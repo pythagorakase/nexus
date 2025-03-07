@@ -1,0 +1,103 @@
+{
+    "module": "psyche_poly.py",
+    "system": "Night City Stories",
+    "focus": "Multi-character psychological dynamics and relationship analysis",
+    "core_module_objectives": {
+      "RelationshipAnalyzer": {
+        "description": "Handles comprehensive multi-character psychological modeling",
+        "capabilities": [
+          "Advanced relationship dynamics tracking",
+          "Narrative-level psychological consistency analysis",
+          "Flexible, extensible group psychology modeling"
+        ]
+      }
+    },
+    "specific_functional_requirements": {
+      "key_functions_from_psyche_fragment.py": [
+        "analyze_relationship",
+        "_create_relationship_analysis",
+        "_infer_relationship_type",
+        "_analyze_power_dynamics",
+        "_analyze_communication_pattern",
+        "_analyze_relationship_stability",
+        "_analyze_emotional_dynamics",
+        "_generate_relationship_insights",
+        "_analyze_relationship_in_narrative",
+        "analyze_narrative_psychology"
+      ],
+      "dependencies": [
+        "Import necessary constants (RELATIONSHIP_TYPES, etc.)",
+        "Use db_sqlite for database access when available",
+        "Use memnon for memory access when available",
+        "May reference psyche_mono for character profiles"
+      ],
+      "support_narrative_level_psychological_analysis": [
+        "Track psychological interactions between characters",
+        "Detect narrative psychological consistency/inconsistency",
+        "Generate multi-character psychological insights",
+        "Model emergent psychological phenomena"
+      ],
+      "maintain_strict_integration_standards": [
+        "Compatible with existing psyche_mono.py character analysis",
+        "Follows Maestro agent communication protocols",
+        "Generate structured psychological metadata",
+        "Supports database and memory system interactions",
+        "Implements comprehensive error handling",
+        "Enable cross-module communication",
+        "Support persistent state storage"
+      ],
+      "implementation_constraints": [
+        "Use dependency injection for modular design",
+        "Provide configurable analysis parameters",
+        "Support graceful feature degradation",
+        "Minimize computational complexity",
+        "Maintain high interpretability of generated insights"
+      ]
+    },
+    "context": {
+      "vision_statement": {
+        "goal": "Augment AI-driven interactive/emergent storytelling with intelligent, dynamic memory storage and retrieval.",
+        "problems_solved": [
+          "Inability to maintain continuity beyond context window",
+          "Poor tracking of off-screen events, character states, and world changes"
+        ],
+        "solution": "Multimodal team of LLMs and modular agentic scripts for intelligent input analysis, structured API payloads, and dynamic memory updates."
+      },
+      "system_design": {
+        "turn_based": true,
+        "real_time_not_needed": true,
+        "latency_acceptable": true
+      },
+      "architecture": {
+        "core_modules": {
+          "maestro.py": "Manages workflow, state, and agent communication",
+          "agents": {
+            "lore.py (ContextManager)": "Deep narrative context analysis",
+            "psyche.py (CharacterPsychologist)": "Tracks psychological states and relationships",
+            "gaia.py (WorldTracker)": "Monitors global world state and entity relationships",
+            "logon.py (NarrativeGenerator)": "Handles API calls for narrative generation"
+          },
+          "memory": {
+            "vector_storage": "ChromaDB for narrative chunks",
+            "entity_registry": "SQLite for structured data",
+            "event_journal": "Immutable record of events"
+          },
+          "adapters": {
+            "db_sqlite.py": "SQLite adapter for entity data",
+            "db_chroma.py": "ChromaDB adapter for narrative embedding search"
+          }
+        },
+        "ai_roles": {
+          "core_functions": "Llama 3 70B (4-5 bit)",
+          "psyche_analysis": "Phi-3 Medium 14B (8-bit)",
+          "narrative_generation": "Claude 3.5 or GPT-4o"
+        },
+        "processing_pipeline": [
+          "Data Preparation",
+          "Multi-Stage Analysis (Entity Mapping, Psychology, Thematics, Relationship Mapping)",
+          "Metadata Enrichment (Narrative functions, emotional valence, causality, thematic tagging)"
+        ]
+      }
+    }
+  }
+  

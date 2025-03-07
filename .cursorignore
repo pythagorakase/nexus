@@ -1,0 +1,8 @@
+# Ignore environment files
+.env
+
+# Ignore transcripts folder
+/transcripts/
+
+# Ignore ChromaDB folder
+/chromadb/

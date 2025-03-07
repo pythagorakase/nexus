@@ -1,0 +1,164 @@
+{
+    "chunk_metadata": {
+        "narrative_functions": {
+            "type": "array",
+            "description": "Types of narrative roles the chunk plays",
+            "possible_values": [
+                "exposition",
+                "character_development",
+                "plot_advancement",
+                "foreshadowing",
+                "world_building",
+                "rising_action",
+                "climax",
+                "resolution",
+                "transition"
+            ]
+        },
+        "emotional_analysis": {
+            "valence": {
+                "type": "string",
+                "description": "Emotional tone of the scene",
+                "possible_values": [
+                    "high_tension",
+                    "contemplative",
+                    "euphoric",
+                    "melancholic",
+                    "angry",
+                    "fearful",
+                    "neutral",
+                    "hopeful",
+                    "desperate"
+                ]
+            },
+            "intensity": {
+                "type": "number",
+                "description": "Emotional intensity scale",
+                "range": [0, 1]
+            }
+        },
+        "character_development": {
+            "type": "array",
+            "description": "Significant character evolution points",
+            "structure": {
+                "character_name": "string",
+                "milestone": "string",
+                "significance_score": "number"
+            },
+            "example": [
+                {
+                    "character_name": "Alex",
+                    "milestone": "confronts_past_trauma",
+                    "significance_score": 0.85
+                }
+            ]
+        },
+        "thematic_tags": {
+            "type": "array",
+            "description": "Recurring themes and conceptual elements",
+            "possible_values": [
+                "identity",
+                "corporate_exploitation",
+                "transhumanism",
+                "survival",
+                "technology_impact",
+                "moral_ambiguity",
+                "power_dynamics",
+                "personal_transformation"
+            ]
+        },
+        "plot_arc_positioning": {
+            "primary_arc": {
+                "type": "string",
+                "description": "Position in the main narrative arc",
+                "possible_values": [
+                    "inciting_incident",
+                    "rising_action",
+                    "midpoint_shift",
+                    "climax",
+                    "falling_action",
+                    "resolution"
+                ]
+            },
+            "secondary_arcs": {
+                "type": "array",
+                "description": "Parallel or subplot arc positions"
+            }
+        },
+        "causal_relationships": {
+            "type": "array",
+            "description": "Cause-effect chain identifiers",
+            "structure": {
+                "cause": "string",
+                "effect": "string",
+                "confidence_score": "number"
+            },
+            "example": [
+                {
+                    "cause": "failed_corporate_negotiation",
+                    "effect": "escalation_of_faction_conflict",
+                    "confidence_score": 0.75
+                }
+            ]
+        },
+        "narrative_weight": {
+            "importance_score": {
+                "type": "number",
+                "description": "Relative significance to overall narrative",
+                "range": [0, 1]
+            },
+            "key_elements": {
+                "type": "array",
+                "description": "Critical narrative components in this chunk"
+            }
+        },
+        "entity_interactions": {
+            "type": "array",
+            "description": "Significant interactions between entities",
+            "structure": {
+                "entities": "array of strings",
+                "interaction_type": "string",
+                "significance": "number"
+            }
+        },
+        "world_state_impact": {
+            "affected_domains": {
+                "type": "array",
+                "description": "Areas of the world state modified by this chunk",
+                "possible_values": [
+                    "political_landscape",
+                    "technological_advancement",
+                    "social_dynamics",
+                    "economic_conditions",
+                    "infrastructure"
+                ]
+            },
+            "change_magnitude": {
+                "type": "number",
+                "description": "Degree of world state transformation",
+                "range": [0, 1]
+            }
+        },
+        "linguistic_features": {
+            "tone": {
+                "type": "string",
+                "description": "Linguistic tone and style",
+                "possible_values": [
+                    "noir",
+                    "technical",
+                    "introspective",
+                    "journalistic",
+                    "dramatic",
+                    "sardonic"
+                ]
+            },
+            "complexity_score": {
+                "type": "number",
+                "description": "Linguistic complexity",
+                "range": [0, 1]
+            }
+        }
+    },
+    "metadata_version": "1.0.0",
+    "generation_date": null
+}
