@@ -1,0 +1,8 @@
+# Activate Python virtual environment
+source_env() {
+  if [ -f "$1" ]; then
+    source "$1"
+  fi
+}
+
+source_env "/Users/pythagor/nexus/.venv/bin/activate"

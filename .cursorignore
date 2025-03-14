@@ -1,0 +1,12 @@
+# Ignore environment files
+.env
+.envrc
+
+# Ignore transcripts folder
+/transcripts/
+
+# Ignore ChromaDB folder
+/chromadb/
+
+/.obsidian/
+/.venv/

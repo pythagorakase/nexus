@@ -1,0 +1,375 @@
+{
+    "chunk_metadata": {
+        "narrative_functions": {
+            "type": "array",
+            "description": "Types of narrative roles the chunk plays",
+            "possible_values": [
+                "exposition",
+                "character_development",
+                "plot_advancement",
+                "foreshadowing",
+                "world_building",
+                "rising_action",
+                "climax",
+                "falling_action",
+                "resolution",
+                "transition",
+                "reflection",
+                "backstory",
+                "setup",
+                "payoff"
+            ]
+        },
+        "emotional_tone": {
+            "primary_tone": {
+                "type": "string",
+                "description": "Dominant emotional tone of the scene",
+                "possible_values": [
+                    "tense",
+                    "contemplative",
+                    "joyful",
+                    "somber",
+                    "angry",
+                    "fearful",
+                    "neutral",
+                    "hopeful",
+                    "despairing",
+                    "humorous",
+                    "serene",
+                    "bittersweet",
+                    "mysterious",
+                    "nostalgic",
+                    "anxious"
+                ]
+            },
+            "intensity": {
+                "type": "number",
+                "description": "Emotional intensity scale",
+                "range": [0, 1]
+            }
+        },
+        "character_elements": {
+            "type": "array",
+            "description": "Significant character elements and developments",
+            "structure": {
+                "character_name": "string",
+                "development_type": "string",
+                "significance_score": "number"
+            },
+            "possible_development_types": [
+                "revelation",
+                "decision_point",
+                "growth",
+                "regression",
+                "transformation",
+                "inner_conflict",
+                "external_conflict",
+                "relationship_shift",
+                "skill_acquisition",
+                "epiphany",
+                "establishing_trait",
+                "contradicting_trait"
+            ],
+            "example": [
+                {
+                    "character_name": "Alex",
+                    "development_type": "decision_point",
+                    "significance_score": 0.85
+                }
+            ]
+        },
+        "thematic_elements": {
+            "type": "array",
+            "description": "Universal themes explored in the chunk",
+            "possible_values": [
+                "alienation",
+                "ambition",
+                "autonomy",
+                "betrayal",
+                "corruption",
+                "death",
+                "deception",
+                "destiny",
+                "family",
+                "friendship",
+                "haunted_past",
+                "heros_journey",
+                "hope",
+                "innocence",
+                "justice",
+                "love",
+                "loyalty",
+                "madness",
+                "metamorphosis",
+                "mystery",
+                "nostalgia",
+                "oppression",
+                "redemption",
+                "revelation",
+                "revenge",
+                "sacrifice",
+                "self_discovery",
+                "survival",
+                "trauma"
+            ]
+        },
+        "narrative_structure": {
+            "primary_arc_position": {
+                "type": "string",
+                "description": "Position in the main narrative arc",
+                "possible_values": [
+                    "inciting_incident",
+                    "rising_action",
+                    "midpoint",
+                    "crisis",
+                    "climax",
+                    "falling_action",
+                    "resolution"
+                ]
+            },
+            "subplot_elements": {
+                "type": "array",
+                "description": "Subplot elements present in the chunk"
+            }
+        },
+        "causality": {
+            "type": "array",
+            "description": "Cause-effect relationships established or advanced",
+            "structure": {
+                "cause": "string",
+                "effect": "string",
+                "confidence_score": "number"
+            },
+            "example": [
+                {
+                    "cause": "character_decision",
+                    "effect": "relationship_consequence",
+                    "confidence_score": 0.75
+                }
+            ]
+        },
+        "narrative_significance": {
+            "importance_score": {
+                "type": "number",
+                "description": "Relative significance to overall narrative",
+                "range": [0, 1]
+            },
+            "key_elements": {
+                "type": "array",
+                "description": "Critical narrative components in this chunk"
+            }
+        },
+        "entity_interactions": {
+            "type": "array",
+            "description": "Significant interactions between characters or entities",
+            "structure": {
+                "entities": "array of strings",
+                "interaction_type": "string",
+                "significance": "number"
+            },
+            "possible_interaction_types": [
+                "alliance",
+                "conflict",
+                "revelation",
+                "deception",
+                "negotiation",
+                "collaboration",
+                "competition",
+                "mentorship",
+                "romance",
+                "familial",
+                "professional"
+            ]
+        },
+        "setting_elements": {
+            "location": {
+                "type": "string",
+                "description": "Physical or conceptual location where events occur"
+            },
+            "time_period": {
+                "type": "string",
+                "description": "Temporal setting of the scene"
+            },
+            "atmosphere": {
+                "type": "string",
+                "description": "Mood or feeling evoked by the setting"
+            },
+            "significance": {
+                "type": "number",
+                "description": "How important the setting is to this chunk",
+                "range": [0, 1]
+            }
+        },
+        "narrative_techniques": {
+            "style": {
+                "type": "string",
+                "description": "Writing style employed in the chunk",
+                "possible_values": [
+                    "descriptive",
+                    "dialogue_heavy",
+                    "introspective",
+                    "action_oriented",
+                    "lyrical",
+                    "sparse",
+                    "expository",
+                    "stream_of_consciousness"
+                ]
+            },
+            "pov": {
+                "type": "string",
+                "description": "Point of view used in the chunk",
+                "possible_values": [
+                    "first_person",
+                    "second_person",
+                    "third_person_limited",
+                    "third_person_omniscient",
+                    "multiple_viewpoints"
+                ]
+            },
+            "literary_devices": {
+                "type": "array",
+                "description": "Literary techniques employed",
+                "possible_values": [
+                    "metaphor",
+                    "simile",
+                    "symbolism",
+                    "irony",
+                    "foreshadowing",
+                    "flashback",
+                    "imagery",
+                    "allusion",
+                    "unreliable_narrator",
+                    "parallel_structure",
+                    "juxtaposition",
+                    "motif"
+                ]
+            }
+        },
+        "pacing": {
+            "tempo": {
+                "type": "string",
+                "description": "Speed at which events unfold",
+                "possible_values": [
+                    "very_slow",
+                    "slow",
+                    "moderate",
+                    "fast",
+                    "very_fast"
+                ]
+            },
+            "tension_curve": {
+                "type": "string",
+                "description": "How tension changes through the chunk",
+                "possible_values": [
+                    "increasing",
+                    "decreasing",
+                    "steady",
+                    "fluctuating",
+                    "climactic",
+                    "resolving"
+                ]
+            }
+        },
+        "continuity_markers": {
+            "type": "array",
+            "description": "Elements that connect this chunk to others for continuity tracking",
+            "structure": {
+                "element_type": "string",
+                "description": "string",
+                "connected_chunks": "array of strings"
+            },
+            "possible_element_types": [
+                "plot_thread",
+                "character_arc",
+                "object_tracking",
+                "location_continuity",
+                "unresolved_question",
+                "narrative_promise",
+                "repeated_motif"
+            ],
+            "example": [
+                {
+                    "element_type": "unresolved_question",
+                    "description": "Mystery of the missing artifact",
+                    "connected_chunks": ["S01E03_014", "S01E05_022"]
+                }
+            ]
+        },
+        "dialogue_analysis": {
+            "type": "object",
+            "description": "Analysis of dialogue content and patterns",
+            "properties": {
+                "percentage": {
+                    "type": "number",
+                    "description": "Approximate percentage of chunk that is dialogue",
+                    "range": [0, 1]
+                },
+                "speakers": {
+                    "type": "array",
+                    "description": "Characters who speak in this chunk"
+                },
+                "functions": {
+                    "type": "array",
+                    "description": "Purposes served by dialogue in this chunk",
+                    "possible_values": [
+                        "exposition",
+                        "character_revelation",
+                        "conflict",
+                        "relationship_development",
+                        "plot_advancement",
+                        "subtext",
+                        "humor",
+                        "philosophical_exploration"
+                    ]
+                },
+                "subtext_present": {
+                    "type": "boolean",
+                    "description": "Whether dialogue contains significant subtext or hidden meanings"
+                }
+            }
+        },
+        "narrative_perspective": {
+            "type": "object",
+            "description": "Analysis of whose perspective is centered in this chunk",
+            "properties": {
+                "viewpoint_character": {
+                    "type": "string",
+                    "description": "Character whose perspective dominates the chunk"
+                },
+                "filters": {
+                    "type": "array",
+                    "description": "Cognitive, emotional, or perceptual filters coloring the narration",
+                    "possible_values": [
+                        "unreliable",
+                        "limited_information",
+                        "emotional_bias",
+                        "memory_distortion",
+                        "perceptual_limitation",
+                        "cultural_perspective",
+                        "objective"
+                    ]
+                },
+                "audience_alignment": {
+                    "type": "number",
+                    "description": "Degree to which the audience is encouraged to align with this perspective",
+                    "range": [0, 1]
+                }
+            }
+        },
+        "existential_themes": {
+            "type": "array",
+            "description": "Deeper philosophical and existential themes explored in the chunk (can be null/empty for passages without such content)",
+            "possible_values": [
+                "transhumanism",
+                "cosmic_horror",
+                "transcendence",
+                "nature_of_consciousness",
+                "reality_perception",
+                "technological_evolution",
+                "existential_dread"
+            ]
+        }
+    },
+    "metadata_version": "1.0.0",
+    "generation_date": null
+}

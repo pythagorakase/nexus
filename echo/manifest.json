@@ -1,0 +1,10 @@
+{
+	"id": "narrative-view",
+	"name": "Narrative View",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "A plugin for displaying a narrative view with intelligent chunk storage.",
+	"author": "Night City Stories",
+	"authorUrl": "https://github.com/night-city-stories",
+	"isDesktopOnly": false
+} 
