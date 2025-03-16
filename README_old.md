@@ -1,4 +1,4 @@
-# Night City Stories: Narrative Intelligence System Roadmap
+# NEXUS: Narrative Intelligence System Roadmap
 
 ## Vision Statement
 

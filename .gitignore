@@ -10,3 +10,5 @@
 
 /.obsidian/
 /.venv/
+
+/llama.cpp/

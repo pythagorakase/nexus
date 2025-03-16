@@ -1,4 +1,4 @@
-# Detailed Roadmap for Building Night City Stories on Letta Foundation
+# Detailed Roadmap for Building NEXUS on Letta Foundation
 
 ## 1. Initial Letta Setup and Environment Configuration
 
