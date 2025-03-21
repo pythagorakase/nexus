@@ -122,9 +122,10 @@ This roadmap provides step-by-step instructions for:
 ## PHASE 11: NEXUS Architecture Implementation
 
 ### 11.1. Agent Framework Design
-- [ ] Design the specialized agent architecture based on NEXUS specification
+- [x] Design the specialized agent architecture based on NEXUS specification
 - [ ] Create agent communication protocols
-- [ ] Design the three-tiered memory hierarchy
+- [ ] ~~Design the three-tiered memory hierarchy~~ 
+	# decided to map this to Letta's existing two tiers for simplicity
 
 ### 11.2. Agent Implementation
 - [ ] Implement LORE agent for context management

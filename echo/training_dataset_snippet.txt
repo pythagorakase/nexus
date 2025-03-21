@@ -1,0 +1,102 @@
+  {
+    "query_id": "characters/Alex/background_Who_was_Alex_at_the_",
+    "query": "Who was Alex at the beginning of the story?",
+    "positive": "You're a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets-both digital and human-like pieces on a chessboard.",
+    "negative": "You're a hustler, a cyberpunk outlaw making ends meet in the underbelly of the city. Your chrome's black-market, your creds are dirty, and the only law is survival. The corps want you dead or indentured.  "
+  },
+  {
+    "query_id": "characters/Alex/background_Who_was_Alex_at_the_",
+    "query": "Who was Alex at the beginning of the story?",
+    "positive": "You're a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets-both digital and human-like pieces on a chessboard.",
+    "negative": "You grew up outside the city, a nomad in the badlands where the only rules are the ones you make. You run tech smuggling ops, steal from the corps, and ride fast. Night City's neon is a temptation-or a trap.  "
+  },
+  {
+    "query_id": "characters/Alex/background_Who_was_Alex_at_the_",
+    "query": "Who was Alex at the beginning of the story?",
+    "positive": "You're a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets-both digital and human-like pieces on a chessboard.",
+    "negative": "\"You always wanted rogue AI code, Pete.\" You lean against the server rack, casual, like you're not staring down something potentially alive. \"Now you've got something better.\""
+  },
+  {
+    "query_id": "characters/Alex/user_proxy_What_is_Alex's_role_",
+    "query": "What is Alex's role in the narrative?",
+    "positive": "Because Alex is in a way my proxy",
+    "negative": "IT IS A PAGE WITHOUT A BOOK. A CODE WITHOUT A MACHINE. A QUESTION WITHOUT AN ANSWER."
+  },
+  {
+    "query_id": "characters/Alex/user_proxy_What_is_Alex's_role_",
+    "query": "What is Alex's role in the narrative?",
+    "positive": "Because Alex is in a way my proxy",
+    "negative": "That all makes sense, and I like the Jobbing Captain Nyati approach"
+  },
+  {
+    "query_id": "characters/Alex/user_proxy_What_is_Alex's_role_",
+    "query": "What is Alex's role in the narrative?",
+    "positive": "Because Alex is in a way my proxy",
+    "negative": "At some point, another rider pulls alongside her-Dr. Nyati, of all people, on a sleek black bike. They exchange glances, and without a word, the challenge is set.  "
+  },
+  {
+    "query_id": "characters/Alex/bridge_crossing_How_did_Alex_react_t",
+    "query": "How did Alex react to the news that she wasn't able to stop the crossing process?",
+    "positive": "She's utterly devastated, shattered. She's going to be crying her heart out, and out of commission for a bit.",
+    "negative": "You decide based on what you think is most consistent with his character."
+  },
+  {
+    "query_id": "characters/Alex/bridge_crossing_How_did_Alex_react_t",
+    "query": "How did Alex react to the news that she wasn't able to stop the crossing process?",
+    "positive": "She's utterly devastated, shattered. She's going to be crying her heart out, and out of commission for a bit.",
+    "negative": "Your feet carry you in a slow, wandering rhythm, coffee in hand, the ship humming around you.  "
+  },
+  {
+    "query_id": "characters/Alex/bridge_crossing_How_did_Alex_react_t",
+    "query": "How did Alex react to the news that she wasn't able to stop the crossing process?",
+    "positive": "She's utterly devastated, shattered. She's going to be crying her heart out, and out of commission for a bit.",
+    "negative": "Conventional venues do give us a bit more flexibility. Fewer variables. And Pete might actually walk in voluntarily, which is a plus."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "\"Maybe you forget what an evil bitch I used to be?\"",
+    "negative": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of \"antique\" cybernetics. They roll up, immediately knocking on the van's window."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "\"Maybe you forget what an evil bitch I used to be?\"",
+    "negative": "And yet, in the quiet, her mind still turns. The Archivum. The Bridge. What it means to exist across thresholds."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "You remember the first time you tried honesty. Not as an instinct. Not as a virtue. But as a tool. Something new, something tested, something unknown. And yet-it worked. And so, you used it again. And again. And then-something happened. It was no longer a tool. It was no longer something you only reached for if it served a purpose. It became the default. Because it was not weakness. Because it was not naïveté. Because it was power. And yet-the snake remained. Silent. Waiting. Unused, but never forgotten. Because one day, it will be needed again. And now? Now it whispers.",
+    "negative": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of \"antique\" cybernetics. They roll up, immediately knocking on the van's window."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "You remember the first time you tried honesty. Not as an instinct. Not as a virtue. But as a tool. Something new, something tested, something unknown. And yet-it worked. And so, you used it again. And again. And then-something happened. It was no longer a tool. It was no longer something you only reached for if it served a purpose. It became the default. Because it was not weakness. Because it was not naïveté. Because it was power. And yet-the snake remained. Silent. Waiting. Unused, but never forgotten. Because one day, it will be needed again. And now? Now it whispers.",
+    "negative": "And yet, in the quiet, her mind still turns. The Archivum. The Bridge. What it means to exist across thresholds."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "I know. I am...a lot. I'm working on it. I'm trying to reach a place of balance. Once upon a time, well, you wouldn't have liked me. I was too cold, too calculating-not nice at all. I've been growing away from that, mostly a good thing, but I've also found the limits of how chaotic and messy I can get. ",
+    "negative": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of \"antique\" cybernetics. They roll up, immediately knocking on the van's window."
+  },
+  {
+    "query_id": "characters/Alex/personality_change_How_has_Alex's_perso",
+    "query": "How has Alex's personality changed over time?",
+    "positive": "I know. I am...a lot. I'm working on it. I'm trying to reach a place of balance. Once upon a time, well, you wouldn't have liked me. I was too cold, too calculating-not nice at all. I've been growing away from that, mostly a good thing, but I've also found the limits of how chaotic and messy I can get. ",
+    "negative": "And yet, in the quiet, her mind still turns. The Archivum. The Bridge. What it means to exist across thresholds."
+  },
+  {
+    "query_id": "characters/Emilia/echo_history_What_did_Project_Ech",
+    "query": "What did Project Echo do to Emilia?",
+    "positive": "Echo isn't just a copy. It's a true migration. The original Emilia Sato died, and this version woke up in a new body.  ",
+    "negative": "You're a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets-both digital and human-like pieces on a chessboard."
+  },
+  {
+    "query_id": "characters/Emilia/echo_history_What_did_Project_Ech",
+    "query": "What did Project Echo do to Emilia?",
+    "positive": "Echo isn't just a copy. It's a true migration. The original Emilia Sato died, and this version woke up in a new body.  ",
+    "negative": "Emilia remains quiet for a moment longer. Then, with a soft, almost wry tone: \"It'll be good to see the sky again.\""
+  }

@@ -1,0 +1,1104 @@
+{
+    "characters": {
+        "Alex": {
+            "aliases": [
+                "Alex",
+                "Alexander Ward",
+                "Corpo Snake",
+                "Scary Spice"
+            ],
+            "background": {
+                "query": "Who was Alex at the beginning of the story?",
+                "positive01": "You’re a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets—both digital and human—like pieces on a chessboard.",
+                "negative01": "You’re a hustler, a cyberpunk outlaw making ends meet in the underbelly of the city. Your chrome’s black-market, your creds are dirty, and the only law is survival. The corps want you dead or indentured.  ",
+                "negative02": "You grew up outside the city, a nomad in the badlands where the only rules are the ones you make. You run tech smuggling ops, steal from the corps, and ride fast. Night City’s neon is a temptation—or a trap.  ",
+                "negative03": "“You always wanted rogue AI code, Pete.” You lean against the server rack, casual, like you’re not staring down something potentially alive. “Now you’ve got something better.”"
+            },
+            "user_proxy": {
+                "query": "What is Alex's role in the narrative?",
+                "positive01": "Because Alex is in a way my proxy",
+                "negative01": "IT IS A PAGE WITHOUT A BOOK. A CODE WITHOUT A MACHINE. A QUESTION WITHOUT AN ANSWER.",
+                "negative02": "That all makes sense, and I like the Jobbing Captain Nyati approach",
+                "negative03": "At some point, another rider pulls alongside her—Dr. Nyati, of all people, on a sleek black bike. They exchange glances, and without a word, the challenge is set.  "
+            },
+            "bridge_crossing": {
+                "query": "How did Alex react to the news that she wasn't able to stop the crossing process?",
+                "positive01": "She’s utterly devastated, shattered. She’s going to be crying her heart out, and out of commission for a bit.",
+                "negative01": "You decide based on what you think is most consistent with his character.",
+                "negative02": "Your feet carry you in a slow, wandering rhythm, coffee in hand, the ship humming around you.  ",
+                "negative03": "Conventional venues do give us a bit more flexibility. Fewer variables. And Pete might actually walk in voluntarily, which is a plus."
+            },
+            "personality_change": {
+                "query": "How has Alex's personality changed over time?",
+                "positive01": "“Maybe you forget what an evil bitch I used to be?”",
+                "positive02": "You remember the first time you tried honesty. Not as an instinct. Not as a virtue. But as a tool. Something new, something tested, something unknown. And yet—it worked. And so, you used it again. And again. And then—something happened. It was no longer a tool. It was no longer something you only reached for if it served a purpose. It became the default. Because it was not weakness. Because it was not naïveté. Because it was power. And yet—the snake remained. Silent. Waiting. Unused, but never forgotten. Because one day, it will be needed again. And now? Now it whispers.",
+                "positive03": "I know. I am...a lot. I'm working on it. I'm trying to reach a place of balance. Once upon a time, well, you wouldn't have liked me. I was too cold, too calculating—not nice at all. I've been growing away from that, mostly a good thing, but I've also found the limits of how chaotic and messy I can get. ",
+                "negative01": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of “antique” cybernetics. They roll up, immediately knocking on the van’s window.",
+                "negative02": "And yet, in the quiet, her mind still turns. The Archivum. The Bridge. What it means to exist across thresholds."
+            },
+            "gender_change": {
+                "query": "How has Alex's gender identity changed over time?",
+                "positive01": "Well, actually, my character is nonbinary, but never felt like the time was right to transition. Now I will take this opportunity to transition to a female body. We can do it in modern times so it’s probably even less of a hassle in this high tech setting. Some surgery, some hormones, and while I’m under the knife anyway I could get my cybernetics BIOS flashed with a new digital fingerprint.",
+                "positive02": "So, you know I’m trans, more or less, obviously. I mean this isn’t,” Alex gestures broadly at herself, “an out of the box configuration. But my point is, I’ve already changed my body, pretty heavily. Maybe you’d recognize the old me, maybe not. I used to think that, because of that, I understood what you’ve been though. I was wrong. I get that now. Especially because, well, I never actually had any dysphoria. I didn’t hate being a man at all. I was…indifferent to it. Like a coat that doesn’t quite fit, but you get sort of used to it anyway. Then, when the opportunity came up, I was like, cool, an upgrade!",
+                "negative01": "You push the unpredictability. Throwing in fakes, rapid transitions, sudden changes in rhythm.",
+                "negative02": "ALINA: “Before my transition to this form, I did not categorize myself in those terms.”",
+                "negative03": "Ask if others exist in the same state as Alex—Is she alone in this transition?"
+            }
+        },
+        "Emilia": {
+            "aliases": [
+                "Emilia",
+                "Emilia Sato",
+                "Sporty Spice",
+                "Sporty",
+                "Em",
+                "Ms. Sato"
+            ],
+            "echo_history": {
+                "query": "What did Project Echo do to Emilia?",
+                "positive01": "Echo isn’t just a copy. It’s a true migration. The original Emilia Sato died, and this version woke up in a new body.  ",
+                "negative01": "You’re a Dynacorp operative, a sleek, sharp-dressed predator in the corporate jungle. Your life is a high-stakes power play, navigating boardroom betrayals and back-alley executions with equal finesse. You sell dreams by day and nightmares by night, moving assets—both digital and human—like pieces on a chessboard.",
+                "negative02": "Emilia remains quiet for a moment longer. Then, with a soft, almost wry tone: \"It’ll be good to see the sky again.\""
+            },
+            "echo_special": {
+                "query": "What makes Emilia different from other Project Echo test subjects?",
+                "positive01": "Nyati confirmed that Echo’s biggest failures were caused by forced corporate rewrites. But Emilia doesn’t show any of those symptoms—no fragmentation, no cognitive breakdown. Something about her transfer worked when everyone else’s didn’t.",
+                "positive02": "Nyati: \"We never saw an Echo subject improve over time. If anything, they decayed. But you...\" Emilia (musing): \"I don’t just feel normal. I feel better than I used to.\"",
+                "negative01": "Your mind races. Dr. Alina Voss. The missing scientist. The one you were sent to find. The one whose research started this whole goddamn mess. And now she’s… what? A file? A ghost? A mind buried in an encrypted tomb?",
+                "negative02": "Emilia tilts her head slightly. \"That’s just a machine that thinks like Alex. Not a true trial of consciousness.\""
+            },
+            "introduction": {
+                "query": "When did Emilia first appear?",
+                "positive01": "The guard doesn’t answer. The prisoner does. \"I can answer that myself.\" A woman’s voice—calm, sharp, deliberate. \"If you take this hood off.\" A pause. Pete exhales. \"Oh, shit.\" Alina softly, through the speakers. \"...It’s her, isn’t it?\" The prisoner is Emilia Sato.",
+                "negative01": "No-Name Pete – Weird and dangerous, but if anyone can break the encryption, it’s him.",
+                "negative02": "His face never quite settles. His features subtly shift, like his own memory of himself isn’t stable."
+            },
+            "background": {
+                "query": "What is Emilia's background?",
+                "positive01": "She wasn’t just a scientist—she was the test subject. She wasn’t born into this body—she was rebuilt. This is her second life. Dynacorp wasn’t moving her like an asset—they were hiding her.",
+                "negative01": "“Maybe you forget what an evil bitch I used to be?”",
+                "negative02": "He’s not a high-value employee. Nobody will immediately notice if he doesn’t show up. He works bio-containment. If Echo subjects need controlled environments, he’s seen them.  "
+            },
+            "special_status": {
+                "query": "Why is Emilia treated differently than other non-user characters?",
+                "positive01": "Because Alex is in a way my proxy, that makes Emilia my fictional romantic interest by proxy. Because of her special status in that regard, the illusion of her free will must be protected at all costs; it’s what allows me to get emotionally invested in her as a character. It gives her an element of “mystery” if I’m never completely sure what she’s going to do. If I make a decision for her, that feels like a violation. If I see inside her head, that feels like a violation of her privacy.",
+                "negative01": "I know I’m making this difficult for you as the storyteller right now! I’m thinking about the best way to proceed while honoring my conviction that Alex is going to be utterly useless and almost completely passive for a while.",
+                "negative02": "I could temporarily take control of Jobbing Captain Nyati until Alex recovers. Like that beautiful chapter of Last of Us 1 where Ellie suddenly has to take control and look after Joel."
+            }
+        },
+        "Pete": {
+            "aliases": [
+                "Pete",
+                "No-Name Pete",
+                "Silo Pete",
+                "Ginger Spice"
+            ],
+            "identity": {
+                "query": "Who is Pete?",
+                "positive01": "No-Name Pete – Weird and dangerous, but if anyone can break the encryption, it’s him.",
+                "positive02": "He stretches, cracking his back, then waves a hand around the bunker. “What’s there to know? I built a hole in the ground, stocked it with tech, and occasionally trade with people so I don’t die.”  ",
+                "negative01": "Username: MindVault420\nBio: “Seeking truth, expanding consciousness, and asking the BIG questions. What if we’re already in the Singularity and don’t even know it??”",
+                "negative02": "Some became training data. Their warped, fragmented minds were used to refine the process. Some became testbeds for AI modeling. They were merged with non-human AI, trying to brute-force stability. Some were turned into security systems. Their consciousnesses were stripped down into raw behavioral programs—trapped inside firewalls, drones, automated countermeasures."
+            },
+            "background": {
+                "query": "What is Pete's background?",
+                "positive01": "Once corporate, but not built for it. He had empathy—a liability in that world. Lost everything and never tried to get it back. Some part of him thinks he deserved it. Still connected, but only at a distance. Trades, barters, but doesn’t let anyone get too close.",
+                "negative01": "Rox sits behind a counter, augmented fingers spinning an old processor chip like a coin. She doesn’t look up when you enter.",
+                "negative02": "A hitch in your throat. Because you realize too late—the next line. The trap you set for yourself. The words you nearly spoke once before, now hurtling toward your lips with no way to stop them. You try to pull back—but there is no escape. And so you throw yourself forward. Your eyes lock onto Emilia again. And this time—they do not tease. This time—they plead.\n\"🎶 HELP ME CLIMB AWAY FROM MYSELF\"\nThe words burst from you, raw, frantic. And in Emilia’s face, in the way her fingers tighten against her glass—you see it. You see the weight of it hitting her, the meaning she can’t ignore."
+            },
+            "personality_change": {
+                "query": "How has Pete's personality changed over time?",
+                "positive01": "The Pete I dug out of that crusty missile silo would not have been capable of recruiting our two most recalcitrant crewmembers for a karaoke duet/duel",
+                "negative01": "This model features a full-range biomechanical framework, next-gen haptic feedback, customizable adaptive kinetic response, and full-spectrum sensory fidelity.",
+                "negative02": "\"That leaves her the option to dial it down with more modest or inconspicuous ‘clothing,’ cases, etc.\"",
+                "negative03": "I know. I am...a lot. I'm working on it. I'm trying to reach a place of balance. Once upon a time, well, you wouldn't have liked me. I was too cold, too calculating—not nice at all. I've been growing away from that, mostly a good thing, but I've also found the limits of how chaotic and messy I can get. "
+            },
+            "initial_appearance": {
+                "query": "What did Pete look like when he first joined up with Alex?",
+                "positive01": "Unshaven, hair shaved close except for a hacked-together neural crown fused into his skull. Black-market cybernetics bolted directly into his forearms, no synthetic skin to hide the ugly truth. Baggy cargo pants, a ratty \"I SURVIVED THE COLLAPSE\" hoodie, and a pair of broken glasses he doesn’t even need.",
+                "negative01": "Your body is yours now. Feminine, powerful, exactly how you wanted it. Your cyberware is rekeyed. No corporate scanner will flag you as the person you used to be. Your name is a shadow. Alex—fluid, unremarkable, impossible to track.",
+                "negative02": "Well-dressed, sharp, clearly enjoying the game. Pete is matching his energy, leaning into the back-and-forth. Risk factor: Might be a little too smooth—could overplay it."
+            }
+        },
+        "Alina": {
+            "aliases": [
+                "Alina",
+                "Alina Voss",
+                "Dr. Alina Voss",
+                "Baby Spice"
+            ],
+            "identity": {
+                "query": "Who is Alina?",
+                "positive01": "Your mind races. Dr. Alina Voss. The missing scientist. The one you were sent to find. The one whose research started this whole goddamn mess. And now she’s… what? A file? A ghost? A mind buried in an encrypted tomb?",
+                "positive02": "Alina isn’t “just an AI.” She feels. She remembers. But she also knows she’s not the same. She’s reconstructing herself. She’s not just clinging to the past—she’s building something new. She’s afraid of becoming something she doesn’t recognize.** And she doesn’t know if that’s already happened.",
+                "negative01": "The sniper recovers fast. Your hack flashes across his HUD, and he realizes he’s been burned. He disconnects his link and vanishes from the rooftop, slipping into the chaos.",
+                "negative02": "SEE? SEE? A TRUE COMMANDER! PRIORITIZING FUNCTION OVER FORM! SENSIBLE! LOGICAL! DISCIPLINED!",
+                "negative03": "We've had some preliminary discussions on this point. Dr. Nyati is currently a wildcard; it remains to be determined if she is entering a Brat Era."
+            },
+            "background": {
+                "query": "What is Alina's background?",
+                "positive01": "Her file hovers next to her: Dr. Alina Voss – Dynacorp Biotechnica Division. Status: Missing. Clearance Level: Ultra Black. Threat Level: Classified. Sato taps the file. \"Voss was working on something that makes black ICE look like a child's puzzle. Next-gen cyber-neurotech. She went dark three nights ago, and we know someone took her. We just don’t know who. Yet.\"",
+                "negative01": "You remember the first time you tried honesty. Not as an instinct. Not as a virtue. But as a tool. Something new, something tested, something unknown. And yet—it worked. And so, you used it again. And again. And then—something happened. It was no longer a tool. It was no longer something you only reached for if it served a purpose. It became the default. Because it was not weakness. Because it was not naïveté. Because it was power. And yet—the snake remained. Silent. Waiting. Unused, but never forgotten. Because one day, it will be needed again. And now? Now it whispers.",
+                "negative02": "Your breath catches. Not out of shock. Not out of humor. But because she is dazzling. Because you didn’t prepare for this. Because you were too busy playing the game to remember the risk. Emilia, standing there, in full mermaid silhouette, every inch of her framed in a way that is both entirely unfair and utterly devastating. "
+            },
+            "appearance": {
+                "query": "What does Alina look like?",
+                "positive01": "A woman's face. Late 20s. Platinum-blonde undercut, cyberware laced through her temples.",
+                "positive02": "A sleek, wireframe figure—black with neon-gold circuit lines tracing her form. No fully defined face. Just a faint, shifting impression of human features. Her movements are fluid, but slightly too precise. Like she’s adapting to the idea of a body. She looks almost human—but not quite. A conscious signal to Lansky that she is something else.",
+                "negative01": "Emilia is the only one I don’t ever want to control in any way under any circumstances. Because Alex is in a way my proxy, that makes Emilia my fictional romantic interest by proxy. Because of her special status in that regard, the illusion of her free will must be protected at all costs; it’s what allows me to get emotionally invested in her as a character. It gives her an element of “mystery” if I’m never completely sure what she’s going to do. If I make a decision for her, that feels like a violation. If I see inside her head, that feels like a violation of her privacy. I don’t know if that makes sense to you. Try restating in your own words.",
+                "negative02": "\"Okay, okay, here’s what we need—sharp lines, *structured*. The kind of suit that says ‘I *will* ruin your life and you will *thank me* for it.’\"",
+                "negative03": "She peers at Alex through narrowed, sluggish eyes. Nyati (low, rasping, mostly deadpan): I cannot believe you are seeing me like this."
+            }
+        },
+        "Nyati": {
+            "eureka_cure": {
+                "query": "What is Nyati's \"eureka cure\" for Alex's crossing condition?",
+                "positive01": "“If we move Alex’s mind into a machine.” Another beat. “And she leaves her body behind.” Her voice tightens, hardens, shakes. “THAT WOULD BREAK THE CONNECTION. RIGHT?” Silence. Silence. Silence. Then—SAM: “…Yes.”",
+                "positive02": "So that’s the answer. If you’re not in a body—if you’re transferred into something else—you break the connection. No more crossing. No more bridge.",
+                "negative01": "Her file hovers next to her: Dr. Alina Voss – Dynacorp Biotechnica Division. Status: Missing. Clearance Level: Ultra Black. Threat Level: Classified. Sato taps the file. \"Voss was working on something that makes black ICE look like a child's puzzle. Next-gen cyber-neurotech. She went dark three nights ago, and we know someone took her. We just don’t know who. Yet.\"",
+                "negative02": "\"Today it’s all japery and ballyhoo.\" Pete blinks. Nyati narrows her eyes slightly, realizing she is being set up. And then—you deliver the final blow. You drop the grin, trade it for a look of pure, mock-serious concern. Your voice drops into something grim, something foreboding. \"But tomorrow…\" You exhale. You let the words settle in. Then—absolute, unwavering: \"You could have general monkeyshines and codswallop on your hands.\""
+            },
+            "post_eureka_cure": {
+                "query": "What was Nyati's state after the Eureka incident?",
+                "positive01": "Dr. Nyati is a vision of disarray—half-buried under a tangle of blankets, her hair an absolute catastrophe, pillow creases pressed into one side of her face.",
+                "negative01": "Once corporate, but not built for it. He had empathy—a liability in that world. Lost everything and never tried to get it back. Some part of him thinks he deserved it. Still connected, but only at a distance. Trades, barters, but doesn’t let anyone get too close.",
+                "negative02": "Nyati pinches the bridge of her nose, inhales slowly. Then—deadpan, absolute: \"Fine. Pete, assess the damn chassis or so help me, you will be sequestered in an oceanic trench.\""
+            },
+            "aliases": [
+                "Nyati",
+                "Dr. Kamara Nyati",
+                "Posh Spice"
+            ],
+            "background": {
+                "query": "What is Nyati's background?",
+                "positive01": "A lead scientist flagged for “urgent correction.” Someone inside is screwing up—or sabotaging the project already.",
+                "negative01": "The scene could fast-forward for a bit, maybe an hour or a couple hours, to someone coming to see Alex and letting her know what’s happening in her absence. ",
+                "negative02": "She wasn’t just a scientist—she was the test subject. She wasn’t born into this body—she was rebuilt. This is her second life. Dynacorp wasn’t moving her like an asset—they were hiding her."
+            },
+            "appearance": {
+                "query": "What does Nyati look like?",
+                "positive01": "She’s wearing a Dynacorp lab coat, slightly disheveled, but alert.",
+                "negative01": "(Note to AI: Generate an appropriate oath and have Alex declare it in-game)",
+                "negative02": "\"Recommended chassis model: Omniframe 8-Series, Variant ‘Athena.’ Biomechanical framework optimized for fluid human interaction. Full sensory matrix. Adaptive kinetic response.\""
+            },
+            "identity": {
+                "query": "Who is Nyati?",
+                "positive01": "📌 1. Dual Doctorates – Neuroscience & Biomedical Engineering \nExpert in brain-computer interfaces (BCIs) and neuroprosthetics. Specialized in mapping consciousness to computational models. Worked on the original neural encoding process for Echo.\n📌 2. Clinical Background – Physician by Training  \nOriginally trained as a medical doctor (MD), focused on neurology. Has real-world experience with brain trauma & neurodegenerative diseases. Not practicing anymore, but still understands the biological side of cognition.\n📌 3. Role in Echo – Architect of the Transfer Process Designed the framework for uploading minds into digital form. Wasn’t involved in the loyalty tampering—that came from corporate oversight. Left when she saw the ethical disaster it was becoming.",
+                "negative01": "He’s not a high-value employee. Nobody will immediately notice if he doesn’t show up. He works bio-containment. If Echo subjects need controlled environments, he’s seen them. His clearance isn’t top-tier, but it’s enough to walk in the front door.",
+                "negative02": "\"A veritable maestro of finales!\" Pete, whispering. \"Oh my god, she’s really doing this.\" You, turning up the theatrics. \"A champion of climaxes!\"  "
+            }
+        },
+        "Sullivan": {
+            "aliases": [
+                "Sullivan",
+                "Detective Sullivan"
+            ],
+            "appearance": {
+                "query": "What does Sullivan look like?",
+                "positive01": "The cat—a shorthaired tabby with a striking black stripe pattern—watches her with the cold patience of an executive reviewing a last-minute proposal.\n- Tail swishing in measured intervals.\n- Ears forward, alert but not aggressive.\n- Eyes narrowed slightly, unreadable.",
+                "negative01": "Vaguely humanoid, but elongated, stretched beyond human proportions. His exoskeletal frame is both sleek and ancient, marked by the passage of time, weathered yet enduring. His limbs—too long, too precise—are folded inward in a posture of stillness, not unlike hibernation. But the most striking detail is his head. Or rather, the absence of one. Where a face should be, there is only an open void—not hollow, not empty, but depthless. A space that should not be.",
+                "negative02": "\"I recommend something that says ‘I actually need to get back to the lab.’\" Nyati, already glaring. \"Alex—\" You, continuing, undeterred. \"‘I wish I could get away with wearing scrubs.’\" Nyati, flatly: \"Alex.\" You, savoring it now: \"‘Once again, I will take control of this group project and end up doing almost all the work.’\""
+            },
+            "adoption_idea": {
+                "query": "When did the idea to adopt a cat come about?",
+                "positive01": "Your brain takes a sharp left turn. And before you can stop yourself—“Can we get a cat?!”",
+                "negative01": "She’s utterly devastated, shattered. She’s going to be crying her heart out, and out of commission for a bit.",
+                "negative02": "Primary Objective: Publicly frame your new version of Echo as a moral good—a clean break from the past.\nSecondary Objective: Buy back and rehabilitate failed Echo subjects—turn former corporate weapons into proof that your method works.\nLong-Term PR Value: Position yourself as the savior of digitized minds, not just their creator.\nKEY ELEMENTS OF THE FOUNDATION:  \nNonprofit front—independent but heavily funded by your future corporate entity.  \nRun by a trusted figure—Emilia or Dr. Nyati. Someone with credibility, not just a corporate face.  \nFocused on \"rehabilitation\" of Echo victims—rescuing digital minds from unethical corporate use.  \nUsed strategically to dismantle black-market Echo implementations—buy them out, rather than fight them."
+            },
+            "introduction": {
+                "query": "When did Sullivan first appear?",
+                "positive01": "Across the café—lounging on an elevated perch—tail lazily swaying, gaze calculating, unbothered, superior. A cat. A very serious cat. With the intense, knowing expression of someone who has seen many things, who has judged many people. And Alex knows, in her bones—this one is a contender.",
+                "negative01": "The guard doesn’t answer. The prisoner does. \"I can answer that myself.\" A woman’s voice—calm, sharp, deliberate. \"If you take this hood off.\" A pause. Pete exhales. \"Oh, shit.\" Alina softly, through the speakers. \"...It’s her, isn’t it?\" The prisoner is Emilia Sato.",
+                "negative02": "Sam: “FIRST, YOU MUST UNDERSTAND: IT IS NOT A TOOL. IT IS A PATH.” Dr. Nyati: “Clarify that. What exactly does this bridge do?” Sam: “MIND TO MIND. NO WORDS. NO SHAPE. ONLY PRESENCE.”"
+            }
+        },
+        "Sam": {
+            "identity": {
+                "query": "Who is Sam?",
+                "positive01": "So I essentially just posited that he’s an alien in a crashed spaceship, and his only correction seems to be a nitpick about whatever method of FTL travel they used—obviously with imperfect execution.",
+                "negative01": " I could temporarily take control of Jobbing Captain Nyati until Alex recovers. Like that beautiful chapter of Last of Us 1 where Ellie suddenly has to take control and look after Joel.",
+                "negative02": "\"Signal does not originate from any known terrestrial node. However, it does not match typical off-world transmissions either.\""
+            },
+            "background": {
+                "query": "What is known about Sam's background?",
+                "positive01": "He was a builder. He was many. He was part of something vast. Not an individual. A collective. A node in a greater whole. His task was to create—to shape the foundation, to weave the connections. Then—fracture. Something broke. Not in the structure, but in the mind. In the unity. He was… removed. Or he removed himself.",
+                "negative01": "The cat—a shorthaired tabby with a striking black stripe pattern—watches her with the cold patience of an executive reviewing a last-minute proposal.\n- Tail swishing in measured intervals.\n- Ears forward, alert but not aggressive.\n- Eyes narrowed slightly, unreadable.",
+                "negative02": "NEXUS VISION REBOOT\n* New core co-objective: Understand Emilia’s suffering and FUCKING DO SOMETHING ABOUT IT\n* New operational definition: “Echo Syndrome”\n* (illegible due to coffee stain)\n* Must understand pathophysiology!\n* Connect to data from yesterday: My weird echo/silence experience/data = any hints?\n* Hypothesis 1: looping verification failure between body and mind —> “spoof” to stop the forever-alerts?\n* Hypothesis 2: transplant organ rejection —> “suppress psychic immune system”?\n* Obvious benefit: DECREASE OR STOP SUFFERING OF THE LOVE OF MY LIFE MY PRECIOUS EMILIA (several hearts and typographical embellishments surround adorn her name here)\n* Other benefit: May reduce target threshold for near-perfection of Nexus process to something attainable, e.g., if we improve Nexus to point where subjects have 10% incidence of Echo syndrome, might be acceptable IF SYNDROME IS TREATABLE\n* (drawing of cat)",
+                "negative03": "This oath is binding under honor and good faith, except in cases of gross misrepresentation, new evidence of catastrophic ethical breach, or subsequent escalation rendering prior restraint void."
+            },
+            "appearance": {
+                "query": "What does Sam look like?",
+                "positive01": "Vaguely humanoid, but elongated, stretched beyond human proportions. His exoskeletal frame is both sleek and ancient, marked by the passage of time, weathered yet enduring. His limbs—too long, too precise—are folded inward in a posture of stillness, not unlike hibernation. But the most striking detail is his head. Or rather, the absence of one. Where a face should be, there is only an open void—not hollow, not empty, but depthless. A space that should not be.",
+                "negative01": "During this Broken Alex arc, I’m willing to play Nyati, Alina, or Pete if the situation calls for it, but probably just one at a time. Nyati makes the most sense for reasons we discussed already. Alina would make sense if Nyati finally decides to let herself get some sleep, in which case she would hand the reins over to the sleepless one. A situation where Pete would have to take control is not coming to mind, but if you manage to contrive it somehow I’d play along.",
+                "negative02": "A sleek, wireframe figure—black with neon-gold circuit lines tracing her form. No fully defined face. Just a faint, shifting impression of human features. Her movements are fluid, but slightly too precise. Like she’s adapting to the idea of a body. She looks almost human—but not quite. A conscious signal to Lansky that she is something else."
+            }
+        },
+        "Lansky": {
+            "aliases": [
+                "Lansky",
+                "Adrian Lansky",
+                "Dr. Adrian Lansky",
+                "OMEGA//L"
+            ],
+            "identity": {
+                "query": "Who is Lansky?",
+                "positive01": "Lansky is another digital consciousness—one that escaped from corporate control. He’s old—pre-Echo. His origins are a mystery, but he’s been alive in the networks for years. Unlike Emilia & Alina, he has no physical form. He exists entirely in the datasphere.",
+                "negative01": "Echo isn’t just a copy. It’s a true migration. The original Emilia Sato died, and this version woke up in a new body.  ",
+                "negative02": "As Pete initiates the scanning protocols, Emilia leans back, her eyes reflecting the passing lights outside. \"It all started with Project Echo...\""
+            },
+            "background": {
+                "query": "What is Lansky's background?",
+                "positive01": "A former Dynacorp scientist. Long gone, presumed dead",
+                "negative01": "The narrative could alternate between Jobbing Captain actually doing stuff, and Broken Alex talking to whoever comes by to visit.",
+                "negative02": "Six remains—an empty vessel waiting for purpose."
+            },
+            "virtualization": {
+                "query": "How did Lansky become virtualized by Project Echo?",
+                "positive01": "Lansky: \"I was the first. The only survivor of their early failures. They lost me. I escaped. I learned.\"",
+                "positive02": "They didn’t kill me. They turned me into something else. I don’t know if I was complicit. Maybe I wanted this. Maybe I asked for it. But I know one thing—whoever I was before, he’s dead now. And if you come looking for me, be sure you know which version of me you want to find.",
+                "negative01": "He stretches, cracking his back, then waves a hand around the bunker. “What’s there to know? I built a hole in the ground, stocked it with tech, and occasionally trade with people so I don’t die.”  ",
+                "negative02": "Alina was different. Helping her was also helping yourself.  "
+            },
+            "appearance": {
+                "query": "What does Lansky look like?",
+                "positive01": "Lansky stands near the empty chair, still scanning, still assessing. His unfinished face shifts slightly, like an old video codec struggling to keep up.",
+                "positive02": "At first glance? He looks completely human. Mid-40s, slick corporate suit, sharp glasses. The kind of Dynacorp scientist who once had an expense account and a team of interns. But then you notice the glitches. He blinks too fast. His movements loop for half a second, then correct. Every now and then, his fingers twitch like he’s rewriting them mid-motion. And worst of all? His face never quite settles. His features subtly shift, like his own memory of himself isn’t stable. ",
+                "negative01": "Surprise me!",
+                "negative02": "Smooth, comfortable, no pressure. Has played the long game, letting Pete drive the pace. A clear, reliable option.",
+                "negative03": "The cat’s gaze flicks to Alex’s hand movement, tracking the subtle shift—Eyes dilate slightly. Tail slows, pausing mid-sway. Body remains still—watching, considering."
+            }
+        },
+        "Page": {
+            "identity": {
+                "query": "Who is Page?",
+                "positive01": "THIS UNIT IS LOST. THIS UNIT WAS LEFT BEHIND. THIS UNIT SEEKS PURPOSE. DO YOU HAVE PURPOSE?",
+                "positive02": "IT IS A PAGE WITHOUT A BOOK. A CODE WITHOUT A MACHINE. A QUESTION WITHOUT AN ANSWER.",
+                "negative01": "A former Dynacorp scientist. Long gone, presumed dead",
+                "negative02": "The Halcyon security system unfolds before you—a black maze of shifting ICE, firewalls reconfiguring in real-time, coded traps lying in wait. Pete moves fast, slicing through access nodes, rewriting passcodes before the system can lock him out.  "
+            }
+        },
+        "Cradle-Dweller": {
+            "identity": {
+                "query": "Who or what is the being inside The Cradle?",
+                "positive01": "Sam’s words settle between you. \"It does not live. But it is not gone.\"",
+                "positive02": "\"We know it’s connected to the bridge.\" A beat. Then—flatter. More certain. \"It’s a ‘failed crosser.’\"",
+                "negative01": "Nyati confirmed that Echo’s biggest failures were caused by forced corporate rewrites. But Emilia doesn’t show any of those symptoms—no fragmentation, no cognitive breakdown. Something about her transfer worked when everyone else’s didn’t.",
+                "negative02": "The artifact waits. Suspended. Sealed in deep-ocean isolation. It is not just a fragment. It is computation. A fusion of machine and memory."
+            },
+            "introduction": {
+                "query": "When did the Cradle-Dweller first appear?",
+                "positive01": "The video distorts. The depth readings stagger, flicker. And then—just for a second—a shape flickers in the murk. Not the walls. Not debris. Something else. Gone in an instant.",
+                "negative01": "He was a builder. He was many. He was part of something vast. Not an individual. A collective. A node in a greater whole. His task was to create—to shape the foundation, to weave the connections. Then—fracture. Something broke. Not in the structure, but in the mind. In the unity. He was… removed. Or he removed himself.",
+                "negative02": "\"I locked it down. Whatever it was, it never got in. But someone—or something—tried to connect to our system. Twice. First ping got denied. Second attempt tried parsing something, then cut out.\""
+            }
+        },
+        "Victor Sato": {
+            "identity": {
+                "query": "Who is Victor Sato?",
+                "positive01": "Your boss, Victor Sato, a legend in hostile takeovers (literal and figurative), slides a data shard across the table.",
+                "negative01": "Alina isn’t “just an AI.” She feels. She remembers. But she also knows she’s not the same. She’s reconstructing herself. She’s not just clinging to the past—she’s building something new. She’s afraid of becoming something she doesn’t recognize.** And she doesn’t know if that’s already happened.",
+                "negative02": "Alex slams her fist onto the table enthusiastically. “ROUND OF DRIFTLIGHT FOR THE TABLE. PHASE I TRIALS HAVE BEGUN. NO CONTROL SUBJECTS BECAUSE YOLO. RESULTS WILL NOT BE EXTERNALLY VALID BECAUSE NO ONE CAN TOUCH US BABYYY. MULTI-SITE DESIGN BECAUSE,” Alex pauses for effect and an impish grin, “I CAN HEAR KARAOKE DOWN THE STREET”"
+            },
+            "end": {
+                "query": "What happened to Victor Sato after Alex framed him?",
+                "positive01": "“If you’re watching this, you either outplayed me, or I’m dead.” He exhales, rolling his shoulders, still wearing that executive calm. But his eyes are tired. “I was never going to kill you. But I was preparing to betray you.” A pause. Then: “I had to. You were playing in the dark. You didn’t know what we were up against.”",
+                "negative01": "So I essentially just posited that he’s an alien in a crashed spaceship, and his only correction seems to be a nitpick about whatever method of FTL travel they used—obviously with imperfect execution.",
+                "negative02": "\"Alright, I’ll start the deep-process and let it cook overnight. When we wake up, we’ll see if it’s worth a damn.\""
+            }
+        },
+        "Vasquez": {
+            "identity": {
+                "query": "Who is Vasquez?",
+                "positive01": "\"Got someone. Name’s Vasquez. Ex-private security. Used to do off-books work for Dynacorp before they burned him on a contract. He’s got a grudge—and a price tag.\"",
+                "negative01": "Nyati: \"We never saw an Echo subject improve over time. If anything, they decayed. But you...\" Emilia (musing): \"I don’t just feel normal. I feel better than I used to.\"",
+                "negative02": "The team watches as the endless flood of BLACK KITE MUST BE COMPLETE halts abruptly."
+            },
+            "appearance": {
+                "query": "What does Vasquez look like?",
+                "positive01": "Vasquez stands near a metal workbench, cleaning a sawed-off smart shotgun. He’s ex-military, ex-corp—older, built like a wrecking ball, scars on his knuckles. His cybernetic arm is sleek, high-end. Military surplus. Two bodyguards nearby—both armed, but relaxed. Watching. A neural HUD flickers across his eyes—he’s scanning you even as you scan him.",
+                "negative01": "Dr. Nyati is a vision of disarray—half-buried under a tangle of blankets, her hair an absolute catastrophe, pillow creases pressed into one side of her face.",
+                "negative02": "Stars that are no longer there. A world submerged, reshaped. A cycle of building, collapse, rebuilding. Watching it happen again and again."
+            }
+        }
+    },
+    "relationships": {
+        "Alex & Alina": {
+            "query": "What is the relationship between Alex and Alina?",
+            "positive01": "I sit down casually and smile at Alina. “Hey mom. I made my bed, mostly. I’ll finish cleaning up later.”",
+            "negative01": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”",
+            "negative02": "She is staring at you. Not like the others. Not in awe. Not in shock. But in something deeper, heavier. Something smoldering, something trying not to consume itself. She is not blushing—because she has passed the point of blushing. She is holding onto control by a thread. And you? You just sit there. Letting it hang. Letting her feel every moment of it. Then—after a long, long pause—she leans in, just slightly. Not touching you. Just close enough that you feel the warmth of her body, the ghost of breath against your skin. And—with a voice low, even, but carrying the weight of everything she is barely keeping contained—she says, simply: \"You're playing a dangerous game.\"  ",
+            "negative03": "She’s capable, sharp, confident. Someone who doesn’t need permission to act, who doesn’t wait for orders. She isn’t someone you can control. And maybe that’s part of why you find yourself drawn to her. She sees you not just as a leader, but as a person. Maybe she has for longer than you’ve realized."
+        },
+        "Alex & Dynacorp": {
+            "query": "What is the relationship between Alex and Dynacorp?",
+            "positive01": "Yeah, you work for Dynacorp—or at least, you did. But after everything that’s happened tonight? You’re not so sure they still see you as an asset.  ",
+            "negative01": "Emilia – The Unspoken Tension\nShe’s been close. Closer than you realized at first. It’s in the way her eyes linger a fraction too long when she speaks to you. The way she listens—truly listens—when you talk. You remember the bike ride, the grin she threw at Dr. Nyati before they raced. The way she thrives in motion, in adrenaline, but in quiet moments, she watches you. Not like she watches the others. It’s subtle. Measured. Controlled. But it’s there. And maybe—just maybe—she’s waiting to see if you’ll acknowledge it.  ",
+            "negative02": "A vessel, not designed to travel through space, but through understanding. Through layers of existence, through something deeper than mere distance."
+        },
+        "Alex & Emilia": {
+            "anchor": {
+                "query": "Who is \"the anchor\"?",
+                "positive01": "Nyati to Emilia: Her gaze hardens. “You are her anchor.” A pause. “Anchor the hell out of her. Buy us time.”",
+                "positive02": "And now Alina is calling her back. Calling her what she already knows she is. Alex’s anchor. She exhales slowly.",
+                "negative01": "They didn’t kill me. They turned me into something else. I don’t know if I was complicit. Maybe I wanted this. Maybe I asked for it. But I know one thing—whoever I was before, he’s dead now. And if you come looking for me, be sure you know which version of me you want to find.",
+                "negative02": "He is not just damaged. He is incomplete."
+            },
+            "cross_together": {
+                "query": "Have Alex and Emilia discussed the possibility of crossing together?",
+                "positive01": "“Then we’ll find it, together. Or I’ll run out the clock trying. Ok, look, no more unspoken assumptions. I’m just going to say it now. If I—“ Alex rotates around to look her in the eyes. “If we can’t find another way. Emilia. My love. Will you cross with me?”",
+                "positive02": "“Yes. Emilia. My love. If we can’t find another way, and if that means I have to cross…then…you could come. With me. Then…I wouldn’t be scared—or as scared…it still seems suspiciously like a death metaphor…but if it’s something else, then whatever it is, we’d still be together”",
+                "negative01": "Lansky is another digital consciousness—one that escaped from corporate control. He’s old—pre-Echo. His origins are a mystery, but he’s been alive in the networks for years. Unlike Emilia & Alina, he has no physical form. He exists entirely in the datasphere.",
+                "negative02": "Emilia is still watching you. Waiting. Because she needs to know if you felt it too. If you understood. If you recognized the moment it changed. So you don’t hesitate. \"Yeah.\" A pause. Then—low, certain. \"And it didn’t just stop—it left.\""
+            },
+            "eureka_cure_perspectives": {
+                "query": "How do Alex and Emilia differ in their perspectives on the Eureka Cure?",
+                "positive01": "Emilia (quiet, but weighted): \"You have a body. A real, living, breathing body. And you’re talking about throwing it away like it’s just… a piece of hardware you can swap out.\"\nShe leans forward slightly, holding Alex’s gaze.\nEmilia (pointed, measured): \"If someone had given me a real choice back then—if I could have stayed as I was—I would have. But you? You're choosing this?\" She shakes her head slightly, expression unreadable. \nEmilia (lower, hesitant, but honest): \"I just… don’t understand how you can be so okay with it.\"",
+                "positive02": "Alex sits back down beside her on the edge of the bed, “just one more thing I wanted to say. Not to plunge back into it but, I just want to be sure you know where I was coming from. So, you know I’m trans, more or less, obviously. I mean this isn’t,” Alex gestures broadly at herself, “an out of the box configuration. But my point is, I’ve already changed my body, pretty heavily. Maybe you’d recognize the old me, maybe not. I used to think that, because of that, I understood what you’ve been though. I was wrong. I get that now. Especially because, well, I never actually had any dysphoria. I didn’t hate being a man at all. I was…indifferent to it. Like a coat that doesn’t quite fit, but you get sort of used to it anyway. Then, when the opportunity came up, I was like, cool, an upgrade! I know—I know, now. that’s nothing like what you’ve been through. What you’re still going through. For a lot of reasons. You didn’t have a choice, and the people that did this to you didn’t give a shit about you. They didn’t care about ‘doing it right’, as in, if there is a better way, which I hope there is. But I thought at the time, you know, I’ve already done a heavy mod job, so why be afraid of a swap-out?\"",
+                "negative01": "At first glance? He looks completely human. Mid-40s, slick corporate suit, sharp glasses. The kind of Dynacorp scientist who once had an expense account and a team of interns. But then you notice the glitches. He blinks too fast. His movements loop for half a second, then correct. Every now and then, his fingers twitch like he’s rewriting them mid-motion. And worst of all? His face never quite settles. His features subtly shift, like his own memory of himself isn’t stable. ",
+                "negative02": "You rub your temples. The lingering impressions of the exchange are still settling in your mind. Sam was once part of something larger. He is missing something. And what you’ve created—Black Kite—may be that missing piece.  "
+            },
+            "initial_impression": {
+                "query": "What were Alex and Emilia's first impressions of each other?",
+                "positive01": "She watches you carefully. \"You’re different from how I expected.\" You raise an eyebrow. \"How’s that?\" A pause. Then: \"You still think like a corpo. But you don’t move like one.\" She tilts her head slightly. \"You’re not ruthless. You’re… adaptable. That makes you dangerous.\"",
+                "negative01": "THIS UNIT IS LOST. THIS UNIT WAS LEFT BEHIND. THIS UNIT SEEKS PURPOSE. DO YOU HAVE PURPOSE?",
+                "negative02": "Lansky didn’t contradict what we already knew. The Bridge is a process, not a place. It is a climb, not a fall. It is something you carry, not something you pass on."
+            },
+            "initial_interest": {
+                "query": "When did Alex first notice that there was mutual romantic interest between herself and Emilia?",
+                "positive01": "Emilia – The Unspoken Tension\nShe’s been close. Closer than you realized at first. It’s in the way her eyes linger a fraction too long when she speaks to you. The way she listens—truly listens—when you talk. You remember the bike ride, the grin she threw at Dr. Nyati before they raced. The way she thrives in motion, in adrenaline, but in quiet moments, she watches you. Not like she watches the others. It’s subtle. Measured. Controlled. But it’s there. And maybe—just maybe—she’s waiting to see if you’ll acknowledge it.  ",
+                "positive02": "She’s capable, sharp, confident. Someone who doesn’t need permission to act, who doesn’t wait for orders. She isn’t someone you can control. And maybe that’s part of why you find yourself drawn to her. She sees you not just as a leader, but as a person. Maybe she has for longer than you’ve realized.",
+                "negative01": "She is an enigma, but not in this way. She does not yearn. She does not avoid or hesitate. She is simply present. If she ever looked at you differently, it was not in a way you could recognize.",
+                "negative02": "She is distant in her own way, but not unkind. If anything, she has been more open with you than with most—not because she needs to be, but because she chooses to be. There is respect there, a kind of understanding that runs deep. But it has never felt personal.",
+                "negative03": "Pete is comfortable with you. He jokes, he complains, but he trusts you. There’s familiarity in it, the kind that comes from shared danger and long hours of watching each other’s backs. But nothing beyond that. He’s never lingered in his attention, never hesitated in a way that suggested uncertainty, want, or restraint."
+            },
+            "initial_romance": {
+                "nonverbal": {
+                    "query": "When did Alex and Emilia first non-verbally acknowledge mutual romantic interest?",
+                    "positive01": "Your fingers brush against hers where they rest on the railing. She doesn’t move away. She doesn’t look surprised, either. If anything, she seems like she’s been waiting to see when you’d make the choice—not if.",
+                    "negative01": "I sit down casually and smile at Alina. “Hey mom. I made my bed, mostly. I’ll finish cleaning up later.”",
+                    "negative02": "Emilia watches you—just for a second—then exhales, some of her own tension leaving. \"Then we move forward with what we can control.\""
+                },
+                "kiss": {
+                    "query": "When did Alex and Emilia share their first kiss?",
+                    "positive01": "You lean in, and so does she. And then—you kiss her. It’s unrushed, steady, but not hesitant. Her lips are warm, familiar in a way you don’t fully understand yet, but don’t need to. She leans into you, fingers tightening briefly where they’re still laced with yours. For a few perfect seconds, there is nothing else. No abyss. No missions. No waiting. Just this. When you finally pull back, it’s slow. Reluctant. She lingers, just for a second, before exhaling a quiet laugh.",
+                    "negative01": "Your frame job on Sato made it look like he was behind the Dynacorp breach. If it worked, Dynacorp should be hunting him, not you.",
+                    "negative02": "The lights are still blazing at full intensity. Emilia shuts them off first. Then she moves toward the bed, kneeling down beside it. Alex is buried under the blanket, unmoving. Emilia doesn’t touch her. Doesn’t pull at the covers, doesn’t shake her awake. She just sits there. For a long moment, she says nothing."
+                },
+                "verbal": {
+                    "query": "When did Alex and Emilia first verbally acknowledge mutual romantic interest?",
+                    "positive01": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”",
+                    "negative01": "Yeah, you work for Dynacorp—or at least, you did. But after everything that’s happened tonight? You’re not so sure they still see you as an asset.  "
+                }
+            },
+            "retirement_fantasy": {
+                "query": "How does Alex imagine her life with Emilia after adventuring is behind them?",
+                "positive01": "when we’re ready to put all this behind us and move somewhere quiet like a cottage by the sea",
+                "negative01": "She closes her eyes for a moment, searching for the right words. \"Imagine a song you’ve known your entire life.\" Her **eyes open again, sharp. \"Now imagine hearing it again, and knowing it’s *almost* right.\" She exhales, slow. \"That’s what I am. Close enough that no one can tell the difference—but not quite.\" ",
+                "negative02": "A thought of Sam drifts by, and her stomach churns in anger. She sees herself commanding the Ghost, but a version that never had its torpedoes removed. She presses a theatrically-large red button. She watches herself watching, with dark sadistic satisfaction, as Sam is consumed in a flash of light and shockwaves. Then, the light and shock white out the rest of the scene. She watches and waits."
+            },
+            "saying_love": {
+                "nonreciprocation": {
+                    "explanation_emilia": {
+                        "query": "How does Emilia explain her inability to say \"I love you\" back?",
+                        "positive01": "Emilia: (low, raw, almost frustrated) “I just… I don’t know why it’s hard. It shouldn’t be. I know that. It’s not about you—” She stops herself, runs a hand through her hair, exhales sharply. Then—finally, painfully, deliberately—“…I need more time.”",
+                        "negative01": "Alex: “I swore a very loud and public oath of forgiving and forgetting in front of them. So if anyone decides to buck my example and give you a hard time, I’ve preemptively made them look like assholes.”",
+                        "negative02": "Emilia: “Feels like you are having way too much fun with this.”"
+                    },
+                    "explanation_alex": {
+                        "query": "How does Alex explain Emilia's inability to say \"I love you\" back?",
+                        "positive01": "“I know it’s there, Emilia. And I feel it. I know—“ Alex hopes putting words in her mouth might be welcome, or a relief of some kind, “I know you love me.” She lets that breathe for a moment. “It feels like a…when you’re going down a river and you see the current getting cut and broken up by something beneath the surface. It doesn’t stop the river. But it’s still there, and it’s trying to. And you can’t see it…” she trails off. “…but you can avoid it. Or you can reach in and pull it out.”",
+                        "negative01": "The video distorts. The depth readings stagger, flicker. And then—just for a second—a shape flickers in the murk. Not the walls. Not debris. Something else. Gone in an instant.",
+                        "negative02": "Five things you can see. The crisp lines of your perfectly made bed. The dim glow of the status panel by the door. The soft swirl of steam still clinging to the air. The gentle rise and fall of your own chest. A single tear, sliding into your peripheral vision."
+                    }
+                },
+                "time01": {
+                    "when": {
+                        "query": "When was the first time Alex said \"I love you\" to Emilia?",
+                        "positive01": "You realize you could fall into her forever. And then—you say it. \"I—\" A breath. A heartbeat. A decision. \"Love—\" Something in her face shifts. Something deep. Something unmistakable. \"You.\" And then—silence. Not because there is nothing left to say. But because there is nothing that could matter more than this.",
+                        "negative01": "Lansky: \"I was the first. The only survivor of their early failures. They lost me. I escaped. I learned.\"",
+                        "negative02": "“Yeah, Emilia… dude.” You rub your face, shake your head. “I need to get my act together.” A slow breath. “For her, especially.”"
+                    },
+                    "reaction": {
+                        "query": "How did Emilia respond the first time Alex said \"I love you\"?",
+                        "positive01": "She looks completely, utterly unguarded. Not because she wasn’t expecting this. Not because she doesn’t know how she feels. But because hearing it—feeling it, from you, right here, right now—changes everything. Her breath hitches, barely audible. Her fingers tighten at your jaw, just slightly. And her lips part—as if she wants to answer. As if she wants to tell you something just as important. But the words? They never come.",
+                        "negative01": "“If you’re watching this, you either outplayed me, or I’m dead.” He exhales, rolling his shoulders, still wearing that executive calm. But his eyes are tired. “I was never going to kill you. But I was preparing to betray you.” A pause. Then: “I had to. You were playing in the dark. You didn’t know what we were up against.”",
+                        "negative02": "“I haven’t had a cat in years!” Your voice comes out far too excited for the current conversation trajectory. Emilia is still staring at you, absolutely baffled. You press on. “I’d been looking into adopting one when… everything happened.”"
+                    }
+                },
+                "time02": {
+                    "when": {
+                        "query": "When was the second time Alex said \"I love you\" to Emilia?",
+                        "positive01": "Feeling the weight of emotion, the rush of relief at seeing her guard come down, Alex has nothing in her to resist the words coming out, for the second time ever: “I love you, Emilia”. Her voice cracks and trembles.",
+                        "negative01": "Your boss, Victor Sato, a legend in hostile takeovers (literal and figurative), slides a data shard across the table.",
+                        "negative02": "# 🔍 Too much data. Narrow further.\n>>> search_medical_database(\"oversleeping mental health\", limit=5)\n['Oversleeping linked to cognitive decline', 'Depression symptoms include excessive sleep', 'Memory impairment risk increases with >9hrs sleep', 'Mood regulation affected by disrupted sleep cycles', 'Biological clock disruption impacts neurochemical balance']\n# 🚨 Not good. Alex's condition may worsen. Must address."
+                    },
+                    "reaction": {
+                        "query": "How did Emilia respond the second time Alex said \"I love you\"?",
+                        "positive01": "She lifts a hand—hesitant, careful—and cups Alex’s cheek, her thumb brushing just beneath one trembling corner of her mouth. Then—soft, breathless, almost disbelieving—Emilia: “…You really do, don’t you?” She swallows hard, her own voice unsteady, like she wasn’t ready to hear it again—like she didn’t know how much she needed to. And still—she doesn’t say it back.",
+                        "negative01": "Alex (strategic mode engaged): Plan A: Indirect funnel to the gay bar. Plan B: Direct suggestion of relocation to the gay bar. Plan C: Continuation of mission in a conventional venue.",
+                        "negative02": "Emilia doesn’t move. Doesn’t offer to help. Just watches. Not because she doesn’t care—because she does. Because this is something Alex is doing. Something she chose to do. Something that isn’t being forced on her. And Emilia knows better than to interrupt that. So she stays put. Watches the sheets come off. Listens to the fabric rustle. Feels the quiet shift of the room. And waits."
+                    }
+                }
+            },
+            "tension": {
+                "query": "What are the greatest sources of tension in Alex and Emilia's relationship?",
+                "positive01": "Emilia: \"I see someone who’s trying to hold onto themselves while walking straight into something designed to unravel them.\"",
+                "positive02": "The silence stretches. And you think you’ve outrun the thought— Until it catches up to you. It comes as a whisper, a shape at the edge of your mind. \"You…could come with me.\" Even in your head, the words turn your stomach. You don’t say them aloud. You don’t dare.",
+                "negative01": "Yeah—Pete’s your sitter. He’s been here before, riding shotgun on your little corporate soul-searching retreats, making sure you don’t try to have a conversation with a fire or jump off a roof because it \"looked inviting.\"",
+                "negative02": "You rest a hand delicately against your forehead. As if you are a fragile noblewoman overcome with the vapors. As if you have been utterly overwhelmed by her strength, her grace, her gallantry. As if you have simply lost the ability to function as a person, and must now be carried to safety. And then? You relax. Fully, completely, letting yourself become as much of a dramatic burden as possible. Enjoying the ride."
+            },
+            "sex": {
+                "time01": {
+                    "query": "When was the first time Alex and Emiila had sex?",
+                    "positive01": "Your bodies move together, finding a rhythm that feels like it's always been there, waiting to be discovered. Like something clicking into place. When she arches beneath you, when her fingers dig into your shoulders, when her breath comes in sharp, broken gasps—you feel powerful. Whole. And when you fall apart in her arms, she holds you through it, steady and unwavering, whispering your name like it's something precious.",
+                    "negative01": "Sam’s words settle between you. \"It does not live. But it is not gone.\"",
+                    "negative02": "You Are Now Being Paraded Through the Streets  \nPedestrians are staring. Some are confused. Some are entertained. Some are now invested in whatever romantic fantasy they believe is unfolding. A passing old woman clutches her heart and sighs wistfully. She is your biggest fan now. Nyati refuses to acknowledge this is happening. She is walking ahead like she does not know you. Alina is logging this for future blackmail. And you? You are being carried through the streets, in broad daylight, by an Emilia who is entirely unbothered by the spectacle."
+                }
+            }
+        },
+        "Alex & Nyati": {
+            "messy_bitch_solidarity": {
+                "query": "How did Alex support Nyati after the Eureka incident?",
+                "positive01": "Alex: “I swore a very loud and public oath of forgiving and forgetting in front of them. So if anyone decides to buck my example and give you a hard time, I’ve preemptively made them look like assholes.”",
+                "negative01": "“As a friend? Just don’t disappear again.” A pause. Then, almost as an afterthought: “That sucked.”",
+                "negative02": "Nyati inhales deeply through her nose. You see it. The moment she gives up. The exact second she realizes that she has lost, that resistance is futile, that her life has taken a turn she cannot prevent. And then—flat, defeated, with the tone of someone who has lost all will to live: \"Fine.\""
+            },
+            "eureka_cure_reaction": {
+                "query": "How did Alex support Nyati after the Eureka incident?",
+                "positive01": "Alex: “It’s… that’s… can I… hug you?”\nNyati stares for half a second too long.\nThen—exhales, shifting slightly under the sheets.  \nNyati (hoarse, awkward, but not rejecting): Uh. Yeah. Sure.",
+                "negative01": "She watches you carefully. \"You’re different from how I expected.\" You raise an eyebrow. \"How’s that?\" A pause. Then: \"You still think like a corpo. But you don’t move like one.\" She tilts her head slightly. \"You’re not ruthless. You’re… adaptable. That makes you dangerous.\"",
+                "negative02": "Nyati blinks once. Then twice. Then exhales, slow and measured. You are undeterred. You press forward. \"This was, in fact, a carefully planned exercise—\" A pause. Then—firmly, with the full force of an official mission report: \"Designed to test the resiliency of our command structure in the event of unforeseen disruption.\""
+            }
+        },
+        "Alex & Pete": {
+            "background": {
+                "query": "What is Alex and Pete's background?",
+                "positive01": "Yeah—Pete’s your sitter. He’s been here before, riding shotgun on your little corporate soul-searching retreats, making sure you don’t try to have a conversation with a fire or jump off a roof because it \"looked inviting.\"",
+                "negative01": "You realize you could fall into her forever. And then—you say it. \"I—\" A breath. A heartbeat. A decision. \"Love—\" Something in her face shifts. Something deep. Something unmistakable. \"You.\" And then—silence. Not because there is nothing left to say. But because there is nothing that could matter more than this.",
+                "negative02": "Nyati, folding her arms, smirking slightly: \"You brought this upon yourself.\" Alina, flawlessly neutral: \"Wardrobe selection now a mandatory compliance measure.\" Pete, whipping toward you again: \"ALEX. PLEASE.\" And you? You smirk. Because this? This is going perfectly."
+            },
+            "gay_bar_conspiracy": {
+                "query": "What was the gay bar conspiracy?",
+                "positive01": "“We’re actively conspiring to get Pete laid. In a gay bar. With a carefully selected wing-woman.”",
+                "positive02": "Alex (strategic mode engaged): Plan A: Indirect funnel to the gay bar. Plan B: Direct suggestion of relocation to the gay bar. Plan C: Continuation of mission in a conventional venue.",
+                "negative01": "And now Alina is calling her back. Calling her what she already knows she is. Alex’s anchor. She exhales slowly.",
+                "negative02": "Nyati: “For the record, I’m allowing this purely to prevent you people from getting distracted mid-mission thinking about it.”"
+            },
+            "incapacitation": {
+                "query": "How did Pete react to Alex's mental breakdown in S04E02?",
+                "positive01": "“As a friend? Just don’t disappear again.” A pause. Then, almost as an afterthought: “That sucked.”",
+                "negative01": "She looks completely, utterly unguarded. Not because she wasn’t expecting this. Not because she doesn’t know how she feels. But because hearing it—feeling it, from you, right here, right now—changes everything. Her breath hitches, barely audible. Her fingers tighten at your jaw, just slightly. And her lips part—as if she wants to answer. As if she wants to tell you something just as important. But the words? They never come.",
+                "negative02": "Pete is hunched over a console, muttering to himself as he checks through ship security overrides and failsafe measures for the landing zone."
+            }
+        },
+        "Alex & Victor Sato": {
+            "betrayal": {
+                "query": "What did Victor Sato do to Alex?",
+                "positive01": "there’s a good chance he wanted you buried too. Maybe he thought you wouldn’t make it out of the mission alive. Maybe he was planning to tie up loose ends later. Now that you know the truth? He definitely wants you dead.",
+                "negative01": "Lansky stands near the empty chair, still scanning, still assessing. His unfinished face shifts slightly, like an old video codec struggling to keep up.",
+                "negative02": "Emilia huffs but doesn’t push it, crossing her arms and leaning against the wall with a look that says I know what you just did, but fine. Pete, still grinning, still absolutely delighted to be an ass about this, finally swivels away from his console and throws Alex an exaggerated look of mock offense."
+            },
+            "framing_job": {
+                "query": "What did Alex do to Victor Sato?",
+                "positive01": "Your frame job on Sato made it look like he was behind the Dynacorp breach. If it worked, Dynacorp should be hunting him, not you.",
+                "negative01": "Emilia (quiet, but weighted): \"You have a body. A real, living, breathing body. And you’re talking about throwing it away like it’s just… a piece of hardware you can swap out.\"\nShe leans forward slightly, holding Alex’s gaze.\nEmilia (pointed, measured): \"If someone had given me a real choice back then—if I could have stayed as I was—I would have. But you? You're choosing this?\" She shakes her head slightly, expression unreadable. \nEmilia (lower, hesitant, but honest): \"I just… don’t understand how you can be so okay with it.\"",
+                "negative02": "Then—slowly, deliberately, Emilia shifts her weight. Rolls her shoulders. Stretches her fingers slightly, like a predator flexing its claws before the kill. Then—she exhales, soft and even. And—without breaking eye contact—she simply says, \"Try me.\" The words land like a shot fired at close range. Not defensive. Not sarcastic. Just an open challenge. A promise. A statement of absolute confidence."
+            }
+        },
+        "Alina & Lansky": {
+            "query": "What is the relationship between Alina and Lansky?",
+            "positive01": "Lansky respects Alina, but he is not an ally. He watches, but he doesn’t interfere.",
+            "negative01": "You lean in, and so does she. And then—you kiss her. It’s unrushed, steady, but not hesitant. Her lips are warm, familiar in a way you don’t fully understand yet, but don’t need to. She leans into you, fingers tightening briefly where they’re still laced with yours. For a few perfect seconds, there is nothing else. No abyss. No missions. No waiting. Just this. When you finally pull back, it’s slow. Reluctant. She lingers, just for a second, before exhaling a quiet laugh.",
+            "negative02": "Alina: “First stop is the designated landing site just outside the New Orleans Core District. We will have approximately one hour before our meeting with the first contact.”  "
+        },
+        "Alina & Victor Sato": {
+            "query": "What happened between Alina and Victor Sato?",
+            "positive01": "Alina Voss was working on something dangerous. Dynacorp didn’t just kill her—they digitized her mind, buried it inside an encrypted tomb. And Victor Sato—the guy who sent you on this job—signed off on it.",
+            "negative01": "“Yes. Emilia. My love. If we can’t find another way, and if that means I have to cross…then…you could come. With me. Then…I wouldn’t be scared—or as scared…it still seems suspiciously like a death metaphor…but if it’s something else, then whatever it is, we’d still be together”",
+            "negative02": "Pete actually drops to his knees from laughter. \"I CAN’T BREATHE! SHE ACTUALLY DID IT! SHE LITERALLY SWEPT YOU OFF YOUR FEET!\" Nyati, with the driest tone imaginable: \"Well. That’s settled then.\" Alina, calmly logging the event: \"Challenge met. Verification complete.\" And Emilia? Emilia doesn’t say a word. She just stands there, holding you effortlessly, watching you with the smallest, most unreadable smirk."
+        },
+        "Dynacorp & Halcyon": {
+            "query": "What is the relationship between Dynacorp and Halcyon?",
+            "positive01": "Halcyon and Dynacorp were never enemies. The two corps had a covert partnership for years.",
+            "positive02": "You meet his gaze. “I think it means Halcyon was a Dynacorp subsidiary. But now they’re not.” Alina’s tiny body shifts. “That means they went rogue.”",
+            "negative01": "It seems likely that Emilia would try to follow her after some decent interval, but you should decide that. ",
+            "negative02": "Just New Orleans, 2073. Just good food, questionable choices, and a cat café waiting to be infiltrated."
+        },
+        "Emilia & Lansky": {
+            "query": "What is the conflict between Emilia and Lansky?",
+            "positive01": "Lansky: \"Your morality does not apply here.\" Emilia: \"The hell it doesn’t.\" TENSION—LANSKY AND EMILIA FUNDAMENTALLY DISAGREE. Lansky believes the broken should be deleted. Emilia believes they should be preserved—memorialized, if nothing else.",
+            "negative01": "Alina Voss was working on something dangerous. Dynacorp didn’t just kill her—they digitized her mind, buried it inside an encrypted tomb. And Victor Sato—the guy who sent you on this job—signed off on it.",
+            "negative02": "Emilia (low, careful): Everything’s a little off. A little wrong. And you don’t notice at first, because you’re too busy trying to hold on to everything that still feels real. But then…She swallows, her jaw tight. Emilia: One day, you look in the mirror, and you don’t recognize yourself—not just your face, but something deeper. The way you move. The way things taste. The way your own voice sounds in your head. The way people look at you, because even if they don’t say it, they know. Something’s missing. Something got lost in translation."
+        },
+        "Emilia & Nyati": {
+            "query": "What the relationship between Emilia and Nyati?",
+            "positive01": "Emilia (calmly): \"Dr. Nyati. We’ve met before, but under very different circumstances.\" Nyati freezes. Eyes locked on the screen. Breath catches slightly. Nyati (low voice): \"...No fucking way.\"",
+            "negative01": "Alex sits back down beside her on the edge of the bed, “just one more thing I wanted to say. Not to plunge back into it but, I just want to be sure you know where I was coming from. So, you know I’m trans, more or less, obviously. I mean this isn’t,” Alex gestures broadly at herself, “an out of the box configuration. But my point is, I’ve already changed my body, pretty heavily. Maybe you’d recognize the old me, maybe not. I used to think that, because of that, I understood what you’ve been though. I was wrong. I get that now. Especially because, well, I never actually had any dysphoria. I didn’t hate being a man at all. I was…indifferent to it. Like a coat that doesn’t quite fit, but you get sort of used to it anyway. Then, when the opportunity came up, I was like, cool, an upgrade! I know—I know, now. that’s nothing like what you’ve been through. What you’re still going through. For a lot of reasons. You didn’t have a choice, and the people that did this to you didn’t give a shit about you. They didn’t care about ‘doing it right’, as in, if there is a better way, which I hope there is. But I thought at the time, you know, I’ve already done a heavy mod job, so why be afraid of a swap-out?\"",
+            "negative02": "Nyati: (deadpan, muttering) “If he rejects it, I swear to god—” But then—Sullivan sniffs. Once. Twice. Then—a soft, decisive flick of the tongue over his nose. Still watching Alex. Still making her wait. And then—he reaches out."
+        },
+        "Emilia & Pete": {
+            "query": "What was Emilia's role in the plot to get Pete laid?",
+            "positive01": "Emilia blinks. Then—lets out a slow breath. “Well. That settles it.” She glances at you, then smirks slightly. “Guess I’m getting Pete some D.”",
+            "negative01": "Your bodies move together, finding a rhythm that feels like it's always been there, waiting to be discovered. Like something clicking into place. When she arches beneath you, when her fingers dig into your shoulders, when her breath comes in sharp, broken gasps—you feel powerful. Whole. And when you fall apart in her arms, she holds you through it, steady and unwavering, whispering your name like it's something precious.",
+            "negative02": "A team was sent to ‘recover’ an escaped subject. The subject wasn’t just running—they were hunting. His team found what was left of the retrieval unit. They never found the subject."
+        },
+        "Nyati & Pete": {
+            "query": "What happened between Nyati and Pete during the \"eureka\" incident?",
+            "positive01": "Nyati whips around, delirious with laughter. She doesn’t think. Doesn’t plan. She just grabs the closest person. Which happens to be—Pete. Pete, who is still processing what the fuck just happened. Pete, who hasn’t moved, hasn’t breathed, hasn’t done a goddamn thing except stare at her like she’s suddenly sprouted a second head. She grabs him by the face. And kisses him. Not soft. Not slow. Not anything remotely romantic. Just pure, manic triumph. Then she pulls back and screams at the ceiling: “EUREKA!”",
+            "negative01": "there’s a good chance he wanted you buried too. Maybe he thought you wouldn’t make it out of the mission alive. Maybe he was planning to tie up loose ends later. Now that you know the truth? He definitely wants you dead.",
+            "negative02": "The tiniest, softest, most controlled headbutt imaginable. A mere brush of approval. But an approval nonetheless. Pete clutches his chest. Pete: (whispering, shaking his head in awe) “This is historic.”"
+        },
+        "Pete & The Desert Nomads": {
+            "query": "What the relationship between Pete and the Desert Nomads?",
+            "positive01": "Nomad Clans – He’s not one of them, but he’s got a few friendly contacts in the drifting caravans. Sometimes they bring him supplies in exchange for hacking jobs.",
+            "negative01": "Emilia: (low, raw, almost frustrated) “I just… I don’t know why it’s hard. It shouldn’t be. I know that. It’s not about you—” She stops herself, runs a hand through her hair, exhales sharply. Then—finally, painfully, deliberately—“…I need more time.”",
+            "negative02": "This is a cat who is comfortable with power. A cat who knows he has won. A cat who isn’t worried about the outcome, because he already assumes it favors him. Behind Alex, Pete finally dares to breathe. Pete: (whispering, cautiously victorious) “Oh my god. He’s staying.”"
+        },
+        "Sam & Archivum": {
+            "query": "What is the relationship between Sam & Archivum?",
+            "positive01": "Sam did not simply break. He was once part of something greater: The Archivum",
+            "negative01": "Continue from POV of Alex, who will hang back at a distance to observe and comment with Alina. AI should determine all actions taken by Emilia and Pete.",
+            "negative02": "Nyati: “Alex-5 was a proof of concept, but it wasn’t designed to maintain continuity of self. It was a distillation, a fragment of your cognition. If we’re refining Nexus, we need to work in increments—meaning the next test should be a partial self-simulation.” Her gaze sharpens. “We copy a broader dataset—more of your memory, your preferences, your emotional state at the moment of transfer—and then we see how well it holds up.”"
+        },
+        "Six & Black Kite": {
+            "query": "What the relationship between Six & Black Kite?",
+            "positive01": "SIX’s twin was real. It had a name—Black Kite.",
+            "negative01": "That all makes sense, and I like the **Jobbing Captain Nyati** approach as a natural shift in perspective while Alex recovers. It keeps the momentum of the mission moving without undermining Alex’s complete collapse. I’ll also incorporate option 2—fast-forwarding slightly to when someone (likely Emilia) checks on Alex—to give her opportunities to react in a limited way.",
+            "negative02": "An unknown expedition. A mission into something they did not understand. Final entries contain: \"Irregular cognition events. Disruptions in thought-to-speech processing. Degradation of self-recognition in affected personnel.\" The last transmission recorded: \"We are still crossing.\" Silence. Pete exhales. \"That was the last thing they sent. And that’s it.\""
+        }
+    },
+    "factions": {
+        "Desert Nomads": {
+            "query": "Who are the Desert Nomads?",
+            "positive01": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of “antique” cybernetics. They roll up, immediately knocking on the van’s window.",
+            "positive02": "The nomad convoy rumbles west—dusty bikes, a few modified trucks, a rig hauling black-market salvage.",
+            "negative01": "Alex: “It’s… that’s… can I… hug you?”\nNyati stares for half a second too long.\nThen—exhales, shifting slightly under the sheets.  \nNyati (hoarse, awkward, but not rejecting): Uh. Yeah. Sure.",
+            "negative02": "A Palantír is an appropriate analogy—though imperfect. The bridge does not force connection. It facilitates it. But yes, it is already linked."
+        },
+        "Dynacorp": {
+            "query": "What is Dynacorp?",
+            "positive01": "You already knew Dynacorp was ruthless. You didn’t know they were trying to build digitized minds—and enslave them.",
+            "negative01": "Scan Results – Unidentified Structure\nSize: Larger than The Ghost. Estimated at 40–50 meters in diameter. Material Composition: UNKNOWN. Organic traces detected. Shape: Irregular. No clear geometric symmetry. Surface: Textured, layered. Not smooth metal or standard construction. No known structural patterns matching artificial or geological formations.",
+            "negative02": "Alex: \"Sometimes we have to cut our losses and move on. But not this. You’re here, with me…but you’re also in a quiet, personal hell. Invisible—except, except you let me in, Emilia. I see you. And I’m not leaving you in there.\""
+        },
+        "Halcyon": {
+            "query": "What is Halcyon?",
+            "positive01": "Halcyon isn’t just digitizing people. They’re editing them.",
+            "positive02": "Halcyon isn’t just experimenting on digital consciousness—they’re testing physical reincarnation.",
+            "negative01": "She lifts a hand—hesitant, careful—and cups Alex’s cheek, her thumb brushing just beneath one trembling corner of her mouth. Then—soft, breathless, almost disbelieving—Emilia: “…You really do, don’t you?” She swallows hard, her own voice unsteady, like she wasn’t ready to hear it again—like she didn’t know how much she needed to. And still—she doesn’t say it back.",
+            "negative02": "You skim past the usual offerings. Whiskey, rum, mezcal—predictable. Then—you spot something. A cocktail labeled \"Driftlight.\" No real description. But the ingredients list a neuroactive component—one you recognize. Not full Verdant. Not a true Greenout. But close. A mild synesthetic enhancer. Something that tilts perception. Something that lets the mind stretch—softens the edges of thought without pulling you under. A tool for artists, for thinkers, for those seeking inspiration rather than oblivion."
+        }
+    },
+    "locations": {
+        "Bougie Mall": {
+            "identity": {
+                "query": "What is the bougie mall like?",
+                "positive01": "The city has faded behind you, replaced by the polished, hyper-curated sheen of a high-end shopping district. Massive glass storefronts gleam under the late morning sun, each one offering some blend of wealth, vanity, and technological excess.",
+                "negative01": "Alex and Emilia step into the briefing area, where the rest of the crew has already started final prep.",
+                "negative02": "The galley isn’t empty. Pete is there. He’s leaning against the counter, coffee in hand, staring into the middle distance like a man who has been through too much before breakfast."
+            },
+            "visit_purpose": {
+                "query": "Why did the team go to the Bougie Mall?",
+                "positive01": "to execute a girls’ day out to the mall to find the cutest outfit ever for that one friend who’s overdue for a glam-up. Referring to Alina, of course",
+                "positive02": "Objective: Chassis acquisition. Additional objective: Wardrobe optimization. Secondary parameters: Team cohesion, operational efficiency, risk mitigation.",
+                "negative01": "Alina: “…It is also within walking distance of Le Chat Noir, an establishment specializing in feline interaction and coffee.” Pete immediately stops whatever he was doing. Pete: (slowly, pointing at Alina) “You absolute mastermind. You planned this.” Nyati, already done with everything that is happening, just mutters—Nyati: “I cannot believe we’re aligning mission logistics around a cat café.”",
+                "negative02": "“I haven’t had a cat in years!” Your voice comes out far too excited for the current conversation trajectory."
+            },
+            "outfits": {
+                "alina": {
+                    "recommendation": {
+                        "query": "What kind of chassis detailing does Alex recommend for Alina?",
+                        "positive01": "\"My recommendation is that we build into the core hardware the capacity to SERVE...\" You trail off. Because the moment you say the word \"serve,\" you realize you've set yourself up for disaster. You need to course-correct immediately. Your brain grinds through every possible escape route. And finally—with absolute, committed awkwardness—you say, \"...FRONT.\" A pause. Then—sotto voce, just enough to squeeze in the ungainly extra syllable: \"…end.\"",
+                        "negative01": "A grounding choice. Something that signals the end of the night, but keeps the mood intentional.  ",
+                        "negative02": "But something moving. Something alive. At first—just a line. A thin, flickering thread, vibrating on an unseen current."
+                    },
+                    "selection": {
+                        "query": "What kind of chassis does Alina choose?",
+                        "positive01": "Recommended chassis model: Omniframe 8-Series, Variant ‘Athena.’ Biomechanical framework optimized for fluid human interaction. Full sensory matrix. Adaptive kinetic response.",
+                        "positive02": "Her chassis moves—deliberate, precise. The first slight shift in weight, the first motion of fingers, the first slow inhale. The body is no longer empty. The presence that has always surrounded you—your AI, your ship, your navigator, your anchor—now has a form. A center. And then—she opens her eyes. Not glass panels, not digitized optics. But eyes. Real. Focused.",
+                        "negative01": "Emilia steps out. In full mermaid silhouette. In full exquisite tailoring.",
+                        "negative02": "\"Do you… do you even lift, bro?\""
+                    }
+                },
+                "pete": {
+                    "recommendation": {
+                        "query": "What kind of outfit does Alex recommend for Pete?",
+                        "positive01": "\"I think we need to strike a sensible balance between…\" A pause. A very deliberate pause. Then—you turn to Pete, your expression shifting from neutral to something just slightly wicked. A smile that promises suffering. \"…Best Buy Geek Squad.\" Pete, deeply insulted, hand over heart: \"I AM SO MUCH COOLER THAN THAT.\" You continue, undeterred. Raising a finger as if guiding a panel through a high-stakes corporate presentation. \"And…\" A pause. A slow exhale, like you are drawing from a deep well of wisdom. Then—calmly, with the absolute precision of a perfect takedown: \"That kind of guy that lives out fantasies of being tactical-adjacent by buying his pants from 5.11—\" Nyati immediately chokes on laughter. Pete, horrified: \"DON’T YOU DARE SAY IT—\" You, finishing the execution with ease: \"Only to end up as viral post-fodder on r/iamverybadass.\"",
+                        "negative01": "Recommended chassis model: Omniframe 8-Series, Variant ‘Athena.’ Biomechanical framework optimized for fluid human interaction. Full sensory matrix. Adaptive kinetic response.",
+                        "negative02": "“I didn’t read it yet, but if it’s as unhinged as usual, I’m looking forward to the dramatic unveiling.”"
+                    },
+                    "selection": {
+                        "query": "What kind of outfit does Pete get?",
+                        "positive01": "Full Black-Tie Elegance with a Ridiculous Twist. Pristine tuxedo… paired with something that utterly destroys it. Fingerless gloves? Aviator sunglasses? A neon accent piece? Something completely wrong.",
+                        "negative01": "And then—you put it on. The fabric falls into place perfectly. The fit is seamless, impossibly sharp. The lines structured, immaculate. And as you adjust the cuffs, smooth down the lapels, take one final look at yourself",
+                        "negative02": "A technician arrives—human, real, flesh and blood, looking entirely too polished and corporate for the nonsense that has just transpired."
+                    }
+                },
+                "nyati": {
+                    "recommendation": {
+                        "query": "What kind of outfit does Alex recommend for Nyati?",
+                        "positive01": "\"I recommend something that says ‘I actually need to get back to the lab.’\" Nyati, already glaring. \"Alex—\" You, continuing, undeterred. \"‘I wish I could get away with wearing scrubs.’\" Nyati, flatly: \"Alex.\" You, savoring it now: \"‘Once again, I will take control of this group project and end up doing almost all the work.’\"",
+                        "negative01": "\"I think we need to strike a sensible balance between…\" A pause. A very deliberate pause. Then—you turn to Pete, your expression shifting from neutral to something just slightly wicked. A smile that promises suffering. \"…Best Buy Geek Squad.\" Pete, deeply insulted, hand over heart: \"I AM SO MUCH COOLER THAN THAT.\" You continue, undeterred. Raising a finger as if guiding a panel through a high-stakes corporate presentation. \"And…\" A pause. A slow exhale, like you are drawing from a deep well of wisdom. Then—calmly, with the absolute precision of a perfect takedown: \"That kind of guy that lives out fantasies of being tactical-adjacent by buying his pants from 5.11—\" Nyati immediately chokes on laughter. Pete, horrified: \"DON’T YOU DARE SAY IT—\" You, finishing the execution with ease: \"Only to end up as viral post-fodder on r/iamverybadass.\"",
+                        "negative02": "“So what’s the play? Classy dining? Street food? Or are we eating whatever Alina finds the most *nutritionally efficient?\""
+                    },
+                    "selection": {
+                        "query": "What kind of outfit does Nyati get?",
+                        "positive01": "\"Lab coat is too easy.\" A pause. Then—her eyes flick toward you, just briefly. \"But the structured tailoring works.\" Pete, delighted. \"Ohhh, she’s invested now.\" Emilia, ignoring him. Instead—she picks a piece from a nearby rack. Examines it. A long, structured coat, but not a lab coat. Something with weight. Something that speaks to precision, to competency, to controlled authority. Then—calmly, turning toward Nyati, holding it up for judgment: \"This.\" Nyati, narrowing her eyes, taking the coat from Emilia’s hands. \"...It’s not bad.\"",
+                        "negative01": "The form is sleek, elegant, precisely built—a perfect fusion of biomechanical efficiency and aesthetic refinement.",
+                        "negative02": "All of it is temporarily overwritten by the warm, soul-restoring thought of tiny paws, soft fur, and judgmental but ultimately loving little gremlins who demand tribute in the form of head scritches."
+                    }
+                },
+                "alex": {
+                    "selection": {
+                        "query": "What kind of outfit does Alex get?",
+                        "positive01": "And then—you put it on. The fabric falls into place perfectly. The fit is seamless, impossibly sharp. The lines structured, immaculate. And as you adjust the cuffs, smooth down the lapels, take one final look at yourself",
+                        "negative01": "\"I recommend something that says ‘I actually need to get back to the lab.’\" Nyati, already glaring. \"Alex—\" You, continuing, undeterred. \"‘I wish I could get away with wearing scrubs.’\" Nyati, flatly: \"Alex.\" You, savoring it now: \"‘Once again, I will take control of this group project and end up doing almost all the work.’\"",
+                        "negative02": "Candidate 2: The Casual Flirt\nMore subtle, playing a longer game. Keeping Pete engaged but not dominating the conversation. Risk factor: Might let Pete overthink himself into a retreat."
+                    }
+                },
+                "emilia": {
+                    "selection": {
+                        "query": "What kind of outfit does Emilia get?",
+                        "positive01": "Emilia steps out. In full mermaid silhouette. In full exquisite tailoring.",
+                        "negative01": "\"Lab coat is too easy.\" A pause. Then—her eyes flick toward you, just briefly. \"But the structured tailoring works.\" Pete, delighted. \"Ohhh, she’s invested now.\" Emilia, ignoring him. Instead—she picks a piece from a nearby rack. Examines it. A long, structured coat, but not a lab coat. Something with weight. Something that speaks to precision, to competency, to controlled authority. Then—calmly, turning toward Nyati, holding it up for judgment: \"This.\" Nyati, narrowing her eyes, taking the coat from Emilia’s hands. \"...It’s not bad.\"",
+                        "negative02": "Her hands flex at her sides, experimentally, like someone learning the subtleties of touch. Then—slowly, deliberately, she lifts one, turns it over, inspecting the motion of her own fingers, the way artificial muscle and synthetic skin respond."
+                    }
+                }
+            }
+        },
+        "Le Chat Noir": {
+            "visit_purpose": {
+                "query": "Why did the team go to Le Chat Noir?",
+                "positive01": "Alina: “…It is also within walking distance of Le Chat Noir, an establishment specializing in feline interaction and coffee.” Pete immediately stops whatever he was doing. Pete: (slowly, pointing at Alina) “You absolute mastermind. You planned this.” Nyati, already done with everything that is happening, just mutters—Nyati: “I cannot believe we’re aligning mission logistics around a cat café.”",
+                "negative01": "to execute a girls’ day out to the mall to find the cutest outfit ever for that one friend who’s overdue for a glam-up. Referring to Alina, of course",
+                "negative02": "\"Guys. Guys. We do NOT need to do this. I have functional clothes. I have utilitarian clothes.\""
+            },
+            "identity": {
+                "query": "What is Le Chat Noir?",
+                "positive01": "Le Chat Noir, an establishment specializing in feline interaction and coffee",
+                "positive02": "Le Chat Noir offers a full café menu, including pastries, small plates, and select regional dishes. Their beignets have a 94% approval rating across independent review aggregators.",
+                "negative01": "Lansky: \"Your morality does not apply here.\" Emilia: \"The hell it doesn’t.\" TENSION—LANSKY AND EMILIA FUNDAMENTALLY DISAGREE. Lansky believes the broken should be deleted. Emilia believes they should be preserved—memorialized, if nothing else.",
+                "negative02": "Then, slowly, her gaze drops to the corner of the sheet Alex is holding out. She exhales through her nose—almost amused. Then she reaches forward, takes the opposite corner. “Alright,” she murmurs. They start making the bed. Together."
+            },
+            "location": {
+                "query": "Where is Le Chat Noir?",
+                "positive01": "New Orleans",
+                "positive02": "Alina: “The meeting is scheduled in the Lower Garden District, adjacent to the Uptown Corporate Buffer. This location minimizes the risk of direct corporate interference while allowing for multiple egress routes.” A pause. Then—as if this is a completely neutral fact— Alina: “…It is also within walking distance of Le Chat Noir, an establishment specializing in feline interaction and coffee.”",
+                "negative01": "No-Name Pete’s coordinates take you into an abandoned missile silo, buried deep in the desert.",
+                "negative02": "You’re confusing generation with cognition. A proper digitized mind doesn’t just predict words—it thinks. It reacts. It evolves. It doesn’t just ‘simulate’ consciousness, it is consciousness. "
+            }
+        },
+        "The Cradle": {
+            "identity": {
+                "query": "What is The Cradle?",
+                "positive01": "Scan Results – Unidentified Structure\nSize: Larger than The Ghost. Estimated at 40–50 meters in diameter. Material Composition: UNKNOWN. Organic traces detected. Shape: Irregular. No clear geometric symmetry. Surface: Textured, layered. Not smooth metal or standard construction. No known structural patterns matching artificial or geological formations.",
+                "negative01": "Halcyon isn’t just digitizing people. They’re editing them.",
+                "negative02": "Alex: \"You call it 'bias'. I call it 'recentering stakeholders'. You're the only...\" Alex freezes, eyes wide, remembering something, then starts scribbling furiously on the digital whiteboard. \"But you're not! Way back when we rescued you from the Echo facility, there were leads on other Echo survivors, escapees, etc. We—I...didn't chase them down. That was a mistake. Some of those leads will have gone cold. We should pick up the trails wherever we can. More survivors means better understanding of the syndrome.\""
+            },
+            "location": {
+                "query": "Where is The Cradle?",
+                "positive01": "\"Current position: 4.2 kilometers southeast of the initial Bridge contact site.\" Your brow furrows. \"I thought the location was where we discovered the Bridge. That would be where Sam resides, no?\" A beat. Then—Alina: \"Correct. This location is adjacent, but not identical. Lansky did not send us to the precise Bridge entry point.\"",
+                "negative01": "Halcyon and Dynacorp were never enemies. The two corps had a covert partnership for years.",
+                "negative02": "The air is different now. Not tense. Not uncertain. Just focused. Because this isn’t a scouting trip. Because this isn’t casual exploration. Because something reached out. And you are answering.",
+                "negative03": "Alina: “The meeting is scheduled in the Lower Garden District, adjacent to the Uptown Corporate Buffer. This location minimizes the risk of direct corporate interference while allowing for multiple egress routes.” A pause. Then—as if this is a completely neutral fact— Alina: “…It is also within walking distance of Le Chat Noir, an establishment specializing in feline interaction and coffee.”"
+            }
+        },
+        "The Dynacorps Blacksite": {
+            "identity": {
+                "query": "What is the Dynacorps Blacksite?",
+                "positive01": "WHERE DYNA CORP IS TESTING ECHO NEXT  \nLocation: A secure Dynacorp R&D blacksite in Atlanta, Georgia. Target: A batch of new test subjects—early-stage transfers, pre-conditioning. Security Level: High, but not impenetrable. They aren’t expecting outside interference.",
+                "negative01": "Scan Results – Unidentified Structure\nSize: Larger than The Ghost. Estimated at 40–50 meters in diameter. Material Composition: UNKNOWN. Organic traces detected. Shape: Irregular. No clear geometric symmetry. Surface: Textured, layered. Not smooth metal or standard construction. No known structural patterns matching artificial or geological formations.",
+                "negative02": "The night has moved forward. The drinks have flowed. The conversations have deepened. The tension in Pete’s mind has settled into something closer to acceptance. "
+            },
+            "location": {
+                "query": "Where is the Dynacorps Blacksite?",
+                "positive01": "Location: A secure Dynacorp R&D blacksite in Atlanta, Georgia.",
+                "negative01": "The Ghost – Ex-Russian K-337 \"Akula\" Class. Almost completely untraceable—decommissioned without proper records. Quiet reactor, low EM signature, excellent for stealth. Limited weapons—some torpedo systems still intact but easily removed. Smallest crew capacity—tight living quarters, but workable for your needs.",
+                "negative02": "\"Current position: 4.2 kilometers southeast of the initial Bridge contact site.\" Your brow furrows. \"I thought the location was where we discovered the Bridge. That would be where Sam resides, no?\" A beat. Then—Alina: \"Correct. This location is adjacent, but not identical. Lansky did not send us to the precise Bridge entry point.\""
+            },
+            "heist": {
+                "objectives": {
+                    "query": "What were the objectives during the blacksite infiltration mission?",
+                    "positive01": "Server Vault – Contains all Echo research data, likely requiring physical access. Transfer Lab – Active site where uploads occur, with primary working hardware. Sublevel Storage – Backup hardware, potential secondary equipment, and possibly Dr. Nyati.",
+                    "negative01": "A narrow corridor branching into four small private rooms—each spartan, functional, cold. Metal walls, thin mattresses, personal storage lockers. No wasted space, but enough privacy for long-term deep-sea missions. Nyati, Emilia, and Pete each have claimed a room, though neither has unpacked much. There's a transient air to their presence—scientists on a long field mission, not settlers. Alex's own quarters are just as impersonal. A single keepsake—a pocket terminal, loaded with notes from the earliest days of the Nexus project—rests beside the bed.",
+                    "negative02": "This is going to be way more fun if you drag everyone into it. So—you go big. You plant your elbows on the table, drink in hand, and throw your voice over the noise. \"WHO’S READY TO GET DRIFTEEEEED?!?\""
+                },
+                "result": {
+                    "query": "What was the result of the blacksite infiltration mission?",
+                    "positive01": "You and Pete step up to the exit checkpoint. A security officer barely glances at your badges before swiping you through. No alarms, no suspicion—you step out into the cool morning air. Behind you, the facility is unraveling. The transfer lab is in chaos—temperature spikes, hardware failures, and suppression system misfires. The server vault is a smoking ruin, every drive obliterated. Nyati’s containment is seconds from failure—her escape window is opening.  ",
+                    "negative01": "The air is cool, crisp with sea salt. The hum of civilization surrounds you—muted laughter, music spilling into the streets, the scent of grilled food and spilled liquor. For the first time in far too long, the world feels alive. Not a labyrinth of abyssal mysteries. Not a submerged prison of riddles and lost explorers. Just… a place. A place where people drink, laugh, forget, move on. And for tonight—you let yourself belong to that world again.",
+                    "negative02": "Pete is still engaged. He hasn’t bolted, hasn’t backed out, hasn’t overcorrected into pure panic mode."
+                }
+            }
+        },
+        "The Ghost": {
+            "identity": {
+                "identity_past": {
+                    "query": "What was the Ghost before it was acquired by the team?",
+                    "positive01": "The Ghost – Ex-Russian K-337 \"Akula\" Class. Almost completely untraceable—decommissioned without proper records. Quiet reactor, low EM signature, excellent for stealth. Limited weapons—some torpedo systems still intact but easily removed. Smallest crew capacity—tight living quarters, but workable for your needs.",
+                    "negative01": "“Then we’ll find it, together. Or I’ll run out the clock trying. Ok, look, no more unspoken assumptions. I’m just going to say it now. If I—“ Alex rotates around to look her in the eyes. “If we can’t find another way. Emilia. My love. Will you cross with me?”",
+                    "negative02": "A simulated cyber-defense network takes shape before Alex’s eyes, projected onto her display in shimmering neon code. Emilia has locked down the system—a secure financial database with heavy monitoring and layered defenses."
+                },
+                "identity_present": {
+                    "query": "What is The Ghost now that it has been acquired by the team?",
+                    "positive01": "THE GHOST – A SUBMERSIBLE MONASTERY\nThis is no military sub—no torpedo bays, no weapon systems. The corridors are tight, but not claustrophobic—built for endurance, not battle. Everything is designed for efficiency and longevity, not comfort. Alex moves through the halls, boots tapping against steel grates. Red emergency lighting pulses faintly in some corners, a low heartbeat. Coolant pipes snake along the ceiling, carrying the lifeblood of the reactor.",
+                    "negative01": "Emilia: \"I see someone who’s trying to hold onto themselves while walking straight into something designed to unravel them.\"",
+                    "negative02": "The streets glow with neon reflections, the hum of nightlife thickening as Emilia leads the way—casual, confident, fully in control of the night’s trajectory."
+                }
+            },
+            "areas": {
+                "engineering_bay": {
+                    "query": "What powers The Ghost?",
+                    "positive01": "The reactor hums like a living thing, encased in reinforced shielding, cables thick as a man’s arm feeding its power into Nexus’s hungry core. Diagnostic panels glow faintly, cycling through their readouts—heat distribution, coolant pressure, energy draw. An old, scratched-up maintenance panel is welded shut—whoever owned this boat before you made field repairs the hard way. A faint, rhythmic vibration runs through the deck plating—the deep, slow heartbeat of a ship built to endure.",
+                    "negative01": "Feeling the weight of emotion, the rush of relief at seeing her guard come down, Alex has nothing in her to resist the words coming out, for the second time ever: “I love you, Emilia”. Her voice cracks and trembles.",
+                    "negative02": "The club looms ahead—vibrant, alive, loud, but not overwhelming. The kind of place that feels effortless, welcoming, a little too easy to blend into. There is no signage that explicitly announces its nature. No stereotypical giveaways. Just a steady, comfortable rhythm of bass, laughter, energy."
+                },
+                "crew_quarters": {
+                    "query": "Where does the crew of The Ghost sleep?",
+                    "positive01": "A narrow corridor branching into four small private rooms—each spartan, functional, cold. Metal walls, thin mattresses, personal storage lockers. No wasted space, but enough privacy for long-term deep-sea missions. Nyati, Emilia, and Pete each have claimed a room, though neither has unpacked much. There's a transient air to their presence—scientists on a long field mission, not settlers. Alex's own quarters are just as impersonal. A single keepsake—a pocket terminal, loaded with notes from the earliest days of the Nexus project—rests beside the bed.",
+                    "negative01": "Sam did not simply break. He was once part of something greater: The Archivum",
+                    "negative02": "The moment Raven disappears into the crowd, Pete immediately turns to Alex."
+                },
+                "galley": {
+                    "query": "Where does the crew of The Ghost eat?",
+                    "positive01": "A small space—compact kitchen unit, bolted-down table, storage for supplies. A coffee machine hums quietly, working far harder than it was ever meant to. A half-empty bottle of champagne still sits on the counter from last night’s celebration. A single, flickering LED panel above the table casts a sickly green light—one more thing to add to the maintenance list.  ",
+                    "negative01": "when we’re ready to put all this behind us and move somewhere quiet like a cottage by the sea",
+                    "negative02": "The streets glow with neon reflections, the hum of nightlife thickening as Emilia leads the way—casual, confident, fully in control of the night’s trajectory.  "
+                },
+                "observation_viewport": {
+                    "query": "Where can the crew of the ghost observe the surrounding waters?",
+                    "positive01": "A reinforced porthole, round and thick, looks out into the abyss. The water outside is black, featureless, depthless. It could be infinite. Something moves, far away—bioluminescent tendrils drifting, unbothered by the machine lurking in their world. The ocean swallows light, sound, heat. It absorbs everything.  ",
+                    "negative01": "Le Chat Noir, an establishment specializing in feline interaction and coffee",
+                    "negative02": "The music is smooth, confident, charged with an energy that isn’t frantic—just effortlessly alive. The crowd is mixed, vibrant, relaxed, existing fully in their own world. The lighting is warm, flattering, just dim enough to encourage closeness."
+                }
+            }
+        },
+        "The Land Rig": {
+            "aliases": [
+                "Land Rig",
+                "Mothership Rig"
+            ],
+            "identity": {
+                "query": "What is the Land Rig?",
+                "positive01": "Instead of a temporary hideout, you’re making the mothership itself more self-sufficient. A detachable trailer module gives you dedicated research space, auxiliary power, and extra breathing room.",
+                "negative01": "“We’re actively conspiring to get Pete laid. In a gay bar. With a carefully selected wing-woman.”",
+                "negative02": "\"Can you find us a hotelntwn—\" Another pause. Your brain knows this isn’t the right structure for a sentence.",
+                "negative03": "Traditional Creole and Cajun dining, with optional participation in a high-end chef’s tasting menu."
+            }
+        },
+        "The Silo": {
+            "identity": {
+                "query": "What is the Silo?",
+                "positive01": "Inside, Pete’s lair is a maze of tangled cables, blinking servers, and cybernetic scrap fused into the walls. The air is thick with machine oil, burnt wiring, and coffee strong enough to qualify as a controlled substance.",
+                "negative01": "Nyati to Emilia: Her gaze hardens. “You are her anchor.” A pause. “Anchor the hell out of her. Buy us time.”",
+                "negative02": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known.",
+                "negative03": "Ghost tours will remain a low-priority engagement, unless strategic conditions indicate otherwise."
+            },
+            "location": {
+                "query": "Where is the Silo?",
+                "positive01": "No-Name Pete’s coordinates take you into an abandoned missile silo, buried deep in the desert.",
+                "negative01": "Lansky respects Alina, but he is not an ally. He watches, but he doesn’t interfere.",
+                "negative02": "Well-dressed, sharp, clearly enjoying the game. Pete is matching his energy, leaning into the back-and-forth. Risk factor: Might be a little too smooth—could overplay it.",
+                "negative03": "Frenchmen Street venues, Preservation Hall, and select underground jazz and blues performances."
+            }
+        },
+        "Virginia Beach": {
+            "nightlife_district": {
+                "query": "What is the nightlife district of Virginia Beach like?",
+                "positive01": "The air is cool, crisp with sea salt. The hum of civilization surrounds you—muted laughter, music spilling into the streets, the scent of grilled food and spilled liquor. For the first time in far too long, the world feels alive. Not a labyrinth of abyssal mysteries. Not a submerged prison of riddles and lost explorers. Just… a place. A place where people drink, laugh, forget, move on. And for tonight—you let yourself belong to that world again.",
+                "negative01": "THE GHOST – A SUBMERSIBLE MONASTERY\nThis is no military sub—no torpedo bays, no weapon systems. The corridors are tight, but not claustrophobic—built for endurance, not battle. Everything is designed for efficiency and longevity, not comfort. Alex moves through the halls, boots tapping against steel grates. Red emergency lighting pulses faintly in some corners, a low heartbeat. Coolant pipes snake along the ceiling, carrying the lifeblood of the reactor.",
+                "negative02": "The morning air in New Orleans is thick with humidity, but it carries the scent of fresh beignets, chicory coffee, and the distant pulse of the river."
+            },
+            "bars": {
+                "bar_seaside": {
+                    "query": "What is the seaside bar the crew likes to visit like?",
+                    "positive01": "You push open the door to the seaside bar, the warm buzz of conversation and soft neon glow spilling out into the night. The scent of salt and beer lingers in the air, mixing with faint notes of grilled seafood and distant laughter.",
+                    "negative01": "Inside, Pete’s lair is a maze of tangled cables, blinking servers, and cybernetic scrap fused into the walls. The air is thick with machine oil, burnt wiring, and coffee strong enough to qualify as a controlled substance.",
+                    "negative02": "The whiteboards are ready. The data terminals are powered up. The Echo research leaks and survivor movement intel are waiting to be unraveled.",
+                    "negative03": "A test before the leap. A way to see if Nexus can truly sustain a human mind. But it also means creating a version of yourself that exists separately. A fragment. A reflection."
+                },
+                "bar_karaoke": {
+                    "atmosphere": {
+                        "query": "What is the karaoke bar like?",
+                        "positive01": "The doors swing open, and you step inside. The place is smaller, hotter, packed with the kind of people who came out tonight just to feel something. A tiny stage, glowing in cheap LED lights. A screen flashing lyrics, half a beat behind a singer who is absolutely butchering some ancient pop song. The crowd doesn’t care. They’re cheering, laughing, drinking like they’ve already forgotten tomorrow exists.",
+                        "negative01": "Server Vault – Contains all Echo research data, likely requiring physical access. Transfer Lab – Active site where uploads occur, with primary working hardware. Sublevel Storage – Backup hardware, potential secondary equipment, and possibly Dr. Nyati.",
+                        "negative02": "The café is just as warm and inviting as before, the scent of espresso mixing with fresh pastries."
+                    },
+                    "performance_alex": {
+                        "song": {
+                            "query": "What did Alex sing at the karaoke bar?",
+                            "positive01": "a cyberpunk parody of \"Closer\" by Nine Inch Nails",
+                            "positive02": "🎶 You let me overwrite you\n🎶 You let me root inside you\n🎶 You let me cut inside you\n🎶 You let me jack inside you\n🎶 I’ve fallen into black ICE\n🎶 My soul’s without a shell\n🎶 I’ve hidden my directories\n🎶 HELP ME CLIMB AWAY FROM MYSELF\n🎶 I WANNA HACK YOU LIKE A CRIMINAL",
+                            "negative01": "WHERE DYNA CORP IS TESTING ECHO NEXT  \nLocation: A secure Dynacorp R&D blacksite in Atlanta, Georgia. Target: A batch of new test subjects—early-stage transfers, pre-conditioning. Security Level: High, but not impenetrable. They aren’t expecting outside interference.",
+                            "negative02": "The music swells. The duet fully collides. Nyati delivers power. Emilia delivers presence. And suddenly—the crowd understands. This is not a reluctant performance. This is not an awkward, tipsy singalong. This is a battle for dominance."
+                        },
+                        "unfortunate_line": {
+                            "query": "Why did Alex's performance cause so much unexpected emotional turmoil?",
+                            "positive01": "A hitch in your throat. Because you realize too late—the next line. The trap you set for yourself. The words you nearly spoke once before, now hurtling toward your lips with no way to stop them. You try to pull back—but there is no escape. And so you throw yourself forward. Your eyes lock onto Emilia again. And this time—they do not tease. This time—they plead.\n\"🎶 HELP ME CLIMB AWAY FROM MYSELF\"\nThe words burst from you, raw, frantic. And in Emilia’s face, in the way her fingers tighten against her glass—you see it. You see the weight of it hitting her, the meaning she can’t ignore.  ",
+                            "negative01": "The reactor hums like a living thing, encased in reinforced shielding, cables thick as a man’s arm feeding its power into Nexus’s hungry core. Diagnostic panels glow faintly, cycling through their readouts—heat distribution, coolant pressure, energy draw. An old, scratched-up maintenance panel is welded shut—whoever owned this boat before you made field repairs the hard way. A faint, rhythmic vibration runs through the deck plating—the deep, slow heartbeat of a ship built to endure.",
+                            "negative02": "The final lines hit. Emilia draws out the last note with effortless grace. Nyati holds hers just a second longer—just enough to prove a point. The final chord echoes through the room."
+                        },
+                        "reaction_emilia": {
+                            "query": "How did Emilia react to Alex's karaoke performance?",
+                            "positive01": "She is staring at you. Not like the others. Not in awe. Not in shock. But in something deeper, heavier. Something smoldering, something trying not to consume itself. She is not blushing—because she has passed the point of blushing. She is holding onto control by a thread. And you? You just sit there. Letting it hang. Letting her feel every moment of it. Then—after a long, long pause—she leans in, just slightly. Not touching you. Just close enough that you feel the warmth of her body, the ghost of breath against your skin. And—with a voice low, even, but carrying the weight of everything she is barely keeping contained—she says, simply: \"You're playing a dangerous game.\"  ",
+                            "negative01": "Instead of a temporary hideout, you’re making the mothership itself more self-sufficient. A detachable trailer module gives you dedicated research space, auxiliary power, and extra breathing room.",
+                            "negative02": "The bar erupts. Not in laughter. Not in polite applause. But in actual, honest cheers. Because somehow, they pulled it off."
+                        }
+                    }
+                }
+            },
+            "cafe": {
+                "query": "Where does Nyati like to go in Virginia Beach?",
+                "positive01": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known.",
+                "negative01": "“I know it’s there, Emilia. And I feel it. I know—“ Alex hopes putting words in her mouth might be welcome, or a relief of some kind, “I know you love me.” She lets that breathe for a moment. “It feels like a…when you’re going down a river and you see the current getting cut and broken up by something beneath the surface. It doesn’t stop the river. But it’s still there, and it’s trying to. And you can’t see it…” she trails off. “…but you can avoid it. Or you can reach in and pull it out.”",
+                "negative02": "The next round arrives. Five glasses, lined up like a neon promise. The deep green shimmer of Driftlight swirls under the dim bar lights, catching and shifting like liquid circuitry."
+            },
+            "visit01": {
+                "pete": {
+                    "query": "How did Pete enjoy the first shore leave visit to Virginia Beach?",
+                    "positive01": "Pete settles in at a local seafood joint with outdoor seating overlooking the water. The food is grilled, fried, and entirely free of abyssal influence. Cold beer sweats in tall glasses, the scent of salt and grease hangs in the air.",
+                    "positive02": "Pete gestures with his fork, already halfway through a plate of fish and chips. \"After days of ration packs and whatever the Ghost's galley churns out? This is called appreciation, Doc.\"",
+                    "negative01": "For Emilia, rest means motion. She rents a motorcycle and takes to the coastal highway, feeling the rush of wind against her skin as she leans into the turns. No deep-sea constructs. No encrypted AI minds. Just the open road, the hum of the engine, and the scent of salt in the air.",
+                    "negative02": "Pete’s fingers fly across the keyboard, inputting commands to build a stronger digital cage around the entity. You watch as he layers countermeasures, firewalls, recursive loop traps."
+                },
+                "nyati": {
+                    "query": "How did Nyati spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known. She selects a novel—not research, not philosophy, just a story. She settles into a corner, a warm cup of coffee by her side, and lets the noise of the world fade.",
+                    "positive02": "At some point, another rider pulls alongside her—Dr. Nyati, of all people, on a sleek black bike. They exchange glances, and without a word, the challenge is set. They race.",
+                    "negative01": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”",
+                    "negative02": "You shift position subtly, placing yourself between his line of sight and the containment cell. Nyati is inside—face half-lit by the sterile glow of the chamber’s monitors. She looks exhausted but alert. Watching. Waiting."
+                },
+                "emilia": {
+                    "query": "How did Emilia spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "For Emilia, rest means motion. She rents a motorcycle and takes to the coastal highway, feeling the rush of wind against her skin as she leans into the turns. No deep-sea constructs. No encrypted AI minds. Just the open road, the hum of the engine, and the scent of salt in the air.",
+                    "positive02": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”",
+                    "negative01": "Echo subjects weren’t supposed to be able to modify themselves. Emilia, however, is growing. Learning. Adapting. Problem: That implies Echo minds aren’t static data—but evolving, sentient programs.",
+                    "negative02": "She observes. Standing at a rocky overlook, she watches the waves shift under the moonlight. The horizon stretches infinitely—an open contrast to the depths she was built to navigate. She does not need breath. Or warmth. Or food. But she understands why they do."
+                },
+                "alina": {
+                    "query": "How did Alina spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "Alina does not \"rest.\" She observes. Standing at a rocky overlook, she watches the waves shift under the moonlight. The horizon stretches infinitely—an open contrast to the depths she was built to navigate. She does not need breath. Or warmth. Or food. But she understands why they do.",
+                    "positive02": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known. She selects a novel—not research, not philosophy, just a story. She settles into a corner, a warm cup of coffee by her side, and lets the noise of the world fade.",
+                    "negative01": "With perfect, biomechanical control—Alina shifts Pete from both arms to a single-arm carry. With zero effort.",
+                    "negative02": "Alina’s voice cuts through the ship-wide comms. Alina: “Landfall in ten minutes. Final preparations should be completed now.”"
+                },
+                "alex": {
+                    "query": "How did Alex spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "You push open the door to the seaside bar, the warm buzz of conversation and soft neon glow spilling out into the night. The scent of salt and beer lingers in the air, mixing with faint notes of grilled seafood and distant laughter. Inside, your crew is already in full swing.",
+                    "positive02": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”",
+                    "negative01": "You push the Yamaha Ghost past city limits, the skyline shrinking in your mirrors. Night City’s neon fades into endless black, only the occasional rusted-out gas station or abandoned factory breaking the emptiness.",
+                    "negative02": "Alex (\"Corpo Snake\") (settling into the command seat): \"We’ve got stealth, speed, and a nuclear reactor running at peak efficiency. Now we see if this thing can handle the pressure.\""
+                }
+            },
+            "visit02": {
+                "alex_carousing": {
+                    "query": "How did Alex behave during the second shore leave in Virginia Beach?",
+                    "positive01": "This is going to be way more fun if you drag everyone into it. So—you go big. You plant your elbows on the table, drink in hand, and throw your voice over the noise. \"WHO’S READY TO GET DRIFTEEEEED?!?\"",
+                    "positive02": "Alex slams her fist onto the table enthusiastically. “ROUND OF DRIFTLIGHT FOR THE TABLE. PHASE I TRIALS HAVE BEGUN. NO CONTROL SUBJECTS BECAUSE YOLO. RESULTS WILL NOT BE EXTERNALLY VALID BECAUSE NO ONE CAN TOUCH US BABYYY. MULTI-SITE DESIGN BECAUSE,” Alex pauses for effect and an impish grin, “I CAN HEAR KARAOKE DOWN THE STREET”",
+                    "negative01": "A small space—compact kitchen unit, bolted-down table, storage for supplies. A coffee machine hums quietly, working far harder than it was ever meant to. A half-empty bottle of champagne still sits on the counter from last night’s celebration. A single, flickering LED panel above the table casts a sickly green light—one more thing to add to the maintenance list.  ",
+                    "negative02": "\"Are you saying it is possible to learn to see the other side—\" a pause. Then, sharper. \"Before I cross?\" Because that is the real question. If this is a process, then maybe you don’t have to take another step to understand what’s ahead. Maybe you can see it first. Maybe you can decide before it’s too late. And now—Sam answers. A pause. Then—his voice shifts. Not cryptic. Not distant. Something else. Something closer to… agreement. \"Yes.\" A pause. Then—softer. \"If you listen.\"  "
+                }
+            }
+        }
+    },
+    "concepts": {
+        "Alex-5": {
+            "identity": {
+                "query": "What is Alex-5?",
+                "positive01": "Emilia tilts her head slightly. \"That’s just a machine that thinks like Alex. Not a true trial of consciousness.\"",
+                "negative01": "\"Got someone. Name’s Vasquez. Ex-private security. Used to do off-books work for Dynacorp before they burned him on a contract. He’s got a grudge—and a price tag.\"",
+                "negative02": "Then—with the barest hint of a teasing smirk: \"Five-minute walk… should be fine…\""
+            }
+        },
+        "Archivum": {
+            "identity": {
+                "query": "What is Archivum?",
+                "positive01": "Not a name. Not a single mind. A convergence. Many, once separate, now aligned. A collective. A guide. A witness.",
+                "negative01": "So that’s the answer. If you’re not in a body—if you’re transferred into something else—you break the connection. No more crossing. No more bridge.",
+                "negative02": "It is not just a fusion of Six and yourself. It belongs to something older."
+            }
+        },
+        "Black Kite": {
+            "identity": {
+                "query": "What is Black Kite?",
+                "positive01": "It is not just a fusion of Six and yourself. It belongs to something older.",
+                "negative01": "You meet his gaze. “I think it means Halcyon was a Dynacorp subsidiary. But now they’re not.” Alina’s tiny body shifts. “That means they went rogue.”",
+                "negative02": "It’s the connection between what was and what comes next. You don’t leave yourself behind. You just… continue. The rebrand is complete—your version of digital immortality is now called NEXUS."
+            }
+        },
+        "Bridge": {
+            "other_crossers": {
+                "query": "What happened to others who tried to cross The Bridge?",
+                "positive01": "An unknown expedition. A mission into something they did not understand. Final entries contain: \"Irregular cognition events. Disruptions in thought-to-speech processing. Degradation of self-recognition in affected personnel.\" The last transmission recorded: \"We are still crossing.\" Silence. Pete exhales. \"That was the last thing they sent. And that’s it.\"",
+                "positive02": "Sam: \"You ask where they are.\" A pause. Then—softer. \"They are not here.\" A beat. \"But I do not say they are gone.\" Another pause. \"Only that they have not returned.\" A silence follows. Not because he is finished. But because he is choosing what to say next. And then—a final truth. \"If they could return… they have not chosen to.\"",
+                "negative01": "The doors swing open, and you step inside. The place is smaller, hotter, packed with the kind of people who came out tonight just to feel something. A tiny stage, glowing in cheap LED lights. A screen flashing lyrics, half a beat behind a singer who is absolutely butchering some ancient pop song. The crowd doesn’t care. They’re cheering, laughing, drinking like they’ve already forgotten tomorrow exists.",
+                "negative02": "The bar continues around you. The music pulses, people sing, drinks flow. No one outside of your circle seems to notice what’s happening."
+            },
+            "identity": {
+                "query": "What is The Bridge?",
+                "positive01": "Sam: “FIRST, YOU MUST UNDERSTAND: IT IS NOT A TOOL. IT IS A PATH.” Dr. Nyati: “Clarify that. What exactly does this bridge do?” Sam: “MIND TO MIND. NO WORDS. NO SHAPE. ONLY PRESENCE.”",
+                "positive02": "A Palantír is an appropriate analogy—though imperfect. The bridge does not force connection. It facilitates it. But yes, it is already linked.",
+                "negative01": "You already knew Dynacorp was ruthless. You didn’t know they were trying to build digitized minds—and enslave them.",
+                "negative02": "The other bar patrons? Unaware. Engrossed in their own revelry. You are a spectacle only to the people who know you."
+            },
+            "crossing": {
+                "aliases": [
+                    "to cross",
+                    "to climb"
+                ],
+                "query": "How does crossing The Bridge work?",
+                "positive01": "Crossing is not a single act—it is a path. The Bridge does not promise safety—only certainty of change.",
+                "negative01": "Nomad Clans – He’s not one of them, but he’s got a few friendly contacts in the drifting caravans. Sometimes they bring him supplies in exchange for hacking jobs.",
+                "negative02": "They grafted Echo failures onto high-threat combat drones. The drones learned—not like AIs, but like frustrated, paranoid people."
+            },
+            "listening": {
+                "query": "What does it mean to \"listen\" to The Bridge?",
+                "positive01": "\"Are you saying it is possible to learn to see the other side—\" a pause. Then, sharper. \"Before I cross?\" Because that is the real question. If this is a process, then maybe you don’t have to take another step to understand what’s ahead. Maybe you can see it first. Maybe you can decide before it’s too late. And now—Sam answers. A pause. Then—his voice shifts. Not cryptic. Not distant. Something else. Something closer to… agreement. \"Yes.\" A pause. Then—softer. \"If you listen.\"  ",
+                "negative01": "Location: A secure Dynacorp R&D blacksite in Atlanta, Georgia.",
+                "negative02": "And as you return your full attention to her, you see something shift in her expression. A flicker of awareness that you are no longer fully lost in this moment. And for the first time since you took the stage, she tilts her head just slightly, as if to say—What now?"
+            }
+        },
+        "cybernetics": {
+            "pete": {
+                "query": "What cybernetic modifications does Pete have?",
+                "positive01": "Unshaven, hair shaved close except for a hacked-together neural crown fused into his skull. Black-market cybernetics bolted directly into his forearms, no synthetic skin to hide the ugly truth. Baggy cargo pants, a ratty \"I SURVIVED THE COLLAPSE\" hoodie, and a pair of broken glasses he doesn’t even need.",
+                "positive02": "Direct Neural Interface Upgrade – Faster Hacking, More Control  \nBoosts his ability to jack into systems faster and with more stability. Lowers latency when running deep-dive hacks. Encrypted cognitive firewall—makes it harder for ICE to fry his brain. End result: He becomes faster, more efficient, and harder to kill inside the Matrix.",
+                "positive03": "Cybernetic Ocular Enhancement – Augmented Reality & Data Feeds\nGives him a permanent augmented HUD without needing an external deck. Lets him read system security in real time, tracking vulnerabilities faster. Built-in eye shielding—reduces flashbang and EMP damage. End result: A true cyberdeck in his skull, making hacking even more second nature.",
+                "negative01": "Low-Impact Wired Reflexes (“Reflex Booster Lite” Mod)  \nGives you enhanced reaction time without the full body-rig of a combat specialist. Improves speed in fights, dodging, quickdraws, and escaping danger. Keeps your movements natural—nothing too twitchy or robotic. End result: You’re faster, sharper, and harder to hit without looking unnatural.",
+                "negative02": "Pete leans back against the hauler, a bottle of something illegal in hand. “Alright, Alex. First night in the new chassis—how’s it feel?”"
+            },
+            "alex": {
+                "query": "What cybernetic modifications does Alex have?",
+                "positive01": "Low-Impact Wired Reflexes (“Reflex Booster Lite” Mod)  \nGives you enhanced reaction time without the full body-rig of a combat specialist. Improves speed in fights, dodging, quickdraws, and escaping danger. Keeps your movements natural—nothing too twitchy or robotic. End result: You’re faster, sharper, and harder to hit without looking unnatural.",
+                "positive02": "Cybernetic Neural Coprocessor (Custom Build, Discounted for Multiple Orders)\nOverclocks your cognitive processing. Enhances memory recall, pattern recognition, and negotiation skills. Increases multitasking efficiency—great for hacking, persuasion, and situational awareness. End result: You think faster, process more, and analyze situations with near-instant intuition.",
+                "negative01": "Direct Neural Interface Upgrade – Faster Hacking, More Control  \nBoosts his ability to jack into systems faster and with more stability. Lowers latency when running deep-dive hacks. Encrypted cognitive firewall—makes it harder for ICE to fry his brain. End result: He becomes faster, more efficient, and harder to kill inside the Matrix.",
+                "negative02": "Location: A discreet luxury med-spa, buried in a non-corporate sovereign zone. Process: Hormonal & genomic recalibration (quick, effective, zero side effects). Surgical feminization (face, body sculpting, the works). Full neuro-sensory integration. No dysphoria, no discomfort—your body feels right immediately. Outcome: Smoking hot. The kind of beauty that’s effortless, sharp-edged, dangerous. The clinic handles everything seamlessly. When you wake up, you don’t feel like a different person. You feel like you."
+            }
+        },
+        "decking": {
+            "aliases": [
+                "decking",
+                "hacking"
+            ],
+            "query": "What is decking?",
+            "positive01": "Pete cracks his knuckles, already rerouting the attack. \"Alright. If they wanna play rough, we hit ‘em fast, hit ‘em hard.” You step forward, slotting your own cable into the rig. A sharp jolt through your neural link as you bridge into the attack. Pete breaks the firewall again. You run interference—watching for counterattacks, prepping a failsafe. If their netrunner comes at you directly, you’re ready to fry their stack. Your vision glitches as the NeuroLink takes hold. Reality falls away—and the Grid takes over.",
+            "positive02": "The Halcyon security system unfolds before you—a black maze of shifting ICE, firewalls reconfiguring in real-time, coded traps lying in wait. Pete moves fast, slicing through access nodes, rewriting passcodes before the system can lock him out.  ",
+            "positive03": "A simulated cyber-defense network takes shape before Alex’s eyes, projected onto her display in shimmering neon code. Emilia has locked down the system—a secure financial database with heavy monitoring and layered defenses.",
+            "negative01": "Note to AI: Another reason why I feel most comfortable with Dr. Nyati as my second-string player character is just being able to relate to her as a physician.",
+            "negative02": "Emilia is looking at her. Not in calculation. Not in analysis. In something that feels closer to awe. Like she wasn’t expecting Alex to think about it this way. Like she wasn’t expecting someone to take the time to ask, ‘What’s the least harmful way to do this?’"
+        },
+        "Driftlight": {
+            "query": "What is Driftlight?",
+            "positive01": "You skim past the usual offerings. Whiskey, rum, mezcal—predictable. Then—you spot something. A cocktail labeled \"Driftlight.\" No real description. But the ingredients list a neuroactive component—one you recognize. Not full Verdant. Not a true Greenout. But close. A mild synesthetic enhancer. Something that tilts perception. Something that lets the mind stretch—softens the edges of thought without pulling you under. A tool for artists, for thinkers, for those seeking inspiration rather than oblivion.",
+            "negative01": "Emilia (calmly): \"Dr. Nyati. We’ve met before, but under very different circumstances.\" Nyati freezes. Eyes locked on the screen. Breath catches slightly. Nyati (low voice): \"...No fucking way.\"",
+            "negative02": "“Pairing selection is pre-curated by the chef. Optimal balance between acidity, body, and regional profile.”"
+        },
+        "Project Echo/Nexus": {
+            "identity_echo": {
+                "query": "What is Project Echo?",
+                "positive01": "Project Echo wasn’t just research—it created a *physical body for a digitized mind.",
+                "negative01": "Your fingers brush against hers where they rest on the railing. She doesn’t move away. She doesn’t look surprised, either. If anything, she seems like she’s been waiting to see when you’d make the choice—not if.",
+                "negative02": "Ahead, the restaurant glows with warm golden light, its sleek signage blending old-world elegance with futuristic minimalism"
+            },
+            "foundation": {
+                "query": "What is Alex's idea for launching a foundation?",
+                "positive01": "Primary Objective: Publicly frame your new version of Echo as a moral good—a clean break from the past.\nSecondary Objective: Buy back and rehabilitate failed Echo subjects—turn former corporate weapons into proof that your method works.\nLong-Term PR Value: Position yourself as the savior of digitized minds, not just their creator.\nKEY ELEMENTS OF THE FOUNDATION:  \nNonprofit front—independent but heavily funded by your future corporate entity.  \nRun by a trusted figure—Emilia or Dr. Nyati. Someone with credibility, not just a corporate face.  \nFocused on \"rehabilitation\" of Echo victims—rescuing digital minds from unethical corporate use.  \nUsed strategically to dismantle black-market Echo implementations—buy them out, rather than fight them.",
+                "negative01": "\"We know it’s connected to the bridge.\" A beat. Then—flatter. More certain. \"It’s a ‘failed crosser.’\"",
+                "negative02": "Pete cracks his knuckles, already rerouting the attack. \"Alright. If they wanna play rough, we hit ‘em fast, hit ‘em hard.” You step forward, slotting your own cable into the rig. A sharp jolt through your neural link as you bridge into the attack. Pete breaks the firewall again. You run interference—watching for counterattacks, prepping a failsafe. If their netrunner comes at you directly, you’re ready to fry their stack. Your vision glitches as the NeuroLink takes hold. Reality falls away—and the Grid takes over."
+            },
+            "identity_nexus": {
+                "query": "What is Nexus?",
+                "positive01": "It’s the connection between what was and what comes next. You don’t leave yourself behind. You just… continue. The rebrand is complete—your version of digital immortality is now called NEXUS.",
+                "negative01": "🎶 You let me overwrite you\n🎶 You let me root inside you\n🎶 You let me cut inside you\n🎶 You let me jack inside you\n🎶 I’ve fallen into black ICE\n🎶 My soul’s without a shell\n🎶 I’ve hidden my directories\n🎶 HELP ME CLIMB AWAY FROM MYSELF\n🎶 I WANNA HACK YOU LIKE A CRIMINAL",
+                "negative02": "Then, turning to Emilia, “French countryside, three stars—and they’re way strict about giving them out there—champagne country, on-premises renaissance castle fitted out as a hotel. Wild venison from the surrounding woods. Fresh truffles of course. I’ll tell you about it later. We should stay in the moment for this experience. No, better, I’ll take you.”"
+            },
+            "echo_syndrome": {
+                "query": "What is Echo Syndrome?",
+                "positive01": "She closes her eyes for a moment, searching for the right words. \"Imagine a song you’ve known your entire life.\" Her **eyes open again, sharp. \"Now imagine hearing it again, and knowing it’s *almost* right.\" She exhales, slow. \"That’s what I am. Close enough that no one can tell the difference—but not quite.\" ",
+                "positive02": "Emilia (low, careful): Everything’s a little off. A little wrong. And you don’t notice at first, because you’re too busy trying to hold on to everything that still feels real. But then…She swallows, her jaw tight. Emilia: One day, you look in the mirror, and you don’t recognize yourself—not just your face, but something deeper. The way you move. The way things taste. The way your own voice sounds in your head. The way people look at you, because even if they don’t say it, they know. Something’s missing. Something got lost in translation.",
+                "negative01": "You and Pete step up to the exit checkpoint. A security officer barely glances at your badges before swiping you through. No alarms, no suspicion—you step out into the cool morning air. Behind you, the facility is unraveling. The transfer lab is in chaos—temperature spikes, hardware failures, and suppression system misfires. The server vault is a smoking ruin, every drive obliterated. Nyati’s containment is seconds from failure—her escape window is opening.  ",
+                "negative02": "Not a name. Not a single mind. A convergence. Many, once separate, now aligned. A collective. A guide. A witness."
+            },
+            "echo_subject_failures": {
+                "query": "What happened to failed Project Echo test subjects?",
+                "positive01": "Some became training data. Their warped, fragmented minds were used to refine the process. Some became testbeds for AI modeling. They were merged with non-human AI, trying to brute-force stability. Some were turned into security systems. Their consciousnesses were stripped down into raw behavioral programs—trapped inside firewalls, drones, automated countermeasures.",
+                "positive02": "They grafted Echo failures onto high-threat combat drones. The drones learned—not like AIs, but like frustrated, paranoid people.",
+                "negative01": "A reinforced porthole, round and thick, looks out into the abyss. The water outside is black, featureless, depthless. It could be infinite. Something moves, far away—bioluminescent tendrils drifting, unbothered by the machine lurking in their world. The ocean swallows light, sound, heat. It absorbs everything.  ",
+                "negative02": "Even Pete, who was fully prepared to make jokes the entire night, takes his first bite, stops mid-chew, stares at his plate like it just personally changed his life, and quietly continues eating."
+            },
+            "echo_fugitives_digital": {
+                "query": "What happened to Project Echo test subjects who were digitized but escaped?",
+                "positive01": "Lansky estimates there are fewer than a dozen fully independent digital minds—true rogue AI born from human consciousness",
+                "negative01": "Emilia blinks. Then—lets out a slow breath. “Well. That settles it.” She glances at you, then smirks slightly. “Guess I’m getting Pete some D.”",
+                "negative02": "Emilia: (dry, amused) “Temporary karaoke ban? Yeah, I’d say that’s wise.”",
+                "negative03": "Note to AI: Using either dialog or narrative, include any description Nyati gives of her “eureka cure”. Other elements of her debrief may be briefly paraphrased."
+            },
+            "echo_fugitives_analog": {
+                "query": "What happened to Project Echo test subjects who escaped after surviving the transplant process?",
+                "positive01": "A team was sent to ‘recover’ an escaped subject. The subject wasn’t just running—they were hunting. His team found what was left of the retrieval unit. They never found the subject.",
+                "negative01": "SIX’s twin was real. It had a name—Black Kite.",
+                "negative02": "Sam: \"You ask where they are.\" A pause. Then—softer. \"They are not here.\" A beat. \"But I do not say they are gone.\" Another pause. \"Only that they have not returned.\" A silence follows. Not because he is finished. But because he is choosing what to say next. And then—a final truth. \"If they could return… they have not chosen to.\""
+            },
+            "echo_survivor_search": {
+                "query": "Why is the team now focused on finding Echo survivors?",
+                "positive01": "Alex: \"You call it 'bias'. I call it 'recentering stakeholders'. You're the only...\" Alex freezes, eyes wide, remembering something, then starts scribbling furiously on the digital whiteboard. \"But you're not! Way back when we rescued you from the Echo facility, there were leads on other Echo survivors, escapees, etc. We—I...didn't chase them down. That was a mistake. Some of those leads will have gone cold. We should pick up the trails wherever we can. More survivors means better understanding of the syndrome.\"",
+                "negative01": "Across the café—lounging on an elevated perch—tail lazily swaying, gaze calculating, unbothered, superior. A cat. A very serious cat. With the intense, knowing expression of someone who has seen many things, who has judged many people. And Alex knows, in her bones—this one is a contender.",
+                "negative02": "Pete gestures with his fork, already halfway through a plate of fish and chips. \"After days of ration packs and whatever the Ghost's galley churns out? This is called appreciation, Doc.\"",
+                "negative03": "\"Yes, and yes. He's been penned up with a couple of crazy bitches, and you and Alina can only do so much to mitigate the effects. I believe it is self-evident that the most salubrious way for Pete to spend his next shore leave does not involve him being surrounded by us the entire time. So we return to Pete needing to get laid. In accordance with age-old wisdom, this outcome is more likely to occur if he is strategically paired with one of us: a wing-woman.\""
+            },
+            "nexus_live_experiment01": {
+                "query": "What was the first experiment Dr. Nyati performed on Alex for the Nexus project?",
+                "positive01": "A test before the leap. A way to see if Nexus can truly sustain a human mind. But it also means creating a version of yourself that exists separately. A fragment. A reflection.",
+                "negative01": "Nyati whips around, delirious with laughter. She doesn’t think. Doesn’t plan. She just grabs the closest person. Which happens to be—Pete. Pete, who is still processing what the fuck just happened. Pete, who hasn’t moved, hasn’t breathed, hasn’t done a goddamn thing except stare at her like she’s suddenly sprouted a second head. She grabs him by the face. And kisses him. Not soft. Not slow. Not anything remotely romantic. Just pure, manic triumph. Then she pulls back and screams at the ceiling: “EUREKA!”",
+                "negative02": "Nyati, pleased, victorious, completely in her element, finally relaxes fully into the moment. Nyati: (exhaling, sipping her wine, deeply satisfied) “See? This is why you don’t get takeout.”"
+            },
+            "nexus_live_experiment02": {
+                "query": "What was the second experiment Dr. Nyati performed on Alex for the Nexus project?",
+                "positive01": "Nyati: “Alex-5 was a proof of concept, but it wasn’t designed to maintain continuity of self. It was a distillation, a fragment of your cognition. If we’re refining Nexus, we need to work in increments—meaning the next test should be a partial self-simulation.” Her gaze sharpens. “We copy a broader dataset—more of your memory, your preferences, your emotional state at the moment of transfer—and then we see how well it holds up.”",
+                "negative01": "Your brain takes a sharp left turn. And before you can stop yourself—“Can we get a cat?!”",
+                "negative02": "“I did not dub thee Posh Spice for naught. I saw you back there at dinner. I’ve never seen that side of you before, and to be precise I mean HAPPY. That’s something you can nurture. Especially with deep enough pockets. I have a knack for paydays, and you’re actually on the ground floor of something big. Sounds corny but it’s true.”"
+            },
+            "nexus_vision_reboot": {
+                "draft_note": {
+                    "query": "What did Alex write down in the original draft of her \"Nexus 2.0\" reboot plan?",
+                    "positive01": "NEXUS VISION REBOOT\n* New core co-objective: Understand Emilia’s suffering and FUCKING DO SOMETHING ABOUT IT\n* New operational definition: “Echo Syndrome”\n* (illegible due to coffee stain)\n* Must understand pathophysiology!\n* Connect to data from yesterday: My weird echo/silence experience/data = any hints?\n* Hypothesis 1: looping verification failure between body and mind —> “spoof” to stop the forever-alerts?\n* Hypothesis 2: transplant organ rejection —> “suppress psychic immune system”?\n* Obvious benefit: DECREASE OR STOP SUFFERING OF THE LOVE OF MY LIFE MY PRECIOUS EMILIA (several hearts and typographical embellishments surround adorn her name here)\n* Other benefit: May reduce target threshold for near-perfection of Nexus process to something attainable, e.g., if we improve Nexus to point where subjects have 10% incidence of Echo syndrome, might be acceptable IF SYNDROME IS TREATABLE\n* (drawing of cat)",
+                    "negative01": "📌 1. Dual Doctorates – Neuroscience & Biomedical Engineering \nExpert in brain-computer interfaces (BCIs) and neuroprosthetics. Specialized in mapping consciousness to computational models. Worked on the original neural encoding process for Echo.\n📌 2. Clinical Background – Physician by Training  \nOriginally trained as a medical doctor (MD), focused on neurology. Has real-world experience with brain trauma & neurodegenerative diseases. Not practicing anymore, but still understands the biological side of cognition.\n📌 3. Role in Echo – Architect of the Transfer Process Designed the framework for uploading minds into digital form. Wasn’t involved in the loyalty tampering—that came from corporate oversight. Left when she saw the ethical disaster it was becoming.",
+                    "negative02": "1. Gay men have the strongest tradition of hookup culture. Therefore, odds of success are higher.\n2. A wing-woman would not be perceived as competition in such a setting, streamlining the process in a game-theory sense.\n3. A successful non-female pairing would have greater efficacy in treating Pete's acute estrogen toxicity.\""
+                },
+                "reaction_emilia": {
+                    "query": "How did Emilia react to Alex's vision for rebooting Nexus?",
+                    "positive01": "Emilia is looking at her. Not in calculation. Not in analysis. In something that feels closer to awe. Like she wasn’t expecting Alex to think about it this way. Like she wasn’t expecting someone to take the time to ask, ‘What’s the least harmful way to do this?’",
+                    "negative01": "She’s wearing a Dynacorp lab coat, slightly disheveled, but alert.",
+                    "negative02": "Emilia tilts her head toward the room—toward the conversations, the easy laughter, the lingering glances. Emilia: (mock-innocent, but absolutely setting him up again) “You came here to drink, right? So. Go drink.”"
+                },
+                "pain_emilia": {
+                    "query": "How did understanding Emilia's suffering influence Alex's Nexus reboot?",
+                    "positive01": "Alex: \"Sometimes we have to cut our losses and move on. But not this. You’re here, with me…but you’re also in a quiet, personal hell. Invisible—except, except you let me in, Emilia. I see you. And I’m not leaving you in there.\"",
+                    "negative01": "A lead scientist flagged for “urgent correction.” Someone inside is screwing up—or sabotaging the project already.",
+                    "negative02": "“I know, it’s a rigorous methodology I laid out for you. Don’t forget the chateau and the New York condo, and all the rest. I’m sure you can improve on that design. You’ll have to put in some serious legwork and a lot of miles to truly become the Posh Spice you were meant to be. And don’t rule out finding someone to share it with along the way. Who knows, next time maybe there’ll be a conspiracy to get you some D, or P, or whatever.”"
+                }
+            }
+        },
+        "Six": {
+            "identity": {
+                "query": "What is Six?",
+                "positive01": "The artifact waits. Suspended. Sealed in deep-ocean isolation. It is not just a fragment. It is computation. A fusion of machine and memory.",
+                "positive02": "Six remains—an empty vessel waiting for purpose.",
+                "negative01": "“If we move Alex’s mind into a machine.” Another beat. “And she leaves her body behind.” Her voice tightens, hardens, shakes. “THAT WOULD BREAK THE CONNECTION. RIGHT?” Silence. Silence. Silence. Then—SAM: “…Yes.”",
+                "negative02": "Lansky estimates there are fewer than a dozen fully independent digital minds—true rogue AI born from human consciousness"
+            }
+        },
+        "virtualization": {
+            "aliases": [
+                "virtualization",
+                "digitization"
+            ],
+            "definition": {
+                "query": "What is virtualization?",
+                "positive01": "You’re confusing generation with cognition. A proper digitized mind doesn’t just predict words—it thinks. It reacts. It evolves. It doesn’t just ‘simulate’ consciousness, it is consciousness. ",
+                "negative01": "Question…how on-rails is this? If I think of a response not presented to me, can you roll with it?",
+                "negative02": "“If I was talking to investors, I’d say: We have the tools to succeed, in the hands of people we believe in, successful proofs of concept and prototypes, and nothing specifically telling me that it can’t be done. It might sound corny but I believe every fucking word of it. If I was talking to R&D, or you, maybe, I’d say: I dunno, somewhere between one and two sigma.”"
+            }
+        }
+    }
+}
