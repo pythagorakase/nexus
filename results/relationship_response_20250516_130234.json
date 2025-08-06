@@ -1,0 +1,83 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 77,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Alex regards Celia as a quietly indispensable node in her off-grid logistics chain—an arms-length ally whose discretion is worth every cred. The ex-exec trusts that the Tidekeeper will ask no awkward questions and deliver gear that works, but she never forgets that the bond is transactional and could evaporate if the risk outweighs the reward. Beneath the cool professionalism, there’s a flicker of respect for a fellow survivor who has carved out autonomy in a ruthless city.",
+    "recent_events": "• Alex detoured to Low Tide under pursuit, purchased a top-tier Nullcloak, and watched her own HUD struggle to track her—proof of Celia’s product quality. • Celia’s dead-pan question—“You planning on disappearing for good?”—reminded Alex that the shopkeeper sees more than she lets on but chooses not to pry. • The automated turrets recognized Alex on entry, confirming prior visits and a working trust protocol between her cyber-signature and Celia’s security net.",
+    "history": "Early in Alex’s Dynacorp days, she sourced specialty stealth mods from Celia for black-bag ops, leaving both with profit and plausible deniability. After Dynacorp’s betrayal, contact went dark until this urgent Season 1 visit, where Alex’s fugitive status raised the stakes but also affirmed Celia’s reliability. Each transaction since has reinforced a pattern: Alex initiates under pressure, pays premium prices without quibbling, and departs quickly, tightening a link built on mutual gain and strict boundaries.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "character2's",
+        "predictability": "consistent"
+      },
+      "leverage_points": {
+        "character1_leverage": "Liquid creds and the promise of high-value referrals within the outlaw tech market.",
+        "character2_leverage": "Exclusive access to military-grade stealth gear and a discreet, turret-guarded storefront."
+      },
+      "conflict_areas": [
+        "Price escalation during high-heat periods",
+        "Risk of surveillance leading corps back to Low Tide"
+      ],
+      "mutual_interests": [
+        "Staying off megacorp radar",
+        "Maintaining professional discretion",
+        "Turning a reliable profit on rare tech"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Night City black-market runners",
+          "No-Name Pete (indirectly through Alex)"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Latest stealth tech specs, rumors of corp trackers in her vicinity.",
+        "information_protected": "Exact mission objectives, real-time location data, and Nexus-related secrets."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 77,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "0|neutral",
+    "dynamic": "Celia sees Alex as a high-paying but high-heat client: useful for moving premium stock, yet liable to drag trouble to her door if she miscalculates. She respects Alex’s professionalism—no haggling, quick exits—but keeps the interaction strictly business, her gravel-voiced cool masking a constant threat assessment. The balance is pragmatic: as long as Alex’s creds clear and the corp fallout stays outside, the door—and the turrets—remain open.",
+    "recent_events": "• Sold a Faraday-woven Nullcloak to Alex without incident, pocketing 8 k creds and confirming her gear’s effectiveness when Alex’s HUD flickered. • Noted Alex’s heightened urgency and adjusted her internal risk ledger, filing the former exec under ‘ghost mode—monitor heat level.’ • Confirmed that her turret IFF still whitelists Alex, but silently flagged the profile for review should corporate agents start nosing around.",
+    "history": "Their first dealings date back to Alex’s corporate operative phase, when she discreetly purchased signal-scramblers for covert ops; Celia learned then that Alex pays well and asks no favors. After news of Dynacorp upheaval, Celia anticipated either disappearance or desperate return; the latter came true in Season 1 when Alex arrived amid a fugitive scramble. Since that sale, Celia has neither pursued nor avoided further contact, maintaining a posture of armed neutrality while monitoring the shifting risk-to-profit ratio.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character2",
+        "terms": "character1's",
+        "predictability": "consistent"
+      },
+      "leverage_points": {
+        "character1_leverage": "Control over limited-edition Nullcloaks, ability to refuse service or jack prices, fortified shop security.",
+        "character2_leverage": "Steady flow of cash, potential access to broader black-market intel, and future favors from a resourceful fugitive."
+      },
+      "conflict_areas": [
+        "Alex’s notoriety increasing shop exposure",
+        "Potential corporate retaliation if Celia aids a wanted asset"
+      ],
+      "mutual_interests": [
+        "Profit from high-end gear transactions",
+        "Keeping corporate eyes off Low Tide",
+        "Maintaining a reputation for discretion"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Shared black-market couriers"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Alex’s current heat level and likelihood of bringing surveillance.",
+        "information_protected": "Supply chain contacts, shop’s defense protocols, and Celia’s ex-military past."
+      }
+    }
+  }
+}

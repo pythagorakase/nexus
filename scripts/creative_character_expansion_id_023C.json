@@ -1,0 +1,44 @@
+{
+  "characters": [
+    {
+      "character_id": 23,
+      "appearance": "Raven is lean, almost birdlike in build, standing a little above average height, with skin the color of coffee left to cool. Her sharp, dark eyes seem to drink in everything at once, forever half-lidded with amusement or calculation. Her hair is an asymmetrical, close-cropped undercut on one side, dark and straight, swept across in a style that leaves one ear\u2014pierced through with a lattice of subtle silver\u2014exposed. She dresses for both discretion and functionality: dark jeans, a loose charcoal blouse tucked under a weathered, storm-black duster with a collar she habitually turns up. Her boots are unremarkable, but always polished. Fingers are long, agile, with chipped black nail polish and a single thumb ring. She favors minimal makeup, save for a razor-thin slash of eyeliner. The only tech she carries visibly is a slim, unbranded datapad and a small, encrypted comm bead in her left ear.",
+      "background": "Raven's real name is lost to all but herself\u2014perhaps deliberately. Born and raised in a pre-Collapse enclave south of Baton Rouge, she survived the chaos as a child by learning to listen more than speak. Orphaned during the Second Blackout, she vanished into the underbelly of New Orleans, rising through a shadow network of smugglers, newsrunners, and ex-corp handlers who recognized her uncanny ability to read both people and systems. Rather than run her own network, Raven became a broker and fixer\u2014never the biggest node, but always the most reliable. She is rumored to have ghosted at least two major corporate purges unscathed, walking away with leverage and knowledge instead of blood on her hands. Her refusal to trade in assassinations or 'burn jobs' is both a personal code and a survival tactic; she has seen too many promising brokers vanish after crossing that line. While her relationship with Alina began as mutual necessity during a refugee corridor crisis, Raven has since cultivated a web of unaligned contacts\u2014operatives, techs, smugglers\u2014that lets her pull the right strings without ever being front and center.",
+      "personality": "Raven is disciplined, dry-witted, and intensely observant\u2014her presence is defined by a stillness that can unnerve the unprepared. She exudes an aura of calm control, rarely rushed, with a conversational style that\u2019s direct but never brusque. Her humor is understated and often surfaces as a single sharp look or a subtle lift of the brow. She is rarely cruel, but also rarely sentimental: Raven respects boundaries, though much of her empathy is hidden under layers of pragmatic detachment. She\u2019s averse to violence unless cornered, believing that force is a tool for those without options. Paradoxically, she craves connection\u2014not friendship, exactly, but a recognition of competence and honesty in others. She is most animated when she finds herself surprised or challenged, as in her interaction with Alex, who disrupts the patterns she\u2019s used to. She detests betrayal and debt without clear terms, and is profoundly uncomfortable when forced to rely on luck or 'gut feeling' rather than evidence.",
+      "emotional_state": "Privately, Raven is restless: the city\u2019s shifting alliances and the recent surge in Echo research have made her usual channels less reliable. She is intrigued by Alex\u2014whose refusal to play the negotiation script hints at both risk and potential\u2014and curious whether this new crew represents an opportunity, a liability, or both.",
+      "current_activity": "Having just handed off two high-stakes intel packages, Raven is recalibrating her network. She is running background checks on Alex\u2019s team, quietly cross-referencing their movements against upticks in local corp surveillance. She is also meeting with a trusted fixer to secure safe passage for a whistleblower from Baton Rouge, and is drafting a coded message to a contact in the New Orleans municipal grid regarding unauthorized Echo signal spikes.",
+      "current_location": "Raven is currently based out of a semi-legal teahouse in the Marigny district\u2014'The Lamplight'\u2014known for its analog privacy booths and old-world charm. She favors a corner table with a direct sightline to both exits and the security feed reflector. At night, she rotates between a handful of safehouse apartments, none of which are registered under her name.",
+      "extra_data": {
+        "skills": [
+          "Advanced social engineering",
+          "Deep network analysis",
+          "Encryption/decryption brokering",
+          "Operational risk assessment",
+          "Psychological profiling"
+        ],
+        "allies": [
+          "Alina Voss (trusted contact)",
+          "The Lamplight's owner (discreet info channel)",
+          "A Baton Rouge fixer group",
+          "Disaffected municipal grid engineer (Echo signal source)"
+        ],
+        "enemies": [
+          "Dynacorp local counterintel",
+          "A rival broker known as 'Glass'",
+          "A former client who blames her for a blown operation"
+        ],
+        "signature_tech": [
+          "Personal null-signature datapad (custom firmware, non-standard OS)",
+          "Encrypted comm bead (frequency-hopping, voiceprint lock)",
+          "\"Ledger\"\u2014her anonymized, favor-tracking algorithmic database, kept entirely off-cloud"
+        ],
+        "connection_points": [
+          "May need Alex's crew to vet or retrieve new data fragments tied to Echo research",
+          "Holds blackmail material on a mid-level Dynacorp asset\u2014could be leveraged by the crew",
+          "Possesses unique survivor movement intelligence relevant to Emilia",
+          "Could source safe passage or deep cover for endangered Nexus/Echo subjects"
+        ]
+      }
+    }
+  ]
+}

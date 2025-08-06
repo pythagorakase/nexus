@@ -1,0 +1,78 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 78,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Rox strikes Alex as a rare, sharp-eyed purveyor of the past—exactly the kind of niche resource a fugitive technocrat keeps on speed-dial. He respects her discernment and enjoys the delicate dance of half-truths required to win her cooperation, even as he compartmentalizes any concern about the lethal prototype he just handed over. For Alex, she is both a potential ally and a potential liability, so the relationship is threaded with calculated cordiality.",
+    "recent_events": "• Alex entered Dead Circuit under a spoofed Dynacorp exec ID and impressed Rox with granular knowledge of the Kiroshi K-512.\n• He negotiated a barter: a pristine cyberdeck in exchange for Dynacorp’s experimental neural interface, with an implicit promise of a future favor.\n• Alex left the shop with the deck—and the awareness that Rox now possesses dangerous tech that might circle back on him.",
+    "history": "Their connection began the moment Alex, on the run from Dynacorp, targeted Dead Circuit as the only place that could supply a period-correct cyberdeck. Initial tension—Rox treating him as a poser—shifted when he demonstrated deep technical fluency, earning her guarded respect. The single high-stakes trade cemented a pragmatic rapport and opened the door to future dealings, but no further contact has occurred yet.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "negotiated",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Access to illicit Dynacorp prototypes, corporate blackmail data, and security credentials Rox might covet.",
+        "character2_leverage": "Control of rare vintage hardware and an IOU that Alex implicitly owes after the trade."
+      },
+      "conflict_areas": [
+        "Risk that the prototype neural interface harms Rox and provokes retaliation",
+        "Potential exposure of Alex’s true identity and fugitive status",
+        "Future price-gouging or coercive favor calls"
+      ],
+      "mutual_interests": [
+        "Acquisition and preservation of rare technology",
+        "Staying ahead of megacorp surveillance and rivals"
+      ],
+      "third_parties": {
+        "mutual_contacts": [],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Alex wants intel on underground tech markets and additional vintage hardware sources Rox can access.",
+        "information_protected": "Alex hides his real identity, location, and the broader Nexus agenda."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 78,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "-1|wary",
+    "dynamic": "To Rox, Alex is a polished but dangerous corpo exile—someone who speaks her language well enough to be useful yet reeks of hidden agendas. The prototype he traded is a tantalizing treasure and a potential death trap, underscoring that any deal with him is a walk along a knife’s edge. She files him under \"profitable until proven otherwise,\" keeping curiosity and caution in tight balance.",
+    "recent_events": "• Alex appeared unannounced, flashed deep-cut knowledge of the K-512, and talked her past the usual poser filters.\n• Rox accepted his Dynacorp neural interface in lieu of 40k creds, gaining both a priceless artifact and a callable favor.\n• Examining the untested wetware prompted Rox to run extra diagnostics and mentally prepare contingencies should the device prove lethal.",
+    "history": "Their entire association is contained in a single, charged negotiation. Rox’s first impression—spoiled corpo tourist—shifted when Alex demonstrated authentic expertise, triggering professional respect mixed with suspicion. The barter finalized their contact: Rox gained a prototype and leverage, Alex walked out with the deck. Since that night she has neither called in the favor nor heard from him, but she has tagged him as a high-value, high-risk asset for future schemes.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character2",
+        "terms": "character1's",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Possession of Alex’s prototype neural interface and a standing favor Alex owes her.",
+        "character2_leverage": "Access to more corporate contraband, blackmail data, or rare passes Rox might want."
+      },
+      "conflict_areas": [
+        "Trustworthiness of the prototype interface",
+        "Risk that Alex’s enemies or corporate ties spill into Rox’s world",
+        "Potential price disputes or favor renegotiations"
+      ],
+      "mutual_interests": [
+        "Monetizing or studying obsolete and experimental tech",
+        "Maintaining discretion to avoid megacorp attention"
+      ],
+      "third_parties": {
+        "mutual_contacts": [],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Rox wants to learn why Alex really needs pre-Collapse gear and how deep his access to Dynacorp secrets runs.",
+        "information_protected": "Rox conceals her buyer network, security measures, and personal stake in vintage wetware."
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "characters": [
+    {
+      "character_id": 23,
+      "appearance": "Early-30s Creole woman, 5\u201910\u2019\u2019 and whip-lean\u2014every ounce of weight looks calculated for sprint or climb. Copper-brown skin freckled like oxidised copper rivets; the freckles darken after long console sessions thanks to trace-heat from her subdermal antennae (twin silver crescents hidden just behind each ear). Hair: close-cropped fade with a razor-straight centre part, sometimes dyed a matte midnight stripe that reads as \u2018raven wing\u2019 under UV. Eyes: fox-sharp, chicory-coffee brown, flicking constantly between three focal planes\u2014street, skyline, HUD read-outs on the inside of her contact lenses. Favours cracked black biker leathers over a charcoal linen duster whose cuff-linings unroll into palm-sized holo-slates. Underlayer: a static-net camisole that smells faintly of cedar oil and ozone, used to scatter most body-scan pulses. Keeps a thin silver stylus tucked behind her ear; doubles as lock-picking torque wrench. Walks with the efficient glide of a courier used to ankle-deep floodwater\u2014long stride, minimal splash.",
+      "background": "Birth name Nadine Baptiste. Raised in the half-submerged Ninth Ward, scavenging hurricane-gutted datacentres with her older brother Luc. Learned to hot-patch servers using grocery-bag zip ties and car batteries before she was twelve. At nineteen, recruited by Dynacorp\u2019s Gulf Recovery Division as junior sys-forensic; believed she could make levees safer with cleaner intel. Four years in, uncovered falsified surge-barrier telemetry hiding corporate liability for 3,212 storm deaths. Refused hush money, leaked proof to a watchdog node\u2014and triggered her own black-flag dismissal plus 500 K-cred bounty. Luc disappeared that same week, presumed rendition. Nadine burned every traceable ID, re-christened herself \u2018Raven\u2019 after the Gulf fibre trunk courier handle she\u2019d used as a teen, and vanished upriver. In exile she built The Murmuration: a decentralised courier lattice where single data-packets are \u2018sharded\u2019 across dozens of street runners and reassembled only at destination, making snatch-and-grab extraction nearly impossible. Raven bankrolls the lattice through favour-banking and selective blackmail, but secretly funnels 30 % of profit into coastal mutual-aid pods trying to keep the next storm from swallowing another ward.",
+      "personality": "Exterior: unflappable courtesy laced with sardonic humour; speaks in a low alto drawl that turns even threats into lullabies. Never wastes a word or gesture\u2014silence is part of the negotiation toolkit. Interior: compulsive pattern-spotter terrified of becoming a martyr; ethical backbone of rebar wrapped in self-preservation foam. Craves puzzles, fears helplessness, especially when storms roll in (hurricane sirens still trigger latent guilt). Mildly claustrophobic despite years in data-tunnels. Maintains a rulebook no one else sees: 1) No blood for bytes. 2) Debts are sacred. 3) Always leave enough evidence for history to condemn the powerful. Loves bad puns, secretly sketches tidal-barrier redesigns in her battered Moleskine margins.",
+      "emotional_state": "Running on edge: Dynacorp\u2019s R-Search scraped a dead-drop; she suspects Luc is alive and forced to work for them. Equal parts exhilarated by Alex\u2019s disruptive style and terrified that caring will compromise operational discipline.",
+      "current_activity": "Triangulating \u2018Lark\u2019, a rogue Echo shard Dynacorp is courting. Splicing NOAA buoy packet captures with the Echo leak she sold Alex; hash-collisions suggest Lark rides storm-monitor drones. Simultaneously orchestrating evacuation drills for three Murmuration courier nests should Infosec sweep the riverfront tonight. Pen-testing an old Jesuit bell-tower to turn into a secondary Nest if her current hide-out burns.",
+      "current_location": "\u2018The Nest\u2019\u2014gutted bell-tower above St. Roch Market. Rooftop line-of-sight to Canal St fibre repeaters; interior strung with heat-sink chimes that mask jammer whine. Emergency egress: market service tunnels emptying into the Claiborne drainage culvert\u2014knee-deep but corp-scanner dark.",
+      "extra_data": {
+        "skills": [
+          "Quantum-grade cryptanalysis",
+          "Social-engineering & cold-read profiling",
+          "Silent lip-reading up to 40 m",
+          "Drone-assisted urban infiltration",
+          "Disaster-zone logistics",
+          "Storm-surge hydrodynamics (amateur but informed)"
+        ],
+        "allies": [
+          "The Murmuration courier lattice",
+          "Dr. Alina Voss (technical validation)",
+          "Captain \u2018Pearce\u2019\u2014ex-NOAA drone pilot",
+          "Saint Augustine Church mutual-aid network",
+          "The Bridge (data-haven operator in Baton Rouge)"
+        ],
+        "enemies": [
+          "Dynacorp Infosec \u2018R-Search\u2019 unit",
+          "Bayou Red smuggling ring",
+          "Gale Ortega\u2014bounty-hunter ex-partner",
+          "VP Victor Sato (blackmail target)",
+          "New Orleans Office of Corporate Security (O.C.S.)"
+        ],
+        "signature_tech": [
+          "MurmurMoths\u2014micro-drones disguised as black moths for encrypted drops",
+          "HushPhones\u2014single-use bone-conduction earpieces that dissolve in water",
+          "The Sextant\u2014correlation engine mapping cargo manifests to covert personnel transfers",
+          "CrowCall\u2014voice-print morpher that lets her imitate any sampled speaker for <30 s before glitching",
+          "\u2018Floodgate\u2019\u2014manual kill-switch that dumps all Murmuration nodes\u2019 location tables into seawater if she flatlines"
+        ],
+        "connection_points": [
+          "Partial Nexus firmware schematics in whistle-blown archives",
+          "Silent corridor out via storm-maintenance tunnels (Pete tie-in)",
+          "Bio-signature of \u2018Instance 08\u2019 from Echo files",
+          "Blackmail on Victor Sato\u2019s clandestine dredging project",
+          "Uncollected courier favour owed to Emilia",
+          "Suspects Luc Baptiste works on R-Search\u2019s Echo sub-project\u2014potential rescue plot",
+          "Can introduce Alex to The Bridge for off-grid server space"
+        ]
+      }
+    }
+  ]
+}

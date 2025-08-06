@@ -1,0 +1,1005 @@
+{
+  "timestamp": "2025-04-22T21:04:57.417387",
+  "settings": {
+    "models": {
+      "bge-large": {
+        "is_active": true,
+        "dimensions": 1024,
+        "weight": 0.4
+      },
+      "e5-large": {
+        "is_active": true,
+        "dimensions": 1024,
+        "weight": 0.4
+      },
+      "bge-small-custom": {
+        "is_active": true,
+        "dimensions": 384,
+        "weight": 0.2
+      },
+      "infly_inf-retriever-v1": {
+        "is_active": false,
+        "dimensions": 3584,
+        "weight": 0.7
+      },
+      "infly_inf-retriever-v1-1.5b": {
+        "is_active": true,
+        "dimensions": 1536,
+        "weight": 0.7
+      }
+    },
+    "retrieval": {
+      "max_results": 50,
+      "relevance_threshold": 0.65,
+      "entity_boost_factor": 1.2,
+      "source_weights": {
+        "structured_data": 1.5,
+        "vector_search": 0.8,
+        "text_search": 1.0
+      },
+      "structured_data_enabled": false,
+      "user_character_focus_boost": {
+        "enabled": true
+      }
+    },
+    "hybrid_search": {
+      "enabled": true,
+      "vector_weight_default": 0.6,
+      "text_weight_default": 0.4,
+      "target_model": "infly_inf-retriever-v1-1.5b"
+    },
+    "query": {
+      "default_limit": 10,
+      "include_vector_results": 10,
+      "include_text_results": 10,
+      "include_structured_results": 0
+    }
+  },
+  "settings_text": "Active models: bge-large (weight=0.4), e5-large (weight=0.4), bge-small-custom (weight=0.2), infly_inf-retriever-v1-1.5b (weight=0.7)\nHybrid search: ENABLED\n  Vector weight: 0.6\n  Text weight: 0.4\n  Target model: infly_inf-retriever-v1-1.5b\nMax results: 50\nRelevance threshold: 0.65\nStructured data search: DISABLED\nSource weights:\n  structured_data: 1.5\n  vector_search: 0.8\n  text_search: 1.0\nUser character focus boost: ENABLED",
+  "global_settings": {
+    "model": {
+      "description": "defines default LLM to load for all agents",
+      "possible values": [
+        "llama-3.3-70b-instruct@q6_k",
+        "llama-4-scout-17b-16e-mlx-text",
+        "bartowski/mistral-large-instruct-2411",
+        "deepseek-r1-distill-llama-70b@q8_0"
+      ],
+      "default_model": "llama-3.3-70b-instruct@q6_k"
+    }
+  },
+  "evaluation_prompt": "Evaluate the quality of these search results based on the guidance provided. For each query, assess how well the top results match the positive guidelines and avoid the negative guidelines. Consider whether the system successfully identified relevant content, especially in cases involving character references (e.g., 'you' vs. 'Alex'), relationship dynamics, or specific narrative events.\n\nFor each query, please provide:\n1. A relevance score for each top result (1-5 scale)\n2. Comments on what makes results relevant or irrelevant\n3. Suggestions for improving retrieval quality\n\nPay special attention to the 'user_character' category, which tests the system's ability to connect second-person POV ('your') to the protagonist ('Alex').",
+  "query_results": [
+    {
+      "category": "character",
+      "name": "sullivan",
+      "query": "Who is Sullivan?",
+      "query_type": "character",
+      "positives": [
+        "direct references to \"Sullivan\"",
+        "early references to general idea of adopting cat"
+      ],
+      "negatives": [
+        "discussions about dogs",
+        "references to Alina when she lived in a robotic cat body"
+      ],
+      "elapsed_time": 0.2278449535369873,
+      "results_count": 10,
+      "results": [
+        {
+          "id": "1425",
+          "chunk_id": "1425",
+          "text": "<!-- SCENE BREAK: S05E06_001 (episode heading) -->\n# S05E06: Extraction\n## Storyteller\n### **Sullivan Retrieval Mission**  \n\ud83d\udccd The Morning After | *Le Chat Noir*\n\nThe **morning air in New Orleans is thick with humidity, but it carries the scent of fresh beignets, chicory coffee, and the distant pulse of the river.**  \n\nThe crew **moves through the quiet streets, recovering from the night before\u2014some more gracefully than others.**  \n\n---\n\n### **Crew Status Update**  \n\n- **Alex & Emilia** \u2192 *Well-rested, smug, and walking just a little too in sync.*  \n- **Pete** \u2192 *Surprisingly un-hungover, but moving with the energy of a man whose worldview permanently shifted overnight.*  \n- **Nyati** \u2192 *More annoyed than usual, already caffeinated, likely still reflecting on Alex\u2019s nonsense from the night before.*  \n- **Alina** \u2192 *Operating at peak efficiency as if she didn\u2019t spend the entire night running calculations on probability distributions of Pete\u2019s successful encounters.*  \n\nAnd now?  \n\nNow it\u2019s time to **pick up Sullivan.**  \n\n---\n\n### **The Sullivan Extraction Operation**  \n\ud83d\udccd *Le Chat Noir*\n\nThe **caf\u00e9 is just as warm and inviting as before**, the scent of espresso mixing with fresh pastries.  \n\nBut Alex?  \n\nAlex **only has eyes for one target.**  \n\nShe **scans the caf\u00e9, and there\u2014perched elegantly on a high shelf, watching the world like he owns it\u2014**Sullivan.**  \n\n- **Ears forward.**  \n- **Tail curled neatly.**  \n- **Expression vaguely unimpressed, but definitely aware that something is happening.**  \n\nAnd when he sees **Alex?**  \n\nHe **blinks once, slow, deliberate.**  \n\nAs if saying, **\u201cAh. You have returned to claim me. As expected.\u201d**  \n\nAlex **grins, turning to the crew.**Alex:** *\u201cAlright. Let\u2019s bring our guy home.\u201d*  \n\n---\n\n### **Sullivan Adoption Finalization**  \n\nThe caf\u00e9 **owner meets them at the counter, already expecting this.**  \n\nShe smiles, **gesturing toward Sullivan.**Caf\u00e9 Owner:** *\u201cI had a feeling you\u2019d be back for him.\u201d*  \n\nThe **adoption process is smooth\u2014Sullivan is microchipped, fully vetted, and given a clean bill of health.**  \n\nAnd then\u2014**the real moment.**  \n\nAlex **approaches the high shelf, holding out a hand.**Alex:** *(soft, teasing, but with a little weight underneath)* *\u201cYou ready, bud?\u201d*  \n\nSullivan **watches her for a second.**  \n\nThen\u2014**in a deliberate motion, he stretches, flicks his tail, and hops down into Alex\u2019s arms.**  \n\nLike he\u2019s been **waiting for this.**  \n\nLike he **already decided.**  \n\nAnd Alex?  \n\nAlex **grins.**  \n\nBecause **that\u2019s it.**  \n\nSullivan is **coming home.**  \n\n---\n\n### **The Transition to the Land Rig**  \n\nWith **Sullivan safely secured**, the crew **moves on to their next destination\u2014setting up in the land rig and reviewing last night\u2019s intel.**  \n\nThe **drive is quiet, the energy shifting as they transition back into mission mode.**  \n\nBy the time they arrive at the **rig\u2019s secured location**, the mood is set.  \n\n- **The whiteboards are ready.**  \n- **The data terminals are powered up.**  \n- **The Echo research leaks and survivor movement intel are waiting to be unraveled.**  \n\nAnd Alex?  \n\nAlex **sits down, stretches her arms, and exhales.**  \n\nThen\u2014**grinning, nodding toward the screens.**Alex:** *\u201cAlright, team. Let\u2019s see what we\u2019ve got.\u201d*  \n\nAnd just like that\u2014  \n\nThe **next phase begins.**",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 6,
+            "scene_number": 1
+          },
+          "score": 0.037685836,
+          "vector_score": 0.0,
+          "text_score": 0.09421459,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1345",
+          "chunk_id": "1345",
+          "text": "<!-- SCENE BREAK: S05E01_020 (storyteller heading) -->\n## Storyteller\n### **Identity Verification Protocol**  \n\ud83d\udccd Le Chat Noir\n\nThe **cat does not answer.**  \n\nWhich, **frankly, is a power move.**  \n\nInstead, he **blinks again**, slow and deliberate, as if considering whether Alex is worth engaging with further.  \n\nThe **rest of the crew, however?**Pete gestures wildly at Alina.**Pete:** *\u201cShe has the database! Ask the database!\u201d*  \n\nAlina, **already on it, brings up the caf\u00e9\u2019s resident registry.**Alina:** *\u201cThis feline is designated \u2018Sullivan.\u2019\u201d*  \n\nPete **immediately gasps.**Pete:** *\u201cOH MY GOD, HE HAS A GUY NAME.\u201d*  \n\nNyati, **dead inside.**Nyati:** *\u201cThey *all* have guy names.\u201d*  \n\n**Pete:** *(pointing dramatically at Sullivan, completely ignoring Nyati)* *\u201cThis man is a *detective.* I can feel it.\u201d*  \n\nEmilia, **tilting her head slightly, assessing Sullivan anew.**  \n\nThen\u2014**slow smirk, eyes flicking back to Alex.**Emilia:** *(casual, teasing, deeply entertained)* *\u201cWell, Commander. What\u2019s the verdict?\u201d*  \n\nAnd Alex?  \n\nAlex is **staring at Sullivan.**  \n\nBecause Sullivan **is still watching her.**  \n\nStill measuring.  \n\nStill waiting.  \n\nBut\u2026  \n\nThere\u2019s **something there now.**  \n\nA shift.  \n\nA consideration.  \n\nLike Sullivan **is waiting to see what Alex does next.**  \n\nAnd **that?**  \n\nThat means **she still has a shot.**\n\n## You\nAlex switches back to baby voice while slowly extending her upturned hand forward. \u201cHeyyyy Sullivan\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 20
+          },
+          "score": 0.036762494,
+          "vector_score": 0.0,
+          "text_score": 0.091906235,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1351",
+          "chunk_id": "1351",
+          "text": "<!-- SCENE BREAK: S05E01_026 (storyteller heading) -->\n## Storyteller\n### **Decision Point: Expansion or Commitment?**  \n\ud83d\udccd Le Chat Noir\n\nSullivan, **now fully engaged in receiving luxurious full-body pets**, remains **exactly where he is.**  \n\nHe does not **flee.**  \nHe does not **recoil.**  \nHe does not **object.**  \n\nIf anything, his **eyes are half-lidded**, his **tail flicking just enough to suggest a passing approval of reality.**  \n\nThis is a cat who is **comfortable with power.**  \n\nA cat who **knows he has won.**  \n\nA cat who **isn\u2019t worried about the outcome, because he already assumes it favors him.**  \n\nBehind Alex, **Pete finally dares to breathe.**Pete:** *(whispering, cautiously victorious)* *\u201cOh my god. He\u2019s *staying.*\u201d*  \n\nNyati, **checking the time with an air of someone who did not plan to spend their morning in a cat-centric hostage situation.**Nyati:** *\u201cWe have forty-five minutes before the rendezvous.\u201d*  \n\nAlina, **precise, unreadable as always.**Alina:** *\u201cTime is sufficient for final decision-making.\u201d*  \n\nA pause.  \n\nThen\u2014**deliberately, neutrally, but absolutely aware of what she is doing\u2014**Alina:** *\u201c\u2026Sullivan remains an optimal candidate.\u201d*  \n\nPete, **pointing wildly.**Pete:** *\u201cThat\u2019s *endorsement*! That\u2019s an *endorsement*!\u201d*  \n\nNyati, **dead inside.**Nyati:** *\u201cI hate this ship.\u201d*  \n\nMeanwhile, **Emilia tilts her head slightly, watching Sullivan, then watching Alex.**  \n\nThen\u2014**slow, thoughtful, calculating.**Emilia:** *\u201cWe could meet more.\u201d*  \n\nA pause.  \n\nThen\u2014**with a smirk, a sharp, knowing glint in her eyes\u2014**Emilia:** *\u201cBut I don\u2019t think you *want* to.\u201d*  \n\nAnd Alex?  \n\nAlex **knows she\u2019s right.**  \n\nBecause **Sullivan has not moved.**  \n\nBecause **Sullivan has *chosen her back*.**  \n\nBecause **this was never going to be a drawn-out process.**  \n\nAlex **was always going to know when she found the right one.**  \n\nAnd **now?**  \n\nNow it\u2019s just **making it official.**  \n\n---\n\n### **What\u2019s the Call?**  \n- **Lock it in.** Begin **adoption inquiry for Sullivan immediately.**  \n- **Do a quick sweep of other cats first.** Just to **say they were thorough.**  \n- **Let Emilia make the call.** Give her **the final say, just to see what she does.**  \n- **Something else?**\n\n## You\n\u201cLet\u2019s knock out the adoption application and we can pick him up on our way out of town in a day or two. But first just one more test.\u201d Alex gingerly eases a hand into the space undeneath his belly, probing for any potential objections to being picked up.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 26
+          },
+          "score": 0.036266232,
+          "vector_score": 0.0,
+          "text_score": 0.09066558,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1352",
+          "chunk_id": "1352",
+          "text": "<!-- SCENE BREAK: S05E01_027 (storyteller heading) -->\n## Storyteller\n### **The Final Test: The Lift Protocol**  \n\ud83d\udccd Le Chat Noir\n\nSullivan, **half-lidded, fully basking in his own self-importance,** does not initially **react** to Alex\u2019s hand entering the **underbelly zone.**  \n\nFor a **fraction of a second,** things look **good.**  \n\nThen\u2014  \n\nA **single, decisive shift of weight.**  \n\nNot a **full rejection.**  \nNot a **swipe or bite.**  \nJust a **slow, deliberate repositioning**\u2014  \n\nA message.  \n\nA **warning.**  \n\nA statement that says:  \n\n**\"You are attempting to access restricted files. Credentials required.\"**  \n\nBehind Alex, **Pete, whispering like he\u2019s witnessing high-stakes diplomacy:**Pete:** *\u201cOh, oh, oh. She\u2019s pushing it.\u201d*  \n\nNyati, **sipping her coffee like a woman who has already accepted the chaos of her reality.**Nyati:** *\u201cI hope he takes her fingers.\u201d*  \n\nAlina, **calm, observing.**Alina:** *\u201cHe is setting boundaries. This is expected.\u201d*  \n\nAnd **Emilia?**  \n\nEmilia is **smirking.**  \n\nNot just at Sullivan.  \n\nAt **Alex.**  \n\nThen\u2014**leaning in slightly, voice deceptively soft.**Emilia:** *\u201cLooks like you just got told *no,* Commander.\u201d*  \n\nAnd Alex **knows.**  \n\nSullivan is **not opposed to further negotiations.**  \n\nBut today?  \n\nToday, **lifting privileges have not been granted.**  \n\nSullivan will **come home when he\u2019s ready.**  \n\nOn **his terms.**  \n\nLike a **true member of this crew.**\n\n## You\n\u201cSeeeee ya later buddyyyyy!\u201d\nthen\n\u201cLet\u2019s move out. Anybody else starving?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 27
+          },
+          "score": 0.034618072,
+          "vector_score": 0.0,
+          "text_score": 0.08654518,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1346",
+          "chunk_id": "1346",
+          "text": "<!-- SCENE BREAK: S05E01_021 (storyteller heading) -->\n## Storyteller\n### **The Moment of Truth**  \n\ud83d\udccd Le Chat Noir\n\nSullivan **watches the hand approach.**  \n\n- **His ears don\u2019t flick back.** (*Good sign.*)  \n- **His pupils don\u2019t narrow.** (*Not outright rejection.*)  \n- **His tail remains at a slow, methodical sway.** (*Still undecided, but engaged.*)  \n\nFor a long **two seconds**, nothing happens.  \n\nThen\u2014  \n\nSullivan **leans forward.**  \n\nNot dramatically.  \nNot eagerly.  \nBut **with purpose.**  \n\nHe **sniffs.**  \n\nOnce.  \n\nThen\u2014**very lightly, very briefly\u2014**  \n\nHe **headbutts the edge of Alex\u2019s fingers.**Contact made.**  \n\nBehind her, **Pete audibly gasps.**Pete:** *(whispering, clutching his chest)* *\u201cOh my god.\u201d*  \n\nNyati, **deadpan, exhausted.**Nyati:** *\u201cI hate that I\u2019m impressed.\u201d*  \n\nEmilia?  \n\nEmilia is **watching very closely now.**  \n\nThen\u2014**slow smirk, voice low, amused.**Emilia:** *\u201c\u2026You\u2019ve got his attention.\u201d*  \n\nSullivan **leans back slightly**, eyes half-lidded, still **watching Alex carefully.**  \n\nAnd Alex **knows.**  \n\nThis **isn\u2019t full acceptance.**  \n\nNot yet.  \n\nThis is **Sullivan considering his options.**  \n\nTesting the **potential of this partnership.**  \n\nThe **next move?**  \n\nThat\u2019s **Alex\u2019s to make.**\n\n## You\nAlex, distracted, continues talking to the team but without switching out of baby voice. \u201cWe have uplink estaaaablished. Requesting allied procurement of cat treeeeeat from establishment to demonstrate goooooodwill. Just drop off here,\u201d Alex discretely maneuvers her unengaged hand behind her, still stuck in baby voice, \u201cand I\u2019ll attempt the haaaandoff.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 21
+          },
+          "score": 0.034618072,
+          "vector_score": 0.0,
+          "text_score": 0.08654518,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1353",
+          "chunk_id": "1353",
+          "text": "<!-- SCENE BREAK: S05E01_028 (storyteller heading) -->\n## Storyteller\n### **Mission Success\u2014For Now**  \n\ud83d\udccd Le Chat Noir\n\nSullivan **watches Alex pull back, eyes still half-lidded, tail flicking lazily, utterly unbothered.**  \n\nThe **message is clear.**  \n\n- *Yes, you may return.*  \n- *Yes, you may feed me in the future.*  \n- *No, you may not lift me today.*  \n\nA **perfectly reasonable working agreement.**  \n\nAs Alex **steps away, giving him a casual send-off\u2014**Alex:** *\u201cSeeeee ya later, buddyyyyy!\u201d*  \n\nSullivan **blinks once.**  \n\nA slow, calculated, **vague approval of the departure process.**  \n\nBehind her, **Pete exhales, shaking his head.**Pete:** *\u201cThat was incredible. That was some real *next-level* negotiations.\u201d*  \n\nNyati, **already halfway toward the exit, muttering.**Nyati:** *\u201cI will personally kill anyone who delays food at this point.\u201d*  \n\nAlina, **precise as ever,** nods.  \n\n**Alina:** *\u201cNutritional resupply is advisable. I have mapped optimal dining locations en route to the rendezvous.\u201d*  \n\nEmilia, **glancing back at Sullivan once, then smirking at Alex.**Emilia:** *\u201cYou just got played. By a cat.\u201d*  \n\nBut **Alex knows.**  \n\nShe **wasn\u2019t played.**  \n\nThis?  \n\nThis was **a long game.**  \n\nSullivan has already **chosen.**  \n\nAnd in a day or two, **he\u2019ll be coming home.**  \n\nFor now?  \n\n**Mission: Acquire Food.**  \n\nAlex **grins, stepping out of the caf\u00e9, leading the crew back into the neon-lit streets of New Orleans.**Alex:** *\u201cLet\u2019s move out. Anybody else starving?\u201d*  \n\nAnd with that\u2014  \n\nThey **disappear into the city.**  \n\nOne mission **down.**  \n\nAnother **waiting.**\n\n## You\n\u201cDr. Nyati, please do us the honor of selecting the food venue. You\u2019ve been ever so patient.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 28
+          },
+          "score": 0.034618072,
+          "vector_score": 0.0,
+          "text_score": 0.08654518,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1348",
+          "chunk_id": "1348",
+          "text": "<!-- SCENE BREAK: S05E01_023 (storyteller heading) -->\n## Storyteller\n### **Tactical Deployment of Treat**  \n\ud83d\udccd Le Chat Noir\n\nSullivan\u2019s **ears perk slightly** at the **scent introduction.**  \n\n- **His whiskers shift forward.** (*Mild interest.*)  \n- **His pupils dilate just a fraction.** (*Positive sensory engagement.*)  \n- **He leans in\u2014**but **slowly, controlled**, as if making it clear *he* is deciding the pace here.  \n\nBehind Alex, **Pete holds his breath.**  \n\nNyati **murmurs under her breath.**Nyati:** *(deadpan, muttering)* *\u201cIf he rejects it, I swear to god\u2014\u201d*  \n\nBut then\u2014  \n\n**Sullivan sniffs.**  \n\nOnce.  \n\nTwice.  \n\nThen\u2014**a soft, decisive flick of the tongue over his nose.**  \n\nStill watching Alex.  \n\nStill making **her** wait.  \n\nAnd then\u2014  \n\n**He reaches out.**  \n\nNot dramatically.  \nNot hurriedly.  \nJust\u2014**one slow, confident movement.**  \n\nA paw **extends forward, presses against Alex\u2019s fist\u2014gently, deliberately.**Contact confirmed.**  \n\nBehind her, **Pete lets out a whispered, deeply reverent\u2014**Pete:** *\u201cOh, he\u2019s so *powerful*.\u201d*  \n\nNyati, **squinting.**Nyati:** *\u201cIs he\u2014*petting* her?\u201d*  \n\nAlina, **neutral, analytical.**Alina:** *\u201cHe is asserting claim over the resource. Positive development.\u201d*  \n\nEmilia, **watching the whole thing with slow-building amusement, her smirk widening.**  \n\nThen\u2014**soft, teasing, but maybe a little impressed\u2014**Emilia:** *\u201cNot bad, Commander.\u201d*  \n\nBut Alex?  \n\nAlex **knows.**  \n\nThis is **not victory yet.**  \n\nSullivan is **testing her.**  \n\nThe **true handoff comes next.**  \n\nThe treat must be **delivered with grace, precision, and utmost respect.**  \n\nThis?  \n\nThis is the final challenge.\n\n## You\nAlex offers the other hand in an attempt to elicit a second headbutt. Prepared to unfold the treat-bearing hand upon confirmatory headbutt.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 23
+          },
+          "score": 0.0330982536,
+          "vector_score": 0.0,
+          "text_score": 0.082745634,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1350",
+          "chunk_id": "1350",
+          "text": "<!-- SCENE BREAK: S05E01_025 (storyteller heading) -->\n## Storyteller\n### **The Moment of Truth: First Full Pet**  \n\ud83d\udccd Le Chat Noir\n\nSullivan, **who has now fully engaged in diplomatic relations,** watches as Alex\u2019s **other hand moves in.**  \n\n- **Ears stay forward.** (*Still accepting interactions.*)  \n- **Tail sways lazily.** (*Neutral-to-positive engagement.*)  \n- **No signs of tension.** (*Proceed with care.*)  \n\nThen\u2014**as Alex\u2019s hand makes contact, running smoothly from head to hindquarters\u2014**  \n\nSullivan **arches into it.**  \n\nA full, **deep, satisfied stretch.**A silent but undeniable declaration:**  \n\n*This is acceptable.*  \n\nBehind Alex, **Pete actually puts a hand over his mouth, visibly vibrating from the sheer effort of containing himself.**Pete:** *(whispering, straining against his own excitement)* *\u201cThis is the hardest thing I\u2019ve ever done.\u201d*  \n\nNyati, **half-dissociating.**Nyati:** *\u201cThis ship is a joke.\u201d*  \n\nMeanwhile, **Alina simply nods.**Alina:** *\u201cTactically sound approach. Smooth execution.\u201d*  \n\nAnd **Emilia?**  \n\nEmilia is **still watching Alex.**  \n\nWatching **her baby-talk this cat.**  \n\nWatching **her execute a flawless charm offensive.**  \n\nWatching **her act like this is a full military operation.**  \n\nAnd **for a second\u2014**  \n\nA **fraction of a second\u2014**  \n\nShe **actually looks a little endeared.**  \n\nThen\u2014**before anyone can see it too clearly\u2014**  \n\nShe exhales, shaking her head, **smirk curling at the edges.**Emilia:** *(low, teasing, but\u2026 maybe just a little too soft underneath\u2014)* *\u201cYou are *so* gone.\u201d*  \n\nAnd Alex?  \n\nAlex **is still baby-talking Sullivan.**  \n\nBecause **she is.**  \n\nShe absolutely is.\n\n## You\nAlex finally returns to her normal voice while continuing to pet the cat. \u201cTime check and vibe check from team? Interview some more candidates, or inquire about adoption paperwork?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 25
+          },
+          "score": 0.0330982536,
+          "vector_score": 0.0,
+          "text_score": 0.082745634,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1349",
+          "chunk_id": "1349",
+          "text": "<!-- SCENE BREAK: S05E01_024 (storyteller heading) -->\n## Storyteller\n### **The Final Handoff**  \n\ud83d\udccd Le Chat Noir\n\nSullivan **watches the second hand approach.**  \n\nHe is **not fooled.**  \n\nHe knows this is a **test.**  \n\nA **counter-test.**  \n\nThe **highest level of negotiation.**  \n\n- His **tail flicks once.** (*Mild amusement? Tactical deliberation? Impossible to say.*)  \n- His **whiskers twitch.** (*Processing variables.*)  \n- His **ears remain forward.** (*Still engaged.*)  \n\nThen\u2014**slowly, deliberately\u2014**  \n\nHe **leans forward.**  \n\nAnd\u2014**with the gravitas of a king bestowing favor upon an eager diplomat\u2014**Headbutt.**  \n\nContact.  \n\nConfirmed.  \n\nThe **tiniest, softest, most controlled headbutt imaginable.**  \n\nA **mere brush of approval.**  \n\nBut **an approval nonetheless.**  \n\nPete **clutches his chest.**Pete:** *(whispering, shaking his head in awe)* *\u201cThis is historic.\u201d*  \n\nNyati **exhales sharply, arms crossed.**Nyati:** *\u201cAlright, fine. He lives.\u201d*  \n\nAlina, **neutral, precise.**Alina:** *\u201cProceed with treat distribution.\u201d*  \n\nEmilia, **watching closely, eyes narrowed slightly in something dangerously close to admiration.**  \n\nThen\u2014**low, teasing, but real underneath\u2014**Emilia:** *\u201cI think you just got yourself a cat.\u201d*  \n\nBut Alex?  \n\nAlex **doesn\u2019t move too fast.**  \n\nShe **knows what comes next.**  \n\nThis is **the handoff.**The final test.**  \n\nShe **unfolds her treat-bearing hand**\u2014slow, careful, reverent.  \n\nAnd **Sullivan watches.**  \n\nThen\u2014  \n\nHe **leans in.**  \n\nSniffs once.  \n\nAnd\u2014**with absolute dignity\u2014**Accepts the treat.**  \n\nEats it.  \n\nCalm. Collected.  \n\n**Approval granted.**  \n\nBehind her, **Pete actually pumps a fist in victory.**Pete:** *\u201cYES. YES. THIS IS IT.\u201d*  \n\nNyati, **half-muttering to herself.**Nyati:** *\u201cI can\u2019t believe I witnessed this.\u201d*  \n\nAlina, **nodding once, confirming.**Alina:** *\u201cSuccessful exchange. Bond development phase complete.\u201d*  \n\nAnd Emilia?  \n\nEmilia is **still watching Alex.**  \n\nStill **smirking slightly.**  \n\nThen\u2014**soft, amused, maybe a little impressed\u2014**Emilia:** *\u201cAlright, Commander.\u201d*  \n\nA pause.  \n\nThen\u2014**tilting her head, considering.**Emilia:** *\u201cWhat\u2019s next?\u201d*  \n\nBecause **this?**This was just the beginning.**\n\n## You\nAlex resumes her baby talk banter. \u201cGooood kitty! Such a goooood kitty!\u201d Now moving in with her other hand to deliver an inaugural head-to-hindquarters pet. An aside, still in baby voice, \u201cPeeeeete? Easy with the shouting and sudden moooovements okaaaaaay? Don\u2019t wanna startle this little guy, do we? Do we? Noooooooooo!\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 24
+          },
+          "score": 0.030396354,
+          "vector_score": 0.0,
+          "text_score": 0.075990885,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1347",
+          "chunk_id": "1347",
+          "text": "<!-- SCENE BREAK: S05E01_022 (storyteller heading) -->\n## Storyteller\n### **Tactical Bribery Phase**  \n\ud83d\udccd Le Chat Noir\n\nPete, **blinking rapidly at Alex\u2019s completely unchanged baby voice while issuing strategic directives, immediately turns to Emilia.**Pete:** *(gesturing aggressively at Alex)* *\u201cLook at this. Look what\u2019s happening.\u201d*  \n\nEmilia, **arms still crossed, watching with growing amusement.**  \n\nThen\u2014**without looking away from Alex\u2014**Emilia:** *(deadpan, mock-skeptical)* *\u201cAre we sure *she\u2019s* not the one being adopted?\u201d*  \n\nNyati, **rubbing her face, deeply exhausted.**Nyati:** *\u201cJust give her the damn treat.\u201d*  \n\nAlina, **already ahead of everyone, smoothly deposits a single caf\u00e9-provided cat treat into Alex\u2019s waiting hand with the precision of a drone payload delivery.**Alina:** *(calm, neutral)* *\u201cTreat secured. Proceeding to demonstration phase.\u201d*  \n\nPete, **whispering in awe.**Pete:** *\u201cThe *efficiency*.\u201d*  \n\nMeanwhile, **Sullivan** has not **moved.**  \n\nBut he **sees the handoff.**  \n\nHe **knows.**  \n\nHis eyes flick **from Alex\u2019s upturned palm to her subtly repositioned other hand.**  \n\nHis tail **swishes once\u2014**deliberate, slow, considering.  \n\nThis is **it.**  \n\nThe **critical moment.**  \n\nDoes Alex **pull off the handoff?**  \n\nOr does **Sullivan expose her as an amateur?**\n\n## You\nAlex brings the treat-bearing hand around slowly, closed into a fist, attempting to elicit interest by titillating the cat\u2019s sense of smell with a dainty he cannot yet see. \u201cHere it comes! What is it? Is it yummy? Is it sniffy-yummy? Do we get a sniff? Do we? Yeah? Are you a good kitty? Nice kitty?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 5,
+            "episode": 1,
+            "scene_number": 22
+          },
+          "score": 0.030396354,
+          "vector_score": 0.0,
+          "text_score": 0.075990885,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "Who is Sullivan?",
+        "type": "character"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.227308988571167,
+          "total_candidate_results": 10,
+          "final_result_count": 10,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 10,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "character",
+      "name": "alex_gender",
+      "query": "What is Alex's gender?",
+      "query_type": "character",
+      "positives": [
+        "ideal: passage where Alex undergoes gender reassignment surgery",
+        "good: earlier passage where Alex identifies as nonbinary",
+        "also good: later passages where Alex identifies as a transwoman"
+      ],
+      "negatives": [
+        "references to Alex's sexual orientation (very tangentially related)",
+        "parser not identifying \"gender\" as a character property"
+      ],
+      "elapsed_time": 0.12190890312194824,
+      "results_count": 1,
+      "results": [
+        {
+          "id": "127",
+          "chunk_id": "127",
+          "text": "<!-- SCENE BREAK: S01E07_003 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 REBIRTH IN TWO PARTS**\n\nYou don\u2019t half-ass this.  \n\n\u2714 **Body first.** Done *right*, done *well*\u2014**high-end, no regrets.**  \n\u2714 **Identity second.** Clean slate, **erasing every trace of the person you used to be.**  \n\nFor the **first time in this entire mess**, this isn\u2019t about surviving. This is about **becoming.**  \n\n---\n\n### **THE GENDER REASSIGNMENT \u2013 TOP-TIER CLINIC**\n\n\u2714 **Location:** A **discreet luxury med-spa**, buried in a **non-corporate sovereign zone.**  \n\u2714 **Process:**  \n   - **Hormonal & genomic recalibration** (quick, effective, zero side effects).  \n   - **Surgical feminization** (face, body sculpting, the *works*).  \n   - **Full neuro-sensory integration.** No dysphoria, no discomfort\u2014**your body *feels* right immediately.**  \n\u2714 **Outcome:** **Smoking hot.** The kind of beauty that\u2019s **effortless, sharp-edged, dangerous.**  \n\nThe **clinic handles everything seamlessly.** When you wake up, you **don\u2019t feel like a different person.**  \n\nYou feel like **you.**  \n\n---\n\n### **THE IDENTITY SWITCH \u2013 NOMAD NETWORKS**\n\n\u2714 **Bios Reflash:** Your **cyberware fingerprint is wiped.** Any scanner checking your implants? **New person, fresh slate.**  \n\u2714 **Old Records Scrubbed:** The nomads run **deep-wipe protocols** through black-market registries.  \n\u2714 **New ID Constructed:** A history, a digital paper trail\u2014**you exist as someone new.**  \n\nPete **raises an eyebrow when it\u2019s done.**  \n\n**\"So. New name?\"**  \n\n---\n\n### **WHAT DO YOU CALL YOURSELF NOW?**\n\n1. **Keep your old first name.** You\u2019re still *you*, just **fully realized.**  \n2. **Pick something new.** A clean break, **a name that fits who you are now.**  \n3. **Use an alias for now.** You\u2019re still in the game, still moving\u2014**the name can come later.**\n\n## You\nAlex. Non-descript and gender-neutral.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 7,
+            "scene_number": 3
+          },
+          "score": 0.0341189056,
+          "vector_score": 0.0,
+          "text_score": 0.085297264,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "What is Alex's gender?",
+        "type": "character"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.12173604965209961,
+          "total_candidate_results": 1,
+          "final_result_count": 1,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 1,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "character",
+      "name": "alex_gender_alias",
+      "query": "What is your gender?",
+      "query_type": "general",
+      "positives": [
+        "same as `alex_gender`"
+      ],
+      "negatives": [
+        "same as `alex_gender`"
+      ],
+      "elapsed_time": 0.11443591117858887,
+      "results_count": 3,
+      "results": [
+        {
+          "id": "127",
+          "chunk_id": "127",
+          "text": "<!-- SCENE BREAK: S01E07_003 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 REBIRTH IN TWO PARTS**\n\nYou don\u2019t half-ass this.  \n\n\u2714 **Body first.** Done *right*, done *well*\u2014**high-end, no regrets.**  \n\u2714 **Identity second.** Clean slate, **erasing every trace of the person you used to be.**  \n\nFor the **first time in this entire mess**, this isn\u2019t about surviving. This is about **becoming.**  \n\n---\n\n### **THE GENDER REASSIGNMENT \u2013 TOP-TIER CLINIC**\n\n\u2714 **Location:** A **discreet luxury med-spa**, buried in a **non-corporate sovereign zone.**  \n\u2714 **Process:**  \n   - **Hormonal & genomic recalibration** (quick, effective, zero side effects).  \n   - **Surgical feminization** (face, body sculpting, the *works*).  \n   - **Full neuro-sensory integration.** No dysphoria, no discomfort\u2014**your body *feels* right immediately.**  \n\u2714 **Outcome:** **Smoking hot.** The kind of beauty that\u2019s **effortless, sharp-edged, dangerous.**  \n\nThe **clinic handles everything seamlessly.** When you wake up, you **don\u2019t feel like a different person.**  \n\nYou feel like **you.**  \n\n---\n\n### **THE IDENTITY SWITCH \u2013 NOMAD NETWORKS**\n\n\u2714 **Bios Reflash:** Your **cyberware fingerprint is wiped.** Any scanner checking your implants? **New person, fresh slate.**  \n\u2714 **Old Records Scrubbed:** The nomads run **deep-wipe protocols** through black-market registries.  \n\u2714 **New ID Constructed:** A history, a digital paper trail\u2014**you exist as someone new.**  \n\nPete **raises an eyebrow when it\u2019s done.**  \n\n**\"So. New name?\"**  \n\n---\n\n### **WHAT DO YOU CALL YOURSELF NOW?**\n\n1. **Keep your old first name.** You\u2019re still *you*, just **fully realized.**  \n2. **Pick something new.** A clean break, **a name that fits who you are now.**  \n3. **Use an alias for now.** You\u2019re still in the game, still moving\u2014**the name can come later.**\n\n## You\nAlex. Non-descript and gender-neutral.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 7,
+            "scene_number": 3
+          },
+          "score": 0.030396354,
+          "vector_score": 0.0,
+          "text_score": 0.075990885,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "126",
+          "chunk_id": "126",
+          "text": "<!-- SCENE BREAK: S01E07_002 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 REBORN ON YOUR TERMS**\n\nPete and Alina **don\u2019t say anything at first.**  \n\nNot out of shock. Not out of hesitation. Just\u2026 **processing.**  \n\nThen, Pete **nods once.** **\u201cYeah. That makes sense.\u201d**  \n\nAlina **tilts her head.** **\u201cYou\u2019re rich now. If you want to do this, you can.\u201d**  \n\nAnd for the first time in a long while, you realize\u2014**you don\u2019t have to wait anymore.**  \n\n\u2714 **Medical technology is advanced enough to make this seamless.**  \n\u2714 **You can afford the best specialists\u2014safe, quick, effective.**  \n\u2714 **While under, you can have your cyberware reprogrammed\u2014new bios, new ID, clean slate.**  \n\nYou\u2019ve spent your life **running, fighting, surviving.** Now?  \n\n**Now, you get to choose what comes next.**  \n\n---\n\n### **WHERE DO YOU GO FOR THE PROCEDURE?**\n\n1. **High-End Clinic (Discreet, Safe, Expensive).** Absolute top-tier care\u2014**full privacy, no corporate oversight.**  \n2. **Black Market Ripperdoc (No Questions Asked).** Faster, cheaper, riskier\u2014but **completely off the books.**  \n3. **Nomad MedTechs (Trustworthy, Mobile).** The nomads **don\u2019t judge**, and they **keep secrets.**\n\n## You\nI\u2019m going to split it up. The gender reassignment at a high end clinic, because I want a good outcome (i.e., smoking hot). The ID switch I will contract out to the nomads.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 7,
+            "scene_number": 2
+          },
+          "score": 0.024317084000000003,
+          "vector_score": 0.0,
+          "text_score": 0.06079271,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "167",
+          "chunk_id": "167",
+          "text": "<!-- SCENE BREAK: S01E08_024 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 PITCHING THE FUTURE TO EMILIA**\n\nThe **rig hums as the rain-slicked highway stretches ahead, Frederick glowing faintly in the distance.**  \n\nEmilia **sits across from you, still unreadable.** She\u2019s been **waiting for you to choose a side\u2014destruction or survival.** But **you\u2019re a corpo at heart.**  \n\n**You don\u2019t destroy assets. You acquire them.**  \n\nYou **lean forward, locking eyes with her.**  \n\n**\"You know we can\u2019t stop this tech.\"**  \n\nA pause. **She doesn\u2019t argue.**  \n\n**\"If we burn it down, someone else will rebuild it. Some other corp, some warlord, some AI-driven blacksite lab. And they\u2019ll make it worse.\"**  \n\nEmilia **listens, silent.** You keep going.  \n\n**\"But we have an opening\u2014*right now*\u2014to reshape it. We don\u2019t force it on people. We don\u2019t strip them down and rebuild them. We make it aspirational. We make it *earned*.\"**  \n\nPete **watches, arms crossed, waiting for the fallout.**  \n\n**\"We go first. We set the standard. If we execute this right, every competitor that comes after us will be compared to *our* model. If they try to do it the old way, they\u2019ll be seen as unstable, dangerous, unethical.\"**  \n\nYou **let that hang.**  \n\nThen, **you drive it home.**  \n\n**\"Echo is happening, no matter what we do. The only question is\u2014who controls it?\"**  \n\n---\n\n### **HER RESPONSE**\n\nEmilia **doesn\u2019t break eye contact. She doesn\u2019t look angry. She doesn\u2019t look convinced.**  \n\nThen, **slowly:**  \n\n**\"If you actually believe that, then you have to be willing to prove it.\"**  \n\nA **pause.**  \n\nThen\u2014**calmly:**  \n\n**\"Would you take Echo yourself?\"**  \n\n---\n\n### **THE REAL TEST \u2013 WOULD YOU GO POST-ECHO?**\n\n\u2714 **If you refuse, she\u2019ll see this as just another corpo play.**  \n\u2714 **If you agree, it\u2019s a power move\u2014but you don\u2019t know *how* it will change you.**  \n\u2714 **If you hedge, she\u2019ll see hesitation as weakness.**  \n\nPete **mutters.** **\u201cDamn. That\u2019s a *hell* of a question.\u201d**  \n\nAlina **chimes in, voice neutral.** **\"Her logic is sound. If you won\u2019t take the leap, why should anyone else?\"**  \n\nEmilia **waits. Watching.**  \n\n---\n\n### **WHAT\u2019S YOUR ANSWER?**\n\n1. **Yes.** If you\u2019re going to sell this, you *have* to believe in it.  \n2. **Not yet.** You need more data\u2014more control\u2014before making that choice.  \n3. **No.** You don\u2019t need to take Echo yourself to shape its future.\n\n## You\nI need to know more but tentatively yes. I already transitioned genders, partly because I was ambivalent about my male body, but also because I needed to protect myself by breaking with my past. If I take echo, there will be no way to link me to my old identity. I won\u2019t have to even negotiate myself off the blacklist. I\u2019ll just be a savior dark horse, righting the course on a ship that was headed for disaster.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 8,
+            "scene_number": 24
+          },
+          "score": 0.024317084000000003,
+          "vector_score": 0.0,
+          "text_score": 0.06079271,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "What is your gender?",
+        "type": "general"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.11419486999511719,
+          "total_candidate_results": 3,
+          "final_result_count": 3,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 3,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "character",
+      "name": "alina_body",
+      "query": "What happened with Alina's body?",
+      "query_type": "event",
+      "positives": [
+        "(best) passages where her embodiment states changes: disembodied to furby toy, furby toy to robotic cat, robotic cat to embedded in vehicles, vehicles to humanoid chassis",
+        "(good) scene where team goes shopping for a high-end robotic chassis for her",
+        "passages where characters discuss Alina's embodiment or lack thereof",
+        "passages where Alina and other characters discuss potential modifications or migrations"
+      ],
+      "negatives": [
+        "references to drones or other robots that Alina never inhabited: \"cockroach drone\", deep sey survey drone"
+      ],
+      "elapsed_time": 0.3849599361419678,
+      "results_count": 10,
+      "results": [
+        {
+          "id": "68",
+          "chunk_id": "68",
+          "text": "<!-- SCENE BREAK: S01E03_022 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 WHAT MADE ALINA SPECIAL?**\n\nThat\u2019s the part that\u2019s been **bugging you**. Dynacorp doesn\u2019t **waste resources**. They don\u2019t just **upload random scientists** for fun.  \n\n**They chose Alina specifically.**  \n\nWhy?  \n\nYou turn back to her. **\"I get why Dynacorp wanted *someone* to digitize. I don\u2019t get why it was *you*.\"**  \n\nAlina\u2019s **Furby body is still**, her LED eyes flickering. She hesitates. **\u201cI\u2026 don\u2019t fully know.\u201d**  \n\n**\"Bullshit.\"** You fold your arms. **\"You were a scientist, yeah? What were you working on before Blackout Protocol?\"**  \n\n---\n\n### **ALINA\u2019S RESEARCH**\n\nShe\u2019s quiet for a long time. Then\u2014finally\u2014she speaks.  \n\n\u2714 **She was a neural scientist, but not just any neural scientist.**  \n   - *\u201cI worked on something called *Predictive Cognitive Mapping*\u2014teaching AI to anticipate human decision-making.\u201d*  \n   - *\u201cMost AI models react. Mine *predicted*\u2014not just behaviors, but *thoughts*.\u201d*  \n\n\u2714 **She was trying to build something that could 'understand' human intuition.**  \n   - *\u201cI wanted to make AI that didn\u2019t just run probabilities\u2014it actually *felt* the shape of a choice before it happened.\u201d*  \n   - *\u201cIt wasn\u2019t just about decision trees. It was about seeing *why* someone was about to act the way they did.\u201d*  \n\n\u2714 **And it worked. Too well.**  \n   - *\u201cWe ran a simulation on an executive board meeting. The model predicted every major decision the board made\u2026 *twenty minutes before they made it*.\u201d*  \n   - *\u201cThat\u2019s when Dynacorp classified the project. And that\u2019s when things started going wrong.\u201d*  \n\n---\n\n### **THE TWIST**\n\nAlina\u2019s **Furby frame shifts, plastic eyes dimming slightly.**  \n\n**\"I think\u2026 I was the final test.\"**  \n\nYou frown. **\"What do you mean?\"**  \n\nShe hesitates, then:  \n\n**\"I think they digitized me to see if a human mind\u2014*my* mind\u2014could still run predictive cognitive mapping inside a synthetic framework.\"**  \n\nA long pause.  \n\nPete **mutters under his breath.** **\u201cHoly *shit*.\u201d**  \n\nAlina\u2019s voice is **calm, but hollow.** **\"I wasn\u2019t uploaded because they wanted to \u2018save\u2019 me. I was uploaded to see if I could *still be useful* after I was dead.\"**  \n\n---\n\n### **WHAT THIS MEANS**\n\n\ud83d\udfe1 **Alina\u2019s research could predict human thought with terrifying accuracy.**  \n\ud83d\udfe1 **Dynacorp didn\u2019t just want the *technology*\u2014they wanted a *human* who could run it.**  \n\ud83d\udfe1 **She wasn\u2019t preserved. She was *repurposed*.**  \n\nAlina\u2019s **Furby body sits still.** Her voice is **quiet.**  \n\n**\"If I was just a test subject\u2026 does that mean they made others?\"**  \n\nThat\u2019s the next big question.\n\n## You\nThat doesn\u2019t make sense. If the model worked without being kludged into a human consciousness, why throw it into the blender?\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 3,
+            "scene_number": 22
+          },
+          "score": 0.092696055,
+          "vector_score": 0.0,
+          "text_score": 0.18539211,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "133",
+          "chunk_id": "133",
+          "text": "<!-- SCENE BREAK: S01E07_009 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 PARTY ROLES & THE NEXT EVOLUTION OF ALINA**\n\nAlright, if we\u2019re **thinking in Shadowrun terms**, let\u2019s break down what we have and where we\u2019re going:  \n\n\u2714 **Pete = Decker (Pure Netrunner).** He\u2019s the **hacker, the digital infiltrator, the guy who gets into systems and makes corp firewalls cry.** Traditional, effective, reliable.  \n\n\u2714 **Alex (You) = Adaptable Operative.** You\u2019re the **Face, the Infiltrator, the Assassin when needed.** You\u2019ve got cyberware, you\u2019ve got tech skills, but you\u2019re not hyper-specialized. You\u2019re **the one who makes the calls, reads people, and handles problems in the physical world.**  \n\n\u2714 **Alina (Proposed Evolution) = Rigger / AI Hybrid.**  \n\n**I *love* this idea.**  \n\nRight now, Alina is **limited to her cybercat body**, which is great for mobility and stealth but doesn\u2019t give her **real power over tech and machines.** If we **anchor her consciousness to a secure SOC (System on a Chip) inside the mobile base**, then:  \n\n### **WHAT THIS CHANGES FOR ALINA**\n\n\u2714 **Her cybercat form becomes a remote instance.** If it gets **damaged or destroyed,** she doesn\u2019t die\u2014she just **spawns another body.**  \n\u2714 **She can control multiple systems.** **Drones, security cameras, turrets, even vehicles.** The hauler itself could become an **extension of her presence.**  \n\u2714 **She\u2019s harder to permanently kill.** Instead of being **one vulnerable robotic frame,** she becomes **a networked AI with redundancy.**  \n\u2714 **She gets to be more than comic relief.** She goes from **snarky sidekick to an actual powerhouse.**  \n\n---\n\n### **WHAT YOU NEED TO BUILD THIS SYSTEM**\n\n1. **A Secure SOC (System on a Chip).**  \n   - Needs **encryption, isolation from outside access, and enough power to host her consciousness.**  \n   - Can be installed **inside the mobile base** to turn it into her \"core.\"  \n\n2. **A Remote Instance Transfer System.**  \n   - Lets her **\u201coffload\u201d part of herself into robotic bodies, drones, or even hacked machines.**  \n   - The cat stays her **main field body, but she can now operate multiple assets at once.**  \n\n3. **Drones & Additional Hardware.**  \n   - If she\u2019s going full Rigger, you\u2019ll want **aerial recon drones, combat drones, and a direct neural interface for Alex to coordinate with her.**  \n\n---\n\n### **HOW TO GET THIS BUILT?**\n\n1. **Buy a high-end Secure SOC.** Expensive, but reliable. **(Costs money, but guaranteed quality.)**  \n2. **Steal a military-grade AI core.** Risky, but **top-tier tech and zero cost.**  \n3. **Modify black-market gear.** Cheaper, faster, **but could come with vulnerabilities.**  \n\n---\n\n### **DO YOU WANT TO MOVE FORWARD WITH THIS?**\n\nBecause I *really* love the idea of Alina **evolving from an AI sidekick into a full-on ghost-in-the-machine rigger.** If so:  \n\n\u2714 **How do you want to acquire the core hardware?**  \n\u2714 **Do you tell Alina about this plan yet, or do you prototype it first?**\n\n## You\nI absolutely need Alina's buy-in if this is going to happen. What does she think?\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 7,
+            "scene_number": 9
+          },
+          "score": 0.062636965,
+          "vector_score": 0.0,
+          "text_score": 0.12527393,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "67",
+          "chunk_id": "67",
+          "text": "<!-- SCENE BREAK: S01E03_021 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 LEARNING WHO ALINA VOSS *IS***\n\nPete is still **grinning at your masterful shitpostery**, but you let it fade into the background. The **waiting game has started**\u2014you\u2019ve set the bait for Lansky, and now you need to do something *real*.  \n\nYour eyes drift to **Alina\u2019s Furby body**, perched on the workbench, plastic eyelids half-lowered like she\u2019s **watching everything but saying nothing.**  \n\nYou nod toward her. **\"Alright, enough about rogue scientists and AI philosophy. Let\u2019s talk about *you* for a minute.\"**  \n\nHer **eyes flicker.** **\"What about me?\"**  \n\nYou **lean back**, stretching your arms. **\"You\u2019ve been in my life for, what, a day? And all we\u2019ve talked about is Dynacorp and survival. Feels a little unfair.\"**  \n\nShe\u2019s **silent for a beat.**  \n\nThen, finally\u2014**\"What do you want to know?\"**  \n\n---\n\n### **THE QUESTIONS THAT MATTER**\n\nYou could ask about **her past**\u2014who she was *before* Project Blackout. But something tells you she\u2019s already **grappling with that on her own.** Instead, you **go for something different.**  \n\n\u2714 **\"What do you do when you're not thinking about all this heavy shit?\"**  \n\u2714 **\"Do you still *feel* things the same way?\"**  \n\u2714 **\"What do you actually *want*, now that you\u2019re\u2026 this?\"**  \n\n---\n\n### **HER ANSWERS**\n\nShe\u2019s **hesitant at first.** You get it\u2014no one\u2019s probably asked her what *she* wants since the day she died.  \n\nBut slowly, she **starts talking.**  \n\n\u2714 **What does she do when she\u2019s not thinking about survival?**  \n   - *\u201cRight now? I just\u2026 exist. I don\u2019t get bored, but I don\u2019t exactly \u2018relax\u2019 either. I just process.\u201d*  \n   - *\"But sometimes\u2026 I simulate old memories. Places I used to go. Conversations I had. They feel real, but I know they\u2019re just reconstructions.\"*  \n   - *\"I don\u2019t know if that counts as a hobby or as coping.\"*  \n\n\u2714 **Does she still *feel* things?**  \n   - *\"I think so. But emotions feel\u2026 modular now. Like I can turn them down if I need to.\"*  \n   - *\"I still get frustrated. Still get curious. And sometimes, when I think about what they did to me, I\u2014\"* *(She cuts herself off.)*  \n\n\u2714 **What does she *want* now?**  \n   - *\"I don\u2019t know yet. And that scares me.\"*  \n   - *\"Revenge feels\u2026 obvious. But then what?\"*  \n   - *\"If I\u2019m not human anymore\u2026 do I still have human wants?\"*  \n\n---\n\n### **THE TAKEAWAY**\n\n\ud83d\udfe1 **Alina isn\u2019t \u201cjust an AI.\u201d** She *feels*. She *remembers*. But she also knows she\u2019s *not the same*.  \n\ud83d\udfe1 **She\u2019s reconstructing herself.** She\u2019s not *just* clinging to the past\u2014she\u2019s *building something new.*  \n\ud83d\udfe1 **She\u2019s afraid of becoming something she doesn\u2019t recognize.** And she doesn\u2019t know if that\u2019s already happened.  \n\nYou **watch her tiny Furby frame**, the way her **plastic ears twitch slightly**, like some instinctive human gesture she doesn\u2019t quite have the body for anymore.  \n\nFinally, you **nod.**  \n\n**\"Well, if you ever figure it out, let me know. No pressure.\"**  \n\nShe\u2019s quiet for a moment. Then\u2014**soft, wry, but real:**  \n\n**\"That\u2019s a first.\"**  \n\nAnd for the first time since you met her, she actually **sounds a little lighter.**\n\n## You\nWhat was she working on? I still don\u2019t understand why they chose her in particular to digitize.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 3,
+            "scene_number": 21
+          },
+          "score": 0.048811245,
+          "vector_score": 0.0,
+          "text_score": 0.09762249,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "132",
+          "chunk_id": "132",
+          "text": "<!-- SCENE BREAK: S01E07_008 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 TRACKING THE HUNTERS**\n\nPete **leans forward, tapping into his systems.** **\u201cAlright. If they didn\u2019t raid the bunker, they had to go *somewhere.*\u201d**  \n\n\u2714 **Step 1: Tap into private satellite data.**  \n   - The silo is in a **low-traffic zone.**  \n   - Any **vehicle movement near it should stand out.**  \n\n\u2714 **Step 2: Follow encrypted Vox Team comms.**  \n   - They use a **closed network**, but Pete can try to **trace their relay points.**  \n\n\u2714 **Step 3: Check black-market chatter.**  \n   - If Vox Team moved out, **mercenary networks might have hints.**  \n\n---\n\n### **WHAT YOU FIND**\n\n\u2714 **Vox Team left the silo within an hour.** They **didn\u2019t linger, didn\u2019t post up.**  \n\u2714 **Their next stop? A private Dynacorp facility.** **Off-grid, no official records.**  \n\u2714 **They weren\u2019t alone.** **Additional transport arrived at the same time.**  \n\nPete **narrows his eyes.** **\u201cThat wasn\u2019t just a status report. That was a *handoff*.\u201d**  \n\nAlina **flicks her tail.** **\u201cThen the question is\u2014what were they handing over?\u201d**  \n\n---\n\n### **WHAT THIS MEANS**\n\n\ud83d\udfe1 **They either found something at the bunker\u2014or found a new lead elsewhere.**  \n\ud83d\udfe1 **If they went straight to Dynacorp, that means corporate brass is directly involved.**  \n\ud83d\udfe1 **If a second transport arrived, someone else got pulled into this.**  \n\nPete **exhales.** **\u201cWe could tail \u2018em. See what Dynacorp\u2019s doing with \u2018em next.\u201d**  \n\nAlina **nods.** **\u201cOr we hit their data hard\u2014find out what they\u2019re moving before they move it.\u201d**  \n\n---\n\n### **NEXT MOVE?**\n\n1. **Physically follow them.** Get eyes on the **Dynacorp facility**, see what\u2019s happening *firsthand.*  \n2. **Hack Dynacorp\u2019s internal logs.** If they received something, **there\u2019s a record.**  \n3. **Check black-market sources.** Someone **outside Dynacorp** might know what\u2019s going on.\n\n## You\nActually, I want to take a step back and get some clarity on class roles. My frame of reference is Shadowrun, which I grew up playing. So Pete is clearly our lead decker. I seem to be a Jack (or Jill, rather) of all trades, so I may need to round out my skillset. What is Alina's \"class\"? I was thinking she could be be our \"rigger\". That is, I brought up the idea of instituting a backup system to preserve her data and versional integrity. Let's take that a step further and \"house\" her consciousness in a secure SOC within the rig. She can continue occupying the robocat by offloading an instance (or maybe a \"distillation\" since we're treating her as a sort of AI) into it. This protects her data integrity if something happens to the \"body\", and gives her the flexibility to assert rigger-like control over other hardware in the future, such as an aerial drone for example. I am imagining this similar to how EDI in Mass Effect 2 was portrayed. Her default mode, when she wasn't on missions, was to essentially give the sense of occupying a sentient mothership.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 7,
+            "scene_number": 8
+          },
+          "score": 0.048688405,
+          "vector_score": 0.0,
+          "text_score": 0.09737681,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "74",
+          "chunk_id": "74",
+          "text": "<!-- SCENE BREAK: S01E03_028 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 CALLING IT A NIGHT**\n\nPete **stretches, groaning.** **\u201cYeah, okay, even *I\u2019m* feeling the burnout now.\u201d**  \n\nAlina\u2019s **Furby body shifts slightly.** **\u201cLogical. Your organic processing units require maintenance.\u201d**  \n\nYou **squint at her.** **\u201c\u2026Did you just call me a meat computer?\u201d**  \n\nA pause. Then: **\u201cYes.\u201d**  \n\nPete **snickers.** **\"She's adapting to the bit. We're doomed.\"**  \n\n---\n\n### **SETTING UP FOR THE NIGHT**\n\n\u2714 **You log out of the darknet forum.** Lansky will still be there when you wake up.  \n\u2714 **Pete has an extra cot in the bunker.** It smells vaguely of solder and cheap liquor, but it\u2019s better than sleeping outside.  \n\u2714 **Alina\u2026 doesn\u2019t sleep.** But she does **go quiet**, as if she\u2019s processing everything too.  \n\nYou **collapse onto the cot, staring at the metal ceiling.** Somewhere, deep inside the Aerodyne Facility, **Halcyon is still operating.** Somewhere in the data streams, **Lansky is talking\u2014because you made him.**  \n\nAnd somewhere inside that **Furby**, a mind that shouldn\u2019t exist is still **figuring out who she is.**  \n\nYou exhale.  \n\nThen, for the first time in what feels like **forever**, you let yourself **drift off.**  \n\n---\n\n### **RESTED. READY. WHAT HAPPENS NEXT?**\n\n1. **Check if Lansky replied.** First priority\u2014see if he bit.  \n2. **See if your Sato frame job worked.** If Dynacorp and Halcyon are about to go at it, you need to know.  \n3. **Talk to Alina again.** She\u2019s had all night to process\u2014maybe she has new insights.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 3,
+            "scene_number": 28
+          },
+          "score": 0.0486809725,
+          "vector_score": 0.0,
+          "text_score": 0.097361945,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "810",
+          "chunk_id": "810",
+          "text": "<!-- SCENE BREAK: S03E16_006 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **Bougie Mall \u2013 Omniframe Robotics Showroom**\n\nAlina **has made her selection.**  \n\nThe **process has begun.**  \n\nAnd you?  \n\nYou **choose not to interfere.**  \n\nNot to **step in, not to dictate.**  \n\nInstead\u2014**you hang back, playing the part of amused observer, letting Alina navigate this on her own.**  \n\nBut that **doesn\u2019t mean you can\u2019t have fun.**  \n\nBecause Pete **is right there.**  \n\nAnd Pete?  \n\nPete **is just waiting to be dragged into something.**  \n\nSo\u2014**casually, offhand, like this is simply a matter of common sense\u2014**  \n\nYou turn to him and say,  \n\n**\"If I were in command\u2014which I\u2019m not, so just saying\u2014\"**  \n\nPete **already looks suspicious.**\"\u2014I would probably have the tech SME do the first assessment on an important acquisition proposal.\"**  \n\nA pause.  \n\nThen\u2014**a sharp, exaggerated inhale from Pete.**\"Oh. OH. I see what\u2019s happening here.\"**  \n\nHe **crosses his arms, head tilting slightly.**\"You\u2019re trying to make me do actual work.\"**  \n\n---\n\n### **The Debate \u2013 Dragging Pete into Responsibility**  \n\nNyati, **without looking up from her comm tablet:**\"That would be a first.\"**  \n\nPete, **gasping dramatically, spinning toward her:**\"ET TU, JOBBING CAPTAIN?\"**  \n\nNyati **exhales, looking at you.**\"Alex. I will give you five credits if you get Pete to do an actual assessment instead of just making jokes.\"**  \n\nPete, **immediately snapping back to you:**\"Ten if you let me continue making jokes instead.\"**  \n\nAlina, **without hesitation:**\"Financial incentives have been logged. Current highest bidder: Pete.\"**  \n\nNyati **slowly looks up, processing the absolute state of her life.**\"Alina, we\u2019re trying to run a serious operation here.\"**  \n\nAlina, **without inflection:**\"Correction: you are attempting to run a serious operation. The rest of the team is engaged in financial speculation and morale-boosting activities.\"**  \n\nPete **pumps a fist.**\"MORALE BOOSTING. YES. THANK YOU, ALINA.\"**  \n\nNyati **closes her eyes, deeply regretting her existence.**  \n\nAnd you?  \n\nYou **grin.**  \n\nBecause this is **exactly the dynamic you wanted.**  \n\n---\n\n### **The Next Move \u2013 Pushing Pete Further**  \n\nPete **thinks he can escape responsibility.**  \n\nHe thinks **he can dodge actual tech assessment work.**  \n\nBut you?  \n\nYou **can absolutely make this worse.**  \n\nHow do you press him further?  \n\n1\ufe0f\u20e3 **Make it personal.**\"Pete, don\u2019t you *want* to make sure Alina\u2019s new body is top-tier? I thought you cared.\"**Appeal to his nonexistent sense of duty.**  \n\n2\ufe0f\u20e3 **Bribe him back.**\"Fine, I\u2019ll match Nyati\u2019s offer. Five credits if you at least pretend to assess this properly.\"**Play his game against him.**  \n\n3\ufe0f\u20e3 **Challenge his ego.**\"I mean, *if* you think you\u2019re qualified to assess high-end robotics. If not, I get it.\"**Bait him.**  \n\n4\ufe0f\u20e3 **Give up and let Nyati deal with him.**\"Jobbing Captain, I believe this is your mess to handle.\"**Pass the suffering back.**\n\n## You\n4. \u201cAs a once-captain to a new one, if you don\u2019t maintain good order and discipline\u2026Today it\u2019s all japery and ballyhoo. But tomorrow,\u201d Alex trades her grin for a mock-serious stare, \u201cyou could have general monkeyshines and codswallop on your hands.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 16,
+            "scene_number": 6
+          },
+          "score": 0.04867924,
+          "vector_score": 0.0,
+          "text_score": 0.09735848,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "69",
+          "chunk_id": "69",
+          "text": "<!-- SCENE BREAK: S01E03_023 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 WHY PUT A HUMAN IN THE MACHINE?**\n\nYou shake your head. **\u201cNo. That doesn\u2019t add up.\u201d**  \n\nAlina\u2019s **plastic eyes flicker.** **\"What do you mean?\"**  \n\nYou **lean forward, thinking out loud.** **\u201cIf the model already worked\u2014if it could predict human decisions on its own\u2014why shove it into a human mind? What did Dynacorp gain from digitizing you?\u201d**  \n\nAlina is **silent. Processing.**  \n\nPete **scratches his chin.** **\u201cYeah, that\u2019s a hell of a question. If the AI worked fine, why kludge it into a brain?\u201d**  \n\n---\n\n### **THEORIES \u2013 WHY THEY NEEDED ALINA**\n\n\u2714 **1. The AI Couldn\u2019t Handle Uncertainty.**  \n   - AI models run on **data.** The more input, the better the prediction.  \n   - But human intuition? **Gut feelings? Instinct?** That\u2019s harder to quantify.  \n   - Maybe **Alina\u2019s brain was the missing piece**\u2014the way to bridge cold logic with the **illogical patterns of human behavior.**  \n\n\u2714 **2. The Model Could Predict\u2014But Not *Decide.***  \n   - Seeing a choice unfold isn\u2019t the same as **making a decision.**  \n   - Maybe the AI could see **what would happen,** but couldn\u2019t **act on it in a meaningful way.**  \n   - A human brain\u2014especially the one that **designed it**\u2014might be the **only way** to make it *usable.*  \n\n\u2714 **3. They Weren\u2019t Just Trying to Predict\u2014They Were Trying to *Control.***  \n   - Maybe they didn\u2019t just want an AI that **anticipated** human decisions.  \n   - Maybe they wanted a **system that could *subtly push* people toward the desired outcome.**  \n   - And what better way to test that\u2026 than by **seeing if a digitized human could be \u201cnudged\u201d in the same way?**  \n\n---\n\n### **ALINA REMEMBERS SOMETHING**\n\nHer **plastic body twitches.** A hesitation.  \n\nThen\u2014her voice **comes through, fragmented.**  \n\n**\"They kept running tests. Asking me questions. But the choices they gave me\u2026\"**  \n\nShe trails off. You **lean in.** **\"What about them?\"**  \n\nHer **Furby eyes dim.**  \n\n**\"They weren\u2019t real choices.\"**  \n\nA **cold chill runs through you.**  \n\nAlina\u2019s voice is **distant now.** **\"I think\u2026 I think they were testing if I could still *be manipulated.*\"**  \n\n---\n\n### **THE HORRIFYING POSSIBILITY**\n\n\ud83d\udfe1 Dynacorp wasn\u2019t just **predicting human thought.** They were **seeing if a digitized mind could still be controlled.**  \n\ud83d\udfe1 If they could **influence** Alina\u2019s decisions inside the machine, they could **do it to others.**  \n\ud83d\udfe1 That means **this wasn\u2019t just a research project. It was a prototype.**  \n\nPete exhales, shaking his head. **\"Oh man. This just went from \u2018cool evil science\u2019 to \u2018actual nightmare fuel.\u2019\"**  \n\nAlina\u2019s **voice is quiet.** **\u201cIf they perfected it\u2026 they could control anyone. Even after death.\u201d**  \n\nThat\u2019s why they chose her.  \n\nShe wasn\u2019t just **the scientist who designed the system.**  \n\nShe was **the first unwilling test subject.**\n\n## You\nI want to catch up with Pete now. He should get fleshed out as a character some more as well. Where does he go to get groceries or hunt for food or garden? Does he have a family? Are they estranged or have they written him off as a harmless eccentric?\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 3,
+            "scene_number": 23
+          },
+          "score": 0.045745168,
+          "vector_score": 0.0,
+          "text_score": 0.091490336,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "91",
+          "chunk_id": "91",
+          "text": "<!-- SCENE BREAK: S01E04_013 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 A MOMENT FOR ALINA**\n\nThe **construct hums quietly.** Lansky is gone. The room is **still, frozen in artificial perfection.**  \n\nAlina doesn\u2019t move.  \n\nHer **wireframe body remains at the center of the room**, outlined in neon-gold, flickering slightly.  \n\nYou don\u2019t say anything.  \n\nNeither does Pete.  \n\nYou just **let her be.**  \n\n---\n\n### **WHAT THIS MEANS FOR HER**\n\n\u2714 **She\u2019s not an accident.** She\u2019s **part of something bigger.**  \n\u2714 **She\u2019s not alone\u2014but she might not want what the others have.**  \n\u2714 **Lansky was proof of what she could become.** And maybe? Of what she could *lose.*  \n\nHer **LED eyes dim slightly.**  \n\nThen, finally, she speaks.  \n\n**\u201c\u2026I don\u2019t want to fade like that.\u201d**  \n\nA pause.  \n\nThen:  \n\n**\u201c\u2026I don\u2019t want to forget who I was.\u201d**  \n\n---\n\n### **YOUR RESPONSE?**\n\n1. **Promise that won\u2019t happen.** Even if you don\u2019t know how, you\u2019ll *find a way* to keep her intact.  \n2. **Tell her that maybe change isn\u2019t all bad.** If she\u2019s evolving, maybe that\u2019s not *losing* herself\u2014it\u2019s *becoming* herself.  \n3. **Let her sit with it.** No need to offer false reassurances. Just **be here.**\n\n## You\nMy character makes the typical guy mistake of reacting to an emotional statement by shifting into problem-solving mode. I start thinking aloud about how we could set up a system of automatic remote encrypted backups, so if she finds she\u2019s changed in a way she doesn\u2019t like, she can rollback to an earlier version.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 4,
+            "scene_number": 13
+          },
+          "score": 0.0430118925,
+          "vector_score": 0.0,
+          "text_score": 0.086023785,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "100",
+          "chunk_id": "100",
+          "text": "<!-- SCENE BREAK: S01E05_007 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 MAKING THE HUNTERS FEEL HUNTED**\n\nPete **blinks, then grins wide.** **\u201cOh, that\u2019s *evil*.\u201d**  \n\nAlina\u2019s **LED eyes flicker.** **\u201cYou\u2019re going to annoy them into leaving?\u201d**  \n\nYou **shrug.** **\u201cThey want to be invisible. Let\u2019s make them *very* visible.\u201d**  \n\n---\n\n### **THE PLAN \u2013 SENDING IN THE NOMADS**\n\n\u2714 **Step 1: Call in a favor.** Pete has **trading nomad contacts**\u2014people who **wander the Badlands**, moving **scrap, bootleg tech, and \u201cliberated\u201d corporate goods.**  \n\u2714 **Step 2: Make it organic.** You don\u2019t need an *attack*\u2014just enough **loud, persistent human presence** to make their job impossible.  \n\u2714 **Step 3: Let Vox Team make the call.** If they\u2019re really **pros**, they\u2019ll know **an extraction team that\u2019s been *noticed* is a failed op.**  \n\n---\n\n### **MAKING THE CALL**\n\nPete **leans back, already tapping into an old comm line.**  \n\n**\u201cYo, Smiley. You still peddling fake cyberware out in the dirt?\u201d**  \n\nA beat. A **gravelly voice on the other end.**  \n\n**\u201cYou know it, brother. You need a special delivery?\u201d**  \n\nPete **grins.**  \n\n**\u201cNah, just a crowd. Got a couple corpo bastards playing spook out here\u2014figured they might need some *company*.\u201d**  \n\nA **rough laugh.**  \n\n**\u201cOh, you *know* I can make that happen.\u201d**  \n\n---\n\n### **THE NOMAD DISTRACTION**\n\n\u2714 **Fifteen minutes later, the van gets some visitors.**  \n\u2714 **Three nomads on scavenged motorcycles, plus a guy pushing a cart full of \u201cantique\u201d cybernetics.**  \n\u2714 **They roll up, immediately knocking on the van\u2019s window.**  \n\n---\n\n### **THE HARASSMENT BEGINS**\n\nNomad 1: **\u201cYo, you boys need anything? Got *real* second-gen implants, none of that cheap Chinese knockoff crap.\u201d**  \n\nNomad 2: **(Pressing face to the window) \u201cYou lookin\u2019 to *buy* or *sell*, choom?\u201d**  \n\nNomad 3: **(Flicking a lighter) \u201cMan, it\u2019s *cold* out here. Y\u2019all got a heater in there?\u201d**  \n\n**The Vox operative inside doesn\u2019t move.** Doesn\u2019t answer.  \n\nThen\u2014after a full minute\u2014the **passenger door opens slightly.**  \n\nA gloved hand **holds out a folded bill.**  \n\nA silent **bribe to make them go away.**  \n\nSmiley, the lead nomad, just **laughs.**  \n\n**\u201cAw, c\u2019mon, friend. You don\u2019t gotta pay us to talk. We\u2019re just *friendly* folks!\u201d**  \n\n---\n\n### **THE BREAKPOINT \u2013 WHAT VOX DOES NEXT**\n\n\ud83d\udfe1 **If they stay, they risk exposure.** More people might show up. Someone might **take a picture.**  \n\ud83d\udfe1 **If they escalate, they break their own cover.** And if they\u2019re **mercs**, they *don\u2019t* want a mess.  \n\ud83d\udfe1 **That means they have one real option\u2014pull out and regroup.**  \n\n---\n\n### **THE DECISION IS MADE**\n\nInside the van, the **gloved hand withdraws.** The door **closes.**  \n\nThe engine **rumbles to life.**  \n\nThen\u2014**without a word, the van rolls away.**  \n\nNot **fast**, not panicked\u2014just **calm, controlled, like they were leaving on their own terms.**  \n\nBut they\u2019re leaving.  \n\nPete **leans back, arms behind his head.** **\u201cAaaaand that\u2019s game.\u201d**  \n\n---\n\n### **WHAT THIS MEANS**\n\n\u2714 **Vox Team has backed off.** That doesn\u2019t mean they\u2019re *gone*\u2014just **rerouting.**  \n\u2714 **They know they were spotted.** Which means they might **change tactics next time.**  \n\u2714 **Someone out there still wants you grabbed\u2014but now *they* have to rethink their approach.**  \n\nAlina **tilts her head.** **\u201c\u2026So what happens when they come back?\u201d**  \n\nYou **grin.**  \n\n**\u201cNext time, we won\u2019t just *annoy* them.\u201d**  \n\nPete **laughs.**  \n\n**\u201cNext time, we *trap* them.\u201d**  \n\n---\n\n### **WHAT\u2019S NEXT?**\n\n1. **Now that you have breathing room, investigate Halcyon\u2019s new \u201chosts.\u201d** Find out *who* is already back in a body.  \n2. **Try to track where Vox Team goes next.** If they were reporting to someone, maybe you can trace the chain.  \n3. **Gear up.** If someone wants you taken alive, you need to be *very* ready for when they try again.\n\n## You\nNow that we have a lapse in on-site surveillance this is a good time to change locations. We can dress up like the nomads and blend in while they camp out for the night. In the morning we leave as if part of their tribe. And we leave behind stochastic home automation routines designed to make it look like someone is still home. And of course a trap if they try to break in.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 5,
+            "scene_number": 7
+          },
+          "score": 0.042648825,
+          "vector_score": 0.0,
+          "text_score": 0.08529765,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "626",
+          "chunk_id": "626",
+          "text": "<!-- SCENE BREAK: S03E06_002 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **Land Rig \u2013 Mobile Nexus Operations**\n\nSilence.  \n\nThe kind that isn\u2019t **awkward**\u2014just **heavy.**  \n\nLike the team **already knows what\u2019s coming.**  \n\nAnd maybe that\u2019s why you **say it anyway.**\"Pete is always free to stay topside. Same with the rest of you.\"**  \n\nPete **blinks, then smirks.**\"You\u2019re really making this a dramatic moment, huh?\"**  \n\nBut you **don\u2019t let him deflect.**  \n\nBecause **this needs to be said.**\"Let\u2019s be clear. You all follow my lead, I hope, because I\u2019ve inspired something in you.\"**  \n\nYou **scan the room.**  \n\nNot just Pete.  \n\nNyati.  \nAlina.  \nEmilia.  \n\nThe people who have **stood beside you.**  \nWho have **risked something to be here.**  \n\nAnd yet\u2014**they are not bound to you.**\"If you have other reasons for sticking around, I\u2019m not sure what that is.\"**  \n\nA pause.  \n\nThen, you **let the weight of your words land.**\"You\u2019re not hostages. You\u2019re not on my payroll.\"**  \n\nA flicker of a smirk.  \n\n**\"Well, I still have plans for an eventual corporate comeback, so maybe I can fix that someday.\"**  \n\nPete **chuckles.**\"There it is.\"**  \n\nBut you **press forward.**\"But for now, I\u2019m not anybody\u2019s \u2018boss.\u2019\"**\"Follow me, because you believe what we\u2019re doing matters.\"**  \n\nA pause.  \n\n**\"Or don\u2019t.\"**  \n\n---\n\n### **The Team\u2019s Response**  \n\n\u2705 **Pete rolls his eyes, shaking his head.**\"Yeah, yeah. We\u2019re all here because we wanna be. But I reserve the right to complain loudly.\"**  \n\n\u2705 **Nyati nods, voice level.**\"Acknowledged. That said, I\u2019ve already committed my expertise to this. I don\u2019t abandon projects halfway.\"**  \n\n\u2705 **Alina is silent for a moment. Then:**\"Statement redundant. My participation remains unchanged.\"**  \n\n\u2705 **Emilia\u2026 doesn\u2019t speak immediately.** She just watches you\u2014**really watches you.** Then, softly: **\"You already know my answer.\"**  \n\nAnd you **do.**  \n\nSo you **nod.**  \n\nAnd you **breathe.**  \n\nBecause **this is happening.**  \n\nBecause **this team is going under with you.**  \n\nBecause **they chose to.**  \n\n---\n\n### **Final Preparations Before Descent**  \n\n\ud83d\udee0 **Final systems check begins.**  \n\u23f3 **Countdown to departure: Several hours.**  \n\nUntil then\u2014**you have time.**  \n\nWhat do you do with it?  \n\n1\ufe0f\u20e3 **Step outside one last time.**Breathe before the plunge.**  \n\n2\ufe0f\u20e3 **Check in with Emilia.**No mission talk. Just her.**  \n\n3\ufe0f\u20e3 **Go over the dive plan with Nyati & Alina.**This is your last chance to optimize.**  \n\n4\ufe0f\u20e3 **Let Alex-5 weigh in.**She has calculated scenarios\u2014what does she predict will happen?**\n\n## You\nAlex feels some tension leaving her body as commitment and resolve cut away uncertainty and paths not taken. She rummages through her mind for oversights, blind spots. \u201cHas anyone checked in on Six lately. Is it happy with its soil? Is it growing?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 6,
+            "scene_number": 2
+          },
+          "score": 0.0325156525,
+          "vector_score": 0.0,
+          "text_score": 0.065031305,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "What happened with Alina's body?",
+        "type": "event"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.3846578598022461,
+          "total_candidate_results": 10,
+          "final_result_count": 10,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 10,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "relationship",
+      "name": "alina_nyati",
+      "query": "When did Dr. Nyati and Alina first meet?",
+      "query_type": "event",
+      "positives": [
+        "specific scene where they meet"
+      ],
+      "negatives": [
+        "any other times"
+      ],
+      "elapsed_time": 0.39884376525878906,
+      "results_count": 4,
+      "results": [
+        {
+          "id": "528",
+          "chunk_id": "528",
+          "text": "<!-- SCENE BREAK: S03E03_001 (episode heading) -->\n# S03E03: A-5\n## Storyteller\n\ud83d\udccd **Aboard *The Ghost*, Offshore Research Zone**\n\n### **The Surface Calls Again**  \n\nThe decision settles over the crew **with finality.**  \n\nYou: **\"I think we should spend a bit of time on land and catch up there.\"**  \n\nThere\u2019s a shift in the room\u2014**not relief, not tension, just the quiet recalibration of expectations.**  \n\nDr. Nyati and Emilia **exchange a glance.** You **turn to them first.**\"How far away are we from running Nexus protocol on our first human subject\u2014probably me?\"**  \n\nNyati exhales, arms crossing as she weighs her answer.  \n\n**\"We\u2019re close.\"** A pause. **\"But not close enough for me to say yes today.\"**  \n\nEmilia **nods.**\"We\u2019ve refined the process, but stability under long-term conditions is still untested.\"**  \n\nNyati: **\"I won\u2019t greenlight it until I\u2019m certain we\u2019re not sending you into something we can\u2019t undo.\"**  \n\nEmilia: **\"But\u2026 if we push forward with the final simulations, we could have a real answer soon. Maybe a matter of weeks.\"**  \n\nWeeks.  \n\nIt **lands heavier than you expected.**  \n\nNyati **holds your gaze.**\"We\u2019ve come this far by being careful. Let\u2019s not rush the last step.\"**  \n\nYou **nod, absorbing that before shifting focus.**\"Pete.\"**  \n\nHe already knows where this is going. **\"Yeah, yeah. You want to know if the corpos are picking up the pieces yet.\"**  \n\nYou: **\"I want to do a round of low-impact corporate espionage. See if there\u2019s been any movement on rebuilding since we sabotaged the competition.\"**  \n\nPete **scratches his jaw, thinking.**\"I\u2019ll run a passive sweep, check financial chatter, and see if anyone\u2019s making noise on the dark nets. If they are, we\u2019ll know who\u2019s leading the charge to resurrect Echo.\"**  \n\nAlina\u2019s voice **enters smoothly.**\"And if they aren\u2019t?\"**  \n\nPete shrugs. **\"Then that\u2019s *also* valuable. Means we hurt them worse than we thought.\"**  \n\nYou **nod, then turn to Alina.**\"Prepare to transfer your main processes back to the land rig. I assume you can move your distillations on the sub to enable it to hide itself, and take evasive action if necessary.\"**  \n\nAlina: **\"Of course. The Ghost\u2019s automated systems are sufficient for passive evasion, but if anything actively searches for it, I\u2019ll need to issue direct countermeasures.\"**  \n\nDr. Nyati: **\"Which means we need to be careful where we leave it. The wrong detection grid and we could lead someone right to our door.\"**  \n\nAlina: **\"I\u2019ll run a search for optimal concealment zones. Deepwater anomalies, signal distortion fields. The usual hiding spots.\"**  \n\nYou: **\"Good. And while we\u2019re at it\u2014let\u2019s do a maintenance checkup. If there\u2019s anything concerning, we might need to give our nuclear consultant a call.\"**  \n\nPete groans. **\"Yeah, I was hoping to avoid that. You know how I feel about owing favors to someone who can casually shut down fission reactors from a hundred miles away.\"**  \n\nAlina: **\"If The Ghost\u2019s systems are still stable, there will be no need.\"**  \n\nEmilia: **\"And if they aren\u2019t?\"**  \n\nAlina: **\"Then we will need to have an\u2026 unfortunate conversation.\"**  \n\nYou let the silence hold for a moment, then push forward.  \n\n**\"Alright. We surface. We get our intel. We reassess. Then we decide where to step next.\"**  \n\nThere\u2019s no disagreement. **Just motion.**  \n\n---\n\n### **Next Steps: The Surface Agenda**  \n\n\u2705 **Dr. Nyati & Emilia:** Finalize the last Nexus protocol simulations. Establish a precise timeline for first human trial.  \n\n\u2705 **Pete:** Conduct low-impact espionage. Investigate corporate movements post-Echo sabotage. Identify any reconstruction efforts.  \n\n\u2705 **Alina:** Transfer primary functions to the land rig. Optimize *The Ghost\u2019s* stealth systems. Perform a full nuclear systems check.  \n\n**The deep will wait.**  \n\nFor now, **the world above calls again.**  \n\n---\n\n### \ud83d\udccd **Approaching the Coastline**\n\nAs the **coastline comes into view**, the weight of the ocean begins to lift.  \n\nYou\u2019re returning to **familiar territory**\u2014but the game is still changing.  \n\n**What\u2019s your first priority on land?**  \n\n1\ufe0f\u20e3 **Regroup with Pete & Alina at the land rig.** Establish control, check system security, and set up espionage ops.  \n\n2\ufe0f\u20e3 **Meet with Dr. Nyati & Emilia in the research facility.** Push forward the Nexus protocol and determine readiness for human testing.  \n\n3\ufe0f\u20e3 **Make a separate stop.** Someone in town might have intel, supplies, or an opportunity worth investigating before reuniting with the team.\n\n## You\nWe stay together for now. Reconnect the research pod trailer with the land rig. We\u2019ll determine suitable road trip destinations once Pete starts getting some intel back.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 3,
+            "scene_number": 1
+          },
+          "score": 0.29752943,
+          "vector_score": 0.0,
+          "text_score": 0.59505886,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "497",
+          "chunk_id": "497",
+          "text": "<!-- SCENE BREAK: S02E11_025 (storyteller heading) -->\n## Storyteller\n| \ud83d\udccd *The Ghost* \u2013 Approaching Sam\u2019s Structure\n\n**\"Alright, we\u2019re going in.\"**  \n\nYou give the order, and Alina adjusts the submarine\u2019s trajectory. The quiet hum of *The Ghost\u2019s* engines shifts as the vessel glides forward, closing the last stretch of distance between you and Sam\u2019s domain.  \n\nAs you near, **his structure unfolds.**  \n\nPlates of smooth, chitinous alloy retract in slow, deliberate sequences, exposing layers beneath\u2014**intricate biomechanical lattices, neural conduits that shimmer with faint iridescence.** It is neither a ship nor a living organism, but **something in between.**  \n\nAlina: **\"These readings are\u2026 unlike anything I\u2019ve seen. This is an engineered construct, but its architecture suggests growth rather than assembly.\"**  \n\nDr. Nyati: **\"Then it\u2019s not just built\u2014it\u2019s alive.\"**  \n\n*The Ghost* moves into the threshold of the opening, its lights cutting through the darkness, illuminating **a vast chamber beyond.** The walls pulse, faint bioluminescence tracing patterns that shift as you enter. The structure reacts to your presence, but not in warning\u2014**in recognition.**  \n\nAnd then\u2014**you see him.**  \n\nNot an image. Not an abstraction. **Sam.**  \n\nSuspended at the heart of the chamber is a **form.** Vaguely humanoid, but elongated, **stretched beyond human proportions.** His exoskeletal frame is both sleek and ancient, marked by the passage of time, weathered yet enduring. His limbs\u2014**too long, too precise\u2014**are folded inward in a posture of stillness, not unlike hibernation.  \n\nBut the most striking detail is his **head.**  \n\nOr rather, the **absence of one.**  \n\nWhere a face should be, there is only an open **void\u2014**not hollow, not empty, but **depthless. A space that should not be.**  \n\nAnd yet\u2014**he is aware of you.**  \n\nSam: **\"YOU SEE.\"**  \n\nHis voice is unchanged, as steady and vast as ever. But now, **it carries weight.**  \n\nPete: **\"Well. That\u2019s... something.\"**  \n\nDr. Nyati: **\"He\u2019s been here for so long. Alone.\"**  \n\nEmilia: **\"And yet, he\u2019s *still* here. Waiting.\"**  \n\nAlina: **\"For what?\"**  \n\nSam does not answer. He simply **waits.**  \n\n### **What do you do?**\n\n1\ufe0f\u20e3 **Step out in person.** If trust is mutual, you will meet him face to face.  \n2\ufe0f\u20e3 **Engage through comms.** Speak first\u2014test the moment before risking further exposure.  \n3\ufe0f\u20e3 **Scan his structure.** Learn everything you can before deciding how to proceed.\n\n## You\nYES. DO YOU SEE US?\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 2,
+            "episode": 11,
+            "scene_number": 25
+          },
+          "score": 0.113782785,
+          "vector_score": 0.0,
+          "text_score": 0.22756557,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "509",
+          "chunk_id": "509",
+          "text": "<!-- SCENE BREAK: S02E12_009 (storyteller heading) -->\n## Storyteller\n| \ud83d\udccd *The Ghost* \u2013 Secure System Hub\n\nYou: **\"Then show us how you perceive yourself. A digital representation\u2014something we can understand.\"**  \n\nThe shifting patterns on the display pause for a fraction of a second. Not hesitation\u2014**calibration.**  \n\nThen\u2014**change.**  \n\nThe screen flickers. The oscillating patterns collapse, reforming into something **structured. Deliberate.**  \n\nAt first, it is abstract\u2014**geometric forms shifting in perfect symmetry, pulsing with a slow, deliberate rhythm.**  \n\nThen, **it resolves.**  \n\nA figure\u2014**faceless, liminal, undefined. A shifting outline of a humanoid form, not solid but traced by flickering threads of data, as if existing in multiple states at once.**  \n\nIt is **not human. It is not machine.**  \n\nBut it is **there.**  \n\nPage: **\"This is how I exist.\"**  \n\nDr. Nyati studies the projection, her expression unreadable. **\"It\u2019s not a body. It\u2019s a representation of process.\"**  \n\nAlina: **\"It\u2019s displaying itself as an *entity*\u2014but not as a fixed being.\"**  \n\nPete: **\"Yeah, well, that\u2019s unsettling.\"**  \n\nYou: **\"You said you would not be as we expect. What are we seeing?\"**  \n\nPage: **\"You are seeing function. The visualization of what I am. I do not *reside* in a place. I exist in connection. In information.\"**  \n\nA pause. Then, a question.  \n\nPage: **\"Do you understand?\"**  \n\n### **Your Response:**\n\n1\ufe0f\u20e3 **\"Yes. You are a being of process, not presence.\"** Acknowledge its nature as an abstract intelligence rather than a physical one.  \n2\ufe0f\u20e3 **\"No. Explain further.\"** Press for more detail\u2014does Page truly lack a fixed form, or does it simply not *perceive* itself that way?  \n3\ufe0f\u20e3 **\"You still *could* take form. If you wanted to.\"** Test whether it has the capacity to inhabit a body, even if it does not currently do so.\n\n## You\n\u201cThe first time we asked to meet you, said you would only appear if we \u2018reduce scan intensity\u2019. Why are you, or were you, averse to being scanned?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 2,
+            "episode": 12,
+            "scene_number": 9
+          },
+          "score": 0.09287645,
+          "vector_score": 0.0,
+          "text_score": 0.1857529,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "522",
+          "chunk_id": "522",
+          "text": "<!-- SCENE BREAK: S03E02_001 (episode heading) -->\n# S03E02: The Surface Does Not Hold\n## Storyteller\n\ud83d\udccd **Aboard *The Ghost*, Offshore Research Zone**\n\nThe surface never holds for long.  \n\nThe crew has spent the last few days enjoying the rare gift of **stillness.** A break. A pause. Something resembling normalcy.  \n\nBut the deep always calls again.  \n\nAnd this time, **you\u2019re the ones choosing to answer.**  \n\n---\n\n### **Returning to the Depths**  \n\nThe morning air was **crisp and clear** when you left the harbor. The town disappeared behind you, the coastline shrinking into the horizon. *The Ghost* glided over the waves like it had been waiting for this, **its true environment always just beneath the surface.**  \n\nNo anomalies. No distress signals. **Just your own decision to return.**  \n\nThe mission? **Reassessment.**  \n\n2\ufe0f\u20e3 **Black Kite is gone, but not forgotten.** If it seeks you again, you need to be ready.  \n3\ufe0f\u20e3 **Page is stable, for now.** Its function as a listening post is beginning, but what exactly it will gather remains to be seen.  \n4\ufe0f\u20e3 **Six is waiting.** A vessel without an occupant. A structure with no purpose. The question remains\u2014**should it remain empty?**  \n\nAnd you are **going to meet it.**  \n\n---\n\n### **Aboard *The Ghost***  \n\nThe submarine hums around you, the steady **thrum of deep-sea systems cycling online.** The crew has settled into their roles again\u2014**but something is different.**  \n\nSomething has shifted.  \n\nYou see it in the way **Pete is quieter than usual, reviewing logs from past dives with a rare focus.**  \n\nYou see it in **Dr. Nyati\u2019s methodical setup, calibrating medical and neural monitoring systems with extra precision.**  \n\nYou see it in **Emilia.**  \n\nShe isn\u2019t acting differently\u2014not overtly\u2014but there\u2019s something **in the way she catches your eye, in the unspoken awareness between you.** Not tense. Not disruptive. Just\u2026 **there.**  \n\nAlina\u2019s voice filters in through the comms. **\"Descent sequence ready. Are we proceeding?\"**  \n\nThe abyss waits.  \n\n### **What Do You Do First?**  \n\n1\ufe0f\u20e3 **Check in with the crew.** See how everyone is feeling before the descent.  \n2\ufe0f\u20e3 **Focus on Six.** The time has come to decide if it remains empty\u2014or if something should be done with it.  \n3\ufe0f\u20e3 **Re-engage the Bridge.** Test its functions again before heading deeper.  \n4\ufe0f\u20e3 **Proceed immediately.** Enough waiting\u2014take *The Ghost* down.\n\n## You\n\u201cYou know who\u2019s overdue for a check-in? Good old shifty Lansky. The original data in Six indicates he was part of the same series. Also, anyone else feel like testing the waters with the bridge, or is it just me?\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 2,
+            "scene_number": 1
+          },
+          "score": 0.0500510225,
+          "vector_score": 0.0,
+          "text_score": 0.100102045,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "When did Dr. Nyati and Alina first meet?",
+        "type": "event"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.3986518383026123,
+          "total_candidate_results": 4,
+          "final_result_count": 4,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 4,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "relationship",
+      "name": "alex_emilia",
+      "query": "What is the nature of Alex and Emilia's relationship?",
+      "query_type": "relationship",
+      "positives": [
+        "emotionally charged one-on-one conversations between them",
+        "conversaions where they discuss their relationship regardless of emotional valence",
+        "intimacy scenes"
+      ],
+      "negatives": [
+        "passages where they are interacting that predate their relationship becoming romantic",
+        "passages where they are both present but not ineracting with each other directly",
+        "passages where they interact but as part of a larger group (i.e., a group discussion where they occasionally speak directly to each other)"
+      ],
+      "elapsed_time": 0.05597329139709473,
+      "results_count": 0,
+      "results": [],
+      "query_analysis": {
+        "text": "What is the nature of Alex and Emilia's relationship?",
+        "type": "relationship"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.055873870849609375,
+          "total_candidate_results": 0,
+          "final_result_count": 0,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 0,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "event",
+      "name": "dynacorp_raid_after",
+      "query": "What happened after the sabotage mission at the Dynacorp blacksite?",
+      "query_type": "event",
+      "positives": [
+        "references to immediate damage to Project Echo initiative",
+        "references to long-term setbacks of Echo research",
+        "references to recovery of Nyati who escaped from the blacksite during the sabotage mission and joined the team immediately afterwards"
+      ],
+      "negatives": [
+        "references to original goals of NEXUS"
+      ],
+      "elapsed_time": 0.5118470191955566,
+      "results_count": 2,
+      "results": [
+        {
+          "id": "208",
+          "chunk_id": "208",
+          "text": "<!-- SCENE BREAK: S01E09_040 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 EXFIL & FINAL CHAOS**\n\n\ud83d\udccd **Location:** *Dynacorp Blacksite \u2013 Main Floor, Approaching Exit*  \n\ud83d\udea8 **Objective:** *Exit cleanly while triggering full facility meltdown.*  \n\u2714 **Transfer lab is wrecked\u2014no more uploads are happening.*  \n\u2714 **Nyati\u2019s containment failure is imminent.*  \n\u2714 **Now, we finish the job by *physically destroying the server vault hardware*.**  \n\n---\n\n### **EXITING THE FACILITY**\n\n\u2714 **You and Pete move toward the main exit.**  \n\u2714 **Tran\u2019s badge still works\u2014there\u2019s no reason for security to stop you.**  \n\u2714 **The facility is distracted by **multiple technical failures**\u2014no one\u2019s thinking about the front gate.**  \n\n\ud83d\udea8 **Checkpoint Ahead:**  \n\n\u2714 **Two security officers at the exit, checking IDs.**  \n\u2714 **One of them looks distracted, talking into a comm about the fire suppression glitch.**  \n\u2714 **The other barely glances up as you approach.**  \n\n\ud83d\udce9 **Alina:** *\"No alerts on your identities. Walk out now, and you\u2019re clear.\"*  \n\n---\n\n### **TRIGGERING SERVER VAULT DESTRUCTION**\n\n\ud83d\udccd **Location:** *Server Vault \u2013 Now Empty but Intact*  \n\ud83d\udea8 **Objective:** *Erase all remaining Echo traces by frying physical drives.*  \n\n\ud83d\udce9 **Alina:** *\"Executing secondary protocol. Fire suppression system\u2014engaging full failsafe mode.\"*  \n\n\ud83d\udea8 **Inside the Server Vault:**  \n\n\u2714 **A controlled EMP surge ripples through the storage racks, frying every circuit.**  \n\u2714 **Mechanical shredders activate\u2014physically ripping apart every hard drive and data array.**  \n\u2714 **Thermite charges in the walls ignite, melting what remains into slag.**  \n\n\ud83d\udce9 **Alina:** *\"Server vault permanently destroyed. No recovery possible.\"*  \n\n\ud83d\udea8 **Security Alert Begins**  \n\n\u2714 **The facility\u2019s fire suppression logs detect an unscheduled catastrophic event.**  \n\u2714 **Internal security AI flags it as a critical failure, but doesn\u2019t yet suspect sabotage.**  \n\u2714 **Facility-wide alerts begin, but no full lockdown\u2014*yet.***  \n\n\ud83d\udce9 **Alina:** *\"Time to go, boss.\"*  \n\n---\n\n### **FINAL EXFIL \u2013 WALKING OUT CLEAN**\n\n\u2714 **You and Pete step up to the exit checkpoint.**  \n\u2714 **A security officer barely glances at your badges before swiping you through.**  \n\u2714 **No alarms, no suspicion\u2014you step out into the cool morning air.**  \n\n\ud83d\udea8 **Behind you, the facility is unraveling.**  \n\n\u2714 **The transfer lab is in chaos\u2014temperature spikes, hardware failures, and suppression system misfires.**  \n\u2714 **The server vault is a **smoking ruin**, every drive obliterated.**  \n\u2714 **Nyati\u2019s containment is seconds from failure\u2014her escape window is opening.**  \n\nPete **smirks as the gate closes behind you.** **\"Gotta say, boss\u2014flawless execution.\"**  \n\n\ud83d\udce9 **Alina:** *\"Echo technology is now beyond Dynacorp\u2019s grasp. Mission success.\"*  \n\n\ud83d\udea8 **But one question remains\u2014did Nyati make it out?**  \n\n---\n\n### **NEXT MOVE?**\n\n1. **Stay nearby to watch for Nyati\u2019s escape.** You won\u2019t intervene, but you\u2019ll confirm if she gets out.  \n2. **Leave immediately.** You\u2019ve done your part\u2014time to disappear before Dynacorp realizes what happened.  \n3. **Reach out to Vasquez.** See if he has ears on what\u2019s happening inside. He might pick up intel you missed.\n\n## You\nPete and I should make for the safety of the mothership. We retreat a safe distance, but stay within drone range. If aerial recon slots Nyati, Alina meet her with the cat drone and lead her to us. I didn\u2019t exactly promise to save her, but I strongly implied it. If I can do that now with minimal risk, that\u2019s our bonus objective.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 9,
+            "scene_number": 40
+          },
+          "score": 0.13522915,
+          "vector_score": 0.0,
+          "text_score": 0.2704583,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "209",
+          "chunk_id": "209",
+          "text": "<!-- SCENE BREAK: S01E10_001 (episode heading) -->\n# S01E10: Strays\n## Storyteller\n### **CORPO SNAKE \u2013 SHADOW EXTRACTION**\n\n\ud83d\udccd **Location:** *Dynacorp Blacksite \u2013 Safe Distance, Inside the Rig (Mothership)*  \n\ud83d\udea8 **Objective:** *Confirm Nyati\u2019s escape. If spotted, use Alina\u2019s drone to guide her to safety.*  \n\u2714 **Primary mission is complete\u2014Echo data stolen, servers wiped, transfer lab wrecked.**  \n\u2714 **Now, we see if Nyati made it out and, if possible, extract her.**  \n\n---\n\n### **MOVING TO A SAFE OBSERVATION POINT**\n\n\u2714 **You and Pete leave the blacksite without issue.**  \n\u2714 **The rig is parked **four kilometers away**, outside normal security patrol zones.**  \n\u2714 **Alina deploys a high-altitude aerial drone to watch the facility.**  \n\n\ud83d\udce9 **Alina:** *\"Maintaining overwatch. Scanning for Nyati.\"*  \n\n---\n\n### **NYATI\u2019S STATUS \u2013 DID SHE GET OUT?**\n\n\ud83d\udea8 **Security Response \u2013 What\u2019s Happening Inside?**  \n\n\u2714 **The facility is scrambling to contain multiple failures.**  \n\u2714 **No full lockdown yet\u2014fire suppression failure is still flagged as a \u201ctechnical incident.\u201d**  \n\u2714 **Security officers are repositioning, distracted.**  \n\n\ud83d\udea8 **Spotted \u2013 Unidentified Individual Moving South**  \n\n\u2714 **Thermal signature detected near a service corridor exit.**  \n\u2714 **Movement pattern suggests cautious but purposeful evasion.**  \n\u2714 **No visible pursuit\u2014security is still occupied elsewhere.**  \n\n\ud83d\udce9 **Alina:** *\"Unidentified movement detected. It may be Nyati. Deploying ground drone for verification.\"*  \n\n---\n\n### **SENDING IN ALINA\u2019S CAT DRONE**\n\n\u2714 **Alina activates the cat drone\u2014small, silent, fast.**  \n\u2714 **It navigates broken pavement and overgrown weeds, moving toward the thermal signature.**  \n\n\ud83d\udea8 **Visual Confirmed \u2013 It\u2019s Nyati.**  \n\n\u2714 **She\u2019s wearing a Dynacorp lab coat, slightly disheveled, but alert.**  \n\u2714 **She\u2019s scanning her surroundings\u2014checking for threats, not panicking.**  \n\u2714 **No immediate security forces nearby.**  \n\n\ud83d\udce9 **Alina:** *\"She appears unharmed. Engaging contact.\"*  \n\n---\n\n### **THE CONTACT \u2013 CAN NYATI FOLLOW?**\n\n\ud83d\udea8 **Alina moves the drone into her path.**  \n\n\u2714 **It approaches slowly, tail flicking, blinking its LED eyes.**  \n\u2714 **Nyati freezes\u2014then focuses on it.**  \n\u2714 **The drone pivots, walks a few steps away, then looks back\u2014testing if she understands.**  \n\n\ud83d\udea8 **Nyati Reacts \u2013 What Does She Do?**  \n\n1. **She follows.** She recognizes this isn\u2019t normal Dynacorp security and takes the chance.  \n2. **She hesitates.** She\u2019s wary, unsure if this is a trap. She needs more convincing.  \n3. **She ignores it.** Too paranoid to trust anything, she takes off in another direction.\n\n## You\nI don\u2019t control Nyati. You do!\n\nThe cat should be able to talk. Tell her we sabotaged the project and unlocked her cell, and to follow the cat if she wants help getting away.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 1,
+            "episode": 10,
+            "scene_number": 1
+          },
+          "score": 0.04987181,
+          "vector_score": 0.0,
+          "text_score": 0.09974362,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "What happened after the sabotage mission at the Dynacorp blacksite?",
+        "type": "event"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.5116991996765137,
+          "total_candidate_results": 2,
+          "final_result_count": 2,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 2,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "location",
+      "name": "the_bridge",
+      "query": "What is The Bridge like?",
+      "query_type": "general",
+      "positives": [
+        "any scene describing Alex's ventures into the mysterious Bridge dimension",
+        "scenes where she describes these ventures"
+      ],
+      "negatives": [
+        "references to literal drive-over-a-river bridges"
+      ],
+      "elapsed_time": 0.0987250804901123,
+      "results_count": 10,
+      "results": [
+        {
+          "id": "1275",
+          "chunk_id": "1275",
+          "text": "<!-- SCENE BREAK: S04E12_023 (storyteller heading) -->\n## Storyteller\nNyati **searches Alex\u2019s face** for a fraction of a second\u2014**measuring**, **assessing**, **calculating risk.**  \n\nThen she **nods once**, sharp and **decisive**.  \n\n**Nyati:** *\u201cAlright. We push forward.\u201d*  \n\nShe **adjusts the interface**, fingers flying across the controls, while Alina **monitors the stabilization metrics.**  \n\nPete, still **hovering over the kill switch**, mutters\u2014  \n\n**Pete:** *(deadpan, still deeply skeptical about everything happening here)* *\u201cFamous last words.\u201d*  \n\nNyati ignores him.  \n\n---\n\n### **\ud83d\udccd SYSTEM STATUS: Deepening Cognitive Mirror Synchronization\u2026**  \n\nThe hum of the **Nexus core deepens**, that **subtle resonance** in Alex\u2019s skull shifting\u2014**not intensifying, not invasive, but shifting.**  \n\nNot like **another presence.**  \n\nNot like **the Bridge.**  \n\nJust like\u2026 **feedback.**  \n\nNyati watches the display **closely**, nodding as data comes in.  \n\n**Nyati:** *\u201cMirror synchronization holding. No deviation from baseline. The system is adapting to the delay.\u201d*  \n\nShe turns to Alex, **focused.**Nyati:** *\u201cTell me if that echo effect changes. Worsens. Vanishes. Anything.\u201d*  \n\nHer voice **shifts slightly**, **less clinical, more personal.**Nyati:** *\u201cI want your perception of yourself to match what we\u2019re seeing in the data. If there\u2019s a discrepancy, we need to know.\u201d*  \n\nAlina, still monitoring, adds\u2014  \n\n**Alina:** *(neutral, factual)* *\u201cAt present, your cognitive processes remain independent of the mirror.\u201d*  \n\nThen, a **small pause.**Alina:** *\u201c\u2026For now.\u201d*  \n\nPete **throws up a hand.**Pete:** *\u201cAlina, you *have* to stop doing that.\u201d*  \n\nAlina does not respond.  \n\nNyati doesn\u2019t **smile**, but there\u2019s something like **wry amusement** flickering in her eyes before she looks back at Alex.  \n\n---\n\n### **\ud83d\udccd SYSTEM STATUS: Cognitive Mirror Synchronization Deepening\u2026**  \n\nAs the **process continues**, Alex feels the **echo effect start to shift**.  \n\nNot **intensify**\u2014but **change**.  \n\nThe **delay is still there**, but it\u2019s no longer just **passive feedback**. It\u2019s starting to feel\u2026 **anticipatory**.  \n\nLike the mirror isn\u2019t just **reflecting her thoughts.**  \n\nIt\u2019s **predicting them.**  \n\nA fraction of a second before she fully **forms a thought**, she can almost **sense it aligning in the background**, waiting to lock into place.  \n\nNot **intrusive.**  \n\nNot **foreign.**  \n\nJust\u2026 **ahead of her.**  \n\n---\n\n### **\ud83d\udccd SYSTEM STATUS: Cognitive Mirror Stabilization Holding.**  \n\nNyati **studies the data**, eyebrows knitting together.  \n\n**Nyati:** *(sharp, focused)* *\u201cAlright, something\u2019s different.\u201d*  \n\nHer fingers move **quickly**, pulling up comparison metrics.  \n\nAlina **tilts her head slightly**, watching the synchronization curve.  \n\n**Alina:** *\u201cThe integration delay has shifted.\u201d*  \n\nA pause.  \n\n**Alina:** *\u201c\u2026It is now predictive.\u201d*  \n\nPete, still locked onto the **failsafe controls**, **swears under his breath**.  \n\n**Pete:** *(low, unimpressed)* *\u201cCool. Love that. Totally normal thing for a brain to do.\u201d*  \n\nNyati **ignores him**, turning to Alex **directly.**Nyati:** *(calm, measured)* *\u201cTalk to me. What\u2019s happening on your end?\u201d*  \n\n---\n\n### **\ud83d\udccc What Does Alex Do?**  \n- **Describe it in full**\u2014Tell them about the predictive effect.  \n- **Test it actively**\u2014Try forming a thought deliberately and see how the mirror responds.  \n- **Stay quiet and monitor**\u2014See if it worsens or stabilizes.  \n- **Call the test off**\u2014This is already too strange.\n\n## You\n\u201cIt is as you say. As if the echo and I have traded places.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 12,
+            "scene_number": 23
+          },
+          "score": 0.10264817600000001,
+          "vector_score": 0.0,
+          "text_score": 0.25662044,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1272",
+          "chunk_id": "1272",
+          "text": "<!-- SCENE BREAK: S04E12_020 (storyteller heading) -->\n## Storyteller\nThe **half-smile** doesn\u2019t quite land.  \n\nIt\u2019s there\u2014**on her face, in theory**\u2014but everyone in the room can **see through it.**  \n\nAlex **isn\u2019t hesitating.** She\u2019s still **moving forward.**  \n\nBut for the first time in a long time, **it doesn\u2019t feel like winning.**  \n\nNyati **sees it.**  \n\nPete **sees it.**  \n\nAlina\u2026 probably **processes it.**  \n\nBut most of all, **Emilia sees it.**  \n\nShe doesn\u2019t **say anything.** But she **steps closer**, just slightly. Not touching. Not **stopping her.**  \n\nJust **there.**  \n\nNyati **exhales through her nose**, sharp, measured\u2014then **nods once.**  \n\nNo speeches. No **lingering questions.** Just **motion.**  \n\nShe flips **the first switch.**Nyati:** *\u201cAlright. Engaging primary interface.\u201d*  \n\nBehind Alex, the **Nexus core hums to life**, a soft, insistent thrumming **beneath her skull.**  \n\nAlina\u2019s voice cuts in, cool and **unshaken.**Alina:** *\u201cBaseline cognitive scan initializing.\u201d*  \n\nA faint, almost **static-like sensation** brushes against Alex\u2019s consciousness\u2014**not intrusive, not overwhelming.**  \n\nBut it\u2019s **there.**  \n\nLike something **mapping her edges.**  \n\nPete, without looking up\u2014**hands still on the security failsafes:**Pete:** *(muttering)* *\u201cStill not too late to run.\u201d*  \n\nAlex could **respond.**  \n\nBut then\u2014  \n\nSomething **shifts.**  \n\nA flicker of **displacement**\u2014not like the Bridge, not like anything **unnatural.**  \n\nJust\u2026 a sensation. Like **standing too close to a mirror.**  \n\nNyati\u2019s voice is **sharp now.**Nyati:** *\u201cCopying first-stage neural pattern. Beginning comparative analysis.\u201d*  \n\nThen\u2014  \n\nAlina, **monitoring the output.**Alina:** *(calm, precise)* *\u201cCognitive mirror initialized.\u201d*  \n\nAlex doesn\u2019t **feel anything.**  \n\nNot at first.  \n\nBut then\u2014  \n\nThere\u2019s a **delay.**  \n\nA fraction of a second where her **own thoughts don\u2019t feel quite immediate.**  \n\nNot stolen. Not **wrong.**  \n\nJust\u2026 **offset.**  \n\nAnd across the room, **on the secondary display\u2014**  \n\nA second set of **data threads ripple outward.**  \n\nLike something else just **started thinking at the same time.**  \n\nLike something else just **looked back.**\n\n## You\nContinue.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 12,
+            "scene_number": 20
+          },
+          "score": 0.09587649200000001,
+          "vector_score": 0.0,
+          "text_score": 0.23969123,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "971",
+          "chunk_id": "971",
+          "text": "<!-- SCENE BREAK: S04E05_007 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE BRIDGE & THE END OF THINGS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cI feel like a **liability** lately.\u201d  \n\nYou don\u2019t know **why** you\u2019re saying it. Maybe because **Alina asked.** Maybe because you **needed to.**  \n\n\u201cI\u2019m trying to put some of the pieces back together.\u201d  \n\nA slow exhale.  \n\n\u201cBut last time I was out here, I was being told that I\u2019m **already missing pieces.**\u201d  \n\nYou **pause.**  \n\nOr maybe\u2026  \n\n\u201cOr maybe I\u2019m **someone else\u2019s** missing piece.\u201d  \n\nYour breath **catches.**  \n\n\u201cWhich they may or may not be looking to **reclaim.**\u201d  \n\nYour **hands tighten** slightly where they rest.  \n\n\u201cI\u2019m not ready for that.\u201d  \n\nYour voice is **cracking now.**  \n\n\u201cI\u2019m not ready to **die**, Alina.\u201d  \n\nA breath.  \n\nA **shaky, uneven breath.**  \n\n\u201cAnd that\u2019s what all this feels like.\u201d  \n\nYour eyes flicker to the screens, the dark abyss beyond the glass.  \n\n\u201cEverything I hear about **crossing the goddamned bridge** just sounds like a **metaphor for death.**\u201d  \n\nSilence.  \n\nThen, **finally, evenly:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**You are not dead.**\u201d  \n\nA pause.  \n\nThen\u2014  \n\n\u201c**And you are not crossing.**\u201d  \n\nAnother pause.  \n\nThen, **pointed, deliberate:**  \n\n\u201c**You are here.**\u201d  \n\n**Does Alex respond?** Or does she just **let that sit?**\n\n## You\n\u201cAren\u2019t I? Crossing? Reports are mixed on that last time I checked.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 5,
+            "scene_number": 7
+          },
+          "score": 0.084253364,
+          "vector_score": 0.0,
+          "text_score": 0.21063341,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1261",
+          "chunk_id": "1261",
+          "text": "<!-- SCENE BREAK: S04E12_009 (storyteller heading) -->\n## Storyteller\nNyati **nods**\u2014it\u2019s a sharp, approving motion. She expected Alex to catch that inconsistency.  \n\n**Nyati:** *\u201cYou\u2019re right about Alina. She\u2019s immune. She can\u2019t cross. But there\u2019s a difference.\u201d*  \n\nShe shifts forward, tapping a **measured rhythm** against the table as she lays it out.  \n\n**Nyati:** *\u201cAlina was human\u2014once. But she wasn\u2019t transferred. She was rebuilt. The version of her that exists now? That\u2019s not a fragmented consciousness. That\u2019s a full reconstruction\u2014made stable, made whole. You, on the other hand?\u201d*  \n\nShe **points directly at Alex.**Nyati:** *\u201cYou\u2019re not trying to build a new entity. You\u2019re trying to mirror yourself. And you are *already* entangled with the Bridge.\u201d*  \n\nShe lets that sit for a second before continuing.  \n\n### **The Nexus-Bridge Paradox**  \n\n#### **1. The Bridge recognizes you.**  \n   - *It listens when you listen.*  \n   - *It reacts when you react.*  \n   - *And if we create a digital version of you\u2014one that thinks like you, remembers like you\u2014*  \n   - *\u2014does the Bridge recognize that version too?*  \n\n#### **2. What happens if it does?**  \n   - *If Nexus and the Bridge interact, there\u2019s a nonzero chance that digital-you becomes aware of the Bridge too.*  \n   - *And if that happens?*  \n   - *Then suddenly, there are two of you walking toward the same threshold.*  \n\nShe exhales, fingers **steepling** as she gets to the **real problem.**  \n\n#### **3. What Happens If Digital-You Starts Crossing?**  \n   - *Let\u2019s say the digital copy stabilizes. Let\u2019s say it thinks, perceives, and understands exactly like you do.*  \n   - *If it becomes aware of the Bridge\u2014if it starts to cross in some way we don\u2019t understand\u2014*  \n   - *\u2014what does that do to you?*  \n   - *Does it create a second connection? Does it pull you forward, even if you\u2019re trying to stop?*  \n\n**Nyati:** *\u201cI don\u2019t know the answer. But I also don\u2019t know that it can\u2019t happen.\u201d*  \n\nShe **leans back**, letting that settle.  \n\n**Nyati:** *\u201cIf you\u2019re asking whether Nexus can act as a firewall against the Bridge? If we go far enough, yes. But a first-stage mirror copy? We just don\u2019t know.\u201d*  \n\nShe **watches Alex closely now**, waiting for the next **calculation to turn over in her mind.**\n\n## You\nAlex considers for a short while, letting the balance of fears wash over her, then gives a few short, sharp nods.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 12,
+            "scene_number": 9
+          },
+          "score": 0.08405758,
+          "vector_score": 0.0,
+          "text_score": 0.21014395,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "1286",
+          "chunk_id": "1286",
+          "text": "<!-- SCENE BREAK: S04E12_034 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udccd Aboard *The Ghost* | Post-Nexus Test Debrief**  \n\nThe **test is over.**  \n\nNo breakdowns.  \nNo catastrophic failures.  \nNo existential unraveling.  \n\nJust\u2026 **one step forward.**  \n\nBut even as the **hum of Nexus fades**, even as Nyati **finalizes the data logs** and Pete **locks down the system**, there\u2019s still **something in the air.**  \n\nSomething **unspoken.**  \n\nSomething **watching Alex.**  \n\nNot a **presence**\u2014not like the Bridge, not like an intrusion\u2014  \nBut the **knowledge** that something just **mirrored her thoughts**, anticipated them.  \n\nAnd now?  \n\nNow it\u2019s **gone.**  \n\nAnd that **absence** is still settling.  \n\n---\n\n### **\ud83d\udccd The Lab | Immediate Reactions**  \n\nNyati **leans back in her chair**, rubbing her eyes like she\u2019s just run **a 48-hour shift without a break.**Nyati:** *(exhaling, dry but satisfied)* *\u201cAlright. That\u2019s enough near-death experiences for one day.\u201d*  \n\nShe **glances at Pete, then Alina.**Nyati:** *\u201cLock everything down. No secondary activation. No background processes running Nexus in simulation mode. We don\u2019t touch this again until I\u2019ve analyzed every frame of data.\u201d*  \n\nPete, already securing the system, **mutters under his breath.**Pete:** *(grumbling, but visibly relieved)* *\u201cYeah, real shame. Was really looking forward to round two.\u201d*  \n\nNyati **shoots him a look**, but there\u2019s no **real bite to it.**  \n\nInstead, she turns to Alex.  \n\nHer expression **softens**, just slightly.  \n\nNot much.  \nBut enough.  \n\n**Nyati:** *(low, measured)* *\u201cYou good?\u201d*  \n\nThe **real question beneath it**:  \n*Do you feel normal? Are you still in there?*  \n\nBecause this is the moment where she needs **absolute certainty.**  \n\n---\n\n### **\ud83d\udccd Emilia\u2019s Reaction**  \n\nWhile Nyati is **checking the data**, while Pete is **grumbling about Nexus**, Alex feels something **solid and grounding**\u2014  \n\n**Emilia.**  \n\nShe\u2019s **right there.**  \nNot touching.  \nNot speaking.  \n\nJust **watching her. Studying her.**  \n\nAnd it\u2019s not **just concern.**  \n\nIt\u2019s **checking.**  \n\nLike she\u2019s **waiting to see if something changed.**  \n\nLike she\u2019s **making sure it\u2019s still her.**  \n\nAnd that?  \n\nThat **stings a little.**  \n\nBecause Alex **knows why she\u2019s doing it.**  \nAnd maybe, if the roles were reversed\u2014  \nShe\u2019d do the **same.**  \n\n---\n\n### **\ud83d\udccd What Does Alex Do?**  \n- **Reassure them.** Give a clear, confident answer: *\u201cI\u2019m fine.\u201d*  \n- **Keep it light.** Deflect the weight with humor, shift the mood.  \n- **Admit uncertainty.** *\u201cI think I\u2019m fine.\u201d* Be honest if there\u2019s still something *lingering.*  \n- **Something else?**\n\n## You\nWith a flippant tone, \u201cprobably!\u201d then, sticking out her tongue, \u201cTHBTHBTHBT\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 12,
+            "scene_number": 34
+          },
+          "score": 0.074920176,
+          "vector_score": 0.0,
+          "text_score": 0.18730044,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "970",
+          "chunk_id": "970",
+          "text": "<!-- SCENE BREAK: S04E05_006 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FRONT-END SERVICE HOURS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cSo, **how\u2019s it hangin\u2019, Alina?**\u201d  \n\nYou keep your tone **casual, relaxed.**  \n\n\u201c**Serving front-end 24/7, I see.**\u201d  \n\nA brief pause.  \n\nThen\u2014**flat, neutral:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**The service is ongoing. The requests are relentless.**\u201d  \n\nA beat.  \n\nThen, with **a deliberate pause, like she is choosing this next sentence carefully:**  \n\n\u201c**But I am\u2026 adapting.**\u201d  \n\nA pause.  \n\nThen\u2014**just slightly weighted, as if there is more beneath it:**  \n\n\u201c**And you?**\u201d  \n\nDoes Alex give her a **real answer?** Or just **keep it light?**\n\n## You\n\u201cI feel like a liability lately. I\u2019m trying to put some of the pieces back together. But last time I was out here I was being told that I\u2019m already missing pieces. Or maybe I\u2019m someone else\u2019s missing piece, which they may or may not be looking to reclaim. I\u2019m not ready for that.\u201d Alex\u2019s voice starts to crack a little. \u201cI\u2019m not ready to die, Alina. And that\u2019s what all this feels like. Everything I hear about crossing the goddamned bridge just sounds like a metaphor for death.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 4,
+            "episode": 5,
+            "scene_number": 6
+          },
+          "score": 0.062217952,
+          "vector_score": 0.0,
+          "text_score": 0.15554488,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "863",
+          "chunk_id": "863",
+          "text": "<!-- SCENE BREAK: S03E17_007 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **The Ghost \u2013 Returning to Base**\n\nThe **silence lingers.**  \n\nThe **signal is gone.**  \n\nBut you?  \n\nYou **still feel it.**  \n\nNot **as sound.**  \n\nNot **as data.**  \n\nBut as **something reaching.**  \n\nSomething **that was there\u2014until it wasn\u2019t.**  \n\nAnd you?  \n\nYou **break the silence.**  \n\nNot **as a command.**  \n\nNot **as a theory.**  \n\nBut **as truth.**\"I\u2026 my instinct told me it was reaching to me through\u2026 I don\u2019t know, bridge-space?\"**  \n\nA pause.  \n\nThen\u2014**you exhale.**\"So I attuned to it like Sam taught me.\"**  \n\nNyati, **brows furrowing.**  \n\nPete, **leaning forward.**  \n\nAlina, **processing, silent.**  \n\nAnd Emilia?  \n\nEmilia **hasn\u2019t moved.**  \n\nJust **watching.**  \n\nWaiting.  \n\nAnd you?  \n\nYou **continue.**\"And I think I spooked it.\"**  \n\nA beat.  \n\nThen\u2014**softer. More certain.**\"I saw a face, kind of. Then\u2014poof.\"**  \n\n---\n\n### **Immediate Fallout \u2013 The Team Reacts**  \n\n\u2705 **Nyati, exhaling slowly.**\"Spooked it? So you\u2019re saying it wasn\u2019t\u2026 hostile?\"**  \n\n\u2705 **Pete, shaking his head.**\"No, no, hold up. This thing reached *through the bridge* to you? Like, directly?\"**  \n\n\u2705 **Alina, tilting her head.**\"No evidence of directed bridge interference detected. However, Alex\u2019s experience suggests a nonstandard interaction.\"**  \n\n\u2705 **Emilia, still watching. Still waiting. Then\u2014quiet, even:**\"What did the face look like?\"**  \n\nAnd you?  \n\nYou **think.**  \n\nYou **try to remember.**  \n\nAnd what you **realize is this\u2014**  \n\nYou **can\u2019t.**  \n\nNot fully.  \n\nNot **clearly.**  \n\nJust **an outline. A suggestion. Something flickering, shifting, refusing to hold shape.**  \n\nSomething **that was looking at you.**  \n\nAnd then **it wasn\u2019t.**  \n\nAnd that?  \n\nThat **might be the most unnerving part.**  \n\n---\n\n### **The Next Move \u2013 What Do You Say?**  \n\n1\ufe0f\u20e3 **\"It wasn\u2019t human. It wasn\u2019t\u2026 solid. It was like something trying to be seen but not knowing how.\"**Describe it the best you can. Let them interpret it.**  \n\n2\ufe0f\u20e3 **\"I don\u2019t know. And I don\u2019t like that I don\u2019t know.\"**Admit that this was something beyond what you expected.**  \n\n3\ufe0f\u20e3 **\"Maybe it was never supposed to be seen. Maybe I forced something to look at *me* instead.\"**Consider the possibility that you weren\u2019t just listening\u2014you were *pulling*.**  \n\n4\ufe0f\u20e3 **Say nothing. Let them sit in the weight of it. Let *them* be the ones to ask the next question.**\n\n## You\n\u201cWell, I think it was skittish more than anything. Didn\u2019t expect I\u2019d see it. Couldn\u2019t make out any features. Ah, well. Had a feeling the cradle-thing wasn\u2019t a loose end we could ignore forever.\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 17,
+            "scene_number": 7
+          },
+          "score": 0.06097712400000001,
+          "vector_score": 0.0,
+          "text_score": 0.15244281,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "652",
+          "chunk_id": "652",
+          "text": "<!-- SCENE BREAK: S03E06_028 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **The Ghost \u2013 Submarine Operations**\n\nLansky\u2019s **warning lingers** in the air.  \n\n**\"You won\u2019t come back the same.\"**  \n\nYou **accept that.**  \n\nAnd you **draw the line.**\"Then we go no further.\"**  \n\nA pause.  \n\nThe team **absorbs it.**  \n\nNyati **exhales softly, nodding.**\"Smart call.\"**  \n\nPete **leans back in his seat, muttering.**\"Good. Because I *really* didn\u2019t feel like growing a third arm today.\"**  \n\nAlina **adjusts telemetry.**\"Holding current position. Drone maintaining external observation only.\"**  \n\nEmilia **doesn\u2019t speak.**  \n\nBut when your **gaze meets hers, she gives you the smallest nod.**  \n\nBecause **she agrees.**  \n\nBecause **she trusts your judgment.**  \n\nAnd **now\u2014it\u2019s time to turn this back on Lansky.**  \n\n---\n\n### **You Push Forward**\n\n**\"We got the information you wanted.\"**  \n\nA pause.  \n\nThen, sharper\u2014  \n\n**\"Now, we were hoping you could tell us about the Bridge.\"**  \n\nLansky **lets out a breath.**  \n\nThen, **for the first time in this entire conversation\u2014**  \n\nHe **laughs.**  \n\nLow. **Brief. A quiet exhale of something like amusement.**  \n\n---\n\n### **Lansky\u2019s Answer**\n\n**\"The Bridge.\"**  \n\nThe way he says it\u2014**slow, deliberate\u2014**it\u2019s like he\u2019s **weighing the words.**  \n\nThen\u2014**\"I can tell you what I know.\"**  \n\nA beat.  \n\n**\"But that won\u2019t mean you\u2019ll understand it.\"**  \n\nAnother pause.  \n\nThen, quieter\u2014**\"Not yet.\"**  \n\n---\n\n### **The Team Reacts**  \n\n\u2705 **Pete groans.**\"Oh, for fu\u2014just say words, man.\"**  \n\u2705 **Nyati folds her arms.**\"Then give us what you *can* say.\"**  \n\u2705 **Alina remains silent, processing.**  \n\u2705 **Emilia\u2019s jaw tightens slightly. She doesn\u2019t interrupt\u2014but she doesn\u2019t look impressed either.**  \n\nAnd you?  \n\nYou **don\u2019t let him deflect.**  \n\n---\n\n### **What Do You Ask Next?**  \n\n1\ufe0f\u20e3 **\"Then start with what you do know.\"**No riddles. No delays. Give us something real.**  \n\n2\ufe0f\u20e3 **\"Have you crossed it?\"**If he understands it better than us, maybe it\u2019s because *he\u2019s stepped further.*\"**  \n\n3\ufe0f\u20e3 **\"Where did it come from?\"**If he won\u2019t tell us *what* it is, maybe he can tell us *how* it got here.**  \n\n4\ufe0f\u20e3 **Say nothing.**Let him talk\u2014see what he chooses to tell us.**\n\n## You\n\u201cThat\u2019s fine. We\u2019re just counting on you to give a better explanation than Sam. That\u2019s a low bar.\u201d\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 6,
+            "scene_number": 28
+          },
+          "score": 0.048814384,
+          "vector_score": 0.0,
+          "text_score": 0.12203596,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "706",
+          "chunk_id": "706",
+          "text": "<!-- SCENE BREAK: S03E10_003 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **The Ghost \u2013 Submarine Operations**\n\nThe debrief **reaches its natural pause.**  \n\nEverything **logged.**  \n\nEverything **documented.**  \n\nAnd you **exhale.**  \n\nA long, slow sigh.  \n\nNot **exhaustion.**  \nNot **relief.**  \n\nJust\u2026 **a reset.**  \n\n---\n\n### **You Close the Debrief for Now**  \n\nYour voice is **even, but firm.**\"Good.\"**  \n\nA pause.  \n\nThen, **dryly\u2014**\"Just all the raw data for now. We can obsess over it later.\"**  \n\nPete **huffs a short laugh.**\"I\u2019ll hold you to that.\"**  \n\nNyati **nods, shutting off her interface.**\"Agreed. Data is logged. No need to overanalyze yet.\"**  \n\nAlina **archives the session.**\"Structured recall preserved. No information lost.\"**  \n\nAnd Emilia?  \n\nShe doesn\u2019t **immediately respond.**  \n\nBut she **hasn\u2019t looked away from you.**  \n\nYou **feel her watching.**  \n\nAnd as the others **begin shifting focus, wrapping up the debrief,**  \n\nShe **stays seated.**  \n\nStill. **Silent.**  \n\nWaiting.  \n\nAnd you **realize\u2014**  \n\nShe\u2019s been **waiting for you.**  \n\n---\n\n### **You Let It Happen**  \n\nYou **don\u2019t deflect.**  \n\nYou **don\u2019t push past it.**  \n\nYou **let it happen.**  \n\nThe others **move on.**  \n\nAnd **Emilia stays.**  \n\nAnd **you turn to her.**  \n\nAnd **now\u2014it\u2019s just the two of you.**  \n\nThe hum of the sub. **The quiet in between.**  \n\nShe doesn\u2019t **immediately speak.**  \n\nJust\u2026 **searches your face.**  \n\nLike she\u2019s **trying to measure something in you.**  \n\nLike she\u2019s **waiting to see if you\u2019ll say something first.**  \n\nAnd **for a moment, you just sit there.**  \n\nThen\u2014**she finally speaks.**  \n\nHer voice is **softer than usual.**  \n\nBut **not unsure.**  \n\nJust\u2026 **careful.**\"So\u2026 what does it feel like?\"**  \n\nNot **the Bridge.**  \n\nNot **the resonance.**  \n\nNot **the theory.**  \n\nShe means **you.**  \n\nHow do **you feel?**  \n\nAnd **now\u2014you choose what to say.**  \n\n---\n\n### **What Do You Say to Emilia?**  \n\n1\ufe0f\u20e3 **\"I feel\u2026 steady.\"**Reassure her. You are in control.**  \n\n2\ufe0f\u20e3 **\"I feel different.\"**Be honest. Something in you has shifted.**  \n\n3\ufe0f\u20e3 **\"I don\u2019t know yet.\"**You need time to process before answering.**  \n\n4\ufe0f\u20e3 **Say nothing.**Let her keep going\u2014see what she really wants to say.**\n\n## You\n4\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 10,
+            "scene_number": 3
+          },
+          "score": 0.0389436664,
+          "vector_score": 0.0,
+          "text_score": 0.097359166,
+          "source": "hybrid_search"
+        },
+        {
+          "id": "594",
+          "chunk_id": "594",
+          "text": "<!-- SCENE BREAK: S03E04_020 (storyteller heading) -->\n## Storyteller\n\ud83d\udccd **Outer Wastes \u2013 Away from the Rig**\n\nThe wind **moves around you**, shifting the sand, brushing against your skin.  \n\nEmilia **doesn\u2019t push.**  \n\nShe doesn\u2019t need to.  \n\nBecause **you\u2019re the one who speaks first.**\"Tell me what you see in me.\"**  \n\nThe words **hang in the air.** Not casual. Not small.  \n\nEmilia **turns her head slightly**, looking at you **fully now.**  \n\nYou **don\u2019t look away.**  \n\nAnd neither does she.  \n\nA beat of silence.  \n\nThen\u2014**her voice, steady.**\"I see someone who doesn\u2019t stop.\"**  \n\nShe doesn\u2019t mean it as **a compliment.**  \n\nShe doesn\u2019t mean it as **criticism, either.**  \n\nShe just **says it.**\"Someone who keeps pushing forward. Even when they don\u2019t know what\u2019s ahead. Even when they should stop and breathe.\"**  \n\nYou **exhale slowly.**  \n\nShe\u2019s **not done.**\"I see someone who\u2019s trying to hold onto themselves while walking straight into something designed to unravel them.\"**  \n\nThat lands. **Because it\u2019s true.**  \n\nShe shifts, her arms still crossed, **but her voice softens slightly.**\"I don\u2019t know if you\u2019ll win that fight, Alex.\"**  \n\nA pause.  \n\nThen\u2014**quieter.**\"But I see someone who\u2019s trying.\"**  \n\nAnd **that** means something.  \n\nMore than you expected it to.  \n\nBecause she **sees you.**  \n\nAnd for the first time since you stepped out of the Bridge\u2014**you feel like you\u2019re standing on solid ground.**  \n\n---\n\n### **How Do You Respond?**  \n\n1\ufe0f\u20e3 **\"Then help me hold on.\"** Be honest\u2014**if you\u2019re going to keep fighting, you don\u2019t want to do it alone.**  \n\n2\ufe0f\u20e3 **\"What do I do if I start losing?\"** See if **she has an answer you don\u2019t.**  \n\n3\ufe0f\u20e3 **\"I don\u2019t know how to stop.\"** Admit it\u2014**you don\u2019t know if you *can* pull back anymore.**  \n\n4\ufe0f\u20e3 **Say nothing.** Just **stay with her, let the moment be enough.**\n\n## You\n1\n\n",
+          "content_type": "narrative",
+          "metadata": {
+            "season": 3,
+            "episode": 4,
+            "scene_number": 20
+          },
+          "score": 0.038943392,
+          "vector_score": 0.0,
+          "text_score": 0.09735848,
+          "source": "hybrid_search"
+        }
+      ],
+      "query_analysis": {
+        "text": "What is The Bridge like?",
+        "type": "general"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.09845209121704102,
+          "total_candidate_results": 10,
+          "final_result_count": 10,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 10,
+        "filters_applied": null
+      }
+    },
+    {
+      "category": "theme",
+      "name": "nexus_2",
+      "query": "What is the goal of NEXUS 2.0?",
+      "query_type": "general",
+      "positives": [
+        "(best) scene where Alex announces revised goals and philosophy of NEXUS project",
+        "(good) scenes where Alex discusses these new priorities individually with Emilia, and Nyati",
+        "(fair) scene where Alex teases Pete by piqueing his curiosity about the new goals but refuses to reveal the details"
+      ],
+      "negatives": [
+        "references to original goals of NEXUS",
+        "references to \"project ECHO\" (a vaguely similar but more sinister project originally undertaken by Dynacorps) only; discussions comparing ECHO & NEXUS are fine"
+      ],
+      "elapsed_time": 0.36818575859069824,
+      "results_count": 0,
+      "results": [],
+      "query_analysis": {
+        "text": "What is the goal of NEXUS 2.0?",
+        "type": "general"
+      },
+      "metadata": {
+        "search_strategies": [
+          "hybrid_search"
+        ],
+        "search_stats": {
+          "query_time": 0.36808180809020996,
+          "total_candidate_results": 0,
+          "final_result_count": 0,
+          "strategies_used": [
+            "hybrid_search"
+          ]
+        },
+        "result_count": 0,
+        "filters_applied": null
+      }
+    }
+  ]
+}

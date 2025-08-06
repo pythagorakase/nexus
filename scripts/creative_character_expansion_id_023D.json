@@ -1,0 +1,39 @@
+{
+  "characters": [
+    {
+      "character_id": 23,
+      "appearance": "Raven is lean and sharp-eyed, with precise movements that reflect her controlled nature. Her straight black hair is neatly tied back, emphasizing her sharp features. She dresses in practical yet sophisticated attire, favoring dark, neutral colors that allow her to blend seamlessly into the urban backdrop.",
+      "background": "Once an intelligence analyst for a major corporation, Raven abandoned corporate espionage to operate independently, disillusioned by their ruthless tactics. She now leverages a vast network of informants and data streams across New Orleans, trading information to subtly influence the city's balance of power.",
+      "personality": "Cautious, emotionally reserved, and highly perceptive, Raven is a master of reading people and situations. She maintains an air of polite professionalism, occasionally punctuated by a dry wit. Though pragmatic in her dealings, she harbors a strong sense of ethics, particularly regarding violence and exploitation.",
+      "emotional_state": "Currently intrigued by Alex's unconventional negotiation style and cautiously optimistic about the potential partnership. She remains guarded, aware of the risks associated with deeper involvement.",
+      "current_activity": "Analyzing recent data streams for anomalies related to Echo research, while subtly reinforcing her network's security in anticipation of corporate backlash.",
+      "current_location": "Operating from her discreet office tucked within a repurposed historic building in New Orleans' French Quarter, fully equipped with advanced surveillance and data-processing equipment.",
+      "extra_data": {
+        "skills": [
+          "Intelligence gathering",
+          "Negotiation",
+          "Cybersecurity",
+          "Psychological profiling"
+        ],
+        "allies": [
+          "Underground tech community",
+          "Independent hackers",
+          "Neutral city officials"
+        ],
+        "enemies": [
+          "Former corporate employers",
+          "Aggressive information brokers",
+          "Corrupt law enforcement"
+        ],
+        "signature_tech": [
+          "Proprietary surveillance algorithm capable of predictive analytics"
+        ],
+        "connection_points": [
+          "Can provide discreet access and vital information for Nexus research",
+          "Aware of hidden Echo survivor networks",
+          "Holds leverage over certain influential city officials"
+        ]
+      }
+    }
+  ]
+}

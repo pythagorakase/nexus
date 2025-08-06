@@ -1,0 +1,86 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 99,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Alex treats Cam as a convenient, good-natured prop in her elaborate social games—someone she can fold into the theater of teasing power play without true malice. She enjoys how easily his polite professionalism can be flustered and uses him to escalate the dramatic stakes of the crew’s makeover escapades. Beneath the banter she registers him as competent and useful, but not vital; a pleasant accessory who makes the scene sparkle. Cam is, for now, a harmless civilian resource she can charm at will.",
+    "recent_events": "• In a rapid-fire gown hunt, Alex flagged Cam down with a breezy 'Yes, hello, which way to the ball gowns?' turning him into the logistical lynchpin of her prank on Emilia. • She spun lurid, half-flirtatious stories about being 'tossed like a sack of potatoes,' elbow-jabbing Cam into blushing complicity while fishing for lace options. • After winning her own makeover, Alex coolly ordered that Cam be 'compensated for his wares and time,' acknowledging his patience and closing the transaction on her terms.",
+    "history": "0: First contact in the Bougie Mall when Alex hijacked Emilia’s shopping trip and needed a sales associate.  +5 min: Alex establishes dominance by summoning Cam and framing him as the crew’s sartorial sherpa.  +10 min: She peppers him with outrageous innuendo, testing how far his courtesy stretches and discovering he remains helpful under pressure.  +20 min: Cam proves reliable, producing gowns and lace as requested; Alex’s respect rises from indifferent to mildly appreciative.  +30 min: After her own suit fitting, Alex formally instructs the team to pay Cam—a small gesture of goodwill that seals him as a trusted (if lightly toyed-with) retail contact.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "character1's",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Charisma, group momentum, and the purchasing power of a high-spending client who can shower or withhold praise.",
+        "character2_leverage": "Exclusive access to luxury inventory, store policy veto power, and the ability to delay or deny service."
+      },
+      "conflict_areas": [
+        "Flirtatious banter that risks embarrassing Cam in front of colleagues",
+        "Alex's disregard for conventional shopping etiquette"
+      ],
+      "mutual_interests": [
+        "Efficient completion of high-value sales",
+        "Maintaining an atmosphere of playful yet harmless spectacle"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Emilia",
+          "Pete",
+          "Nyati",
+          "Alina"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Style advice, availability of dramatic gowns, gauge of Cam’s composure for comedic effect.",
+        "information_protected": "Details of Nexus operations and Alex’s true identity as a fugitive executive."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 99,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "-1|wary",
+    "dynamic": "To Cam, Alex is the embodiment of unpredictable VIP energy—charming one second, scandalously suggestive the next, always steering the encounter at break-neck speed. He strives to uphold impeccable service etiquette, but her double-entendres and sudden power shifts keep him on edge. Respect mingles with caution: he recognizes a big spender he must appease, yet senses a shark beneath the smile. Cam’s goal is to survive the transaction with dignity, praying the corporate banshee leaves before HR–nightmare territory materializes.",
+    "recent_events": "• Alex abruptly commandeered his attention for a 'ball-gown emergency,' setting the session’s frantic tone. • Her dramatic tale of being 'carried through ruffians' forced Cam to improvise professional enthusiasm while blushing at the innuendo. • During the lace consultation, Alex’s escalating user-interface jokes left Cam verbally buffering, but he dutifully complied and finalized the sale.",
+    "history": "Initial Encounter: Cam notices Alex as part of a loud party; she flags him with effortless authority.  Minute 3: She showers him with rapid-fire requests and layered flirtatious jokes, testing his composure; Cam labels her 'high-maintenance but lucrative.'  Minute 10: Realizes Alex manipulates the crew and him alike for theatrical effect—professional alarm bells ring, but commission potential keeps him engaged.  Minute 25: Witnesses Alex’s own makeover reveal; respect rises for her striking confidence, yet intimidation also spikes.  Closure: Alex ensures payment and thanks him indirectly; Cam files her under 'memorable, possibly dangerous clientele' and readies for future visits.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character2",
+        "terms": "character2's",
+        "predictability": "erratic"
+      },
+      "leverage_points": {
+        "character1_leverage": "Control over merchandise access, ability to expedite or stall checkout, and knowledge of store policy limits.",
+        "character2_leverage": "Purchasing power, charismatic pressure, willingness to lavish or withhold social approval."
+      },
+      "conflict_areas": [
+        "Risk of inappropriate banter breaching professional decorum",
+        "Time strain as Alex’s requests snowball"
+      ],
+      "mutual_interests": [
+        "Successful completion of high-value sale",
+        "Maintaining outward civility despite escalating theatrics"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Emilia",
+          "Pete",
+          "Nyati",
+          "Alina"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Alex’s actual purchase intentions and budget boundaries.",
+        "information_protected": "Store policies on customer conduct and his personal discomfort."
+      }
+    }
+  }
+}

@@ -1,0 +1,453 @@
+Enum "ir_eval"."query_category_enum" {
+  "character"
+  "event"
+  "general"
+  "location"
+  "relationship"
+  "theme"
+}
+
+Table "ir_eval"."queries" {
+  "id" int4 [pk, not null, increment]
+  "text" text [unique, not null]
+  "name" text
+  "category" ir_eval.query_category_enum
+  "examples" "text[]"
+}
+
+Table "ir_eval"."judgments" {
+  "id" int4 [pk, not null, increment]
+  "query_id" int4 [not null]
+  "chunk_id" int8 [not null, note: 'References narrative_chunks.id']
+  "relevance" int4
+  "doc_text" text
+  "justification" text
+
+  Indexes {
+    (query_id, chunk_id) [type: btree, name: "judgments_query_id_chunk_id_key"]
+    chunk_id [type: btree, name: "idx_judgments_chunk_id"]
+    query_id [type: btree, name: "idx_judgments_query_id"]
+  }
+  Note: 'Stores relevance judgments for narrative chunks'
+}
+
+Table "ir_eval"."runs" {
+  "id" int4 [pk, not null, increment]
+  "name" text [not null]
+  "timestamp" timestamptz [default: `now()`]
+  "settings" jsonb
+  "description" text
+  "config_type" text
+}
+
+Table "ir_eval"."results" {
+  "id" int4 [pk, not null, increment]
+  "run_id" int4 [not null]
+  "query_id" int4 [not null]
+  "chunk_id" int8 [not null, note: 'References narrative_chunks.id']
+  "rank" int4
+  "score" float4
+  "vector_score" float4
+  "text_score" float4
+  "text" text
+  "source" text
+
+  Indexes {
+    (run_id, query_id, chunk_id) [type: btree, name: "results_run_id_query_id_chunk_id_key"]
+    chunk_id [type: btree, name: "idx_results_chunk_id"]
+    query_id [type: btree, name: "idx_results_query_id"]
+    run_id [type: btree, name: "idx_results_run_id"]
+  }
+  Note: 'Stores search results from evaluation runs'
+}
+
+Table "ir_eval"."metrics" {
+  "id" int4 [pk, not null, increment]
+  "run_id" int4 [not null]
+  "query_id" int4 [not null]
+  "p_at_5" float4
+  "p_at_10" float4
+  "mrr" float4
+  "bpref" float4
+  "judged_p_at_5" int4
+  "judged_p_at_10" int4
+  "judged_total" int4
+  "unjudged_count" int4
+
+  Indexes {
+    (run_id, query_id) [type: btree, name: "metrics_run_id_query_id_key"]
+    query_id [type: btree, name: "idx_metrics_query_id"]
+    run_id [type: btree, name: "idx_metrics_run_id"]
+  }
+}
+
+Table "ir_eval"."comparisons" {
+  "id" int4 [pk, not null, increment]
+  "timestamp" timestamptz [default: `now()`]
+  "run_ids" "int4[]" [not null]
+  "run_names" "text[]" [not null]
+  "best_run_id" int4
+  "comparison_data" jsonb
+}
+
+Table "ir_eval"."run_pair_links" {
+  "id" int4 [pk, not null, increment]
+  "control_run_id" int4 [not null]
+  "experiment_run_id" int4 [not null]
+  "description" text
+  "timestamp" timestamptz [default: `now()`]
+
+  Indexes {
+    (control_run_id, experiment_run_id) [type: btree, name: "run_pair_links_control_run_id_experiment_run_id_key"]
+  }
+}
+
+Enum "agent_type" {
+  "LOGON"
+  "LORE"
+  "GAIA"
+  "PSYCHE"
+  "MEMNON"
+  "MAESTRO"
+  "NEMESIS"
+}
+
+Enum "entity_type" {
+  "character"
+  "faction"
+  "place"
+  "item"
+}
+
+Enum "item_type" {
+  "currency"
+  "weapon"
+  "cybernetic"
+  "tech"
+  "wearable"
+  "consumable"
+  "tool"
+  "data"
+  "artifact"
+}
+
+Enum "log_level_type" {
+  "DEBUG"
+  "INFO"
+  "WARNING"
+  "ERROR"
+  "CRITICAL"
+}
+
+Enum "place_type" {
+  "fixed_location"
+  "vehicle"
+  "other"
+}
+
+Enum "threat_domain_type" {
+  "physical"
+  "psychological"
+  "social"
+  "environmental"
+}
+
+Enum "threat_lifecycle_type" {
+  "inception"
+  "gestation"
+  "manifestation"
+  "escalation"
+  "culmination"
+  "resolution"
+  "aftermath"
+}
+
+Enum "world_layer_type" {
+  "primary"
+  "flashback"
+  "dream"
+  "extradiegetic"
+}
+
+Table "characters" {
+  "id" int8 [pk, not null, increment]
+  "name" varchar(50) [unique, not null]
+  "aliases" "text[]"
+  "summary" varchar(500)
+  "appearance" text
+  "background" text [default: 'unknown']
+  "personality" text
+  "conflicts" text
+  "emotional_state" varchar(500)
+  "undisclosed_internal" text [note: 'records inner states the character has not revealed for various reasons, e.g., embarassment, uncertainty, malicious intent']
+  "current_activity" varchar(500) [note: 'establishes and tracks persistent independent behavior when a character is off-screen']
+  "current_location" varchar(500)
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  "entity_type" varchar(50)
+
+  Indexes {
+    aliases [type: gin, name: "idx_characters_aliases"]
+  }
+  Note: '''An enriched \'characters\' table that stores specialized columns for depth and personality. Non-character entities rely on entity_details/states.'''
+}
+
+Table "character_relationships" {
+  "id" int8 [pk, not null, increment]
+  "character1_id" int8 [not null]
+  "character2_id" int8 [not null]
+  "dynamic" text
+  "recent_events" varchar(500)
+  "history" text
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  Indexes {
+    (character1_id, character2_id) [type: btree, name: "unique_one_way_relationship"]
+  }
+  Note: '''Tracks pairwise relationships between characters, including \'dynamic\', \'asymmetry\', and relevant events.'''
+}
+
+Table "factions" {
+  "id" int8 [pk, not null, increment]
+  "name" varchar(50) [unique, not null]
+  "primary_location" varchar(100)
+  "ideology" text
+  "power_level" numeric(3,2) [default: 0.5]
+  "resources" varchar(500)
+  "key_members" "text[]"
+  "allies" "text[]"
+  "enemies" "text[]"
+  "status" varchar(100) [default: 'active']
+  "hidden_agenda" text
+  "current_activity" varchar(500)
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+}
+
+Table "places" {
+  "id" int8 [pk, not null, increment]
+  "name" varchar(50) [unique, not null]
+  "type" place_type [not null]
+  "zone" int8 [not null, note: 'current location if type is vehicle']
+  "summary" varchar(1000)
+  "inhabitants" "text[]"
+  "historical_significance" text
+  "current_status" varchar(500)
+  "undiscovered" text [note: 'e.g., significant items that have not been discovered, unknown entities present, old traps that could be sprung']
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  Indexes {
+    inhabitants [type: gin, name: "idx_places_inhabitants"]
+  }
+}
+
+Table "items" {
+  "id" int8 [pk, not null, increment]
+  "type" varchar(100) [not null]
+  "quantity" int4 [not null, default: 1]
+  "summary" varchar(500) [not null]
+  "name" varchar(50) [unique, not null]
+  "owner_id" int8
+  "history" text
+  "status" varchar(50) [not null, default: 'functional']
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+}
+
+Table "threats" {
+  "id" int8 [pk, not null, increment]
+  "name" varchar(255) [not null]
+  "description" text
+  "domain" threat_domain_type [not null]
+  "lifecycle_stage" threat_lifecycle_type [not null, default: 'inception']
+  "target_entity_type" entity_type [not null]
+  "target_entity_id" varchar(50) [not null]
+  "severity" numeric(3,2) [not null, default: 0.5]
+  "is_active" bool [not null, default: true]
+  "extra_data" jsonb
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+  Note: 'Core record for an active threat in NEMESIS. Lifecycle stage tracks progression.'
+}
+
+Table "ai_notebook" {
+  "id" int8 [pk, not null, increment]
+  "timestamp" timestamptz [not null, default: `now()`]
+  "log_entry" text [not null]
+  "agent" agent_type [not null]
+  "level" log_level_type [not null, default: 'INFO']
+  Note: 'Stores log entries from any internal agent (LORE, GAIA, etc.) for debugging or historical review.'
+}
+
+Table "global_variables" {
+  "id" bool [pk, not null, default: true]
+  "base_timestamp" timestamptz [not null]
+  "user_character" int8
+}
+
+Table "narrative_chunks" {
+  "id" int8 [pk, not null, increment]
+  "raw_text" text [not null]
+  "created_at" timestamptz [default: `now()`]
+}
+
+Table "chunk_metadata" {
+  "id" int8 [pk, not null]
+  "chunk_id" int8 [unique, not null]
+  "season" int4
+  "episode" int4
+  "scene" int4
+  "world_layer" world_layer_type
+  "time_delta" interval
+  "place" int8
+  "atmosphere" varchar(255)
+  "characters" "text[]"
+  "arc_position" varchar(50)
+  "direction" jsonb
+  "magnitude" varchar(50)
+  "character_elements" jsonb
+  "perspective" jsonb
+  "interactions" jsonb
+  "dialogue_analysis" jsonb
+  "emotional_tone" jsonb
+  "narrative_function" jsonb
+  "narrative_techniques" jsonb
+  "thematic_elements" jsonb
+  "causality" jsonb
+  "continuity_markers" jsonb
+  "metadata_version" varchar(20)
+  "generation_date" timestamp
+  "slug" varchar(10) [unique]
+
+  Indexes {
+    scene [type: btree, name: "idx_chunk_metadata_scene"]
+    (season, episode, scene) [type: btree, name: "idx_chunk_metadata_season_episode_scene"]
+  }
+}
+
+Table "events" {
+  "id" int8 [pk, not null]
+  "chunk_id" int8
+  "title" varchar(100) [not null]
+  "description" text
+  "cause" text
+  "consequences" text
+  "characters_involved" "text[]"
+  "status" varchar(50) [not null, default: 'ongoing']
+  "created_at" timestamptz [not null, default: `now()`]
+  "updated_at" timestamptz [not null, default: `now()`]
+
+  Indexes {
+    characters_involved [type: gin, name: "idx_events_chars_involved"]
+  }
+}
+
+Table "threat_transitions" {
+  "id" int8 [pk, not null]
+  "threat_id" int8 [not null]
+  "from_stage" threat_lifecycle_type [not null]
+  "to_stage" threat_lifecycle_type [not null]
+  "transition_reason" text
+  "chunk_id" int8
+  "transition_date" timestamptz [not null, default: `now()`]
+  "notes" text
+}
+
+Table "zones" {
+  "id" int8 [pk, not null, increment]
+  "name" varchar(50) [not null]
+}
+
+Table "chunk_embeddings_1024d" {
+  "id" int4 [pk, not null, increment]
+  "chunk_id" int8 [not null]
+  "model" varchar(255) [not null]
+  "embedding" public.vector [not null]
+  "created_at" timestamptz [default: `now()`]
+
+  Indexes {
+    (chunk_id, model) [type: btree, name: "unique_chunk_embeddings_1024d_chunk_model"]
+    chunk_id [type: btree, name: "chunk_embeddings_1024d_chunk_id_idx"]
+    embedding [type: hnsw, name: "chunk_embeddings_1024d_hnsw_idx"]
+    model [type: btree, name: "chunk_embeddings_1024d_model_idx"]
+  }
+}
+
+Table "chunk_embeddings_0384d" {
+  "id" int4 [pk, not null, increment]
+  "chunk_id" int8 [not null]
+  "model" varchar(255) [not null]
+  "embedding" public.vector [not null]
+  "created_at" timestamptz [default: `now()`]
+
+  Indexes {
+    (chunk_id, model) [type: btree, name: "unique_chunk_embeddings_0384d_chunk_model"]
+    chunk_id [type: btree, name: "chunk_embeddings_0384d_chunk_id_idx"]
+    embedding [type: hnsw, name: "chunk_embeddings_0384d_hnsw_idx"]
+    model [type: btree, name: "chunk_embeddings_0384d_model_idx"]
+  }
+}
+
+Table "chunk_embeddings_1536d" {
+  "id" int4 [pk, not null, increment]
+  "chunk_id" int8 [not null]
+  "model" varchar(255) [not null]
+  "embedding" public.vector [not null]
+  "created_at" timestamptz [default: `now()`]
+
+  Indexes {
+    (chunk_id, model) [type: btree, name: "unique_chunk_embeddings_1536d_chunk_model"]
+    chunk_id [type: btree, name: "chunk_embeddings_1536d_chunk_id_idx"]
+    embedding [type: hnsw, name: "chunk_embeddings_1536d_hnsw_idx"]
+    model [type: btree, name: "chunk_embeddings_1536d_model_idx"]
+  }
+}
+
+Ref "comparisons_best_run_id_fkey":"ir_eval"."runs"."id" < "ir_eval"."comparisons"."best_run_id" [delete: set null]
+
+Ref "judgments_query_id_fkey":"ir_eval"."queries"."id" < "ir_eval"."judgments"."query_id" [update: cascade, delete: cascade]
+
+Ref "metrics_query_id_fkey":"ir_eval"."queries"."id" < "ir_eval"."metrics"."query_id" [delete: cascade]
+
+Ref "metrics_run_id_fkey":"ir_eval"."runs"."id" < "ir_eval"."metrics"."run_id" [delete: cascade]
+
+Ref "results_query_id_fkey":"ir_eval"."queries"."id" < "ir_eval"."results"."query_id" [delete: cascade]
+
+Ref "results_run_id_fkey":"ir_eval"."runs"."id" < "ir_eval"."results"."run_id" [delete: cascade]
+
+Ref "run_pair_links_control_run_id_fkey":"ir_eval"."runs"."id" < "ir_eval"."run_pair_links"."control_run_id" [delete: cascade]
+
+Ref "run_pair_links_experiment_run_id_fkey":"ir_eval"."runs"."id" < "ir_eval"."run_pair_links"."experiment_run_id" [delete: cascade]
+
+Ref "character_relationships_character1_id_fkey1":"characters"."id" < "character_relationships"."character1_id"
+
+Ref "character_relationships_character2_id_fkey":"characters"."id" < "character_relationships"."character2_id"
+
+Ref "fk_chunk_embeddings_0384d_chunk_id":"narrative_chunks"."id" < "chunk_embeddings_0384d"."chunk_id" [delete: cascade]
+
+Ref "fk_chunk_embeddings_1024d_chunk_id":"narrative_chunks"."id" < "chunk_embeddings_1024d"."chunk_id" [delete: cascade]
+
+Ref "fk_chunk_embeddings_1536d_chunk_id":"narrative_chunks"."id" < "chunk_embeddings_1536d"."chunk_id" [delete: cascade]
+
+Ref "chunk_metadata_chunk_id_fkey":"narrative_chunks"."id" < "chunk_metadata"."chunk_id" [update: cascade, delete: cascade]
+
+Ref "chunk_metadata_place_fkey":"places"."id" < "chunk_metadata"."place" [update: cascade, delete: set null]
+
+Ref "fk_events_narrative_chunks":"narrative_chunks"."id" < "events"."chunk_id" [update: cascade, delete: set null]
+
+Ref "global_variables_user_character_fkey":"characters"."id" < "global_variables"."user_character"
+
+Ref "items_owner_id_fkey1":"characters"."id" < "items"."owner_id" [delete: set null]
+
+Ref "places_zone_fkey":"zones"."id" < "places"."zone" [update: cascade, delete: set null]
+
+Ref "fk_threat_transitions_narrative_chunks":"narrative_chunks"."id" < "threat_transitions"."chunk_id" [update: cascade, delete: set null]
+
+Ref "fk_threat_transitions_threats":"threats"."id" < "threat_transitions"."threat_id" [delete: cascade]

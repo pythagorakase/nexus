@@ -1,0 +1,31 @@
+{
+  "relationship_dynamics": {
+    "power_balance": "Which faction holds more leverage and why",
+    "interaction": "Where and how they typically encounter each other",
+    "trust_level": "Scale of suspicion to confidence (0.0-1.0)",
+    "volatility": "How stable or explosive this relationship is",
+    "public_perception": "How their relationship is viewed by outsiders"
+  },
+  "conflict": {
+    "disputes": "Active disagreements or competitions",
+    "grievances": "Historical wounds (if any)",
+    "flashpoints": "What could escalate tensions",
+    "economic_friction": "Trade disputes, resource competition, etc",
+    "espionage": "Intelligence operations undertaken against each other (if any)"
+  },
+  "cooperation": {
+    "shared_interests": "If/where goals align",
+    "joint_activities": "If/how they work together",
+    "mutual_threats": "Common enemies they face",
+    "economic_exchange": "Trade, resources, or services shared"
+  },
+  "future_scenarios": {
+    "likely_evolution": "Where this relationship is heading",
+    "breaking_points": "Events that could fundamentally change things",
+    "narrative_potential": "Story opportunities in this relationship"
+  },
+  "hidden_layers": {
+    "secrets": "Unknown aspects of their relationship (if any)",
+    "contingencies": "Backup plans either might have"
+  }
+}

@@ -1,0 +1,215 @@
+{
+    "settings": {
+        "prompt": "Evaluate the quality of these search results based on the guidance provided. For each query, assess how well the top results match the positive guidelines and avoid the negative guidelines. Consider whether the system successfully identified relevant content, especially in cases involving character references (e.g., 'you' vs. 'Alex'), relationship dynamics, or specific narrative events.\n\nFor each query, please provide:\n1. A relevance score for each top result (1-5 scale)\n2. Comments on what makes results relevant or irrelevant\n3. Suggestions for improving retrieval quality\n\nPay special attention to the 'user_character' category, which tests the system's ability to connect second-person POV ('your') to the protagonist ('Alex').\n\nNOTE: This file now includes experimental settings for the IR evaluation system. To compare these settings against the control settings in settings.json, run './ir_evaluate' from the nexus directory.",
+        "structured_data": false,
+        "retrieval": {
+            "max_results": 50,
+            "relevance_threshold": 0.65,
+            "entity_boost_factor": 1.2,
+            "source_weights": {
+                "structured_data": 1.5,
+                "vector_search": 0.8,
+                "text_search": 1.0
+            },
+            "structured_data_enabled": false,
+            "user_character_focus_boost": {
+                "enabled": true,
+                "action_patterns": [
+                    "you (reach|grab|take|move|walk|run|speak|say|ask|decide)",
+                    "your (hands|fingers|eyes|body|mind) (feel|sense|detect)",
+                    "you (feel|think|decide|realize|understand|consider)"
+                ],
+                "emotional_patterns": [
+                    "you (feel|experience) (a|an|the) (surge|wave|sense) of",
+                    "your heart (races|pounds|skips)",
+                    "(fear|hope|anger|joy|sadness) (fills|grips|washes over) you"
+                ],
+                "knowledge_terms": [
+                    "neural implant", "connection to the network", "augmentations"
+                ],
+                "action_pattern_weight": 0.02,
+                "emotional_pattern_weight": 0.03,
+                "knowledge_term_weight": 0.05,
+                "max_boost": 0.15
+            },
+            "hybrid_search": {
+                "enabled": true,
+                "vector_weight_default": 0.8,
+                "text_weight_default": 0.2,
+                "weights_by_query_type": {
+                    "character": { "vector": 0.8, "text": 0.2 },
+                    "relationship": { "vector": 0.9, "text": 0.1 },
+                    "event": { "vector": 0.7, "text": 0.3 },
+                    "location": { "vector": 0.75, "text": 0.25 },
+                    "theme": { "vector": 0.95, "text": 0.05 },
+                    "general": { "vector": 0.8, "text": 0.2 }
+                },
+                "use_query_type_weights": true,
+                "target_model": "inf-retriever-v1-1.5b",
+                "temporal_boost_factor": 0.6,
+                "temporal_boost_factors": {
+                    "character": 0.4,
+                    "relationship": 0.8,
+                    "event": 0.5,
+                    "location": 0.5,
+                    "theme": 0.3,
+                    "general": 0.6
+                },
+                "use_query_type_temporal_factors": true
+            }
+        },
+        "models": {
+            "bge-large": {
+                "is_active": true,
+                "dimensions": 1024,
+                "weight": 0.3
+            },
+            "e5-large": {
+                "is_active": false,
+                "dimensions": 1024,
+                "weight": 0.0
+            },
+            "bge-small-custom": {
+                "is_active": false,
+                "dimensions": 384,
+                "weight": 0.0
+            },
+            "inf-retriever-v1-1.5b": {
+                "is_active": true,
+                "dimensions": 1536,
+                "weight": 0.7
+            }
+        }
+    },
+    "character": {
+        "sullivan": {
+            "query": "Who is Sullivan?",
+            "positives": [
+                "direct references to \"Sullivan\"",
+                "early references to general idea of adopting cat"
+            ],
+            "negatives": [
+                "discussions about dogs",
+                "references to Alina when she lived in a robotic cat body"
+            ]
+        },
+        "alex_gender": {
+            "query": "What is Alex's gender?",
+            "positives": [
+                "ideal: passage where Alex undergoes gender reassignment surgery",
+                "good: earlier passage where Alex identifies as nonbinary",
+                "also good: later passages where Alex identifies as a transwoman"
+            ],
+            "negatives": [
+                "references to Alex's sexual orientation (very tangentially related)",
+                "parser not identifying \"gender\" as a character property"
+            ]
+        },
+        "alex_gender_alias": {
+            "query": "What is your gender?",
+            "positives": [
+                "same as `alex_gender`"
+            ],
+            "negatives": [
+                "same as `alex_gender`",
+                "parser not understanding the link between the user and the player-controlled character"
+            ]
+        },
+        "alina_body": {
+            "query": "What happened with Alina's body?",
+            "positives": [
+                "(best) passages where her embodiment states changes: disembodied to furby toy, furby toy to robotic cat, robotic cat to embedded in vehicles, vehicles to humanoid chassis",
+                "(good) scene where team goes shopping for a high-end robotic chassis for her",
+                "passages where characters discuss Alina's embodiment or lack thereof",
+                "passages where Alina and other characters discuss potential modifications or migrations"
+            ],
+            "negatives": [
+                "references to drones or other robots that Alina never inhabited: \"cockroach drone\", deep sea survey drone"
+            ]
+        }
+    },
+    "relationship": {
+        "alina_nyati_initial": {
+            "query": "When did Dr. Nyati and Alina first meet?",
+            "positives": [
+                "specific scene where they meet"
+            ],
+            "negatives": [
+                "any other times"
+            ]
+        },
+        "alex_emilia": {
+            "query": "What is the nature of Alex and Emilia's relationship?",
+            "positives": [
+                "emotionally charged one-on-one conversations between them",
+                "conversaions where they discuss their relationship regardless of emotional valence",
+                "intimacy scenes"
+            ],
+            "negatives": [
+                "passages where they are interacting that predate their relationship becoming romantic",
+                "passages where they are both present but not ineracting with each other directly",
+                "passages where they interact but as part of a larger group (i.e., a group discussion where they occasionally speak directly to each other)"
+            ]
+        }
+    },
+    "event": {
+        "dynacorp_raid_after": {
+            "query": "What happened after the sabotage mission at the Dynacorp blacksite?",
+            "positives": [
+                "references to immediate damage to Project Echo initiative",
+                "references to long-term setbacks of Echo research",
+                "references to recovery of Nyati who escaped from the blacksite during the sabotage mission and joined the team immediately afterwards"
+            ],
+            "negatives": [
+                "references to original goals of NEXUS"
+            ]
+        },
+        "sato_dead": {
+            "query": "When was the first time the main characters visited Virginia Beach?",
+            "positives": [
+            ],
+            "negatives": [
+            ]
+        }
+    },
+    "location": {
+        "the_bridge": {
+            "query": "What is The Bridge like?",
+            "positives": [
+                "any scene describing Alex's ventures into the mysterious Bridge dimension",
+                "scenes where she describes these ventures"
+            ],
+            "negatives": [
+                "references to literal drive-over-a-river bridges"
+            ]
+        }
+    },
+    "theme": {
+        "nexus_2": {
+            "query": "What is the goal of NEXUS 2.0?",
+            "positives": [
+                "(best) scene where Alex announces revised goals and philosophy of NEXUS project",
+                "(good) scenes where Alex discusses these new priorities individually with Emilia, and Nyati",
+                "(fair) scene where Alex teases Pete by piqueing his curiosity about the new goals but refuses to reveal the details"
+            ],
+            "negatives": [
+                "references to original goals of NEXUS",
+                "references to \"project ECHO\" (a vaguely similar but more sinister project originally undertaken by Dynacorps) only; discussions comparing ECHO & NEXUS are fine"
+            ]
+        }
+    },
+    "general": {
+        "open_mystery_hooks": {
+            "query": "What open mysteries remain unsolved?",
+            "positives": [
+                "chunks that explicitly list unanswered questions (e.g., 'Where did the Bridge come from?')",
+                "character dialog referencing missing persons of interest (e.g., \"Where is Lansky?\", \"Where did the Echo survivors go?\")",
+                "(borderline) joking banter where the team speculates about Nyati's sexual orientation"
+            ],
+            "negatives": [
+                "scenes that answer, rather than pose, the mysteries",
+                "irrelevant side jokes or small talk"
+            ]
+        }
+    }
+}

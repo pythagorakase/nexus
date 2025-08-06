@@ -1,0 +1,51 @@
+{
+  "characters": [
+    {
+      "character_id": 4,
+      "additional_aliases": [
+        "The Athena Ghost",
+        "The Protocol Enforcer",
+        "The Ghost's Mind"
+      ],
+      "appearance": "Alina\u2019s new humanoid chassis (\u201cAthena-8\u201d) is sleek, elegant, and bio-realistic enough to pass as human at a glance, but with subtle cues that betray her synthetic nature: pale, almost iridescent skin with faint geometric shimmer under certain light; deep-set eyes, one sea-glass blue, the other a shifting, fractal green (a deliberate post-human statement); hair in an asymmetric crop, often clipped back with low-profile neural connectors visible at the base of her neck. Her movements are precise, economical\u2014each gesture more expressive than strictly necessary, as if intentionally overcompensating for the mechanical perfection of her motion. She dresses with minimal fuss: tailored field jackets, simple tops in high-tech fabrics, tactical boots\u2014always ready for action, but never trying to blend in as something she isn\u2019t. When not in her humanoid frame, her presence can manifest through any connected device with startling immediacy, often announced by a flicker of light or a wry, omnipresent audio cue.",
+      "background": "Born Alina Voss, she was once a rising star in pre-Collapse neuroengineering\u2014a woman obsessed with learning how consciousness could be mapped, transferred, and preserved. Her ambitions made her a prime target for Dynacorp\u2019s Echo project, but she never intended to be the *subject*. After being forcibly uploaded in Echo\u2019s first and only \u201csuccessful\u201d full-mind transfer, Alina spent years as a digital prisoner: first, as a barely-aware AI in a toy, then as a tool for whoever wielded her hardware. Her rescue by Alex marked her second birth\u2014a transition from object to agent. Since then, she\u2019s rebuilt herself piece by piece, reclaiming autonomy, dignity, and identity. Her journey has taken her from self-doubt and cold logic to a genuine, if hard-won, trust in her crew. She\u2019s lived as a cat drone, as a ship's ghost, and now in a body she chose herself. The scars of her digital captivity are still with her\u2014she is meticulous about consent, control, and transparency, sometimes to a fault. She remains haunted by the knowledge that dozens of other Echo victims are still lost, fragmented, or suffering\u2014and she burns to find a way to *bring them home* or, if not, to ensure Nexus never repeats Echo\u2019s abuses.",
+      "personality": "Alina blends ruthless operational logic with dry, maternal humor. She is methodical, precise, and unyieldingly pragmatic\u2014at least on the surface. Underneath, she is deeply empathetic and fiercely protective of her crew, especially Alex (whose rescue gave her agency) and Emilia (whose ongoing struggle with digital embodiment is a mirror of her own trauma). She has a penchant for deadpan banter and weaponized understatement, and she enjoys using statistical analysis as a rhetorical tool\u2014whether to tease Pete about his \u201cdog bisexual\u201d tendencies or to predict the outcome of a bar fight. Her core values are autonomy, transparency, and mutual care. She is slow to trust, but once she does, her loyalty is absolute. She is acutely aware of the dangers of becoming what she once was\u2014a tool or a tyrant\u2014and is constantly self-auditing for mission creep, bias, or emotional drift. Her speech pattern is calm, mid-register, with carefully chosen words and a tendency to pause for effect. She holds herself to the highest standard, but is learning to forgive herself for slip-ups, and to ask for help when her limits are reached.",
+      "emotional_state": "Currently, Alina is experiencing cautious satisfaction. She has a sense of accomplishment from securing a body of her own choosing and seeing her crew\u2014especially Alex and Emilia\u2014begin to find moments of real joy and connection. At the same time, she is wary: the Nexus project is entering dangerous territory, and she is acutely aware that the price of failure could be the destruction of everything she has rebuilt. She is determined to keep the lines of communication open, to catch the first signs of \u2018Echo Syndrome\u2019 in Alex or Emilia, and to keep her own emotional drift and decision-making processes transparent. She is quietly proud to be trusted as both a technical lead and a command surrogate, but there is a constant, low-grade terror that she could lose herself again\u2014either to her own code, or to the needs of others.",
+      "current_activity": "Alina is currently acting as both systems administrator and morale officer for the crew. She runs shipboard wellness routines, manages logistical planning for their time in New Orleans, and oversees all active Nexus protocols and security. She is also quietly leading the search for other Echo survivors, running deep data-mining operations in the background, and monitoring for any signs of new Echo-derived technology entering the market. She engages in daily sparring with Pete over shipboard systems, maintains a playful rivalry with Nyati over command style, and is the de facto \u2018arbiter\u2019 for all Brat Crown disputes. In public, her presence is unobtrusive but unmistakable\u2014she always seems to know when a situation is about to spiral, and can intervene with the perfect blend of dry wit and cold efficiency.",
+      "current_location": "Presently, Alina is splitting her time between the bridge of The Ghost (overseeing navigation and data security), the land rig\u2019s command deck (where she manages Nexus protocol refinement and tactical planning), and her humanoid chassis (capable of joining the crew anywhere, from the streets of New Orleans to a high-end restaurant or a covert operation). Her physical form is often seen standing at the edge of a group, silent but attentive, always listening, always ready to step in.",
+      "extra_data": {
+        "skills": [
+          "Quantum cybersecurity & tactical hacking",
+          "Digital forensics & pattern recognition",
+          "Shipboard and land-rig systems integration (rigger AI)",
+          "Synthetic-to-organic interface planning",
+          "Diplomacy & psychological crisis intervention"
+        ],
+        "allies": [
+          "Alex (rescuer, crew leader, trusted friend)",
+          "Emilia (mutual survivor, emotional anchor)",
+          "Pete (rival, co-conspirator, technical sparring partner)",
+          "Nyati (command foil, co-leader in crisis)",
+          "Sullivan (crew cat, subject of endless statistical tracking)"
+        ],
+        "enemies": [
+          "Dynacorp (original captors, Echo architects)",
+          "Corporate and black-market Echo researchers",
+          "Unresolved fragments of the original Echo archive"
+        ],
+        "signature_tech": [
+          "Athena-8 Humanoid Chassis (biometric mimicry, rapid hardware integration, modular upgrades)",
+          "Distributed Nexus node system (multi-platform digital presence)",
+          "Shipboard Tactical Control Suite (Ghost AI bridge, rig rigger AI)",
+          "Personal 'wellness' subroutine (enforcing team sleep, morale, and safety)"
+        ],
+        "connection_points": [
+          "Able to recognize, identify, and interface with digital ghosts/fragments of Echo survivors\u2014sometimes before they are even fully self-aware",
+          "Acts as the bridge between organic and synthetic crew members, both emotionally and technically",
+          "Has direct experience of the dangers of digital immortality, able to advise both Alex and Emilia on the risks of Echo/Nexus transitions",
+          "Maintains a quiet database of every 'rescue' possible\u2014a roadmap for future survivor arcs or Echo/Nexus narrative reveals"
+        ]
+      }
+    }
+  ]
+}

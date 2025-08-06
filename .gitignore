@@ -1,0 +1,35 @@
+# Ignore environment files
+.env
+.envrc
+
+# Ignore transcripts folder
+/transcripts/
+
+# Ignore ChromaDB folder
+/chromadb/
+
+# Ignore large directories
+/.obsidian/
+/.venv/
+/llama.cpp/
+/models/
+/nexus/models/
+/data/
+/.git/objects/pack/
+
+# Ignore logs
+*.log
+/error_log.txt
+/memnon*.log
+/*_processing.log
+/season_episode_extraction.log
+/time_delta_processor.log
+/lm_studio_log.txt
+
+# Ignore binaries and database files
+*.sqlite3
+
+# Ignore system files
+.DS_Store
+__pycache__/
+nexus-tui-temp/

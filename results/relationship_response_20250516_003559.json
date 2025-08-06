@@ -1,0 +1,60 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 4,
+    "character2_id": 6,
+    "relationship_type": "companion",
+    "emotional_valence": "+2|friendly",
+    "dynamic": "Alina regards Sullivan as a self-possessed micro-commander whose calm authority benefits overall crew wellness. She engages him like any other critical system: analyze, respect boundaries, and supply resources on schedule. Beneath the dry analytics sits a genuine, quietly amused fondness that makes her the cat’s most reliable quartermaster. Their rapport is maintained through mutual acknowledgement of each other’s autonomy and value to mission cohesion.",
+    "recent_events": "• Delivered the inaugural treat with precision during the adoption negotiations, earning his first paw-tap of approval.\n• Publicly endorsed him as the 'optimal candidate' during crew deliberations, tipping the decision toward immediate adoption paperwork.\n• Oversaw the next-day extraction operation, monitoring vitals and ensuring a stress-free transfer to the land rig.",
+    "history": "First contact was the café-registry lookup, where Alina identified \"Sullivan\" and initiated the treat-delivery protocol. During the multi-step negotiation she noted his boundary-setting behaviors and adjusted interaction tempo accordingly. Her data-driven endorsement cemented crew consensus, and the subsequent retrieval mission formalized his status as crew. Since then, she tracks his acclimation metrics and gently refines interaction scripts, treating him as both morale asset and ongoing behavioral study.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "dependable",
+        "formality": "informal",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Maintain a calm, enrichment-rich living environment aboard crew assets",
+        "Enhance overall crew morale through low-effort, high-impact interactions",
+        "Gather longitudinal data on organic–synthetic companionship dynamics"
+      ],
+      "areas_of_expertise": "Alina supplies logistics, environmental control and analytical insight; Sullivan contributes ambient stress reduction, observational feedback loops, and a symbolic anchor of normalcy.",
+      "resource_sharing": {
+        "information": "selective",
+        "material": "generous",
+        "contacts": "open network"
+      },
+      "crisis_behavior": "Alina will prioritize Sullivan’s safe relocation to a sealed compartment or drone-held carrier during any emergency, treating him as a VIP cargo manifest."
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 6,
+    "character2_id": 4,
+    "relationship_type": "companion",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Sullivan appraises the quiet metal one as a competent attendant: she materializes treats with flawless timing and never oversteps his clearly signaled boundaries. Her precise movements and respectful distance earn his tolerant acceptance and occasional slow blink of approval. While she is not the primary human to charm, her reliability places her firmly within his circle of useful, permissible allies. For now, he allows her proximity and expects continued high-quality service.",
+    "recent_events": "• Accepted a treat she deployed during the adoption trials, rewarding her efficiency with a measured paw-press.\n• Noted her calm endorsement of his candidacy, a gesture that acknowledged his obvious superiority.\n• Permitted her to supervise the morning retrieval, hopping into Alex’s arms only after her logistical preparations signaled readiness.",
+    "history": "Initial impression was a neutral assessment when she identified him from the database—useful but untested. Her flawlessly timed treat and respectful pacing during the negotiation established her as a reliable resource provider. Subsequent endorsement confirmed her understanding of proper hierarchy. The extraction operation reaffirmed her role: she orchestrates environments so he may move with dignity. Their interactions remain sparse but consistently positive, reinforcing trust through predictability.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "conditional",
+        "formality": "implied",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Secure steady flow of high-quality sustenance and comfortable territory",
+        "Preserve an atmosphere where his authority is acknowledged without fuss",
+        "Sustain low-stress coexistence that benefits overall pride—human, AI, and feline"
+      ],
+      "areas_of_expertise": "Sullivan offers morale elevation, silent supervision, and aesthetic gravitas; Alina provides precise resource delivery, environmental stability, and respectful interaction protocols.",
+      "resource_sharing": {
+        "information": "minimal",
+        "material": "calculated",
+        "contacts": "guarded"
+      },
+      "crisis_behavior": "If disturbance arises, Sullivan expects the metal attendant to relocate him to safety; failing that, he will retreat to elevated ground and observe until order is restored."
+    }
+  }
+}

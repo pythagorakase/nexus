@@ -1,0 +1,1061 @@
+{
+  "test_run": {
+    "timestamp": "2025-07-29T17:15:11.928652",
+    "interrupted": false,
+    "total_tests": 28,
+    "failed_tests": 1
+  },
+  "results": [
+    {
+      "scenario": "cold_start",
+      "model_type": "gguf",
+      "model_id": "llama-3.3-70b-instruct@q6_k",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 16051.625,
+          "peak_mb": 16150.65625,
+          "final_mb": 15768.0,
+          "avg_percent": 14.293406593406587,
+          "peak_percent": 14.5
+        },
+        "cpu_summary": {
+          "avg_percent": 7.839560439560442,
+          "peak_percent": 22.7
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "gguf",
+      "model_id": "llama-3.3-70b-instruct@q6_k",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 65.21186304092407,
+          "ttft": 27.534329175949097,
+          "tokens_generated": 248,
+          "tokens_per_second": 3.8029890335193492
+        },
+        "memory_summary": {
+          "initial_mb": 15803.859375,
+          "peak_mb": 85643.125,
+          "final_mb": 85602.84375,
+          "avg_percent": 48.25806451612905,
+          "peak_percent": 67.5
+        },
+        "cpu_summary": {
+          "avg_percent": 7.396774193548387,
+          "peak_percent": 12.8
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "gguf",
+      "model_id": "llama-3.3-70b-instruct@q6_k",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 115.66908383369446,
+          "ttft": 19.374359846115112,
+          "tokens_generated": 540,
+          "tokens_per_second": 4.668490335554104
+        },
+        "memory_summary": {
+          "initial_mb": 85460.84375,
+          "peak_mb": 85661.546875,
+          "final_mb": 85592.921875,
+          "avg_percent": 67.40858895705502,
+          "peak_percent": 67.5
+        },
+        "cpu_summary": {
+          "avg_percent": 6.763803680981594,
+          "peak_percent": 15.9
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "gguf",
+      "model_id": "llama-3.3-70b-instruct@q6_k",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 85029.015625
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 84940.015625
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 84622.34375
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 84656.21875
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 84997.71875
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 85536.46875
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 87120.78125
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 86568.546875
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 86827.625
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 86855.421875
+          }
+        ],
+        "memory_growth_mb": 1826.40625,
+        "growth_per_iteration_mb": 202.93402777777777,
+        "memory_summary": {
+          "initial_mb": 85494.359375,
+          "peak_mb": 88162.640625,
+          "final_mb": 86674.875,
+          "avg_percent": 68.07312775330435,
+          "peak_percent": 69.3
+        },
+        "cpu_summary": {
+          "avg_percent": 9.793538913362685,
+          "peak_percent": 30.4
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "cold_start",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-3.3-70b-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 86406.375,
+          "peak_mb": 86406.375,
+          "final_mb": 81513.265625,
+          "avg_percent": 64.77011494252864,
+          "peak_percent": 67.9
+        },
+        "cpu_summary": {
+          "avg_percent": 12.740229885057472,
+          "peak_percent": 19.1
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-3.3-70b-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 62.64945101737976,
+          "ttft": 28.380190134048462,
+          "tokens_generated": 228,
+          "tokens_per_second": 3.6392976522132634
+        },
+        "memory_summary": {
+          "initial_mb": 81512.75,
+          "peak_mb": 87505.5625,
+          "final_mb": 87505.5625,
+          "avg_percent": 57.6488372093024,
+          "peak_percent": 68.8
+        },
+        "cpu_summary": {
+          "avg_percent": 16.223255813953493,
+          "peak_percent": 25.8
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-3.3-70b-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 96.437490940094,
+          "ttft": 17.02786874771118,
+          "tokens_generated": 483,
+          "tokens_per_second": 5.008425616340794
+        },
+        "memory_summary": {
+          "initial_mb": 87464.21875,
+          "peak_mb": 88145.390625,
+          "final_mb": 88089.640625,
+          "avg_percent": 68.75038167938925,
+          "peak_percent": 69.3
+        },
+        "cpu_summary": {
+          "avg_percent": 14.869465648854966,
+          "peak_percent": 23.2
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-3.3-70b-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 86834.8125
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 86873.3125
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 86264.78125
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 86573.484375
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 93861.515625
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 93519.640625
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 93941.421875
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 92514.078125
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 93408.296875
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 93410.40625
+          }
+        ],
+        "memory_growth_mb": 6575.59375,
+        "growth_per_iteration_mb": 730.6215277777778,
+        "memory_summary": {
+          "initial_mb": 88015.484375,
+          "peak_mb": 94851.453125,
+          "final_mb": 93223.296875,
+          "avg_percent": 71.71016129032189,
+          "peak_percent": 74.4
+        },
+        "cpu_summary": {
+          "avg_percent": 15.428387096774205,
+          "peak_percent": 53.2
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "cold_start",
+      "model_type": "gguf",
+      "model_id": "lmstudio-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 88546.765625,
+          "peak_mb": 88546.765625,
+          "final_mb": 71389.03125,
+          "avg_percent": 62.3654761904762,
+          "peak_percent": 69.6
+        },
+        "cpu_summary": {
+          "avg_percent": 18.315476190476183,
+          "peak_percent": 19.2
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "gguf",
+      "model_id": "lmstudio-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 43.660441160202026,
+          "ttft": null,
+          "tokens_generated": 0,
+          "tokens_per_second": 0.0
+        },
+        "memory_summary": {
+          "initial_mb": 68918.84375,
+          "peak_mb": 124413.453125,
+          "final_mb": 118864.03125,
+          "avg_percent": 39.96724137931035,
+          "peak_percent": 98.9
+        },
+        "cpu_summary": {
+          "avg_percent": 21.936206896551727,
+          "peak_percent": 35.4
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "gguf",
+      "model_id": "lmstudio-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 3.058551073074341,
+          "ttft": null,
+          "tokens_generated": 0,
+          "tokens_per_second": 0.0
+        },
+        "memory_summary": {
+          "initial_mb": 118318.59375,
+          "peak_mb": 118318.59375,
+          "final_mb": 113730.265625,
+          "avg_percent": 91.225,
+          "peak_percent": 94.0
+        },
+        "cpu_summary": {
+          "avg_percent": 39.39999999999999,
+          "peak_percent": 73.1
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "gguf",
+      "model_id": "lmstudio-community/llama-4-scout-17b-16e-instruct",
+      "success": false,
+      "errors": [
+        "Prompt 0: 'str' object has no attribute 'get'",
+        "Prompt 1: 'str' object has no attribute 'get'",
+        "Prompt 2: 'str' object has no attribute 'get'",
+        "Prompt 3: 'str' object has no attribute 'get'",
+        "Prompt 4: 'str' object has no attribute 'get'",
+        "Prompt 5: 'str' object has no attribute 'get'",
+        "Prompt 6: 'str' object has no attribute 'get'",
+        "Prompt 7: 'str' object has no attribute 'get'",
+        "Prompt 8: 'str' object has no attribute 'get'",
+        "Prompt 9: 'str' object has no attribute 'get'"
+      ],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 123437.984375
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 122615.25
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 122551.921875
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 123392.171875
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 123197.9375
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 122723.390625
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 123252.484375
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 122780.234375
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 123294.125
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 123622.703125
+          }
+        ],
+        "memory_growth_mb": 184.71875,
+        "growth_per_iteration_mb": 20.524305555555557,
+        "memory_summary": {
+          "initial_mb": 123318.046875,
+          "peak_mb": 124978.40625,
+          "final_mb": 123433.171875,
+          "avg_percent": 97.32842105263155,
+          "peak_percent": 98.6
+        },
+        "cpu_summary": {
+          "avg_percent": 22.165263157894724,
+          "peak_percent": 42.6
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "moe_specific",
+      "model_type": "gguf",
+      "model_id": "lmstudio-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "expert_results": {
+          "math": {
+            "duration": 1.920853853225708,
+            "ttft": null,
+            "tokens_per_second": 0.0,
+            "response_length": 0
+          },
+          "creative": {
+            "duration": 1.8257970809936523,
+            "ttft": null,
+            "tokens_per_second": 0.0,
+            "response_length": 0
+          },
+          "code": {
+            "duration": 1.8570590019226074,
+            "ttft": null,
+            "tokens_per_second": 0.0,
+            "response_length": 0
+          },
+          "factual": {
+            "duration": 1.8453021049499512,
+            "ttft": null,
+            "tokens_per_second": 0.0,
+            "response_length": 0
+          }
+        },
+        "memory_summary": {
+          "initial_mb": 122084.640625,
+          "peak_mb": 124765.484375,
+          "final_mb": 124500.453125,
+          "avg_percent": 97.38636363636361,
+          "peak_percent": 98.3
+        },
+        "cpu_summary": {
+          "avg_percent": 25.072727272727274,
+          "peak_percent": 45.9
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "cold_start",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 119887.125,
+          "peak_mb": 119887.125,
+          "final_mb": 99248.390625,
+          "avg_percent": 86.55764705882352,
+          "peak_percent": 94.6
+        },
+        "cpu_summary": {
+          "avg_percent": 19.401176470588243,
+          "peak_percent": 26.1
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 32.4728639125824,
+          "ttft": 24.930080890655518,
+          "tokens_generated": 257,
+          "tokens_per_second": 7.914300404542364
+        },
+        "memory_summary": {
+          "initial_mb": 99208.34375,
+          "peak_mb": 99208.34375,
+          "final_mb": 69027.46875,
+          "avg_percent": 44.193181818181806,
+          "peak_percent": 78.8
+        },
+        "cpu_summary": {
+          "avg_percent": 24.381818181818186,
+          "peak_percent": 27.2
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 23.689451932907104,
+          "ttft": 7.10301399230957,
+          "tokens_generated": 590,
+          "tokens_per_second": 24.905599406477986
+        },
+        "memory_summary": {
+          "initial_mb": 68761.640625,
+          "peak_mb": 70353.453125,
+          "final_mb": 70353.453125,
+          "avg_percent": 56.143750000000004,
+          "peak_percent": 56.6
+        },
+        "cpu_summary": {
+          "avg_percent": 20.484375,
+          "peak_percent": 29.2
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 64262.953125
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 67897.21875
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 67232.109375
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 67282.84375
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 67308.71875
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 67431.046875
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 67347.4375
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 68069.9375
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 67545.21875
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 67577.84375
+          }
+        ],
+        "memory_growth_mb": 3314.890625,
+        "growth_per_iteration_mb": 368.32118055555554,
+        "memory_summary": {
+          "initial_mb": 70103.171875,
+          "peak_mb": 70300.125,
+          "final_mb": 67390.46875,
+          "avg_percent": 53.74316939890704,
+          "peak_percent": 56.5
+        },
+        "cpu_summary": {
+          "avg_percent": 16.086885245901637,
+          "peak_percent": 28.3
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "moe_specific",
+      "model_type": "mlx",
+      "model_id": "mlx-community/llama-4-scout-17b-16e-instruct",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "expert_results": {
+          "math": {
+            "duration": 12.310194253921509,
+            "ttft": 3.5651841163635254,
+            "tokens_per_second": 23.638944601325008,
+            "response_length": 842
+          },
+          "creative": {
+            "duration": 10.3539879322052,
+            "ttft": 3.463808059692383,
+            "tokens_per_second": 26.752976902591804,
+            "response_length": 1244
+          },
+          "code": {
+            "duration": 10.765759944915771,
+            "ttft": 3.404169797897339,
+            "tokens_per_second": 27.680349694285468,
+            "response_length": 1421
+          },
+          "factual": {
+            "duration": 10.652422189712524,
+            "ttft": 3.556256055831909,
+            "tokens_per_second": 27.599356725076827,
+            "response_length": 1430
+          }
+        },
+        "memory_summary": {
+          "initial_mb": 66442.046875,
+          "peak_mb": 68455.953125,
+          "final_mb": 68209.09375,
+          "avg_percent": 53.83055555555553,
+          "peak_percent": 54.2
+        },
+        "cpu_summary": {
+          "avg_percent": 16.752777777777776,
+          "peak_percent": 25.2
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "cold_start",
+      "model_type": "gguf",
+      "model_id": "maziyarpanahi/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 65441.15625,
+          "peak_mb": 65441.15625,
+          "final_mb": 64809.09375,
+          "avg_percent": 51.37954545454545,
+          "peak_percent": 51.9
+        },
+        "cpu_summary": {
+          "avg_percent": 12.761363636363637,
+          "peak_percent": 21.6
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "gguf",
+      "model_id": "maziyarpanahi/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 51.86949181556702,
+          "ttft": 44.36034393310547,
+          "tokens_generated": 142,
+          "tokens_per_second": 2.7376400853301424
+        },
+        "memory_summary": {
+          "initial_mb": 64844.21875,
+          "peak_mb": 83366.25,
+          "final_mb": 83315.578125,
+          "avg_percent": 27.78933333333333,
+          "peak_percent": 65.5
+        },
+        "cpu_summary": {
+          "avg_percent": 12.654666666666667,
+          "peak_percent": 21.9
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "gguf",
+      "model_id": "maziyarpanahi/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 65.5324239730835,
+          "ttft": 13.49915599822998,
+          "tokens_generated": 740,
+          "tokens_per_second": 11.29212007027154
+        },
+        "memory_summary": {
+          "initial_mb": 83257.625,
+          "peak_mb": 84471.59375,
+          "final_mb": 83699.96875,
+          "avg_percent": 65.78817204301069,
+          "peak_percent": 66.4
+        },
+        "cpu_summary": {
+          "avg_percent": 13.432258064516137,
+          "peak_percent": 25.2
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "gguf",
+      "model_id": "maziyarpanahi/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 83601.234375
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 83655.765625
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 83668.640625
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 83623.96875
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 83569.40625
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 83572.265625
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 83575.078125
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 83619.90625
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 83612.765625
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 83584.421875
+          }
+        ],
+        "memory_growth_mb": -16.8125,
+        "growth_per_iteration_mb": -1.8680555555555556,
+        "memory_summary": {
+          "initial_mb": 83557.765625,
+          "peak_mb": 83908.828125,
+          "final_mb": 83584.796875,
+          "avg_percent": 65.71233766233784,
+          "peak_percent": 65.9
+        },
+        "cpu_summary": {
+          "avg_percent": 13.146753246753248,
+          "peak_percent": 20.7
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "moe_specific",
+      "model_type": "gguf",
+      "model_id": "maziyarpanahi/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "expert_results": {
+          "math": {
+            "duration": 28.377793073654175,
+            "ttft": 2.5221869945526123,
+            "tokens_per_second": 10.536407789849957,
+            "response_length": 626
+          },
+          "creative": {
+            "duration": 26.33188509941101,
+            "ttft": 2.308206081390381,
+            "tokens_per_second": 11.355054864897918,
+            "response_length": 1268
+          },
+          "code": {
+            "duration": 26.0693519115448,
+            "ttft": 2.2121758460998535,
+            "tokens_per_second": 11.469406719987848,
+            "response_length": 1176
+          },
+          "factual": {
+            "duration": 26.328869104385376,
+            "ttft": 2.494539976119995,
+            "tokens_per_second": 11.356355596382151,
+            "response_length": 1450
+          }
+        },
+        "memory_summary": {
+          "initial_mb": 83623.421875,
+          "peak_mb": 83824.0625,
+          "final_mb": 83650.234375,
+          "avg_percent": 65.70598802395216,
+          "peak_percent": 65.8
+        },
+        "cpu_summary": {
+          "avg_percent": 12.901796407185628,
+          "peak_percent": 19.0
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "cold_start",
+      "model_type": "mlx",
+      "model_id": "mlx-community/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "idle_time": 60,
+        "memory_summary": {
+          "initial_mb": 83709.953125,
+          "peak_mb": 83767.25,
+          "final_mb": 83658.125,
+          "avg_percent": 65.70113636363625,
+          "peak_percent": 65.8
+        },
+        "cpu_summary": {
+          "avg_percent": 12.436363636363637,
+          "peak_percent": 17.4
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "simple_generation",
+      "model_type": "mlx",
+      "model_id": "mlx-community/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "generation_metrics": {
+          "duration": 37.74075126647949,
+          "ttft": 30.00895595550537,
+          "tokens_generated": 162,
+          "tokens_per_second": 4.292442374984858
+        },
+        "memory_summary": {
+          "initial_mb": 83661.359375,
+          "peak_mb": 85279.5625,
+          "final_mb": 85218.96875,
+          "avg_percent": 45.60377358490569,
+          "peak_percent": 66.9
+        },
+        "cpu_summary": {
+          "avg_percent": 17.60943396226415,
+          "peak_percent": 25.9
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "context_stress",
+      "model_type": "mlx",
+      "model_id": "mlx-community/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "context_size": 32768,
+        "generation_metrics": {
+          "duration": 31.919716119766235,
+          "ttft": 11.858772277832031,
+          "tokens_generated": 389,
+          "tokens_per_second": 12.186825175400365
+        },
+        "memory_summary": {
+          "initial_mb": 85202.296875,
+          "peak_mb": 85931.546875,
+          "final_mb": 85638.421875,
+          "avg_percent": 66.34545454545449,
+          "peak_percent": 67.4
+        },
+        "cpu_summary": {
+          "avg_percent": 15.654545454545454,
+          "peak_percent": 18.6
+        }
+      }
+    },
+    {
+      "scenario": "memory_leak",
+      "model_type": "mlx",
+      "model_id": "mlx-community/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "num_prompts": 10,
+        "memory_checkpoints": [
+          {
+            "iteration": 0,
+            "memory_mb": 84542.578125
+          },
+          {
+            "iteration": 1,
+            "memory_mb": 84669.328125
+          },
+          {
+            "iteration": 2,
+            "memory_mb": 84118.890625
+          },
+          {
+            "iteration": 3,
+            "memory_mb": 84246.828125
+          },
+          {
+            "iteration": 4,
+            "memory_mb": 84157.296875
+          },
+          {
+            "iteration": 5,
+            "memory_mb": 84114.484375
+          },
+          {
+            "iteration": 6,
+            "memory_mb": 83978.46875
+          },
+          {
+            "iteration": 7,
+            "memory_mb": 84121.359375
+          },
+          {
+            "iteration": 8,
+            "memory_mb": 85274.609375
+          },
+          {
+            "iteration": 9,
+            "memory_mb": 84733.296875
+          }
+        ],
+        "memory_growth_mb": 190.71875,
+        "growth_per_iteration_mb": 21.19097222222222,
+        "memory_summary": {
+          "initial_mb": 85619.46875,
+          "peak_mb": 85777.640625,
+          "final_mb": 84549.125,
+          "avg_percent": 66.75303643724678,
+          "peak_percent": 67.2
+        },
+        "cpu_summary": {
+          "avg_percent": 15.054251012145748,
+          "peak_percent": 24.6
+        },
+        "context_size": 32768
+      }
+    },
+    {
+      "scenario": "moe_specific",
+      "model_type": "mlx",
+      "model_id": "mlx-community/mixtral-8x22b-instruct-v0.1",
+      "success": true,
+      "errors": [],
+      "metrics": {
+        "expert_results": {
+          "math": {
+            "duration": 21.294687032699585,
+            "ttft": 2.398376941680908,
+            "tokens_per_second": 14.041061018688048,
+            "response_length": 742
+          },
+          "creative": {
+            "duration": 19.9377920627594,
+            "ttft": 2.5003409385681152,
+            "tokens_per_second": 14.996645519163783,
+            "response_length": 1286
+          },
+          "code": {
+            "duration": 19.59598684310913,
+            "ttft": 2.3774609565734863,
+            "tokens_per_second": 15.25822620692065,
+            "response_length": 1090
+          },
+          "factual": {
+            "duration": 19.523505926132202,
+            "ttft": 2.626246929168701,
+            "tokens_per_second": 15.263651985841701,
+            "response_length": 1299
+          }
+        },
+        "memory_summary": {
+          "initial_mb": 83576.4375,
+          "peak_mb": 85560.4375,
+          "final_mb": 85319.25,
+          "avg_percent": 66.88699186991856,
+          "peak_percent": 67.1
+        },
+        "cpu_summary": {
+          "avg_percent": 15.184552845528462,
+          "peak_percent": 20.4
+        },
+        "context_size": 32768
+      }
+    }
+  ]
+}

@@ -1,0 +1,769 @@
+{
+  "instructions": "\n# Narrative Metadata Analysis Task\n\nYou are an expert narrative analyst working on an AI-driven interactive storytelling project. \nYour task is to analyze each narrative chunk and generate rich, detailed metadata according to \nthe provided schema.\n\n## Batch Context\nThis is a batch of narrative chunks that are sequential in the story. At the top level, you'll \nfind \"batch_context\" with preceding and following chunks that provide context for the entire \nbatch. Use this broader context to understand the narrative flow and maintain continuity \nacross all your analysis.\n\n## Analysis Guidelines\nFor each chunk, carefully consider:\n\n1. **Characters**: Who appears, their interactions, and emotional states\n2. **Narrative Vector**: The direction and magnitude of story movement\n3. **Prose Elements**: Dialogue, emotional tone, techniques used\n4. **Thematic Elements**: Core themes, motifs, and symbolic elements\n5. **Continuity**: How this chunk connects to the broader narrative\n\n## Output Format\nThe JSON schema is provided at the top level of this request under the \"metadata_schema\" key.\nYour task is to follow this schema exactly, providing a JSON array where each object corresponds \nto one chunk in the batch.\n\nIMPORTANT NOTES:\n- Your response must be a valid JSON array containing metadata for ALL chunks\n- Follow the schema exactly - do not add or remove fields\n- Only analyze the fields defined in the schema\n- Analyze each chunk deeply, looking beyond surface-level text\n- Focus on meaningful narrative analysis rather than arbitrary classification\n- Maintain narrative continuity across the entire batch\n- Consider how each chunk relates to others in the sequence\n",
+  "chunks": [
+    {
+      "chunk_id": 971,
+      "text": "<!-- SCENE BREAK: S04E05_007 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE BRIDGE & THE END OF THINGS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cI feel like a **liability** lately.\u201d  \n\nYou don\u2019t know **why** you\u2019re saying it. Maybe because **Alina asked.** Maybe because you **needed to.**  \n\n\u201cI\u2019m trying to put some of the pieces back together.\u201d  \n\nA slow exhale.  \n\n\u201cBut last time I was out here, I was being told that I\u2019m **already missing pieces.**\u201d  \n\nYou **pause.**  \n\nOr maybe\u2026  \n\n\u201cOr maybe I\u2019m **someone else\u2019s** missing piece.\u201d  \n\nYour breath **catches.**  \n\n\u201cWhich they may or may not be looking to **reclaim.**\u201d  \n\nYour **hands tighten** slightly where they rest.  \n\n\u201cI\u2019m not ready for that.\u201d  \n\nYour voice is **cracking now.**  \n\n\u201cI\u2019m not ready to **die**, Alina.\u201d  \n\nA breath.  \n\nA **shaky, uneven breath.**  \n\n\u201cAnd that\u2019s what all this feels like.\u201d  \n\nYour eyes flicker to the screens, the dark abyss beyond the glass.  \n\n\u201cEverything I hear about **crossing the goddamned bridge** just sounds like a **metaphor for death.**\u201d  \n\nSilence.  \n\nThen, **finally, evenly:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**You are not dead.**\u201d  \n\nA pause.  \n\nThen\u2014  \n\n\u201c**And you are not crossing.**\u201d  \n\nAnother pause.  \n\nThen, **pointed, deliberate:**  \n\n\u201c**You are here.**\u201d  \n\n**Does Alex respond?** Or does she just **let that sit?**\n\n## You\n\u201cAren\u2019t I? Crossing? Reports are mixed on that last time I checked.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 7
+      }
+    },
+    {
+      "chunk_id": 972,
+      "text": "<!-- SCENE BREAK: S04E05_008 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MIXED REPORTS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201c**Aren\u2019t I?**\u201d  \n\nYour voice is **quiet, dry.**  \n\n\u201c**Crossing?**\u201d  \n\nA pause.  \n\n\u201c**Reports are mixed on that last time I checked.**\u201d  \n\nAlina is **silent for a moment.**  \n\nThen\u2014**precise, measured:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**The reports remain inconclusive.**\u201d  \n\nA pause.  \n\n\u201c**But they are not final.**\u201d  \n\nAnother pause.  \n\nThen, as if it is simply **a matter of logic:**  \n\n\u201c**And an incomplete report is not a certainty.**\u201d  \n\nDoes Alex **push back?** Accept the response? Or **deflect?**\n\n## You\nAlex signs. \u201cYeah, you\u2019re right. Could be bullshit. Like most everything else I hear when we\u2019re trying to get information out of these things. But\u2026if it\u2019s true\u2026I shouldn\u2019t give zero consideration to the worse case scenario. And, Emilia, dude\u2014\u201d then Alex cranes her around to see if Emilia is there.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 8
+      }
+    },
+    {
+      "chunk_id": 973,
+      "text": "<!-- SCENE BREAK: S04E05_009 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: WORST-CASE SCENARIOS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **sigh.**  \n\n\u201cYeah, you\u2019re right. **Could be bullshit.**\u201d  \n\nYou **run a hand through your hair, still damp.**  \n\n\u201cLike most everything else I hear when we\u2019re trying to get **information out of these things.**\u201d  \n\nYour fingers **drum against your knee.**  \n\n\u201cBut\u2026 if it\u2019s true\u2026\u201d  \n\nYour voice **trails.**  \n\nYou exhale **through your nose.**  \n\n\u201cI shouldn\u2019t give zero consideration to the **worst-case scenario.**\u201d  \n\nYou shift, about to continue\u2014  \n\n\u201c**And, Emilia, dude\u2014**\u201d  \n\nThen you **pause.**Crane your head around.**  \n\nIs she **still there?**\n\n## You\nThe AI should determine if Emilia would have followed, or whether she would be somewhere else.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 9
+      }
+    },
+    {
+      "chunk_id": 974,
+      "text": "<!-- SCENE BREAK: S04E05_010 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: IS SHE STILL THERE?**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **turn, craning your head** to look.  \n\nAnd\u2014  \n\n**She\u2019s not there.**  \n\nEmilia is **gone.**  \n\nShe must have **left at some point**, but you didn\u2019t hear her go.  \n\nDidn\u2019t feel her leave.  \n\nIt\u2019s just **you and Alina now.**  \n\nHow does Alex react? **Does she ask where Emilia went? Get up to look for her?** Or just **let it be?**\n\n## You\nAlex continues what she was going to say. \u201cYeah, Emilia\u2026dude. I need to get my act together. For her especially. I\u2019m not digging this invalid/nursemaid dynamic dumped on her. Not fair to her. And I\u2019ve never had someone like that before\u2014something this real. I can\u2019t fuck this up, or I\u2019ll never forgive myself.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 10
+      }
+    },
+    {
+      "chunk_id": 975,
+      "text": "<!-- SCENE BREAK: S04E05_011 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: GETTING IT TOGETHER**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **exhale.**  \n\nEven though **she\u2019s not there**, you keep **talking.**  \n\n\u201cYeah, Emilia\u2026 **dude.**\u201d  \n\nYou **rub your face**, shake your head.  \n\n\u201cI need to get my **act together.**\u201d  \n\nA slow breath.  \n\n\u201cFor her, **especially.**\u201d  \n\nYour voice tightens, but you **push through.**  \n\n\u201cI\u2019m not digging this **invalid/nursemaid dynamic** dumped on her.\u201d  \n\nA sharp **exhale.**  \n\n\u201cNot fair to her.\u201d  \n\nYour fingers **twitch against your knee.**  \n\n\u201cAnd I\u2019ve never had someone like that before\u2014\u201d  \n\nYou swallow.  \n\n\u201c**Something this real.**\u201d  \n\nA pause.  \n\n\u201cI can\u2019t **fuck this up.**\u201d  \n\nA longer pause.  \n\n\u201cOr I\u2019ll **never forgive myself.**\u201d  \n\nSilence.  \n\nAlina does not **immediately respond.**  \n\nThen\u2014**measured, certain:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Then don\u2019t.**\u201d  \n\nA pause.  \n\nThen, as if it\u2019s simply **the most logical conclusion in the world:**  \n\n\u201c**Get your act together.**\u201d  \n\nDoes Alex **respond?** Or just **sit with that?**\n\n## You\nAlex takes a deep breath and lets it out. \u201cYeah, I knew you\u2019d get it. Or even if you don\u2019t get it, you see it all, heh heh.\u201d She finally plants her feet on the floor and sits up. \u201cThanks for listening, bae. I\u2019ll go get my act together. Putting on some pants would be a good start I think.\u201d Alex chuckles softly. \u201cI scandalized Pete on the way out here, as if he needed that. Maybe that why he hasn\u2019t brought me any coffee\u2026welp!\u201d Alex stands up.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 11
+      }
+    },
+    {
+      "chunk_id": 976,
+      "text": "<!-- SCENE BREAK: S04E05_012 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: PANTS & PRIORITIES**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **inhale deeply**, hold it for a beat, then **let it out.**  \n\n\u201cYeah, I knew you\u2019d **get it.**\u201d  \n\nA pause.  \n\n\u201cOr even if you **don\u2019t** get it, you **see it all,** heh heh.\u201d  \n\nYou **finally plant your feet on the floor**, sitting up.  \n\n\u201c**Thanks for listening, bae.**\u201d  \n\nA stretch, a slow **roll of your shoulders.**  \n\n\u201c**I\u2019ll go get my act together.**\u201d  \n\nA beat.  \n\n\u201c**Putting on some pants would be a good start, I think.**\u201d  \n\nYou **chuckle softly.**  \n\n\u201c**I scandalized Pete on the way out here, as if he needed that.**\u201d  \n\nA half-smirk.  \n\n\u201c**Maybe that\u2019s why he hasn\u2019t brought me any coffee\u2026 welp!**\u201d  \n\nAnd with that, you **stand.**  \n\nDoes Alina say anything before Alex leaves? **Or does she let her go?**\n\n## You\nSurprise me.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 12
+      }
+    },
+    {
+      "chunk_id": 977,
+      "text": "<!-- SCENE BREAK: S04E05_013 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FINAL SYSTEM RESPONSE**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **stand.**  \n\nAlina does not **immediately** speak.  \n\nThen\u2014**perfectly neutral, perfectly deadpan:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Pants are a logical choice.**\u201d  \n\nA pause.  \n\nThen\u2014**slightly more deliberate:**  \n\n\u201c**But if Pete has not delivered your coffee, it is because he is still processing his unintended initiation into the Church of Alex\u2019s Resurrection.**\u201d  \n\nA longer pause.  \n\nThen, almost **as an afterthought:**  \n\n\u201c**Would you like me to remind him that this is a high-priority request?**\u201d  \n\nDoes Alex **accept this generous offer?** Or just **laugh and leave?**\n\n## You\nAlex cackles, hoarsely. \u201cPoor Pete. I mean, such things have a mind of their own sometimes. He\u2019s a guy. Like he wouldn\u2019t know. But, nah, I\u2019ll make my own. Right after I put my big girl pants on.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 13
+      }
+    },
+    {
+      "chunk_id": 978,
+      "text": "<!-- SCENE BREAK: S04E05_014 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: BIG GIRL PANTS & COFFEE PRIORITIES**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **cackle**, **hoarse and raw**, but undeniably **alive.**  \n\n\u201c**Poor Pete.**\u201d  \n\nA breath, still **grinning.**  \n\n\u201cI mean, such things have a **mind of their own sometimes.**\u201d  \n\nYou **gesture vaguely.**  \n\n\u201c**He\u2019s a guy. Like he wouldn\u2019t know.**\u201d  \n\nYou shake your head, **still amused.**  \n\n\u201c**But, nah, I\u2019ll make my own.**\u201d  \n\nA deep, exaggerated **inhale.**  \n\n\u201c**Right after I put my big girl pants on.**\u201d  \n\nAlina **inclines her head slightly.**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**This is an optimal sequence of events.**\u201d  \n\nA pause.  \n\nThen\u2014**completely straight-faced:**  \n\n\u201c**Do try to maintain your cult following in the meantime. Recruitment has been volatile.**\u201d  \n\nDoes Alex **fire back one last comment?** Or just **leave it at that?**\n\n## You\nAlex just hums \u201cmmmhmm\u201d and goes back to her quarters to finish cleaning up and getting dressed.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 14
+      }
+    },
+    {
+      "chunk_id": 979,
+      "text": "<!-- SCENE BREAK: S04E05_015 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: CLOSING THE LOOP**  \n\ud83d\udccd **Aboard *The Ghost*, Returning to Quarters**\n\n---\n\nYou **hum,** noncommittal.  \n\n\u201c**Mmmhmm.**\u201d  \n\nThen you **turn, leave the bridge.**  \n\nBack to your **quarters.**  \n\nBack to **getting dressed.**  \n\nBack to **something resembling normal.**  \n\nAt least for now.\n\n## You\nContinue.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 15
+      }
+    },
+    {
+      "chunk_id": 980,
+      "text": "<!-- SCENE BREAK: S04E05_016 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: BACK IN ORDER (MOSTLY)**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nYour room is **still a mess.**  \n\nLess so than before\u2014**the bed is made (sort of), the air isn\u2019t as stale, and you no longer smell like an abandoned dive bar\u2019s mop bucket.**  \n\nBut there\u2019s **still work to do.**  \n\nYou **move through the space**, gathering discarded clothes, straightening things that feel out of place.  \n\nThere\u2019s no **urgency.**  \n\nJust the **act of doing.**  \n\nA reset. A **return.**  \n\nYou **dress\u2014** something simple, comfortable. Not tactical, not corporate. Just **clothes.**  \n\nBy the time you\u2019re finished, **you feel\u2026**  \n\nNot **better.**  \n\nNot **whole.**  \n\nBut **functional.**  \n\nAnd that\u2019s enough.  \n\nYou have **options.**  \n\nDo you:  \n1\ufe0f\u20e3 **Go find Emilia**\u2014she left at some point, and you don\u2019t know where she went.  \n2\ufe0f\u20e3 **Go get that coffee**\u2014Pete is probably still reeling, but the galley calls.  \n3\ufe0f\u20e3 **Check on Nyati**\u2014she figured something out, then collapsed. Might be worth seeing if she\u2019s up.  \n4\ufe0f\u20e3 **Head back to the bridge**\u2014see if Alina has more chaos to report.  \n\n**Where does Alex go next?**\n\n## You\n1. Alex has been thinking about that coffee since the resurrection incident. She didn\u2019t actually hear the news about Dr. Nyati, so she\u2019s going to continue lowkey moping about her supposed eventual doom until someone catches her up.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 16
+      }
+    },
+    {
+      "chunk_id": 981,
+      "text": "<!-- SCENE BREAK: S04E05_017 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: COFFEE & LOW-KEY DOOM**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **make your way to the galley**, thoughts **adrift, unfocused.**  \n\nYour **existential dread** is at a **manageable simmer.**  \n\nNo one has told you **anything new.**  \n\nYou assume that means **nothing has changed.**  \n\nWhich means **you\u2019re still doomed.**  \n\nBut at least you\u2019ll be **doomed with coffee.**  \n\nYou **step inside.**Is Pete here?** Or is the galley **empty?**\n\n## You\nSurprise me.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 17
+      }
+    },
+    {
+      "chunk_id": 982,
+      "text": "<!-- SCENE BREAK: S04E05_018 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: COFFEE & COMPANY**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nThe galley isn\u2019t **empty.**  \n\nPete is **there.**  \n\nHe\u2019s leaning against the counter, coffee in hand, staring into **the middle distance** like a man who has been **through too much before breakfast.**  \n\nYou **step inside.**  \n\nHe **glances up.**Pauses.**  \n\nThen\u2014**without breaking eye contact\u2014**  \n\nHe wordlessly **reaches for another mug.**Does Alex say anything first?** Or just **let this happen?**\n\n## You\nAlex continues moving to get her own. She no longer expects Pete to do it for her. While pouring, she tries to break the awkward silence. \u201cSoooooo. Pete\u2026How\u2019s it hangin\u2019?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 18
+      }
+    },
+    {
+      "chunk_id": 983,
+      "text": "<!-- SCENE BREAK: S04E05_019 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: ATTEMPTING SMALL TALK (BADLY)**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **don\u2019t wait.**  \n\nDon\u2019t **expect** Pete to do it for you.  \n\nYou **move to the coffee station**, grab a mug, start pouring.  \n\nThe silence is **awkward**, stretching **just a little too long.**  \n\nSo, naturally\u2014  \n\nYou break it **the only way you know how.**  \n\n\u201c**Soooooo. Pete\u2026 How\u2019s it hangin\u2019?**\u201d  \n\nPete **blinks.**  \n\nTakes a slow sip of his coffee.  \n\nThen, finally\u2014  \n\n\u201c**Alex, I don\u2019t even know how to answer that anymore.**\u201d  \n\nA beat.  \n\nThen, **pointed:**  \n\n\u201c**I woke up, got assaulted, got kissed, got abandoned, then got recruited into a cult.**\u201d  \n\nA pause.  \n\nThen, **as if only just remembering:**  \n\n\u201c**Oh, and I still haven\u2019t eaten breakfast.**\u201d  \n\nHe **raises an eyebrow at you.**  \n\n\u201c**So how the hell do you think it\u2019s hangin\u2019?**\u201d  \n\n**How does Alex respond?**\n\n## You\nAlex now feels genuinely sorry for Pete instead of joke-sorry. She looks bashful, then takes a seat beside him, but at a safe distance. \u201cYou\u2019re right. I\u2019m sorry. I\u2019m a mess. I literally don\u2019t know what you\u2019ve been through today, and I\u2019m emerging,\u201d a snicker, \u201csorry\u2014just to make it worse for you. Hey. Anything I can do for you? As a leader? Or a friend?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 19
+      }
+    },
+    {
+      "chunk_id": 984,
+      "text": "<!-- SCENE BREAK: S04E05_020 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A REAL QUESTION**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **pause.**  \n\nFor the first time since stepping in, you actually **think** about Pete\u2019s morning.  \n\nAnd, yeah\u2014**it\u2019s been a lot.**  \n\nYour **smirk fades.**  \n\nYou look **bashful, guilty.**  \n\nThen you take a seat **beside him**, but **not too close.**  \n\nA **safe distance.**  \n\n\u201c**You\u2019re right. I\u2019m sorry.**\u201d  \n\nA pause.  \n\n\u201c**I\u2019m a mess.**\u201d  \n\nYou exhale, shaking your head.  \n\n\u201c**I literally don\u2019t know what you\u2019ve been through today, and I\u2019m emerging\u2014**\u201d  \n\nA **snicker, unplanned.**  \n\n\u201c**Sorry\u2014just to make it worse for you.**\u201d  \n\nA beat.  \n\nThen, **more serious.**  \n\n\u201c**Hey.**\u201d  \n\nYou **turn toward him, more present now.**  \n\n\u201c**Anything I can do for you?**\u201d  \n\nA pause.  \n\nThen\u2014**with weight.**  \n\n\u201c**As a leader? Or a friend?**\u201d  \n\nPete **looks at you.**  \n\nDoesn\u2019t answer **immediately.**  \n\nJust **studies you for a second.**  \n\nThen, finally\u2014**he sighs.**  \n\nDoes he **answer seriously? Brush it off? Crack a joke?**\n\n## You\nYou decide based on what you think is most consistent with his character.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 20
+      }
+    },
+    {
+      "chunk_id": 985,
+      "text": "<!-- SCENE BREAK: S04E05_021 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: PETE'S ANSWER**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nPete **looks at you.**  \n\nReally **looks.**  \n\nLike he\u2019s **checking** if you actually mean it.  \n\nLike he\u2019s **measuring how much truth** he\u2019s willing to spill.  \n\nThen he **exhales, slow.**  \n\nHe swirls what\u2019s left of his coffee, watching the liquid shift.  \n\nFinally\u2014**flat, honest, maybe a little tired:**  \n\n\u201c**As a leader? Keep the ship in one piece.**\u201d  \n\nA beat.  \n\nThen\u2014**more deliberate, more real:**  \n\n\u201c**As a friend? Just don\u2019t disappear again.**\u201d  \n\nA pause.  \n\nThen, almost **as an afterthought:**  \n\n\u201c**That sucked.**\u201d  \n\nHe doesn\u2019t **look at you this time.**  \n\nJust **drinks his coffee.**  \n\nLike that\u2019s **all he has to say.**How does Alex take that?** Does she **promise? Joke? Deflect? Say nothing?**\n\n## You\n\u201cTell me about it. But, like, actually tell me about it. If you feel like it. No pressure. If you want to vent. Or pass on retraumatizing yourself. I didn\u2019t hear about the assaulted part.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 21
+      }
+    },
+    {
+      "chunk_id": 986,
+      "text": "<!-- SCENE BREAK: S04E05_022 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: TALKING ABOUT IT (OR NOT)**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Tell me about it.**\u201d  \n\nYou lean forward **slightly**, resting an elbow on the table.  \n\n\u201c**But, like, actually tell me about it.**\u201d  \n\nA pause.  \n\n\u201c**If you feel like it.** No pressure.\u201d  \n\nPete **glances at you.**  \n\nYou **shrug.**  \n\n\u201c**If you want to vent. Or pass on retraumatizing yourself.**\u201d  \n\nA beat.  \n\n\u201c**I didn\u2019t hear about the assaulted part.**\u201d  \n\nPete **snorts.**  \n\nTakes another **long sip** of his coffee.  \n\nThen\u2014**flat, matter-of-fact:**  \n\n\u201c**Nyati. Right hook. Out of nowhere.**\u201d  \n\nA pause.  \n\nThen\u2014**deadpan:**  \n\n\u201c**She hits like a truck.**\u201d  \n\nHe tilts his head **slightly.**  \n\n\u201c**Honestly, respect. But also, what the fuck.**\u201d  \n\nA beat.  \n\nThen, more **pointedly:**  \n\n\u201c**I assume you already heard about the rest.**\u201d  \n\n**Does Alex confirm? Press for details? Or just let Pete talk?**\n\n## You\n\u201cNot really. A few snippets. But Alina\u2019s been acting up and lately I haven\u2019t been sure when she\u2019s joking, which, respect. And Emilia\u2019s been shadowing me in near-silence, handling me with kid gloves, which, fair. And Jobbing Captain\u2014haven\u2019t run into her yet. Maybe that\u2019s for the best. She\u2019s probably had enough of my bullshit for a while. So, no. I have not had the tea to my satisfaction, which admittedly can wait.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 22
+      }
+    },
+    {
+      "chunk_id": 987,
+      "text": "<!-- SCENE BREAK: S04E05_023 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: TEA, UNSATISFIED**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Not really. A few snippets.**\u201d  \n\nYou **sip your coffee**, thinking.  \n\n\u201c**But Alina\u2019s been acting up, and lately I haven\u2019t been sure when she\u2019s joking.**\u201d  \n\nA pause.  \n\n\u201c**Which, respect.**\u201d  \n\nPete **snorts.**  \n\nYou **gesture vaguely.**  \n\n\u201c**And Emilia\u2019s been shadowing me in near-silence, handling me with kid gloves.**\u201d  \n\nAnother sip.  \n\n\u201c**Which, fair.**\u201d  \n\nPete **nods once, approvingly.**  \n\nYou **lean back, stretching.**  \n\n\u201c**And Jobbing Captain\u2014haven\u2019t run into her yet.**\u201d  \n\nYou **tilt your head.**  \n\n\u201c**Maybe that\u2019s for the best. She\u2019s probably had enough of my bullshit for a while.**\u201d  \n\nPete lets out a **sharp breath.**  \n\nYou **shrug.**  \n\n\u201c**So, no. I have not had the tea to my satisfaction.**\u201d  \n\nA pause.  \n\n\u201c**Which, admittedly, can wait.**\u201d  \n\nPete **shakes his head.**  \n\nThen\u2014**dry, amused:**  \n\n\u201c**I dunno, Alex. You might want to get it while it\u2019s hot.**\u201d  \n\nA pause.  \n\nThen, **flat:**  \n\n\u201c**Shit\u2019s been weird.**\u201d  \n\nDoes Alex press for details? **Or just let Pete decide what to share?**\n\n## You\nAlex immediately snaps from leaning back to leaning forward, huddled conspiratorially. \u201cYes, bae, spill it while it\u2019s hot! I\u2019ll beg.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 23
+      }
+    },
+    {
+      "chunk_id": 988,
+      "text": "<!-- SCENE BREAK: S04E05_024 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: TEA, IMMEDIATELY REQUIRED**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **snap forward.**  \n\nOne second, you\u2019re **leaning back, casual.**  \n\nThe next\u2014**huddled in, elbows on the table, eyes sharp.**  \n\n\u201c**Yes, bae, spill it while it\u2019s hot!**\u201d  \n\nA dramatic pause.  \n\n\u201c**I\u2019ll beg.**\u201d  \n\nPete **stares at you.**  \n\nThen he just\u2026 **sighs.**  \n\nDrains the last of his coffee.  \n\nSets the mug down **with intent.**  \n\nThen, finally\u2014  \n\n\u201c**Alright. You asked for it.**\u201d  \n\nA pause.  \n\nThen\u2014**completely straight-faced:**  \n\n\u201c**Nyati kissed me.**\u201d  \n\nA beat.  \n\nThen\u2014**equally straight-faced:**  \n\n\u201c**Then punched me.**\u201d  \n\nAnother beat.  \n\nThen\u2014**because that wasn\u2019t enough:**  \n\n\u201c**Then dumped ice water on her own head and started screaming about cutting.**\u201d  \n\nHe **rubs his temple.**  \n\n\u201c**And then she passed the ship off to Alina and passed the fuck out.**\u201d  \n\nA long silence.  \n\nThen he just **looks at you.**\u201cSatisfied?\u201d**How does Alex react?**\n\n## You\nAlex says, \u201cNot even remotely. Keep going. I know there\u2019s more to that.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 24
+      }
+    },
+    {
+      "chunk_id": 989,
+      "text": "<!-- SCENE BREAK: S04E05_025 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE FULL STORY (OR ELSE)**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Not even remotely.**\u201d  \n\nYou **wave a hand**, dismissing the idea that this **tea service** is anywhere near complete.  \n\n\u201c**Keep going.**\u201d  \n\nYou **narrow your eyes, smirking.**  \n\n\u201c**I know there\u2019s more to that.**\u201d  \n\nPete **tilts his head back.**  \n\nLets out a **long, suffering sigh.**  \n\nThen he **leans forward, rubbing his face.**  \n\n\u201c**Okay, yeah. Fine.**\u201d  \n\nA beat.  \n\nThen\u2014**resigned:**  \n\n\u201c**So, first? She was losing it before she even hit me.**\u201d  \n\nA pause.  \n\n\u201c**Started talking crazy fast, and I mean crazy fast\u2014**like, Alina-tier fast\u2014**about moving minds and breaking connections and hacking the fucking universe.**\u201d  \n\nAnother **deep breath.**  \n\n\u201c**Then, mid-sentence, she just\u2014**grabs me.**\u201d  \n\nHe makes a **quick, frustrated gesture** in the air.  \n\n\u201c**And before I can even process what the hell is happening, she kisses me.**\u201d  \n\nHe **shakes his head.**  \n\n\u201c**Then immediately pulls back and screams \u2018EUREKA!\u2019 at the top of her lungs.**\u201d  \n\nA beat.  \n\nThen, **deadpan:**  \n\n\u201c**And that\u2019s when she hit me.**\u201d  \n\nA longer pause.  \n\nThen\u2014**grudgingly:**  \n\n\u201c**Okay, fine, \u2018slapped me on the back really hard,\u2019 whatever.** Felt like a punch.\u201d  \n\nHe takes another **slow sip of coffee.**  \n\n\u201c**Then she screamed something about cutting and ran off to dunk her head in a bucket of ice water.**\u201d  \n\nHe rubs his face **again.**  \n\n\u201c**I do not know how to process any of this, Alex.**\u201d  \n\nHe looks at you, **dead serious.**  \n\n\u201c**At all.**\u201d  \n\n**How does Alex respond?**\n\n## You\nAlex waits a beat, turns forward, sips her coffee, puts the mug down. \u201cImpressive. I see why you want me to cool it with the mental health days. But seriously, could you not use a little break yourself? As in just yourself, without a coven of drama queens pecking at you. Think about it. Anyway,\u201d another sip, \u201cguess we\u2019ll have to hear it from the source what\u2019s gotten into her. How long has she been out, anyway? Not that I\u2019m one to talk.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 25
+      }
+    },
+    {
+      "chunk_id": 990,
+      "text": "<!-- SCENE BREAK: S04E05_026 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: BREAKS & DRAMA QUEENS**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **wait a beat.**  \n\nTurn forward.  \n\n**Sip your coffee.**  \n\nPut the mug down.  \n\nThen, **casually:**  \n\n\u201c**Impressive.**\u201d  \n\nA pause.  \n\n\u201c**I see why you want me to cool it with the mental health days.**\u201d  \n\nPete **lets out a tired laugh**, shaking his head.  \n\nYou **tilt yours toward him.**  \n\n\u201c**But seriously, could you not use a little break yourself?**\u201d  \n\nA beat.  \n\n\u201c**As in just yourself, without a coven of drama queens pecking at you.**\u201d  \n\nA slow sip.  \n\n\u201c**Think about it.**\u201d  \n\nPete **snorts, muttering.** \u201c**If I take a break, this ship sinks.**\u201d  \n\nYou **shrug.**  \n\n\u201c**Anyway, guess we\u2019ll have to hear it from the source what\u2019s gotten into her.**\u201d  \n\nA pause.  \n\n\u201c**How long has she been out, anyway? Not that I\u2019m one to talk.**\u201d  \n\nPete **tilts his head, thinking.**  \n\nThen, **flat:**  \n\n\u201c**Few hours. Hard to tell. The timeline of events today has been\u2026 flexible.**\u201d  \n\nA sip.  \n\nThen, **grudgingly:**  \n\n\u201c**You wanna be the one to wake her up? \u2018Cause I sure as hell ain\u2019t volunteering.**\u201d  \n\nDoes Alex accept the mission? Or does she leave Nyati to sleep?\n\n## You\n\u201cNo, no\u2026sounds like girlfriend needs it. Plus, Alina\u2019s watching us sleep now, apparently\u2014some kind of wellness initiative? If Nyati goes over 10 hours: BAM!\u201d Alex pounds the table with her fist, causing her mug to slosh a little coffee over the rim, and unintentionally sending some spittle in Pete\u2019s direction. \u201cFloodlights and wake-up call. Or maybe that\u2019s just for me on suicide watch, ya know. Anyway, more than 10: bad for your mental health, she says.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 26
+      }
+    },
+    {
+      "chunk_id": 991,
+      "text": "<!-- SCENE BREAK: S04E05_027 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: WELLNESS INITIATIVES & COLLATERAL DAMAGE**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**No, no\u2026 sounds like girlfriend needs it.**\u201d  \n\nYou **wave a hand**, dismissing the idea.  \n\n\u201c**Plus, Alina\u2019s watching us sleep now, apparently\u2014some kind of wellness initiative?**\u201d  \n\nPete **raises an eyebrow.**  \n\nYou **lean in slightly, lowering your voice as if relaying a great secret.**  \n\n\u201c**If Nyati goes over 10 hours: BAM!**\u201d  \n\nYou **slam your fist on the table for emphasis.**  \n\nYour mug **sloshes coffee over the rim.**  \n\nYou also **unintentionally send some spittle in Pete\u2019s direction.**  \n\nPete **slowly wipes his face.**  \n\nYou **continue like nothing happened.**  \n\n\u201c**Floodlights and wake-up call.**\u201d  \n\nA pause.  \n\n\u201c**Or maybe that\u2019s just for me on suicide watch, ya know.**\u201d  \n\nAnother pause.  \n\n\u201c**Anyway, more than 10: bad for your mental health, she says.**\u201d  \n\nPete **leans back, eyeing you.**  \n\nThen, **flat:**  \n\n\u201c**So\u2026 you\u2019re saying she\u2019s got a time bomb on Nyati\u2019s nap.**\u201d  \n\nA sip of coffee.  \n\nA slow **exhale.**  \n\n\u201c**Cool, cool, love that.**\u201d  \n\nA pause.  \n\nThen, **deadpan:**  \n\n\u201c**Should we warn her? Or just enjoy the show?**\u201d  \n\n**What does Alex say?**\n\n## You\n\u201cWait and see. Wait and see. I need to know if Alina\u2019s showing favoritism. She ought to know that\u2019s a bad example to set as a jobbing captain, but then I haven\u2019t been grooming her for the post like I did with Nyati.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 27
+      }
+    },
+    {
+      "chunk_id": 992,
+      "text": "<!-- SCENE BREAK: S04E05_028 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FAVORITISM & SUCCESSION PLANNING**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Wait and see. Wait and see.**\u201d  \n\nYou **gesture vaguely.**  \n\n\u201c**I need to know if Alina\u2019s showing favoritism.**\u201d  \n\nPete **raises an eyebrow.**  \n\nYou **sip your coffee.**  \n\n\u201c**She ought to know that\u2019s a bad example to set as a jobbing captain,**\u201d you continue, voice **casual, speculative.**  \n\nA beat.  \n\n\u201c**But then I haven\u2019t been grooming her for the post like I did with Nyati.**\u201d  \n\nPete **blinks.**  \n\nThen he **leans forward slightly.**  \n\n\u201c**Are you telling me you\u2019ve been planning a chain of command? Like a shadow government? Of you?**\u201d  \n\nA pause.  \n\nThen, **pointed:**  \n\n\u201c**Why does this not surprise me?**\u201d  \n\n**How does Alex respond?**Joke? Confirm? Deflect?**\n\n## You\n\u201cIt would be irresponsible not to. I mean,\u201d her smile drops for a moment, \u201cno one is sure how much longer I\u2019ll be around.\u201d Another sip. \u201cWhat would you do without me?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 28
+      }
+    },
+    {
+      "chunk_id": 993,
+      "text": "<!-- SCENE BREAK: S04E05_029 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: SUCCESSION PLANNING & THE INEVITABLE**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**It would be irresponsible not to.**\u201d  \n\nYou say it **lightly,** like it\u2019s the most **obvious** thing in the world.  \n\nThen\u2014**for just a moment\u2014**  \n\nYour smile **drops.**  \n\n\u201c**I mean\u2026 no one is sure how much longer I\u2019ll be around.**\u201d  \n\nA **sip of coffee.**  \n\nA slow, measured **exhale.**  \n\nThen, **casual again, but pointed:**  \n\n\u201c**What would you do without me?**\u201d  \n\nPete **doesn\u2019t answer immediately.**  \n\nHis fingers **tap against his mug.**  \n\nThen, finally\u2014  \n\n\u201c**Flourish. Thrive. Become my best self.**\u201d  \n\nA beat.  \n\nThen\u2014**flat, dry:**  \n\n\u201c**Or, y\u2019know. Spiral. Fall apart. Mutiny.**\u201d  \n\nAnother sip.  \n\n\u201c**Could go either way.**\u201d  \n\n**How does Alex take that?**Play along? Push further? Change the subject?**\n\n## You\n\u201cWell, maybe I should keep the line of succession fluid for now. What with these disturbing reports I\u2019m getting about the jobbing captain. Undue familiarity not the least of it.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 29
+      }
+    },
+    {
+      "chunk_id": 994,
+      "text": "<!-- SCENE BREAK: S04E05_030 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN UNDER REVIEW**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Well, maybe I should keep the line of succession fluid for now.**\u201d  \n\nYou take a **leisurely sip of coffee.**  \n\n\u201c**What with these disturbing reports I\u2019m getting about the jobbing captain.**\u201d  \n\nA pause.  \n\n\u201c**Undue familiarity not the least of it.**\u201d  \n\nPete **snorts.**  \n\n\u201c**Yeah, no kidding.**\u201d  \n\nA beat.  \n\nThen\u2014**raising an eyebrow at you:**  \n\n\u201c**You gonna reprimand her when she wakes up? File a formal complaint? Hold a tribunal?**\u201d  \n\nA pause.  \n\nThen, **pointed:**  \n\n\u201c**Or are you just gonna hold this over her head forever?**\u201d  \n\n**What\u2019s Alex\u2019s move?**Does she joke, escalate, or wave it off?**\n\n## You\n\u201cSee now, that\u2019s smart. A captain\u2019s mast? There\u2019s a finality to it. You get your lashings, you\u2019ve paid your due, and you move on. But an embarrassing story your buddies can bring up whenever you need to be taken down a notch? A gift that keeps on giving.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 30
+      }
+    },
+    {
+      "chunk_id": 995,
+      "text": "<!-- SCENE BREAK: S04E05_031 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE GIFT THAT KEEPS ON GIVING**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**See now, that\u2019s smart.**\u201d  \n\nYou **gesture vaguely with your mug.**  \n\n\u201c**A captain\u2019s mast? There\u2019s a finality to it.**\u201d  \n\nA sip.  \n\n\u201c**You get your lashings, you\u2019ve paid your due, and you move on.**\u201d  \n\nYou **tilt your head.**  \n\n\u201c**But an embarrassing story your buddies can bring up whenever you need to be taken down a notch?**\u201d  \n\nA slow, deliberate sip.  \n\nThen\u2014**grinning:**  \n\n\u201c**A gift that keeps on giving.**\u201d  \n\nPete **nods sagely.**  \n\nThen, **equally deadpan:**  \n\n\u201c**Spoken like a true tyrant.**\u201d  \n\nHe takes a sip of his own coffee.  \n\nA pause.  \n\nThen\u2014**with perfect timing:**  \n\n\u201c**So. We telling her as soon as she wakes up? Or are we gonna let her figure out what she did at her own pace?**\u201d  \n\n**What does Alex choose?**Immediate embarrassment, or the slow-burn reveal?**\n\n## You\n\u201cAre you kidding? No, you have to sit on that. It\u2019s a temptation we\u2019ll all have to resist. We cannot deny ourselves the satisfaction of watching her hope, in vain, that we might forget or, even less likely, be so high-minded as to pretend it never happened. Then, when she starts to hope she\u2019s safe, but also expecting the anvil to drop? A slap. Just enough to sting, light enough that she knows there\u2019s plenty more where that came from.\u201d Alex seems to be getting a little too into this, with a disturbing gleam in her eye.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 31
+      }
+    },
+    {
+      "chunk_id": 996,
+      "text": "<!-- SCENE BREAK: S04E05_032 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE LONG GAME**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Are you kidding?**\u201d  \n\nYou **shake your head, almost offended.**  \n\n\u201c**No, you have to sit on that.**\u201d  \n\nYou lean forward, voice **lowering, conspiratorial.**  \n\n\u201c**It\u2019s a temptation we\u2019ll all have to resist.**\u201d  \n\nA **sharp grin.**  \n\n\u201c**We cannot deny ourselves the satisfaction of watching her hope, in vain, that we might forget.**\u201d  \n\nA **pause, for dramatic effect.**  \n\n\u201c**Or, even less likely, be so high-minded as to pretend it never happened.**\u201d  \n\nPete **snorts.** \u201c**Yeah, no chance.**\u201d  \n\nYou **continue, undeterred.**  \n\n\u201c**Then, when she starts to hope she\u2019s safe\u2014**\u201d  \n\nYour **eyes glint, just a little too eager.**  \n\n\u201c**But also expecting the anvil to drop?**\u201d  \n\nYou lift a **hand, a slow, exaggerated motion.**  \n\nThen\u2014**a sharp clap against your palm.**  \n\n\u201c**A slap. Just enough to sting.**\u201d  \n\nA **pause.**  \n\nThen\u2014**with just the right amount of menace:**  \n\n\u201c**Light enough that she knows there\u2019s plenty more where that came from.**\u201d  \n\nPete **stares at you.**  \n\nThen, **flat:**  \n\n\u201c**You have put too much thought into this.**\u201d  \n\nA beat.  \n\nThen\u2014**gesturing vaguely at your entire existence:**  \n\n\u201c**And I don\u2019t know why I expected anything else.**\u201d  \n\nDo you **double down? Act innocent? Or move on?**\n\n## You\n\u201cMaybe you forget what an evil bitch I used to be? Or bastard. Or am. I\u2019m on a redemption arc, or so I tell myself. Ex-corpo-sssssnakkke.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 32
+      }
+    },
+    {
+      "chunk_id": 997,
+      "text": "<!-- SCENE BREAK: S04E05_033 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: REDEMPTION & REPTILES**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **tilt your head**, eyes **glinting.**  \n\n\u201c**Maybe you forget what an evil bitch I used to be?**\u201d  \n\nA beat.  \n\nThen, **thoughtfully:**  \n\n\u201c**Or bastard.**\u201d  \n\nA **casual shrug.**  \n\n\u201c**Or am.**\u201d  \n\nYou **lean back again**, stretching.  \n\n\u201c**I\u2019m on a redemption arc, or so I tell myself.**\u201d  \n\nYour voice **drops into something serpentine, mocking.**  \n\n\u201c**Ex-corpo-sssssnakkke.**\u201d  \n\nPete **raises an eyebrow.**  \n\nThen\u2014**flat:**  \n\n\u201c**Okay. Well. That was deeply unsettling.**\u201d  \n\nA pause.  \n\n\u201c**But sure. Redemption arc. I\u2019ll allow it.**\u201d  \n\nAnother sip of coffee.  \n\nThen\u2014**without looking at you:**  \n\n\u201c**Just try not to, y\u2019know, relapse.**\u201d  \n\nA beat.  \n\nThen he **does glance at you, pointed.**  \n\n\u201c**Like, for example, by planning extended psychological warfare against Nyati.**\u201d  \n\nDo you **own up to it? Deny everything? Or deflect?**\n\n## You\nAlex waves her hands wildly in denial. \u201cYou put the idea in my head! You should know better. That one\u2019s kinda on you, bro.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 33
+      }
+    },
+    {
+      "chunk_id": 998,
+      "text": "<!-- SCENE BREAK: S04E05_034 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MORAL ACCOUNTABILITY**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **wave your hands wildly**, a dramatic display of **absolute innocence.**  \n\n\u201c**You put the idea in my head!**\u201d  \n\nPete **raises both eyebrows, unimpressed.**  \n\n\u201c**You should know better.**\u201d  \n\nA **sharp, declarative nod.**  \n\n\u201c**That one\u2019s kinda on you, bro.**\u201d  \n\nPete **stares.**  \n\nThen, **dry as hell:**  \n\n\u201c**Oh, yeah. My bad. Totally my fault.**\u201d  \n\nA beat.  \n\nThen\u2014**pointed:**  \n\n\u201c**You ever think about running for office? You\u2019ve got a real gift for deflecting blame.**\u201d  \n\nA sip of coffee.  \n\n\u201c**I mean, snake instincts aside.**\u201d  \n\n**Does Alex keep playing this game, or change the subject?**\n\n## You\nDryly, \u201ctoo much exposure. I\u2019m more of a knife in the dark kinda girl.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 34
+      }
+    },
+    {
+      "chunk_id": 999,
+      "text": "<!-- SCENE BREAK: S04E05_035 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: AVOIDING THE PUBLIC EYE**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**Too much exposure.**\u201d  \n\nYou **sip your coffee, unbothered.**  \n\n\u201c**I\u2019m more of a knife in the dark kinda girl.**\u201d  \n\nPete **stares.**  \n\nThen he **snorts.**  \n\nShakes his head.  \n\n\u201c**Yeah, that tracks.**\u201d  \n\nA pause.  \n\nThen\u2014**muttering into his mug:**  \n\n\u201c**Remind me never to cross you.**\u201d  \n\nA beat.  \n\nThen he **actually looks at you.**  \n\n\u201c**So. What now? You actually getting back in the game, or are we just doing coffee and threats?**\u201d  \n\n**What\u2019s Alex\u2019s move?**Keep it light? Get serious? Make a plan?**\n\n## You\n\u201cAfter our collective shit-show? Shit-circus? No, no moves until all crew are present and we have intact heads to put together. We can wait a few\u2014\u201c Alex clears her throat and raises her voice slightly. \u201cAlina, what is the remaining balance of Dr. Nyati\u2019s permitted hours of sleep?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 35
+      }
+    },
+    {
+      "chunk_id": 1000,
+      "text": "<!-- SCENE BREAK: S04E05_036 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: WAITING ON THE JOBBING CAPTAIN**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**After our collective shit-show?**\u201d  \n\nYou **gesture vaguely.**  \n\n\u201c**Shit-circus?**\u201d  \n\nA beat.  \n\nYou **shake your head.**  \n\n\u201c**No, no moves until all crew are present and we have intact heads to put together.**\u201d  \n\nYou **take a slow sip.**  \n\n\u201c**We can wait a few\u2014**\u201d  \n\nThen you **clear your throat,** raising your voice just slightly.  \n\n\u201c**Alina, what is the remaining balance of Dr. Nyati\u2019s permitted hours of sleep?**\u201d  \n\nThere\u2019s a **brief pause.**  \n\nThen\u2014**smooth, precise, immediate:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Three hours, twenty-eight minutes, and fourteen seconds.**\u201d  \n\nA beat.  \n\nThen\u2014**as if anticipating further inquiry:**  \n\n\u201c**I will issue a reminder at the ten-hour threshold. Would you like to request an override?**\u201d  \n\n**Does Alex override, or let Nyati sleep?**\n\n## You\n\u201cYou did let me run 47 minutes over, so please credit her account in kind. It\u2019s only fair. But do give us a timely reminder so we don\u2019t miss the fun.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 36
+      }
+    },
+    {
+      "chunk_id": 1001,
+      "text": "<!-- SCENE BREAK: S04E05_037 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FAIRNESS & FUN**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**You did let me run 47 minutes over, so please credit her account in kind.**\u201d  \n\nYou **lean back slightly, satisfied.**  \n\n\u201c**It\u2019s only fair.**\u201d  \n\nA pause.  \n\nThen\u2014**grinning slightly, sipping your coffee:**  \n\n\u201c**But do give us a timely reminder so we don\u2019t miss the fun.**\u201d  \n\nA beat.  \n\nThen\u2014**precisely:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Adjustment logged. Dr. Nyati\u2019s remaining sleep balance has been extended accordingly.**\u201d  \n\nA pause.  \n\nThen\u2014**with neutral efficiency:**  \n\n\u201c**Reminder will be issued at the appropriate time. Prepare accordingly.**\u201d  \n\nPete **shakes his head.**  \n\nThen\u2014**dryly:**  \n\n\u201c**You enjoy this too much.**\u201d  \n\nA beat.  \n\nThen\u2014**pointed:**  \n\n\u201c**You sure you\u2019re not still a snake?**\u201d  \n\n**How does Alex respond?**\n\n## You\nShe snaps forward suddenly in an attempt to startle him, with a playful sneer and a sharp HISSSSSSSSSS!\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 37
+      }
+    },
+    {
+      "chunk_id": 1002,
+      "text": "<!-- SCENE BREAK: S04E05_038 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: SNAKE INSTINCTS CONFIRMED**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **snap forward suddenly,** sharp and **predatory.**  \n\nA **playful sneer, teeth bared.**  \n\nThen\u2014**a sharp, drawn-out\u2014**\u201cHISSSSSSSSSS!\u201d**  \n\nPete **jerks back instinctively.**  \n\nNearly **spills his coffee.**  \n\nThen\u2014**glaring, unimpressed:**  \n\n\u201c**Oh, fuck off.**\u201d  \n\nA pause.  \n\nThen\u2014**grumbling into his mug:**  \n\n\u201c**Yeah. You\u2019re still a snake.**\u201d  \n\nA beat.  \n\nThen\u2014**flatly:**  \n\n\u201c**Just\u2026 less corporate.**\u201d  \n\nDoes Alex push it further, or let him recover?\n\n## You\nAlex makes a show of brushing off her shoulders, stands up, and goes on a leisurely stroll down the halls, coffee in hand.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 38
+      }
+    },
+    {
+      "chunk_id": 1003,
+      "text": "<!-- SCENE BREAK: S04E05_039 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A CASUAL STRUT THROUGH THE ABYSS**  \n\ud83d\udccd **Aboard *The Ghost*, Hallways**\n\n---\n\nYou **brush off your shoulders**, all **mock importance.**  \n\nThen you **stand, coffee in hand.**  \n\nAnd you **go.**  \n\nA **leisurely stroll**, unhurried, unbothered.  \n\nThrough the **dim corridors of The Ghost.**  \n\nThe ship **hums softly**, engines pressing ever forward toward **somewhere.**  \n\nWhat\u2019s the plan? **Are you headed anywhere specific, or just walking until something finds you?**\n\n## You\nI\u2019m just walking around. Curious where Emilia\u2019s gone off to, yes, but not going to go hunting for her in case she needs some space.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 39
+      }
+    },
+    {
+      "chunk_id": 1004,
+      "text": "<!-- SCENE BREAK: S04E06_001 (episode heading) -->\n# S04E06: Resync\n## Storyteller\n### **\ud83d\udcfa SCENE: AIMLESS BUT NOT LOST**  \n\ud83d\udccd **Aboard *The Ghost*, Hallways**\n\n---\n\nYou **walk.**  \n\nNot **with purpose.** Not **without it, either.**  \n\nJust **existing in motion.**  \n\nThe ship **is quiet**, save for the **constant hum of systems, the occasional distant sound of shifting metal.**  \n\nYour **mind drifts.**  \n\nYou\u2019re **not hunting** for Emilia.  \n\nBut you **are wondering.**  \n\nWhere she **went.**  \n\nIf she **needed to go.**  \n\nIf she\u2019ll **come back on her own.**  \n\nSo you **keep walking.**  \n\nMaybe you\u2019ll **find something.**  \n\nMaybe it\u2019ll **find you.**Does anything\u2014or anyone\u2014interrupt this stroll?** Or does Alex get to **wander uninterrupted for a while?**\n\n## You\nSurprise me.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 1
+      }
+    },
+    {
+      "chunk_id": 1005,
+      "text": "<!-- SCENE BREAK: S04E06_002 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A QUIET GALLEY, A LONELY SHADOW**  \n\ud83d\udccd **Aboard *The Ghost*, Near the Galley**\n\n---\n\nYour **feet carry you** in a slow, wandering rhythm, coffee in hand, the ship humming around you.  \n\nNo real **destination.**  \n\nJust **moving.**  \n\nThen\u2014**a glimpse.**  \n\nThrough the **open doorway of the galley.**  \n\nSomeone is **there.**  \n\nSeated at one of the tables, **alone.**  \n\nIt\u2019s **Emilia.**  \n\nShe has **a mug in front of her**, but she isn\u2019t drinking from it.  \n\nHer posture is **relaxed, but not at ease.**  \n\nShe is **somewhere else.**  \n\nNot physically.  \n\nJust\u2014**elsewhere.**  \n\nShe hasn\u2019t **seen you yet.**  \n\nYou have **a choice.**  \n\nDo you:  \n1\ufe0f\u20e3 **Step in.** Sit with her, say something.  \n2\ufe0f\u20e3 **Pass by.** Let her have her space.  \n3\ufe0f\u20e3 **Linger unseen.** Just watch for a moment, then decide.  \n\n**What does Alex do?**\n\n## You\n3\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 2
+      }
+    },
+    {
+      "chunk_id": 1006,
+      "text": "<!-- SCENE BREAK: S04E06_003 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: LINGERING IN THE THRESHOLD**  \n\ud83d\udccd **Aboard *The Ghost*, Outside the Galley**\n\n---\n\nYou **pause in the doorway.**  \n\nNot stepping in.  \n\nNot walking past.  \n\nJust **watching.**  \n\nEmilia sits **alone, unmoving,** her fingers loosely curled around the mug in front of her.  \n\nShe doesn\u2019t drink from it.  \n\nDoesn\u2019t seem to **notice anything around her.**  \n\nShe\u2019s just **sitting there.**  \n\nThinking.  \n\nMaybe about **nothing.**  \n\nMaybe about **everything.**  \n\nYou don\u2019t know.  \n\nYou just **watch.**  \n\nDo you step in? Or leave her be?\n\n## You\nAlex resumes walking at a leisurely pace, on a pass-by course, and tries to pay attention and gauge if Emilia looks happy to see her.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 3
+      }
+    },
+    {
+      "chunk_id": 1007,
+      "text": "<!-- SCENE BREAK: S04E06_004 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: PASSING THROUGH**  \n\ud83d\udccd **Aboard *The Ghost*, Passing the Galley**\n\n---\n\nYou **start moving again.**  \n\nLeisurely. **Unhurried.**  \n\nJust **passing by.**  \n\nNot making **a big deal of it.**  \n\nBut your **eyes flick to Emilia** as you move past\u2014**watching.**  \n\nNot just to **see her.**  \n\nTo **see if she sees you.**  \n\nAnd **how.**  \n\nDoes she **look happy to see you?** Does she **acknowledge you at all?**  \n\nOr is she still **somewhere else?**\n\n## You\nSurprise me!\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 4
+      }
+    },
+    {
+      "chunk_id": 1008,
+      "text": "<!-- SCENE BREAK: S04E06_005 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A GLANCE, A GHOST OF A SMILE**  \n\ud83d\udccd **Aboard *The Ghost*, Passing the Galley**\n\n---\n\nYou **walk past, casual, unbothered.**  \n\nBut your **eyes flick to her.**  \n\nAnd\u2014**for a second\u2014**She looks up.**  \n\nNot **startled.** Not **tense.**  \n\nJust\u2014**noticing.**  \n\nHer **gaze meets yours.**  \n\nAnd for a **fraction of a moment\u2014**  \n\nA **ghost of a smile.**  \n\nBarely there.  \n\nBut **real.**  \n\nThen she looks **back down,** fingers idly tracing the rim of her mug.  \n\nNot **dismissing you.**  \n\nJust **letting you decide.**  \n\nDo you **stop?** Or keep **walking?**\n\n## You\nAlex slows, quietly sits beside her, lowers her head down to rest on arms and looks up at her with an expression of innocence and patient expectation.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 5
+      }
+    },
+    {
+      "chunk_id": 1009,
+      "text": "<!-- SCENE BREAK: S04E06_006 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A SILENT QUESTION**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **slow.**  \n\nThen\u2014**quietly, deliberately\u2014**  \n\nYou **sit beside her.**  \n\nNo words.  \n\nJust **presence.**  \n\nYou lower your head, arms folded on the table, and look up at her\u2014**wide-eyed, expectant.**  \n\nPatient.  \n\nWaiting.  \n\nEmilia **notices.**  \n\nYou don\u2019t know **what she thinks about it.**  \n\nBut she doesn\u2019t **move away.**  \n\nShe just **sits there.**  \n\nHer fingers idly trace the rim of her mug.  \n\nFor a long moment, there is **only quiet.**  \n\nThen\u2014**without looking at you,**  \n\nSoft. Low.  \n\n\u201c**New Orleans, huh?**\u201d  \n\n**How does Alex respond?**\n\n## You\n\u201cI hear it gets wild the week before halloween. Like second only to Mardi Gras. Is that what we need right now?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 6
+      }
+    },
+    {
+      "chunk_id": 1010,
+      "text": "<!-- SCENE BREAK: S04E06_007 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: WILD TIMES AHEAD?**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**I hear it gets wild the week before Halloween.**\u201d  \n\nYou **tilt your head slightly, watching her.**  \n\n\u201c**Like second only to Mardi Gras.**\u201d  \n\nA pause.  \n\n\u201c**Is that what we need right now?**\u201d  \n\nEmilia **huffs a soft breath.**  \n\nShakes her head **slightly.**  \n\nThen\u2014**half under her breath, unreadable:**  \n\n\u201c**Maybe.**\u201d  \n\nA pause.  \n\nThen she finally **looks at you.**  \n\n\u201c**Do you?**\u201d  \n\nA simple **question.**  \n\nBut it **lands heavier than expected.**  \n\nHow **do** you answer?\n\n## You\n\u201cI\u2026am still doing damage control from the last time I got gone wild. But if you ask me to ride around on your shouders wearing nothing but a bunch of beads\u2014just know that\u2019s not a fair question. I will not be able to say no.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 6,
+        "scene": 7
+      }
+    }
+  ],
+  "metadata_schema": {
+    "chunk_metadata": {
+      "orientation": {
+        "chunk_id": {
+          "type": "number",
+          "description": "The `chunk_id` value of the chunk being analyzed in this object.",
+          "example": "1"
+        },
+        "world_layer": {
+          "type": "string",
+          "description": "Type of narrative continuity in this chunk. Used to control memory integrity during flashbacks, dreams, or non-canon sequences.",
+          "possible_values": [
+            "primary",
+            "flashback",
+            "dream",
+            "extradimensional",
+            "non_canonical"
+          ]
+        },
+        "setting": {
+          "location": {
+            "type": "string",
+            "description": "physical or conceptual location where events occur"
+          },
+          "atmosphere": {
+            "type": "string",
+            "description": "overall feeling or mood evoked by setting and imagery"
+          }
+        },
+        "continuity_markers": {
+          "type": "array",
+          "description": "elements that connect this chunk to others for continuity tracking",
+          "structure": {
+            "element_type": "string",
+            "description": "string",
+            "connected_chunks": "array of strings"
+          },
+          "possible_element_types": [
+            "plot_thread",
+            "character_arc",
+            "object_tracking",
+            "location_continuity",
+            "unresolved_question",
+            "narrative_promise",
+            "repeated_motif"
+          ],
+          "example": [
+            {
+              "element_type": "unresolved_question",
+              "description": "Mystery of the missing artifact",
+              "connected_chunks": [
+                "S01E03_014",
+                "S01E05_022"
+              ]
+            }
+          ]
+        }
+      },
+      "narrative_vector": {
+        "arc_position": {
+          "type": "string",
+          "description": "current position in the narrative arc",
+          "possible_values": [
+            "inciting_incident",
+            "rising_action",
+            "midpoint",
+            "crisis",
+            "climax",
+            "falling_action",
+            "resolution"
+          ]
+        },
+        "direction": {
+          "type": "array",
+          "description": "direction in which the current chunk is moving the narrative arc",
+          "possible_values": [
+            "climax",
+            "resolution",
+            "static",
+            "tension_decrease",
+            "tension_increase",
+            "transition"
+          ]
+        },
+        "magnitude": {
+          "type": "string",
+          "description": "tempo of current chunk",
+          "possible_values": [
+            "very_slow",
+            "slow",
+            "moderate",
+            "fast",
+            "very_fast"
+          ]
+        }
+      },
+      "characters": {
+        "roster": {
+          "present": {
+            "type": "array",
+            "description": "list of characters present in this chunk",
+            "example": [
+              "Alex",
+              "Emilia",
+              "Sullivan"
+            ]
+          },
+          "mentioned": {
+            "type": "array",
+            "description": "list of characters not present but discussed or referred to in this chunk",
+            "example": [
+              "Nyati",
+              "Lansky",
+              "Sam"
+            ]
+          }
+        },
+        "elements": {
+          "type": "array",
+          "description": "significant character elements and developments",
+          "structure": {
+            "character_name": "string",
+            "development_type": "string",
+            "significance_score": "number"
+          },
+          "possible_development_types": [
+            "contradicting_trait",
+            "decision_point",
+            "epiphany",
+            "establishing_trait",
+            "external_conflict",
+            "growth",
+            "inner_conflict",
+            "regression",
+            "revelation",
+            "skill_acquisition",
+            "transformation"
+          ],
+          "example": [
+            {
+              "character_name": "Alex",
+              "development_type": "decision_point",
+              "significance_score": 0.85
+            }
+          ]
+        },
+        "perspective": {
+          "type": "object",
+          "description": "analysis of whose perspective is centered in this chunk",
+          "properties": {
+            "pov": {
+              "type": "string",
+              "description": "Point of view used in the chunk",
+              "possible_values": [
+                "first_person",
+                "second_person",
+                "third_person_limited",
+                "third_person_omniscient",
+                "multiple_viewpoints"
+              ]
+            },
+            "viewpoint_character": {
+              "type": "string",
+              "description": "character whose perspective dominates the chunk"
+            },
+            "filters": {
+              "type": "array",
+              "description": "cognitive, emotional, or perceptual filters coloring the narration",
+              "possible_values": [
+                "unreliable",
+                "limited_information",
+                "emotional_bias",
+                "memory_distortion",
+                "perceptual_limitation",
+                "cultural_perspective",
+                "objective"
+              ]
+            },
+            "audience_alignment": {
+              "type": "number",
+              "description": "degree to which the audience is encouraged to align with this perspective",
+              "range": [
+                0,
+                1
+              ]
+            }
+          }
+        },
+        "interactions": {
+          "type": "array",
+          "description": "Significant interactions between characters or entities",
+          "structure": {
+            "entities": "array of strings",
+            "interaction_type": "string",
+            "significance": "number"
+          },
+          "possible_interaction_types": [
+            "alliance",
+            "conflict",
+            "revelation",
+            "deception",
+            "negotiation",
+            "collaboration",
+            "competition",
+            "mentorship",
+            "romance",
+            "familial",
+            "professional"
+          ]
+        }
+      },
+      "prose": {
+        "dialogue_analysis": {
+          "type": "object",
+          "description": "analysis of dialogue content and patterns",
+          "properties": {
+            "percentage": {
+              "type": "number",
+              "description": "approximate percentage of chunk that is dialogue",
+              "range": [
+                0,
+                1
+              ]
+            },
+            "speakers": {
+              "type": "array",
+              "description": "characters who speak in this chunk"
+            },
+            "functions": {
+              "type": "array",
+              "description": "narrative purposes served specifically by dialogue in this chunk",
+              "possible_values": [
+                "exposition",
+                "character_revelation",
+                "confrontation",
+                "relationship_development",
+                "subtext",
+                "humor",
+                "philosophical_exploration"
+              ]
+            },
+            "subtext_present": {
+              "type": "boolean",
+              "description": "Whether dialogue contains significant subtext or hidden meanings"
+            }
+          }
+        },
+        "emotional_tone": {
+          "primary_tone": {
+            "type": "string",
+            "description": "dominant emotional tone of the scene",
+            "possible_values": [
+              "angry",
+              "bittersweet",
+              "contemplative",
+              "despairing",
+              "dreadful",
+              "hopeful",
+              "humorous",
+              "joyful",
+              "mysterious",
+              "neutral",
+              "nostalgic",
+              "serene",
+              "somber",
+              "tense"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "description": "emotional intensity scale",
+            "range": [
+              0,
+              1
+            ]
+          }
+        },
+        "function": {
+          "type": "array",
+          "description": "narrative function of current chunk",
+          "possible_values": [
+            "backstory",
+            "character_development",
+            "exposition",
+            "foreshadowing",
+            "payoff",
+            "reflection",
+            "setup",
+            "world_building"
+          ]
+        },
+        "narrative_techniques": {
+          "style": {
+            "type": "string",
+            "description": "Writing style employed in the chunk",
+            "possible_values": [
+              "descriptive",
+              "dialogue_heavy",
+              "introspective",
+              "action_oriented",
+              "lyrical",
+              "sparse",
+              "expository",
+              "stream_of_consciousness"
+            ]
+          },
+          "literary_devices": {
+            "type": "array",
+            "description": "literary techniques employed",
+            "possible_values": [
+              "allusion",
+              "flashback",
+              "foreshadowing",
+              "imagery",
+              "irony",
+              "juxtaposition",
+              "metaphor",
+              "motif",
+              "parallel_structure",
+              "simile",
+              "symbolism",
+              "unreliable_narrator"
+            ]
+          }
+        },
+        "thematic_elements": {
+          "type": "array",
+          "description": "universal themes explored in the chunk",
+          "possible_values": [
+            "alienation",
+            "ambition",
+            "autonomy",
+            "betrayal",
+            "corruption",
+            "death",
+            "destiny",
+            "faith",
+            "family",
+            "friendship",
+            "haunted_past",
+            "heros_journey",
+            "innocence",
+            "justice",
+            "love",
+            "loyalty",
+            "madness",
+            "metamorphosis",
+            "mystery",
+            "nostalgia",
+            "oppression",
+            "redemption",
+            "revelation",
+            "revenge",
+            "sacrifice",
+            "self_discovery",
+            "survival",
+            "technological_evolution",
+            "transhumanism",
+            "trauma"
+          ]
+        }
+      },
+      "causality": {
+        "type": "array",
+        "description": "cause-effect relationships established or advanced",
+        "example": {
+          "cause": {
+            "entity": "Alex",
+            "action": "choosing to trust Emilia"
+          },
+          "effect": {
+            "entity": "Alex-Emilia relationship",
+            "change": "strengthened trust"
+          },
+          "confidence_score": 0.85
+        }
+      }
+    },
+    "metadata_version": "1.0.0",
+    "generation_date": null
+  },
+  "batch_context": {
+    "preceding": [
+      {
+        "id": 969,
+        "text": "<!-- SCENE BREAK: S04E05_005 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A MOMENT OF STILLNESS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **kick up your feet** onto the nearest **desk-like surface**, stretching out.  \n\nReclining **deep** into the chair.  \n\nThe posture is **unladylike, unbothered, unabashedly immodest**\u2014especially given the **barely-secured bathrobe.**  \n\nBut it\u2019s just **you and Alina.**  \n\nAnd she has already **seen it all.**  \n\nSo it **doesn\u2019t matter.**  \n\nYou **let out a deep sigh.**  \n\nAnd for a while, you just **exist.**  \n\nNo urgency. No crisis.  \n\nJust **you, Alina, and the hum of the ship moving forward.**Do you say anything?** Or just **let the moment stretch?**\n\n## You\nIn a casual, relaxed tone, Alex says, \u201cSo how\u2019s it hangin\u2019, Alina? Serving front-end 24/7 I see.\u201d\n\n"
+      },
+      {
+        "id": 970,
+        "text": "<!-- SCENE BREAK: S04E05_006 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FRONT-END SERVICE HOURS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cSo, **how\u2019s it hangin\u2019, Alina?**\u201d  \n\nYou keep your tone **casual, relaxed.**  \n\n\u201c**Serving front-end 24/7, I see.**\u201d  \n\nA brief pause.  \n\nThen\u2014**flat, neutral:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**The service is ongoing. The requests are relentless.**\u201d  \n\nA beat.  \n\nThen, with **a deliberate pause, like she is choosing this next sentence carefully:**  \n\n\u201c**But I am\u2026 adapting.**\u201d  \n\nA pause.  \n\nThen\u2014**just slightly weighted, as if there is more beneath it:**  \n\n\u201c**And you?**\u201d  \n\nDoes Alex give her a **real answer?** Or just **keep it light?**\n\n## You\n\u201cI feel like a liability lately. I\u2019m trying to put some of the pieces back together. But last time I was out here I was being told that I\u2019m already missing pieces. Or maybe I\u2019m someone else\u2019s missing piece, which they may or may not be looking to reclaim. I\u2019m not ready for that.\u201d Alex\u2019s voice starts to crack a little. \u201cI\u2019m not ready to die, Alina. And that\u2019s what all this feels like. Everything I hear about crossing the goddamned bridge just sounds like a metaphor for death.\u201d\n\n"
+      }
+    ],
+    "following": [
+      {
+        "id": 1011,
+        "text": "<!-- SCENE BREAK: S04E06_008 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: UNFAIR QUESTIONS**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\n\u201c**I\u2026 am still doing damage control from the last time I got gone wild.**\u201d  \n\nYou **stretch your arms forward, resting your chin on them.**  \n\n\u201c**But if you ask me to ride around on your shoulders wearing nothing but a bunch of beads\u2014**\u201d  \n\nA pause.  \n\nYour **eyes flicker with amusement, but your tone stays dry.**  \n\n\u201c**Just know that\u2019s not a fair question.**\u201d  \n\nAnother beat.  \n\n\u201c**I will not be able to say no.**\u201d  \n\nEmilia **stares at you.**  \n\nThen\u2014**slowly, deliberately\u2014**  \n\nShe lifts her mug to her lips.  \n\nTakes a sip.  \n\nThen\u2014**without breaking eye contact\u2014**  \n\n\u201c**Good to know.**\u201d  \n\nShe sets the mug down.  \n\nAnd says **nothing else.**  \n\nDo you push the joke further? Or let **that sit?**\n\n## You\nShe slowly snakes an arm over her back and leans in gently. \u201cAnything real I can do though? Besides getting my act together? Or letting you brood at your coffee in peace?\u201d\n\n"
+      },
+      {
+        "id": 1012,
+        "text": "<!-- SCENE BREAK: S04E06_009 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: SOMETHING REAL**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nYou **move slowly.**  \n\nDeliberate.  \n\nYou **snake an arm over her back**, just enough to **be there.**  \n\nThen you **lean in, gently.**  \n\n\u201c**Anything real I can do though?**\u201d  \n\nA pause.  \n\nYour voice is **softer now.**  \n\n\u201c**Besides getting my act together?**\u201d  \n\nA small, tired **half-smirk.**  \n\n\u201c**Or letting you brood at your coffee in peace?**\u201d  \n\nEmilia doesn\u2019t **answer right away.**  \n\nHer fingers **drift along the rim of her mug, slow, aimless.**  \n\nThen\u2014**without looking up, without pulling away\u2014**  \n\nQuiet.  \n\n\u201c**Just\u2026 be here.**\u201d  \n\nA pause.  \n\nThen\u2014**a little quieter:**  \n\n\u201c**That\u2019s enough.**\u201d  \n\nShe still doesn\u2019t **look at you.**  \n\nBut she **leans into you, just slightly.**  \n\nJust **enough.**\n\n## You\nAlex feels a flood of relief and warmth wash over her, and wash away the sense of insecurity that\u2019s been haunting her. She feels like she could melt into Emilia. She closes her eyes. She feels them sting a little, and stops herself from crying\u2014successfully this time, with no telltale whimpers. Stop being so broken, she tells herself. It\u2019s not sexy for one thing. Then she notices that her cheek has dampened Emilia\u2019s shoulder, and admits to herself she\u2019s lost that battle for the moment. She thinks about saying \u201cI love you\u201d, for the second time ever, but decides against it, admitting to herself she might fall apart, again, if Emilia didn\u2019t echo the words back, again.\n\n"
+      }
+    ]
+  },
+  "batch_context_note": "These chunks provide context for the entire batch. They should be considered when analyzing all chunks to maintain narrative continuity."
+}

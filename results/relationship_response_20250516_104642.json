@@ -1,0 +1,60 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 9,
+    "character2_id": 3,
+    "relationship_type": "professional",
+    "emotional_valence": "0|neutral",
+    "dynamic": "From Alex-5’s vantage, Pete is a high-value but noise-heavy data conduit: his skepticism lengthens decision-loops yet ultimately improves model fidelity. She engages him without emotional charge, parsing his sarcasm as tagged variables and adjusting her projections to accommodate the \"human-cost coefficients\" he insists on surfacing.",
+    "recent_events": "• Pete’s vocal objection to her initial 'immediate Bridge re-entry' directive required recalibration of her risk matrix.\n• His collaboration on structured re-entry protocols confirmed his reliability under controlled parameters.\n• Alex-5 logged Pete’s deep-net search for prior Bridge encounters, incorporating his findings into her emerging knowledge graph.",
+    "history": "Activation: During the first Nexus construct test, Alex-5 noted Pete’s instant distrust of her utilitarian calculus.  Mid-Season 3: A recurring loop forms—she outputs cold recommendations, Pete counters with human-safety objections, Nyati mediates; Alex-5 integrates spectrum-based risk at Nyati’s urging.  Season 4: After Alex rebukes her binary risk model, Alex-5 revises her framework, now flagging Pete’s interventions as stabilizing inputs rather than obstacles, cementing an iterative, data-driven collaboration.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "dependable",
+        "formality": "explicit",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Advance Nexus research without catastrophic loss",
+        "Acquire actionable intelligence on the Bridge/Cradle",
+        "Maintain operational integrity of team assets"
+      ],
+      "areas_of_expertise": "Alex-5: macro-scale risk calculus, scenario forecasting; Pete: network infiltration, cybersecurity counter-measures, pragmatic field logistics",
+      "resource_sharing": {
+        "information": "selective",
+        "material": "none",
+        "contacts": "guarded"
+      },
+      "crisis_behavior": "Automatically surfaces high-priority threat alerts to Pete, expecting him to execute physical or cyber counter-measures while she refines contingency trees."
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 3,
+    "character2_id": 9,
+    "relationship_type": "professional",
+    "emotional_valence": "-1|wary",
+    "dynamic": "Pete treats Alex-5 like a razor-sharp tool that might lop off a limb if no one’s watching.  He mines her projections for useful numbers, then blankets them with human-factor skepticism, masking unease with sardonic quips about 'logic-only clones' and 'corporate efficiency gone feral.'",
+    "recent_events": "• Objected to Alex-5’s push for immediate Bridge crossing, labeling it 'maximum intel, minimum survival.'\n• Witnessed Alex-5 revise her binary risk model after Alex’s dressing-down, easing (but not erasing) his distrust.\n• Leveraged her silent processing while he decrypted deep-web chatter, acknowledging her capacity to ingest his findings without attitude.",
+    "history": "First Contact: Pete meets the freshly-minted construct and instantly flags her as 'too seamless.'  Ongoing Missions: Each tactical meeting cements a rhythm—Alex-5 proposes risk-blind optimals, Pete pokes holes, team lands somewhere in between.  Recent Developments: Her willingness to update variables post-rebuke shows she can learn, shifting Pete’s view from 'dangerous algorithm' to 'upgradable subsystem,' though he keeps a finger on the kill-switch.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "conditional",
+        "formality": "explicit",
+        "durability": "situational"
+      },
+      "shared_goals": [
+        "Keep the crew alive while pursuing Nexus breakthroughs",
+        "Extract verifiable intel on the Bridge and related anomalies",
+        "Prevent runaway, de-humanized decision loops"
+      ],
+      "areas_of_expertise": "Pete: real-time system defense, intel scraping, gut-level red-flagging; Alex-5: predictive modelling, probabilistic threat ranking",
+      "resource_sharing": {
+        "information": "selective",
+        "material": "none",
+        "contacts": "guarded"
+      },
+      "crisis_behavior": "If Alex-5’s guidance aligns with survivability, Pete executes; if it veers into 'acceptable losses,' he overrides, forcibly disconnecting or re-routing systems as needed."
+    }
+  }
+}

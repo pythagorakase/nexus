@@ -1,0 +1,84 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 71,
+    "relationship_type": "rival",
+    "emotional_valence": "-1|wary",
+    "dynamic": "To Alex, Dr. Oliver Cross is an absence that radiates danger—a vanished grand-strategist whose silence implies careful scheming. She respects his capacity to play ten moves ahead yet refuses to cede initiative, treating him as a future chess piece rather than today’s opponent. His name stays on her corkboard, annotated with question marks and contingency arrows, a reminder that the next strike against Nexus may come from someone she has never met face-to-face.",
+    "recent_events": "• Pete’s data-scrape confirmed Cross’s total disappearance, elevating him from footnote to primary threat.\n• The team’s discussion on whether to pursue or ignore competition ended with Alex opting to prioritize Nexus development while allocating passive intel assets to track Cross’s finances.\n• Rumors of black-market Echo fragments revived Alex’s suspicion that Cross may already be prototyping a rival platform.",
+    "history": "Early in Dynacorp days, Alex knew Cross only by reputation—Echo’s quiet architect who translated research into boardroom dominance. After Alex sabotaged Echo and re-branded the tech as Nexus, Cross vanished, erasing his corporate trail. Each new intel burst—from missing budget lines to whispers of a successor effort—has turned him into Alex’s primary unseen adversary. So far there has been no direct contact, only an escalating information war as Alex fortifies her lead and waits to see where Cross resurfaces.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "third-party",
+        "terms": "circumstantial",
+        "predictability": "variable"
+      },
+      "leverage_points": {
+        "character1_leverage": "Head start with Nexus prototype, control of surviving digital minds, growing public goodwill around ethical stance",
+        "character2_leverage": "Unknown capital reserves, deep knowledge of Echo’s failures, embedded contacts in multiple megacorps"
+      },
+      "conflict_areas": [
+        "Market dominance in digital immortality",
+        "Protection vs. exploitation of Echo survivors",
+        "Corporate reputation and IP ownership"
+      ],
+      "mutual_interests": [
+        "Advancing mind-upload technology",
+        "Staying ahead of regulatory scrutiny"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Former Dynacorp board members",
+          "Shared black-market brokers"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Alex wants proof of Cross’s current location, funding streams, and technical progress",
+        "information_protected": "Exact Nexus facility sites, survivor identities, details of the Bridge research"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 71,
+    "character2_id": 1,
+    "relationship_type": "rival",
+    "emotional_valence": "-2|disapproving",
+    "dynamic": "From Oliver Cross’s distant vantage, Alex is the loose cannon who burned Echo to the ground and walked away with its crown jewels. He regards her mix of idealism and ruthlessness as both threat and inadvertent proof-of-concept—useful data wrapped in an unpredictable variable. Until he is ready to move, Cross studies her every choice the way a chess master pores over an opponent’s opening repertoire.",
+    "recent_events": "• Cross’s surveillance nets flagged news that Alex has rechristened Echo’s tech as \"Nexus,\" confirming her intent to commercialize.\n• Financial forensics showed a sudden spike in off-ledger spending by Alex’s shell companies, prompting Cross to tighten information firewalls and accelerate contingency planning.\n• Reports of Alex recruiting former Echo survivors signaled a shift toward ethics-based branding, forcing Cross to adjust his own narrative strategies.",
+    "history": "During Echo, Cross knew Alex only as a capable but replaceable asset inside Dynacorp. Her defection and the subsequent destruction of Echo cost him years of positioning, turning her overnight into the primary obstacle to his long-term blueprint for mind-upload supremacy. Since going dark, he has observed her pivot to Nexus, mapping her alliances and waiting for the optimal moment to reclaim market leadership—whether through acquisition, sabotage, or reputational ruin.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "character1's",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Access to remaining Echo IP, hidden capital reserves, network of loyal corporate operatives",
+        "character2_leverage": "Functional prototype of Nexus, moral high ground, unpredictable tactical boldness"
+      },
+      "conflict_areas": [
+        "Ownership of Echo-derived technology",
+        "Public narrative control over digital immortality",
+        "Potential exposure of Dynacorp’s past crimes"
+      ],
+      "mutual_interests": [
+        "Rapid advancement of consciousness transfer methods",
+        "Maintaining secrecy from regulators and rival megacorps"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Ex-Dynacorp scientists",
+          "Black-market tech dealers"
+        ],
+        "mediators": []
+      },
+      "intelligence": {
+        "information_sought": "Cross seeks real-time data on Nexus’s technical milestones, Alex’s funding sources, and vulnerabilities within her crew",
+        "information_protected": "His current location, the scope of his contingency network, and long-term strategic timelines"
+      }
+    }
+  }
+}

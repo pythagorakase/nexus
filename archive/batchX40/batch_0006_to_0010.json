@@ -1,0 +1,454 @@
+{
+  "instructions": "\n# Narrative Metadata Analysis Task\n\nYou are an expert narrative analyst working on an AI-driven interactive storytelling project. \nYour task is to analyze each narrative chunk and generate rich, detailed metadata according to \nthe provided schema.\n\n## Batch Context\nThis is a batch of narrative chunks that are sequential in the story. At the top level, you'll \nfind \"batch_context\" with preceding and following chunks that provide context for the entire \nbatch. Use this broader context to understand the narrative flow and maintain continuity \nacross all your analysis.\n\n## Analysis Guidelines\nFor each chunk, carefully consider:\n\n1. **Characters**: Who appears, their interactions, and emotional states\n2. **Narrative Vector**: The direction and magnitude of story movement\n3. **Prose Elements**: Dialogue, emotional tone, techniques used\n4. **Thematic Elements**: Core themes, motifs, and symbolic elements\n5. **Continuity**: How this chunk connects to the broader narrative\n\n## Output Format\nThe JSON schema is provided at the top level of this request under the \"metadata_schema\" key.\nYour task is to follow this schema exactly, providing a JSON array where each object corresponds \nto one chunk in the batch.\n\nIMPORTANT NOTES:\n- Your response must be a valid JSON array containing metadata for ALL chunks\n- Follow the schema exactly - do not add or remove fields\n- Only analyze the fields defined in the schema\n- Analyze each chunk deeply, looking beyond surface-level text\n- Focus on meaningful narrative analysis rather than arbitrary classification\n- Maintain narrative continuity across the entire batch\n- Consider how each chunk relates to others in the sequence\n",
+  "chunks": [
+    {
+      "chunk_id": 6,
+      "text": "<!-- SCENE BREAK: S01E01_006 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 Flashbang Symphony**\n\nYou flick open your **neural interface**, fingers dancing through **holo-code** as you jack into **Night City's grid.** You don\u2019t need to beat the sniper\u2014**you just need to blind him.**  \n\nYour HUD pings: **Nearby Infrastructure Access\u2026 Granted.**  \n\n**Now for the fireworks.**  \n\nYou overload:  \n\n- **Traffic signals** \u2013 Every light on the block flips to **green**.  \n- **Holo-billboards** \u2013 Flicker into seizure-inducing **strobe bursts**.  \n- **Power grid** \u2013 A **feedback surge** arcs through the cables, sending up a **shower of electric sparks.**  \n\nThe entire block **erupts into chaos.**  \n\nCars **slam into each other**, alarms wail, and panicked civilians hit the pavement. The sniper\u2019s **optical HUD flares white**, temporarily **blinding him** in a wash of digital static.  \n\nYour window is **small**\u2014but it\u2019s enough.  \n\n**Do you:**  \n\n1. **Move in for the kill** \u2013 You know where he is. You could climb up and end him before he recovers.  \n2. **Slip into the chaos and disappear** \u2013 No need to escalate. You\u2019ve already won this round.  \n3. **Trace his signal** \u2013 He\u2019s running custom optics; that means he\u2019s got a network. Find out who sent him.\n\n## You\n3\n\n",
+      "essential_metadata": {
+        "season": 1,
+        "episode": 1,
+        "scene": 6
+      }
+    },
+    {
+      "chunk_id": 7,
+      "text": "<!-- SCENE BREAK: S01E01_007 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 Ghost in the Network**\n\nWhile the sniper\u2019s **blinded by your lightshow**, you **jack deeper into the grid**, tracing his **optical HUD signature** through the city\u2019s surveillance network.  \n\n**Bingo.**  \n\nThe merc\u2019s cyber-rig is **pinging a remote server in District 07**, buried in the old industrial zone\u2014**off the corporate grid, deep in gangland.** That\u2019s where his **contract is coming from.**  \n\nYour **HUD auto-pings** his backup cache\u2014he\u2019s **broadcasting an encrypted comms signal.** Someone\u2019s **feeding him live updates.**  \n\nWith a quick **neural command**, you insert a **data worm** into his system. It won\u2019t last long, but it\u2019s enough to **grab a signature.**  \n\n**Got a hit.**  \n\nThe **contract originates from an unknown party.** The message is short:  \n\n**\"Kill the asset. Leave no trace.\"**  \n\nIt doesn\u2019t say **who the \u2018asset\u2019 is.** Could be you. Could be **Dr. Alina Voss.** Either way, **someone wants this job dead and buried.**  \n\nThe sniper recovers fast. Your hack **flashes across his HUD**, and he realizes he\u2019s been **burned.** He **disconnects his link** and **vanishes from the rooftop**, slipping into the chaos.  \n\nYou\u2019re left with **two big leads:**  \n\n1. **The District 07 server**\u2014Whoever hired the merc is operating out of **gang-controlled territory.**  \n2. **Dr. Voss's last known location**\u2014The Dynacorp facility where she disappeared.  \n\n**What\u2019s your next move?**  \n\n1. **Track down the server in District 07** \u2013 Find out who paid for the hit.  \n2. **Investigate Dynacorp\u2019s facility** \u2013 Start where Voss vanished and dig up the truth.\n\n## You\n1. I need to take care of this threat. Plus this is a warmer trail.\n\n",
+      "essential_metadata": {
+        "season": 1,
+        "episode": 1,
+        "scene": 7
+      }
+    },
+    {
+      "chunk_id": 8,
+      "text": "<!-- SCENE BREAK: S01E01_008 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 Into the Underbelly**\n\nIf someone\u2019s **paying for your head**, you don\u2019t wait for them to send the next bullet\u2014you **go hunting.**  \n\nYou **slip into the crowd**, moving fast before security drones sweep in. The sniper is gone, but you\u2019ve got something better: **his employer\u2019s server, deep in District 07.**  \n\n#### **The Ride to Hell**  \n\nDistrict 07 is **old Night City**, where the **megacorps pulled out decades ago** and left the bones behind. Now it\u2019s a **gangland free-for-all**, crawling with **cybered-up street psychos, black-market dealers, and scavengers stripping buildings for parts.**  \n\nYou jack a **bike from a valet drone**\u2014a sleek, matte-black **Yamaha Ghost**\u2014and punch it toward the industrial sprawl. **Neon glow fades into rusted steel**, and the streets get meaner with every block.  \n\nYour HUD **highlights the server\u2019s location**: **An abandoned shipping yard, buried in the gang zone.**  \n\n#### **Game Plan:**  \n\nAs you approach, you scope out the situation. The yard is **fenced off**, patrolled by a **gang of auged-out mercs in blood-red combat rigs**\u2014**The Sable Rats.**  \n\nThis isn\u2019t just some **hacker\u2019s den**\u2014it\u2019s an **operating base.**  \n\n#### **Options:**  \n\n1. **Go in loud** \u2013 Guns blazing, full corpo extraction mode. They want a war? Give them one.  \n2. **Sneak in** \u2013 Find a quiet way past security, get to the server, and ghost out.  \n3. **Fake your way in** \u2013 You\u2019re a corpo. Maybe they\u2019ll believe you\u2019re a buyer looking for work.\n\n## You\nQuestion\u2026how on-rails is this? If I think of a response not presented to me, can you roll with it?\n\n",
+      "essential_metadata": {
+        "season": 1,
+        "episode": 1,
+        "scene": 8
+      }
+    },
+    {
+      "chunk_id": 9,
+      "text": "<!-- SCENE BREAK: S01E01_009 (storyteller heading) -->\n## Storyteller\nAbsolutely. This isn\u2019t a rigid path\u2014**if you\u2019ve got your own play, we roll with it.** Think of it like a **tabletop RPG in a cyberpunk nightmare**\u2014I set the scene, but you make the calls. If you want to mix approaches, call in a contact, blow something up, or do something completely off-script, I\u2019ll adapt.  \n\nSo, if you\u2019ve got a plan that\u2019s not on the list, **hit me with it.** Let\u2019s get creative.\n\n## You\nI would to send a tiny drone in. Something that looks like a cockroach or a fly to a casual glance. I\u2019ll use that to access the server.\n\n",
+      "essential_metadata": {
+        "season": 1,
+        "episode": 1,
+        "scene": 9
+      }
+    },
+    {
+      "chunk_id": 10,
+      "text": "<!-- SCENE BREAK: S01E01_010 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 Bug in the System**\n\nYou **pull off the road**, parking the **Yamaha Ghost** behind a rusted-out **cargo hauler**. From here, you\u2019ve got a **clear line of sight** on the shipping yard\u2014but you\u2019re not going in.  \n\nNot in person, anyway.  \n\nYou reach into your **inner jacket pocket** and pull out a **small, matte-black device** no bigger than a cigarette case. You tap the side, and it **whirs to life**\u2014unfolding into a **tiny cybernetic roach**, its chitinous body **fitted with micro-lenses, a data-spike, and an onboard AI that\u2019s just smart enough to get into trouble.**  \n\nYou **jack in** through your neural interface, and your vision **glitches** as you switch to the drone\u2019s **feed.** The world goes **low to the ground, grainy, and fast.**  \n\n#### **The Infiltration**  \n\nYou **send the roach skittering forward**, slipping under the **fence**, past **booted gangsters with red-lit augments**, and through the **labyrinth of old cargo crates.**  \n\nThe **Sable Rats** are **loaded with chrome**\u2014military-grade optics, exo-rigs, combat subroutines. But they aren\u2019t **paying attention to the ground.** Your drone moves **unnoticed**, crawling toward the **central warehouse** where the server\u2019s signal is strongest.  \n\nYou slip through a **vent**, drop down onto a **rusted control panel**, and spot it\u2014  \n\nA **server stack**, glowing in the dark. **This is your target.**  \n\nYou position the roach on the **data port** and prep a **silent breach.**  \n\n**Roll the dice:**  \n\n1. **Go full stealth** \u2013 A quiet hack, slow but nearly undetectable.  \n2. **Quick and dirty** \u2013 Faster access, but higher risk of tripping security.  \n3. **Leave a digital backdoor** \u2013 Gain intel now, but also a way back in later.\n\n## You\n3. Let\u2019s burrow into the kernel layer, nice and quiet. Then I can finish the op from a secure location.\n\n",
+      "essential_metadata": {
+        "season": 1,
+        "episode": 1,
+        "scene": 10
+      }
+    }
+  ],
+  "metadata_schema": {
+    "chunk_metadata": {
+      "orientation": {
+        "chunk_id": {
+          "type": "number",
+          "description": "The `chunk_id` value of the chunk being analyzed in this object.",
+          "example": "1"
+        },
+        "world_layer": {
+          "type": "string",
+          "description": "Type of narrative continuity in this chunk. Used to control memory integrity during flashbacks, dreams, or non-canon sequences.",
+          "possible_values": [
+            "primary",
+            "flashback",
+            "dream",
+            "extradimensional",
+            "non_canonical"
+          ]
+        },
+        "setting": {
+          "location": {
+            "type": "string",
+            "description": "physical or conceptual location where events occur"
+          },
+          "atmosphere": {
+            "type": "string",
+            "description": "overall feeling or mood evoked by setting and imagery"
+          }
+        },
+        "continuity_markers": {
+          "type": "array",
+          "description": "elements that connect this chunk to others for continuity tracking",
+          "structure": {
+            "element_type": "string",
+            "description": "string",
+            "connected_chunks": "array of strings"
+          },
+          "possible_element_types": [
+            "plot_thread",
+            "character_arc",
+            "object_tracking",
+            "location_continuity",
+            "unresolved_question",
+            "narrative_promise",
+            "repeated_motif"
+          ],
+          "example": [
+            {
+              "element_type": "unresolved_question",
+              "description": "Mystery of the missing artifact",
+              "connected_chunks": [
+                "S01E03_014",
+                "S01E05_022"
+              ]
+            }
+          ]
+        }
+      },
+      "narrative_vector": {
+        "arc_position": {
+          "type": "string",
+          "description": "current position in the narrative arc",
+          "possible_values": [
+            "inciting_incident",
+            "rising_action",
+            "midpoint",
+            "crisis",
+            "climax",
+            "falling_action",
+            "resolution"
+          ]
+        },
+        "direction": {
+          "type": "array",
+          "description": "direction in which the current chunk is moving the narrative arc",
+          "possible_values": [
+            "climax",
+            "resolution",
+            "static",
+            "tension_decrease",
+            "tension_increase",
+            "transition"
+          ]
+        },
+        "magnitude": {
+          "type": "string",
+          "description": "tempo of current chunk",
+          "possible_values": [
+            "very_slow",
+            "slow",
+            "moderate",
+            "fast",
+            "very_fast"
+          ]
+        }
+      },
+      "characters": {
+        "roster": {
+          "present": {
+            "type": "array",
+            "description": "list of characters present in this chunk",
+            "example": [
+              "Alex",
+              "Emilia",
+              "Sullivan"
+            ]
+          },
+          "mentioned": {
+            "type": "array",
+            "description": "list of characters not present but discussed or referred to in this chunk",
+            "example": [
+              "Nyati",
+              "Lansky",
+              "Sam"
+            ]
+          }
+        },
+        "elements": {
+          "type": "array",
+          "description": "significant character elements and developments",
+          "structure": {
+            "character_name": "string",
+            "development_type": "string",
+            "significance_score": "number"
+          },
+          "possible_development_types": [
+            "contradicting_trait",
+            "decision_point",
+            "epiphany",
+            "establishing_trait",
+            "external_conflict",
+            "growth",
+            "inner_conflict",
+            "regression",
+            "revelation",
+            "skill_acquisition",
+            "transformation"
+          ],
+          "example": [
+            {
+              "character_name": "Alex",
+              "development_type": "decision_point",
+              "significance_score": 0.85
+            }
+          ]
+        },
+        "perspective": {
+          "type": "object",
+          "description": "analysis of whose perspective is centered in this chunk",
+          "properties": {
+            "pov": {
+              "type": "string",
+              "description": "Point of view used in the chunk",
+              "possible_values": [
+                "first_person",
+                "second_person",
+                "third_person_limited",
+                "third_person_omniscient",
+                "multiple_viewpoints"
+              ]
+            },
+            "viewpoint_character": {
+              "type": "string",
+              "description": "character whose perspective dominates the chunk"
+            },
+            "filters": {
+              "type": "array",
+              "description": "cognitive, emotional, or perceptual filters coloring the narration",
+              "possible_values": [
+                "unreliable",
+                "limited_information",
+                "emotional_bias",
+                "memory_distortion",
+                "perceptual_limitation",
+                "cultural_perspective",
+                "objective"
+              ]
+            },
+            "audience_alignment": {
+              "type": "number",
+              "description": "degree to which the audience is encouraged to align with this perspective",
+              "range": [
+                0,
+                1
+              ]
+            }
+          }
+        },
+        "interactions": {
+          "type": "array",
+          "description": "Significant interactions between characters or entities",
+          "structure": {
+            "entities": "array of strings",
+            "interaction_type": "string",
+            "significance": "number"
+          },
+          "possible_interaction_types": [
+            "alliance",
+            "conflict",
+            "revelation",
+            "deception",
+            "negotiation",
+            "collaboration",
+            "competition",
+            "mentorship",
+            "romance",
+            "familial",
+            "professional"
+          ]
+        }
+      },
+      "prose": {
+        "dialogue_analysis": {
+          "type": "object",
+          "description": "analysis of dialogue content and patterns",
+          "properties": {
+            "percentage": {
+              "type": "number",
+              "description": "approximate percentage of chunk that is dialogue",
+              "range": [
+                0,
+                1
+              ]
+            },
+            "speakers": {
+              "type": "array",
+              "description": "characters who speak in this chunk"
+            },
+            "functions": {
+              "type": "array",
+              "description": "narrative purposes served specifically by dialogue in this chunk",
+              "possible_values": [
+                "exposition",
+                "character_revelation",
+                "confrontation",
+                "relationship_development",
+                "subtext",
+                "humor",
+                "philosophical_exploration"
+              ]
+            },
+            "subtext_present": {
+              "type": "boolean",
+              "description": "Whether dialogue contains significant subtext or hidden meanings"
+            }
+          }
+        },
+        "emotional_tone": {
+          "primary_tone": {
+            "type": "string",
+            "description": "dominant emotional tone of the scene",
+            "possible_values": [
+              "angry",
+              "bittersweet",
+              "contemplative",
+              "despairing",
+              "dreadful",
+              "hopeful",
+              "humorous",
+              "joyful",
+              "mysterious",
+              "neutral",
+              "nostalgic",
+              "serene",
+              "somber",
+              "tense"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "description": "emotional intensity scale",
+            "range": [
+              0,
+              1
+            ]
+          }
+        },
+        "function": {
+          "type": "array",
+          "description": "narrative function of current chunk",
+          "possible_values": [
+            "backstory",
+            "character_development",
+            "exposition",
+            "foreshadowing",
+            "payoff",
+            "reflection",
+            "setup",
+            "world_building"
+          ]
+        },
+        "narrative_techniques": {
+          "style": {
+            "type": "string",
+            "description": "Writing style employed in the chunk",
+            "possible_values": [
+              "descriptive",
+              "dialogue_heavy",
+              "introspective",
+              "action_oriented",
+              "lyrical",
+              "sparse",
+              "expository",
+              "stream_of_consciousness"
+            ]
+          },
+          "literary_devices": {
+            "type": "array",
+            "description": "literary techniques employed",
+            "possible_values": [
+              "allusion",
+              "flashback",
+              "foreshadowing",
+              "imagery",
+              "irony",
+              "juxtaposition",
+              "metaphor",
+              "motif",
+              "parallel_structure",
+              "simile",
+              "symbolism",
+              "unreliable_narrator"
+            ]
+          }
+        },
+        "thematic_elements": {
+          "type": "array",
+          "description": "universal themes explored in the chunk",
+          "possible_values": [
+            "alienation",
+            "ambition",
+            "autonomy",
+            "betrayal",
+            "corruption",
+            "death",
+            "destiny",
+            "faith",
+            "family",
+            "friendship",
+            "haunted_past",
+            "heros_journey",
+            "innocence",
+            "justice",
+            "love",
+            "loyalty",
+            "madness",
+            "metamorphosis",
+            "mystery",
+            "nostalgia",
+            "oppression",
+            "redemption",
+            "revelation",
+            "revenge",
+            "sacrifice",
+            "self_discovery",
+            "survival",
+            "technological_evolution",
+            "transhumanism",
+            "trauma"
+          ]
+        }
+      },
+      "causality": {
+        "type": "array",
+        "description": "cause-effect relationships established or advanced",
+        "example": {
+          "cause": {
+            "entity": "Alex",
+            "action": "choosing to trust Emilia"
+          },
+          "effect": {
+            "entity": "Alex-Emilia relationship",
+            "change": "strengthened trust"
+          },
+          "confidence_score": 0.85
+        }
+      }
+    },
+    "metadata_version": "1.0.0",
+    "generation_date": null
+  },
+  "batch_context": {
+    "preceding": [
+      {
+        "id": 4,
+        "text": "<!-- SCENE BREAK: S01E01_004 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 No Risk, No Reward**\n\nYou don\u2019t flinch. You don\u2019t hesitate. That\u2019s what separates the sharks from the chum.  \n\nYou slide the data shard off the table and slot it into your **neural interface**, letting the mission details flood your HUD.  \n\n**\"Consider it done,\"** you say, downing the last of your drink.  \n\nSato\u2019s smirk widens just a fraction. He respects a **snake that bites first and asks later**.  \n\n**\"Good. You\u2019ll get the full intel drop in an hour. And remember\u2014this is off the books. If you get caught?\"** He leans in, voice low. **\"You never worked for us.\"**  \n\nA familiar tune. But the stakes feel different this time.  \n\nAs you step out of the **Skyline Lounge**, the city hums around you\u2014**neon lights flickering, drones zipping between megatowers, the ever-present buzz of synthetic life.** Your HUD pings again. **The unknown sender.**  \n\n**Unknown Sender:** _\"You just signed your death warrant. Hope you're fast, corpo.\"_  \n\nA second later, a **red warning flash** hits your vision\u2014**PROXIMITY ALERT.**  \n\nSomething's wrong.  \n\n**Do you:**  \n\n1. **Dive for cover** \u2013 If someone\u2019s trying to ice you, standing still is a good way to get ventilated.  \n2. **Scan for threats** \u2013 Maybe it\u2019s not an attack. Maybe someone just wants you scared.  \n3. **Run like hell** \u2013 You\u2019re a corpo, not a street samurai. Live to fight another day.\n\n## You\n1\n\n"
+      },
+      {
+        "id": 5,
+        "text": "<!-- SCENE BREAK: S01E01_005 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 A Bullet with Your Name on It**\n\nYour instincts take over. You don\u2019t wait to see who\u2019s aiming at you\u2014**you move.**  \n\nYou dive behind a **holo-ad kiosk**, just as the glass behind you **shatters in a hail of gunfire**. The crowd screams. Pedestrians scatter. Your **HUD auto-tags the trajectory**\u2014**high-caliber rounds from a rooftop, two blocks away.**  \n\nYour comm pings\u2014**Sato.**  \n\n**\"You're already in the fire, huh?\"** His voice is cool, almost amused. **\"Handle it.\"**  \n\nThe call drops. No backup. No corporate security coming to clean up the mess. **You\u2019re on your own.**  \n\nYour neural scanner **identifies the shooter**\u2014a **droned-out merc with a sniper rig**, cybernetic optics glowing like a wolf\u2019s in the dark. He\u2019s already reloading.  \n\n**Options:**  \n\n1. **Hack the city's grid** \u2013 Overload nearby streetlights, traffic signals, anything to cause chaos and cover your escape.  \n2. **Draw your pistol and return fire** \u2013 You\u2019re not running. You\u2019re sending a message.  \n3. **Sprint for the nearest alley** \u2013 Snipers are useless in close quarters. Get to ground level and lose him.  \n\nWhat\u2019s the move, corpo?\n\n## You\n1. Try for something flashy and distracting.\n\n"
+      }
+    ],
+    "following": [
+      {
+        "id": 11,
+        "text": "<!-- SCENE BREAK: S01E01_011 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 The Long Con**\n\nYou don\u2019t just grab data and run. That\u2019s **amateur hour.**  \n\nInstead, you sink **deep into the code**, tunneling past the **firewalls and ICE**, threading your way into the **kernel layer.** You\u2019re not just hacking the server\u2014you\u2019re **becoming part of it.**  \n\n#### **DIGITAL GHOST MODE: ACTIVATED**  \n\nYour roach-drone **injects a stealth-coded backdoor** into the system, disguised as **harmless maintenance data.** To any **casual scan**, it\u2019s just another line of corporate junk\u2014an unimportant process lost in the noise of bigger things.  \n\nBut for you? **It\u2019s a skeleton key.**  \n\n**With this, you can:**  \n\n\u2714\ufe0f **Monitor activity on the server in real time**  \n\u2714\ufe0f **Pull data remotely from anywhere in the city**  \n\u2714\ufe0f **Insert false logs, wipe records, or rewrite security access**  \n\nYou slip out of the **system undetected**, the drone retracting its **data-spike** and scuttling back toward the exit.  \n\nThat\u2019s when you catch **something unexpected.**  \n\n#### **The Hidden File**  \n\nJust before disconnecting, your **backdoor pings something deep in the archives**\u2014a file marked **BLACKOUT PROTOCOL.**  \n\nIt\u2019s **buried under layers of encryption**, locked with **Dynacorp-grade security.** This shouldn\u2019t be here.  \n\nBut before you can dig deeper, your drone **registers movement.**  \n\nA Sable Rat, **heavily auged and pissed off**, slams a **data-slate** onto the table near the server. He mutters into his comm:  \n\n**\u201cTell the client we\u2019re scrubbing everything in 24 hours. No loose ends.\u201d**  \n\nWhoever hired these guys, **they\u2019re about to erase their tracks.**  \n\n#### **Decisions, Decisions:**  \n\n1. **Get out clean & decrypt later** \u2013 You\u2019ve got a backdoor now. No need to risk detection.  \n2. **Try to grab the BLACKOUT PROTOCOL now** \u2013 High risk, but you might not get another shot.  \n3. **Override the scrub command** \u2013 Screw their plans. You can stop them from deleting evidence.\n\n## You\n3. Let\u2019s make it so when they initiate the scrub, it just removes the files from the index while leaving the data intact.\n\n"
+      },
+      {
+        "id": 12,
+        "text": "<!-- SCENE BREAK: S01E01_012 (storyteller heading) -->\n## Storyteller\n### **CORPO SNAKE \u2013 The Perfect Illusion**\n\nYou move **fast but precise,** threading into the server\u2019s **scrub routine.** The Sable Rats are **about to wipe everything**, but you\u2019re **rewriting the rules.**  \n\nInstead of a full data purge, you **alter the deletion command**\u2014when they **erase the files**, it\u2019ll only remove **the index references**, making the data **invisible** but **still intact.**  \n\nTo them? **It\u2019s gone.**  \nTo you? **It\u2019s a buried treasure waiting to be dug up.**  \n\n#### **LAST-MINUTE TWEAKS:**  \n\nSince you\u2019re already inside, you make a few extra\u2026 adjustments:  \n\n\u2714\ufe0f **Redirect scrub logs** to a **random junk server**\u2014so if they check, everything looks legit.  \n\u2714\ufe0f **Trigger a false malware alert** on their security scanners\u2014**paranoia makes people sloppy.**  \n\u2714\ufe0f **Lock yourself a hidden re-entry point**\u2014so you can access the system later if needed.  \n\n#### **EXIT STRATEGY:**  \n\nYour **roach-drone** finishes the job and **skitters back** toward the exit. Just as it reaches the **fence**, your neural HUD **flashes a warning.**  \n\n**NEW MESSAGE \u2013 UNKNOWN SENDER**  \n\n_\u201cI see what you did. Smart move. But you\u2019re still playing catch-up. Time to move faster.\u201d_  \n\nBefore you can trace it, the **sender wipes their own signal.**  \n\nYou **retract the drone, hop back onto your stolen Yamaha Ghost, and tear out of District 07.**  \n\n#### **YOUR NEXT MOVE?**  \n\n1. **Go somewhere secure to decrypt the BLACKOUT PROTOCOL** \u2013 You need to see what\u2019s inside before it\u2019s too late.  \n2. **Check your backdoor later & meet with a contact** \u2013 You might need outside help on this.  \n3. **Report back to Sato** \u2013 Play it like a loyal corpo and see what he knows.\n\n## You\nThe encryption level is really high, so does that mean it might take a while to decrypt? Do I need to set some dedicated hardware running on it for a while?\n\n"
+      }
+    ]
+  },
+  "batch_context_note": "These chunks provide context for the entire batch. They should be considered when analyzing all chunks to maintain narrative continuity."
+}

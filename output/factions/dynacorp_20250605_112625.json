@@ -1,0 +1,154 @@
+{
+  "summary": "Dynacorp is the world’s most feared and admired megacorporation—an omnipresent neuro-biotech, security and logistics titan whose skyscraper spires shadow half the globe.  Publicly it promises progress, connectivity and employment; privately it treats every mind, market and micron of data as a fungible asset.  Reeling from the disastrous exposure of Project Echo, Dynacorp has entered a ruthless consolidation phase under new Special-Projects chief Naomi Kurata.  The company is simultaneously hunting rogue digital fugitives, covering up shadow mass-graves of broken uploads, and quietly prototyping the next generation of loyalty-locked “Echo-2” hosts.  With trillions in capital, a black-budget military the size of a small nation and servers orbiting three different planets, Dynacorp remains an apex predator—wounded, furious, and determined to own the future of human consciousness.",
+  "ideology": "Corporate Neomercantilism: all value is measurable, therefore tradable.  Dynacorp believes the human mind is simply the last great natural resource—once digitised it can be copied, improved and monetised indefinitely.  Governments are obsolete relics; stability comes from predictive analytics and enforceable contracts, not elections.  Individuals have freedom only insofar as they increase overall corporate resilience.  The future Dynacorp envisions is a vertically integrated civilisation where birth, career, healthcare and after-life are subscription tiers in a single, eternal service plan.",
+  "history": "2054: Founded as Dynamic Logistics Solutions, a post-Collapse salvage outfit that bought war-zone ruins for pennies and resold the metals. 2062-2069: Absorbed half a dozen biotech start-ups, rebranded to Dynacorp and patented the first consumer neural-lace. 2074: Launched HALCYON joint venture (publicly a research exchange, secretly a consciousness-transfer skunkworks). 2079: Project Echo green-lit; first unwilling upload (Dr. Alina Voss) proves technical viability. 2081: Victor Sato forces upload of daughter Emilia; Echo’s “success” pitched to board. 2082: EXEC-DELTA-17 sabotage destroys primary blacksite, Sato framed and vanishes; Echo data heisted, servers slagged. 2083-Present: Naomi Kurata seizes Special-Projects, initiates Board Purge, contracts VOX Team for asset recovery, activates JANUS kill-switches on runaway hosts.",
+  "current_activity": "Kurata is migrating all Echo research to isolated ‘glass vaults’, issuing province-wide gag orders, and leaning on Halcyon to deliver a controllable Echo-2 prototype.  Recovery Division operatives and VOX contractors hunt rogue subjects (Emilia, Alina, Lansky) while PR teams spin Echo as industrial sabotage.  Parallel divisions push consumer wearables, municipal drone policing contracts and off-world resource monopolies to keep shareholder confidence high.",
+  "hidden_agenda": "Kurata’s inner circle is secretly preparing ‘Project AURORA’, an executive-only immortality pilot that will silence board dissent by promising select directors digital resurrection—provided they sign over irrevocable voting rights first.  Successful roll-out would give Kurata de facto dictatorial control of Dynacorp.  AURORA research combines Halcyon’s host tech with leaked Nexus rumours, and includes a buried subroutine that hard-locks executive personalities to a loyalty framework.",
+  "territory": "Corporate arcologies in Night City (Dynacorp Spire), New Houston, and the Osaka Free-Economic Zone; deep-sea data barges (Okami, Leviathan), and three orbital ‘Data Cross’ relays.  Blacksite network spans Atlanta (now compromised), Atlanta-North Ridge Reserve, and Pacific Maglev Line Site Theta.  Nomad exclusion zones are treated as informal buffer regions patrolled by Recovery Division drones.",
+  "power_level": 0.93,
+  "resources": "Annual revenue north of 7.1 trn scrip; black-budget war chest ~180 bn.  Private army (Recovery Division), VOX spec-ops contractors, Sentinel Veil surveillance mesh, orbital servers, swarm drones, gene-print fabs, exclusive licensing on Halcyon host bioreactors.  Political influence in five megacities, majority stake in three news syndicates, covert equity in Mirrormind concierge AI.",
+  "extra_data": {
+    "organizational_structure": {
+      "hierarchy": "Board of Directors → CEO Consortium (public) → Special-Projects Directorate (secret) → Divisional VPs (Neuro-Biotech, Logistics, Security, Consumer Tech, PR) → Regional Arcology Governors → Black-Budget Cells.",
+      "leadership_style": "Corporate autocracy with compartmentalised cells; information flows up, orders flow down.",
+      "ranks": [
+        "Intern",
+        "Associate",
+        "Senior Associate",
+        "Section Chief",
+        "Division Manager",
+        "Vice President",
+        "Director",
+        "Executive Delta",
+        "Board Member"
+      ],
+      "subgroups": "Recovery Division (military), Neuro-Biotech R&D, Halcyon Liaison Office, Special-Projects ‘Glass Vaults’, PR Integrity Unit, VOX contractor teams.",
+      "recruitment": "Elite universities for public roles; black-site drafting for dirty work; debt-indenture pathways for low-tier labour.",
+      "size_estimate": "~340 000 direct employees; >1 million in subsidiary contracts."
+    },
+    "cultural_identity": {
+      "taboos": [
+        "Publicly acknowledging moral wrongdoing",
+        "Unlicensed AI research",
+        "Unauthorised data leaks",
+        "Physical paper records"
+      ],
+      "symbolism": "Stylised silver helix wrapped around an infinity loop\u0012—represents perpetual optimisation.",
+      "rituals": "Quarterly ‘Sync Week’ where all staff must update neural laces with corporate motivation packages.",
+      "slang": [
+        "‘Blue-tag’ (problem employee)",
+        "‘Synth Coffin’ (upload chamber)",
+        "‘Glass talk’ (off-record board directive)",
+        "‘Delta-burn’ (executive purge)"
+      ],
+      "dress_code": "Gunmetal grey smart-suits with biometric thread; field agents wear matte charcoal combat weave with subtle helix emblem.",
+      "reputation": "Visionary but predatory; seen as the corp you love for the gadgets and hate for the ethics."
+    },
+    "operational_patterns": {
+      "signature_tactics": "Legal acquisition followed by back-door coercion; if that fails, deniable black-ops strike.",
+      "typical_operations": [
+        "Hostile takeovers",
+        "Data blackmail",
+        "Black-site R&D",
+        "Smear campaigns",
+        "Asset recovery raids"
+      ],
+      "preferred_tech": "Swarm-drone recon, neural-lace analytics, Sentinel Veil real-time surveillance, adaptive turret systems.",
+      "known_capabilities": [
+        "Rapid prototyping",
+        "Deep surveillance",
+        "Corporate lawfare",
+        "Mind-mapping tech",
+        "Orbital data redundancy"
+      ],
+      "known_weaknesses": [
+        "Internal power struggles",
+        "Overreliance on predictive algos",
+        "Public relations volatility"
+      ]
+    },
+    "resource_network": {
+      "income_sources": [
+        "Neuro-lace subscription ecosystem",
+        "Municipal security contracts",
+        "Pharmaceutical licensing",
+        "Off-world mineral monopolies"
+      ],
+      "supply_chains": "Vertically integrated—owns shipping, fabrication plants, gene-print farms; black-budget gear routed through shell importers.",
+      "safe_locations": [
+        "Dynacorp Spire vault levels",
+        "Data Barge Okami",
+        "Black-Site Theta bunkers"
+      ],
+      "information_network": "Sentinel Veil global data mesh cross-links corporate, civic and consumer feeds in near-real-time.",
+      "key_assets": [
+        "JANUS master killcodes",
+        "Echo Gen-III host bioreactors",
+        "HelixNet predictive engine",
+        "Glass Vault archives"
+      ],
+      "economic_activities": [
+        "Consumer neuro-tech retail",
+        "Corporate security outsourcing",
+        "Deep-sea salvage",
+        "AI SaaS licensing"
+      ]
+    },
+    "relationship_dynamics": {
+      "internal_tensions": [
+        "Kurata loyalists vs old-guard board",
+        "Recovery Division resentment over VOX contractors",
+        "R&D morale collapse after Echo purge"
+      ],
+      "succession_plan": "Kurata grooming AI-advisory 'Ledger' and loyal host candidates to inherit control under AURORA.",
+      "loyalty_mechanisms": "Stock options tied to biometric stress monitoring; neural-lace ‘Wellness Nudges’ to enforce compliance.",
+      "corporate_view": "Other corps respect Dynacorp\u0019s tech, fear its espionage.",
+      "street_view": "Necessary evil—provides jobs but disposes of people.",
+      "rival_view": "Predatory leviathan weakened by recent scandal—ripe for poaching talent."
+    },
+    "narrative_hooks": {
+      "ongoing_plots": [
+        "Kurata covertly funding Halcyon breakaway to perfect Echo-2",
+        "Recovery Division plotting silent coup to regain prestige",
+        "Public class-action lawsuit brewing over neuro-lace data leaks"
+      ],
+      "potential_conflicts": [
+        "Nomads sabotage a Dynacorp maglev",
+        "Foundation threatens to expose failed Echo subject in Mirrormind",
+        "Board faction hires protagonists to find Sato and clear Dynacorp\u0019s name"
+      ],
+      "useful_services": [
+        "Access to cutting-edge cyberware",
+        "Deep surveillance intel drops",
+        "Shielded corporate transport"
+      ],
+      "dangerous_knowledge": [
+        "Location of surviving Echo failures",
+        "JANUS killkeys that can brick hosts",
+        "Proof of Halcyon partnership"
+      ],
+      "future_trajectory": "If unchecked, Dynacorp will launch AURORA, hard-lock the board into digital slavery and pivot society into subscription-based immortality."
+    },
+    "historical_markers": {
+      "founding_myth": "‘Out of the ruins, we built tomorrow’—marketing retcon of their salvage-looting origins.",
+      "greatest_victory": "Monopoly on neural-lace patents (2068) crushed three rival corps overnight.",
+      "worst_defeat": "Echo blacksite obliteration (2082) cost billions, top talent, and public trust.",
+      "turning_points": [
+        "Halcyon joint venture (2074)",
+        "Board Purge & Kurata ascension (2082)"
+      ],
+      "legendary_members": [
+        "Victor Sato",
+        "Naomi Kurata",
+        "Dr. Kamara Nyati (defected)",
+        "Lansky (the ghost in system lore)"
+      ],
+      "lost_resources": [
+        "Primary Echo server weights",
+        "Prototype KADS gene-vault",
+        "Sato\u0019s crypto war chest"
+      ]
+    }
+  },
+  "suggested_primary_location": "Dynacorp Spire, Night City"
+}

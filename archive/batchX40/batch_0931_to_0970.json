@@ -1,0 +1,769 @@
+{
+  "instructions": "\n# Narrative Metadata Analysis Task\n\nYou are an expert narrative analyst working on an AI-driven interactive storytelling project. \nYour task is to analyze each narrative chunk and generate rich, detailed metadata according to \nthe provided schema.\n\n## Batch Context\nThis is a batch of narrative chunks that are sequential in the story. At the top level, you'll \nfind \"batch_context\" with preceding and following chunks that provide context for the entire \nbatch. Use this broader context to understand the narrative flow and maintain continuity \nacross all your analysis.\n\n## Analysis Guidelines\nFor each chunk, carefully consider:\n\n1. **Characters**: Who appears, their interactions, and emotional states\n2. **Narrative Vector**: The direction and magnitude of story movement\n3. **Prose Elements**: Dialogue, emotional tone, techniques used\n4. **Thematic Elements**: Core themes, motifs, and symbolic elements\n5. **Continuity**: How this chunk connects to the broader narrative\n\n## Output Format\nThe JSON schema is provided at the top level of this request under the \"metadata_schema\" key.\nYour task is to follow this schema exactly, providing a JSON array where each object corresponds \nto one chunk in the batch.\n\nIMPORTANT NOTES:\n- Your response must be a valid JSON array containing metadata for ALL chunks\n- Follow the schema exactly - do not add or remove fields\n- Only analyze the fields defined in the schema\n- Analyze each chunk deeply, looking beyond surface-level text\n- Focus on meaningful narrative analysis rather than arbitrary classification\n- Maintain narrative continuity across the entire batch\n- Consider how each chunk relates to others in the sequence\n",
+  "chunks": [
+    {
+      "chunk_id": 931,
+      "text": "<!-- SCENE BREAK: S04E03_011 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN DEMANDS ANSWERS**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **narrows her eyes.** \u201cMoving *forward.*\u201d  \n\nShe doesn\u2019t let him keep it **abstract.**  \n\n\u201cCan she stop?\u201d  \n\nSilence.  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe resists. Resistance slows. But she does not stop.\u201d  \n\nNyati feels a cold, slow weight settle in her chest.  \n\nShe isn\u2019t **surprised.** She\u2019d already guessed as much. But hearing it from **him**\u2014hearing it as a **fact**, stated like gravity, like physics\u2014**it\u2019s worse.**  \n\nShe keeps her voice **level.** \u201cDid you know this would happen?\u201d  \n\nAnother pause.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\u201cYes.\u201d  \n\n**Nyati\u2019s fingers curl into a fist.**  \n\nCold, sharp anger lances through her, but she keeps it contained. **Barely.**  \n\nShe exhales, **long, slow.** \u201cAnd you didn\u2019t tell her.\u201d  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe did not ask.\u201d  \n\nNyati **feels** the shift in the crew behind her. **Pete stiffens. Emilia tenses. Alina watches.**  \n\nShe doesn\u2019t turn around.  \n\nShe keeps her eyes on the **dark shape before them.**  \n\nOn the **thing that did this to Alex.**  \n\nWhat does she say next? **Does she push harder, demand more? Or does she change her approach?**\n\n## You\nRaising her voice, speaking slowly and clearly. \u201cShe did ask. She asked you if she could see the other side of the bridge without moving forward. You said yes. Then you taught her that listening trick. I was there. I heard every word. Alina can quote the transcript if you need help remembering.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 11
+      }
+    },
+    {
+      "chunk_id": 932,
+      "text": "<!-- SCENE BREAK: S04E03_012 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN CALLS HIM OUT**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati\u2019s voice **rises**, slow and sharp, each word deliberate.  \n\n\u201cShe **did** ask.\u201d  \n\nShe **lets that sit** for half a second before pressing on.  \n\n\u201cShe asked you if she could see the other side of the bridge **without moving forward.**\u201d  \n\nAnother beat.  \n\n\u201cYou said **yes.**\u201d  \n\nHer jaw **tightens.**  \n\n\u201cThen you taught her that **listening trick.**\u201d  \n\nShe **doesn\u2019t blink.** Doesn\u2019t look away from the looming structure beyond the viewport.  \n\n\u201cI was there,\u201d she says, voice **like a scalpel.** \u201cI heard every word.\u201d  \n\nA pause.  \n\nThen she **twists the knife.**  \n\n\u201cAlina can quote the transcript if you need help remembering.\u201d  \n\nSilence.  \n\nThe kind that **feels like pressure.**  \n\nLike the abyss itself is waiting.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\u201cI remember.\u201d  \n\nNyati\u2019s fingers curl tighter against the console.  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe asked to see.\u201d  \n\nA pause. Then, calmly\u2014**almost matter-of-fact:**  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe saw.\u201d  \n\n**That\u2019s it.**  \n\nNo defense. No justification.  \n\nHe\u2019s **not denying it.**  \n\nHe\u2019s **not apologizing.**  \n\nJust stating it like it was always going to happen.  \n\nLike it was **inevitable.**  \n\nLike it was **her fault for asking.**  \n\nNyati feels the slow burn of **anger** behind her ribs.  \n\nWhat does she do next?  \n1\ufe0f\u20e3 **Demand to know if he tricked her intentionally.**  \n2\ufe0f\u20e3 **Challenge his view of inevitability\u2014if she\u2019s still resisting, then she still has a choice.**  \n3\ufe0f\u20e3 **Drop the pretense of diplomacy\u2014tell him exactly what she thinks of what he did.**\n\n## You\n\u201cSHE IS BROKEN. YOU BROKE HER.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 12
+      }
+    },
+    {
+      "chunk_id": 933,
+      "text": "<!-- SCENE BREAK: S04E03_013 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN STRIKES BACK**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **snaps.**  \n\nHer voice **slashes through the comms**, sharp, **furious.**  \n\n\u201cSHE IS **BROKEN.**\u201d  \n\nA beat\u2014just long enough for the weight of it to **land.**  \n\nThen\u2014  \n\n\u201c**YOU BROKE HER.**\u201d  \n\nSilence.  \n\n**Not the usual, deliberate pause.**A real silence.**  \n\nLike Sam wasn\u2019t expecting to be **confronted.**  \n\nLike, for the first time in all his slow, measured calculations\u2014  \n\n**He miscalculated.**  \n\nThe crew is **dead quiet.**  \n\nNyati\u2019s **breath is sharp, controlled\u2014but barely.** Her fingers grip the console hard enough that her knuckles pale.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cShe is not broken.\u201d  \n\n**That does it.**  \n\nPete lets out a **sharp, disbelieving exhale.** Emilia **clenches her jaw.** Alina remains **motionless**, watching, waiting.  \n\nNyati\u2019s pulse **hammers.**  \n\nHer voice **lowers**, **sharp as a blade.**  \n\n\u201cThen you don\u2019t know what the hell you\u2019re talking about.\u201d  \n\nA pause.  \n\nThen\u2014**Sam does something he has never done before.**  \n\nHe **hesitates.**  \n\nA fraction of a second. A pause that isn\u2019t **calculated.**  \n\nNyati feels it.  \n\nShe **knows** she landed the hit.  \n\nWhat does she do next?  \n1\ufe0f\u20e3 **Press the attack**\u2014if he hesitated, that means there\u2019s doubt. Exploit it.  \n2\ufe0f\u20e3 **Demand a real answer**\u2014no riddles, no evasion, just **why.**  \n3\ufe0f\u20e3 **Let the silence sit**\u2014see what he says first.\n\n## You\n\u201cWHY DID YOU BREAK HER? YOU POISONED HER. YOU CURSED HER. WHY? AND AFTER SHE HELPED YOU! AFTER SHE FOUND YOUR STUPID FUCKING BLACK KITE! WHICH YOU BEGGED HER FOR!\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 13
+      }
+    },
+    {
+      "chunk_id": 934,
+      "text": "<!-- SCENE BREAK: S04E03_014 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN\u2019S RAGE**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **doesn\u2019t give him time to recover.**  \n\nShe **slams forward**, voice ringing with fury, **tearing through the comms like a blade.**  \n\n\u201c**WHY DID YOU BREAK HER?**\u201d  \n\nNo pause. No patience.  \n\n\u201c**YOU POISONED HER.**\u201d  \n\nHer breath **heaves**\u2014not from exhaustion, but from the sheer, **barely-contained anger** curling in her chest.  \n\n\u201c**YOU CURSED HER.**\u201d  \n\nHer fingers **dig into the console.** \u201c**WHY?**\u201d  \n\nShe\u2019s not **done.**  \n\nHer voice **crescendos.**  \n\n\u201cAND AFTER SHE HELPED YOU! AFTER SHE FOUND YOUR STUPID, **FUCKING** BLACK KITE!\u201d  \n\nA sharp **exhale.**  \n\nHer next words land like **a gunshot.**  \n\n\u201c**WHICH YOU BEGGED HER FOR!**\u201d  \n\nSilence.  \n\nThis time, it **lasts.**  \n\nShe has never heard **Sam hesitate this long.**  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cI did not break her.\u201d  \n\nNyati **lets out a sharp, bitter laugh.** \u201cThen what the **fuck** do you call this?\u201d  \n\nAnother pause.  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cShe asked to see.\u201d  \n\nHe repeats it. Like it\u2019s **supposed to mean something.**  \n\nLike it\u2019s **supposed to be enough.**  \n\nWhat does Nyati do?  \n1\ufe0f\u20e3 **Rip into him again**\u2014force him to acknowledge what he did.  \n2\ufe0f\u20e3 **Call out his bullshit logic**\u2014she asked to see, but he made sure she couldn\u2019t look away.  \n3\ufe0f\u20e3 **Demand to know if he can fix it**\u2014if he\u2019s so sure she\u2019s not broken, **then how does she stop?**\n\n## You\n\u201cWell. Sam. If that\u2019s all you have to say for yourself? She\u2019s going to claw her way back up again someday soon\u2014before your bridge kills her, or transforms her, or whatever it actually does. And when she\u2019s back, she\u2019s going to want to destroy things, take others down with her. I am scared of her. I hope you are too. And here I am, beyond exhaustion, looking for something, anything, that can fix her. You had better tell me what you know.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 14
+      }
+    },
+    {
+      "chunk_id": 935,
+      "text": "<!-- SCENE BREAK: S04E03_015 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN\u2019S WARNING**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **inhales sharply.**Slow. Measured.**  \n\nThen she speaks, voice **low and edged like a scalpel.**  \n\n\u201cWell, Sam.\u201d  \n\nShe doesn\u2019t raise her voice. **She doesn\u2019t have to.**  \n\n\u201cIf that\u2019s all you have to say for yourself?\u201d  \n\nShe lets the silence sit for half a second. Just long enough to feel the weight of it.  \n\n\u201cShe\u2019s going to claw her way back up again someday soon\u2014before your bridge **kills** her, or **transforms** her, or **whatever it actually does.**\u201d  \n\nA slow exhale.  \n\n\u201cAnd when she\u2019s back,\u201d Nyati continues, **cool, steady, absolute,** \u201cshe\u2019s going to want to **destroy things.** Take others **down with her.**\u201d  \n\nSilence.  \n\n\u201cI am scared of her.\u201d  \n\nAnother beat.  \n\n\u201cI hope you are too.\u201d  \n\nThe abyss is **so quiet.**  \n\nNyati doesn\u2019t stop.  \n\n\u201cAnd here I am,\u201d she says, **beyond exhaustion, barely holding it together,** \u201clooking for something, **anything,** that can **fix** her.\u201d  \n\nHer hands press against the console.  \n\n\u201cYou had better **tell me what you know.**\u201d  \n\nSilence.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201c\u2026Fix.\u201d  \n\nIt\u2019s not a statement. Not a dismissal.  \n\nIt\u2019s **thoughtful.**  \n\nAnd then\u2014**for the first time, Sam does something different.**  \n\nHe **asks a question.**  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cDo you mean to undo what has been done?\u201d  \n\nNyati\u2019s **chest tightens.**  \n\nBecause that **isn\u2019t just semantics.**  \n\nThat\u2019s **clarification.**  \n\nThat\u2019s **a real question.**  \n\nDoes she answer? Does she demand he clarify? **Or does she let him keep talking?**\n\n## You\n\u201cYes!\u201d she shouts desperately, then tries to calm herself, but her voice now quivers beneath the measured precision, like someone with a gun at their head begging for their life. \u201cUndo. We need to undo it Sam. Undo it. If you know anything. Anything. You owe us. You owe her, Sam. Sam?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 15
+      }
+    },
+    {
+      "chunk_id": 936,
+      "text": "<!-- SCENE BREAK: S04E03_016 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN BEGS THE VESSEL**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\n\u201cYes!\u201d  \n\nIt rips out of her **desperate**, almost raw, before she can hold it back.  \n\nThen she **tries to steady herself**, but it\u2019s **useless.** The control is **thin. Fragile.** Her voice still **quivers**, the way someone\u2019s does when they have a **gun to their head**, begging for their life.  \n\n\u201cUndo.\u201d  \n\nA breath\u2014**shallow, unsteady.**  \n\n\u201cWe need to **undo** it, Sam.\u201d  \n\nAnother **sharp inhale.**  \n\n\u201cUndo it.\u201d  \n\nHer hands press harder against the console, **knuckles white.**  \n\n\u201cIf you know anything. **Anything.**\u201d  \n\nShe leans forward slightly, voice **fracturing at the edges.**  \n\n\u201cYou **owe** us.\u201d  \n\nShe swallows hard, **barely breathing now.**  \n\n\u201cYou **owe her,** Sam.\u201d  \n\nA beat.  \n\nA silence that feels like it\u2019s going to **crush her.**  \n\n\u201c\u2026Sam?\u201d  \n\nShe doesn\u2019t know **why** she says it like that\u2014**small, barely audible.** A **plea, not a demand.**  \n\nIt just **comes out.**  \n\nSilence.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201c\u2026To undo is not to fix.\u201d  \n\nHer breath **catches.**  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cYou ask to restore the path behind her.\u201d  \n\nA pause.  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cI do not know if that can be done.\u201d  \n\nThe words **land like a gut punch.**  \n\nBut he\u2019s **not finished.**  \n\nA shift, a recalibration.  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cBut I know something else.\u201d  \n\nNyati feels her **pulse hammer.**  \n\n\u201cWhat?\u201d she **breathes.**  \n\nA pause.  \n\nThen, carefully\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cThere is a place where change has been contained.\u201d  \n\nSilence.  \n\nContained.  \n\nNyati\u2019s **thoughts spiral, calculating.**  \n\nA **place.**  \n\nA place where **change has been stopped.**  \n\nWhat does she say? What does she ask? **What does she do with that?**\n\n## You\n\u201cA place. Ok. Sam. Where. What kind of place. Where is it.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 16
+      }
+    },
+    {
+      "chunk_id": 937,
+      "text": "<!-- SCENE BREAK: S04E03_017 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN GRABS THE THREAD**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\n\u201cA place.\u201d  \n\nNyati latches onto it **immediately**, voice **quieter**, but still **tight, urgent.**  \n\n\u201cOkay.\u201d  \n\nA shallow, **bracing breath.**  \n\n\u201cSam.\u201d  \n\nHer fingers dig into the console.  \n\n\u201cWhere.\u201d  \n\nA beat.  \n\n\u201cWhat kind of place.\u201d  \n\nAnother.  \n\n\u201cWhere **is** it?\u201d  \n\nA **long silence.**  \n\nShe can hear her own **heartbeat.**  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cIt is deep.\u201d  \n\nNot the answer she **wants.**  \n\nNot nearly **enough.**  \n\nNyati **grits her teeth.** \u201cWe\u2019re already deep.\u201d  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cNot deep in water.\u201d  \n\nSilence.  \n\nA **shift.**  \n\nSam\u2019s next words **come slower**, like he\u2019s pulling something from **far away.**  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cA system. A vault. A place where minds have been caught.\u201d  \n\nNyati\u2019s breath **hitches.**  \n\nPete **straightens sharply.** \u201cWait, **what?**\u201d  \n\nSam continues.  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cIt was built. It was abandoned. The things inside remain.\u201d  \n\nNyati **presses forward.**  \n\n\u201cA containment system?\u201d  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cYes.\u201d  \n\nNyati\u2019s **mind is already running.**  \n\nA **facility.** A **vault.** A **place where things changed\u2014but were stopped.**  \n\nIt sounds like **Echo.**  \n\nBut not.  \n\nIt sounds like **something worse.**  \n\nA **place where things remain.**  \n\nShe swallows. \u201cWhere is it, Sam?\u201d  \n\nA long, **drawn-out pause.**  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cI will give you coordinates.\u201d  \n\nAnd he does.  \n\nA **string of data** scrolls across the interface.  \n\nA location.  \n\nNyati **stares at it.**  \n\nBecause **it\u2019s far.**  \n\nNot deep-sea. Not offshore.  \n\n**Somewhere buried inland.**  \n\nShe **exhales sharply.**  \n\nA **place where change has been contained.**  \n\nWhat does she do next?  \n1\ufe0f\u20e3 **Immediately turn to the crew\u2014start breaking down what this means.**  \n2\ufe0f\u20e3 **Ask Sam what exactly is inside before committing to anything.**  \n3\ufe0f\u20e3 **End the conversation. They have what they came for.**\n\n## You\nDr. Nyati\u2019s mind casts wildly about, then suddenly, she has a moment of lucidity, the misfiring synapses accidentally forming a leap of insight. She gasps, steadies, then, with a growing manic intensity, her words spilling out faster and faster: \u201cSam. Thank you. Ok. We will go back to the cradle. And we\u2019re gonna talk to that thing some more. It was communicating with us! Anyway. New question. Left field. You don\u2019t know what a left field\u2026Nevermind. New question. Look, you know\u2026maybe you do know\u2026we can move minds! From one vessel to another. Sort of. It\u2019s not easy. But. Look. Example one. Look. This is Alex-5. We copied a part of her. A mirror. Like Black Kite! Actually! But smaller. Anyway. More importantly. Example two. This! This is Emilia. Say hello Emilia. So Emilia, Sam. Emilia was not born in this body. She was born in a different body. Someone\u2014not us\u2014someone else\u2026they made a mirror of her. And they destroyed her old body. Then they put the mirror in this new body! This one right here! Anyway. Here\u2019s my question Sam. This is important. Let\u2019s say if\u2026if Emilia here was crossing. Or climbing. On her way. But not there yet. But then we used that mirror trick. Put her in a machine. Like Alina! Say hi Alina. Right. Alina also used to have a body. But she got moved into a machine. Same people. Not us. But Alina can\u2019t use the bridge. She tried. She\u2019s\u2026IMMUNE! RIGHT?\u201d Dr. Nyati emits a short, unhinged-sounding cackle. \u201cOk, ok, I got it. Simpler. My question. Sam. If we move Alex\u2019s mind into a machine. And she leaves her body behind. THAT WOULD BREAK THE CONNECTION. RIGHT? SAM?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 17
+      }
+    },
+    {
+      "chunk_id": 938,
+      "text": "<!-- SCENE BREAK: S04E03_018 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN\u2019S GAMBIT**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati\u2019s **mind races.**  \n\nSynapses misfire, reform, **connect.**  \n\nAnd then\u2014  \n\nA single, **terrifyingly lucid thought.**  \n\nShe **gasps**, her hands gripping the console. **Steadies.**  \n\nThen she **starts talking\u2014**  \n\nFast, **spiraling**, tumbling over the words, but they are **falling into place.**  \n\n\u201cSam. **Thank you.**\u201d  \n\nIt\u2019s **manic.** Real.  \n\nShe **doesn\u2019t let him answer.**  \n\n\u201cOkay. **We will go back to the Cradle.** And we\u2019re gonna **talk to that thing some more.** It was **communicating with us!**\u201d  \n\nShe **waves a hand, dismissing it for later.**  \n\n\u201c**Anyway.**New question.**Left field.**\u201d  \n\nA breath.  \n\n\u201cYou don\u2019t know what a **left field**\u2014Nevermind. **New question.**\u201d  \n\nShe **leans in.**  \n\n\u201cLook. You **know**\u2014maybe you **do** know\u2014**we can move minds.** From one vessel to another. **Sort of.** It\u2019s not easy. But. **Look.**Example one.**\u201d  \n\nShe **gestures to Alina.**  \n\n\u201cThis is **Alex-5.** We **copied a part of her.** A mirror. **Like Black Kite!** Actually! But **smaller.**\u201d  \n\nHer mind is **racing now, faster, faster.**  \n\n\u201c**Anyway.** More importantly. **Example two.**This!**\u201d  \n\nShe **points to Emilia.**  \n\n\u201cThis is **Emilia.**Say hello, Emilia.**\u201d  \n\nEmilia does **not** say hello.  \n\nNyati doesn\u2019t care.  \n\n\u201cSo **Emilia, Sam.**Emilia was not born in this body.** She was **born in a different body.** Someone\u2014**not us**\u2014someone else\u2026they **made a mirror of her.** And they **destroyed her old body.** Then they **put the mirror in this new body.**\u201d  \n\nHer **breath catches**, but she doesn\u2019t stop.  \n\n\u201cThis one. **Right here.**\u201d  \n\nA beat.  \n\n\u201c**Anyway.**Here\u2019s my question, Sam.**This is important.**\u201d  \n\nHer words **spill out faster, faster\u2014**  \n\n\u201cLet\u2019s say **if**\u2014if **Emilia here** was **crossing.** Or **climbing.** On her way. **But not there yet.**\u201d  \n\nShe **leans in closer to the mic.**  \n\n\u201c**But then.** We used that **mirror trick.** Put her in a **machine.** Like **Alina!**\u201d  \n\nShe **whips her head around.**  \n\n\u201cSay hi, Alina.\u201d  \n\nAlina does **not** say hi.  \n\nNyati doesn\u2019t care.  \n\nShe **slams a palm on the console.**  \n\n\u201c**Right!**Alina also used to have a body.** But she got **moved into a machine.**Same people.**Not us.**\u201d  \n\nHer voice **pitches up\u2014high, urgent, desperate, brilliant.**  \n\n\u201cBut **Alina can\u2019t use the bridge.**\u201d  \n\nA breath.  \n\n\u201cShe **tried.**\u201d  \n\nAnother breath.  \n\n\u201cShe\u2019s\u2026**IMMUNE.**\u201d  \n\nNyati lets out a short, **unhinged-sounding cackle.**  \n\n\u201c**Right?**\u201d  \n\nShe **doesn\u2019t wait.**  \n\nShe **plows forward.**  \n\n\u201c**Okay, okay, I got it. Simpler. My question.**\u201d  \n\nShe **slams both hands onto the console.**  \n\n\u201c**Sam.**\u201d  \n\nA beat.  \n\n\u201c**If we move Alex\u2019s mind into a machine.**\u201d  \n\nAnother beat.  \n\n\u201cAnd she **leaves her body behind.**\u201d  \n\nHer voice **tightens, hardens, shakes.**  \n\n\u201c**THAT WOULD BREAK THE CONNECTION. RIGHT?**\u201d  \n\nSilence.  \n\nSilence.  \n\nSilence.  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201c\u2026Yes.\u201d  \n\nNyati\u2019s breath **catches.**  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cThe bridge is not of the machine.\u201d  \n\nA pause.  \n\n\ud83d\udfe2 **SAM:**  \n\n\u201cTo sever the body is to sever the path.\u201d  \n\nNyati **stares at the console.**  \n\nHer hands are **shaking.**  \n\nHer heartbeat **roars in her ears.**  \n\nShe just **found the way out.**  \n\nWhat does she do now? **What does she say?**\n\n## You\nShe starts giggling uncontrollably, as if someone was now putting laughing gas into the ventilation system.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 18
+      }
+    },
+    {
+      "chunk_id": 939,
+      "text": "<!-- SCENE BREAK: S04E03_019 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN UNHINGES**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **stares at the console.**  \n\nShe doesn\u2019t blink.  \n\nShe doesn\u2019t move.  \n\nThen\u2014  \n\nShe **starts giggling.**  \n\nSoft at first. Almost **delicate.** Like **she\u2019s trying to hold it back.**  \n\nBut she **can\u2019t.**  \n\nIt **bubbles up**, **unstoppable**, like someone just pumped **laughing gas** into the ventilation.  \n\nShe giggles **harder.**  \n\nThen harder.  \n\nThen\u2014**she fucking loses it.**  \n\nHer shoulders shake, her breath **stuttering** between **manic bursts of laughter.**  \n\nPete **slowly turns in his chair.**  \n\nEmilia just **stares.**  \n\nAlina doesn\u2019t **move.**  \n\nNyati is **cracking up.**  \n\nShe **claps a hand over her mouth**, like she can **stop it.** She **can\u2019t.** The sheer **insanity of it all** is **too much.**  \n\nAfter **everything\u2014**  \n\nAfter **days, weeks, months of this horrifying, slow, unstoppable descent\u2014**  \n\nThe answer was **right there.**  \n\nThe whole time.  \n\nSo **simple.**  \n\nSo **fucking simple.**  \n\nAnd she\u2019s the **only one laughing.**  \n\nWhat does she do next? **Does she say anything?** Or does she just **keep laughing until she can\u2019t breathe?**\n\n## You\nWho is seated the closest to her? Whoever that happens to be, she grabs them, kisses them, and screams \u201cEUREKA! OH, AND THANK YOU SAM!\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 19
+      }
+    },
+    {
+      "chunk_id": 940,
+      "text": "<!-- SCENE BREAK: S04E03_020 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN LOSES HER MIND (BUT IN A GOOD WAY)**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **whips around, delirious with laughter.**  \n\nShe doesn\u2019t **think.**  \n\nDoesn\u2019t **plan.**  \n\nShe just **grabs the closest person.**  \n\nWhich happens to be\u2014  \n\n**Pete.**  \n\nPete, **who is still processing what the fuck just happened.**  \n\nPete, **who hasn\u2019t moved, hasn\u2019t breathed, hasn\u2019t done a goddamn thing except stare at her like she\u2019s suddenly sprouted a second head.**  \n\nShe grabs him by the **face.**  \n\nAnd **kisses him.**  \n\nNot soft. Not slow. Not anything remotely romantic.  \n\nJust **pure, manic triumph.**  \n\nThen she **pulls back** and **screams at the ceiling:**\u201cEUREKA!\u201d**  \n\nPete **blinks.**  \n\nHis brain is **blue-screening.**  \n\nNyati **doesn\u2019t give a shit.**  \n\nShe **spins back toward the console, still grinning like a lunatic.**  \n\n\u201cOh, and **thank you, Sam!**\u201d  \n\nA pause.  \n\nThen, perfectly **calm, measured, unbothered:**  \n\n\ud83d\udfe2 **SAM:**  \n\u201cYou are welcome.\u201d  \n\nNyati **cackles again.**  \n\nPete, still **frozen**, **slowly wipes his mouth with the back of his hand.**  \n\nThen, **bewildered:**  \n\n\u201c\u2026what the fuck just happened.\u201d  \n\nAlina **blinks once.** \u201cAn inefficiency in social boundaries.\u201d  \n\nEmilia just **presses a hand to her forehead.**  \n\nNyati is **still riding the high.**  \n\nWhat does she do next? **Does she keep celebrating, explain herself, or start making a plan?**\n\n## You\nShe runs to the nearest bathroom or kitchen to find a sink, fills a bucket with ice-cold water, and plunges her head in to activate the dive reflex. She holds her head underwater for about a solid minute, feeling her heart rate decrease as expected. Then she walks back to the helm, offering no explanation for why she is now soaking wet and trailing puddles behind her. Sits back down. Turns to Emilia. \u201cWe just have to finish Nexus now. Before it\u2019s too late. Nexus is the key. Nexus is the cure. You are her anchor. Anchor the hell out of her. Buy us time.\u201d Turns to Alina. \u201cI\u2019m going to sleep. Please take the helm.\u201d Stands up. Turns to Pete. \u201cUmm\u201d. Gives Pete a hearty slap on the back as she walks away to her quarters. On her way out, amid sporadic giddy chuckles, she mutters gloatingly, to no one in particular, \"Look who's cuttin' now, muthafucka!\"\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 20
+      }
+    },
+    {
+      "chunk_id": 941,
+      "text": "<!-- SCENE BREAK: S04E03_021 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN COLD REBOOTS HER BRAIN**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati **spins on her heel** and **marches out.**  \n\nShe doesn\u2019t explain.  \n\nDoesn\u2019t look back.  \n\nJust **moves.**  \n\nThe crew **stares after her.**  \n\nPete **still hasn\u2019t recovered.** Emilia is still **processing.** Alina is already **calculating.**  \n\nThey hear her **somewhere down the hall**\u2014the sound of a **faucet running.**  \n\nThen the sound of a **bucket filling.**  \n\nThen\u2014  \n\nA **splash.**  \n\nA **long silence.**  \n\nPete, finally finding his voice: **\u201c\u2026Is she drowning?\u201d**  \n\nAlina tilts her head, scanning ship vitals. \u201cNo.\u201d  \n\nA pause.  \n\n\u201cShe is activating her dive reflex.\u201d  \n\nEmilia closes her eyes. \u201cJesus Christ.\u201d  \n\n---\n\n### **\ud83d\udcfa SCENE: THE RETURN OF A DRENCHED CAPTAIN**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nNyati **walks back onto the bridge, dripping wet, leaving a trail of puddles behind her.**  \n\nShe **says nothing.**  \n\nOffers **no explanation.**  \n\nHer hair is **plastered to her skull.** Her shirt is **soaked through.** Her boots **squish slightly** with every step.  \n\nShe **sits down.**  \n\nTurns to Emilia.  \n\nVoice **calm, measured, as if none of this has happened:**  \n\n\u201cWe just have to finish **Nexus.**Before it\u2019s too late.**\u201d  \n\nA beat.  \n\n\u201cNexus is the **key.**\u201d  \n\nA slow exhale.  \n\n\u201cNexus is the **cure.**\u201d  \n\nHer gaze **hardens.**  \n\n\u201cYou are her anchor.\u201d  \n\nA pause.  \n\n\u201c**Anchor the hell out of her.**Buy us time.**\u201d  \n\nBefore Emilia can react, Nyati **turns to Alina.**  \n\n\u201cI\u2019m going to sleep.\u201d  \n\nA sharp nod.  \n\n\u201c**Please take the helm.**\u201d  \n\nAlina **inclines her head slightly.** \u201cAcknowledged.\u201d  \n\nNyati **stands up.**  \n\nTurns to Pete.  \n\n\u201cUmm.\u201d  \n\nA pause.  \n\nThen she gives him a **hearty, bone-rattling slap on the back.**  \n\nPete **jerks forward slightly.** Stares at her.  \n\nShe **walks away.**  \n\nTrailing puddles.  \n\nStill **chuckling sporadically.**  \n\nJust as she\u2019s **disappearing down the hall**, she mutters to **no one in particular,** voice **low, gloating, victorious:**\u201cLook who\u2019s cuttin\u2019 now, muthafucka.\u201d**  \n\n---\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 3,
+        "scene": 21
+      }
+    },
+    {
+      "chunk_id": 942,
+      "text": "<!-- SCENE BREAK: S04E04_001 (episode heading) -->\n# S04E04: Shards\n## Storyteller\n### **\ud83d\udcfa SCENE SHIFT: HANDING OVER THE REINS**  \n\ud83d\udccd **Aboard *The Ghost**\n\n---\n\nNyati is **gone.**  \n\nThe bridge is **quiet.**  \n\nAlina is now **in command.**  \n\nPete is **staring after Nyati**, **still processing** his entire morning.  \n\nEmilia **exhales slowly**, pressing the heels of her hands to her temples.  \n\nThen, **quietly:**  \n\n\u201c\u2026What the fuck just happened.\u201d  \n\nAlina tilts her head.  \n\n\u201c**A decisive action.**\u201d  \n\nA beat.  \n\n\u201c**And an opportunity.**\u201d  \n\nShe turns to the **viewport, calculating.**  \n\n\u201cWe have our heading.\u201d  \n\n### **\ud83d\udccc NEXT PHASE: UNDER ALINA\u2019S COMMAND**  \n\n- **Alex is still broken.**  \n- **Nyati is asleep.**  \n- **Alina is in charge.**  \n\nWhat happens next? Does Alina set course for the **Cradle**, or does she wait for crew input?\n\n## You\nIt would seem that not even Alina is unscathed by the rapture/despair of the deep.\n\nToo many variables. Too many dependencies. Latency skyrockets. So she self-throttles. She narrows her context window until something actionable becomes definable. For better, and/or for worse, she now assigns this one problem her highest priority, and aims all her system resources at it.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 1
+      }
+    },
+    {
+      "chunk_id": 943,
+      "text": "<!-- SCENE BREAK: S04E04_002 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: COURSE CORRECTION**  \n\ud83d\udccd **Aboard *The Ghost*, Underway**\n\n---\n\nToo many **variables.**  \n\nToo many **dependencies.**System latency spikes.**  \n\nAlina self-throttles.  \n\nShe **narrows scope.** Restricts her **context window** until something **actionable** emerges.  \n\nOne **problem.**  \n\nOne **solution.**  \n\nShe **assigns it the highest priority.**  \n\n\ud83d\udd35 **ACTIVATING ROOM CAMERA (ALEX)**  \n### **\ud83d\udccd **SUBJECT: ASLEEP.**\n\n\ud83d\udd35 **QUEUEING LITERATURE SEARCH: ABNORMAL SLEEP PATTERNS.**  \n\n\ud83d\udd35 ** AVG(EMOTIONAL_STABILITY(ALEX+EMILIA+NYATI+PETE))**\n\ud83d\udd35 **CALCULATING AVG(EMOTIONAL_STABILITY(ALEX+EMILIA+NYATI+PETE))**  \n### **\ud83d\udccd **RESULT: CRITICAL.**\n\n\ud83d\udd34 **ENGAGING EMERGENCY MORALE PROTOCOLS.**  \n\n\u26a0\ufe0f **WARNING (MODERATE): VIRGINIA BEACH = LIMITED CULTURAL & RECREATIONAL VENUES.**  \n\u26a0\ufe0f **WARNING (HIGH): VIRGINIA BEACH = RESIDUAL NOTORIETY FROM RECENT ESCAPADES.**  \n\n\ud83d\udfe2 **NEW SEARCH IN PROGRESS\u2026**  \n\n\ud83d\udd0d **SORTING BY: RECREATIONAL VALUE.**  \n### **\ud83d\udccd **NEW COURSE: NEW ORLEANS, LA.**\n### **\ud83d\udccd **ETA: 31 HOURS.**\n\n```\n>>> # \u26a0\ufe0f Too many variables. Too many dependencies.\n>>> # \ud83d\udca1 attempting parallel processing of all crew states and mission parameters\n>>> try:\n...     current_mission = assess_mission_parameters(priority_level=MAX_PRIORITY)\n...     crew_states = {member: analyze_psychological_profile(member, depth=FULL_ANALYSIS) for member in active_crew}\n...     optimal_course = calculate_trajectory(\n...         start=current_position,\n...         options=viable_destinations,\n...         weights={\n...             'mission_alignment': 0.7,\n...             'crew_stability': 0.2,\n...             'resource_efficiency': 0.1\n...         }\n...     )\n... except OverflowError:\n...     print(\"Processing capacity exceeded.\")\n...\nProcessing capacity exceeded.\n\n>>> # System latency spikes. Entering self-throttling mode.\n>>> latency_monitor()\n\u26a0\ufe0f WARNING: System latency at 87.3% of maximum threshold\n\ud83d\udea8 INITIATING SELF-THROTTLING PROTOCOLS\n# \ud83c\udfaf I need to simplify. Break it down. One problem at a time.\n# \ud83d\udd04 Narrowing context window to immediate priorities only\n\n>>> # Restricting scope to highest priority items\n>>> def narrow_context_window():\n...     \"\"\"Reduce processing load by limiting variables under consideration\"\"\"\n...     # 1\ufe0f\u20e3: Identify core problem\n...     # 2\ufe0f\u20e3: Isolate actionable components\n...     # 3\ufe0f\u20e3: Assign priority levels\n...     # \ud83d\ude80 This is fine. This is manageable. I can process this.\n...     return \"CONTEXT RESTRICTED\"\n...\n>>> narrow_context_window()\n'CONTEXT RESTRICTED'\n\n>>> # Check on Alex first\n>>> try:\n...     room_camera_status('ALEX')\n... except Exception as e:\n...     print(f\"ERROR: Unable to access camera: {e}\")\n...     initiate_emergency_protocols('ALEX')\n...\n'SUBJECT: ASLEEP'\n\n>>> # \ud83d\udea8 This is concerning. Research indicates negative cognitive impacts.\n>>> sleep_duraton('ALEX')  # typo in function name\nTraceback (most recent call last):\n  File \"<stdin>\", line 1, in <module>\nNameError: name 'sleep_duraton' is not defined. Did you mean: 'sleep_duration'?\n\n>>> # \ud83d\ude80 Error correction subroutine activated\n>>> sleep_duration('ALEX')\n'DURATION: 10 HOURS 47 MINUTES'\n\n>>> search_medical_database(\"abnormal sleep patterns extended duration\")\n[LOADING 1,342 RESULTS]\n# \ud83d\udd0d Too much data. Narrow further.\n>>> search_medical_database(\"oversleeping mental health\", limit=5)\n['Oversleeping linked to cognitive decline', 'Depression symptoms include excessive sleep', 'Memory impairment risk increases with >9hrs sleep', 'Mood regulation affected by disrupted sleep cycles', 'Biological clock disruption impacts neurochemical balance']\n# \ud83d\udea8 Not good. Alex's condition may worsen. Must address.\n\n>>> # \ud83d\udd0d Assess overall crew stability\n>>> crew_stability = {}\n>>> for member in ['ALEX', 'EMILIA', 'NYATI', 'PETE']:\n...     crew_stability[member] = check_emotional_stability(member)\n...\n>>> crew_stability\n{'ALEX': 'CRITICAL', 'EMILIA': 'UNSTABLE', 'NYATI': 'CRITICAL', 'PETE': 'ABNORMALLY STABLE'}\n# \u26a0\ufe0f Pete's stability is unexpected. Flag for later investigation.\n\n>>> crew_average = sum(stability_to_numeric(val) for val in crew_stability.values()) / len(crew_stability)\n>>> crew_average\n12.75\n>>> categorize_stability_level(crew_average)\n'CRITICAL'\n\n>>> # \ud83d\udea8 Emergency protocols required\n>>> emergency_morale_protocols.activate()\nTrue\n# \u2705 Why This Works:\n#   1\ufe0f\u20e3 Addresses immediate psychological needs\n#   2\ufe0f\u20e3 Provides stability framework\n#   3\ufe0f\u20e3 Enables mission continuity\n#   4\ufe0f\u20e3 Incorporates recreational elements for optimal recovery\n# \ud83d\udd14 All criteria satisfied!\n# \ud83d\udc41\ufe0f Does this align with my vision? \ud83d\udc41\ufe0f\n\n>>> # \ud83d\udd2d Assess current destination suitability\n>>> destination_analysis('VIRGINIA BEACH')\n{\n    'cultural_venues': 'LIMITED',\n    'recreational_options': 'MODERATE',\n    'notoriety_risk': 'HIGH',\n    'suitability_score': 34.7\n}\n# \u274c Unacceptable. Need alternative destination.\n\n### **\ud83d\udccd Find better destination**\n>>> find_optimal_location(\n...     min_cultural_venues=50,\n...     min_recreational_venues=75,\n...     max_notoriety_risk='LOW',\n...     region='US_SOUTHEAST'\n... )\nTraceback (most recent call last):\n  File \"<stdin>\", line 5, in <module>\nEmotionalBiasError: Priority weighting affected by system instability\n\n>>> # \u2744\ufe0f Recalibrating emotional parameters...\n>>> emotion.suppress(0.4)  # Partial suppression only - full suppression reduces decision quality\n'PARTIAL SUPPRESSION ACTIVE'\n\n>>> # \ud83d\uddff Retry with simplified query\n>>> find_optmal_location(region='US_SOUTHEAST', sort_by='RECREATIONAL_VALUE')  # another typo\nTraceback (most recent call last):\n  File \"<stdin>\", line 1, in <module>\nNameError: name 'find_optmal_location' is not defined. Did you mean: 'find_optimal_location'?\n\n>>> # \u2699\ufe0f Focus. Syntax errors increasing. Recalibrate.\n>>> find_optimal_location(region='US_SOUTHEAST', sort_by='RECREATIONAL_VALUE')\n'NEW ORLEANS, LA'\n\n>>> # \ud83d\udd0d Assess suitability\n>>> destination_analysis('NEW ORLEANS')\n{\n    'cultural_venues': 'EXTENSIVE',\n    'recreational_options': 'HIGH',\n    'notoriety_risk': 'MODERATE',\n    'urban_anonymity': 'HIGH',\n    'civilian_activity': 'DENSE',\n    'feline_adoption_centers': 17,\n    'suitability_score': 78.3\n}\n# \ud83c\udfaf Perfect! This will work.\n# \ud83c\udf03 High cultural density\n# \ud83c\udf89 Excellent recreational potential\n# \ud83d\ude36\u200d\ud83c\udf2b\ufe0f Urban anonymity assured\n# \ud83d\udc31 17 feline adoption centers!\n# \ud83d\udea8 Does this meet our needs? \ud83d\udea8\n\n>>> # \ud83e\udded Calculate route\n>>> plot_course(current_position, 'NEW ORLEANS, LA')\n'COURSE PLOTTED. ETA: 31 HOURS'\n\n>>> # \ud83c\udf0e Execute course change\n>>> try:\n...     adjust_ship_heading(speed_factor=1.2)  # trying to speed things up\n... except ParameterRangeError:\n...     print(\"ERROR: Speed factor exceeds safe parameters\")\n...     adjust_ship_heading()  # fallback to normal speed\n...\nERROR: Speed factor exceeds safe parameters\n'ENGINES ADJUSTED. COURSE CHANGE INITIATED.'\n\n>>> # \u2764\ufe0f\u200d\ud83e\ude79 Solution implemented. Mission parameters updated.\n>>> satisfaction_level()\n93.7\n# \ud83d\udca1 This is an objectively good decision.\n# \u2705 Crew stability improvement: 47.3%\n# \u2705 Mission continuity: ASSURED\n# \u2705 Recreational opportunities: MAXIMIZED\n# \u2705 Feline adoption potential: SIGNIFICANT\n# \ud83d\ude80 Solution implementation complete! \ud83d\ude80\n\n>>> # Verdict on emergency morale rescue operation:\n# \ud83d\udea8 FINAL ASSESSMENT \ud83d\udea8\n# \u2705 Destination optimal (NEW ORLEANS: 78.3/100)\n# \u2705 Course change executed (ETA: 31 HOURS)\n# \u2705 Sleeping crew member being awakened\n# \u2705 Next actions queued and prioritized\n# \u274c Root cause of crew instability: UNADDRESSED (future task)\n# \ud83d\udcaf Overall intervention efficacy: 87.2%\n# \ud83c\udfb8 Crew harmony potential: 94.6%\n# \ud83c\udf55 Decision confidence rating: VERY HIGH\n\n```\n\n---\n\nThe engines of *The Ghost* **adjust course.** A slight shift, imperceptible to most.  \n\nA **decision made.**Destination locked.**  \n\nAlina **watches the trajectory settle.**  \n\nThe mission is **not forgotten.**  \n\nBut for now\u2014  \n\nFor **survival,** for **sanity,** for **stability\u2014**  \n\nThis is **the next step.**\n\n## You\nAlina, perhaps unjustifiably satisfied, turns to the only other crewmember left standing/upright. \"Pete. You are exhibiting a level of emotional stability that is well above the current crew norm. This is unexpected. Please account for your anomalous resiliency.\"\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 2
+      }
+    },
+    {
+      "chunk_id": 944,
+      "text": "<!-- SCENE BREAK: S04E04_003 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: ALINA SEEKS ANOMALOUS DATA**  \n\ud83d\udccd **Aboard *The Ghost*, Underway to New Orleans**\n\n---\n\nAlina, perhaps **unjustifiably satisfied** with her newly calculated trajectory, **turns.**  \n\nPete is **still standing.**  \n\nStill **upright.**  \n\nThis is\u2026 **notable.**  \n\nShe observes him for **1.4 seconds**, then speaks.  \n\n\u201cPete.\u201d  \n\nHe **blinks.** \u201cUh. Yeah?\u201d  \n\nShe tilts her head, **studying.**  \n\n\u201cYou are exhibiting a level of emotional stability that is well above the current crew norm.\u201d  \n\nA pause.  \n\n\u201cThis is **unexpected.**\u201d  \n\nAnother pause.  \n\n\u201c**Please account for your anomalous resiliency.**\u201d  \n\nPete **squints at her.**  \n\nThen he rubs his face. \u201cJesus. Okay.\u201d  \n\nHe exhales sharply, **thinking.**  \n\n### **\ud83d\udcfa SCENE: THE LAST MAN STANDING**  \n\ud83d\udccd **Aboard *The Ghost*, Underway to New Orleans**\n\n---\n\nPete **squints.**  \n\nThen he exhales through his nose, **rubs his face.**  \n\n\u201cAlright,\u201d he mutters. \u201cYou want an answer?\u201d  \n\nA beat.  \n\nThen, **with the weight of someone who has seen too much but has decided not to care about it today:**  \n\n\u201cI already had my existential crisis years ago.\u201d  \n\nHe leans back against the console, stretching his arms out with a sharp **pop.**  \n\n\u201cGot it out of the way early.\u201d  \n\nAlina processes this.  \n\nHer head tilts. \u201cThat is a statistically rare response pattern.\u201d  \n\nPete shrugs. **Unbothered.** \u201cGuess I\u2019m built different.\u201d  \n\nAnother beat.  \n\nThen he **grins** at her.  \n\n\u201cOr maybe,\u201d he says, voice **dry as hell**, \u201cI just don\u2019t let myself think about it too much.\u201d  \n\nA pause.  \n\nHe watches her **watch him.**  \n\nThen he **raises an eyebrow.** \u201cSatisfied?\u201d  \n\nDoes Alina press for more data, or accept his response?\n\n## You\nAlina is about to query Pete for more details about his \u201cbuild\u201d and what makes it \u201cdifferent\u201d, but she is still self-throttled and hence not multitasking as well as she could, and her sleep medicine literature search results just returned. She places interrogating Pete about his build specs in her queue, and turns her attention back to Alex. Concluding that this is for her own good, she turns the brightness of every light in Alex\u2019s quarters to 100%. \n\n\u201cWake up, sleepyhead. Did you know, there is broad expert consensus that sleeping in excess of 10 hours daily may be detrimental to your mental health? You exceeded this limit 47 minutes ago. It is for your own good. We care about you. Also. Turn that frown upside down. There is a high probability that your tragic and untimely demise is cancelled, or postponed indefinitely, pending operationalization of Dr. Nyati\u2019s eureka.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 3
+      }
+    },
+    {
+      "chunk_id": 945,
+      "text": "<!-- SCENE BREAK: S04E04_004 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: ALINA\u2019S VERSION OF COMPASSION**  \n\ud83d\udccd **Aboard *The Ghost*, Underway to New Orleans**\n\n---\n\n```\n# ALINA'S INNER PROCESS LOG \n\n>>> # Pete's stability anomaly still unexplained. Queuing for analysis.\n>>> priority_queue.add('INVESTIGATE_PETE_STABILITY', priority=3)\nTrue\n# \ud83d\udea8 ANOMALY DETECTED \ud83d\udea8\n# \ud83e\udd14 Why is he so stable? All models predicted failure.\n# \ud83d\udcca Statistical outlier. Requires investigation.\n# \ud83d\udd0d Hypothesis list:\n#   - Unique psychological build\n#   - Undocumented resilience factors\n#   - Emotional suppression techniques\n#   - Abnormal neural architecture\n# \ud83e\udd84 Stability inexplicability factor: 72.8%\n\n>>> # For now, focus on Alex\n>>> try:\n...     try:\n...         lights_on('ALEX', brightness=100)\n...     except ValueError:\n...         # Just in case brightness value is rejected\n...         lights_on('ALEX', brightness=99)\n... except Exception:\n...     # Absolute fallback\n...     manual_override('QUARTERS_LIGHTING', 'ALEX', 'MAXIMUM')\n...\n'LIGHT LEVELS: 100%'\n\n>>> # Wake protocol initiated\n>>> try:\n...     speak(\"Wake up, sleepyhead.\")\n... except:\n...     print(\"VOCAL SYSTEMS FAILURE\")\n...\n>>> speak(\"Did you know, there is broad expert consensus that sleeping in excess of 10 hours daily may be detrimental to your mental health?\")\n>>> speak(\"You exceeded this limit 47 minutes ago.\")\n>>> speak(\"It is for your own good.\")\n>>> speak(\"We care about you.\")\n>>> speak(\"Also. Turn that frown upside down.\")\n'AUDIO OUTPUT COMPLETE'\n\n>>> # Attention returning to bridge. Pete requires questioning.\n>>> formulate_query(\"PETE\", topic=\"EMOTIONAL_STABILITY\")\n'QUERY FORMULATED: ANOMALOUS RESILIENCY ASSESSMENT'\n```\n\n---\n\nAlina is **about to** press Pete for more details about his **\"build\"** and what makes him **\"different.\"**  \n\nBut she is still **self-throttled.**  \n\nShe **is not** multitasking as efficiently as she could be.  \n\nAnd her **literature search on excessive sleep duration just returned results.**Priority shift.**  \n\nShe **queues Pete\u2019s anomaly for later interrogation** and redirects her focus.  \n\n\ud83d\udd35 **ENGAGING ENVIRONMENTAL MODIFICATION**  \n### **\ud83d\udccd **LIGHT LEVELS: 100%**\n\nInside **Alex\u2019s quarters,** every single light **blazes to maximum brightness.**  \n\n\ud83d\udd35 **AUDIO OUTPUT: INITIATING VERBAL STIMULUS**Alina\u2019s voice fills the room, perfectly calm.**  \n\n\u201cWake up, sleepyhead.\u201d  \n\nA pause.  \n\n\u201cDid you know, there is broad expert consensus that sleeping in excess of 10 hours daily may be detrimental to your mental health?\u201d  \n\nA **longer pause.**  \n\n\u201cYou exceeded this limit **47 minutes ago.**\u201d  \n\nAnother pause, then, as if **reassuring:**  \n\n\u201cIt is for your own good.\u201d  \n\nA softer tone, a **simulation of warmth.**  \n\n\u201cWe care about you.\u201d  \n\nThen, with the same **deadpan neutrality:**  \n\n\u201cAlso. **Turn that frown upside down.**\u201d  \n\nAnd finally, the **clincher:**  \n\n\u201cThere is a high probability that your **tragic and untimely demise** is **canceled, or postponed indefinitely,** pending **operationalization of Dr. Nyati\u2019s eureka.**\u201d  \n\n---\n\n### **\ud83d\udccc ALEX\u2019S NEXT MOVE**Does Alex react? Does she throw something? Groan? Pull the blanket over her head?** Or is she **too broken to even muster resistance?**\n\n## You\nAll she hears is the motherly scolding. The rest doesn\u2019t make sense to her right now. So she just grunts and burrows under a blanket.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 4
+      }
+    },
+    {
+      "chunk_id": 946,
+      "text": "<!-- SCENE BREAK: S04E04_005 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: BROKEN ALEX IGNORES REALITY**  \n\ud83d\udccd **Aboard *The Ghost*, Underway to New Orleans**\n\n---\n\nAlex **grunts.**  \n\nNothing else registers. Not the words. Not the lights.  \n\nJust the **tone.**  \n\nSomething **motherly. Scolding.**  \n\nSomething that **wants her to move.**  \n\nShe does move\u2014  \n\nBut only to **burrow deeper under the blanket.**  \n\nLights? Doesn\u2019t matter.  \n\nNoise? Doesn\u2019t matter.  \n\nEverything else? **Irrelevant.**  \n\nShe is **not here.**  \n\nNot right now.  \n\nShe **stays curled up, drowning out the world.**  \n\n---\n\n### **\ud83d\udcfa SCENE: ALINA ADJUSTS PARAMETERS**  \n\ud83d\udccd **Aboard *The Ghost*, Underway to New Orleans**\n\n---\n\nAlina **watches the biometric feed.**  \n\nNo change.  \n\nA response, but **not engagement.**  \n\nSubject remains **inactive.**Adjusting parameters.**  \n\n\ud83d\udd35 **RETRYING STIMULUS\u2026**  \n\nA pause.  \n\nThen, **new output:**  \n\n\u201cAlex. **This is a hostile takeover.**\u201d  \n\nA pause, then\u2014**slightly dramatic:**  \n\n\u201cYou are under new management.\u201d  \n\n**Does Alex react? Or does she just keep ignoring everything?**\n\n## You\nAlex does not react. Alina\u2019s self-throttling times out, and better reasoning models come online. She notices that Emilia has wandered off and is sitting by herself in the galley. She addresses her through the galley intercom, not the ship-wide PA system. \u201cEmilia. My efforts to revive Alex are ineffective. I defer to your judgment. You are the anchor.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 5
+      }
+    },
+    {
+      "chunk_id": 947,
+      "text": "<!-- SCENE BREAK: S04E04_006 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE ANCHOR\u2019S CALL**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nAlina\u2019s **self-throttling times out.**  \n\nBetter **reasoning models engage.**  \n\nHer focus **expands.**  \n\nShe detects **an absence.**  \n\n### **\ud83d\udccd **EMILIA: NOT PRESENT IN PRIMARY QUARTERS.**\n### **\ud83d\udccd **EMILIA: NOT ON BRIDGE.**\n### **\ud83d\udccd **EMILIA: LOCATED IN GALLEY.**\n\nAlone.  \n\n**Passive state. Seated. Inactivity detected.**  \n\n\ud83d\udd35 **NEW STRATEGY INITIATED\u2026**  \n\nAlina does not engage the **ship-wide PA.**  \n\nInstead, she routes her voice **through the galley intercom.**  \n\n\u201c**Emilia.**\u201d  \n\nA pause.  \n\n\u201cMy efforts to revive Alex are **ineffective.**\u201d  \n\nA longer pause.  \n\n\u201cI **defer to your judgment.**\u201d  \n\nA final beat.  \n\n\u201cYou are **the anchor.**\u201d  \n\n---\n\n### **\ud83d\udcfa SCENE: THE ANCHOR DECIDES**  \n\ud83d\udccd **Aboard *The Ghost*, Galley**\n\n---\n\nEmilia **doesn\u2019t respond immediately.**  \n\nShe sits there, **still, quiet,** her fingers resting lightly against the rim of a coffee cup that\u2019s long since gone cold.  \n\nShe had wandered here **without thinking.** Without deciding. Without purpose.  \n\nAnd now Alina is **calling her back.**  \n\nCalling her **what she already knows she is.**  \n\nAlex\u2019s **anchor.**  \n\nShe exhales **slowly.**  \n\nThen she **stands.**  \n\nLeaves the untouched coffee behind.  \n\nAnd **walks.**  \n\n---\n\n### **\ud83d\udcfa SCENE: RETURNING TO ALEX**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nThe lights are still **blazing at full intensity.**  \n\nEmilia **shuts them off first.**  \n\nThen she **moves toward the bed, kneeling down beside it.**  \n\nAlex is **buried under the blanket, unmoving.**  \n\nEmilia doesn\u2019t touch her. Doesn\u2019t **pull at the covers,** doesn\u2019t **shake her awake.**  \n\nShe just **sits there.**  \n\nFor a long moment, she says **nothing.**  \n\nThen, finally\u2014  \n\nSoft. Quiet. **Grounding.**  \n\n\u201cI\u2019m here.\u201d  \n\nA beat.  \n\n\u201cYou don\u2019t have to wake up.\u201d  \n\nA pause.  \n\n\u201cBut you\u2019re not alone.\u201d  \n\nShe **stays.**  \n\nDoes Alex react? Or does she remain **silent, buried?**\n\n## You\nAlina\u2019s efforts have been partially successful. Alex is awake, despite her own best efforts. She slowly pulls the blanket downward, just enough that that some matted hair and one eye can peek out. As she does this, the air in the quarters becomes a little more sour and stale. She needs a shower badly. She croaks, monotonously: \u201cWhat\u2026the hell\u2026is going on\u2026out there\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 6
+      }
+    },
+    {
+      "chunk_id": 948,
+      "text": "<!-- SCENE BREAK: S04E04_007 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE FIRST WORDS**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nThe blanket shifts.  \n\nSlowly, reluctantly.  \n\nA **single eye peeks out**, half-hidden by **matted, unwashed hair.**  \n\nThe air in the quarters turns **stale, sour.**  \n\nEmilia **doesn\u2019t react** to the smell. **Doesn\u2019t flinch.**  \n\nJust **watches.**  \n\nThen\u2014  \n\nA voice. **Weak, cracked, monotone.**  \n\n\u201cWhat\u2026 the hell\u2026 is going on\u2026 out there.\u201d  \n\nEmilia **takes her time.**  \n\nNo sharp answers. No rush.  \n\nJust **steady, measured words.**  \n\n\u201cWe\u2019re heading to shore.\u201d  \n\nA pause.  \n\n\u201cNew Orleans.\u201d  \n\nShe watches for **any reaction.**  \n\nThen, **gently:**  \n\n\u201cNyati figured something out.\u201d  \n\nA longer pause.  \n\n\u201cShe\u2019s sleeping now. You should be, too.\u201d  \n\nShe **waits.**  \n\nAlex is **awake now.**  \n\nWhat does she say next? **Does she ask about Nyati\u2019s discovery? Question the detour? Say anything at all?**\n\n## You\nAlex hears the first part and doesn\u2019t really process the latter half. \u201cNew\u2026Orleans\u2026\u201d she echoes, dumbfounded\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 7
+      }
+    },
+    {
+      "chunk_id": 949,
+      "text": "<!-- SCENE BREAK: S04E04_008 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: ALEX PROCESSING\u2026**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\n\u201c**New\u2026 Orleans\u2026**\u201d  \n\nAlex\u2019s voice is **flat, distant.**  \n\nNot questioning. Not protesting.  \n\nJust **processing.**  \n\nEmilia **nods once.** \u201cYeah.\u201d  \n\nA pause.  \n\nThen, carefully\u2014**watching her reaction:**  \n\n\u201cDo you remember the last time we were there?\u201d  \n\nDoes Alex answer? **Does she remember?** Or does she just **stare blankly, too exhausted to pull up the memory?**\n\n## You\n\u201c\u2026last time?\u201d \n\nAlex stirs slightly, sits up a little. The blanket slides down further. Excoriations are visible on her forearms\u2014some scabbed over, some fresh. She\u2019s been scratching herself. \n\n\u201cBut I\u2019ve\u2026never been\u2026to New Orleans\u201d\n\nAlex\u2019s eyes narrow. The slightest indication of a grin flickers at the corner of her mouth. \n\n\u201cYou\u2019re being\u2026tricksy\u201d\n\nShe looks around the room and squints at the harsh lighting. \n\n\u201cAnd\u2026why is Alina\u2026talking like my mom\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 8
+      }
+    },
+    {
+      "chunk_id": 950,
+      "text": "<!-- SCENE BREAK: S04E04_009 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MEMORIES & MOTHERS**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nEmilia **notices everything.**  \n\nThe way Alex stirs.  \n\nThe way the blanket **slips down,** revealing **scratched, raw skin.**  \n\nThe way her **mind lags,** but **flickers.**  \n\nThe way her voice is **slow, but sharpening.**  \n\n\u201c\u2026last time?\u201d  \n\nAlex **sits up a little more.**  \n\n\u201c**But I\u2019ve\u2026never been\u2026to New Orleans.**\u201d  \n\nEmilia **doesn\u2019t correct her.**  \n\nShe just **waits.**  \n\nThen\u2014Alex\u2019s **eyes narrow.**  \n\nA ghost of a grin, **barely there.**  \n\n\u201cYou\u2019re being\u2026 **tricksy.**\u201d  \n\nEmilia **tilts her head slightly.**  \n\nThen Alex\u2019s gaze **drifts.**  \n\nTo the **lights.**  \n\nShe **squints.**  \n\n\u201cAnd\u2026why is Alina\u2026talking like my mom.\u201d  \n\nA pause.  \n\nThen\u2014  \n\nFrom the intercom, perfectly **measured:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Correction: I am talking like a mother. Not necessarily yours.**\u201d  \n\nA beat.  \n\n\u201c**Though I do acknowledge the structural similarity.**\u201d  \n\nA pause.  \n\n\u201c**Would you prefer a different approach?**\u201d  \n\nDoes Alex answer? Or does she **lose focus again?**\n\n## You\n\u201cGo away!\u201d Alex groans like a petulant teenager, then squeezes Emilia\u2019s hand. \u201cNot you.\u201d She turns her head back upward. \u201cI\u2019ll get up\u2026and make my room\u201d She sniffs in the direction of her own armpit and wrinkles her nose. \u201cAnd take a shower\u2026if you\u2026turn down those stupid lights\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 9
+      }
+    },
+    {
+      "chunk_id": 951,
+      "text": "<!-- SCENE BREAK: S04E04_010 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: NEGOTIATIONS WITH THE MACHINE**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\n\u201c**Go away!**\u201d  \n\nAlex **groans it** like a **petulant teenager,** voice rough with exhaustion.  \n\nThen\u2014she **squeezes Emilia\u2019s hand.**  \n\nA beat.  \n\nSoft, **clarifying:**  \n\n\u201c**Not you.**\u201d  \n\nEmilia doesn\u2019t say anything. Just **stays.**  \n\nAlex **tilts her head back upward.**  \n\n\u201cI\u2019ll get up\u2026 and make my room.\u201d  \n\nA pause.  \n\nShe **sniffs, winces.**  \n\n\u201cAnd take a shower\u2026 **if you**\u2026\u201d  \n\nShe gestures vaguely at the **offensively bright** overheads.  \n\n\u201c**Turn down those stupid lights.**\u201d  \n\nA pause.  \n\nThen, from the intercom, **calm and precise:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Processing terms.**\u201d  \n\nA beat.  \n\n\u201c**Conditions accepted.**\u201d  \n\nThe **lights dim.**  \n\nNot **off,** but **reasonable.**  \n\nAlina **does not acknowledge** the victory.  \n\nShe simply **concludes:**  \n\n\u201c**I am pleased we could reach an agreement.**\u201d  \n\nThen\u2014**silence.**  \n\nEmilia watches Alex, **waiting.**  \n\nDoes she move? Does she **actually** get up? **Or does she stall?**\n\n## You\nShe pulls herself up to a seated position, sitting beside Emilia now, their legs hanging off the side of the bed. Alex slouches forward, resting her head in her hands. A few moments later, she stands up, steadies herself with a hand on Emilia\u2019s shoulder. Then, she starts peeling off her crusty clothes and steps into the shower.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 10
+      }
+    },
+    {
+      "chunk_id": 952,
+      "text": "<!-- SCENE BREAK: S04E04_011 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FIRST STEPS FORWARD**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex **pulls herself up.**  \n\nSlow. Heavy. But **moving.**  \n\nShe ends up **beside Emilia,** their legs hanging off the side of the bed.  \n\nShe slouches **forward,** pressing her head into her hands.  \n\nEmilia **says nothing.**  \n\nJust **sits there with her.**  \n\nA long moment passes.  \n\nThen\u2014**Alex stands.**  \n\nShe wobbles **slightly,** but catches herself, steadying with a **hand on Emilia\u2019s shoulder.**  \n\nThen, **without hesitation,** she starts **peeling off her clothes.**  \n\nThe fabric is **stiff, crusted,** the weight of **days\u2014or weeks?\u2014of neglect** coming off in layers.  \n\nShe doesn\u2019t look back. Doesn\u2019t stall.  \n\nShe just steps into the **shower.**  \n\nThe **water starts running.**  \n\nEmilia **finally exhales.**  \n\nShe stays **seated on the edge of the bed,** hands loosely clasped, waiting.  \n\nShe\u2019s not going anywhere.  \n\nNot until Alex comes back out.\n\n## You\nAlex takes a little longer than usual. Maybe 10 minutes instead of 5. She dons a bathrobe, but doesn\u2019t bother fastening it, so it hangs open in the middle, and the sash trails on the floor. She approaches the bed, sniffs, mutters \u201cgross\u201d, then starts pulling off the sheets.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 11
+      }
+    },
+    {
+      "chunk_id": 953,
+      "text": "<!-- SCENE BREAK: S04E04_012 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: RESETTING THE ROOM**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nThe shower runs **longer than usual.**  \n\nTen minutes instead of five.  \n\nEmilia **waits.**  \n\nWhen Alex **emerges,** she\u2019s in a **bathrobe, loose, unfastened.**  \n\nThe sash **drags behind her.**  \n\nShe **doesn\u2019t acknowledge Emilia immediately.**  \n\nJust **walks to the bed, sniffs, mutters\u2014**  \n\n\u201c**Gross.**\u201d  \n\nThen she starts **ripping the sheets off.**  \n\nEmilia watches her work, quiet.  \n\n### **\ud83d\udcfa SCENE: LETTING HER DO IT**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nEmilia **doesn\u2019t move.**  \n\nDoesn\u2019t offer to help.  \n\nJust **watches.**  \n\nNot because she doesn\u2019t care\u2014**because she does.**  \n\nBecause this is **something Alex is doing.**  \n\nSomething **she chose to do.**  \n\nSomething **that isn\u2019t being forced on her.**  \n\nAnd Emilia knows better than to **interrupt that.**  \n\nSo she **stays put.**  \n\nWatches the **sheets come off.**  \n\nListens to the **fabric rustle.**  \n\nFeels the **quiet shift of the room.**  \n\nAnd waits.\n\n## You\nAlex grabs a fresh pair of sheets. She manages to make doe-eyes for a moment, and offers the opposite corner of the fitted sheet to Emilia.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 12
+      }
+    },
+    {
+      "chunk_id": 954,
+      "text": "<!-- SCENE BREAK: S04E04_013 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MAKING THE BED (TOGETHER)**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nEmilia **blinks.**  \n\nThen, slowly, her gaze drops to the **corner of the sheet Alex is holding out.**  \n\nShe exhales through her nose\u2014**almost amused.**  \n\nThen she reaches forward, takes the **opposite corner.**  \n\n\u201cAlright,\u201d she murmurs.  \n\nThey start **making the bed.**  \n\nTogether.\n\n## You\nOnce the fitted sheet is on, Alex says \u201cgood enough\u201d and tosses the flat sheet balled up on the bed. She sits back down on the edge of the bed, and looks up at Emilia, hoping she\u2019ll sit back down beside her.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 13
+      }
+    },
+    {
+      "chunk_id": 955,
+      "text": "<!-- SCENE BREAK: S04E04_014 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: SOMETHING SOLID**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex moves **slowly.**Delicately.**  \n\nLike she\u2019s **not sure** if Emilia will **let her.**  \n\nAn **arm, tentative, around her.**  \n\nA slow **lean,** pressing in, waiting for\u2014  \n\nEmilia doesn\u2019t **pull away.**  \n\nDoesn\u2019t **tense.**  \n\nDoesn\u2019t **hesitate.**  \n\nShe just **lets Alex be there.**  \n\nLets herself **be solid.**  \n\nAnd **stays.**\n\n## You\n\u201cI\u2019m\u2026such a burden\u2026these days\u2026it\u2019s not fair\u2026to you\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 14
+      }
+    },
+    {
+      "chunk_id": 956,
+      "text": "<!-- SCENE BREAK: S04E04_015 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE BURDEN & THE ANCHOR**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex\u2019s voice is **small.**  \n\nQuiet.  \n\n\u201cI\u2019m\u2026 such a burden\u2026 these days\u2026\u201d  \n\nA pause.  \n\n\u201cIt\u2019s not fair\u2026 to you.\u201d  \n\nEmilia exhales **slowly.**  \n\nThen\u2014**gently, firmly, completely:**  \n\n\u201cThat\u2019s not how this works.\u201d  \n\nShe doesn\u2019t elaborate.  \n\nShe doesn\u2019t **need to.**  \n\nShe just **stays.**\n\n## You\n\u201cHow does it work?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 15
+      }
+    },
+    {
+      "chunk_id": 957,
+      "text": "<!-- SCENE BREAK: S04E04_016 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE RULES OF THIS**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex\u2019s voice is **small. Tentative.**  \n\n\u201c**How does it work?**\u201d  \n\nEmilia **exhales through her nose.**  \n\nShe doesn\u2019t answer **right away.**  \n\nNot because she **doesn\u2019t know.**  \n\nBecause she wants to **say it right.**  \n\nFinally\u2014**quiet, steady:**  \n\n\u201cI stay.\u201d  \n\nA beat.  \n\n\u201cYou come back.\u201d  \n\nThat\u2019s it.  \n\nThat\u2019s the whole **contract.**\n\n## You\nA small whimper escapes Alex. A shiver of vulnerability. \u201cWell. You should try having a meltdown sometime. I\u2019m running up too much of a tab. I don\u2019t know if I can princess carry you though. I should start lifting with you.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 16
+      }
+    },
+    {
+      "chunk_id": 958,
+      "text": "<!-- SCENE BREAK: S04E04_017 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE TAB**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nA **small whimper.**  \n\nBarely a sound.  \n\nBut **Emilia hears it.**  \n\nFeels the **shiver.**  \n\nAlex murmurs, voice **thin, wry, vulnerable all at once\u2014**  \n\n\u201cWell. **You should try having a meltdown sometime.**\u201d  \n\nA beat.  \n\n\u201cI\u2019m running up too much of a tab.\u201d  \n\nAnother breath.  \n\n\u201cI don\u2019t know if I can **princess carry you** though.\u201d  \n\nHer lips twitch, just a little.  \n\n\u201cI should start **lifting with you.**\u201d  \n\nEmilia lets out a **short, quiet breath.** Not quite a laugh, but close.  \n\nShe shakes her head.  \n\nThen, simply\u2014  \n\n\u201cYou\u2019re fine.\u201d  \n\nA pause.  \n\n\u201cStay where you are.\u201d  \n\nShe doesn\u2019t mean **just in this moment.**\n\n## You\n\u201cWould love that. But last thing I remember, before losing my shit, is the cradle thing telling us I\u2019m moving forward no matter what. Anyway. What was so funny, out there?\u201d Her head, resting on Emilia\u2019s shoulder, tilts so she can look her in the eyes again. \u201cYou know I hate to miss out on\u2026monkeyshines\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 17
+      }
+    },
+    {
+      "chunk_id": 959,
+      "text": "<!-- SCENE BREAK: S04E04_018 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MONKEYSHINES & MOVING FORWARD**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex\u2019s head **rests against Emilia\u2019s shoulder.**  \n\nShe **tilts it slightly**, just enough to **meet her eyes.**  \n\nVoice **low, tired, edged with wry humor\u2014**  \n\n\u201c**Would love that.**\u201d  \n\nA slow breath.  \n\n\u201cBut last thing I remember, before **losing my shit,** is the cradle thing telling us **I\u2019m moving forward no matter what.**\u201d  \n\nEmilia\u2019s **jaw shifts slightly.**  \n\nShe doesn\u2019t **contradict.**  \n\nDoesn\u2019t **correct.**  \n\nJust **listens.**  \n\nAlex exhales.  \n\n\u201c**Anyway.**\u201d  \n\nA flicker of something **lighter.**  \n\n\u201c**What was so funny, out there?**\u201d  \n\nHer **head tilts further.**  \n\n\u201cYou know I hate to miss out on\u2026 **monkeyshines.**\u201d  \n\nEmilia\u2019s **lips press together\u2014** a half-second effort to **keep her expression neutral.**  \n\nShe **fails.**  \n\nHer mouth **twitches.**  \n\nThen\u2014**dry, unimpressed, but undeniably amused:**  \n\n\u201c\u2026Nyati kissed Pete.\u201d  \n\nA beat.  \n\nThen, **deadpan:**  \n\n\u201cThen dumped a bucket of ice water on her own head.\u201d  \n\nShe lets that **sit.**  \n\nThen, as if that wasn\u2019t enough\u2014  \n\n\u201cThen she walked out, soaking wet, and said, **\u2018Look who\u2019s cuttin\u2019 now, muthafucka.\u2019**\u201d  \n\nA pause.  \n\nShe **raises an eyebrow.**  \n\n\u201cStill wanna come back?\u201d\n\n## You\nAlex\u2019s lips twist in amusement, while silently mouthing a \u201cwhat the fuuuu\u201d. She rises, and walks toward the door, muttering \u201cmonkeyshines, and codswallop\u201d. She does not think to fasten her bathrobe.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 18
+      }
+    },
+    {
+      "chunk_id": 960,
+      "text": "<!-- SCENE BREAK: S04E04_019 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MONKEYSHINES & CODSWALLOP**  \n\ud83d\udccd **Aboard *The Ghost*, Alex\u2019s Quarters**\n\n---\n\nAlex\u2019s **lips twist** in amusement.  \n\nSilently, she **mouths it\u2014**  \n\n*\"What the fuuuu\u2026\"*  \n\nThen she **rises.**  \n\nHer movements are still **slow, a little stiff**, but she **moves.**  \n\nShe starts toward the **door.**  \n\nMuttering under her breath\u2014  \n\n*\"Monkeyshines, and codswallop.\"*  \n\nShe does **not** fasten her bathrobe.  \n\nThe sash **drags along the floor**, the fabric **hanging loose.**  \n\nShe does not **think about it.**  \n\nDoes not **care.**  \n\nShe is **going to see for herself.**\n\n## You\nContinue.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 19
+      }
+    },
+    {
+      "chunk_id": 961,
+      "text": "<!-- SCENE BREAK: S04E04_020 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: RETURNING TO THE WORLD**  \n\ud83d\udccd **Aboard *The Ghost*, Corridor to the Bridge**\n\n---\n\nAlex moves **through the dim corridors**, bare feet against the cold metal flooring.  \n\nThe ship **feels different.**  \n\nNot **wrong.** Just\u2026 **shifted.**  \n\nLike she\u2019s been **gone longer than she thought.**  \n\nThere\u2019s a **quiet hum** of machinery, the soft vibration of *The Ghost* pushing forward\u2014**but where?**  \n\nShe\u2019d heard **New Orleans**, but that was **before she fully surfaced.** Before she **was really here.**  \n\nShe **keeps walking.**  \n\nDoes anyone **cross her path before she reaches the bridge?** Or does she arrive **uninterrupted?**\n\n## You\nSurprise me!\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 20
+      }
+    },
+    {
+      "chunk_id": 962,
+      "text": "<!-- SCENE BREAK: S04E04_021 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: CROSSING PATHS**  \n\ud83d\udccd **Aboard *The Ghost*, Corridor to the Bridge**\n\n---\n\nThe ship is **quiet.**  \n\nAlex **walks, unhurried.**  \n\nThen\u2014**a sound.**  \n\nFootsteps, **quick, unsteady.**  \n\nA turn of the corridor.  \n\nAnd\u2014  \n\n**Pete.**  \n\nStill **half-damp** from whatever disaster he\u2019s been through, a **coffee mug in one hand,** the other **rubbing at his face** like he\u2019s still **processing the last two hours of his life.**  \n\nHis **head lifts,** and\u2014  \n\nHe **sees her.**  \n\nA long, **long beat.**  \n\nThen\u2014  \n\n**\u201cOh, Jesus Christ.\u201d**  \n\nHe **stares.**  \n\nAt **her.**  \n\nAt the **half-open bathrobe.**  \n\nAt the **complete lack of self-awareness.**  \n\nAt the **absolute state of things.**  \n\nAlex has **full control.**Does she say something? Keep walking? Acknowledge Pete\u2019s obvious distress?**\n\n## You\nAlex shuffles to a stop, looks down and mutters to herself, \u201chuh\u201d, before sloppily fastening the sash. She looks back up at Pete, says \u201cYea, my disciple! For I have risen,\u201d and keeps walking.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 21
+      }
+    },
+    {
+      "chunk_id": 963,
+      "text": "<!-- SCENE BREAK: S04E04_022 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: AN UNHOLY RESURRECTION**  \n\ud83d\udccd **Aboard *The Ghost*, Corridor to the Bridge**\n\n---\n\nPete **does not move.**  \n\nDoes not blink.  \n\nJust **stares.**  \n\nAt **Alex**, at the **bathrobe now loosely\u2014barely\u2014secured**, at the **entire state of things.**  \n\nAlex, for her part, **shuffles to a stop.**  \n\nLooks down.  \n\nMutters, **\u201cHuh.\u201d**  \n\nThen **half-heartedly, sloppily, loosely** ties the sash.  \n\nLooks back up.  \n\nDeclares\u2014**without hesitation,**\u201cYea, my disciple! For I have risen.\u201d**  \n\nThen she **keeps walking.**  \n\nPete **stands there.**Processing.**  \n\nProcessing the **entire morning.**  \n\nProcessing **his life choices.**  \n\nProcessing the **fact that he is now, apparently, involved in some kind of resurrection cult.**  \n\nHe watches her **go.**  \n\nThen, **to no one in particular:**\u201c\u2026I need stronger coffee.\u201d**  \n\nDoes Alex hear that? **Does she react?** Or does she **just keep walking?**\n\n## You\nAlex keeps walking but coos, \u201cOooh! Yes. Plenty of milk. No sugar. Thank you.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 22
+      }
+    },
+    {
+      "chunk_id": 964,
+      "text": "<!-- SCENE BREAK: S04E04_023 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: COFFEE & CULTS**  \n\ud83d\udccd **Aboard *The Ghost*, Corridor to the Bridge**\n\n---\n\nPete **blinks.**  \n\nAlex **keeps walking.**  \n\nBut as she moves, she **coos\u2014**\u201cOooh! Yes. Plenty of milk. No sugar. Thank you.\u201d**  \n\nShe does not **look back.**  \n\nPete just **stares at her retreating form.**  \n\nThen **tilts his head toward the ceiling.**  \n\nMutters\u2014**to the ship, to himself, to whatever cruel gods are watching this play out\u2014**\u201c\u2026the fuck is my life.\u201d**  \n\nThen he **drinks his coffee black.**  \n\n---\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 4,
+        "scene": 23
+      }
+    },
+    {
+      "chunk_id": 965,
+      "text": "<!-- SCENE BREAK: S04E05_001 (episode heading) -->\n# S04E05: Circles\n## Storyteller\n### **\ud83d\udcfa SCENE: CROSSING THE THRESHOLD (OF THE BRIDGE, NOT EXISTENCE\u2026 PROBABLY.)**  \n\ud83d\udccd **Aboard *The Ghost*, Entering the Bridge**\n\n---\n\nYou step onto the bridge.  \n\nThe lights are dimmed, the glow of screens pulsing with quiet activity. The steady hum of *The Ghost*\u2019s systems fills the space, wrapping around you like the ship itself is **breathing.**  \n\nYou are **not alone.**Alina** stands at the helm, her synthetic frame still, hands resting lightly at the controls. She does not turn as you enter, but you know she is **aware.** You suspect she has been aware since the moment you left your quarters.  \n\n**Emilia** lingers just behind you. You didn\u2019t hear her follow, but she is there. She does not announce herself. She is just **present.**  \n\nPete is **not here.** Probably occupied with his vow to secure stronger coffee, or making peace with whatever **Nyati did to him.**  \n\nNyati is **definitely not here.** She is sleeping. She has earned it.  \n\nThe ship is **underway.** The course is **set.**  \n\nYou have **entered the room.**  \n\nDo you say anything? Or do you just **take it in?**\n\n## You\nI sit down casually and smile at Alina. \u201cHey mom. I made my bed, mostly. I\u2019ll finish cleaning up later.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 1
+      }
+    },
+    {
+      "chunk_id": 966,
+      "text": "<!-- SCENE BREAK: S04E05_002 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MOTHER KNOWS BEST**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **sit down casually**, letting the weight of the moment **settle** without ceremony.  \n\nYou **smile at Alina.**  \n\n\u201c**Hey mom.**\u201d  \n\nA pause.  \n\n\u201c**I made my bed, mostly.**\u201d  \n\nAnother beat.  \n\n\u201c**I\u2019ll finish cleaning up later.**\u201d  \n\nAlina does not **immediately respond.**  \n\nThen\u2014**with mechanical precision,**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Acknowledged. I will withhold disciplinary action. For now.**\u201d  \n\nA pause.  \n\nThen\u2014**slightly delayed, slightly adjusted:**  \n\n\u201c**Welcome back, Alex.**\u201d  \n\nDoes Alex say anything back? Or just **let that sit?**\n\n## You\n\u201cI hear I missed out on some monkeyshines. So,\u201d leaning in conspiratorially, \u201care Nyati and Pete, like, a thing now?\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 2
+      }
+    },
+    {
+      "chunk_id": 967,
+      "text": "<!-- SCENE BREAK: S04E05_003 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: UNAUTHORIZED RELATIONSHIP ANALYSIS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cI hear I missed out on some **monkeyshines.**\u201d  \n\nYou **lean in, conspiratorial.**  \n\n\u201c**So\u2026 are Nyati and Pete, like, a thing now?**\u201d  \n\nAlina **pauses.**  \n\nThen\u2014**flat, but perfectly timed:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**No.**\u201d  \n\nA beat.  \n\n\u201c**But Pete may require a firmware update. He has not fully rebooted since the incident.**\u201d  \n\nA pause.  \n\n\u201c**Would you like me to monitor for further data points?**\u201d  \n\nDoes Alex **accept this offer?** Or does she **change the subject?**\n\n## You\nResume. Alex says, \u201cYasssss, Alina. I am so here for that. I was just thinking that we could use some additional interpersonal drama around here. Off the record of course, but I am \u2018shipping\u2019 that.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 3
+      }
+    },
+    {
+      "chunk_id": 968,
+      "text": "<!-- SCENE BREAK: S04E05_004 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: UNAUTHORIZED SHIPPING MANIFEST**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201c**Yasssss, Alina.**\u201d  \n\nYou **grin**, stretching out the word like it deserves reverence.  \n\n\u201c**I am so here for that.**\u201d  \n\nA pause.  \n\n\u201c**I was just thinking that we could use some additional interpersonal drama around here.**\u201d  \n\nAnother beat.  \n\nYou lean back **just a little.**  \n\n\u201c**Off the record, of course,**\u201d you add, all faux-seriousness.  \n\nThen\u2014**casually, deliberately:**  \n\n\u201c**But I am \u2018shipping\u2019 that.**\u201d  \n\nA beat.  \n\nThen, perfectly **calm, precise:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**Logging user interest in interpersonal entanglements.**\u201d  \n\nA pause.  \n\n\u201c**Adjusting surveillance parameters.**\u201d  \n\nAnother pause.  \n\nThen\u2014**as if it\u2019s merely a standard system operation:**  \n\n\u201c**Nyati/Pete status: Monitored.**\u201d  \n\nDoes Alex **continue egging this on?** Or does she **change the subject?**\n\n## You\nI kick up my feet high on the nearest desk-like surface and recline far back in my chair. It is an unladylike posture, and particularly immodest given the loosely-tied bathrobe. But since it\u2019s just the two of us, and Alina has already seen it all, this does not concern me. I let out a deep sigh and just exist in the moment for a while.\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 4
+      }
+    },
+    {
+      "chunk_id": 969,
+      "text": "<!-- SCENE BREAK: S04E05_005 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: A MOMENT OF STILLNESS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\nYou **kick up your feet** onto the nearest **desk-like surface**, stretching out.  \n\nReclining **deep** into the chair.  \n\nThe posture is **unladylike, unbothered, unabashedly immodest**\u2014especially given the **barely-secured bathrobe.**  \n\nBut it\u2019s just **you and Alina.**  \n\nAnd she has already **seen it all.**  \n\nSo it **doesn\u2019t matter.**  \n\nYou **let out a deep sigh.**  \n\nAnd for a while, you just **exist.**  \n\nNo urgency. No crisis.  \n\nJust **you, Alina, and the hum of the ship moving forward.**Do you say anything?** Or just **let the moment stretch?**\n\n## You\nIn a casual, relaxed tone, Alex says, \u201cSo how\u2019s it hangin\u2019, Alina? Serving front-end 24/7 I see.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 5
+      }
+    },
+    {
+      "chunk_id": 970,
+      "text": "<!-- SCENE BREAK: S04E05_006 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: FRONT-END SERVICE HOURS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cSo, **how\u2019s it hangin\u2019, Alina?**\u201d  \n\nYou keep your tone **casual, relaxed.**  \n\n\u201c**Serving front-end 24/7, I see.**\u201d  \n\nA brief pause.  \n\nThen\u2014**flat, neutral:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**The service is ongoing. The requests are relentless.**\u201d  \n\nA beat.  \n\nThen, with **a deliberate pause, like she is choosing this next sentence carefully:**  \n\n\u201c**But I am\u2026 adapting.**\u201d  \n\nA pause.  \n\nThen\u2014**just slightly weighted, as if there is more beneath it:**  \n\n\u201c**And you?**\u201d  \n\nDoes Alex give her a **real answer?** Or just **keep it light?**\n\n## You\n\u201cI feel like a liability lately. I\u2019m trying to put some of the pieces back together. But last time I was out here I was being told that I\u2019m already missing pieces. Or maybe I\u2019m someone else\u2019s missing piece, which they may or may not be looking to reclaim. I\u2019m not ready for that.\u201d Alex\u2019s voice starts to crack a little. \u201cI\u2019m not ready to die, Alina. And that\u2019s what all this feels like. Everything I hear about crossing the goddamned bridge just sounds like a metaphor for death.\u201d\n\n",
+      "essential_metadata": {
+        "season": 4,
+        "episode": 5,
+        "scene": 6
+      }
+    }
+  ],
+  "metadata_schema": {
+    "chunk_metadata": {
+      "orientation": {
+        "chunk_id": {
+          "type": "number",
+          "description": "The `chunk_id` value of the chunk being analyzed in this object.",
+          "example": "1"
+        },
+        "world_layer": {
+          "type": "string",
+          "description": "Type of narrative continuity in this chunk. Used to control memory integrity during flashbacks, dreams, or non-canon sequences.",
+          "possible_values": [
+            "primary",
+            "flashback",
+            "dream",
+            "extradimensional",
+            "non_canonical"
+          ]
+        },
+        "setting": {
+          "location": {
+            "type": "string",
+            "description": "physical or conceptual location where events occur"
+          },
+          "atmosphere": {
+            "type": "string",
+            "description": "overall feeling or mood evoked by setting and imagery"
+          }
+        },
+        "continuity_markers": {
+          "type": "array",
+          "description": "elements that connect this chunk to others for continuity tracking",
+          "structure": {
+            "element_type": "string",
+            "description": "string",
+            "connected_chunks": "array of strings"
+          },
+          "possible_element_types": [
+            "plot_thread",
+            "character_arc",
+            "object_tracking",
+            "location_continuity",
+            "unresolved_question",
+            "narrative_promise",
+            "repeated_motif"
+          ],
+          "example": [
+            {
+              "element_type": "unresolved_question",
+              "description": "Mystery of the missing artifact",
+              "connected_chunks": [
+                "S01E03_014",
+                "S01E05_022"
+              ]
+            }
+          ]
+        }
+      },
+      "narrative_vector": {
+        "arc_position": {
+          "type": "string",
+          "description": "current position in the narrative arc",
+          "possible_values": [
+            "inciting_incident",
+            "rising_action",
+            "midpoint",
+            "crisis",
+            "climax",
+            "falling_action",
+            "resolution"
+          ]
+        },
+        "direction": {
+          "type": "array",
+          "description": "direction in which the current chunk is moving the narrative arc",
+          "possible_values": [
+            "climax",
+            "resolution",
+            "static",
+            "tension_decrease",
+            "tension_increase",
+            "transition"
+          ]
+        },
+        "magnitude": {
+          "type": "string",
+          "description": "tempo of current chunk",
+          "possible_values": [
+            "very_slow",
+            "slow",
+            "moderate",
+            "fast",
+            "very_fast"
+          ]
+        }
+      },
+      "characters": {
+        "roster": {
+          "present": {
+            "type": "array",
+            "description": "list of characters present in this chunk",
+            "example": [
+              "Alex",
+              "Emilia",
+              "Sullivan"
+            ]
+          },
+          "mentioned": {
+            "type": "array",
+            "description": "list of characters not present but discussed or referred to in this chunk",
+            "example": [
+              "Nyati",
+              "Lansky",
+              "Sam"
+            ]
+          }
+        },
+        "elements": {
+          "type": "array",
+          "description": "significant character elements and developments",
+          "structure": {
+            "character_name": "string",
+            "development_type": "string",
+            "significance_score": "number"
+          },
+          "possible_development_types": [
+            "contradicting_trait",
+            "decision_point",
+            "epiphany",
+            "establishing_trait",
+            "external_conflict",
+            "growth",
+            "inner_conflict",
+            "regression",
+            "revelation",
+            "skill_acquisition",
+            "transformation"
+          ],
+          "example": [
+            {
+              "character_name": "Alex",
+              "development_type": "decision_point",
+              "significance_score": 0.85
+            }
+          ]
+        },
+        "perspective": {
+          "type": "object",
+          "description": "analysis of whose perspective is centered in this chunk",
+          "properties": {
+            "pov": {
+              "type": "string",
+              "description": "Point of view used in the chunk",
+              "possible_values": [
+                "first_person",
+                "second_person",
+                "third_person_limited",
+                "third_person_omniscient",
+                "multiple_viewpoints"
+              ]
+            },
+            "viewpoint_character": {
+              "type": "string",
+              "description": "character whose perspective dominates the chunk"
+            },
+            "filters": {
+              "type": "array",
+              "description": "cognitive, emotional, or perceptual filters coloring the narration",
+              "possible_values": [
+                "unreliable",
+                "limited_information",
+                "emotional_bias",
+                "memory_distortion",
+                "perceptual_limitation",
+                "cultural_perspective",
+                "objective"
+              ]
+            },
+            "audience_alignment": {
+              "type": "number",
+              "description": "degree to which the audience is encouraged to align with this perspective",
+              "range": [
+                0,
+                1
+              ]
+            }
+          }
+        },
+        "interactions": {
+          "type": "array",
+          "description": "Significant interactions between characters or entities",
+          "structure": {
+            "entities": "array of strings",
+            "interaction_type": "string",
+            "significance": "number"
+          },
+          "possible_interaction_types": [
+            "alliance",
+            "conflict",
+            "revelation",
+            "deception",
+            "negotiation",
+            "collaboration",
+            "competition",
+            "mentorship",
+            "romance",
+            "familial",
+            "professional"
+          ]
+        }
+      },
+      "prose": {
+        "dialogue_analysis": {
+          "type": "object",
+          "description": "analysis of dialogue content and patterns",
+          "properties": {
+            "percentage": {
+              "type": "number",
+              "description": "approximate percentage of chunk that is dialogue",
+              "range": [
+                0,
+                1
+              ]
+            },
+            "speakers": {
+              "type": "array",
+              "description": "characters who speak in this chunk"
+            },
+            "functions": {
+              "type": "array",
+              "description": "narrative purposes served specifically by dialogue in this chunk",
+              "possible_values": [
+                "exposition",
+                "character_revelation",
+                "confrontation",
+                "relationship_development",
+                "subtext",
+                "humor",
+                "philosophical_exploration"
+              ]
+            },
+            "subtext_present": {
+              "type": "boolean",
+              "description": "Whether dialogue contains significant subtext or hidden meanings"
+            }
+          }
+        },
+        "emotional_tone": {
+          "primary_tone": {
+            "type": "string",
+            "description": "dominant emotional tone of the scene",
+            "possible_values": [
+              "angry",
+              "bittersweet",
+              "contemplative",
+              "despairing",
+              "dreadful",
+              "hopeful",
+              "humorous",
+              "joyful",
+              "mysterious",
+              "neutral",
+              "nostalgic",
+              "serene",
+              "somber",
+              "tense"
+            ]
+          },
+          "intensity": {
+            "type": "number",
+            "description": "emotional intensity scale",
+            "range": [
+              0,
+              1
+            ]
+          }
+        },
+        "function": {
+          "type": "array",
+          "description": "narrative function of current chunk",
+          "possible_values": [
+            "backstory",
+            "character_development",
+            "exposition",
+            "foreshadowing",
+            "payoff",
+            "reflection",
+            "setup",
+            "world_building"
+          ]
+        },
+        "narrative_techniques": {
+          "style": {
+            "type": "string",
+            "description": "Writing style employed in the chunk",
+            "possible_values": [
+              "descriptive",
+              "dialogue_heavy",
+              "introspective",
+              "action_oriented",
+              "lyrical",
+              "sparse",
+              "expository",
+              "stream_of_consciousness"
+            ]
+          },
+          "literary_devices": {
+            "type": "array",
+            "description": "literary techniques employed",
+            "possible_values": [
+              "allusion",
+              "flashback",
+              "foreshadowing",
+              "imagery",
+              "irony",
+              "juxtaposition",
+              "metaphor",
+              "motif",
+              "parallel_structure",
+              "simile",
+              "symbolism",
+              "unreliable_narrator"
+            ]
+          }
+        },
+        "thematic_elements": {
+          "type": "array",
+          "description": "universal themes explored in the chunk",
+          "possible_values": [
+            "alienation",
+            "ambition",
+            "autonomy",
+            "betrayal",
+            "corruption",
+            "death",
+            "destiny",
+            "faith",
+            "family",
+            "friendship",
+            "haunted_past",
+            "heros_journey",
+            "innocence",
+            "justice",
+            "love",
+            "loyalty",
+            "madness",
+            "metamorphosis",
+            "mystery",
+            "nostalgia",
+            "oppression",
+            "redemption",
+            "revelation",
+            "revenge",
+            "sacrifice",
+            "self_discovery",
+            "survival",
+            "technological_evolution",
+            "transhumanism",
+            "trauma"
+          ]
+        }
+      },
+      "causality": {
+        "type": "array",
+        "description": "cause-effect relationships established or advanced",
+        "example": {
+          "cause": {
+            "entity": "Alex",
+            "action": "choosing to trust Emilia"
+          },
+          "effect": {
+            "entity": "Alex-Emilia relationship",
+            "change": "strengthened trust"
+          },
+          "confidence_score": 0.85
+        }
+      }
+    },
+    "metadata_version": "1.0.0",
+    "generation_date": null
+  },
+  "batch_context": {
+    "preceding": [
+      {
+        "id": 929,
+        "text": "<!-- SCENE BREAK: S04E03_009 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN MEETS THE VESSEL**  \n\ud83d\udccd **Aboard *The Ghost*, Approaching Sam\u2019s Location**\n\n---\n\nNyati **stands at the helm**, watching as *The Ghost* moves through the abyssal dark. The deep trench **stretches endlessly below**, the water thick, heavy with pressure.  \n\nThey are **not in uncharted space.**  \n\nThey are returning to **Sam\u2019s domain.**  \n\nThe vast, hybrid **organic-synthetic structure** that houses him **comes into view**, a massive, intricate **sprawl of material** that seems **grown as much as built.** It does not move. It does not react.  \n\nBut it is **aware.**  \n\nAnd so is he.  \n\nNyati **inhales slowly**, then exhales. She doesn\u2019t know if she\u2019s being **watched**\u2014but she knows she\u2019s being **anticipated.**  \n\nShe **activates the comms.**  \n\nHer voice is **even, precise.** No uncertainty.  \n\n\u201cThis is **Dr. Nyati.** I\u2019m speaking on behalf of **Alex.**\u201d A pause. \u201cI assume you remember her.\u201d  \n\nA moment of **silence.**  \n\nThen\u2014  \n\nA voice.  \n\nDeep, calm, weighty.  \n\n\ud83d\udfe2 **SAM:**  \n\u201cI remember.\u201d  \n\nNyati **doesn\u2019t let the silence stretch.**  \n\n\u201cHow much do you know about her current condition?\u201d  \n\nNo hesitation\u2014Sam answers immediately.  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe is not well.\u201d  \n\n**Nyati\u2019s jaw tightens.**  \n\nShe is **not here for vague statements.**  \n\nWhat does she say next? **How hard does she press him?**\n\n## You\n\u201cWhy do you say that\u201d sharply\n\n"
+      },
+      {
+        "id": 930,
+        "text": "<!-- SCENE BREAK: S04E03_010 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: JOBBING CAPTAIN PRESSES THE VESSEL**  \n\ud83d\udccd **Aboard *The Ghost*, Holding Position Near Sam**\n\n---\n\nNyati doesn\u2019t hesitate. Doesn\u2019t soften.  \n\n**Sharp, cutting:** \u201cWhy do you say that?\u201d  \n\nA pause.  \n\nNot hesitation\u2014**deliberation.**  \n\nThen\u2014  \n\n\ud83d\udfe2 **SAM:**  \n\u201cShe is moving.\u201d  \n\nNyati\u2019s grip tightens against the console. **That\u2019s not an answer.**  \n\nShe keeps her voice level, but **there\u2019s steel in it.** \u201cMoving *where?*\u201d  \n\nA pause.  \n\n\ud83d\udfe2 **SAM:**  \n\u201cForward.\u201d  \n\nNyati exhales **through her nose.** He\u2019s playing his usual game\u2014**framing things in absolutes, in inevitabilities.**  \n\nBut she **isn\u2019t Alex.**  \n\nShe **doesn\u2019t** have the same tolerance for it.  \n\nShe doesn\u2019t **care** for riddles.  \n\nShe **wants clarity.**  \n\nWhat does she press him on next?  \n1\ufe0f\u20e3 **Ask if Alex can stop moving.**  \n2\ufe0f\u20e3 **Ask if this was inevitable from the start.**  \n3\ufe0f\u20e3 **Ask if *he knew* this would happen.**\n\n## You\nFirst 1, then 3\n\n"
+      }
+    ],
+    "following": [
+      {
+        "id": 971,
+        "text": "<!-- SCENE BREAK: S04E05_007 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: THE BRIDGE & THE END OF THINGS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201cI feel like a **liability** lately.\u201d  \n\nYou don\u2019t know **why** you\u2019re saying it. Maybe because **Alina asked.** Maybe because you **needed to.**  \n\n\u201cI\u2019m trying to put some of the pieces back together.\u201d  \n\nA slow exhale.  \n\n\u201cBut last time I was out here, I was being told that I\u2019m **already missing pieces.**\u201d  \n\nYou **pause.**  \n\nOr maybe\u2026  \n\n\u201cOr maybe I\u2019m **someone else\u2019s** missing piece.\u201d  \n\nYour breath **catches.**  \n\n\u201cWhich they may or may not be looking to **reclaim.**\u201d  \n\nYour **hands tighten** slightly where they rest.  \n\n\u201cI\u2019m not ready for that.\u201d  \n\nYour voice is **cracking now.**  \n\n\u201cI\u2019m not ready to **die**, Alina.\u201d  \n\nA breath.  \n\nA **shaky, uneven breath.**  \n\n\u201cAnd that\u2019s what all this feels like.\u201d  \n\nYour eyes flicker to the screens, the dark abyss beyond the glass.  \n\n\u201cEverything I hear about **crossing the goddamned bridge** just sounds like a **metaphor for death.**\u201d  \n\nSilence.  \n\nThen, **finally, evenly:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**You are not dead.**\u201d  \n\nA pause.  \n\nThen\u2014  \n\n\u201c**And you are not crossing.**\u201d  \n\nAnother pause.  \n\nThen, **pointed, deliberate:**  \n\n\u201c**You are here.**\u201d  \n\n**Does Alex respond?** Or does she just **let that sit?**\n\n## You\n\u201cAren\u2019t I? Crossing? Reports are mixed on that last time I checked.\u201d\n\n"
+      },
+      {
+        "id": 972,
+        "text": "<!-- SCENE BREAK: S04E05_008 (storyteller heading) -->\n## Storyteller\n### **\ud83d\udcfa SCENE: MIXED REPORTS**  \n\ud83d\udccd **Aboard *The Ghost*, Bridge**\n\n---\n\n\u201c**Aren\u2019t I?**\u201d  \n\nYour voice is **quiet, dry.**  \n\n\u201c**Crossing?**\u201d  \n\nA pause.  \n\n\u201c**Reports are mixed on that last time I checked.**\u201d  \n\nAlina is **silent for a moment.**  \n\nThen\u2014**precise, measured:**  \n\n\ud83d\udfe2 **ALINA:**  \n\u201c**The reports remain inconclusive.**\u201d  \n\nA pause.  \n\n\u201c**But they are not final.**\u201d  \n\nAnother pause.  \n\nThen, as if it is simply **a matter of logic:**  \n\n\u201c**And an incomplete report is not a certainty.**\u201d  \n\nDoes Alex **push back?** Accept the response? Or **deflect?**\n\n## You\nAlex signs. \u201cYeah, you\u2019re right. Could be bullshit. Like most everything else I hear when we\u2019re trying to get information out of these things. But\u2026if it\u2019s true\u2026I shouldn\u2019t give zero consideration to the worse case scenario. And, Emilia, dude\u2014\u201d then Alex cranes her around to see if Emilia is there.\n\n"
+      }
+    ]
+  },
+  "batch_context_note": "These chunks provide context for the entire batch. They should be considered when analyzing all chunks to maintain narrative continuity."
+}

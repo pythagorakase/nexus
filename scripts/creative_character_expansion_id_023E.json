@@ -1,0 +1,39 @@
+{
+  "characters": [
+    {
+      "character_id": 23,
+      "appearance": "Tall and lean with a tight, streamlined build, Raven moves like someone always expecting a threat. Her hair is cropped close, a deep raven-black with subtle flecks of silver near the temples, and she frequently wears simple, dark-hued clothes\u2014a lightweight coat over a form-fitting top and practical pants. Sharp eyes are her trademark: grey irises that flick across every detail in a room. Even when seated, her posture hints at readiness, and a faint scar under her left cheekbone suggests she\u2019s not a stranger to close calls.",
+      "background": "Raven grew up navigating the back alleys of New Orleans, where secret deals and whispered intel shaped every opportunity. Initially working as a small-time info runner, she gained a reputation for providing scarily accurate leads on corporate double-dealings. Over time, her talent attracted bigger contacts, and she learned to leverage intangible currencies\u2014favors, introductions, and hidden safe passages. She eventually left behind the smaller hustles, forging a broker identity built on the principle that knowledge is best wielded quietly, and credits alone can\u2019t buy loyalty. Her early clients included unscrupulous fixers, but she soon refined her network toward the nuanced, principled trades she now prefers.",
+      "personality": "Raven is calculated, calm under pressure, and thrives on reading people\u2019s motives in a single glance. She trades comedic banter with those who earn her trust but favors measured politeness in tense negotiations. Beneath her composed exterior is a subtle moral code; she refuses to facilitate contract killings or feed information into lost causes. She\u2019s drawn to individuals who question the game rather than simply playing it. While she enjoys the advantage of secrecy, Raven quietly yearns for more profound connections, knowing that true power is built through shared stakes, not solitary cunning.",
+      "emotional_state": "Confident yet mildly restless. She\u2019s content with her growing network but senses that recent intel on Echo developments could reshape loyalties.",
+      "current_activity": "Monitoring the fallout from her latest intel trade with Alex\u2019s crew and covertly mapping potential safe routes through New Orleans for future negotiations.",
+      "current_location": "A nondescript loft near the French Quarter, wired with surveillance failsafes and secure data lines, allowing her to observe the city\u2019s shifting alliances.",
+      "extra_data": {
+        "skills": [
+          "Information networking",
+          "Expert social engineering",
+          "Advanced encryption and data handling",
+          "Keen situational awareness"
+        ],
+        "allies": [
+          "Alina (established point of contact)",
+          "Select neutral couriers",
+          "Discreet under-the-table netrunners"
+        ],
+        "enemies": [
+          "Overzealous corp intelligence divisions",
+          "Rivals who see open-ended favors as competition",
+          "Any operative demanding lethal outcomes"
+        ],
+        "signature_tech": [
+          "A custom-encrypted datapad with specialized stealth modules for secure trades"
+        ],
+        "connection_points": [
+          "Holds unique corridor passes for smuggler routes through the city",
+          "Maintains partial Echo research data fragments",
+          "Has established lines of contact with unaligned fixers seeking neutral negotiations"
+        ]
+      }
+    }
+  ]
+}

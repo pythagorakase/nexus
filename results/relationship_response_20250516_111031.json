@@ -1,0 +1,88 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 23,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Alex reads Raven as a rare breed of broker—sharp, adaptable, and impossible to bully—so the usual corporate mind games give way to amused sparring. She finds the woman’s refusal to posture refreshing, even as she notes the latent cost of the open-ended favor now hanging over her head. For Alex, Raven is both a useful asset and an intriguing wildcard, worthy of courtesy but never of unguarded trust.",
+    "recent_events": "• In their first face-to-face, Alex sidestepped Raven’s leverage play by treating the all-or-nothing offer as illogical, forcing a rule-change in the negotiation.\n• Alex secured both intel packages in exchange for a future favor, sealing the deal with a firm handshake and a round of irreverent Spice-Girl codenames that made Raven laugh.\n• The quiet acknowledgment—Raven’s amused \"let’s see if you stay worth the favor\"—cemented an ongoing ledger rather than a one-off exchange.",
+    "history": "Day 0: Raven, contacted through Alina, arranged a public café meet to sell Echo leak data and survivor-tracking logs.\nMinute 10: Raven opened with a pressure test, offering an all-or-nothing deal; Alex’s confused pushback forced her to reveal the ploy’s motive.\nMinute 20: Negotiation flipped; Alex demanded both packages, Raven countered with payment by favor.\nMinute 25: Scope of favor clarified—no assassinations, no suicide runs, just access and reputation work.\nMinute 30: Handshake, data transfer, and mutual amusement over Spice-Girl callsigns closed the meeting. Relationship is newborn but already framed as an open future engagement.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "balanced",
+        "terms": "negotiated",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Control over Nexus IP and research credibility; ability to grant high-level access or endorsements in post-Echo circles.",
+        "character2_leverage": "Proprietary intelligence network, smuggling routes, and the undefined favor Alex now owes."
+      },
+      "conflict_areas": [
+        "Ambiguity of owed favor’s scope",
+        "Potential clashes over Nexus intellectual property",
+        "Divergent long-term agendas"
+      ],
+      "mutual_interests": [
+        "Keeping Echo tech out of hostile hands",
+        "Expanding low-profile information channels",
+        "Maintaining reputations for reliability over violence"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Alina"
+        ],
+        "mediators": [
+          "Alina"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Depth of Raven’s network reach and reliability for future leaks.",
+        "information_protected": "Precise location of The Ghost and cutting-edge Nexus protocols."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 23,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "+2|friendly",
+    "dynamic": "Raven finds Alex disarming: a former corpo who steamrolls negotiation theater with deadpan confusion and Spice-Girl jokes, yet still walks away with both intel packets. The encounter marks Alex as a high-value, entertaining client—someone worth investing in for the long game. Raven respects Alex’s wit and reach, but keeps one mental bookmark on the favor she can call when opportunity strikes.",
+    "recent_events": "• Observed Alex shrug off the standard leverage trap, forcing Raven to reveal her intent and pivot strategies mid-meeting.\n• Concluded the trade on a single open-ended favor, appreciating Alex’s insistence on defining acceptable parameters (no assassinations, no suicide runs).\n• Shared genuine laughter over the improvised Spice-Girl codenames—an ice-breaker that hinted at compatible senses of humor and future rapport.",
+    "history": "T-24 hrs: Raven, via Alina, schedules café rendezvous to test Nexus crew’s priorities and liquidity.\nMeeting start: Holds her seat, gauges team discipline; notes Alex’s decision to let Alina speak first.\nNegotiation phase: Alex derails the binary offer, demonstrating flexibility Raven values in partners.\nClosing phase: Favor contract set; handshake confirms mutual confidence; Raven offers her handle and departs satisfied.\nPost-meet: Adds Alex (\"Scary Spice\") to her ledger as an adaptable, non-aligned conduit for future access operations.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "negotiated",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Wide-ranging intelligence feeds, ability to broker covert access, and the unresolved favor token.",
+        "character2_leverage": "Nexus brand legitimacy, technical vetting expertise, and door-opening credibility in anti-Echo circles."
+      },
+      "conflict_areas": [
+        "Timing and scope of the favor call-in",
+        "Risk of Alex’s IP enforcement tangling with Raven’s clients",
+        "Possible misalignment on acceptable levels of risk"
+      ],
+      "mutual_interests": [
+        "Profitable but non-lethal problem-solving",
+        "Keeping corporations guessing and off-balance",
+        "Building reputations for principled deals"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Alina"
+        ],
+        "mediators": [
+          "Alina"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Extent of Alex’s influence and ethical red lines for future leverage.",
+        "information_protected": "Identity of Raven’s higher-tier clients and the full scope of her broker network."
+      }
+    }
+  }
+}
