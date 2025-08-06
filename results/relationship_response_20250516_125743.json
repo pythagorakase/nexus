@@ -1,0 +1,81 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 76,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "To Alex, Elliot Tran is a necessary but expendable asset—an unwitting key card she prefers not to break while picking the lock. She feels a faint, almost managerial obligation to keep him unharmed, both to avoid unnecessary blood on her hands and to maintain the moral high ground Nexus now claims. The connection is strictly one-way and transactional, yet Alex’s new ethos makes her quietly protective of this collateral civilian.",
+    "recent_events": "• Identified Tran through hacked shift logs and singled him out as the infiltration vector.\n• Ordered Vasquez to intercept and detain him gently, cloning his badge and biometrics for use inside the Echo black-site.\n• Completed the heist using his identity, then confirmed he remained alive and off-site before disappearing.",
+    "history": "Early in the Echo op, Alex combed Dynacorp schedules for a mid-tier employee whose absence would go unnoticed—Tran fit perfectly. After remote surveillance confirmed his shift, she arranged his quiet abduction, cloning his credentials while keeping him detained but unharmed. Throughout the black-site raid she relied on his badge to breeze through checkpoints, checking in periodically with Vasquez to ensure the hostage was stable. Post-operation she left him alive, credentials fried but body intact, marking the encounter as a clean, bloodless resource extraction.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "character1's",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Possesses his badge, biometric clone, and knowledge of his routine, allowing her to impersonate him and dictate the narrative of his disappearance.",
+        "character2_leverage": "None at present; his only latent leverage is testimony or cooperation with investigators if ever released."
+      },
+      "conflict_areas": [
+        "Need to keep him silent post-heist",
+        "Risk of Dynacorp retaliation if Elliot talks",
+        "Ethical discomfort over using an innocent"
+      ],
+      "mutual_interests": [
+        "Elliot’s continued survival",
+        "Avoiding direct corporate crack-down"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Vasquez"
+        ],
+        "mediators": [
+          "Vasquez"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Shift schedule, clearance level, badge data, typical facility pathways.",
+        "information_protected": "True identity of the Nexus team, scope of the Echo sabotage, future plans."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 76,
+    "character2_id": 1,
+    "relationship_type": "stranger",
+    "emotional_valence": "-2|disapproving",
+    "dynamic": "Elliot has never seen Alex’s face—only felt the zip-tie bite of her hireling and heard her name murmured in coded chatter. In his mind, \"Alex\" stands for the abrupt hijacking of his life, the looming threat of corporate reprisal, and the uneasy mercy of captors who chose not to kill him. Confusion mixes with smoldering resentment: he fears her competence yet can’t decide whether she is villain or reluctant savior.",
+    "recent_events": "• Abducted en route to his Dynacorp shift, badge and biometrics duplicated without consent.\n• Held in an off-site safehouse while hearing scattered reports of a catastrophic breach at his workplace.\n• Released (or transferred) still ignorant of motives, now facing Dynacorp scrutiny for a crime he didn’t commit.",
+    "history": "On what should have been an ordinary workday, Elliot was intercepted, hooded, and detained by strangers acting on Alex’s orders. During captivity he caught snippets of conversation indicating his badge was central to a major inside job. Hours later the Echo facility suffered a disastrous sabotage, and he was left alive but tainted by association. Since then, corporate investigators view him with suspicion while he struggles to piece together who masterminded the plot and why he was spared.",
+    "extra_data": {
+      "schema_type": "liminal_relationship",
+      "impressions": {
+        "first_impression": "Faceless, highly organized abductors led by someone called Alex—efficient and terrifying.",
+        "current_assessment": "Sees Alex as a shadowy hacker-mastermind who upended his life for unknown ends.",
+        "points_of_interest": [
+          "Why she chose him instead of killing him",
+          "Her apparent code of minimizing collateral damage"
+        ]
+      },
+      "interaction_history": {
+        "contexts": [
+          "Kidnapping while commuting to black-site"
+        ],
+        "quality": "negative"
+      },
+      "potential_directions": [
+        "Could seek revenge or legal redress if he learns her identity",
+        "Might become a reluctant informant or ally if convinced Dynacorp is the greater evil",
+        "Could remain an anxious, peripheral casualty of the corporate war"
+      ],
+      "information_gaps": [
+        "Alex’s real identity and goals",
+        "Whether she plans to silence him permanently",
+        "What truly happened inside the Echo facility"
+      ],
+      "intuition_notes": "Gut tells him the operation was surgical, not sadistic—suggesting Alex follows her own ethical rules, however warped."
+    }
+  }
+}

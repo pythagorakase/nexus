@@ -1,0 +1,366 @@
+{
+  "run1_id": 1,
+  "run2_id": 2,
+  "original_metrics": {
+    "p@5": 0.8,
+    "p@10": 0.74,
+    "mrr": 0.95,
+    "bpref": 0.7310954772441521,
+    "count": 10
+  },
+  "variation_metrics": {
+    "p@5": 0.6,
+    "p@10": 0.6,
+    "mrr": 0.9,
+    "bpref": 0.6997808641975308,
+    "count": 10
+  },
+  "pairs": [
+    {
+      "original_query": "Who is Sullivan?",
+      "variation_query": "Sullivan identity description character role background information details",
+      "original_metrics": {
+        "p@5": 1.0,
+        "p@10": 1.0,
+        "mrr": 1.0,
+        "bpref": 1.0,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.7,
+        "mrr": 0.5,
+        "bpref": 0.41777777777777775,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.19999999999999996,
+        "p@10": -0.30000000000000004,
+        "mrr": -0.5,
+        "bpref": -0.5822222222222222
+      }
+    },
+    {
+      "original_query": "What is Alex's gender?",
+      "variation_query": "Alex gender identity personal characteristics biological details self-identification",
+      "original_metrics": {
+        "p@5": 0.6,
+        "p@10": 0.5,
+        "mrr": 1.0,
+        "bpref": 0.4897959183673469,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.4,
+        "p@10": 0.5,
+        "mrr": 1.0,
+        "bpref": 0.31999999999999995,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.19999999999999996,
+        "p@10": 0.0,
+        "mrr": 0.0,
+        "bpref": -0.16979591836734698
+      }
+    },
+    {
+      "original_query": "What is your gender?",
+      "variation_query": "player protagonist gender identity personal characteristic self-identification",
+      "original_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.7,
+        "mrr": 1.0,
+        "bpref": 0.9183673469387756,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.6,
+        "p@10": 0.6,
+        "mrr": 1.0,
+        "bpref": 0.6111111111111112,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.20000000000000007,
+        "p@10": -0.09999999999999998,
+        "mrr": 0.0,
+        "bpref": -0.3072562358276645
+      }
+    },
+    {
+      "original_query": "What happened with Alina's body?",
+      "variation_query": "Alina physical form body changes status current previous transformation",
+      "original_metrics": {
+        "p@5": 1.0,
+        "p@10": 0.9,
+        "mrr": 1.0,
+        "bpref": 0.6745562130177516,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.6,
+        "p@10": 0.6,
+        "mrr": 1.0,
+        "bpref": 0.7222222222222222,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.4,
+        "p@10": -0.30000000000000004,
+        "mrr": 0.0,
+        "bpref": 0.047666009204470616
+      }
+    },
+    {
+      "original_query": "When did Dr. Nyati and Alina first meet?",
+      "variation_query": "Nyati Alina meeting encounter interaction initial first chronology timeline",
+      "original_metrics": {
+        "p@5": 0.2,
+        "p@10": 0.1,
+        "mrr": 1.0,
+        "bpref": 1.0,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.2,
+        "p@10": 0.1,
+        "mrr": 1.0,
+        "bpref": 1.0,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": 0.0,
+        "p@10": 0.0,
+        "mrr": 0.0,
+        "bpref": 0.0
+      }
+    },
+    {
+      "original_query": "What is the nature of Alex and Emilia's relationship?",
+      "variation_query": "Alex Emilia relationship connection interaction dynamic personal history involvement",
+      "original_metrics": {
+        "p@5": 1.0,
+        "p@10": 1.0,
+        "mrr": 1.0,
+        "bpref": 0.5882352941176471,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.9,
+        "mrr": 0.5,
+        "bpref": 0.8888888888888891,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.19999999999999996,
+        "p@10": -0.09999999999999998,
+        "mrr": -0.5,
+        "bpref": 0.300653594771242
+      }
+    },
+    {
+      "original_query": "What happened after the sabotage mission at the Dynacorp blacksite?",
+      "variation_query": "Dynacorp blacksite mission operation aftermath results consequences events subsequent",
+      "original_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.6,
+        "mrr": 1.0,
+        "bpref": 0.9166666666666666,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.6,
+        "p@10": 0.3,
+        "mrr": 1.0,
+        "bpref": 0.7777777777777778,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.20000000000000007,
+        "p@10": -0.3,
+        "mrr": 0.0,
+        "bpref": -0.13888888888888884
+      }
+    },
+    {
+      "original_query": "What is The Bridge like?",
+      "variation_query": "Bridge description characteristics details features properties nature function purpose",
+      "original_metrics": {
+        "p@5": 1.0,
+        "p@10": 1.0,
+        "mrr": 1.0,
+        "bpref": 0.5555555555555556,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.4,
+        "p@10": 0.6,
+        "mrr": 1.0,
+        "bpref": 0.4722222222222223,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.6,
+        "p@10": -0.4,
+        "mrr": 0.0,
+        "bpref": -0.08333333333333326
+      }
+    },
+    {
+      "original_query": "What is the goal of NEXUS 2.0?",
+      "variation_query": "NEXUS project objective purpose goal intention plan design function aim",
+      "original_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.9,
+        "mrr": 1.0,
+        "bpref": 0.75,
+        "judged_counts": {
+          "p@5": 4,
+          "p@10": 9,
+          "total": 9
+        },
+        "unjudged_count": 1
+      },
+      "variation_metrics": {
+        "p@5": 1.0,
+        "p@10": 0.9,
+        "mrr": 1.0,
+        "bpref": 0.9753086419753088,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": 0.19999999999999996,
+        "p@10": 0.0,
+        "mrr": 0.0,
+        "bpref": 0.22530864197530875
+      }
+    },
+    {
+      "original_query": "Sullivan identity description character role background information details",
+      "variation_query": "remaining unresolved mysteries open questions plot threads",
+      "original_metrics": {
+        "p@5": 0.8,
+        "p@10": 0.7,
+        "mrr": 0.5,
+        "bpref": 0.41777777777777775,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "variation_metrics": {
+        "p@5": 0.6,
+        "p@10": 0.8,
+        "mrr": 1.0,
+        "bpref": 0.8125,
+        "judged_counts": {
+          "p@5": 5,
+          "p@10": 10,
+          "total": 10
+        },
+        "unjudged_count": 0
+      },
+      "changes": {
+        "p@5": -0.20000000000000007,
+        "p@10": 0.10000000000000009,
+        "mrr": 0.5,
+        "bpref": 0.39472222222222225
+      }
+    }
+  ],
+  "changes": {
+    "p@5": -0.20000000000000007,
+    "p@10": -0.14,
+    "mrr": -0.04999999999999993,
+    "bpref": -0.03131461304662131
+  }
+}

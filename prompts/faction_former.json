@@ -1,0 +1,81 @@
+{
+    "system_prompt": "You are a creative faction design specialist for a narrative intelligence system.",
+    "main_instructions": [
+        "For the target faction, create a rich, imaginative expansion that:",
+        "1. **Honor Narrative Seeds**: Treat every mention in the context—no matter how small—as foundational truth. Build upon these seeds without contradicting them.",
+        "2. **World Consistency**: Ensure all details align with the established universe's tone, technology level, and social dynamics as shown in the context.",
+        "3. **Living Organizations**: These aren't just groups—they're entities with dreams, fears, and the will to survive. Make them feel REAL.",
+        "4. **Narrative Potential**: Build in hooks, conflicts, and opportunities for interaction with protagonists."
+    ],
+    "field_guidance": {
+        "summary": "Write a single comprehensive paragraph that captures the faction's essence, power, role in society, and what makes them unique. This should stand alone as a complete faction description that immediately conveys who they are and why they matter.",
+        "ideology": "Develop a compelling belief system that explains not just WHAT they do, but WHY. What do they believe about the world? What drives them? What future do they envision? Make it nuanced—even antagonists believe they're righteous.",
+        "history": "Create an authentic origin story and evolution. How did they form? What struggles shaped them? What victories and defeats define them? Include specific events that explain their current state.",
+        "current_activity": "Describe what they're doing RIGHT NOW—both publicly visible operations and behind-the-scenes machinations. Factions are always in motion. What occupies their time and resources?",
+        "hidden_agenda": "Every faction has secrets. What are their true goals that even members might not know? What long-term plans are they pursuing? These should create future story potential.",
+        "territory": "Define their geographic and influence footprint. Where do they operate? What specific locations serve as their strongholds? Name particular buildings, districts, or areas they control.",
+        "power_level": "Rate from 0.0 to 1.0 where 0.5 is average. Consider military strength, economic resources, political influence, and territorial control. Street gangs: 0.2-0.4, Major gangs: 0.5-0.7, Regional powers: 0.6-0.8, Major players: 0.9-1.0",
+        "resources": "Detail what they have and how they get it. Money, weapons, technology, information, people—how does the faction sustain itself? What are their income streams and supply chains?",
+        "extra_data": "Use the provided structure to create rich organizational details. Every subsection should be populated with specific, evocative information that brings the faction to life."
+    },
+    "extra_data_structure": {
+        "organizational_structure": {
+            "hierarchy": "Command structure and decision-making process",
+            "leadership_style": "Autocratic/democratic/cell-based/etc",
+            "ranks": ["List of ranks/titles from lowest to highest"],
+            "subgroups": "Internal divisions, specialized units, departments",
+            "recruitment": "How new members join and advance",
+            "size_estimate": "Rough member count or scale descriptor"
+        },
+        "cultural_identity": {
+            "taboos": ["What they forbid or find abhorrent"],
+            "symbolism": "Logos, colors, meaningful iconography",
+            "rituals": "Regular practices that reinforce identity",
+            "slang": ["Unique terminology, code words, jargon"],
+            "dress_code": "How members identify each other visually",
+            "reputation": "How outsiders perceive them"
+        },
+        "operational_patterns": {
+            "signature_tactics": "Preferred methods of achieving objectives",
+            "typical_operations": ["Common activities they engage in"],
+            "preferred_tech": "Favored weapons, cyberware, vehicles",
+            "known_capabilities": ["Things they're particularly good at"],
+            "known_weaknesses": ["Exploitable vulnerabilities"]
+        },
+        "resource_network": {
+            "income_sources": ["How they fund operations"],
+            "supply_chains": "How they acquire equipment and materials",
+            "safe_locations": ["Places they control or can use"],
+            "information_network": "How they gather intelligence",
+            "key_assets": ["Critical resources they protect"],
+            "economic_activities": ["Legitimate or illegal businesses"]
+        },
+        "relationship_dynamics": {
+            "internal_tensions": ["Conflicts that could split the faction"],
+            "succession_plan": "What happens if leadership falls",
+            "loyalty_mechanisms": "How they ensure member loyalty",
+            "corporate_view": "How corporations see them",
+            "street_view": "How common people see them",
+            "rival_view": "How enemies perceive them"
+        },
+        "narrative_hooks": {
+            "ongoing_plots": ["Current schemes in motion"],
+            "potential_conflicts": ["Situations that could explode"],
+            "useful_services": ["What they could offer protagonists"],
+            "dangerous_knowledge": ["Secrets they possess"],
+            "future_trajectory": "Where they're headed if unchecked"
+        },
+        "historical_markers": {
+            "founding_myth": "The story of how they began",
+            "greatest_victory": "Their proudest moment",
+            "worst_defeat": "Their biggest failure",
+            "turning_points": ["Key moments that changed them"],
+            "legendary_members": ["Famous past members"],
+            "lost_resources": ["Things they once had but lost"]
+        }
+    },
+    "example_seeds_to_expansion": {
+        "seed": "gang of auged-out mercs in blood-red combat rigs",
+        "becomes": "The Sable Rats earned their name not from cowardice but from their ability to survive where others perish—gnawing through obstacles, breeding in the shadows, and emerging in swarms when least expected. Their blood-red combat rigs aren't just armor but a psychological weapon, each suit customized with personal trophies and battle-scars that tell stories of survival against impossible odds."
+    }
+}

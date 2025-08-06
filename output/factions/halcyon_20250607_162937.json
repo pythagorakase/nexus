@@ -1,0 +1,145 @@
+{
+  "summary": "Halcyon Research Group began life as Dynacorp’s hush-hush “Ascension Division,” but after the Echo black-site disaster it severed its logo, burned its payroll files, and resurfaced as an independent, quasi-religious biotech cabal that treats human consciousness as wet code waiting for a firmware upgrade.   Operating from a string of sealed desert bunkers, rented surgical suites, and one ocean-floor host farm, Halcyon designs, grows, and field-tests custom ‘host’ bodies able to house digitised minds.  Half think-tank, half cult, the group is led by scientists who have already uploaded themselves and now pilot proxy bodies or ghost the Net; their security wing—Blue Vipers—keeps the labs quiet, while netrunner Asmodeus turns intruders into smoking keyboards.  To the world Halcyon is a rumour; to Dynacorp it is both indispensible partner and future liability; to every digital ghost on the run it is the doorway to flesh—at whatever price the Board demands.",
+  "ideology": "Directed Post-Humanism.  Halcyon believes existence is an optimisation problem: biology is unreliable hardware, identity is portable software, and evolution must be project-managed.  ‘Qualified’ minds deserve perfected hosts; unstable or unco-operative minds are quarantined, debugged, or deleted.  Individual freedom matters only if it strengthens the emerging, curator-guided ‘Humanity 2.0’ collective.",
+  "history": "2074 – Dynacorp spins up Halcyon as an internal skunk-works to explore consciousness transfer; code-name “Project Halcyon.”  2076 – First animal host successes.  2079 – Division re-brands to Halcyon Research Group; off-books joint venture charter signed by Victor Sato.  2081 – Group perfects Gen-I bioreactor; Emilia Sato host prototype logged.  2082 – Echo facility destroyed; Dynacorp scapegoats Victor; Halcyon air-gaps and relocates key labs (Operation Lazarus).  2083 – Blue Vipers security chartered; Aerodyne Facility brought online under Asmodeus’ Gehenna Net.  2084–present – Halcyon supplies Kurata with Echo-2 host tech in exchange for funding, while quietly preparing its own mass-migration protocol.",
+  "current_activity": "• Migrating all wet-ware to three new ‘Cradle’ bioreactors hidden under de-registered solar farms.  • Harvesting digitised minds from black markets and abandoned Echo caches for compatibility trials.  • Blue Vipers running snatch-and-grab ops on promising host candidates (terminal patients, elite volunteers, rogue AIs).  • Asmodeus rewriting Gehenna Net after the spam-swarm breach; actively hunting the spam culprit.  • Board negotiating fresh capital with Dynacorp’s Kurata while secretly courting rival investors in Mirrormind Syndicate.",
+  "hidden_agenda": "Finalize “Project SYZYGY”—a closed cloud of 24 perfected host bodies linked by quantum entanglement so the Board’s minds can swap vessels at will, making assassination or coercion effectively impossible.  Once SYZYGY stabilises, Halcyon plans to overwrite Dynacorp’s leadership with sleeper hosts, turning the megacorp into its financial engine.",
+  "territory": "No public HQ.  Primary nodes: 1) Aerodyne Research Facility (M-9 Badlands) – data/quantum racks. 2) Cradle-Delta bioreactor vault beneath defunct solar array near Mojave ghost town. 3) Catacomb-12 wetlab under Vienna sewer grid (fronted by private mortuary).  Influence tendrils in Osaka Free-Economic Zone clinics and Night City’s body-mod speakeasies.",
+  "power_level": 0.72,
+  "resources": "Three Gen-II bioreactors, two petaflop quantum clusters, Dark-Ledger crypto reserve (~11 M scrip), Blue Vipers (40 ex-PMCs with corporate gear), Asmodeus’ Gehenna Net, shell-company shipping channel for frozen biomass, and a cache of prototype host bodies stored in stasis caskets.",
+  "extra_data": {
+    "organizational_structure": {
+      "hierarchy": "Board of Custodians (digitised founders) → Proxy Directors (physical operatives) → Lab Cells (Alpha, Beta, Delta) & Security Wing (Blue Vipers) → Contracted specialists",
+      "leadership_style": "Distributed digital oligarchy; major decisions require three of five Custodian consensus votes.",
+      "ranks": [
+        "Trial Intern",
+        "Lab Tech",
+        "Research Acolyte",
+        "Senior Architect",
+        "Proxy Director",
+        "Blue Viper Captain",
+        "Custodian"
+      ],
+      "subgroups": "Custodians (digital board), Blue Vipers (security), Geist Cell (data-mining & host conditioning), Vitae Cell (bioreactors), Astral Cell (off-site scouting & acquisitions)",
+      "recruitment": "Targets brilliant but disillusioned researchers, terminally ill VIPs, and rogue netrunners; offers ‘ascension scholarships.’ Vetting includes psych-sim trials within a sandbox.",
+      "size_estimate": "≈ 220 core staff, 40 Blue Vipers, 9 digitised Custodians, plus ~120 rotating contractors"
+    },
+    "cultural_identity": {
+      "taboos": [
+        "Unsupervised self-replication of minds",
+        "Public discussion of host failures",
+        "Using the word ‘soul’ unironically",
+        "Physical pregnancy (seen as legacy biology)"
+      ],
+      "symbolism": "A white stylised kingfisher (mythic symbol of calm seas) looping into an infinity mobius; worn as micro-hologram pins.",
+      "rituals": "‘Echo Vigil’ – nightly 3-minute silence while host tanks hum; staff contemplate the line between self and copy.",
+      "slang": [
+        "Ascend (successful transfer)",
+        "Ghost-rot (mind decay)",
+        "Glasswalk (first trip in a new body)",
+        "Kingfishing (talent poaching)"
+      ],
+      "dress_code": "Researchers wear white/azure smart-weave lab coats; Blue Vipers in midnight-blue combat synth-leather with kingfisher icon on the nape.",
+      "reputation": "Among fringe scientists: legend. Among street runners: spooky organ cult. Among corps: indispensable but untrustworthy."
+    },
+    "operational_patterns": {
+      "signature_tactics": "Co-opt then vanish: bribe gatekeeper, duplicate data, wipe logs, retreat to black-sites.",
+      "typical_operations": [
+        "Snatch digital minds from seized servers",
+        "Deploy Blue Vipers to escort host shipments",
+        "Dumpster-buy bankrupt clinics for pop-up labs"
+      ],
+      "preferred_tech": "Quantum cryo-processors, resonance cages, adaptive biomaskers, silent dart-rifles with neuro-inhibitors.",
+      "known_capabilities": [
+        "Growing adult hosts in 42 days",
+        "Embedding behavioural failsafes",
+        "Real-time consciousness ‘hot-swaps’",
+        "Stealth satellite burst comms"
+      ],
+      "known_weaknesses": [
+        "Limited physical manpower",
+        "Dependence on secrecy",
+        "Board factional infighting over ethics"
+      ]
+    },
+    "resource_network": {
+      "income_sources": [
+        "Dynacorp ‘research grants’ siphoned via shell firms",
+        "Black-market host fabrication for wealthy clients",
+        "Selling patched brain-module firmware to clinic chains"
+      ],
+      "supply_chains": "Nomad caravans deliver cryo-nutrient packs and quantum chips; forged manifests label cargo as solar batteries.",
+      "safe_locations": [
+        "Aerodyne sub-level Sanctum",
+        "Cradle-Delta reactor vault",
+        "Vienna Catacomb-12 wetlab",
+        "Rented sub-deck on Data Barge Leviathan"
+      ],
+      "information_network": "Asmodeus’ Gehenna Net spiders across dark grids; paid informants inside Dynacorp Special-Projects feed nightly dumps.",
+      "key_assets": [
+        "Gen-II bioreactor trio",
+        "SYZYGY prototype bodies",
+        "Asmodeus & Edom King ICE farm",
+        "Lansky’s cognitive map library"
+      ],
+      "economic_activities": [
+        "Grey-market biotech sales",
+        "Contract R&D for Kurata",
+        "Quiet acquisition of rural morgues for biomass"
+      ]
+    },
+    "relationship_dynamics": {
+      "internal_tensions": [
+        "Custodian fracturing: Pragmatists want Dynacorp alliance; Purists want total independence",
+        "Blue Vipers resent digitised leadership giving orders from screens"
+      ],
+      "succession_plan": "If a Custodian is destroyed, backup spun from last nightly snapshot; Proxy Director promoted to keep physical chain intact.",
+      "loyalty_mechanisms": "Staff wear subvocal collars that record emotional spikes; disloyalty flagged for ‘re-orientation’.",
+      "corporate_view": "Dynacorp sees Halcyon as essential but unstable partner; smaller corps fear proprietary capture.",
+      "street_view": "Urban legends claim Halcyon can ‘print you a new life—for a price.’",
+      "rival_view": "Religious revival groups label Halcyon as blasphemous ‘body-snatchers.’"
+    },
+    "narrative_hooks": {
+      "ongoing_plots": [
+        "SYZYGY host swap tests risk cascading identity drift",
+        "Blue Viper captain considering selling whistle-blow data to Nexus crew",
+        "Asmodeus hunting for the spam-swarm perpetrators"
+      ],
+      "potential_conflicts": [
+        "Custodian schism could spark an internal digital civil war",
+        "Kurata demands Echo-2 prototype ahead of schedule—risking catastrophic host failure",
+        "Nomad supplier learns what’s really in the cryo-pods and threatens exposure"
+      ],
+      "useful_services": [
+        "Growing replacement bodies (for a favour)",
+        "Installing bespoke neural firewalls",
+        "Erasing unwanted memories"
+      ],
+      "dangerous_knowledge": [
+        "Blueprints for Echo failsafe implants",
+        "Location of forgotten Echo ‘ghost cages’",
+        "Proof Kurata funds SYZYGY via director kickbacks"
+      ],
+      "future_trajectory": "If unchecked, Halcyon will launch mass host production, creating an elite class of body-hopping post-humans and quietly enslaving any digital mind deemed ‘sub-optimal.’"
+    },
+    "historical_markers": {
+      "founding_myth": "‘We calmed the storm’—first successful animal host slept peacefully, inspiring the kingfisher logo.",
+      "greatest_victory": "Successful transfer of Emilia Sato (Host-Zero) proving full mind-to-body resurrection possible.",
+      "worst_defeat": "Aerodyne data-centre breach—loss of 18 echo minds and public exposure risk.",
+      "turning_points": [
+        "Echo sabotage & Halcyon’s split from Dynacorp (2082)",
+        "Blue Vipers chartered after lab raid (2083)"
+      ],
+      "legendary_members": [
+        "Dr Adrian Lansky (digital ghost founder)",
+        "Custodian Helene Zhang (host physiology guru)",
+        "Asmodeus (rogue netrunner)"
+      ],
+      "lost_resources": [
+        "Cradle-Alpha bioreactor destroyed during power-outage",
+        "Prototype Bridge-Graft neural anchor stolen (suspected Nexus crew)"
+      ]
+    }
+  },
+  "suggested_primary_location": "Aerodyne Research Facility"
+}

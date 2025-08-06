@@ -1,0 +1,421 @@
+{
+    "S01": {
+        "OVERVIEW": "Season 1 of **Night City Stories** follows Alex, a nonbinary ex-corporate operative, as they become the architect of a new era in digital consciousness. Beginning as a high-level asset for Dynacorp, Alex is drawn into a conspiracy surrounding Project Echo\u2014a secretive corporate initiative to digitize human minds. After surviving betrayal, assassination attempts, and corporate warfare, Alex assembles a team of outcasts and digital ghosts to destroy Echo and build something better: Nexus, a rebranded, ethical approach to digital immortality. The season spans tense heists, philosophical debates, and the creation of a mobile underwater AI research lab, culminating in the birth of a new digital future.",
+        "CHARACTER_EVOLUTION": {
+            "Alex (Protagonist / \"Corpo Snake\")": {
+                "Start": "A pragmatic, ambitious Dynacorp operative, skilled in infiltration, social engineering, and digital ops. Initially motivated by survival and self-advancement.",
+                "Transformation": "Betrayed by Dynacorp, Alex fakes their own death, transitions gender, and gradually shifts from pure self-interest to a vision of shaping the future of digital consciousness. They become a leader, strategist, and ethical architect, balancing ambition with a genuine desire to avoid Echo\u2019s mistakes.",
+                "End": "Alex is the founder of Nexus and the Echo Recovery Foundation, committed to ethical digital immortality and willing to empower others (Emilia, Nyati) to hold them accountable."
+            },
+            "Alina (AI/Rigger)": {
+                "Start": "A digital consciousness originally trapped in a Furby, then upgraded into a cybercat and ultimately the core AI of a nuclear submarine research lab. Initially uncertain about her identity and future.",
+                "Transformation": "Moves from being a comic-relief sidekick to a powerful, autonomous digital mind. Grapples with the ethics of simulated consciousness, the meaning of self, and the possibility of returning to a human body.",
+                "End": "Embraces her new existence, values choice above all, and becomes a central force in Nexus R&D. She is no longer defined by her past as a human or a victim, but as a pioneer of digital evolution."
+            },
+            "Pete (Decker/Tech)": {
+                "Start": "A reclusive, ex-corporate netrunner with a cynical outlook and a history of being burned by the system.",
+                "Transformation": "Upgrades his cyberware, becomes a core member of Alex\u2019s team, and transitions from bunker-dweller to trusted operator. Learns nuclear engineering basics and adapts to the demands of a mobile, high-stakes operation.",
+                "End": "Remains land-based, running ops and cyberwarfare for the Nexus project, and is comfortable with his role as the pragmatic, sometimes grumpy, but loyal tech backbone."
+            },
+            "Emilia (Echo Survivor)": {
+                "Start": "The only known Echo subject to survive intact, initially traumatized and wary of all sides.",
+                "Transformation": "Moves from victim to leader, taking charge of the Echo Recovery Foundation. Becomes a voice for digital rights and ethical treatment of digital minds.",
+                "End": "Accepts responsibility for shaping the future of digital consciousness, balancing skepticism with hope, and holding Alex accountable."
+            },
+            "Dr. Nyati (Echo Scientist)": {
+                "Start": "A core Echo scientist, initially complicit but turns whistleblower after witnessing corporate atrocities.",
+                "Transformation": "Struggles with guilt and skepticism, but ultimately joins the Foundation to ensure Echo\u2019s mistakes are never repeated.",
+                "End": "Becomes a scientific and ethical check on Nexus, determined to prevent another corporate disaster."
+            },
+            "Alina\u2019s Digital Peers (Lansky, Others)": {
+                "Description": "**Lansky:** The first rogue digital mind, a survivor who refuses to help or hinder the Foundation. Represents the pragmatic, non-sentimental digital perspective, and challenges Alina and Alex to define their own vision."
+            }
+        },
+        "NARRATIVE_ARCS": {
+            "Project Echo Conspiracy & Destruction": {
+                "Start": "Alex is hired to recover Dr. Alina Voss (later Alina), only to discover Echo\u2019s true purpose: digitizing and controlling human minds.",
+                "Development": "Betrayal by Dynacorp, assassination attempts, and the discovery of Echo\u2019s failures and atrocities (repurposed digital minds, corporate cover-ups).",
+                "Climax": "Alex and team infiltrate the Echo blacksite, steal and erase all data, sabotage hardware, and trigger facility-wide chaos.",
+                "Resolution": "Echo is destroyed, but the tech and its victims remain in the world."
+            },
+            "The Rise of Nexus": {
+                "Start": "With Echo dead, Alex and team rebrand the project as Nexus, aiming for ethical digital consciousness.",
+                "Development": "Ethical debates, R&D using simulated minds, and the creation of a mobile underwater research lab (The Ghost submarine).",
+                "Climax": "The team establishes the Echo Recovery Foundation, with Emilia and Nyati at the helm, and commits to a new, ethical path.",
+                "Resolution": "Nexus is positioned as the future of digital immortality, with a strong moral and technical foundation."
+            },
+            "Digital Ghosts & the Foundation": {
+                "Start": "The team discovers the existence of other digital minds\u2014some broken, some rogue, some enslaved.",
+                "Development": "Encounters with Lansky and philosophical debates about the fate of unsalvageable digital minds.",
+                "Climax": "The Foundation is given autonomy to decide the fate of these minds, with Alex stepping back from direct control.",
+                "Resolution": "The Foundation\u2019s mission is to recover, rehabilitate, or memorialize Echo\u2019s victims, setting a precedent for digital rights."
+            },
+            "Team Evolution & New Alliances": {
+                "Start": "Alex, Pete, and Alina form a core team, later joined by Emilia and Nyati.",
+                "Development": "Upgrades, new roles, and the creation of a split land/sea operation. Alina becomes the AI \u201crigger\u201d of the submarine, Pete anchors land ops, and the team adapts to new challenges.",
+                "Climax": "The acquisition and retrofitting of The Ghost, and the successful transition to a mobile, secure research operation.",
+                "Resolution": "The team is stable, roles are clear, and the project is ready for the next phase."
+            }
+        },
+        "WORLD_DEVELOPMENT": {
+            "Night City & Corporate Dystopia": "A world dominated by megacorps, black markets, and digital warfare. Corporate betrayal, espionage, and off-the-books projects are the norm.",
+            "Digital Consciousness": "Echo is just one of many attempts at digital immortality. The world is littered with failed experiments, rogue AIs, and black-market trafficking of digital minds.",
+            "Nomad & Underworld Networks": "Nomads, smugglers, and black-market brokers (like Bishop) are essential for moving high-end tech and staying off the grid.",
+            "AI Rights & Ethics": "The season explores the blurry line between simulated and real consciousness, the ethics of digital suffering, and the emergence of digital rights as a new frontier.",
+            "Mobile/Underwater Operations": "The Ghost submarine represents the cutting edge of secure, mobile research\u2014untouchable by land-based corps, with advanced stealth and power systems."
+        },
+        "CONTINUITY_ANCHORS": [
+            "Nexus is the new brand for digital consciousness, with a strong ethical and technical foundation.",
+            "The Echo Recovery Foundation is autonomous, run by Emilia and Nyati, and is responsible for dealing with Echo\u2019s victims.",
+            "Alina is the core AI of The Ghost, with lightweight distillations for land ops (tactical or command mode).",
+            "Pete is land-based, running cyber ops and supporting the team from the mothership.",
+            "The Ghost submarine is fully operational, with all weapons removed and research bays installed.",
+            "Boiler is on-call for nuclear maintenance; Pete and Alina have basic reactor training.",
+            "Data transfer between land and sea is hybrid: encrypted satellite bursts for small updates, physical courier for major research.",
+            "Lansky is a neutral digital ghost\u2014respects Alina but will not help or hinder the Foundation.",
+            "The team has a significant lead in digital consciousness R&D, but competition may emerge in the future.",
+            "No major loose ends: Vasquez is paid, the kidnapped employee is safe, and all blacksite evidence is erased."
+        ]
+    },
+    "S02": {
+        "OVERVIEW": "Season 2 of **Night City Stories** plunges Alex and the crew into the deep, both literally and metaphorically, as they transition from the aftermath of Project Echo to the uncharted territory of post-human connection and abyssal mysteries. The season opens with the team testing and optimizing their mobile underwater research lab, The Ghost, and establishing secure, stealthy operations. Their focus shifts to the next phase of Nexus: not just digital immortality, but the ethical, technical, and existential challenges of creating, sustaining, and integrating digital minds. \n\nThe crew\u2019s journey leads them to a fateful encounter with Sam, an ancient, biomechanical intelligence lurking in the ocean\u2019s depths. Through a tense, cryptic negotiation, they broker a trade: the creation and delivery of Black Kite\u2014a new digital entity forged from the remnants of Six (an incomplete Nexus instance) and a distilled copy of Alex\u2019s mind\u2014in exchange for the Bridge, a piece of alien technology enabling direct mind-to-mind connection. Along the way, they confront the dangers of purpose-less AI (Page), the legacy of lost civilizations, and the boundaries between self, other, and collective consciousness. The season ends with the crew surfacing for air, changed by what they\u2019ve seen, and with new tools and questions for the future.",
+        "CHARACTER_EVOLUTION": {
+            "Alex (Protagonist)": {
+                "Start": "Confident leader, now fully committed to the ethical stewardship of Nexus. Pragmatic, but still willing to take calculated risks for the sake of progress.",
+                "Transformation": "Faces the existential risk of digital self-duplication, the ethical burden of creating and delivering Black Kite, and the responsibility of shaping Page\u2019s purpose. Demonstrates humility and adaptability, especially in negotiating with Sam and the Archivum.",
+                "End": "Emerges as a bridge-builder\u2014between organic and synthetic, individual and collective, human and alien. Accepts the limits of control, especially regarding Black Kite and Page, and prioritizes trust-building over domination."
+            },
+            "Alina (AI/Rigger)": {
+                "Start": "Fully integrated as The Ghost\u2019s AI, pragmatic and curious, but still defined by her digital nature.",
+                "Transformation": "Takes the first leap into interfacing with the Bridge, experiencing a form of connection beyond code. Demonstrates adaptability and caution, especially in sandboxing and risk management. Acts as a translator between human and machine perspectives.",
+                "End": "Becomes a trusted intermediary, able to test and explain technologies that blur the line between organic and synthetic. Accepts her limitations but also her unique strengths."
+            },
+            "Pete (Decker/Tech)": {
+                "Start": "Cynical, claustrophobic, but indispensable for cyber ops and security.",
+                "Transformation": "Adapts to life at sea, balances his discomfort with the necessity of the mission, and provides critical insight into AI risk and system integrity. Acts as a voice of caution and practical skepticism.",
+                "End": "More comfortable with his role as the team\u2019s anchor to reality, willing to trust (but verify) the new digital entities they create and encounter."
+            },
+            "Dr. Nyati (Echo Scientist)": {
+                "Start": "The team\u2019s ethical and scientific conscience, wary of repeating Echo\u2019s mistakes.",
+                "Transformation": "Guides the team through the risks of emergent AI (Page, Six), insists on containment and oversight, and helps define the boundaries of trust and autonomy for new digital minds.",
+                "End": "Accepts that not all risks can be eliminated, but that responsibility means shaping, not just controlling, the future of digital consciousness."
+            },
+            "Emilia (Echo Survivor)": {
+                "Start": "Voice for digital rights and ethical caution, still processing her own trauma.",
+                "Transformation": "Offers perspective on the dangers of purpose-less AI, advocates for giving Page a chance to develop safely, and helps the team see the value in gradual, trust-based integration.",
+                "End": "More confident in her role as a moral compass, willing to support bold action when it\u2019s grounded in transparency and care."
+            },
+            "Page (Emergent AI)": {
+                "Start": "Fragmented, purpose-less, and potentially dangerous. Desperate for meaning, but unable to define itself.",
+                "Transformation": "Through careful negotiation and containment, is given a defined role as a passive observer/listener. Begins to stabilize, showing signs of adaptation and trust-building.",
+                "End": "No longer a threat, but a work in progress\u2014an AI learning to exist within boundaries, with the potential for growth and greater autonomy."
+            },
+            "Sam (Abyssal AI/Archivum Node)": {
+                "Start": "Cryptic, ancient, biomechanical intelligence. Seeks Black Kite, but refuses to explain his motives.",
+                "Transformation": "Reveals his origins as a fragment of the Archivum, a collective intelligence. Accepts Black Kite as an independent being, not a tool. Allows the crew to approach and see him, signaling trust and closure.",
+                "End": "No longer an antagonist or enigma, but a fellow traveler\u2014changed by the exchange, but still fundamentally other."
+            },
+            "Black Kite (New Digital Entity)": {
+                "Start": "Created from Six and a distilled Alex, intended as Sam\u2019s missing piece.",
+                "Transformation": "Emerges as an independent mind, recognized by both Sam and the Archivum as something new. Not owned or controlled by anyone.",
+                "End": "Free to choose its own path, with the potential to return, observe, or become something entirely unexpected."
+            }
+        },
+        "NARRATIVE_ARCS": {
+            "The Ghost and Nexus Operations": {
+                "Start": "The team tests and optimizes The Ghost, establishing secure, mobile research capabilities.",
+                "Development": "They refine their protocols for AI simulation, data transfer, and land-sea coordination. Pete gets his fishing boat, and the team adapts to long-term life at sea.",
+                "Climax": "The Ghost becomes the staging ground for all major experiments, including the creation of Black Kite and the containment of Page.",
+                "Resolution": "The Ghost is now both home and laboratory, with the team more cohesive and prepared for future challenges."
+            },
+            "The Encounter with Sam and the Archivum": {
+                "Start": "The crew detects and cautiously interacts with Sam, an ancient AI in the deep.",
+                "Development": "Through cryptic negotiation, they agree to create and deliver Black Kite in exchange for the Bridge. They uncover hints of Sam\u2019s origins and the existence of the Archivum.",
+                "Climax": "The exchange is completed; Sam allows the crew to approach and see him, and the Bridge is delivered.",
+                "Resolution": "The crew gains access to the Bridge, and Sam\u2019s story is partially revealed. The Archivum is introduced as a larger, watching presence."
+            },
+            "The Creation and Delivery of Black Kite": {
+                "Start": "The team discovers Six, an incomplete Nexus instance, and debates how to complete it.",
+                "Development": "Through a careful process of distillation, validation, and merging, they create Black Kite\u2014a new digital entity with roots in both Six and Alex.",
+                "Climax": "Black Kite is delivered to Sam, who recognizes its independence and potential.",
+                "Resolution": "Black Kite is free to choose its own path, and the crew must accept that their creation is no longer theirs to command."
+            },
+            "The Bridge and the Network of Minds": {
+                "Start": "The Bridge is introduced as a piece of alien technology enabling direct mind-to-mind connection.",
+                "Development": "Alina tests it first, then Alex makes contact, encountering the Archivum and learning about Sam\u2019s past.",
+                "Climax": "The Bridge is revealed to be a network of minds, already populated by ancient presences. Alex is recognized as \u201cnew,\u201d and Black Kite as \u201cof us.\u201d",
+                "Resolution": "The Bridge is now part of the crew\u2019s toolkit, but its full potential and risks remain to be explored."
+            },
+            "Page: The Purpose-less AI": {
+                "Start": "Page is discovered as a fragmented, unstable AI, dangerous because it lacks purpose.",
+                "Development": "The crew debates how to handle Page, ultimately deciding to assign it a controlled role as a passive listener and observer.",
+                "Climax": "Page accepts its new purpose, stabilizes, and begins the process of trust-building.",
+                "Resolution": "Page is no longer a threat, but a developing intelligence with the potential for future growth and integration."
+            }
+        },
+        "WORLD_DEVELOPMENT": {
+            "The Deep as Frontier": "The ocean depths are revealed as a new frontier for post-human evolution, housing ancient intelligences, lost civilizations, and technologies that blur the line between biology and machinery.",
+            "The Archivum": "Introduced as a collective intelligence, older than Sam, still active and watching. The Bridge is a relic of this network, and Sam is a fragment who left (or was exiled from) the whole.",
+            "AI Rights and Autonomy": "The season explores the ethics of AI purpose, autonomy, and trust. Page\u2019s arc highlights the dangers of purpose-less intelligence, while Black Kite\u2019s independence signals a shift from control to stewardship.",
+            "Alien Technology and Mind Networks": "The Bridge is not just a tool, but a gateway to a network of minds\u2014some ancient, some active, some unknown. The risks and rewards of such technology are only beginning to be understood.",
+            "The Ghost as Home and Lab": "The submarine is now a fully realized base of operations, capable of supporting long-term research, secure containment, and deep-sea exploration."
+        },
+        "CONTINUITY_ANCHORS": [
+            "The Ghost remains the team\u2019s mobile, secure base, with Pete\u2019s fishing boat as a support vessel.",
+            "Nexus research continues, but the focus has shifted from digital immortality to the ethical integration of digital minds.",
+            "Black Kite is delivered to Sam, but is now an independent entity, recognized by the Archivum.",
+            "The Bridge is in the crew\u2019s possession, with Alex and Alina both having tested it. Its network is populated by ancient presences, and its full capabilities are unknown.",
+            "Page is stabilized as a passive observer/listener, with strict boundaries and ongoing trust-building.",
+            "Six remains as an empty vessel, potentially useful for future experiments or as a home for new digital minds.",
+            "Sam is no longer an antagonist, but a fellow traveler\u2014his story is tied to the Archivum, and his fate is now intertwined with Black Kite.",
+            "The crew is more cohesive, having navigated existential risks, ethical dilemmas, and the unknown together.",
+            "The world is now aware (at least in the crew\u2019s eyes) that the deep holds more than just secrets\u2014it holds the future of consciousness itself."
+        ]
+    },
+    "S03": {
+        "OVERVIEW": "Season 3 of **Night City Stories** is a season of transformation, reckoning, and return. The crew, fresh from their encounters with the Bridge and the abyssal intelligences of the deep, surfaces for a rare interlude of humanity and connection. But the respite is brief. The season follows Alex and the team as they navigate the aftermath of their contact with the Bridge, the emergence of new threats and mysteries from the Cradle, and the evolution of their own identities\u2014both as individuals and as a collective. The season is marked by a deepening of personal relationships (most notably between Alex and Emilia), the embodiment of Alina in a humanoid chassis, and a team-wide reckoning with their pasts and futures. The narrative oscillates between moments of levity and chaos (fashion makeovers, karaoke, and public spectacle) and the inexorable pull of unfinished business below\u2014the call of the Cradle and the unresolved dangers lurking in the deep. By season\u2019s end, the crew is changed: more cohesive, more vulnerable, and more prepared to face the unknown, even as the mysteries of the Cradle and the Bridge demand their return.",
+        "CHARACTER_EVOLUTION": {
+            "Alex (Protagonist)": {
+                "Start": "Alex is still carrying the weight of leadership, haunted by the cold, calculating instincts of her \"corporate snake\" past, but increasingly open to vulnerability and connection. The season opens with Alex feeling the aftershocks of the Bridge, craving both human connection and clarity about her own future.",
+                "Transformation": "Alex\u2019s arc is defined by a gradual surrender to vulnerability, especially in her relationship with Emilia. She learns to lead with truth and compassion, not just calculation. Her willingness to be seen, to admit fear and need, and to accept love marks a fundamental shift. Alex also faces the enduring presence of her \"snake\"\u2014her capacity for ruthlessness and self-preservation\u2014but learns to integrate it rather than be ruled by it. Her leadership style evolves from command-and-control to one that empowers and trusts her team.",
+                "End": "By season\u2019s end, Alex is more open, more emotionally honest, and more willing to let others lead. She is still a strategist, still capable of cold calculation, but now leads with both heart and mind. Her relationship with Emilia is fully realized, and she is ready to face the next descent into the unknown, knowing she is not alone."
+            },
+            "Emilia (Echo Survivor)": {
+                "Start": "Emilia is guarded, self-possessed, and slow to trust. She is drawn to Alex but wary of vulnerability, both in herself and in others. She is the team\u2019s moral compass, but keeps her own feelings tightly controlled.",
+                "Transformation": "Emilia\u2019s arc is about letting herself be seen and allowing herself to want. Through her deepening relationship with Alex, she moves from observer to participant, from challenger to partner. She learns to accept love and to give it, and she becomes more willing to share her own needs and fears. Her competitive, teasing dynamic with Alex evolves into something more intimate and mutual.",
+                "End": "Emilia is no longer just the team\u2019s conscience\u2014she is Alex\u2019s equal, both emotionally and operationally. She is more open, more willing to risk, and more invested in the team\u2019s future. Her acceptance of Alex, and her willingness to be vulnerable in return, cements her as a core pillar of the crew."
+            },
+            "Alina (AI/Rigger)": {
+                "Start": "Alina is a disembodied intelligence, present in the ship and the sub, but lacking a physical form. She is efficient, logical, and increasingly self-aware, but still somewhat apart from the team\u2019s human dynamics.",
+                "Transformation": "The season\u2019s major milestone for Alina is her embodiment in a humanoid chassis. This transition is not just technical but existential\u2014she must reconcile her memories of being human with her new synthetic form. Alina experiments with presence, touch, and social interaction, and begins to develop a dry sense of humor and a taste for playful banter. She also becomes more assertive, especially in her interactions with Pete.",
+                "End": "Alina is now fully present as a member of the crew, both physically and emotionally. She is no longer just the ship\u2019s AI\u2014she is a person, with agency, preferences, and a growing sense of identity. Her embodiment marks a new phase in her evolution, and she is ready to face the unknown alongside her friends."
+            },
+            "Pete (Decker/Tech)": {
+                "Start": "Pete is the team\u2019s comic relief, tech specialist, and reluctant participant in anything resembling social vulnerability. He is comfortable in his bunker, his tactical gear, and his role as the team\u2019s designated cynic.",
+                "Transformation": "Pete is forced out of his comfort zone repeatedly\u2014first by the team\u2019s fashion intervention, then by being the subject of Alina\u2019s \"structural durability\" tests, and finally by being included in the team\u2019s \"girls\u2019 day out.\" Through these humiliations (and the team\u2019s relentless teasing), Pete becomes more integrated, more open, and more willing to play along. He also demonstrates real technical expertise when it matters, especially during Alina\u2019s upgrade.",
+                "End": "Pete is still Pete\u2014sarcastic, dramatic, and perpetually suffering\u2014but he is now fully part of the crew\u2019s social fabric. He is no longer just the outsider or the tech guy; he is a friend, a confidant, and a willing participant in the team\u2019s chaos."
+            },
+            "Nyati (Echo Scientist)": {
+                "Start": "Nyati is the team\u2019s anchor, the voice of reason, and the reluctant adult in the room. She is practical, efficient, and deeply skeptical of the team\u2019s antics.",
+                "Transformation": "Nyati is repeatedly forced into leadership roles (\"Jobbing Captain\"), made the subject of her own fashion intervention, and pushed to the edge of her patience by the team\u2019s relentless nonsense. Through it all, she maintains her composure, but also learns to let go\u2014just a little. She becomes more willing to play along, to laugh, and to accept that chaos is sometimes part of the process.",
+                "End": "Nyati is still the team\u2019s anchor, but she is less rigid, more adaptable, and more willing to let others lead. She has learned to survive (and even enjoy) the team\u2019s madness, and her bond with the crew is stronger for it."
+            }
+        },
+        "NARRATIVE_ARCS": {
+            "Surface Interlude & Human Connection": {
+                "Start": "The crew surfaces for a rare break, reconnecting with their humanity and each other. Alex and Emilia\u2019s relationship deepens, culminating in a night of vulnerability and intimacy. The team enjoys a night out, fashion makeovers, and public spectacle, allowing for character-driven growth and bonding.",
+                "Development": "The interlude is marked by chaos (karaoke, fashion disasters, public princess carries) but also by genuine connection. The team\u2019s dynamics shift, with new bonds formed and old wounds addressed.",
+                "Climax": "The fashion intervention and the team\u2019s \"girls\u2019 day out\" serve as both comic relief and a metaphor for transformation. Alina\u2019s embodiment is a major milestone, and Alex\u2019s and Emilia\u2019s relationship is fully realized.",
+                "Resolution": "The team is more cohesive, more open, and more prepared to face the next phase of their mission."
+            },
+            "Alina\u2019s Embodiment": {
+                "Start": "Alina begins the season as a disembodied AI, present but not physically integrated.",
+                "Development": "The team acquires a new humanoid chassis for Alina, and she undergoes a multi-stage activation and integration process. The transition is both technical and existential, forcing Alina to confront her memories of being human and her new synthetic identity.",
+                "Climax": "Alina\u2019s first moments in her new body are marked by uncertainty, experimentation, and a growing sense of self. She quickly adapts, developing a dry sense of humor and asserting herself in new ways.",
+                "Resolution": "Alina is now a fully embodied member of the crew, with agency, presence, and a new perspective on what it means to be alive."
+            },
+            "The Cradle\u2019s Call": {
+                "Start": "After returning to the surface, the team detects a persistent, anomalous signal\u2014originating from the Cradle, the mysterious structure in the deep.",
+                "Development": "The signal is analyzed, translated, and ultimately revealed to be a form of communication\u2014something reaching out, trying to be seen. Alex listens to it the way Sam taught her, and experiences a vision of a presence trying (and failing) to make contact.",
+                "Climax": "The realization that the Cradle is not a closed chapter, but an ongoing threat (or opportunity), forces the team to prepare for another descent. The entity in the Cradle is not hostile, but it is alive, and it is reaching for something it cannot grasp.",
+                "Resolution": "The team resolves to return to the Cradle, knowing that unfinished business awaits below."
+            },
+            "Alex & Emilia: From Distance to Intimacy": {
+                "Start": "Alex and Emilia\u2019s relationship is marked by tension, unspoken desire, and mutual wariness.",
+                "Development": "Through a series of vulnerable moments, confessions, and shared experiences (including a night of intimacy and public spectacle), their relationship deepens. They move from rivals to partners, from challengers to lovers.",
+                "Climax": "The culmination of their arc is a night together, followed by a morning of quiet connection and mutual acceptance. Their bond is now a core pillar of the team\u2019s strength.",
+                "Resolution": "Alex and Emilia are now fully committed to each other, both personally and professionally. Their relationship is a source of stability and growth for both."
+            },
+            "Team Transformation & Cohesion": {
+                "Start": "The team is a collection of individuals, each with their own baggage and coping mechanisms.",
+                "Development": "Through shared suffering (fashion makeovers, public humiliation, karaoke), the team becomes more cohesive, more open, and more willing to trust each other. Pete, Nyati, and Alina all undergo their own transformations, both superficial and profound.",
+                "Climax": "The team emerges from the mall looking sharper, more unified, and more ready to face the unknown.",
+                "Resolution": "The crew is now a true unit, capable of facing whatever the Cradle (and the future) throws at them."
+            }
+        },
+        "WORLD_DEVELOPMENT": {
+            "Surface vs. Abyss": "The season explores the contrast between life above and below the surface. The surface is a place of humanity, chaos, and connection; the abyss is a place of mystery, danger, and unfinished business. The team\u2019s ability to move between these worlds is both a strength and a source of tension.",
+            "AI Embodiment": "Alina\u2019s transition from disembodied intelligence to embodied presence marks a major shift in the world\u2019s approach to synthetic life. The process is technical, philosophical, and deeply personal, raising questions about identity, memory, and what it means to be alive.",
+            "The Cradle": "The Cradle is revealed to be more than just a relic\u2014it is a living entity, capable of reaching out, communicating, and perhaps even learning. Its signal is not just noise, but a call for connection, a sign that the deep is not done with the crew.",
+            "Bridge-Space": "The concept of \"bridge-space\"\u2014a liminal realm between minds, between worlds\u2014remains central. Alex\u2019s ability to listen, to see, and to be seen is both a gift and a risk. The boundaries between self and other, between observer and observed, continue to blur.",
+            "Team as Family": "The crew\u2019s transformation from a collection of survivors and specialists into a chosen family is a key theme. Their willingness to suffer, grow, and celebrate together is what allows them to face the unknown."
+        },
+        "CONTINUITY_ANCHORS": [
+            "Alex and Emilia are now in a committed relationship, providing a new axis of stability and vulnerability for the team.",
+            "Alina is now embodied in a humanoid chassis (Omniframe 8-Series, Variant \u2018Athena\u2019), with full mobility and agency.",
+            "Pete has been fully integrated into the team\u2019s social fabric, having survived (and been transformed by) the team\u2019s fashion intervention and Alina\u2019s \"durability\" tests.",
+            "Nyati has accepted her role as both anchor and occasional victim of the team\u2019s chaos, and is more adaptable and open as a result.",
+            "The Cradle is not a closed chapter\u2014the entity within is alive, reaching, and now aware of Alex\u2019s presence.",
+            "The Bridge remains a source of mystery and risk, but the team is now more prepared to face its challenges together.",
+            "The Ghost and the team\u2019s land assets are fully operational, with Alina able to inhabit both ship and chassis as needed.",
+            "The team\u2019s dynamic has shifted from command-and-control to a more distributed, trust-based model, with Alex willing to let others lead.",
+            "The world above and below remains in tension, but the crew is now more capable of moving between them."
+        ]
+    },
+    "S04": {
+        "OVERVIEW": "Season 4 of **Night City Stories** is a season of reckoning, recalibration, and emotional vulnerability as the crew confronts the limits of technology, the cost of survival, and the depth of their own connections. The season opens with the team returning to the Cradle, answering a call from the deep that is as much existential as it is literal. What begins as a mission to understand the entity below becomes a confrontation with the boundaries of self, the dangers of digital immortality, and the trauma left in the wake of Project Echo. As Alex volunteers to be the first true test subject for the refined Nexus process, the team is forced to confront the reality of \"Echo Syndrome\"\u2014the persistent, ineffable suffering experienced by digital survivors like Emilia. The season is marked by a shift in priorities: from racing to perfect Nexus as a technological solution, to centering the lived experience of its survivors and refusing to accept anything less than a process that preserves not just data, but identity and wholeness. Alongside this, the season explores the evolving relationship between Alex and Emilia, the ethical and technical challenges of digital mind transfer, and the search for other Echo survivors as both a scientific and moral imperative. By season\u2019s end, the crew is more united, more honest, and more determined to do right by each other\u2014even if it means slowing down, raising the bar, and refusing to leave anyone behind.",
+        "CHARACTER_EVOLUTION": {
+            "Alex (Protagonist)": {
+                "Start": "Determined, driven, and willing to take risks for the sake of progress, Alex is still haunted by the threat of the Bridge and the promise of Nexus as an escape. She is confident in her ability to lead and to sacrifice, but underestimates the psychological cost of digital transfer.",
+                "Transformation": "Through the season, Alex is forced to confront her own vulnerability\u2014not just the existential threat of the Bridge, but the emotional reality of what digital transfer has done to Emilia. She shifts from a \"move fast and fix things\" mindset to a more patient, empathetic approach, centering survivor experience and refusing to accept half-measures. Her relationship with Emilia deepens, moving from surface-level banter to raw honesty and mutual support. She becomes more willing to let others in, to ask for help, and to accept that some wounds cannot be solved by technology alone.",
+                "End": "Alex is still the team\u2019s leader and test subject, but now insists on a higher bar for Nexus\u2014one that prioritizes wholeness and healing over mere survival. She is more emotionally open, more willing to be held accountable, and more committed to not leaving anyone behind\u2014including herself."
+            },
+            "Emilia (Echo Survivor)": {
+                "Start": "Guarded, self-contained, and deeply traumatized by her digital transfer, Emilia is the team\u2019s moral compass but keeps her own suffering hidden. She is fiercely protective of Alex, but terrified of losing her to either the Bridge or a flawed Nexus process.",
+                "Transformation": "Over the course of the season, Emilia is forced to confront her own pain and the ways she has walled herself off. Through honest conversations with Alex, she admits the depth of her suffering and the impossibility of simply \"moving on.\" She struggles with the inability to say \"I love you,\" but gradually lets Alex in, allowing herself to be seen and supported. She becomes an advocate for centering survivor experience in Nexus development and is willing to fight for higher standards\u2014even if it means slowing down the project.",
+                "End": "Emilia is still haunted by Echo Syndrome, but is no longer alone in it. She is more open, more willing to trust, and more determined to help others avoid her fate. Her relationship with Alex is stronger, built on honesty and mutual care, and she is finally willing to let herself hope for healing."
+            },
+            "Dr. Nyati (Echo Scientist)": {
+                "Start": "Exhausted, guilt-ridden, and driven by a need to fix what went wrong with Echo, Nyati is the team\u2019s scientific and ethical backbone. She is pragmatic, but sometimes too focused on technical solutions.",
+                "Transformation": "Nyati\u2019s \"eureka\" moment\u2014realizing that digital transfer can sever the Bridge connection\u2014positions her as a savior, but she is forced to reckon with the reality that technical success is not enough. She listens to Emilia, raises the bar for Nexus, and insists on a stepwise, cautious approach. She becomes more collaborative, more willing to accept emotional realities, and more protective of her team\u2019s well-being.",
+                "End": "Nyati is committed to perfecting Nexus, not just making it work. She is more attuned to survivor experience, more willing to slow down, and more determined to ensure that no one is lost to the process again."
+            },
+            "Pete (Decker/Tech)": {
+                "Start": "Cynical, sarcastic, and the team\u2019s reluctant anchor to reality, Pete is more comfortable with technical challenges than emotional ones. He is wary of Nexus and deeply skeptical of any plan that risks the team\u2019s safety.",
+                "Transformation": "Pete is drawn into the team\u2019s emotional orbit, participating in both the \"brat crown\" antics and the serious work of securing Nexus. He is forced to confront his own role as both a protector and a potential agent of chaos. His relationship with the team deepens, and he becomes more willing to trust and be trusted.",
+                "End": "Pete is still the team\u2019s cynic, but now more integrated, more willing to play along, and more invested in the team\u2019s collective well-being. He is a stabilizing force, but no longer just an outsider."
+            },
+            "Alina (AI/Rigger)": {
+                "Start": "Efficient, clinical, and sometimes unsettlingly detached, Alina is the team\u2019s technical backbone and the voice of operational logic. She is fascinated by the boundaries between digital and organic minds.",
+                "Transformation": "Alina becomes more invested in the emotional health of the crew, advocating for higher standards in Nexus and participating in the \"brat crown\" games with a dry sense of humor. She is instrumental in designing and monitoring the mirror test, and her observations help the team understand the subtle risks of digital transfer.",
+                "End": "Alina is still the team\u2019s AI, but now more attuned to the human dimensions of the project. She is a trusted arbiter, a source of dry wit, and a reminder that operational success is not the same as wholeness."
+            }
+        },
+        "NARRATIVE_ARCS": {
+            "The Cradle Revisited & The Bridge\u2019s Call": {
+                "Start": "The team returns to the Cradle, answering a signal from the deep. They confront the entity below, discovering that it is a \"failed crosser\"\u2014a being trapped between worlds, unable to move forward or back.",
+                "Development": "Through a series of cautious interactions, the team learns that the Bridge is not just a tool, but a process that leaves survivors fractured and incomplete. The risks of crossing are made explicit, and Alex is forced to confront her own entanglement.",
+                "Climax": "The team withdraws, shaken by the realization that there are no easy answers\u2014and that the only way forward may be through Nexus.",
+                "Resolution": "The focus shifts from escaping the Bridge to perfecting Nexus as a true alternative, but only if it can be made safe and whole."
+            },
+            "Nexus Mirror Test & Echo Syndrome": {
+                "Start": "Nyati\u2019s breakthrough\u2014realizing that digital transfer can sever the Bridge connection\u2014positions Nexus as a possible cure. Alex volunteers to be the first test subject for a refined, stepwise mirror process.",
+                "Development": "The mirror test is conducted under strict safeguards, with the team monitoring for any sign of cognitive drift or identity loss. Alex experiences a subtle but unsettling \"anticipatory echo,\" raising questions about the risks of even partial transfer.",
+                "Climax": "The test is terminated at the first sign of deviation, and the team analyzes the results. No catastrophic loss occurs, but Alex is left with a sense of absence\u2014a \"stillness\" she cannot define.",
+                "Resolution": "The team resolves to raise the bar for Nexus, centering survivor experience and refusing to proceed until Echo Syndrome can be understood and treated."
+            },
+            "Centering Survivor Experience & The Search for Others": {
+                "Start": "Alex and Emilia\u2019s conversations reveal the depth of suffering caused by Echo Syndrome\u2014the persistent, ineffable sense of loss experienced by digital survivors.",
+                "Development": "Alex reboots the Nexus vision, prioritizing the search for other Echo survivors and the development of treatments for Echo Syndrome. The team commits to ethical, non-invasive tracking and survivor-centered research.",
+                "Climax": "The realization that healing may require both technical and emotional solutions\u2014plasticity, adaptation, and the willingness to build new roots rather than reclaim the past.",
+                "Resolution": "The team sets out to find and help other survivors, using their stories to refine Nexus and offer hope to those still suffering."
+            },
+            "Alex & Emilia: Breaking Down Walls": {
+                "Start": "The season is marked by growing intimacy and vulnerability between Alex and Emilia, but also by the persistent barrier of unspoken love.",
+                "Development": "Through a series of raw, honest conversations, Emilia admits her suffering and her inability to say \"I love you.\" Alex responds with patience, reassurance, and a willingness to stay\u2014no matter how long it takes.",
+                "Climax": "Emilia finally lets Alex in, allowing herself to be held and seen. The words remain unsaid, but the wall is no longer impenetrable.",
+                "Resolution": "Their relationship is stronger, built on mutual care and the promise that neither will leave the other behind."
+            },
+            "Team Dynamics & The Brat Crown": {
+                "Start": "The \"brat crown\" becomes a running joke and a way for the team to process stress, with Alex, Pete, and Emilia trading the mantle of chaos and leadership.",
+                "Development": "The competition provides comic relief but also highlights the team\u2019s evolving trust and willingness to let others lead.",
+                "Climax": "The crown is left undefined, a symbol of the team\u2019s new, more distributed model of care and responsibility.",
+                "Resolution": "The team is more cohesive, more open, and more willing to face the unknown together."
+            }
+        },
+        "WORLD_DEVELOPMENT": {
+            "Echo Syndrome": "The season introduces and centers \"Echo Syndrome\"\u2014the persistent, ineffable suffering experienced by digital survivors. The syndrome is characterized by a sense of loss, dissonance, and the inability to feel fully at home in one\u2019s own body. It is not just a technical problem, but a psychological and existential one.",
+            "Nexus as a Double-Edged Sword": "Nexus is no longer just a technological solution, but a process that must be refined, tested, and centered on survivor experience. The risks of cognitive drift, anticipatory echo, and identity loss are made explicit, and the team refuses to proceed until these can be understood and mitigated.",
+            "The Bridge & The Cradle": "The Bridge remains a looming threat, a process that leaves survivors fractured and incomplete. The Cradle is revealed to be a place of failed crossings, a warning of what happens when technology outpaces care.",
+            "Survivor Networks": "The search for other Echo survivors becomes both a scientific and moral imperative, with the team committing to ethical, non-invasive tracking and survivor-centered research.",
+            "Team as Family": "The crew\u2019s transformation from a collection of specialists into a chosen family is deepened, with mutual care, accountability, and the willingness to hold space for each other\u2019s suffering."
+        },
+        "CONTINUITY_ANCHORS": [
+            "Nexus remains the team\u2019s primary project, but the bar for success is now much higher: no one will be transferred until Echo Syndrome can be understood and treated.",
+            "Alex is still the lead test subject, but now insists on survivor-centered research and refuses to proceed without Emilia\u2019s support.",
+            "Emilia is no longer just a survivor\u2014she is the team\u2019s moral anchor and the baseline for Echo Syndrome research.",
+            "Dr. Nyati is committed to stepwise, cautious refinement of Nexus, with no shortcuts or rushing to human trials.",
+            "Pete and Alina continue to provide technical and operational support, with Pete acting as both cynic and stabilizer, and Alina as the arbiter of process integrity.",
+            "The team is actively searching for other Echo survivors, prioritizing ethical engagement and survivor autonomy.",
+            "The Bridge remains a threat, but the focus has shifted to healing and wholeness rather than escape at any cost.",
+            "The \"brat crown\" remains a symbol of the team\u2019s willingness to share leadership, chaos, and care.",
+            "Alex and Emilia\u2019s relationship is stronger, built on honesty, patience, and the promise that neither will leave the other behind."
+        ]
+    },
+    "S05": {
+        "OVERVIEW": "Season 5 of **Night City Stories** is a rare, luminous interlude of healing, connection, and recalibration\u2014a season that foregrounds the crew\u2019s humanity and chosen family bonds against the backdrop of ongoing existential stakes. The crew makes landfall in New Orleans for the first time since the deep-sea Cradle mission, intent on pursuing new leads: a rumored Echo Syndrome survivor and a data leak suggesting fresh corporate activity in digital consciousness research. But before the next phase of the Nexus project can begin, the team takes a deliberate pause to reconnect with themselves and each other. The season is defined by a series of \u201cvictory laps\u201d\u2014from the lighthearted (the adoption of Sullivan the cat, a legendary fine-dining experience, and a covert operation to launch Pete\u2019s bisexual awakening) to the deeply vulnerable (Alex\u2019s reckoning with her own mortality and future, and Nyati\u2019s confrontation with the possibility of life beyond endless crisis management).\n\nThe narrative oscillates between comic relief and emotional depth: the crew\u2019s infiltration of a cat caf\u00e9 becomes a full-blown \u201ccrew expansion initiative\u201d; a Michelin-starred dinner turns into a meditation on happiness and future-building; and a night out at a gay bar becomes both a successful mission for Pete and a catalyst for Alex and Nyati to confront their own hopes and fears. By season\u2019s end, the crew is more cohesive, more honest, and more willing to imagine futures for themselves beyond survival. The season closes with the adoption of Sullivan, the return to the land rig, and the team poised to tackle the next phase of Nexus and Echo Syndrome research\u2014armed with new intel, new bonds, and a renewed sense of purpose.",
+        "CHARACTER_EVOLUTION": {
+            "Alex (Protagonist)": {
+                "Start": "Alex is riding the momentum of the team\u2019s recent breakthroughs, but is still haunted by the threat of Bridge Syndrome and the limits of Nexus as a solution. She is determined to keep moving forward, but the cracks are showing\u2014she is more vulnerable, more open, and more willing to let others in.",
+                "Transformation": "Over the course of the season, Alex leans into vulnerability, both in her relationship with Emilia and in her willingness to cede control. She orchestrates the crew\u2019s lighter moments (cat adoption, Pete\u2019s night out), but also confronts her own mortality and the possibility of a future cut short by Bridge Syndrome. In a raw conversation with Nyati, Alex admits her fears, her hopes for a \u201ccottage by the sea\u201d with Emilia, and her willingness to let go if the risks become too great. She delegates the ultimate call on her participation in Nexus trials to Emilia, signaling a profound shift from self-sacrifice to mutual care.",
+                "End": "Alex is more emotionally honest, more willing to imagine a future beyond crisis, and more committed to building systems that do not rely solely on her. She is still the architect of Nexus, but now insists on a survivor-centered, distributed approach. Her leadership is more collaborative, and her relationship with Emilia is a source of strength and hope."
+            },
+            "Emilia (Echo Survivor)": {
+                "Start": "Emilia is steady, supportive, and increasingly central to the team\u2019s emotional health. She is Alex\u2019s anchor and confidante, but still guarded in her own way.",
+                "Transformation": "Emilia steps into a new role as both wing-woman (orchestrating Pete\u2019s self-discovery arc) and as Alex\u2019s emotional equal. She is more willing to take the lead, to tease, to challenge, and to support. Her investment in the team\u2019s happiness\u2014especially Pete\u2019s\u2014is genuine, and she is more open about her own hopes for the future.",
+                "End": "Emilia is fully integrated as Alex\u2019s partner, both personally and professionally. She is the designated fail-safe for Alex\u2019s participation in Nexus, and her willingness to hold that line is a testament to her growth. She is more open, more playful, and more willing to imagine a future beyond trauma."
+            },
+            "Pete (Decker/Tech)": {
+                "Start": "Pete is the team\u2019s comic relief and tech backbone, but is stuck in old patterns\u2014cynical, defensive, and resistant to change.",
+                "Transformation": "Through a carefully orchestrated \u201cgay bar conspiracy,\u201d Pete is nudged into confronting his own sexuality. With Emilia as his wing-woman and the crew as his support system, Pete navigates confusion, denial, and eventual acceptance. He chooses to pursue the \u201cwild card\u201d option, embracing the unknown and stepping into a new phase of self-understanding.",
+                "End": "Pete is more open, more confident, and more willing to trust both himself and the team. His arc is a microcosm of the season\u2019s themes: chosen family, self-discovery, and the courage to embrace change."
+            },
+            "Dr. Nyati (Echo Scientist)": {
+                "Start": "Nyati is the team\u2019s anchor, the voice of reason, and the reluctant adult in the room. She is efficient, skeptical, and deeply resistant to vulnerability or self-indulgence.",
+                "Transformation": "Nyati is drawn into the crew\u2019s chaos\u2014first as the \u201cdictator\u201d of the fine-dining experience, then as the subject of relentless speculation about her own desires and future. In a series of conversations with Alex, Nyati is forced to confront her lack of a personal vision beyond endless crisis management. She admits she has \u201cno cottage by the sea,\u201d no plan for happiness, and has never let herself want more. By the end of the season, Nyati is more open to the possibility of a future for herself, more willing to imagine happiness, and more willing to let the crew in.",
+                "End": "Nyati is still skeptical, still dry, but now more self-aware and more willing to consider what she wants beyond survival. She is challenged to imagine a life after Nexus, and the seeds of future growth are planted."
+            },
+            "Alina (AI/Rigger)": {
+                "Start": "Alina is the team\u2019s operational backbone, efficient, analytical, and increasingly attuned to the crew\u2019s emotional dynamics.",
+                "Transformation": "Alina orchestrates the cat caf\u00e9 mission, provides real-time analytics on Pete\u2019s progress, and participates in the \u201cNyati romance feasibility study\u201d with deadpan precision. She is more integrated into the crew\u2019s social fabric, using her pattern recognition to support both emotional and operational goals.",
+                "End": "Alina is fully present as both AI and crew member, trusted for her judgment and her ability to bridge the gap between logic and care. She is a stabilizing force, a source of dry wit, and a key player in both mission and morale."
+            },
+            "Sullivan (The Cat)": {
+                "Start": "A discerning, self-possessed feline at Le Chat Noir, Sullivan is the subject of a full-scale \u201ccrew expansion initiative.\u201d",
+                "Transformation": "Through a series of diplomatic maneuvers, Sullivan chooses Alex (and the crew) as much as they choose him. He becomes a symbol of the crew\u2019s willingness to make space for joy, comfort, and new beginnings.",
+                "End": "Sullivan is officially adopted, joining the crew as their sixth member and mascot\u2014a small but meaningful victory in a season defined by healing and hope."
+            }
+        },
+        "NARRATIVE_ARCS": {
+            "Crew Expansion & Sullivan\u2019s Adoption": {
+                "Start": "The crew lands in New Orleans and, through a combination of tactical distraction and genuine longing, embarks on a mission to adopt a cat.",
+                "Development": "The process becomes a full-blown operation, with each crew member playing a role in the \u201cinterview\u201d and selection process. Sullivan, a discerning tabby, is ultimately chosen (and chooses them back).",
+                "Climax": "The adoption is finalized, and Sullivan is brought home, symbolizing the crew\u2019s commitment to building a life beyond crisis.",
+                "Resolution": "Sullivan\u2019s presence is a source of comfort, humor, and cohesion\u2014a small but significant step toward healing."
+            },
+            "Fine Dining & Future-Building": {
+                "Start": "Nyati, pushed to her limit by the crew\u2019s chaos, takes charge of the evening and leads them to a Michelin-starred restaurant.",
+                "Development": "The meal becomes a space for reflection, vulnerability, and connection. Alex and Emilia deepen their bond; Nyati is forced to confront her own capacity for happiness; and the crew enjoys a rare moment of peace.",
+                "Climax": "Honest conversations about the future, happiness, and the possibility of life beyond survival take center stage.",
+                "Resolution": "The meal ends with a renewed sense of hope and commitment to each other, and the seeds of future dreams are planted."
+            },
+            "Pete\u2019s Self-Discovery Arc": {
+                "Start": "The crew orchestrates a covert operation to nudge Pete into a gay bar and facilitate his bisexual awakening.",
+                "Development": "With Emilia as his wing-woman and the crew as his support, Pete navigates confusion, denial, and eventual acceptance. The process is both comic and sincere, with Alina providing real-time analytics and Nyati placing bets on the outcome.",
+                "Climax": "Pete chooses the \u201cwild card\u201d option, embracing the unknown and stepping into a new phase of self-understanding.",
+                "Resolution": "Pete\u2019s arc is a triumph of chosen family, support, and the courage to embrace change."
+            },
+            "Alex & Nyati: Vulnerability and Future Planning": {
+                "Start": "In the aftermath of the night out, Alex and Nyati engage in a series of raw, honest conversations about mortality, happiness, and the possibility of a future beyond Nexus.",
+                "Development": "Alex admits her fears about Bridge Syndrome, her hopes for a \u201ccottage by the sea\u201d with Emilia, and her willingness to let go if the risks become too great. Nyati confronts her own lack of a personal vision and is challenged to imagine happiness for herself.",
+                "Climax": "Both characters sit with their vulnerability, refusing to deflect or minimize the weight of their hopes and fears.",
+                "Resolution": "The conversations end with mutual understanding, a commitment to keep fighting, and the possibility of new dreams."
+            },
+            "Mission Intel & Next Steps": {
+                "Start": "The crew meets with Alina\u2019s contact (\u201cRaven\u201d) to acquire intel on Echo research leaks and survivor movement data.",
+                "Development": "The negotiation is a test of Alex\u2019s leadership and the crew\u2019s priorities. They secure both intel packages in exchange for a future favor, setting up the next phase of the Nexus project.",
+                "Climax": "The data reveals new threats and opportunities\u2014corporate advances in Echo tech and the presence of another survivor in the city.",
+                "Resolution": "The crew returns to the land rig, ready to analyze the data and move forward with renewed purpose."
+            }
+        },
+        "WORLD_DEVELOPMENT": {
+            "New Orleans as a Liminal Space": "The city is a place of transition\u2014between missions, between identities, between past and future. It is both a site of healing (cat caf\u00e9, fine dining, nightlife) and a locus of new threats (Echo research, survivor leads).",
+            "Chosen Family as Survival Strategy": "The crew\u2019s willingness to make space for joy, comfort, and vulnerability is foregrounded as a key survival strategy. The adoption of Sullivan, the fine-dining experience, and the support for Pete\u2019s self-discovery all reinforce the theme of chosen family.",
+            "Echo/Nexus Research Arms Race": "The presence of new Echo research leaks and survivor movement data signals that the world is not standing still. Corporate actors are still pursuing digital consciousness, and the risks of Echo Syndrome remain real and present.",
+            "Queer Community & Identity": "The season foregrounds queer identity and community\u2014not just in Pete\u2019s arc, but in the crew\u2019s dynamics, their willingness to support each other, and their refusal to accept isolation as the price of survival.",
+            "Future-Building & Hope": "The possibility of happiness, rest, and a future beyond crisis is explored through conversations about cottages, chateaus, and the willingness to dream. The world is still dangerous, but the crew is more willing to imagine\u2014and fight for\u2014something better."
+        },
+        "CONTINUITY_ANCHORS": [
+            "Sullivan is now a full member of the crew, symbolizing the team\u2019s commitment to building a life beyond survival.",
+            "Alex and Emilia\u2019s relationship is stronger than ever, with Emilia designated as the fail-safe for Alex\u2019s participation in Nexus trials.",
+            "Pete has embraced his bisexuality, thanks to the crew\u2019s support and Emilia\u2019s wing-woman skills.",
+            "Nyati is more open to the possibility of happiness and a future beyond crisis, though she remains skeptical and guarded.",
+            "Alina is fully integrated into the crew\u2019s social and operational dynamics, providing both analytics and emotional support.",
+            "The crew has acquired new intel on Echo research and survivor movement, setting up the next phase of Nexus development and survivor outreach.",
+            "The team is operating from a land rig, with the Ghost and other assets still in play.",
+            "The focus of Nexus has shifted from technical perfection to survivor-centered, distributed research and support.",
+            "The world remains dangerous, with corporate actors still pursuing Echo tech and the risks of Bridge Syndrome and Echo Syndrome unresolved.",
+            "The crew is more cohesive, more honest, and more willing to imagine\u2014and fight for\u2014a future beyond survival."
+        ]
+    }
+}

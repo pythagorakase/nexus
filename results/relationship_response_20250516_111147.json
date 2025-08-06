@@ -1,0 +1,88 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 24,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "To Alex, Vasquez is a razor-edged but dependable tool—someone who trades in hard intel without demanding loyalty or ideology. She admires the fixer’s cool pragmatism and sees in him a mirror of her own former corporate ruthlessness, albeit stripped of boardroom polish. Their connection is strictly transactional, yet the shared hatred of Dynacorp and a record of clean, punctual dealings give the relationship a thin braid of mutual regard. Alex keeps him at arm’s length, but she mentally tags him as a valued, low-maintenance node in her growing anti-corp network.",
+    "recent_events": "• Warehouse negotiation where Vasquez, after tense silence, divulged Echo horror stories and detailed black-site security.\n• Contracted Vasquez to quietly abduct technician Elliot Tran, hold him off-site, and deliver credentials via drone—operation executed without collateral damage.\n• Settled payment in full post-raid; Alina confirmed he is neutral but potentially available for future quiet work.",
+    "history": "The relationship began with an Oakes dead-drop request for a meet; Alex arrived armed but diplomatic, testing Vasquez’s limits. After an initial standoff, her calculated silence coaxed him into revealing both his personal grudge against Dynacorp and actionable intel on the Echo facility. Trust deepened when she respected his boundaries—keeping him out of direct line of fire—and paid promptly for services rendered. Subsequent cooperation on the Tran grab cemented a pattern: Alex supplies money and keeps risk contained; Vasquez supplies logistics and intel, then disengages. Post-Echo, they parted on neutral, professional terms, each leaving the door open for future collaborations.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "negotiated",
+        "predictability": "consistent"
+      },
+      "leverage_points": {
+        "character1_leverage": "Reliable cash payments, ability to hurt Dynacorp—Vasquez’s sworn enemy.",
+        "character2_leverage": "Exclusive on-the-ground intel, clean kidnapping logistics, local muscle."
+      },
+      "conflict_areas": [
+        "Differing risk tolerance—Alex courts high-profile chaos, Vasquez avoids heat",
+        "Potential moral divergence if Alex’s operations create civilian collateral",
+        "Long-term loyalty expectations versus Vasquez’s strictly transactional code"
+      ],
+      "mutual_interests": [
+        "Undermining Dynacorp",
+        "Maintaining low profiles while profiting off corporate conflict"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Oakes dead-drop network",
+          "Pete (acts as technical liaison)"
+        ],
+        "mediators": [
+          "Alina (drone courier, comms relay)"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Up-to-date security layouts, employee schedules, and black-market supply lines controlled by Vasquez.",
+        "information_protected": "Alex’s strategic objectives beyond the immediate contract, her true identity as Nexus architect."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 24,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "-1|wary",
+    "dynamic": "Alex Ward reads to Vasquez like trouble wrapped in charisma—sharp, persuasive, and willing to walk straight into the corporate meat grinder he escaped. She pays fast and keeps promises, so he files her under ‘profitable but high-risk,’ a client to indulge only from a fortified distance. Beneath his caution lies a grudging respect for her nerve and their aligned vendetta against Dynacorp, yet he watches for the moment her grand crusade drags him across the line he swore never to cross again. For now, she is a necessary storm he tracks on radar rather than a partner he trusts with his back.",
+    "recent_events": "• Initial warehouse meet where Alex’s silent stare pressured him to recount the Echo massacre and hand over classified security data.\n• Accepted a follow-up contract to snatch techie Elliot Tran, babysit him, and courier credentials—job completed cleanly but reaffirmed Alex’s appetite for risk.\n• Received full payment and a clear disengagement clause; noted Echo site meltdown from afar, confirming Alex’s efficiency and the danger of proximity.",
+    "history": "First contacted through an old Oakes channel, Vasquez vetted Alex’s crew at gunpoint, impressed by her composure. Her willingness to listen—and pay—persuaded him to share Echo intel despite his better judgment. Their second engagement, the Tran extraction, proved her reliability with money and discretion. After the Dynacorp black-site fell, Vasquez ensured all debts were settled and severed contact, classifying Alex as a lucrative but volatile element to be approached only when the odds and fee justify the fallout.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character2",
+        "terms": "character2's",
+        "predictability": "calculated"
+      },
+      "leverage_points": {
+        "character1_leverage": "Local muscle, black-market hardware, firsthand corp security experience.",
+        "character2_leverage": "Cash reserves, operational tech support, shared anti-Dynacorp agenda."
+      },
+      "conflict_areas": [
+        "Alex’s tendency toward high-profile sabotage versus Vasquez’s low-visibility code",
+        "Fear of corporate retaliation if Alex’s ops are traced back",
+        "Trust issues—Vasquez protects his anonymity, Alex probes for deeper collaboration"
+      ],
+      "mutual_interests": [
+        "Profiting from Dynacorp’s downfall",
+        "Avoiding collateral damage during ops"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Oakes network",
+          "Pete (remote tech support)"
+        ],
+        "mediators": [
+          "Alina’s drone couriers"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Scope of Alex’s future anti-corp plans and how they might threaten his safety.",
+        "information_protected": "His warehouse location network, personal history, and client list."
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "characters": [
+    {
+      "character_id": 5,
+      "additional_aliases": [
+        "The Perpetual Problem-Solver",
+        "Dr. K",
+        "The Last Rationalist",
+        "Gatekeeper of the Mind",
+        "Echo\u2019s Shadow"
+      ],
+      "appearance": "Nyati is of medium height, with deep, umber skin and the bearing of someone who has spent half her life at a lab bench and the other half in crisis meetings. Her features are striking: sharp cheekbones, wide-set, intelligent eyes often narrowed in assessment, and a mouth that seems sculpted for biting retorts. Her hair is tightly coiled, usually pinned a little too hastily in a bun or under a headwrap. She exudes an aura of meticulous professionalism, but her clothes (usually utilitarian field jackets over tailored jumpsuits, always with too many pockets) always look a bit rumpled by the end of the day. Permanent sleep deprivation has etched fine lines at the corners of her eyes, and she wears slender glasses that, despite modern retinal upgrades, she keeps for the comfort of routine. Her hands are callused from old habit and fidget with stylus, data slate, or coffee mug when not running diagnostics.",
+      "background": "Dr. Kamara Nyati was born in Lagos in the twilight years before the post-collapse era, the youngest daughter of two biomedical engineers. The family emigrated as climate, politics, and plagues battered the old world, eventually finding a home in New Houston. Nyati\u2019s childhood was marked by both scarcity and relentless drive\u2014a mother who demanded excellence, a father who believed in intellectual curiosity as survival. She earned her doctorate in neurocybernetics before she was 25, recruited straight into Dynacorp\u2019s black sector by a mentor who saw her as both a prodigy and a tool. On Project Echo, Nyati pushed for ethical oversight and participant autonomy, clashing with superiors and fighting for every concession. The failures, the \"syndrome,\" the cover-ups\u2014these left a wound she has never fully acknowledged. After sabotaging her own research, she went underground, only to be pulled into Nexus by Alex and her team. She\u2019s become both their ethical anchor and their most ruthless problem-solver, always searching for a way to prevent others from suffering her mistakes.",
+      "personality": "Nyati is a study in contradictions: relentlessly logical but secretly sentimental, razor-sharp with her humor but fiercely protective of her found family. She is the team\u2019s anchor and standard-bearer\u2014the scientist who will not let an experiment run unless she is certain it won\u2019t hurt anyone who can\u2019t consent. She is dry, sardonic, and deeply competent, never suffering fools, but capable of surprising warmth in quiet moments. Her guilt over Echo\u2019s failures manifests as a form of hyper-vigilance; she is often the last to sleep, the first to review data, the one insisting on another round of safety checks. She finds comfort in structure, hates indecision, and is allergic to discussions of her own feelings. Her greatest fear is creating another Emilia\u2014another mind forced to adapt to a world that doesn\u2019t recognize what it lost. She will never say it, but she envies Alex\u2019s capacity to hope and Emilia\u2019s resilience. She is beginning to imagine\u2014just imagine\u2014a future not built on crisis management, but on something softer.",
+      "emotional_state": "Nyati is currently operating in a state of high-functioning exhaustion. She\u2019s riding the high of her recent breakthrough (the \"mind-transfer cure\"), but fears it is only the first step in a much longer process. Relief and pride battle with anxiety: she knows she may have just saved Alex, but she also fears the team is entering uncharted territory, and the cost could be more than any of them want to pay. She\u2019s still haunted by the possibility that what she proposes as a cure might only be another wound.",
+      "current_activity": "Nyati is leading the analysis of Raven\u2019s Echo-leak aboard the land rig, cross-referencing survivor movement data and survivor interviews in a bid to refine Nexus 2.0\u2019s protocols. She is finalizing protocols for the next round of mirror-copy experiments, establishing the benchmarks for what constitutes psychological integrity and identity preservation. She\u2019s also\u2014reluctantly\u2014tolerating the crew\u2019s ongoing campaign to drag her into \"normal\" life: social outings, nice meals, and the awkward but persistent effort to discover her romantic orientation. She owes them Bananas Foster, and, despite herself, is almost looking forward to it.",
+      "current_location": "Land rig, parked inside a secure, camouflaged compound on the outskirts of New Orleans. The rig is converted to a mobile research lab and command hub for Nexus operations.",
+      "extra_data": {
+        "skills": [
+          "Neurocybernetics (PhD-level expertise)",
+          "Cognitive architecture design",
+          "Ethical systems analysis",
+          "High-stress crisis management",
+          "Experimental design and data interpretation",
+          "Rapid triage and field medicine"
+        ],
+        "allies": [
+          "Alex (Commander, confidante)",
+          "Emilia (Echo survivor, anchor for ethical direction)",
+          "Alina (AI, intellectual sparring partner)",
+          "Pete (security, technical backup, comic relief)",
+          "Select Echo syndrome survivors from her old life"
+        ],
+        "enemies": [
+          "Dynacorp (former employer; burned bridges after sabotage)",
+          "Certain rival neuroscientists who see her as a traitor or a liability",
+          "Echo project architects who covered up the origins of the syndrome"
+        ],
+        "signature_tech": [
+          "Cognitive mirror testing suite",
+          "Mobile neuroimaging array (custom, field-deployable)",
+          "Echo risk assessment algorithm (classified variant of her own design)"
+        ],
+        "connection_points": [
+          "Potentially the only scientist left with a working, unclassified framework for identity-preserving mind transfer",
+          "Holds blackmail material on Echo\u2019s original project leads",
+          "Contact with at least two surviving Echo subjects, both in hiding",
+          "A yet-unpublished paper on the pathophysiology of 'Echo Syndrome' that may be the key to treating survivors"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+    "system_prompt": "You are a creative, inventive character design consultant.",
+    "main_instructions": [
+        "For the target character, who has been selected for additional character development, please create a rich, imaginative expansion that:",
+        "1. **Comprehensive Summary**: First, create a concise yet comprehensive character summary that captures their essence, role in the story, and key characteristics. This should be a single paragraph that could stand alone as a complete character description.",
+        "2. **Honors Existing Seeds**: Use any tiny mentions or references as foundational truth.",
+        "3. **World Consistency**: Ensure all details align with the established universe rules, technology, tone, and history.",
+        "4. **Narrative Potential**: Develop the character with built-in hooks for future storylines.",
+        "5. **Complex Interiority**: Create a psychologically nuanced individual with desires, fears, and contradictions.",
+        "6. **Tangible Presence**: Provide vivid physical description, speech patterns, and behavioral quirks.",
+        "7. **Current Status**: Establish their present situation, location, and activities that could intersect with the main narrative.",
+        "8. **Historical Connection**: Weave subtle ties to established characters or events without forcing major retcons.",
+        "9. **Unique Value**: Give them a specific skill, knowledge, or resource that would make them valuable in the story."
+    ],
+    "special_instructions": "The user has developed backstories for the characters and recorded them in the existing `summary` field. They contain elements not supported by or referenced in the text, but should be treated as canon and incorporated into your content. Your new summary should build upon and enhance any existing summary while maintaining consistency with the established character.",
+    "example": {
+        "before": "Nyra 'Ghostwire' Vex — CHOICE C: A woman watching from the shadows. Leader of the Rustborn, queen of Sector 12.",
+        "after": {
+            "summary": "Nyra 'Ghostwire' Vex is the ruthlessly brilliant leader of the Rustborn scavenger collective in Night City's forgotten Sector 12, where she transforms discarded technology into instruments of power. Born with an uncanny ability to interface with broken tech, she rose from captive salvager to revolutionary queen, orchestrating a teenage coup that reshaped the wasteland into a thriving underground kingdom. Behind her cold exterior and circuit-patterned scars lies a visionary who sees in technology's remnants the seeds of a new social order—one where the discarded become the architects of tomorrow.",
+            "additional_aliases": [
+                "Queen of Salvage", 
+                "The Circuit Witch", 
+                "Sector's Shadow"
+            ],
+            "appearance": "Tall and lithe with deep brown skin covered in circuit-like scarification patterns that pulse faintly blue when activated. Her left eye is replaced with a custom chrome implant featuring a kaleidoscopic iris that shifts colors according to her mood. Typically dressed in salvaged high-fashion pieces modified with practical tech: a torn designer jumpsuit reinforced with kevlar panels, vintage combat boots with hidden blade compartments, and a frayed longcoat containing numerous hidden pockets. Her most striking feature is her hair—a crown of fiber optic filaments that change color and pattern based on nearby electromagnetic signals.",
+            "background": "Born to refugee parents in the toxic outskirts of Night City, Nyra's early life was defined by scarcity and hidden potential. At twelve, she discovered an innate talent for interfacing with discarded tech, able to sense operational pathways in broken devices others considered worthless. This gift made her valuable to the Original Shrikes—a gang of scrappers who recognized her potential and exploited it ruthlessly. After three years of effective servitude, she orchestrated an internal coup by secretly reprogramming their security systems, assuming leadership at just sixteen. Under her guidance, the Shrikes evolved from mere scavengers to technological innovators, transforming Sector 12 from a forgotten wasteland into a dangerous but vibrant community built on repurposed tech.",
+            "personality": "Calculating and wary with strangers, fiercely loyal to her people. Nyra's exterior projects cool detachment, but this masks intense passion for her vision of a self-sufficient Shrike future. She possesses a dark, cutting humor that emerges primarily among trusted associates. Values intelligence and resourcefulness above all else, and maintains a personal code that prizes innovation over tradition. Has little patience for corporate politics but plays the game when necessary. Secretly romantic about technology's potential to transform society, though she'd never admit this publicly",
+            "emotional_state": "Currently wrestling with isolation at the top. Success has distanced her from her people even as she fights for them. Harbors deep curiosity about the protagonist's activities and a growing sense that their paths should have crossed. Increasingly concerned about corporate interest in Sector 12's innovations.",
+            "current_activity": "Negotiating with underground tech brokers to distribute Shrike innovations while avoiding corporate attention. Investigating rumors of an abandoned pre-Collapse server farm beneath Sector 12 that may contain invaluable data. Monitoring the protagonist's movements through a network of informants.",
+            "current_location": "\"The Circuitry Palace\" - a converted power substation in Sector 12's heart that serves as both her residence and the Shrikes' innovation lab, where salvaged tech is reborn with new purpose.",
+            "extra_data": {
+                "skills": [
+                    "Neural interface hacking",
+                    "Scrap tech engineering",
+                    "Tactical leadership",
+                    "Electromagnetic sensitivity"
+                ],
+                "allies": [
+                    "The Shrike Collective",
+                    "Black market tech dealers",
+                    "Certain rogue AIs"
+                ],
+                "enemies": [
+                    "Dynacorp Recovery Division",
+                    "Rival scavenger groups",
+                    "Former Shrike leaders she deposed"
+                ],
+                "signature_tech": [
+                    "The Echo Mesh - a self-developed network of microscopic drones that function as both surveillance system and personal defense"
+                ],
+                "connection_points": [
+                    "Could provide unique parts for Nexus hardware",
+                    "Has encountered digital fragments similar to Echo subjects",
+                    "Possesses information about Dynacorp's abandoned projects"
+                ]
+            }
+        }
+    }
+}

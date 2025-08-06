@@ -1,0 +1,60 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 2,
+    "character2_id": 6,
+    "relationship_type": "companion",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "From Emilia’s viewpoint, Sullivan is the newest—and most self-possessed—member of the crew: a tiny commander whose quiet authority she both respects and gently mocks. She enjoys watching his subtle dominance plays, finding in him a mirror of her own insistence on boundaries and consent. His presence signals a shift toward home-building rather than endless crisis, so she treats him with a measured warmth, letting him set the pace while expecting that, in time, he’ll fold neatly into the team’s rhythm. For now, she is simultaneously amused observer and dutiful provider, content to earn his trust one deliberate head-butt at a time.",
+    "recent_events": "• Helped stage the diplomatic ‘treat negotiation’ that convinced Sullivan to choose Alex—standing back but monitoring body language like a handler.\n• Teased Alex about being the one ‘adopted,’ indicating her own comfort and budding fondness for the cat.\n• Participated in the morning retrieval mission, quietly pleased when Sullivan hopped into Alex’s arms without protest, confirming her sense that he has accepted the crew.",
+    "history": "Day 1: First sighting at Le Chat Noir—Emilia leans against a chair, amused as Alex conducts the courting ritual; she notes Sullivan’s regal restraint and labels him a ‘detective.’\nDay 1 (later): Observes successive treat handoffs, acknowledges Alex’s success, and privately files Sullivan as a potential morale asset.\nDay 3: Returns with the crew to finalize adoption; sees Sullivan’s calm acceptance as proof of his compatibility. From this point, Emilia begins supplying logistics—carrier prep, feeding schedule—treating him as a junior crewmate.\nForward trajectory: Intends to cultivate a low-key alliance built on respect for sovereignty—no forced cuddles, plenty of choice—confident that mutual trust will deepen during the rig and submarine phases.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "dependable",
+        "formality": "implied",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Maintain crew morale and a sense of home aboard ever-shifting bases",
+        "Keep Sullivan healthy, stimulated, and content so he can continue serving as living stress-relief",
+        "Model clear boundaries and consent within the team’s pseudo-family dynamic"
+      ],
+      "areas_of_expertise": "Emilia supplies physical security, food, and structured routines; Sullivan contributes calm presence, non-verbal emotional feedback, and a unifying mascot effect.",
+      "resource_sharing": {
+        "information": "minimal",
+        "material": "generous",
+        "contacts": "selective"
+      },
+      "crisis_behavior": "Emilia will scoop Sullivan to safety or shield him without hesitation, prioritizing his welfare the way she does any vulnerable crew member."
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 6,
+    "character2_id": 2,
+    "relationship_type": "companion",
+    "emotional_valence": "0|neutral",
+    "dynamic": "From Sullivan’s confident feline perspective, Emilia is the tall, steady primate who respects protocol—she keeps her distance, offers resources, and never forces contact. He registers her soft smirks and measured movements as signs of intelligence and deference, acceptable traits in a subordinate-partner arrangement. While she is not his primary contract-holder (Alex fills that role), her quiet competence marks her as a reliable secondary caretaker worth tolerating, perhaps even favoring, once further evaluation is complete. For now, she exists in the ‘trusted but still tested’ category of crew.",
+    "recent_events": "• Observed Emilia’s strategic position during the initial treat exchange—she neither intruded nor displayed desperation, earning a tentative approval.\n• Noted her lack of sudden movements and her consistent vocal tone during the retrieval mission, which reinforced a sense of safety.\n• Logged her prompt provision of carrier padding and silent vigilance during transit to the land rig, satisfying immediate comfort requirements.",
+    "history": "Phase 1—Assessment: First encounter at the café; Emilia’s composed stance and sardonic commentary are catalogued as non-threatening background data.\nPhase 2—Courtship Ritual: During Alex’s treat diplomacy, Sullivan detects Emilia monitoring variables, interpreting her as an ally ensuring negotiations proceed on feline terms.\nPhase 3—Transfer of Territory: On adoption day, Emilia handles logistical details smoothly, confirming her role in operational support.\nProjected Evolution: If Emilia continues to respect spatial boundaries and supply resources, Sullivan will upgrade her status from ‘competent staff’ to ‘preferred perch,’ granting occasional lap privileges.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "conditional",
+        "formality": "implied",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Ensure daily comfort, nutrition, and stability aboard crew habitats",
+        "Maintain an environment where Sullivan’s authority is acknowledged and uninterrupted",
+        "Provide mutual stress-reduction through calm coexistence"
+      ],
+      "areas_of_expertise": "Sullivan offers dignified companionship, aura of authority, and subtle emotional barometry; Emilia provides food security, respectful handling, and enforcement of boundary etiquette.",
+      "resource_sharing": {
+        "information": "minimal",
+        "material": "reciprocal",
+        "contacts": "guarded"
+      },
+      "crisis_behavior": "If disturbance arises, Sullivan expects Emilia to remove hazards swiftly; in return, he will remain composed, reducing crew panic through his steady demeanor."
+    }
+  }
+}

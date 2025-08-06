@@ -1,0 +1,50 @@
+{
+  "areas": {
+    "area_name_1": {
+      "description": "",
+      "purpose": "",
+      "notable_features": []
+    },
+    "area_name_2": {
+      "description": "",
+      "purpose": "",
+      "notable_features": []
+    }
+  },
+  "physical_attributes": {
+    "appearance": "",
+    "atmosphere": "",
+    "notable_features": [],
+    "sensory_details": {
+      "sights": [],
+      "sounds": [],
+      "smells": [],
+      "textures": []
+    }
+  },
+  "surroundings": {
+    "environment": "",
+    "approach": "",
+    "nearby_features": [],
+    "weather_patterns": "",
+    "accessibility": ""
+  },
+  "technology": {
+    "systems": [],
+    "capabilities": [],
+    "limitations": [],
+    "unique_aspects": ""
+  },
+  "social_aspects": {
+    "customs": [],
+    "power_structure": "",
+    "common_activities": [],
+    "reputation": ""
+  },
+  "secrets": {
+    "mysteries": [],
+    "tensions": [],
+    "narrative_hooks": [],
+    "hidden_elements": []
+  }
+}

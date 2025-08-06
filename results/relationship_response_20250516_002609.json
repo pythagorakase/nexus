@@ -1,0 +1,68 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 2,
+    "character2_id": 4,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Alex’s relationship with Emilia is defined by a deep, hard-won intimacy, grounded in mutual respect, vulnerability, and a fierce commitment to one another. Though Alex’s nature is restless, competitive, and occasionally self-destructive, she finds in Emilia an anchor—someone who offers both stability and challenge, meeting her bravado with quiet strength and her chaos with unwavering presence. Alex’s love for Emilia is equal parts playful (full of games, teasing, and showmanship) and reverent, marked by flashes of awe at both Emilia’s resilience and the private hell she endures. Alex’s devotion is protective but never patronizing; she is determined not only to keep Emilia safe, but to give her the space and honesty she needs to heal, even if that means raising the bar for herself and for Nexus.",
+    "recent_events": "Alex trusted Emilia to be her emotional anchor during her breakdown after the Cradle incident, relying on her presence to keep from unraveling entirely. She openly acknowledged to the crew—and to herself—that Emilia has full authority to call a halt to any Nexus experiment that threatens to cost Alex her sense of self. In New Orleans, Alex orchestrated the cat café mission largely out of a desire to build a home and a future with Emilia, teasing her with weaponized cuteness and ultimately leaning into the joy of shared, mundane pleasures. The two have crossed into full partnership, with Alex publicly referencing Emilia as the love of her life and top-priority stakeholder in her decisions.",
+    "history": "Their relationship began as a competitive, banter-filled camaraderie but quickly deepened as mutual trust was earned through shared trauma, survival, and responsibility. Emilia’s presence was what allowed Alex to break out of her own cycles of self-destruction and open up to vulnerability, while Alex’s relentless drive challenged Emilia to move beyond mere survival. The bond was tested through multiple existential crises—Emilia’s suffering from Echo Syndrome, Alex’s slow transformation through the Bridge, and the looming threat of irreversible loss of self. Each time, they recommitted: through trust, through small gestures of care, and through moments of raw honesty. Their relationship has shifted from mutual challenge to full partnership, with Alex now framing her own well-being and even the future of Nexus around what Emilia needs and deserves.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Supporting one another through the aftermath of consciousness transfer trauma and Echo Syndrome",
+        "Emilia anchoring Alex during her breakdown after the Cradle encounter",
+        "Public and private affirmations of love and partnership, including Alex’s open designation of Emilia as her emotional anchor",
+        "Weaponized cuteness and cat café plotting for a future together",
+        "Navigating the risks of Nexus together, with Emilia holding ultimate veto power"
+      ],
+      "points_of_tension": [
+        "Alex’s fear of losing Emilia to Echo Syndrome or the Bridge",
+        "Emilia’s difficulty expressing vulnerability and accepting help",
+        "The pressure of making existential, potentially irreversible choices together",
+        "Alex’s tendency to deflect with bravado or chaos when threatened"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 4,
+    "character2_id": 2,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Emilia relates to Alex with a blend of amused exasperation, fierce protectiveness, and profound, quietly expressed love. While she is often the more reserved, controlled partner, Emilia is deeply attuned to Alex’s moods, quick to recognize when chaos masks suffering, and unwavering in her willingness to anchor Alex through breakdowns and existential crises. Emilia trusts Alex enough to let her in, to let herself be seen, and to allow herself hope for a future built around more than just survival. She is both a challenger and a caretaker, holding Alex accountable while also offering a safe harbor—her devotion is steady, even when she struggles to express it in words.",
+    "recent_events": "Emilia stayed by Alex’s side through Alex’s near-total breakdown after the Cradle incident, offering silent presence and physical grounding rather than platitudes. She accepted the role of ultimate fail-safe for the Nexus project, agreeing to halt any experiment that puts Alex at risk, and has become the de facto emotional authority in Alex’s life. In New Orleans, Emilia both surrendered and asserted herself: she let Alex win the cat café campaign, but also challenged her to keep making space for joy, for living—not just surviving. She has begun to let herself hope, to ask for and accept more, even as she keeps Alex honest about the dangers they both face.",
+    "history": "Emilia and Alex’s bond grew from sparring partners and confidants to true equals, forged in the crucible of shared trauma and the slow, difficult work of trust-building. Emilia was slow to let Alex in, but as Alex proved herself—through both bravado and vulnerability—Emilia reciprocated, allowing herself to be seen and cared for. The relationship weathered Alex’s bouts of self-doubt, the existential threat of the Bridge, and the ongoing struggle with Echo Syndrome. Each crisis drew them closer, with Emilia increasingly acting as both the emotional barometer and the line Alex cannot cross. Their intimacy has grown through acts of care, mutual teasing, and the willingness to keep choosing each other in the face of uncertainty.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Emilia anchoring Alex through breakdowns and existential threats",
+        "Accepting the role of fail-safe and emotional anchor for Alex’s participation in Nexus",
+        "Letting Alex plan for a future together, including the crew’s expansion with Sullivan the cat",
+        "Directly challenging Alex to keep joy and humanity at the center of their mission",
+        "Letting herself hope and invest in a shared future, despite her own suffering"
+      ],
+      "points_of_tension": [
+        "Emilia’s struggle to express vulnerability and allow herself to be cared for",
+        "The burden of being Alex’s anchor and the fear of failing her",
+        "Unspoken fears about the risks of Nexus and the Bridge",
+        "Occasional frustration with Alex’s bravado or avoidance tactics"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  }
+}

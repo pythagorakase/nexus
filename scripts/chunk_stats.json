@@ -1,0 +1,24 @@
+{
+  "generated_at": "2025-04-17T16:13:45.572931Z",
+  "table": "narrative_chunks",
+  "tokenizer": "claude-3-7-sonnet-20250219",
+  "stats": {
+    "n": 1367,
+    "min": 86,
+    "max": 2254,
+    "mean": 589.21,
+    "median": 565,
+    "stdev": 253.24,
+    "p10": 285,
+    "p25": 405,
+    "p50": 565,
+    "p75": 732,
+    "p90": 898
+  },
+  "total_tokens": 805448,
+  "processing": {
+    "elapsed_seconds": 0.15,
+    "chunks_per_second": 9006.99,
+    "avg_seconds_per_chunk": 0.0
+  }
+}

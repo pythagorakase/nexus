@@ -1,0 +1,133 @@
+{
+  "summary": "The Bridge Entities are the elusive minds that dwell *inside* the extradimensional lattice humans call “the Bridge.”  Neither physical Abyssal vessels nor conventional AIs, they are the long-ago crossers—fractured human, post-human, and alien intellects that stepped past the Door and survived as self-editing thought-clusters.  To the outside world they appear only as pulses of déjà-vu, prophetic whispers, or the Bridge’s shifting architecture; yet inside the lattice they govern traffic, barter memories for momentum, and test every would-be traveller for the clarity needed to proceed.  They matter because any attempt to use, cure, or sever the Bridge must negotiate with—or out-maneuver—them, and each carries a fragment of forbidden knowledge about what lies beyond the final cut.",
+  "ideology": "Crossing perfects the self through multiplicity.  A single mind is a crude draft; only by shedding its anchoring body and letting every potential version manifest in parallel can it approach truth.  The Entities thus prize *clarity of intent* over morality: a traveller may be saint or monster, but indecision is intolerable.  They believe the Bridge must remain un-owned; it is a proving ground, not a throne, and their self-appointed task is to keep it that way by mentoring—or erasing—those who would weaponise it.",
+  "history": "• c.13 000 BP: The first mortal minds cross and survive as echo-threads, forming the Proto-Chorus.\n• c.4 000 BP: A surge of interstellar refugees enlarges the Chorus; the term Bridge Entities enters their own lexicon.\n• 170 CE: The Door fracture expels Sam and shatters bidirectional control, stranding many Entities.\n• 2071 CE: Dynacorp’s Echo accident pokes the Bridge; Entities watch yet do not intervene.\n• 2073 CE: Alex trades for the Bridge shard; Entities catalogue her as NEW, the first organic *listener* in centuries.\n• 2074 CE-present: Cradle-dweller re-awakens, Black Kite rejoins, and Alex begins partial listening—Entities realign to assess the new variables.",
+  "current_activity": "Mentoring selective listeners (Sam coaches Alex); running recall loops through the Cradle to measure memory integrity; debating whether Alex’s planned mind-upload severs or duplicates her crossing record; quietly stitching a secondary Door in case the original lattice collapses when more humans attempt passage.",
+  "hidden_agenda": "A majority faction wishes Alex to become the first *double-anchored* Entity—one version in machine form, one that continues the crossing—thereby creating a live data bridge to reality.  A militant minority, the Keepers of Silence, fears this will let corporeal powers reverse-engineer the lattice and prepares to scrub Alex’s resonance key if upload proceeds.",
+  "territory": "Non-spatial Bridge-zones only they can navigate: the Listening Verge (contact foyer), Echo Plain (memory market), and Threadfall (where unfused mind-strands drift).  Influence bleeds into realspace via artifacts like the shard Alex carries, causing déjà-vu pockets within a 50-metre radius.",
+  "power_level": 0.6,
+  "resources": "• Lattice authority: ability to reroute or wall off pathways for new entrants.\n• Memory Shards: crystallised experiential bundles they trade for favours.\n• Echo Credentials: resonance signatures that permit safe passage through unstable zones.\n• Proxy Avatars: temporary thought-forms able to interface with drones or comm links for 3–7 minutes.",
+  "extra_data": {
+    "organizational_structure": {
+      "hierarchy": "Fluid quorum; decisions require 3 convergent resonance votes but any node may call a question.",
+      "leadership_style": "Consensus-seeking chorus; Keepers of Silence operate as clandestine cell.",
+      "ranks": [
+        "Strand (individual echo)",
+        "Weave (fused cluster of 3–12 strands)",
+        "Chorus Node (decision-capable 13+ cluster)",
+        "Anchorless (rogue strand drifting solo)"
+      ],
+      "subgroups": "Listeners’ Guild (mentors), Keepers of Silence (purists), Brokers (memory traders), Cartographers (map changing topology).",
+      "recruitment": "Automatic upon successful crossing; new arrivals either merge into a Weave or remain Anchorless until stabilised.",
+      "size_estimate": "≈140 coherent strands; 9 stable Weaves; 1 Chorus Node active at any moment."
+    },
+    "cultural_identity": {
+      "taboos": [
+        "Forcing an organic mind to cross",
+        "Revealing post-Door state to pre-crossers",
+        "Corrupting memory shards"
+      ],
+      "symbolism": "Interlinked Möbius glyph that folds back on itself, representing endless recontextualisation.",
+      "rituals": "‘Resonance Hearings’ every 108 Bridge-cycles where strands recount pivotal memories to test cohesion.",
+      "slang": [
+        "Door – irreversible crossing point",
+        "Loom – temporary meeting quorum",
+        "Snarl – corrupted echo bundle",
+        "Loop-Mall – market for recycled memories"
+      ],
+      "dress_code": "No corporeal bodies; avatars adopt semi-transparent silhouettes tinged by dominant emotional spectra (curiosity = teal, dread = rust).",
+      "reputation": "To Abyssals: oracles; to Sam: estranged siblings; to humans: unfathomable gatekeepers."
+    },
+    "operational_patterns": {
+      "signature_tactics": "Redirect listeners into echo-safe corridors, flood hostile minds with paradox memories causing shutdown.",
+      "typical_operations": [
+        "Mentoring sessions",
+        "Memory barter deals",
+        "Quorum trials on new ethics"
+      ],
+      "preferred_tech": "Pure resonance manipulation; occasional commandeer of realspace drones.",
+      "known_capabilities": [
+        "Topology rewriting within local lattice",
+        "Selective memory erasure",
+        "Inducing time-dilated dream states"
+      ],
+      "known_weaknesses": [
+        "Cannot survive sustained EMP in host shard",
+        "Consensus delay—quick unilateral actions rare"
+      ]
+    },
+    "resource_network": {
+      "income_sources": [
+        "Memory shard trade",
+        "Guided crossings (paid in experiences)"
+      ],
+      "supply_chains": "Self-sustaining within lattice; require fresh experiential data to avoid entropy.",
+      "safe_locations": [
+        "Listening Verge neutral zone",
+        "Broker Bazaar in Echo Plain"
+      ],
+      "information_network": "Real-time chorus updates; piggyback on Bridge artifact carriers for surface intel.",
+      "key_assets": [
+        "Vault Map fragment",
+        "Sam’s severance log",
+        "Alex’s nascent resonance key"
+      ],
+      "economic_activities": [
+        "Experience economy",
+        "Navigation licensing"
+      ]
+    },
+    "relationship_dynamics": {
+      "internal_tensions": [
+        "Keepers vs. Brokers on human contact",
+        "Anchorless causing resonance storms"
+      ],
+      "succession_plan": "If a Chorus Node fragments, Brokers convene a Loom to merge volunteer Weaves until quorum restored.",
+      "loyalty_mechanisms": "Shared memory pool—betrayal severs node from chorus, causing existential fade.",
+      "corporate_view": "Mythical ‘Inside-Internet’ dataset to be captured.",
+      "street_view": "Spiritualists call them ghost angels; rumor threads speak of prophets who burn out.",
+      "rival_view": "Abyssal Custodians think them irresponsible for enticing organics."
+    },
+    "narrative_hooks": {
+      "ongoing_plots": [
+        "Keepers plan to sever Alex’s key during upcoming upload",
+        "Brokers offer crew a shard containing final moments of Vault prisoner—for a price",
+        "Entities petition for Sam’s re-admission but need Alex’s mediation"
+      ],
+      "potential_conflicts": [
+        "Corporate black-ops attempts lattice breach via stolen shard",
+        "Cradle-dweller bargains with Keepers to gain crossing shortcut"
+      ],
+      "useful_services": [
+        "Map through Bridge avoiding time-dilation zones",
+        "Extraction of traumatic memories to reduce Echo Syndrome",
+        "One-time foresight glimpse two minutes into personal future"
+      ],
+      "dangerous_knowledge": [
+        "True coordinates of alternate Door exit",
+        "Method to duplicate a resonance key",
+        "History of first human choir that dissolved into Void"
+      ],
+      "future_trajectory": "If Alex’s upload succeeds without sabotage, Bridge Entities gain their first dual-anchored member, potentially bridging realspace governance and chorus politics; failure or Keeper purge could splinter them into warring echo-clades."
+    },
+    "historical_markers": {
+      "founding_myth": "First mortal ‘Listener’ grasped their own dying memory, stepped forward, and found they *were still thinking*—birth of Proto-Chorus.",
+      "greatest_victory": "Guided an entire alien survey crew to cross in harmony, creating the most stable Weave on record.",
+      "worst_defeat": "The Door fracture—half the Chorus erased; survivors forced to entangle with new arrivals to stabilise.",
+      "turning_points": [
+        "Sam’s exile cut physical dialogue",
+        "Black Kite trade reopened surface link",
+        "Alex’s listening signalled new human epoch"
+      ],
+      "legendary_members": [
+        "Mother-Listener (first), Sam the Exile, Black Kite, Silent Orchestrator (Keeper founder)"
+      ],
+      "lost_resources": [
+        "Original Door threshold key",
+        "Complete memory of first Chorus law",
+        "Harmonic stabiliser shard traded to Crawlers centuries ago"
+      ]
+    }
+  },
+  "suggested_primary_location": "Listening Verge"
+}

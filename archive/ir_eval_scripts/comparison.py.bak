@@ -1,0 +1,629 @@
+#!/usr/bin/env python3
+"""
+Comparison Module for NEXUS IR Evaluation System
+
+This module provides functions for comparing IR metrics between runs.
+"""
+
+import os
+import sys
+import json
+import sqlite3
+import datetime
+import logging
+from typing import Dict, List, Any, Optional, Set, Tuple
+
+# Add parent directory to path to import other modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from db import IRDatabase, dict_factory
+
+# Configure logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("nexus.ir_eval.comparison")
+
+def compare_runs(
+    run_ids: List[int],
+    run_names: List[str],
+    db: Optional[IRDatabase] = None
+) -> Dict[str, Any]:
+    """
+    Compare multiple runs and identify the best performer.
+    
+    Args:
+        run_ids: List of database IDs for runs to compare
+        run_names: List of names for each run
+        db: IRDatabase instance
+        
+    Returns:
+        Dictionary with comparison results and ID
+    """
+    # Use provided database or create one
+    if db is None:
+        db = IRDatabase()
+    
+    # Ensure we have names for all runs
+    if len(run_names) < len(run_ids):
+        for i in range(len(run_names), len(run_ids)):
+            run_names.append(f"Run {chr(65 + i)}")
+    
+    # Get metrics for each run
+    run_results = []
+    for run_id in run_ids:
+        metrics = db.get_run_metrics(run_id)
+        run_results.append(metrics)
+    
+    # Structure for comparison results
+    comparison = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "runs": [{"name": name, "results": results} for name, results in zip(run_names, run_results)],
+        "comparison": {
+            "overall": {},
+            "by_category": {}
+        },
+        "best_run": {}
+    }
+    
+    # Compare overall metrics
+    overall_comparison = {}
+    for metric in ["p@5", "p@10", "mrr", "bpref"]:
+        values = []
+        for run in run_results:
+            if run and "aggregated" in run and "overall" in run["aggregated"]:
+                values.append(run["aggregated"]["overall"].get(metric, 0))
+            else:
+                values.append(0)
+        
+        # Identify best run for this metric
+        if values:
+            best_index = values.index(max(values))
+            best_run = run_names[best_index]
+        else:
+            best_index = -1
+            best_run = "None"
+        
+        # Calculate changes relative to first run
+        changes = []
+        if values and len(values) > 1:
+            baseline = values[0]
+            for value in values:
+                changes.append(value - baseline)
+        
+        overall_comparison[metric] = {
+            "values": values,
+            "changes": changes,
+            "best_run": best_run,
+            "best_index": best_index
+        }
+    
+    comparison["comparison"]["overall"] = overall_comparison
+    
+    # Compare by category
+    category_comparison = {}
+    all_categories = set()
+    
+    # Collect all categories
+    for run in run_results:
+        if run and "aggregated" in run and "by_category" in run["aggregated"]:
+            all_categories.update(run["aggregated"]["by_category"].keys())
+    
+    # Compare each category
+    for category in all_categories:
+        category_comparison[category] = {}
+        
+        for metric in ["p@5", "p@10", "mrr", "bpref"]:
+            values = []
+            for run in run_results:
+                if (run and "aggregated" in run and "by_category" in run["aggregated"] and
+                    category in run["aggregated"]["by_category"]):
+                    values.append(run["aggregated"]["by_category"][category].get(metric, 0))
+                else:
+                    values.append(0)
+            
+            # Identify best run for this metric
+            if values:
+                best_index = values.index(max(values))
+                best_run = run_names[best_index]
+            else:
+                best_index = -1
+                best_run = "None"
+            
+            # Calculate changes relative to first run
+            changes = []
+            if values and len(values) > 1:
+                baseline = values[0]
+                for value in values:
+                    changes.append(value - baseline)
+            
+            category_comparison[category][metric] = {
+                "values": values,
+                "changes": changes,
+                "best_run": best_run,
+                "best_index": best_index
+            }
+    
+    comparison["comparison"]["by_category"] = category_comparison
+    
+    # Determine best run overall using average of normalized metric performance
+    run_scores = [0] * len(run_results)
+    
+    for metric, data in overall_comparison.items():
+        if data["values"]:
+            max_val = max(data["values"])
+            if max_val > 0:  # Avoid division by zero
+                for i, val in enumerate(data["values"]):
+                    # Normalize each score and add to total
+                    run_scores[i] += val / max_val
+    
+    # Best run is the one with highest total score
+    if run_scores:
+        best_index = run_scores.index(max(run_scores))
+        best_run_id = run_ids[best_index]
+        best_run_name = run_names[best_index]
+    else:
+        best_index = -1
+        best_run_id = None
+        best_run_name = "None"
+    
+    comparison["best_run"] = {
+        "name": best_run_name,
+        "id": best_run_id,
+        "index": best_index,
+        "scores": run_scores
+    }
+    
+    # Save comparison to database
+    comparison_id = db.save_comparison(run_ids, run_names, comparison, best_run_id)
+    if comparison_id:
+        comparison["id"] = comparison_id
+    
+    return comparison
+
+def print_comparison_table(comparison: Dict[str, Any]) -> None:
+    """Print a formatted comparison table."""
+    run_names = [run["name"] for run in comparison["runs"]]
+    
+    # Print header
+    print("\n" + "="*80)
+    print("NEXUS IR Evaluation - Run Comparison")
+    print("="*80)
+    
+    # Print overall metrics
+    print("\nOverall Metrics:")
+    print("-"*80)
+    
+    # Header row
+    header = "Metric".ljust(10)
+    for name in run_names:
+        header += name.ljust(15)
+    if len(run_names) > 1:
+        header += "Best Run".ljust(15)
+    print(header)
+    print("-"*80)
+    
+    # Metrics rows
+    for metric in ["p@5", "p@10", "mrr", "bpref"]:
+        metric_data = comparison["comparison"]["overall"][metric]
+        row = metric.ljust(10)
+        
+        for i, value in enumerate(metric_data["values"]):
+            cell = f"{value:.4f}"
+            if len(run_names) > 1 and i > 0:
+                change = metric_data["changes"][i]
+                if change > 0:
+                    cell += f" (+{change:.4f})"
+                elif change < 0:
+                    cell += f" ({change:.4f})"
+                else:
+                    cell += " (±0.0000)"
+            row += cell.ljust(15)
+        
+        if len(run_names) > 1:
+            row += metric_data["best_run"].ljust(15)
+        
+        print(row)
+    
+    # Print category metrics if available
+    if comparison["comparison"]["by_category"]:
+        for category, metrics in comparison["comparison"]["by_category"].items():
+            print(f"\n{category.capitalize()} Category Metrics:")
+            print("-"*80)
+            
+            # Header row
+            header = "Metric".ljust(10)
+            for name in run_names:
+                header += name.ljust(15)
+            if len(run_names) > 1:
+                header += "Best Run".ljust(15)
+            print(header)
+            print("-"*80)
+            
+            # Metrics rows
+            for metric in ["p@5", "p@10", "mrr", "bpref"]:
+                if metric in metrics:
+                    metric_data = metrics[metric]
+                    row = metric.ljust(10)
+                    
+                    for i, value in enumerate(metric_data["values"]):
+                        cell = f"{value:.4f}"
+                        if len(run_names) > 1 and i > 0:
+                            change = metric_data["changes"][i]
+                            if change > 0:
+                                cell += f" (+{change:.4f})"
+                            elif change < 0:
+                                cell += f" ({change:.4f})"
+                            else:
+                                cell += " (±0.0000)"
+                        row += cell.ljust(15)
+                    
+                    if len(run_names) > 1:
+                        row += metric_data["best_run"].ljust(15)
+                    
+                    print(row)
+    
+    # Print unjudged document counts
+    print("\nUnjudged Documents:")
+    row = "Count".ljust(10)
+    for run in comparison["runs"]:
+        if run["results"] and "aggregated" in run["results"] and "overall" in run["results"]["aggregated"]:
+            count = run["results"]["aggregated"]["overall"].get("unjudged_count", 0)
+            row += str(count).ljust(15)
+        else:
+            row += "N/A".ljust(15)
+    print(row)
+    
+    # Print best run overall
+    print("\n" + "="*80)
+    best_run = comparison["best_run"]["name"]
+    print(f"BEST OVERALL PERFORMER: {best_run}")
+    print("="*80)
+    
+    return results
+
+def print_query_variations_table(results: Dict[str, Any]) -> None:
+    """Print a formatted table of query variation comparison results."""
+    if not results or "pairs" not in results or not results["pairs"]:
+        print("\nNo valid query variation pairs found for analysis.")
+        return
+    
+    pairs = results["pairs"]
+    original_metrics = results["original_metrics"]
+    variation_metrics = results["variation_metrics"]
+    changes = results["changes"]
+    
+    # Print header
+    print("\n" + "="*80)
+    print("Query Variation Analysis")
+    print("="*80)
+    
+    # Print summary metrics
+    print("\nMetrics comparison: Original Queries vs Variations")
+    print("-"*80)
+    
+    # Header
+    header = "Query Type".ljust(15)
+    header += "p@5".ljust(10)
+    header += "p@10".ljust(10)
+    header += "MRR".ljust(10)
+    header += "bpref".ljust(10)
+    print(header)
+    print("-"*80)
+    
+    # Original metrics
+    row = "Original".ljust(15)
+    row += f"{original_metrics['p@5']:.4f}".ljust(10)
+    row += f"{original_metrics['p@10']:.4f}".ljust(10)
+    row += f"{original_metrics['mrr']:.4f}".ljust(10)
+    row += f"{original_metrics['bpref']:.4f}".ljust(10)
+    print(row)
+    
+    # Variation metrics
+    row = "Variation".ljust(15)
+    row += f"{variation_metrics['p@5']:.4f}".ljust(10)
+    row += f"{variation_metrics['p@10']:.4f}".ljust(10)
+    row += f"{variation_metrics['mrr']:.4f}".ljust(10)
+    row += f"{variation_metrics['bpref']:.4f}".ljust(10)
+    print(row)
+    
+    # Differences with proper alignment regardless of sign
+    row = "Difference".ljust(15)
+    for metric in ["p@5", "p@10", "mrr", "bpref"]:
+        diff = changes[metric]
+        if diff > 0:
+            # For positive values, add a "+" sign in the same column where "-" would be
+            row += f"+{diff:.4f}".ljust(10)
+        elif diff < 0:
+            # For negative values, the "-" sign is part of the number
+            row += f"{diff:.4f}".ljust(10) 
+        else:
+            # For zero values, add a space where the sign would be
+            row += f" {diff:.4f}".ljust(10)
+    print(row)
+    
+    # Print individual pairs if requested
+    print("\nIndividual Query Pairs:")
+    print("-"*80)
+    
+    for i, pair in enumerate(pairs, 1):
+        print(f"Pair {i}:")
+        print(f"  Original: {pair['original_query']}")
+        print(f"  Variation: {pair['variation_query']}")
+        print("  Metrics:")
+        
+        # Create a comparison table for this pair
+        print("  " + "-"*50)
+        print("  " + "Type".ljust(10) + "p@5".ljust(10) + "p@10".ljust(10) + "MRR".ljust(10) + "bpref".ljust(10))
+        print("  " + "-"*50)
+        
+        # Original
+        orig_metrics = pair["original_metrics"]
+        row = "  " + "Original".ljust(10)
+        row += f"{orig_metrics.get('p@5', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('p@10', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('mrr', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('bpref', 0):.4f}".ljust(10)
+        print(row)
+        
+        # Variation
+        var_metrics = pair["variation_metrics"]
+        row = "  " + "Variation".ljust(10)
+        row += f"{var_metrics.get('p@5', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('p@10', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('mrr', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('bpref', 0):.4f}".ljust(10)
+        print(row)
+        
+        # Differences with proper alignment regardless of sign
+        changes = pair["changes"]
+        row = "  " + "Diff".ljust(10)
+        for metric in ["p@5", "p@10", "mrr", "bpref"]:
+            diff = changes[metric]
+            if diff > 0:
+                # For positive values, add a "+" sign in the same column where "-" would be
+                row += f"+{diff:.4f}".ljust(10)
+            elif diff < 0:
+                # For negative values, the "-" sign is part of the number
+                row += f"{diff:.4f}".ljust(10)
+            else:
+                # For zero values, add a space where the sign would be
+                row += f" {diff:.4f}".ljust(10)
+        print(row)
+        print()
+    
+    # Winner analysis
+    print("\n" + "="*80)
+    print("ANALYSIS")
+    print("="*80)
+    
+    metrics_diff_sum = sum(changes.values())
+    
+    print(f"Total analyzed query pairs: {len(pairs)}")
+    print(f"Metric differences sum: {metrics_diff_sum:.4f}")
+    
+    if metrics_diff_sum > 0:
+        print("\nWINNER: VARIATIONS (Vector-optimized keyword queries)")
+        print("The keyword-based query variations generally performed better than natural language queries.")
+    elif metrics_diff_sum < 0:
+        print("\nWINNER: ORIGINALS (Natural language queries)")
+        print("The natural language queries generally performed better than keyword variations.")
+    else:
+        print("\nRESULT: TIE")
+        print("Natural language queries and keyword variations performed equally well overall.")
+
+def get_related_queries(db: IRDatabase, relationship_type: str = "variation") -> Dict[int, int]:
+    """
+    Get query relationships of a specified type from the database.
+    
+    Args:
+        db: IRDatabase instance
+        relationship_type: Type of relationship to look for
+        
+    Returns:
+        Dictionary of {query1_id: query2_id} relationships
+    """
+    related_queries = {}
+    
+    # Check if relationship table exists
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='query_relationships'")
+    if not cursor.fetchone():
+        raise RuntimeError("query_relationships table doesn't exist - run add_query_relationships.py first")
+    
+    # Get relationships of specified type
+    cursor.execute('''
+    SELECT query1_id, query2_id
+    FROM query_relationships
+    WHERE relationship_type = ?
+    ''', (relationship_type,))
+    
+    for row in cursor.fetchall():
+        related_queries[row['query1_id']] = row['query2_id']
+    
+    if not related_queries:
+        raise RuntimeError(f"No relationships found with type '{relationship_type}'")
+        
+    return related_queries
+
+def compare_aggregated_judgments(db: Optional[IRDatabase] = None) -> Dict[str, Any]:
+    """
+    Compare aggregated judgment statistics between original queries and their variations
+    using the explicit relationships defined in the database.
+    
+    Args:
+        db: IRDatabase instance (optional)
+        
+    Returns:
+        Dictionary with comparison results
+    """
+    # Use provided database or create one
+    if db is None:
+        db = IRDatabase()
+    
+    # Get query groups from the relationship table
+    relationships = get_related_queries(db, "variation")
+    ORIGINAL_QUERIES = list(relationships.keys())
+    VARIATION_QUERIES = list(relationships.values())
+    logger.info(f"Using {len(relationships)} query pairs from relationships table")
+    
+    # Get all judgments for original queries (1-9)
+    original_judgments = {}
+    for query_id in ORIGINAL_QUERIES:
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT doc_id, relevance FROM judgments WHERE query_id = ?", (query_id,))
+        for row in cursor.fetchall():
+            doc_id = row['doc_id']
+            relevance = row['relevance']
+            original_judgments[doc_id] = relevance
+    
+    # Get all judgments for variation queries (10-19)
+    variation_judgments = {}
+    for query_id in VARIATION_QUERIES:
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT doc_id, relevance FROM judgments WHERE query_id = ?", (query_id,))
+        for row in cursor.fetchall():
+            doc_id = row['doc_id']
+            relevance = row['relevance']
+            variation_judgments[doc_id] = relevance
+    
+    # Calculate statistics
+    original_stats = calculate_judgment_stats(original_judgments)
+    variation_stats = calculate_judgment_stats(variation_judgments)
+    
+    # Find common documents
+    original_docs = set(original_judgments.keys())
+    variation_docs = set(variation_judgments.keys())
+    common_docs = original_docs & variation_docs
+    
+    # Calculate agreement on common documents
+    if common_docs:
+        agreement_count = sum(1 for doc in common_docs 
+                            if original_judgments[doc] == variation_judgments[doc])
+        agreement_ratio = agreement_count / len(common_docs)
+    else:
+        agreement_count = 0
+        agreement_ratio = 0
+    
+    # Prepare results
+    results = {
+        "original_stats": original_stats,
+        "variation_stats": variation_stats,
+        "common_docs_count": len(common_docs),
+        "agreement_count": agreement_count,
+        "agreement_ratio": agreement_ratio,
+        "differences": {
+            "avg_relevance": variation_stats["avg_relevance"] - original_stats["avg_relevance"],
+            "relevant_ratio": variation_stats["relevant_ratio"] - original_stats["relevant_ratio"],
+            "distribution": {
+                level: variation_stats["relevance_distribution"][level]["percentage"] - 
+                       original_stats["relevance_distribution"][level]["percentage"]
+                for level in range(4)
+            }
+        }
+    }
+    
+    return results
+
+def print_aggregated_judgments_table(results: Dict[str, Any]) -> None:
+    """Print a formatted table of aggregated judgment comparison results."""
+    original_stats = results["original_stats"]
+    variation_stats = results["variation_stats"]
+    differences = results["differences"]
+    
+    # Print header
+    print("\nAggregated Judgment Comparison: Original Queries vs Variations")
+    print("=" * 80)
+    
+    # Print statistics for original queries
+    print(f"\nOriginal Queries (IDs 1-9):")
+    print(f"  Total documents judged: {original_stats['count']}")
+    print(f"  Average relevance: {original_stats['avg_relevance']:.2f}")
+    print(f"  Relevant documents: {original_stats['relevant_count']} ({original_stats['relevant_ratio'] * 100:.1f}%)")
+    print(f"  Non-relevant documents: {original_stats['nonrelevant_count']}")
+    print(f"  Highly relevant documents: {original_stats['highly_relevant_count']}")
+    
+    # Print relevance distribution for original queries
+    print("\nRelevance distribution for Original Queries:")
+    for level, data in original_stats['relevance_distribution'].items():
+        print(f"  Level {level}: {data['count']} documents ({data['percentage']:.1f}%)")
+    
+    # Print statistics for variation queries
+    print(f"\nVariation Queries (IDs 10-19):")
+    print(f"  Total documents judged: {variation_stats['count']}")
+    print(f"  Average relevance: {variation_stats['avg_relevance']:.2f}")
+    print(f"  Relevant documents: {variation_stats['relevant_count']} ({variation_stats['relevant_ratio'] * 100:.1f}%)")
+    print(f"  Non-relevant documents: {variation_stats['nonrelevant_count']}")
+    print(f"  Highly relevant documents: {variation_stats['highly_relevant_count']}")
+    
+    # Print relevance distribution for variation queries
+    print("\nRelevance distribution for Variation Queries:")
+    for level, data in variation_stats['relevance_distribution'].items():
+        print(f"  Level {level}: {data['count']} documents ({data['percentage']:.1f}%)")
+    
+    # Print comparison results
+    print("\nComparison:")
+    print(f"  Common documents: {results['common_docs_count']}")
+    print(f"  Agreement on common documents: {results['agreement_count']} ({results['agreement_ratio'] * 100:.1f}%)")
+    
+    # Print differences
+    print("\nDifferences (Variation - Original):")
+    print(f"  Average relevance: {differences['avg_relevance']:+.2f}")
+    print(f"  Relevant ratio: {differences['relevant_ratio']:+.2f} ({differences['relevant_ratio'] * 100:+.1f}%)")
+    
+    print("\nDistribution difference:")
+    for level in range(4):
+        diff = differences['distribution'][level]
+        print(f"  Level {level}: {diff:+.1f}%")
+    
+    print("=" * 80)
+
+def calculate_judgment_stats(judgments: Dict[str, int]) -> Dict[str, Any]:
+    """Calculate statistics about a set of judgments."""
+    if not judgments:
+        return {
+            "count": 0,
+            "avg_relevance": 0.0,
+            "relevant_count": 0,
+            "nonrelevant_count": 0,
+            "highly_relevant_count": 0,
+            "relevant_ratio": 0.0,
+            "relevance_distribution": {level: {"count": 0, "percentage": 0.0} for level in range(4)}
+        }
+    
+    relevance_values = list(judgments.values())
+    
+    # Count by relevance level
+    relevant_count = sum(1 for v in relevance_values if v >= 1)
+    nonrelevant_count = sum(1 for v in relevance_values if v == 0)
+    highly_relevant_count = sum(1 for v in relevance_values if v >= 3)
+    
+    # Calculate average relevance
+    avg_relevance = sum(relevance_values) / len(relevance_values) if relevance_values else 0
+    
+    # Calculate ratio of relevant documents
+    relevant_ratio = relevant_count / len(relevance_values) if relevance_values else 0
+    
+    # Get distribution by relevance level
+    relevance_distribution = {}
+    for level in range(4):  # Relevance levels 0-3
+        count = sum(1 for v in relevance_values if v == level)
+        relevance_distribution[level] = {
+            "count": count,
+            "percentage": (count / len(relevance_values)) * 100 if relevance_values else 0
+        }
+    
+    return {
+        "count": len(judgments),
+        "avg_relevance": avg_relevance,
+        "relevant_count": relevant_count,
+        "nonrelevant_count": nonrelevant_count,
+        "highly_relevant_count": highly_relevant_count,
+        "relevant_ratio": relevant_ratio,
+        "relevance_distribution": relevance_distribution
+    }
+
+if __name__ == "__main__":
+    # If called directly, run the aggregated judgment comparison
+    db = IRDatabase()
+    results = compare_aggregated_judgments(db)
+    print_aggregated_judgments_table(results)
+    db.close()
