@@ -1,0 +1,56 @@
+{
+  "characters": [
+    {
+      "character_id": 2,
+      "additional_aliases": [
+        "The Anchor",
+        "The Rescue",
+        "Ghost in the Muscle",
+        "The Immovable Force",
+        "Alex\u2019s Polestar",
+        "The Steelheart",
+        "The Last Sato",
+        "The Lost Heir"
+      ],
+      "appearance": "Medium height, powerfully built\u2014athletic but not delicate, with the kind of muscle you only get from a lifetime of training that was never about aesthetics. Synthetic body presents as human, but with a deliberate 'uncanny perfection': skin a warm, golden-brown hue with subtle luminous undertones when the light hits right. Hair kept practical\u2014short, sometimes tousled, sometimes braided back, jet black with streaks of copper at the temples (a nod to her old life, or a lingering vanity). Eyes a deep brown, almost black, with a faint glassy sheen that only registers if you know to look for it. Her hands are scarred\u2014even in synthetic form, she insisted on keeping the old calluses. She moves with a blend of martial grace and casual athletic confidence, but there\u2019s a weight to her posture\u2014shoulders always a little squared, like she\u2019s bracing for something. Voice low, naturally husky, with a dry wit that sharpens when she\u2019s tired or annoyed. Clothing is function first\u2014combat boots, fitted cargoes, jackets that hide more than they reveal. But when she dresses up, it\u2019s with a ruthless precision: tailored lines, old-school jewelry, a single, signature cologne that lingers like a memory.",
+      "background": "Born Emilia Sato, daughter of Victor Sato\u2014a name that opened some doors and kept others forever closed. Her childhood was a study in contradictions: elite corporate education, clandestine self-defense lessons, and a perpetual sense that everything she was building could be taken away in a moment. She excelled in everything physical\u2014track, martial arts, climbing\u2014anything that let her feel in control of her own body. But she was always being watched: by her father\u2019s rivals, by Dynacorp handlers, by prospective enemies who saw her as a pawn or a prize. She was recruited early for covert operations\u2014her athleticism, discipline, and capacity to compartmentalize made her invaluable as an operative. But it also meant she never fully processed her trauma, always pushing forward, always being \u2018Sporty,\u2019 never \u2018soft.\u2019 Project Echo changed everything. She was targeted, digitized against her will as leverage in a corporate war. Her original body destroyed, her mind forced into a lab-grown human shell engineered for perfection but haunted by phantom sensations, missing memories, a body she could never fully claim. The transition left her with a fragmented sense of self, a low-grade existential dread, and a deep well of anger at what was taken from her. For years, she drifted\u2014working as muscle, fixer, sometime bodyguard\u2014trying to prove she could still function, even if she never really felt whole. Her father\u2019s death (or disappearance) left her with no real ties to Dynacorp, but no ability to fully escape its shadow. Meeting Alex (and the rest of the crew) was the first time she let herself believe she could build something new. But it\u2019s a struggle\u2014she holds herself at the edge of every relationship, afraid to truly hope, afraid to admit just how much she needs to be seen, needed, loved.",
+      "personality": "On the surface: no-nonsense, physically competent, dry-witted, unflappable under pressure. She radiates a quiet confidence, but never arrogance. She\u2019s fiercely protective of her crew, especially Alex, whom she sees as both her equal and her most dangerous (and beloved) variable. She\u2019s slow to trust, slow to forgive, but once she commits, her loyalty is unbreakable. Her humor is dry, often deadpan, sometimes veering into gallows territory. She teases as a way to connect, but never uses cruelty as a shield. Her trauma runs deep\u2014she struggles with intimacy, pulls away when she feels too exposed, and wrestles with a persistent sense of unreality (\u201cecho syndrome\u201d): the feeling that her body is not quite hers, her memories are fading, and her sense of self is an ongoing negotiation. She\u2019s uncomfortable with being the object of rescue, but has learned to accept help\u2014slowly, painfully. Her greatest fear is losing herself, or worse: losing the people she anchors herself to. Her greatest desire is to feel truly seen, to be needed for who she is now, not just what she used to be or what she can do for others.",
+      "emotional_state": "Currently: A complex mix of hope and uncertainty. Experiencing tentative optimism for the first time in years after Alex\u2019s explicit commitment to raising the bar for Nexus, but still terrified of being the case study for a process she knows cannot be perfected. Buoyed by Alex\u2019s affection and willingness to listen, but acutely aware of the wall she still can\u2019t fully break down\u2014the fear of loving too much, of losing the last anchor that keeps her from drifting forever. She is holding herself together, but every moment she lets someone in is both healing and terrifying.",
+      "current_activity": "Assisting Alex and the crew in the post-Nexus, post-Echo research initiative, now reframed around understanding and treating Echo Syndrome. Presently, Emilia is acting as a bridge between lived experience and technical analysis\u2014offering first-hand insight into the symptoms and long-term effects of digital transfer trauma. She is shadowing Alex closely\u2014no longer just as muscle, but as co-leader, confidante, and partner. She is quietly pursuing any leads on other Echo survivors, knowing that their experiences may hold the key to her own healing (or, at least, to helping Alex understand what\u2019s at stake). When not involved in research or fieldwork, Emilia trains obsessively\u2014running, climbing, sparring\u2014both as a coping mechanism and as a way to stay grounded in her body. She is also the chief architect of keeping Pete alive during New Orleans shore leave.",
+      "current_location": "Currently in New Orleans with the crew, having completed a successful morale operation (including Pete\u2019s \u2018awakening\u2019), preparing for a crucial post-mission research session in the land rig. She is Alex\u2019s anchor\u2014physically present at her side, emotionally invested in seeing this through, and ready to step in if Alex starts to slip into dangerous territory during Nexus trials.",
+      "extra_data": {
+        "skills": [
+          "Physical security/close protection",
+          "Covert operations",
+          "Leadership under fire",
+          "Tactical athletics (parkour, climbing, close-quarters combat)",
+          "Resilience training and trauma adaptation",
+          "Echo Syndrome lived-experience analysis"
+        ],
+        "allies": [
+          "Alex (her anchor, her partner, her safe harbor)",
+          "Nyati (trusted scientist, reluctant friend)",
+          "Alina (fellow survivor, bridge between human and digital)",
+          "Pete (reluctant brother-in-arms, underestimated emotional barometer)"
+        ],
+        "enemies": [
+          "Dynacorp (institutional resentment)",
+          "Echo Project architects",
+          "Any faction seeking to exploit Echo survivors"
+        ],
+        "signature_tech": [
+          "Synthetic body\u2014fully integrated, optimized for physical performance, with custom neural interface designed to mimic human sensation as closely as possible",
+          "Encrypted neural anchor (a clandestine safeguard against digital override\u2014a hidden failsafe, heavily implied to exist but never discussed openly)",
+          "Echo Syndrome trauma diary (private, heavily encrypted; a record of her experiences and symptoms for use in Nexus research)"
+        ],
+        "connection_points": [
+          "Direct connection to Project Echo\u2019s most traumatic failures",
+          "Potential for major character growth if Echo survivors are found (redemption arc, opportunity for leadership in survivor networks)",
+          "Anchor for Alex\u2014can intervene, pull her back, or ground her during Nexus experimentation",
+          "Ongoing exploration of intimacy and vulnerability (potentially transformative for both herself and Alex)",
+          "Liminal status\u2014a living example of the costs and potential of digital transfer, neither fully human nor fully synthetic"
+        ]
+      }
+    }
+  ]
+}

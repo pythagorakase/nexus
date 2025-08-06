@@ -1,0 +1,518 @@
+#!/usr/bin/env python3
+"""
+NEXUS Character Psychology Profile Generator
+
+This script generates comprehensive psychological profiles for characters in the narrative,
+utilizing GPT-4.1's large context window to analyze the entire story corpus at once.
+
+Features:
+- Analyzes all narrative chunks (up to 1M tokens)
+- Generates structured psychological profiles following a detailed template
+- Focuses on one character at a time for depth
+- Stores results in PostgreSQL as JSONB
+- Built on the api_openai.py library
+
+Usage:
+    python generate_psychology.py --character 1
+    
+    # Optional parameters
+    python generate_psychology.py --character 1 --model gpt-4.1 --overwrite --dry-run
+"""
+
+import os
+import sys
+import json
+import time
+import argparse
+import logging
+from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime
+from pathlib import Path
+
+import sqlalchemy as sa
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, ForeignKey, TIMESTAMP, text
+from sqlalchemy.dialects.postgresql import JSONB
+
+try:
+    from pydantic import BaseModel, Field
+except ImportError:
+    print("Error: Pydantic package is required. Please install with: pip install pydantic")
+    sys.exit(1)
+
+# Import OpenAI API utilities from api_openai.py
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from scripts.api_openai import (
+    OpenAIProvider,
+    get_default_llm_argument_parser,
+    get_db_connection_string,
+    setup_abort_handler,
+    is_abort_requested,
+    get_token_count
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("character_psychology.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("nexus.character_psychology")
+
+# Define Pydantic model for the psychology profile
+class PsychologyProfile(BaseModel):
+    """Structured output model for character psychology profiles."""
+    self_concept: Dict[str, Any] = Field(
+        description="Core identity and self-perception, including how they see themselves vs. how others see them"
+    )
+    behavior: Dict[str, Any] = Field(
+        description="Observable patterns and actions, including consistent traits and contextual variations"
+    )
+    cognitive_framework: Dict[str, Any] = Field(
+        description="Thinking and decision-making patterns, including biases and problem-solving approaches"
+    )
+    temperament: Dict[str, Any] = Field(
+        description="Emotional landscape, including range, regulation, triggers, and expression"
+    )
+    relational_style: Dict[str, Any] = Field(
+        description="How they interact with others, including attachment patterns and trust dynamics"
+    )
+    defense_mechanisms: Dict[str, Any] = Field(
+        description="How they protect themselves, including mature, neurotic, and immature defenses"
+    )
+    character_arc: Dict[str, Any] = Field(
+        description="Developmental trajectory, including psychological tensions and growth potential"
+    )
+    secrets: Dict[str, Any] = Field(
+        description="Withheld information and hidden dimensions, including internal conflicts and unspoken desires"
+    )
+    validation_evidence: Dict[str, Any] = Field(
+        description="Supporting evidence and reasoning for the psychological assessment"
+    )
+
+def parse_arguments():
+    """Parse command line arguments."""
+    # Start with the default LLM parser from api_openai
+    parser = get_default_llm_argument_parser()
+    
+    # Add script-specific arguments
+    parser.add_argument("--character", type=int, required=True,
+                       help="Character ID to analyze")
+    parser.add_argument("--overwrite", action="store_true",
+                       help="Overwrite existing profile if it exists")
+    parser.add_argument("--output", type=str,
+                       help="Output file path for the generated profile (for preview)")
+    parser.add_argument("--import", dest="import_file", type=str,
+                       help="Import profile from a JSON file instead of generating")
+    
+    return parser.parse_args()
+
+def create_database_tables(engine):
+    """Create necessary database tables if they don't exist."""
+    metadata = MetaData()
+    
+    # Define character_psychology table
+    character_psychology = Table(
+        'character_psychology',
+        metadata,
+        Column('character_id', Integer, ForeignKey('characters.id'), primary_key=True),
+        Column('self_concept', JSONB),
+        Column('behavior', JSONB),
+        Column('cognitive_framework', JSONB),
+        Column('temperament', JSONB),
+        Column('relational_style', JSONB),
+        Column('defense_mechanisms', JSONB),
+        Column('character_arc', JSONB),
+        Column('secrets', JSONB),
+        Column('validation_evidence', JSONB),
+        Column('created_at', TIMESTAMP, server_default=text('NOW()')),
+        Column('updated_at', TIMESTAMP, server_default=text('NOW()'))
+    )
+    
+    # Create tables if they don't exist
+    metadata.create_all(engine)
+    logger.info("Database tables verified/created.")
+    return character_psychology
+
+def fetch_character_info(engine, character_id: int) -> Optional[Dict[str, Any]]:
+    """Fetch basic information for the specified character."""
+    with engine.connect() as connection:
+        # Query the specified character and check if it exists
+        character_query = text("""
+            SELECT id, name, aliases
+            FROM characters
+            WHERE id = :character_id
+        """)
+        character_result = connection.execute(character_query, {"character_id": character_id}).fetchone()
+        
+        if not character_result:
+            return None
+        
+        # Convert to dictionary
+        character_info = {
+            "id": character_result[0],
+            "name": character_result[1],
+            "aliases": character_result[2] if character_result[2] else []
+        }
+        
+        return character_info
+
+def fetch_character_roster(engine) -> List[Dict[str, Any]]:
+    """Fetch a roster of main characters (ids 1-10)."""
+    with engine.connect() as connection:
+        # Query main characters
+        roster_query = text("""
+            SELECT id, name, aliases
+            FROM characters
+            WHERE id BETWEEN 1 AND 10
+            ORDER BY id
+        """)
+        roster_results = connection.execute(roster_query).fetchall()
+        
+        # Convert to list of dictionaries
+        roster = []
+        for row in roster_results:
+            roster.append({
+                "id": row[0],
+                "name": row[1],
+                "aliases": row[2] if row[2] else []
+            })
+        
+        return roster
+
+def fetch_narrative_corpus(engine) -> List[Dict[str, Any]]:
+    """Fetch all narrative chunks with metadata."""
+    with engine.connect() as connection:
+        # Query all narrative chunks with metadata
+        corpus_query = text("""
+            SELECT 
+                nc.id, 
+                nc.content, 
+                cm.season,
+                cm.episode,
+                wc.in_world_date
+            FROM 
+                narrative_chunks nc
+            LEFT JOIN 
+                chunk_metadata cm ON nc.id = cm.chunk_id
+            LEFT JOIN 
+                world_clock_mv wc ON nc.id = wc.chunk_id
+            ORDER BY 
+                cm.season, cm.episode, nc.id
+        """)
+        corpus_results = connection.execute(corpus_query).fetchall()
+        
+        # Convert to list of dictionaries
+        corpus = []
+        for row in corpus_results:
+            corpus.append({
+                "id": row[0],
+                "content": row[1],
+                "season": row[2],
+                "episode": row[3],
+                "in_world_date": row[4] if row[4] else None
+            })
+        
+        return corpus
+
+def fetch_season_summaries(engine) -> List[Dict[str, Any]]:
+    """Fetch season summaries for additional context."""
+    with engine.connect() as connection:
+        # Query season summaries
+        summary_query = text("""
+            SELECT 
+                season,
+                summary
+            FROM 
+                season_summaries
+            ORDER BY 
+                season
+        """)
+        summary_results = connection.execute(summary_query).fetchall()
+        
+        # Convert to list of dictionaries
+        summaries = []
+        for row in summary_results:
+            summaries.append({
+                "season": row[0],
+                "summary": row[1]
+            })
+        
+        return summaries
+
+def check_existing_profile(engine, character_id: int) -> bool:
+    """Check if a psychological profile already exists for the character."""
+    with engine.connect() as connection:
+        query = text("""
+            SELECT 1 FROM character_psychology
+            WHERE character_id = :character_id
+        """)
+        result = connection.execute(query, {"character_id": character_id}).fetchone()
+        return result is not None
+
+def delete_existing_profile(engine, character_id: int) -> None:
+    """Delete an existing psychological profile for the character."""
+    with engine.connect() as connection:
+        query = text("""
+            DELETE FROM character_psychology
+            WHERE character_id = :character_id
+        """)
+        connection.execute(query, {"character_id": character_id})
+        connection.commit()
+        logger.info(f"Deleted existing profile for character ID {character_id}")
+
+def save_profile_to_database(engine, character_id: int, profile: Dict[str, Any]) -> None:
+    """Save the psychological profile to the database."""
+    with engine.connect() as connection:
+        # SQL query for inserting the profile
+        insert_query = text("""
+            INSERT INTO character_psychology 
+            (character_id, self_concept, behavior, cognitive_framework, temperament, 
+             relational_style, defense_mechanisms, character_arc, secrets, validation_evidence, 
+             created_at, updated_at)
+            VALUES 
+            (:character_id, :self_concept, :behavior, :cognitive_framework, :temperament, 
+             :relational_style, :defense_mechanisms, :character_arc, :secrets, :validation_evidence, 
+             NOW(), NOW())
+        """)
+        
+        # Execute the query
+        connection.execute(insert_query, {
+            "character_id": character_id,
+            "self_concept": json.dumps(profile["self_concept"]),
+            "behavior": json.dumps(profile["behavior"]),
+            "cognitive_framework": json.dumps(profile["cognitive_framework"]),
+            "temperament": json.dumps(profile["temperament"]),
+            "relational_style": json.dumps(profile["relational_style"]),
+            "defense_mechanisms": json.dumps(profile["defense_mechanisms"]),
+            "character_arc": json.dumps(profile["character_arc"]),
+            "secrets": json.dumps(profile["secrets"]),
+            "validation_evidence": json.dumps(profile["validation_evidence"])
+        })
+        connection.commit()
+        logger.info(f"Saved psychological profile for character ID {character_id}")
+
+def prepare_prompt(character_info: Dict[str, Any], 
+                 character_roster: List[Dict[str, Any]], 
+                 narrative_corpus: List[Dict[str, Any]]) -> Tuple[str, Dict[str, Any]]:
+    """Prepare the prompt for the OpenAI API."""
+    # Load the prompt template
+    prompt_path = Path("prompts/generate_psychology.json")
+    if not prompt_path.exists():
+        raise FileNotFoundError(f"Prompt template not found at {prompt_path}")
+    
+    with open(prompt_path, "r") as f:
+        prompt_template = json.load(f)
+    
+    # Format the main prompt with character name
+    character_name = character_info["name"]
+    main_instructions = prompt_template["main_instructions"].format(character_name=character_name)
+    
+    # Create initial prompt section
+    initial_prompt = [
+        f"System: {prompt_template['system_prompt']}",
+        f"Instruction: {main_instructions}",
+        f"Output Structure: {prompt_template['output_structure']}",
+        f"Special Instructions: {prompt_template['special_instructions']}",
+        f"Formatting: {prompt_template['formatting_instructions']}"
+    ]
+    
+    # Prepare the character roster
+    character_list = ["# CHARACTER ROSTER\n"]
+    for char in character_roster:
+        marker = "→ TARGET CHARACTER ←" if char["id"] == character_info["id"] else ""
+        alias_text = f", also known as: {', '.join(char['aliases'])}" if char["aliases"] else ""
+        character_list.append(f"Character ID {char['id']}: {char['name']}{alias_text} {marker}")
+    character_list.append("\n")
+    
+    # Prepare the narrative corpus
+    raw_text = ["# FULL NARRATIVE\n"]
+    for chunk in narrative_corpus:
+        season_ep = f"S{chunk['season']}E{chunk['episode']}" if chunk['season'] and chunk['episode'] else "Unknown"
+        date_text = f" | Date: {chunk['in_world_date']}" if chunk['in_world_date'] else ""
+        raw_text.append(f"--- Chunk ID: {chunk['id']} | {season_ep}{date_text} ---\n{chunk['content']}\n\n")
+    
+    # Final prompt reminder
+    final_reminder = [
+        f"REMINDER - Generate a psychological profile for {character_name} following the structure below:\n",
+        json.dumps(prompt_template['profile_sections'], indent=2),
+        f"Remember to include all required sections and follow the format shown in this example:\n",
+        json.dumps(prompt_template['examples'], indent=2)
+    ]
+    
+    # Combine the parts in the requested order
+    full_prompt = "\n\n".join([
+        "\n\n".join(initial_prompt),
+        "\n".join(character_list),
+        "\n".join(raw_text),
+        "\n\n".join(final_reminder)
+    ])
+    
+    return full_prompt, prompt_template
+
+def validate_profile(profile: Dict[str, Any], template: Dict[str, Any]) -> bool:
+    """Validate the generated profile against the expected template structure."""
+    # Check that all required sections exist
+    for section in template['profile_sections'].keys():
+        if section not in profile:
+            logger.error(f"Missing required section: {section}")
+            return False
+            
+        # Check that all required subsections exist
+        required_subsections = template['profile_sections'][section]['required_subsections']
+        for subsection in required_subsections:
+            if subsection not in profile[section]:
+                logger.error(f"Missing required subsection: {section}.{subsection}")
+                return False
+    
+    return True
+
+def main():
+    """Main entry point for the script."""
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Set up abort handler
+    setup_abort_handler()
+    
+    # Connect to database
+    db_url = args.db_url or get_db_connection_string()
+    engine = create_engine(db_url)
+    
+    try:
+        # Create tables if they don't exist
+        character_psychology_table = create_database_tables(engine)
+        
+        # Check if profile exists and how to handle it
+        if check_existing_profile(engine, args.character):
+            if args.overwrite:
+                logger.info(f"Overwriting existing profile for character ID {args.character}")
+                delete_existing_profile(engine, args.character)
+            else:
+                logger.error(f"Profile already exists for character ID {args.character}. Use --overwrite to replace it.")
+                return 1
+        
+        # If importing from file, skip the generation process
+        if args.import_file:
+            with open(args.import_file, "r") as f:
+                profile = json.load(f)
+                
+            # Fetch character info for validation
+            character_info = fetch_character_info(engine, args.character)
+            if not character_info:
+                logger.error(f"Character with ID {args.character} not found.")
+                return 1
+                
+            # Validate the profile against the template
+            prompt_path = Path("prompts/generate_psychology.json")
+            if prompt_path.exists():
+                with open(prompt_path, "r") as f:
+                    prompt_template = json.load(f)
+                    
+                if not validate_profile(profile, prompt_template):
+                    logger.error("Imported profile is invalid. Please check the structure.")
+                    return 1
+            
+            # Save to database if not a dry run
+            if not args.dry_run:
+                save_profile_to_database(engine, args.character, profile)
+                logger.info(f"Imported profile saved for character ID {args.character}")
+            else:
+                logger.info("Dry run - profile not saved to database.")
+                
+            return 0
+        
+        # Fetch character information
+        character_info = fetch_character_info(engine, args.character)
+        if not character_info:
+            logger.error(f"Character with ID {args.character} not found.")
+            return 1
+        
+        logger.info(f"Generating psychological profile for character: {character_info['name']} (ID: {args.character})")
+        
+        # Fetch data for context
+        logger.info("Fetching character roster...")
+        character_roster = fetch_character_roster(engine)
+        
+        logger.info("Fetching narrative corpus (all chunks)...")
+        narrative_corpus = fetch_narrative_corpus(engine)
+        logger.info(f"Retrieved {len(narrative_corpus)} narrative chunks for analysis.")
+        
+        # Prepare the prompt
+        logger.info("Preparing prompt with context...")
+        full_prompt, prompt_template = prepare_prompt(
+            character_info, 
+            character_roster, 
+            narrative_corpus
+        )
+        
+        # Count tokens
+        prompt_tokens = get_token_count(full_prompt, args.model)
+        logger.info(f"Prompt prepared with {prompt_tokens} tokens.")
+        
+        # Initialize the OpenAI provider
+        provider = OpenAIProvider(
+            api_key=args.api_key,
+            model=args.model,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            system_prompt=None,  # System prompt is included in our full prompt
+            reasoning_effort=args.effort if args.model.startswith("o") else None
+        )
+        
+        # Check if prompt exceeds token limits
+        max_input_tokens = 128000  # Assuming a large context model like GPT-4.1
+        if prompt_tokens > max_input_tokens:
+            logger.error(f"Prompt exceeds model's token limit ({prompt_tokens} tokens > {max_input_tokens}).")
+            logger.error("Consider reducing context or using a different approach for very large narratives.")
+            return 1
+        
+        # Make the API call
+        logger.info(f"Calling OpenAI API with model {args.model}...")
+        start_time = time.time()
+        try:
+            response = provider.get_completion(full_prompt)
+            logger.info(f"API call completed in {time.time() - start_time:.2f} seconds.")
+            logger.info(f"Response tokens: {response.input_tokens} input, {response.output_tokens} output")
+            
+            # Parse the response as JSON
+            try:
+                profile = json.loads(response.content)
+            except json.JSONDecodeError:
+                logger.error("Failed to parse response as JSON. Raw response:")
+                logger.error(response.content[:1000] + "..." if len(response.content) > 1000 else response.content)
+                return 1
+            
+            # Validate the profile against the template
+            if not validate_profile(profile, prompt_template):
+                logger.error("Generated profile is invalid. Raw response:")
+                logger.error(json.dumps(profile, indent=2)[:1000] + "..." if len(json.dumps(profile, indent=2)) > 1000 else json.dumps(profile, indent=2))
+                return 1
+            
+            # Output to file if requested
+            if args.output:
+                with open(args.output, "w") as f:
+                    json.dump(profile, f, indent=2)
+                logger.info(f"Profile saved to {args.output}")
+            
+            # Save to database if not a dry run
+            if not args.dry_run:
+                save_profile_to_database(engine, args.character, profile)
+                logger.info(f"Psychological profile saved for character ID {args.character}")
+            else:
+                logger.info("Dry run - profile not saved to database.")
+            
+        except Exception as e:
+            logger.error(f"Error during API call: {str(e)}")
+            return 1
+        
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return 1
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main()) 

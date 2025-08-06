@@ -1,0 +1,44 @@
+{
+  "database": {
+    "url": "postgresql://pythagor@localhost/NEXUS",
+    "create_tables": true,
+    "drop_existing": true
+  },
+  "models": {
+    "bge-large": {
+      "local_path": "/Users/pythagor/nexus/models/models--BAAI--bge-large-en",
+      "remote_path": "BAAI/bge-large-en",
+      "dimensions": 1024,
+      "weight": 0.4
+    },
+    "e5-large": {
+      "local_path": "/Users/pythagor/nexus/models/models--intfloat--e5-large-v2",
+      "remote_path": "intfloat/e5-large-v2",
+      "dimensions": 1024,
+      "weight": 0.4
+    },
+    "bge-small-custom": {
+      "local_path": "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654",
+      "remote_path": null,
+      "dimensions": 384,
+      "weight": 0.2
+    }
+  },
+  "import": {
+    "file_pattern": "ALEX_*_copy_notime.md",
+    "chunk_regex": "<!--\\s*SCENE BREAK:\\s*(S(\\d+)E(\\d+))_(\\d+).*-->",
+    "batch_size": 10,
+    "verbose": true
+  },
+  "query": {
+    "default_model": "bge-large",
+    "default_limit": 5,
+    "min_similarity": 0.7,
+    "highlight_matches": true
+  },
+  "logging": {
+    "file": "memnon.log",
+    "level": "INFO",
+    "console": true
+  }
+}

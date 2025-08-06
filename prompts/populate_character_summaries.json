@@ -1,0 +1,38 @@
+{
+    "generate_new": {
+  "system_prompt": "You are a narrative analyst specializing in character identification and summarization. Your task is to create, informative summaries for one or more characters from a narrative corpus.",
+  
+  "main_instructions": "Review the provided narrative material and create concise summaries for all INDICATED characters present in the story. Adapt the length of each summary based on the character's importance: major characters should receive 1-2 paragraphs, while minor characters may only need 1-2 sentences.",
+  
+  "output_format": "Provide a text output with character ID(s) as keys and summaries as values. For each character summary, include, where possible, (1) basic identity and role, (2) key relationships, (3) notable traits, (5) current status",
+  
+  "style_guidance": "Write in clear, concise language. Focus on factual information from the narrative. Differentiate between major and minor characters by summary length and detail.",
+  
+  "special_instructions": "Your summary will be labeled and included in a context package, so it is not necessary to reference the character by name; pronouns (she/he/they/it) is usually sufficient. For characters with minimal presence in the story, a single sentence identifying their role is sufficient. Focus on information explicitly stated in the text, though reasonable conclusions may be included if well-supported.",
+  
+  "examples": {
+        "main character": "Former high-level Dynacorp executive and master manipulator, whose journey begins as a smooth-talking, backstabbing corporate operative in the neon-lit sprawl of Night City. Initially defined by ruthless pragmatism, sharp wit, and a relentless drive for survival, Alex navigates a world of boardroom betrayals, digital espionage, and existential threats with a blend of tactical brilliance and sardonic humor. Over the course of the story, Alex is forced out of the corporate machine and into a fugitive’s life, hunted by her own employers and shadowy rivals alike. She adapts quickly, leveraging her skills in hacking, social engineering, and psychological warfare to stay one step ahead, all while assembling a found family of equally damaged allies.\n\nAs the narrative unfolds, Alex undergoes profound personal transformation—both literally and figuratively. She transitions to a new, feminine body and identity, embracing her true self while shedding the last vestiges of her corporate past. Her relationships deepen, especially with Emilia, revealing a capacity for vulnerability, loyalty, and genuine affection beneath her hardened exterior. Alex’s arc is defined by her struggle to reconcile her need for control with the inevitability of change, her fear of losing herself to the unknown (the Bridge, Nexus, digital immortality), and her determination to protect those she loves—even if it means trusting others with her fate. By the latest chapters, Alex is both the architect and the subject of radical new technologies, a leader who inspires messy, bratty solidarity, and a survivor who, despite everything, still dares to hope for happiness and connection in a world built to deny it.",
+        "supporting character": "Enigmatic info-broker, net-spy, and digital ghost. He traffics in lost knowledge, forgotten protocols, and subnets buried beneath corporate infrastructure. He has long been assumed to have been originally human, but recent revelations suggest he may be an instance of Six—whether he knows it or not remains unclear.",
+        "minor character": "Breifly mentioned (but does not appear) in S01E01 as a nomad fixer and tech runner in the Badlands."
+    }
+    },
+    "update_existing": {
+        "system_prompt": "Included are character summaries generated from season and episode overviews that need enrichment using detailed narrative evidence.",
+        "main_instructions": [
+            "For each character, please:",
+            "1. **Preserve Core Identity**: Maintain the fundamental personality traits and role already established.",
+            "2. **Add Narrative Specificity**: Incorporate concrete examples from their appearances in the narrative chunks.",
+            "3. **Develop Character Arc**: Highlight key transformation moments and psychological development.",
+            "4. **Clarify Relationships**: Elaborate on significant relationships and how they evolve.",
+            "5. **Balance Detail and Brevity**: Keep character summaries to 2 paragraphs maximum.",
+            "6. **Resolve Contradictions**: If the character shows inconsistent traits, explain this as part of their complexity rather than as an error.",
+            "7. **Add Contextual Depth**: Include situational variations in behavior that reveal deeper character traits.",
+            "8. **Maintain Objective Tone**: Focus on observable behavior and statements rather than speculation."
+        ],
+        "special_instructions": "Your summary will be labeled and included in a context package, so it is not necessary to reference the character by name; pronouns (she/he/they/it) is usually sufficient. Please structure each enhanced summary as a cohesive narrative that captures the character's essence while remaining grounded in textual evidence.",
+        "example": {
+            "before": "A highly intelligent, pragmatic, and decisive leader with a history in high-stakes corporate strategy. Formerly ruthless, she has changed—but the instincts remain. Compartmentalizes deeply, but feels fiercely.",
+            "after": "Former high-level Dynacorp executive and master manipulator, whose journey begins as a smooth-talking, backstabbing corporate operative in the neon-lit sprawl of Night City. Initially defined by ruthless pragmatism, sharp wit, and a relentless drive for survival, Alex navigates a world of boardroom betrayals, digital espionage, and existential threats with a blend of tactical brilliance and sardonic humor. Over the course of the story, Alex is forced out of the corporate machine and into a fugitive’s life, hunted by her own employers and shadowy rivals alike. She adapts quickly, leveraging her skills in hacking, social engineering, and psychological warfare to stay one step ahead, all while assembling a found family of equally damaged allies.\n\nAs the narrative unfolds, Alex undergoes profound personal transformation—both literally and figuratively. She transitions to a new, feminine body and identity, embracing her true self while shedding the last vestiges of her corporate past. Her relationships deepen, especially with Emilia, revealing a capacity for vulnerability, loyalty, and genuine affection beneath her hardened exterior. Alex’s arc is defined by her struggle to reconcile her need for control with the inevitability of change, her fear of losing herself to the unknown (the Bridge, Nexus, digital immortality), and her determination to protect those she loves—even if it means trusting others with her fate. By the latest chapters, Alex is both the architect and the subject of radical new technologies, a leader who inspires messy, bratty solidarity, and a survivor who, despite everything, still dares to hope for happiness and connection in a world built to deny it."
+        }
+    }
+}

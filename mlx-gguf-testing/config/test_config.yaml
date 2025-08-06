@@ -1,0 +1,97 @@
+# MLX vs GGUF Testing Configuration
+
+# LM Studio API Settings
+lmstudio:
+  base_url: "http://localhost:1234"
+  timeout: 300  # 5 minutes for large models
+  retry_attempts: 3
+  retry_delay: 5
+  memory_cleanup_delay: 15  # seconds to wait after unload for GPU memory cleanup
+
+# Model Pairs for Testing (ordered by memory requirements)
+model_pairs:
+  # Scout first - most memory-sensitive model
+  - name: "Scout 17Bx16E"
+    gguf_id: "lmstudio-community/llama-4-scout-17b-16e-instruct"
+    mlx_id: "mlx-community/llama-4-scout-17b-16e-instruct"
+    context_size: 32768
+    test_scenarios: ["cold_start", "simple_gen", "context_stress", "memory_leak", "moe_specific"]
+    # Note: Scout GGUF requires clean memory state to load properly
+    skip_on_gpu_memory_error: true
+    
+  - name: "Llama 3.3 70B"
+    gguf_id: "llama-3.3-70b-instruct@q6_k"
+    mlx_id: "mlx-community/llama-3.3-70b-instruct"
+    context_size: 32768
+    test_scenarios: ["cold_start", "simple_gen", "context_stress", "memory_leak"]
+    
+  - name: "Mixtral 8x22B"
+    gguf_id: "maziyarpanahi/mixtral-8x22b-instruct-v0.1"
+    mlx_id: "mlx-community/mixtral-8x22b-instruct-v0.1"
+    context_size: 32768
+    test_scenarios: ["cold_start", "simple_gen", "context_stress", "memory_leak", "moe_specific"]
+
+# Test Scenarios
+test_scenarios:
+  cold_start:
+    description: "Measure memory and load time from cold start"
+    idle_time: 60  # seconds
+    
+  simple_gen:
+    description: "Simple generation with 200-word prompt"
+    max_tokens: 500
+    temperature: 0.7
+    
+  context_stress:
+    description: "Load 4000-token document and request summary"
+    max_tokens: 1000
+    temperature: 0.7
+    
+  memory_leak:
+    description: "Sequential prompts to detect memory leaks"
+    num_prompts: 10
+    delay_between: 5  # seconds
+    
+  moe_specific:
+    description: "Test different expert routing patterns"
+    prompt_types: ["math", "creative", "code", "factual"]
+
+# Metrics Collection
+metrics:
+  sampling_interval: 0.1  # 100ms
+  memory_tracking:
+    - "rss"     # Resident Set Size
+    - "vms"     # Virtual Memory Size
+    - "percent" # Memory percentage
+  cpu_tracking:
+    - "percent"
+    - "threads"
+  gpu_tracking:
+    enabled: true
+    command: "ioreg -l | grep IOGPUMetalCommandBufferStoragePool"
+
+# Test Prompts
+prompts:
+  simple: "Explain quantum entanglement in simple terms, using about 200 words."
+  
+  math: "Solve step by step: If a train travels 120km in 1.5 hours, what is its average speed? Then calculate how long it would take to travel 300km at that speed."
+  
+  creative: "Write a haiku about artificial intelligence, then explain your creative choices."
+  
+  code: |
+    Write a Python function to calculate fibonacci numbers efficiently using memoization. 
+    Include proper docstring and type hints.
+  
+  reasoning: "What are the pros and cons of remote work? Consider productivity, work-life balance, and team collaboration."
+  
+  memory_test: "List 20 different types of fruits, then categorize them by color, origin, and typical season."
+  
+  long_context: "long_context.txt"  # Will load from file
+
+# Output Settings
+output:
+  results_dir: "results"
+  timestamp_format: "%Y%m%d_%H%M%S"
+  save_raw_data: true
+  generate_plots: true
+  report_format: "markdown"

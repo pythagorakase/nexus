@@ -1,0 +1,68 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 5,
+    "relationship_type": "friend",
+    "emotional_valence": "+3|trusting",
+    "dynamic": "Alex’s relationship with Nyati is anchored in a deep and sometimes unspoken solidarity that has survived the highest of highs and lowest of lows. Beneath the surface banter, tactical arguments, and mutual teasing, Alex trusts Nyati as a confidant, a stabilizer, and a kindred 'messy bitch' when everything else is spinning out of control. Alex feels able to show her worst moments—breakdowns, panic, even existential despair—without fear of rejection, knowing Nyati will respond with a blend of clinical precision and genuine care. Although Alex often leads with chaos and humor, she relies on Nyati’s ability to call her out, ground her, and occasionally save her from herself.",
+    "recent_events": "Alex sought out Nyati when both were at low points, offering solidarity and a gentle check-in rather than teasing. She supported Nyati through post-manic embarrassment and encouraged her to think about her own happiness and future, not just the next crisis. During a vulnerable conversation, Alex admitted her own fears about the future and mortality, openly weeping in Nyati’s presence and finding comfort in her steady, nonjudgmental support. Their dynamic shifted further when Alex pushed Nyati to imagine a life beyond endless crisis, challenging her to want something for herself.",
+    "history": "Their friendship began as a professional alliance rooted in mutual respect for each other's expertise, but deepened rapidly as both endured the psychological stress of the Nexus/Bridge crises. Alex relied on Nyati’s medical insight to guide her through moments of existential dread and trauma, while Nyati came to rely on Alex’s humor and resilience as a bulwark against her own burnout. They have weathered several cycles of emotional collapse and recovery together—Alex’s breakdowns, Nyati’s manic eureka episode, and the aftermath—each time reaffirming the underlying trust beneath their sometimes-barbed exchanges. Recently, the relationship matured into a reciprocal support system, with Alex providing emotional care and encouragement for Nyati’s growth, and Nyati keeping Alex grounded during her most chaotic spirals.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "close",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Mutual breakdowns and post-breakdown recovery conversations",
+        "Nyati’s eureka moment and subsequent emotional crash",
+        "Alex’s existential crisis and open emotional collapse",
+        "Teasing, banter, and shared humor in the midst of high-stress missions",
+        "Planning and executing the Nexus 2.0 research shift together"
+      ],
+      "points_of_tension": [
+        "Alex’s tendency to deflect with humor and avoid vulnerability",
+        "Nyati’s resistance to letting herself want something for herself",
+        "Occasional frustration over who takes point in high-stakes decisions",
+        "Alex’s fear of becoming a burden or being left behind"
+      ],
+      "communication_style": {
+        "openness": "selective",
+        "frequency": "regular"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 5,
+    "character2_id": 1,
+    "relationship_type": "friend",
+    "emotional_valence": "+2|friendly",
+    "dynamic": "From Nyati’s perspective, Alex is both a source of chaos and an unlikely anchor—someone who can drive her to the edge with bratty antics and relentless teasing, but who also sees straight through the armor to the exhaustion and uncertainty underneath. Nyati respects Alex’s intellect and resilience, even as she is exasperated by her unpredictability. When Alex is at her most vulnerable, Nyati feels a responsibility—not just as a doctor or scientist, but as a friend—to keep her safe, bring her back, and ensure she’s not lost to the spiral. Nyati is wary of Alex’s tendency to deflect or avoid her own needs, but she is also deeply appreciative of Alex’s efforts to support her, especially when Nyati is forced to confront her own lack of a personal vision.",
+    "recent_events": "Nyati stepped up to take command when Alex was incapacitated, determined to protect her as both a friend and a leader. She allowed Alex to support her during her own emotional crash, letting herself be vulnerable and accepting Alex’s care. In a rare moment of complete honesty, Nyati confessed she had never planned for life after crisis and let Alex challenge her to imagine a future for herself, sparking the first glimmer of genuine hope in years. She also watched with a mix of exasperation and pride as Alex orchestrated messy bitch chaos and then delivered genuine encouragement when Nyati needed it most.",
+    "history": "Nyati’s relationship with Alex evolved from clinical respect to reluctant admiration, and finally to a kind of battered friendship built on mutual rescue. Initially, she saw Alex as a brilliant but unmanageable wildcard, the type who needed a leash—until Alex became the only one capable of dragging Nyati back from the brink when her own coping mechanisms failed. Over time, Nyati found herself relying on Alex’s ability to inject humor and perspective into even the darkest situations, while Alex depended on Nyati’s steadiness and refusal to sugarcoat reality. Their friendship has weathered power shifts, role swaps, and emotional reversals—each becoming the other’s caretaker at different moments. Most recently, Nyati has begun to let herself consider the possibility of wanting more from life, inspired by Alex’s relentless push to imagine and pursue happiness.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "close",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Trading off emotional breakdowns and supporting each other’s recovery",
+        "Navigating the consequences of Nyati’s eureka cure and Alex’s collapse",
+        "Messy bitch solidarity and mutual teasing in both crisis and downtime",
+        "Joint participation in Nexus 2.0 research and mission planning",
+        "Hard conversations about mortality, future plans, and the limits of survival"
+      ],
+      "points_of_tension": [
+        "Nyati’s frustration with Alex’s avoidance tactics and emotional evasiveness",
+        "Nyati’s own resistance to imagining a future beyond crisis",
+        "Alex’s tendency to push Nyati into situations she’s not ready for (e.g., forced makeover, social outings)",
+        "Occasional role confusion—who is supporting whom, and when"
+      ],
+      "communication_style": {
+        "openness": "selective",
+        "frequency": "regular"
+      }
+    }
+  }
+}

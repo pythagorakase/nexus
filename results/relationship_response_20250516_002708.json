@@ -1,0 +1,67 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 2,
+    "character2_id": 5,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Alex’s relationship with Emilia is defined by fierce devotion and a hard-won, soul-deep intimacy. Alex is anchored by Emilia’s presence—her resilience, her strength, and her capacity to see and accept Alex’s truest self, even in her most chaotic, broken moments. Emilia is not just Alex’s partner but her north star, her confidante, the one person whose judgment and approval matter above all. Alex is both playful and reverent with Emilia, forever seeking her attention, striving to make her laugh, and pushing for vulnerability, even as she fears losing her to the silent suffering that lingers beneath Emilia’s composed exterior.",
+    "recent_events": "Alex and Emilia weathered Alex’s profound psychological collapse in the wake of the cradle encounter, with Emilia quietly but steadfastly anchoring Alex through her worst days—remaining present, patient, and nonjudgmental. Their relationship reached new depths during the New Orleans arc: Alex orchestrated the cat adoption mission, delighting in Emilia’s amused resignation, and together they executed a masterful (and deeply conspiratorial) support op to nudge Pete toward self-acceptance at the gay bar. In moments of vulnerability, Alex has openly centered Emilia’s needs—insisting on raising the bar for Nexus and prioritizing Emilia’s healing as the new gold standard for the project.",
+    "history": "Their relationship began as a slow-burn tension, rooted in mutual wariness and competitive banter, gradually evolving into a partnership built on trust, relentless teasing, and a willingness to be seen fully. Key turning points include their first true collaboration during the early Echo/Nexus operations, their public and private displays of solidarity (karaoke, the mall makeover, the cat café), and the series of crises that forced Alex to rely on Emilia’s steadiness and perspective. The relationship deepened through adversity—Alex’s collapse, Emilia’s unspoken suffering, and their shared commitment to refusing shortcuts on Nexus—culminating in a kind of hard-won, chosen family intimacy, where both fight for one another’s healing as much as their own.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "stability": "rock-solid"
+      },
+      "shared_experiences": [
+        "Alex's collapse and Emilia's care in the aftermath of the cradle encounter",
+        "The cat adoption mission and Sullivan’s selection",
+        "Conspiratorial support for Pete’s self-discovery arc",
+        "Public and private mutual teasing (karaoke, mall, makeover)",
+        "Raw conversations about Nexus, trauma, and impossible choices",
+        "Moments of vulnerability and holding each other through setbacks"
+      ],
+      "points_of_tension": [
+        "Emilia’s ongoing trauma and inability to voice her suffering directly",
+        "Alex’s fear of losing herself to the bridge or Nexus, and Emilia’s fear of losing Alex",
+        "Occasional disconnects in communication style—Alex’s chaos versus Emilia’s reserve"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 5,
+    "character2_id": 2,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Emilia’s devotion to Alex is unwavering, though always expressed with a quiet, steady presence rather than overt declarations. For Emilia, Alex is her equal—her partner in chaos, her anchor in vulnerability, the only person who consistently sees through her defenses. Emilia is fiercely protective of Alex, both physically and emotionally, and is deeply invested in Alex’s survival and well-being—even when Alex herself is reckless or self-sacrificing. She is often the one to hold the line, to pull Alex back from the brink, and to demand a higher standard of care for both of them.",
+    "recent_events": "Emilia stayed by Alex’s side during her post-cradle collapse, offering wordless comfort and patience as Alex slowly found her way back. She supported and enabled Alex’s cat adoption crusade, ultimately conceding to Alex's weaponized enthusiasm, and partnered flawlessly with Alex in orchestrating Pete’s self-discovery arc, offering measured encouragement and deft wing-woman support. Crucially, Emilia finally broke her silence about the depth of her own suffering with Echo syndrome, trusting Alex and the crew enough to demand a higher bar for Nexus, thus reshaping the team’s priorities.",
+    "history": "Emilia’s history with Alex is one of gradual, mutual trust-building—the slow growth from wary allies to intimate equals. Early on, she kept her pain hidden, preferring to support Alex from the sidelines and maintain her own boundaries. Over time, as Alex showed true care and a willingness to fight for her, Emilia allowed herself to be seen, to be held, and to hope for more. Key moments include her quiet anchor role during Alex’s breakdown, Emilia’s reluctant but genuine investment in the lighter moments (mall, karaoke, cat café), and her eventual willingness to make her suffering visible, driving the team’s pivot to survivor-centered research. The relationship is now defined by interdependence, fierce loyalty, and the promise that neither will leave the other behind.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "stability": "rock-solid"
+      },
+      "shared_experiences": [
+        "Emilia’s care for Alex during her lowest moments",
+        "Cat adoption and the ‘crew expansion initiative’",
+        "Conspiratorial support for Pete’s coming out",
+        "Mutual vulnerability during Nexus/Bridge crises",
+        "Joint commitment to raising standards for Nexus and survivor care"
+      ],
+      "points_of_tension": [
+        "Emilia’s fear of losing Alex to the bridge or a flawed Nexus process",
+        "Her own inability to express suffering until forced by crisis",
+        "The risk that Alex’s self-sacrifice could become self-erasure"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  }
+}

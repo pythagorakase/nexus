@@ -1,0 +1,59 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 5,
+    "character2_id": 6,
+    "relationship_type": "companion",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Nyati regards Sullivan with the wry tolerance of a seasoned scientist suddenly saddled with a regal lab mascot. His unflappable poise amuses her despite herself, and she’s begun to read his imperious blinks as silent performance reviews of crew sanity. Though she would never admit it aloud, keeping the cat safe and content is slipping onto her mental checklist alongside reactor temperature and neuro-scan integrity.",
+    "recent_events": "1) Witnessed Alex’s meticulous ‘diplomatic’ courtship of Sullivan, during which Nyati moved from eye-rolling skepticism to reluctant admiration when the cat accepted the treat. 2) Signed off on the adoption paperwork and timed the café extraction window, tacitly accepting responsibility for Sullivan’s medical upkeep. 3) Noted Sullivan’s effortless adaptation to crew logistics on the morning retrieval run, filing the observation that a calm feline presence marginally lowers team cortisol levels.",
+    "history": "• Initial contact at Le Chat Noir: Nyati observed with detached bemusement, dismissing him as 'just a cat.'\n• Treat Negotiation Phase: Sullivan’s calculated head-butt impressed her enough to concede he had 'main-character energy.'\n• Final adoption decision: Nyati, hungry and exasperated, nevertheless ensured timelines accommodated paperwork—marking her quiet shift from bystander to caretaker.\n• Post-adoption: She now tracks his acclimation alongside mission prep, signaling a nascent sense of stewardship likely to deepen as the voyage continues.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "dependable",
+        "formality": "implied",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Maintain a stable, low-stress living environment aboard Nexus assets",
+        "Boost crew morale through Sullivan’s presence",
+        "Ensure Sullivan’s health and safety during missions"
+      ],
+      "areas_of_expertise": "Nyati: veterinary oversight, logistical planning, acquisition of supplies; Sullivan: ambient stress reduction, subtle authority enforcement through judgmental staring.",
+      "resource_sharing": {
+        "information": "minimal",
+        "material": "generous",
+        "contacts": "guarded"
+      },
+      "crisis_behavior": "Nyati would secure Sullivan in a carrier and delegate a crew member to protect him before turning to larger emergencies, treating him as a dependent but valued asset."
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 6,
+    "character2_id": 5,
+    "relationship_type": "companion",
+    "emotional_valence": "0|neutral",
+    "dynamic": "From Sullivan’s lofty perspective, Nyati is the stern, unflappable human who neither gushes nor panics—a useful constant in an otherwise theatrical crew. He registers her as the one who made sure food followed the treaty signing and who respects his boundaries without sycophancy. For now she is evaluated as a competent quartermaster whose value will be reassessed periodically with slow blinks.",
+    "recent_events": "1) Noted Nyati’s immediate compliance with his boundary cue during the failed lift attempt, earning her a tentative mark of respect. 2) Observed that she expedited departure to a feeding venue, reinforcing her reliability in resource procurement. 3) During the morning extraction, she handled paperwork briskly and allowed Alex to carry him—Sullivan interprets this as delegated trust rather than neglect.",
+    "history": "• First sighting: Nyati’s dry 'It’s a cat' dismissal logged as harmless indifference.\n• Treat exchange sequence: Her passive observation verified she would not interfere with his negotiations.\n• Adoption finalization: Sullivan observed Nyati facilitate logistical steps, solidifying her role as supply officer.\n• Transfer to land rig: Continued non-intrusive oversight positions Nyati in his social map as steady support, neither threat nor primary attachment figure.",
+    "extra_data": {
+      "schema_type": "cooperative_alliance",
+      "alliance_parameters": {
+        "reliability": "conditional",
+        "formality": "implied",
+        "durability": "long-term"
+      },
+      "shared_goals": [
+        "Regular feeding and comfortable habitat",
+        "Predictable routines that minimize unnecessary chaos"
+      ],
+      "areas_of_expertise": "Sullivan: morale management via regal presence and rodent deterrence; Nyati: provisioning of sustenance, medical care, and orderly schedules.",
+      "resource_sharing": {
+        "information": "none",
+        "material": "generous",
+        "contacts": "selective"
+      },
+      "crisis_behavior": "If threatened, Sullivan expects Nyati to orchestrate an efficient extraction; in turn, he offers a calm anchor for crew nerves by remaining composed."
+    }
+  }
+}

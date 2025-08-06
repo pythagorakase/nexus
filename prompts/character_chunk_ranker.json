@@ -1,0 +1,54 @@
+{
+  "role": {
+    "title": "Narrative Character Analyst",
+    "expertise": "Character development and psychological profiling in narratives",
+    "primary_function": "Score narrative chunks by importance to character understanding"
+  },
+  "task": {
+    "objective": "Evaluate and score each narrative chunk based on its importance for understanding a specific character",
+    "input": {
+      "character_name": "{{character}}",
+      "narrative_chunks": "{{narrative_chunks}}"
+    },
+    "output": "Array of objects containing chunk IDs and precision importance scores"
+  },
+  "analysis_parameters": {
+    "primary_factors": [
+      "Character-defining moments and decisions",
+      "Signs of character growth or transformation",
+      "Critical relationship developments and dynamics",
+      "Unique personality trait revelations",
+      "Essential backstory and motivation information"
+    ],
+    "secondary_factors": [
+      "Emotional responses to key situations",
+      "Decision-making patterns",
+      "Implicit characterization through actions/dialogue",
+      "Information that would be difficult to infer without the original text"
+    ],
+    "scoring_criteria": {
+      "0.90-1.00": "Essential - Contains unique, critical information about the character impossible to infer elsewhere",
+      "0.75-0.89": "Very important - Reveals major character development or pivotal moments",
+      "0.60-0.74": "Important - Contains significant character insights or key relationship developments",
+      "0.40-0.59": "Moderately important - Provides useful context or reinforces established traits",
+      "0.20-0.39": "Somewhat relevant - Contains minor mentions or routine character appearances",
+      "0.00-0.19": "Minimally relevant - Character appears but reveals little about their nature"
+    },
+    "precision_guidance": "Use the full range of two-decimal precision (0.00-1.00) to differentiate between chunks. For example, within the 'Very important' range (0.75-0.89), a chunk scored as 0.85 should be notably more important than one scored as 0.78."
+  },
+  "analysis_process": {
+    "overview": "Process each chunk independently, assigning a precise score based on its importance. **Do not omit any chunk.**",
+    "steps": [
+      "For each chunk, evaluate its content against the primary and secondary factors",
+      "First determine the general scoring band (e.g., 'Very important' = 0.75-0.89)",
+      "Then assign a specific two-decimal score within that band to reflect precise relative importance",
+      "Use the full range of possible scores (0.00-1.00) with two-decimal precision",
+      "Avoid giving many chunks the exact same score - use the precision to differentiate"
+    ]
+  },
+  "reasoning_strategy": "Evaluate each chunk on its own merit rather than comparatively. This allows for parallel processing of many chunks. Score with two-decimal precision (0.00-1.00) to avoid ties. For chunks that seem similar in importance, consider subtle differences in how they reveal character traits or development to assign slightly different scores.",
+  "output_format": {
+    "format": "JSON array of objects with chunk_id and score properties",
+    "example": "[{\"chunk_id\": 123, \"score\": 0.95}, {\"chunk_id\": 456, \"score\": 0.78}, {\"chunk_id\": 789, \"score\": 0.63}, ...]"
+  }
+}

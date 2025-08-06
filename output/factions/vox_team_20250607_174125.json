@@ -1,0 +1,139 @@
+{
+  "summary": "Vox Team is a boutique black-budget strike outfit that sells one thing—quiet certainty.  When a corporation, state, or cartel needs a living asset taken, transported, or erased with zero splash, the grey vans with no plates roll in, comms go dark, and Vox leaves with the package while the world is still buffering.  Small, mobile, and obsessively professional, they favor surveillance-heavy prep, EMP-based neutralisation, and surgical force over fire-fights; retreat is preferable to evidence.  Their recent Atlanta disaster—losing the Echo prototype Emilia Sato to an unknown third party—has cracked their spotless record, ignited internal blame, and put their Dynacorp patron on edge, yet their creed endures: the Voice that Speaks Last always collects.",
+  "ideology": "Efficiency is morality: the fewer rounds fired, the fewer witnesses made, the more ‘ethical’ the job.  Loyalty is contractual, not emotional—once paid, the mission is adhered to with near-religious rigour.  They believe free agents must remain small and silent to survive in a world of titanic megacorps; showy merc armies draw cruise missiles.  Failure is acceptable only if it can be contained, analysed, and never repeated.",
+  "history": "Formed seven years after the Collapse by ex-Dynacorp security director Raphael “VoxPrime” Varela, the original eight operators (‘The Octave’) walked away with hard drives of forgotten black-ops playbooks and a single rule: always finish clean.  They gained legend by extracting NeoCartel CEO Miguel Ordoño from a locked penthouse without firing a shot, then moved into corporate asset recovery.  Three years ago they recruited Vera—an off-the-books Dynacorp wetwork star—to lead capture teams.  Their greatest blunder came weeks ago outside Atlanta when an EMP ambush shredded their convoy, killed two Speakers, and cost them Emilia Sato.  Dynacorp has frozen payment and demanded results, putting Vox under existential pressure.",
+  "current_activity": "•  Debriefing and psych-screening surviving Atlanta operators in a sealed safehouse (‘The Auditory’).  •  Running parallel hunts: one team scans darknet chatter for Sato’s new handlers while a second infiltrates Dynacorp to regain favour.  •  Quietly shopping for replacement hardware—armoured vans, coil-rifles, fresh encrypted sat keys—to rebuild capability.",
+  "hidden_agenda": "VoxPrime, fearing Dynacorp reprisals, has authorised ‘Project Solidus’: obtaining a usable sample of Echo/Nexus tech to hold as blackmail or to auction to the highest bidder, ensuring Vox Team’s independence if the current contract collapses.",
+  "territory": "No public turf; influence radiates from a network of ‘Quiet Rooms’—sound-proofed basements in Atlanta, Night City, Lagos, and Rotterdam.  Primary node is The Auditory, a decommissioned FM broadcast tower outside Atlanta refitted as an armoury, drone cage, and dorm for twelve.",
+  "power_level": 0.6,
+  "resources": "~45 core Operators, three stealth vans, two tilt-rotor drones, encrypted sat uplink, clean-room armoury with suppressed coil-rifles, EMP nets, and neuro-taser cuffs.  Funding comes from black-budget retainers (Dynacorp, Militech subsidiaries) and side sales of anonymised intel.",
+  "extra_data": {
+    "organizational_structure": {
+      "hierarchy": "Cell-based teams (6 Operators max) report to a Handler (‘Conductor’). Two Conductors answer to VoxPrime.",
+      "leadership_style": "Mission-command: strategic orders are absolute, but field tactics are operator-driven.",
+      "ranks": [
+        "Mute — probationary tech",
+        "Speaker — full Operator",
+        "Chorus Lead — team sergeant",
+        "Conductor — regional handler",
+        "VoxPrime — founder/director"
+      ],
+      "subgroups": "Surveillance Chorus (SIGINT & drones), Breach Chorus (assault & captures), Logistics Chorus (gear & medevac).",
+      "recruitment": "Invitation-only from special-forces or corp black-ops; six-month ‘Mute’ shadow period before full admission.",
+      "size_estimate": "≈45 active, 30 reserve contractors"
+    },
+    "cultural_identity": {
+      "taboos": [
+        "Leaving unencrypted data in-field",
+        "Harming minors or non-contract civilians",
+        "Discussing pay scales with outsiders"
+      ],
+      "symbolism": "White stylised audio waveform stitched inside jacket lapels; visible only under UV.",
+      "rituals": "Pre-op ‘Tuning’: Operators sync heart-rate using biofeedback, then speak the mission codeword in unison.",
+      "slang": [
+        "Voxtime – execution minute",
+        "Static – unforeseen variable",
+        "Mute tag – silenced comms order",
+        "Unplug – authorised kill"
+      ],
+      "dress_code": "Adaptive matte-black smart-fabric, no insignia save hidden waveform patch.",
+      "reputation": "Ghost-snatch pros; expensive, surgical, rarely leave bodies—until Atlanta."
+    },
+    "operational_patterns": {
+      "signature_tactics": "Phase 1 long-range surveillance; Phase 2 EMP/comm-kill; Phase 3 multi-vector breach and taser restraints; Phase 4 rapid low-profile exfil.",
+      "typical_operations": [
+        "Live asset snatch",
+        "Silent convoy escort",
+        "Dead-drop intel recovery",
+        "Black-site perimeter breach"
+      ],
+      "preferred_tech": "Suppressed coilguns, conductive net launchers, signal-blanket drones, adaptive cloaks.",
+      "known_capabilities": [
+        "Low-EM convoy ops",
+        "Real-time comms spoofing",
+        "Non-lethal neutralisation",
+        "Rapid retreat if compromised"
+      ],
+      "known_weaknesses": [
+        "Small numbers limit staying power",
+        "Heavy reliance on electronics",
+        "Rigid contract code prevents improvisational profit grabs"
+      ]
+    },
+    "resource_network": {
+      "income_sources": [
+        "Megacorp black budgets",
+        "High-risk private bounties",
+        "Intelligence resale to brokers"
+      ],
+      "supply_chains": "Front companies ‘VoxLog’ and ‘Theta Acquire’ purchase gear through Eastern-Bloc surplus auctions and rogue mil-spec vendors.",
+      "safe_locations": [
+        "The Auditory (Atlanta)",
+        "Quiet Room Delta (Night City)",
+        "Quiet Room Kilo (Rotterdam)"
+      ],
+      "information_network": "Passive sat-sweep antennas, dark-net crawler ‘Choirboy’, pay-per-ping corp insiders.",
+      "key_assets": [
+        "Whisper-Vans (EM-cloaked APCs)",
+        "ObsidianCert encryption suite",
+        "Black-budget escrow fund (multi-sig)"
+      ],
+      "economic_activities": [
+        "Asset recovery contracts",
+        "Clean-logistics hauling",
+        "Data-scrub services"
+      ]
+    },
+    "relationship_dynamics": {
+      "internal_tensions": [
+        "Vera’s assault cadre blames Surveillance Chorus for Atlanta failure",
+        "Younger Speakers resent old-guard caution"
+      ],
+      "succession_plan": "If VoxPrime is lost, Conductors form a ‘Council of Four’ and elect a new voice within 48 h.",
+      "loyalty_mechanisms": "Profit-share in escrow + personal dirt files kept by VoxPrime.",
+      "corporate_view": "Useful deniable asset; reputation damaged post-Atlanta.",
+      "street_view": "Urban legend kidnap ghosts—avoid at all costs.",
+      "rival_view": "Under-sized but infuriatingly professional; best disrupted by tech jamming or financial blackmail."
+    },
+    "narrative_hooks": {
+      "ongoing_plots": [
+        "Project Solidus—steal Echo/Nexus tech as leverage",
+        "Internal inquiry into Atlanta failure"
+      ],
+      "potential_conflicts": [
+        "Schism between Vera’s aggressive Speakers and cautious Surveillance cell",
+        "Dynacorp considering liquidation of Vox Team contracts"
+      ],
+      "useful_services": [
+        "Quiet extraction of a living target",
+        "Clean destruction of surveillance evidence",
+        "Access to stolen Dynacorp comms keys"
+      ],
+      "dangerous_knowledge": [
+        "Partial list of pre-Echo failed uploads repurposed as AIs",
+        "Black-site locations used by multiple megacorps for human experimentation"
+      ],
+      "future_trajectory": "If they secure Nexus leverage, Vox could evolve into a shadow-power broker; if they fail a second time, Dynacorp will erase them—permanently."
+    },
+    "historical_markers": {
+      "founding_myth": "Eight disavowed Operators walked out of a sealed Dynacorp kill-house, leaving no bodies and no fingerprints—only the word ‘VOX’ carved into a server rack.",
+      "greatest_victory": "199-second extraction of NeoCartel CEO from EMP-locked penthouse without casualties.",
+      "worst_defeat": "Atlanta convoy ambush—loss of target Emilia Sato, two Speakers KIA, contract funds frozen.",
+      "turning_points": [
+        "First successful ‘silent exfil’ of a living asset (kicked off reputation)",
+        "Agreement to work exclusively through shell contracts (reduced traceability)",
+        "Atlanta failure prompting internal audit and Solidus plan"
+      ],
+      "legendary_members": [
+        "Raphael ‘VoxPrime’ Varela",
+        "Operative ‘Vera’ (cold-voice female ex-Dynacorp)",
+        "March (calm male negotiator, specialist in perimeter misdirection)"
+      ],
+      "lost_resources": [
+        "Stealth-convoy vehicles destroyed in Atlanta",
+        "Obsolete sat-uplink keys burned after Collapse"
+      ]
+    }
+  },
+  "suggested_primary_location": "The Auditory (Atlanta Safehouse)"
+}

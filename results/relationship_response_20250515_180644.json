@@ -1,0 +1,74 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 3,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Alex’s relationship with Emilia is defined by profound, hard-won intimacy, a devotion that has grown through trauma, vulnerability, and mutual rescue. She is deeply, sometimes desperately, in love—willing to put Emilia’s needs at the center of her own life, to fight for her healing, and to sacrifice her own ambitions or even her life to keep Emilia from suffering further. The dynamic is layered with both playfulness and raw openness: Alex teases, flirts, and challenges Emilia, but also clings to her as an anchor through existential fear and emotional collapse. Beneath the bravado and relentless humor, Alex harbors a persistent fear of losing Emilia—either to the scars of the past or to her own mistakes—and her devotion is shot through with awe, protectiveness, and a desperate hope for a shared future.",
+    "recent_events": "After a period of emotional collapse and recovery, Alex recommitted to centering Emilia in her life and in the Nexus project, vowing not to proceed unless the process could be improved for Emilia and others. She confessed her love—raw and trembling—twice, and has set explicit boundaries that place her future in Emilia’s hands if Nexus threatens her identity. Together, they have navigated the pain of Emilia’s lingering Echo Syndrome, with Alex pledging to pursue every possible cure. Their bond has deepened through shared vulnerability: from heavy, teary conversations to playful banter, to moments of physical and emotional comfort where Alex simply holds Emilia, present and unguarded.",
+    "history": "Alex and Emilia’s relationship began as a cautious partnership, slow-burning with mutual respect and unspoken attraction. Early trust was hard-won, built through shared trauma and the slow, incremental lowering of walls. The turning point came when Alex rescued Emilia from the Echo transport convoy, and later when she centered Emilia’s suffering as the new core objective for Nexus. Their intimacy grew through moments of emotional collapse, mutual caretaking, and a series of confessions—Alex’s first, then Emilia’s willingness to try to let Alex in, even when she couldn’t say the words. The relationship has weathered moments of insecurity, fear, and the existential threat of the Bridge, but each crisis has ultimately drawn them closer: Alex’s playful, bratty chaos is now balanced by sincere, explicit devotion, and a growing ability to be still and present for Emilia’s needs.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "history_length": "years",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Rescuing Emilia from the Echo transport",
+        "Enduring the existential threat of the Bridge together",
+        "Confessions of love and promises to be each other's anchor",
+        "Navigating the aftermath of emotional breakdowns and recovery",
+        "Playful, bratty banter and private moments of physical intimacy",
+        "Planning a future together, from the sea-cottage fantasy to adopting a cat"
+      ],
+      "points_of_tension": [
+        "Emilia’s difficulty saying 'I love you' and Alex’s longing for the words",
+        "Alex’s fear of losing herself to Nexus and the Bridge",
+        "The risk of Nexus causing irreparable harm to Alex’s identity",
+        "Emilia’s struggle to heal from Echo Syndrome and feel whole in her body",
+        "Alex’s tendency to deflect pain with humor, risking emotional distance"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 3,
+    "character2_id": 1,
+    "relationship_type": "romantic",
+    "emotional_valence": "+5|devoted",
+    "dynamic": "Emilia’s relationship with Alex is marked by fierce, sometimes wordless devotion—a love that is both terrifying and sustaining. She is Alex’s anchor, her protector, the person who both challenges and grounds her. Emilia struggles to verbalize her love, haunted by the trauma of her own body’s loss and the persistent pain of Echo Syndrome; yet, in action and presence, she proves her commitment again and again. She is wary of losing Alex—to Nexus, to the Bridge, or to self-sacrifice—but she stays, fights for her, and is learning to let Alex in fully. Emilia’s devotion is quieter but no less deep: she stays by Alex through breakdowns, holds her through pain, and, even when afraid, chooses not to run.",
+    "recent_events": "Emilia remained by Alex’s side through her emotional collapse and recovery, becoming her confidant and caretaker. She finally let herself be held, dropped her walls, and began to let Alex see the depth of her own pain and fear. Despite her struggle to say 'I love you,' she acknowledged it through action: staying when Alex needed her, promising to fight to pull her back if Nexus harmed her, and admitting her own terror at the prospect of losing Alex. Their bond deepened during the Nexus testing, where Emilia insisted on being present and Alex made her the fail-safe. Afterward, Emilia allowed herself to rest in Alex’s arms, trusting her more than ever.",
+    "history": "Emilia and Alex’s relationship grew from professional necessity to a deep, intimate partnership. Early on, Emilia kept her distance, afraid of being seen, afraid of being a burden, and terrified of what Echo Syndrome had done to her sense of self. Over time, Alex became her anchor—first through acts of rescue, then through steady, persistent presence. The shift from guardedness to vulnerability was gradual: Emilia let Alex in, piece by piece, culminating in moments where she allowed Alex to hold her completely, to see her pain and her unspoken love. When Alex confessed her devotion, Emilia struggled to echo the words, but stayed, promising to try. Their intimacy now rests on a foundation of shared survival, mutual care, and the ongoing, imperfect project of building a future together, one that refuses to leave either behind.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "intimate",
+        "history_length": "years",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Being rescued by Alex from the Echo convoy and joining her found family",
+        "Facing down Echo Syndrome, and trusting Alex to make her suffering the center of Nexus research",
+        "Moments of emotional collapse and mutual caretaking",
+        "Alex’s confessions of love and Emilia’s struggle to respond in kind",
+        "Physical intimacy as a form of communication and reassurance",
+        "The unspoken promise to not leave each other behind, even if crossing becomes inevitable"
+      ],
+      "points_of_tension": [
+        "Emilia’s fear of losing herself—or Alex—to Nexus or the Bridge",
+        "Her inability to say 'I love you' even when she feels it deeply",
+        "The pain of not knowing what she lost in the transfer, and her fear that Alex cannot truly understand",
+        "The risk that her suffering will drive Alex away, or that she will be left behind",
+        "Her resistance to letting her guard down, and the ongoing, slow process of healing"
+      ],
+      "communication_style": {
+        "openness": "selective",
+        "frequency": "constant"
+      }
+    }
+  }
+}

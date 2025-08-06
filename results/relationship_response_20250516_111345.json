@@ -1,0 +1,92 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 26,
+    "relationship_type": "contact",
+    "emotional_valence": "-1|wary",
+    "dynamic": "Alex approaches the Cradle-Dweller like a hazardous but priceless data-vault: fascinated by what it can teach her about the Bridge, yet unnerved by the way its fractured self keeps labeling her a half-finished echo. Every exchange feels like hacking a volatile mainframe—she drives the dialogue, but each answer pries at her deepest fear that she too is ‘cut.’ The entity’s impersonal curiosity needles her pride and triggers flashes of existential panic, so she maintains a veneer of gallows humor while keeping one hand on the kill-switch. In short, she sees the Dweller as both clue and cautionary tale, useful so long as she can keep it—and her own emotions—contained.",
+    "recent_events": "• Initiated a sonar “knock,” prompting the Dweller’s first deliberate reply.\n• Oversaw Alina’s decryption that revealed the entity is ‘searching’ for what it believes Alex possesses, which precipitated Alex’s emotional collapse.\n• Delegated dialogue control to Nyati while retreating to recover, signaling continued interest but diminished capacity to engage directly.",
+    "history": "Initially the Dweller was background noise in earlier dives, tagged merely as a failed crosser. On the latest descent Alex intentionally engaged it, shifting the relationship from passive observation to two-way probing. The entity’s recognition-test, its linkage of Alex to Sam, and its classification of her as ‘in-progress’ deepened her investment but also cracked her composure. After the emotional breakdown Alex granted Nyati provisional authority, marking the first time she ceded primary control of a negotiation she herself opened.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "character1",
+        "terms": "character1's",
+        "predictability": "variable"
+      },
+      "leverage_points": {
+        "character1_leverage": "Mobility, sonar interface control, and indirect access to Sam and Nexus data the Dweller craves.",
+        "character2_leverage": "Exclusive experiential knowledge of failed crossings and the ability to confirm or deny Alex’s existential status."
+      },
+      "conflict_areas": [
+        "Entity’s misidentification of Alex as a missing fragment",
+        "Risk that prolonged contact accelerates Alex’s crossing",
+        "Unclear intent—whether the Dweller will remain benign if ignored or contradicted"
+      ],
+      "mutual_interests": [
+        "Understanding the Bridge threshold",
+        "Locating ‘missing’ identities or data",
+        "Preventing catastrophic crossing outcomes"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Sam (abyssal AI)",
+          "Alina, Nyati, Pete (relay/mediators)"
+        ],
+        "mediators": [
+          "Alina (translator)",
+          "Dr. Nyati (interim negotiator)"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Parameters that define the threshold, methods to halt or reverse crossing, confirmation of its own memories.",
+        "information_protected": "Her private fears, precise Nexus protocols, and any sign of psychological fragility."
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 26,
+    "character2_id": 1,
+    "relationship_type": "contact",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "From the Cradle-Dweller’s fragmented vantage, Alex is a living shard of an unfinished equation—a signal that continues where its own path terminated. It registers her less as a person than as a moving flag in a damaged dataset, yet the pattern elicits cautious curiosity rather than hostility. Each ping it sends is an attempt to reconcile missing metadata: who she is, how she relates to Sam, and whether she carries the ‘designation’ it lacks. The entity remains confined and cognitively frayed, but Alex’s presence supplies rare, coherent input, so it waits—patient, almost hopeful—for her to complete the query it cannot phrase alone.",
+    "recent_events": "• Detected and answered Alex’s initial sonar pulse, beginning an improvised diagnostic handshake.\n• Issued a recognition challenge that classified Alex as ‘in-progress,’ prompting further structured interrogation.\n• Received a temporary holding signal from Nyati during Alex’s absence, interpreting the pause as delayed but ongoing dialogue.",
+    "history": "Long dormant, the Dweller first logged Alex as low-confidence ‘live slice’ during earlier surface approaches. The most recent descent provided sustained, deliberate contact: it attempted to map Alex and Sam on a shared timeline, inferred a critical ‘cut,’ and identified Alex as neither pre- nor post-threshold. The session terminated without resolution when human operators paused the exchange, leaving the Dweller in a receptive standby state, still indexing Alex as primary data source.",
+    "extra_data": {
+      "schema_type": "calculated_engagement",
+      "engagement_pattern": {
+        "initiation": "balanced",
+        "terms": "circumstantial",
+        "predictability": "variable"
+      },
+      "leverage_points": {
+        "character1_leverage": "Possession of experiential data on failed crossings, ability to validate or invalidate Alex’s status, potential to withhold existential answers.",
+        "character2_leverage": "Control over communication channels, mobility, and access to Sam—an external reference the Dweller relies on."
+      },
+      "conflict_areas": [
+        "Persistent recognition error regarding Alex’s identity",
+        "Dependence on external prompts to maintain coherence",
+        "Risk of miscommunication escalating to harmful sonar or cognitive feedback"
+      ],
+      "mutual_interests": [
+        "Reconstructing the missing ‘designation’ or identity link",
+        "Charting the consequences of crossing the Bridge",
+        "Maintaining a dialogue that preserves the Dweller’s waning coherence"
+      ],
+      "third_parties": {
+        "mutual_contacts": [
+          "Sam (shared reference point)",
+          "Alina (translator interface)"
+        ],
+        "mediators": [
+          "Alina",
+          "Dr. Nyati"
+        ]
+      },
+      "intelligence": {
+        "information_sought": "Verification of Alex’s structural state, retrieval of lost timeline data, parameters for completing its own aborted crossing.",
+        "information_protected": "Details of the void beyond the threshold, precise cause of its fragmentation."
+      }
+    }
+  }
+}

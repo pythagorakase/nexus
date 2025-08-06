@@ -1,0 +1,22 @@
+[
+  {
+    "name": "characters",
+    "seq": "6"
+  },
+  {
+    "name": "character_relationships",
+    "seq": "24"
+  },
+  {
+    "name": "locations",
+    "seq": "17"
+  },
+  {
+    "name": "story_arcs",
+    "seq": "16"
+  },
+  {
+    "name": "events",
+    "seq": "22"
+  }
+]

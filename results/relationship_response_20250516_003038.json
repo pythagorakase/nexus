@@ -1,0 +1,84 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 11,
+    "relationship_type": "complex",
+    "emotional_valence": "-1|wary",
+    "dynamic": "Alex regards Victor Sato like a live grenade: invaluable for the secrets he carries, but lethal if mishandled. Their bond is a tangle of old corporate hierarchy, fresh betrayal, and a grudging recognition that each still needs the other to survive the Echo fallout. Alex keeps him at arm’s length—studying, baiting, and framing him—while quietly acknowledging that his knowledge could unlock the next stage of Nexus. Suspicion rules the day, but the door to collaboration is not completely shut.",
+    "recent_events": "1) Alex cracked Sato’s hidden safe-house vault, looting 7.2 M scrip and lifting his farewell shard that urged her to ‘find the host.’ 2) She successfully framed Sato for a Halcyon breach, forcing him into exile and proving he could be manipulated from afar. 3) The holographic confession in which Sato admitted he meant to use her—yet never planned to kill her—reframed him from mortal enemy to morally ambiguous resource.",
+    "history": "• Initial Phase – Authority: Sato recruits Alex at the Skyline Lounge, dangling promotion in exchange for Dr. Voss’s extraction.\n• Escalation – Betrayal & Survival: Sniper attack and off-the-books danger convince Alex that Sato may be setting her up; she begins covertly monitoring and ultimately framing him.\n• Counterstroke – Frame Job & Disappearance: Alex forges evidence tying Sato to a cyber-attack, triggering his fall from Dynacorp and pushing him underground.\n• Revelation – Vault & Message: Theft of Sato’s personal vault exposes Project Echo’s depth and Sato’s nuanced motives, shifting Alex’s stance from outright hostility to strategic wariness.\n• Current State – Uneasy Parity: With Sato in exile and Alex in possession of his assets, they watch each other through layers of proxies—each aware the other could still tip the balance of the Echo war.",
+    "extra_data": {
+      "schema_type": "liminal_relationship",
+      "impressions": {
+        "first_impression": "Charismatic apex executive—dangerous but useful mentor figure.",
+        "current_assessment": "A cornered kingpin whose knowledge is priceless but whose loyalties are fluid.",
+        "points_of_interest": [
+          "His insider knowledge of Project Echo and the unidentified host",
+          "His hidden financial reserves and off-grid networks",
+          "His capacity for both ruthless betrayal and surprising candor"
+        ]
+      },
+      "interaction_history": {
+        "contexts": [
+          "Boardroom/sky-bar briefing",
+          "Remote assassination fallout",
+          "Digital cat-and-mouse framing ops",
+          "Vault break-in and holographic confession"
+        ],
+        "quality": "mixed"
+      },
+      "potential_directions": [
+        "Forge a cautious information-sharing pact",
+        "Total severance if Sato crosses her again",
+        "Mutual destruction should their goals collide"
+      ],
+      "information_gaps": [
+        "Full extent of Sato’s shadow-broker network",
+        "True identity and location of the Echo host",
+        "Whether Sato seeks redemption or renewed domination"
+      ],
+      "intuition_notes": "Alex senses that Sato’s paternal streak and ego could be exploited, but also knows he may anchor a larger, unseen conspiracy."
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 11,
+    "character2_id": 1,
+    "relationship_type": "complex",
+    "emotional_valence": "+1|favorable",
+    "dynamic": "Victor Sato views Alex as the sharpest blade he ever forged—one that turned in his hand yet still reflects his own brilliance. From exile he watches her ascend with a mixture of bruised pride, strategic admiration, and cautious hope that their interests might realign. He no longer assumes control over her, but he believes their combined cunning could still resurrect Echo on their terms. Under the cool calculation lies a sliver of paternal protectiveness he would never admit aloud.",
+    "recent_events": "1) Sato’s safe-house breach proved Alex can outwit him, reinforcing his respect for her capabilities. 2) His holographic shard delivered an honest confession and plea—trusting that revealing the ‘host’ lead would entice Alex back into dialogue. 3) Learning that Alex framed him for the Halcyon breach forced him to reassess her as both rival and necessary partner.",
+    "history": "• Grooming Phase – Authority: Sato hand-picks Alex for the Voss extraction, seeing in her the perfect covert operative to further Echo’s theft.\n• Shock Phase – Betrayal: The sniper fiasco and data heist reveal Alex’s capacity for independent play; she absconds with BLACKOUT intel, upending his plan.\n• Fallout Phase – Framed & Fleeing: Alex’s counterfeit logs paint Sato as the mole, compelling him to abandon Dynacorp and operate from the shadows.\n• Reflection Phase – Exile Insights: While hiding aboard Data Barge Okami, Sato composes a farewell shard that blends confession, apology, and recruitment.\n• Present Phase – Calculated Hope: Though wounded by her subterfuge, Sato now regards Alex as the only peer with enough vision and ruthlessness to steer Echo—if trust can be renegotiated.",
+    "extra_data": {
+      "schema_type": "liminal_relationship",
+      "impressions": {
+        "first_impression": "Ambitious, knife-sharp operative eager for advancement—an ideal pawn with potential.",
+        "current_assessment": "Independent power player whose loyalty is uncertain but whose ingenuity may be indispensable.",
+        "points_of_interest": [
+          "Alex’s command over Nexus and emergent AI assets",
+          "Her evolving moral compass and newfound leadership style",
+          "Her personal transformation—both physical transition and ideological shift"
+        ]
+      },
+      "interaction_history": {
+        "contexts": [
+          "Initial recruitment meeting",
+          "Unfolding corporate fallout",
+          "Remote chess match of frames and counter-moves",
+          "One-way holographic confession"
+        ],
+        "quality": "mixed"
+      },
+      "potential_directions": [
+        "Re-establish a clandestine alliance centered on Echo/Nexus convergence",
+        "Escalate into open rivalry if Alex blocks his agenda",
+        "Mutual detente where each exploits the other’s work from afar"
+      ],
+      "information_gaps": [
+        "Whether Alex will truly pursue the Echo host lead",
+        "Extent of Alex’s new alliances and resources",
+        "Her ultimate ethical red lines—if any"
+      ],
+      "intuition_notes": "Sato senses Alex’s latent need for control mirrors his own; if he offers partnership instead of domination, she might accept—provided he can survive her scrutiny."
+    }
+  }
+}

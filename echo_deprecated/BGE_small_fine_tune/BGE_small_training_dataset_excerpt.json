@@ -1,0 +1,227 @@
+{
+    "characters": {
+        "Nyati": {
+            "eureka_cure": {
+                "query": "What is Nyati's \"eureka cure\" for Alex's crossing condition?",
+                "positive01": "“If we move Alex’s mind into a machine.” Another beat. “And she leaves her body behind.” Her voice tightens, hardens, shakes. “THAT WOULD BREAK THE CONNECTION. RIGHT?” Silence. Silence. Silence. Then—SAM: “…Yes.”",
+                "positive02": "So that’s the answer. If you’re not in a body—if you’re transferred into something else—you break the connection. No more crossing. No more bridge."
+            },
+            "post_eureka_cure": {
+                "query": "What was Nyati's state after the Eureka incident?",
+                "positive01": "Dr. Nyati is a vision of disarray—half-buried under a tangle of blankets, her hair an absolute catastrophe, pillow creases pressed into one side of her face."
+            },
+            "aliases": [
+                "Nyati",
+                "Dr. Kamara Nyati",
+                "Posh Spice"
+            ],
+            "background": {
+                "query": "What is Nyati's background?",
+                "positive01": "A lead scientist flagged for “urgent correction.” Someone inside is screwing up—or sabotaging the project already."
+            },
+            "appearance": {
+                "query": "What does Nyati look like?",
+                "positive01": "She’s wearing a Dynacorp lab coat, slightly disheveled, but alert."
+            },
+            "identity": {
+                "query": "Who is Nyati?",
+                "positive01": "📌 1. Dual Doctorates – Neuroscience & Biomedical Engineering \nExpert in brain-computer interfaces (BCIs) and neuroprosthetics. Specialized in mapping consciousness to computational models. Worked on the original neural encoding process for Echo.\n📌 2. Clinical Background – Physician by Training  \nOriginally trained as a medical doctor (MD), focused on neurology. Has real-world experience with brain trauma & neurodegenerative diseases. Not practicing anymore, but still understands the biological side of cognition.\n📌 3. Role in Echo – Architect of the Transfer Process Designed the framework for uploading minds into digital form. Wasn’t involved in the loyalty tampering—that came from corporate oversight. Left when she saw the ethical disaster it was becoming."
+            }
+        }
+    },
+    "relationships": {
+        "Alex & Emilia": {
+            "anchor": {
+                "query": "Who is \"the anchor\"?",
+                "positive01": "Nyati to Emilia: Her gaze hardens. “You are her anchor.” A pause. “Anchor the hell out of her. Buy us time.”",
+                "positive02": "And now Alina is calling her back. Calling her what she already knows she is. Alex’s anchor. She exhales slowly."
+            },
+            "cross_together": {
+                "query": "Have Alex and Emilia discussed the possibility of crossing together?",
+                "positive01": "“Then we’ll find it, together. Or I’ll run out the clock trying. Ok, look, no more unspoken assumptions. I’m just going to say it now. If I—“ Alex rotates around to look her in the eyes. “If we can’t find another way. Emilia. My love. Will you cross with me?”",
+                "positive02": "“Yes. Emilia. My love. If we can’t find another way, and if that means I have to cross…then…you could come. With me. Then…I wouldn’t be scared—or as scared…it still seems suspiciously like a death metaphor…but if it’s something else, then whatever it is, we’d still be together”"
+            },
+            "eureka_cure_perspectives": {
+                "query": "How do Alex and Emilia differ in their perspectives on the Eureka Cure?",
+                "positive01": "Emilia (quiet, but weighted): \"You have a body. A real, living, breathing body. And you’re talking about throwing it away like it’s just… a piece of hardware you can swap out.\"\nShe leans forward slightly, holding Alex’s gaze.\nEmilia (pointed, measured): \"If someone had given me a real choice back then—if I could have stayed as I was—I would have. But you? You're choosing this?\" She shakes her head slightly, expression unreadable. \nEmilia (lower, hesitant, but honest): \"I just… don’t understand how you can be so okay with it.\"",
+                "positive02": "Alex sits back down beside her on the edge of the bed, “just one more thing I wanted to say. Not to plunge back into it but, I just want to be sure you know where I was coming from. So, you know I’m trans, more or less, obviously. I mean this isn’t,” Alex gestures broadly at herself, “an out of the box configuration. But my point is, I’ve already changed my body, pretty heavily. Maybe you’d recognize the old me, maybe not. I used to think that, because of that, I understood what you’ve been though. I was wrong. I get that now. Especially because, well, I never actually had any dysphoria. I didn’t hate being a man at all. I was…indifferent to it. Like a coat that doesn’t quite fit, but you get sort of used to it anyway. Then, when the opportunity came up, I was like, cool, an upgrade! I know—I know, now. that’s nothing like what you’ve been through. What you’re still going through. For a lot of reasons. You didn’t have a choice, and the people that did this to you didn’t give a shit about you. They didn’t care about ‘doing it right’, as in, if there is a better way, which I hope there is. But I thought at the time, you know, I’ve already done a heavy mod job, so why be afraid of a swap-out?\""
+            },
+            "initial_impression": {
+                "query": "What were Alex and Emilia's first impressions of each other?",
+                "positive01": "She watches you carefully. \"You’re different from how I expected.\" You raise an eyebrow. \"How’s that?\" A pause. Then: \"You still think like a corpo. But you don’t move like one.\" She tilts her head slightly. \"You’re not ruthless. You’re… adaptable. That makes you dangerous.\""
+            },
+            "initial_interest": {
+                "query": "When did Alex first notice that there was mutual romantic interest between herself and Emilia?",
+                "positive01": "Emilia – The Unspoken Tension\nShe’s been close. Closer than you realized at first. It’s in the way her eyes linger a fraction too long when she speaks to you. The way she listens—truly listens—when you talk. You remember the bike ride, the grin she threw at Dr. Nyati before they raced. The way she thrives in motion, in adrenaline, but in quiet moments, she watches you. Not like she watches the others. It’s subtle. Measured. Controlled. But it’s there. And maybe—just maybe—she’s waiting to see if you’ll acknowledge it.  ",
+                "positive02": "She’s capable, sharp, confident. Someone who doesn’t need permission to act, who doesn’t wait for orders. She isn’t someone you can control. And maybe that’s part of why you find yourself drawn to her. She sees you not just as a leader, but as a person. Maybe she has for longer than you’ve realized."
+            },
+            "initial_romance": {
+                "nonverbal": {
+                    "query": "When did Alex and Emilia first non-verbally acknowledge mutual romantic interest?",
+                    "positive01": "Your fingers brush against hers where they rest on the railing. She doesn’t move away. She doesn’t look surprised, either. If anything, she seems like she’s been waiting to see when you’d make the choice—not if."
+                },
+                "kiss": {
+                    "query": "When did Alex and Emilia share their first kiss?",
+                    "positive01": "You lean in, and so does she. And then—you kiss her. It’s unrushed, steady, but not hesitant. Her lips are warm, familiar in a way you don’t fully understand yet, but don’t need to. She leans into you, fingers tightening briefly where they’re still laced with yours. For a few perfect seconds, there is nothing else. No abyss. No missions. No waiting. Just this. When you finally pull back, it’s slow. Reluctant. She lingers, just for a second, before exhaling a quiet laugh."
+                },
+                "verbal": {
+                    "query": "When did Alex and Emilia first verbally acknowledge mutual romantic interest?",
+                    "positive01": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”"
+                }
+            },
+            "retirement_fantasy": {
+                "query": "How does Alex imagine her life with Emilia after adventuring is behind them?",
+                "positive01": "when we’re ready to put all this behind us and move somewhere quiet like a cottage by the sea"
+            },
+            "saying_love": {
+                "nonreciprocation": {
+                    "explanation_emilia": {
+                        "query": "How does Emilia explain her inability to say \"I love you\" back?",
+                        "positive01": "Emilia: (low, raw, almost frustrated) “I just… I don’t know why it’s hard. It shouldn’t be. I know that. It’s not about you—” She stops herself, runs a hand through her hair, exhales sharply. Then—finally, painfully, deliberately—“…I need more time.”"
+                    },
+                    "explanation_alex": {
+                        "query": "How does Alex explain Emilia's inability to say \"I love you\" back?",
+                        "positive01": "“I know it’s there, Emilia. And I feel it. I know—“ Alex hopes putting words in her mouth might be welcome, or a relief of some kind, “I know you love me.” She lets that breathe for a moment. “It feels like a…when you’re going down a river and you see the current getting cut and broken up by something beneath the surface. It doesn’t stop the river. But it’s still there, and it’s trying to. And you can’t see it…” she trails off. “…but you can avoid it. Or you can reach in and pull it out.”"
+                    }
+                },
+                "time01": {
+                    "when": {
+                        "query": "When was the first time Alex said \"I love you\" to Emilia?",
+                        "positive01": "You realize you could fall into her forever. And then—you say it. \"I—\" A breath. A heartbeat. A decision. \"Love—\" Something in her face shifts. Something deep. Something unmistakable. \"You.\" And then—silence. Not because there is nothing left to say. But because there is nothing that could matter more than this."
+                    },
+                    "reaction": {
+                        "query": "How did Emilia respond the first time Alex said \"I love you\"?",
+                        "positive01": "She looks completely, utterly unguarded. Not because she wasn’t expecting this. Not because she doesn’t know how she feels. But because hearing it—feeling it, from you, right here, right now—changes everything. Her breath hitches, barely audible. Her fingers tighten at your jaw, just slightly. And her lips part—as if she wants to answer. As if she wants to tell you something just as important. But the words? They never come."
+                    }
+                },
+                "time02": {
+                    "when": {
+                        "query": "When was the second time Alex said \"I love you\" to Emilia?",
+                        "positive01": "Feeling the weight of emotion, the rush of relief at seeing her guard come down, Alex has nothing in her to resist the words coming out, for the second time ever: “I love you, Emilia”. Her voice cracks and trembles."
+                    },
+                    "reaction": {
+                        "query": "How did Emilia respond the second time Alex said \"I love you\"?",
+                        "positive01": "She lifts a hand—hesitant, careful—and cups Alex’s cheek, her thumb brushing just beneath one trembling corner of her mouth. Then—soft, breathless, almost disbelieving—Emilia: “…You really do, don’t you?” She swallows hard, her own voice unsteady, like she wasn’t ready to hear it again—like she didn’t know how much she needed to. And still—she doesn’t say it back."
+                    }
+                }
+            },
+            "tension": {
+                "query": "What are the greatest sources of tension in Alex and Emilia's relationship?",
+                "positive01": "Emilia: \"I see someone who’s trying to hold onto themselves while walking straight into something designed to unravel them.\"",
+                "positive02": "The silence stretches. And you think you’ve outrun the thought— Until it catches up to you. It comes as a whisper, a shape at the edge of your mind. \"You…could come with me.\" Even in your head, the words turn your stomach. You don’t say them aloud. You don’t dare."
+            },
+            "sex": {
+                "time01": {
+                    "query": "When was the first time Alex and Emiila had sex?",
+                    "positive01": "Your bodies move together, finding a rhythm that feels like it's always been there, waiting to be discovered. Like something clicking into place. When she arches beneath you, when her fingers dig into your shoulders, when her breath comes in sharp, broken gasps—you feel powerful. Whole. And when you fall apart in her arms, she holds you through it, steady and unwavering, whispering your name like it's something precious."
+                }
+            }
+        }
+    },
+    "factions": {
+        "Desert Nomads": {
+            "query": "Who are the Desert Nomads?",
+            "positive01": "Three nomads on scavenged motorcycles, plus a guy pushing a cart full of “antique” cybernetics. They roll up, immediately knocking on the van’s window.",
+            "positive02": "The nomad convoy rumbles west—dusty bikes, a few modified trucks, a rig hauling black-market salvage."
+        }
+    },
+    "locations": {
+        "Virginia Beach": {
+            "nightlife_district": {
+                "query": "What is the nightlife district of Virginia Beach like?",
+                "positive01": "The air is cool, crisp with sea salt. The hum of civilization surrounds you—muted laughter, music spilling into the streets, the scent of grilled food and spilled liquor. For the first time in far too long, the world feels alive. Not a labyrinth of abyssal mysteries. Not a submerged prison of riddles and lost explorers. Just… a place. A place where people drink, laugh, forget, move on. And for tonight—you let yourself belong to that world again."
+            },
+            "bars": {
+                "bar_seaside": {
+                    "query": "What is the seaside bar the crew likes to visit like?",
+                    "positive01": "You push open the door to the seaside bar, the warm buzz of conversation and soft neon glow spilling out into the night. The scent of salt and beer lingers in the air, mixing with faint notes of grilled seafood and distant laughter."
+                },
+                "bar_karaoke": {
+                    "atmosphere": {
+                        "query": "What is the karaoke bar like?",
+                        "positive01": "The doors swing open, and you step inside. The place is smaller, hotter, packed with the kind of people who came out tonight just to feel something. A tiny stage, glowing in cheap LED lights. A screen flashing lyrics, half a beat behind a singer who is absolutely butchering some ancient pop song. The crowd doesn’t care. They’re cheering, laughing, drinking like they’ve already forgotten tomorrow exists."
+                    },
+                    "performance_alex": {
+                        "song": {
+                            "query": "What did Alex sing at the karaoke bar?",
+                            "positive01": "a cyberpunk parody of \"Closer\" by Nine Inch Nails",
+                            "positive02": "🎶 You let me overwrite you\n🎶 You let me root inside you\n🎶 You let me cut inside you\n🎶 You let me jack inside you\n🎶 I’ve fallen into black ICE\n🎶 My soul’s without a shell\n🎶 I’ve hidden my directories\n🎶 HELP ME CLIMB AWAY FROM MYSELF\n🎶 I WANNA HACK YOU LIKE A CRIMINAL"
+                        },
+                        "unfortunate_line": {
+                            "query": "Why did Alex's performance cause so much unexpected emotional turmoil?",
+                            "positive01": "A hitch in your throat. Because you realize too late—the next line. The trap you set for yourself. The words you nearly spoke once before, now hurtling toward your lips with no way to stop them. You try to pull back—but there is no escape. And so you throw yourself forward. Your eyes lock onto Emilia again. And this time—they do not tease. This time—they plead.\n\"🎶 HELP ME CLIMB AWAY FROM MYSELF\"\nThe words burst from you, raw, frantic. And in Emilia’s face, in the way her fingers tighten against her glass—you see it. You see the weight of it hitting her, the meaning she can’t ignore.  "
+                        },
+                        "reaction_emilia": {
+                            "query": "How did Emilia react to Alex's karaoke performance?",
+                            "positive01": "She is staring at you. Not like the others. Not in awe. Not in shock. But in something deeper, heavier. Something smoldering, something trying not to consume itself. She is not blushing—because she has passed the point of blushing. She is holding onto control by a thread. And you? You just sit there. Letting it hang. Letting her feel every moment of it. Then—after a long, long pause—she leans in, just slightly. Not touching you. Just close enough that you feel the warmth of her body, the ghost of breath against your skin. And—with a voice low, even, but carrying the weight of everything she is barely keeping contained—she says, simply: \"You're playing a dangerous game.\"  "
+                        }
+                    }
+                }
+            },
+            "cafe": {
+                "query": "Where does Nyati like to go in Virginia Beach?",
+                "positive01": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known."
+            },
+            "visit01": {
+                "pete": {
+                    "query": "How did Pete enjoy the first shore leave visit to Virginia Beach?",
+                    "positive01": "Pete settles in at a local seafood joint with outdoor seating overlooking the water. The food is grilled, fried, and entirely free of abyssal influence. Cold beer sweats in tall glasses, the scent of salt and grease hangs in the air.",
+                    "positive02": "Pete gestures with his fork, already halfway through a plate of fish and chips. \"After days of ration packs and whatever the Ghost's galley churns out? This is called appreciation, Doc.\""
+                },
+                "nyati": {
+                    "query": "How did Nyati spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known. She selects a novel—not research, not philosophy, just a story. She settles into a corner, a warm cup of coffee by her side, and lets the noise of the world fade.",
+                    "positive02": "At some point, another rider pulls alongside her—Dr. Nyati, of all people, on a sleek black bike. They exchange glances, and without a word, the challenge is set. They race."
+                },
+                "emilia": {
+                    "query": "How did Emilia spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "For Emilia, rest means motion. She rents a motorcycle and takes to the coastal highway, feeling the rush of wind against her skin as she leans into the turns. No deep-sea constructs. No encrypted AI minds. Just the open road, the hum of the engine, and the scent of salt in the air.",
+                    "positive02": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”"
+                },
+                "alina": {
+                    "query": "How did Alina spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "Alina does not \"rest.\" She observes. Standing at a rocky overlook, she watches the waves shift under the moonlight. The horizon stretches infinitely—an open contrast to the depths she was built to navigate. She does not need breath. Or warmth. Or food. But she understands why they do.",
+                    "positive02": "Dr. Nyati steps into a dimly lit bookshop café, the kind of place where the world slows down. The scent of old paper and fresh coffee settles around her as she trails a hand over book spines, feeling their weight. Something solid. Something known. She selects a novel—not research, not philosophy, just a story. She settles into a corner, a warm cup of coffee by her side, and lets the noise of the world fade."
+                },
+                "alex": {
+                    "query": "How did Alex spend the first shore leave visit to Virginia Beach?",
+                    "positive01": "You push open the door to the seaside bar, the warm buzz of conversation and soft neon glow spilling out into the night. The scent of salt and beer lingers in the air, mixing with faint notes of grilled seafood and distant laughter. Inside, your crew is already in full swing.",
+                    "positive02": "You hold her gaze, still feeling the warmth of the kiss lingering between you. No excuses. No second-guessing. “I don’t know where this goes.” Your voice is steady. “But I don’t want to keep pretending I don’t want it.” Emilia exhales softly—not surprised, but as if she’s been waiting to hear it out loud. She squeezes your hand just slightly, just enough. “Good.”"
+                }
+            },
+            "visit02": {
+                "alex_carousing": {
+                    "query": "How did Alex behave during the second shore leave in Virginia Beach?",
+                    "positive01": "This is going to be way more fun if you drag everyone into it. So—you go big. You plant your elbows on the table, drink in hand, and throw your voice over the noise. \"WHO’S READY TO GET DRIFTEEEEED?!?\"",
+                    "positive02": "Alex slams her fist onto the table enthusiastically. “ROUND OF DRIFTLIGHT FOR THE TABLE. PHASE I TRIALS HAVE BEGUN. NO CONTROL SUBJECTS BECAUSE YOLO. RESULTS WILL NOT BE EXTERNALLY VALID BECAUSE NO ONE CAN TOUCH US BABYYY. MULTI-SITE DESIGN BECAUSE,” Alex pauses for effect and an impish grin, “I CAN HEAR KARAOKE DOWN THE STREET”"
+                }
+            }
+        }
+    },
+    "concepts": {
+        "Bridge": {
+            "other_crossers": {
+                "query": "What happened to others who tried to cross The Bridge?",
+                "positive01": "An unknown expedition. A mission into something they did not understand. Final entries contain: \"Irregular cognition events. Disruptions in thought-to-speech processing. Degradation of self-recognition in affected personnel.\" The last transmission recorded: \"We are still crossing.\" Silence. Pete exhales. \"That was the last thing they sent. And that’s it.\"",
+                "positive02": "Sam: \"You ask where they are.\" A pause. Then—softer. \"They are not here.\" A beat. \"But I do not say they are gone.\" Another pause. \"Only that they have not returned.\" A silence follows. Not because he is finished. But because he is choosing what to say next. And then—a final truth. \"If they could return… they have not chosen to.\""
+            },
+            "identity": {
+                "query": "What is The Bridge?",
+                "positive01": "Sam: “FIRST, YOU MUST UNDERSTAND: IT IS NOT A TOOL. IT IS A PATH.” Dr. Nyati: “Clarify that. What exactly does this bridge do?” Sam: “MIND TO MIND. NO WORDS. NO SHAPE. ONLY PRESENCE.”",
+                "positive02": "A Palantír is an appropriate analogy—though imperfect. The bridge does not force connection. It facilitates it. But yes, it is already linked."
+            },
+            "crossing": {
+                "aliases": [
+                    "to cross",
+                    "to climb"
+                ],
+                "query": "How does crossing The Bridge work?",
+                "positive01": "Crossing is not a single act—it is a path. The Bridge does not promise safety—only certainty of change."
+            },
+            "listening": {
+                "query": "What does it mean to \"listen\" to The Bridge?",
+                "positive01": "\"Are you saying it is possible to learn to see the other side—\" a pause. Then, sharper. \"Before I cross?\" Because that is the real question. If this is a process, then maybe you don’t have to take another step to understand what’s ahead. Maybe you can see it first. Maybe you can decide before it’s too late. And now—Sam answers. A pause. Then—his voice shifts. Not cryptic. Not distant. Something else. Something closer to… agreement. \"Yes.\" A pause. Then—softer. \"If you listen.\"  "
+            }
+        }
+    }
+}

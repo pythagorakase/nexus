@@ -1,0 +1,25 @@
+{
+    "format": {
+        "type": "json_schema",
+        "name": "character_summary",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "character_id": {
+                    "type": "integer",
+                    "description": "ID corresponding to the character whose summary you are generating"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "summary of the target character"
+                }
+            },
+            "required": [
+                "character_id",
+                "summary"
+            ],
+            "additionalProperties": false
+        },
+        "strict": true
+    }
+}

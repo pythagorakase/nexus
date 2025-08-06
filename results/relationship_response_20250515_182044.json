@@ -1,0 +1,66 @@
+{
+  "rel_1_to_2": {
+    "character1_id": 1,
+    "character2_id": 3,
+    "relationship_type": "friend",
+    "emotional_valence": "+3|trusting",
+    "dynamic": "Alex’s relationship with Pete has evolved into a bond of deep, hard-won trust and authentic camaraderie. What began as a partnership of convenience and mutual utility has weathered existential crises, personal breakdowns, and a constant undercurrent of chaos—both engineered and accidental. Alex increasingly sees Pete not just as a vital crew member, but as an anchor, a sounding board, and a brother-in-arms in the ongoing battle against the abyss (and their own collective dysfunction). She respects his resilience, his dry humor, and his ability to adapt—even when he’s suffering the brunt of her schemes. There’s genuine affection beneath the banter, a sense that Pete is one of very few people who truly ‘get’ her—or at least, refuse to give up on her, even when she’s at her worst.",
+    "recent_events": "Alex masterminded a conspiracy—fully supported by Alina and Emilia—to engineer Pete’s ‘bisexual awakening’ via a stealth gay bar operation, deploying Emilia as the wing-woman and reveling in Pete’s slow, panicked realization. She was both amused and proud of how he handled it, taking comfort (and a little pride) in his ability to adapt and thrive. She openly checked in with Pete after the chaos, expressing real concern for his well-being, apologizing for adding to his stress, and sincerely offering support as both a leader and a friend. Her teasing and tactical torment was always laced with affection, and she was quick to acknowledge his value to the crew and her personal gratitude for his presence.",
+    "history": "Their relationship began with mutual suspicion and cautious respect—Pete as the cynical, skilled decker with a bunker survivalist’s paranoia, and Alex as the ruthless, brilliant ex-corporate manipulator. Over time, shared crises (the abyss, the Bridge, the chaos of Nexus, the emotional volatility of the crew) forged a bond that is both functional and deeply personal. Alex has always been the instigator, the source of much of Pete’s suffering, but also his biggest cheerleader and defender. Their banter grew more affectionate as the trust deepened; Alex has leaned on Pete’s resilience and dry humor to ground herself, especially when her own emotional stability has wavered. She openly worries about his well-being, encourages his personal growth, and, perhaps most tellingly, is willing to step back and let him claim his own victories. She sees him as a true equal in the mess of their found family.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "close",
+        "history_length": "years",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Surviving Nexus and the Bridge together",
+        "Teaming up on chaotic operations (e.g., fashion interventions, karaoke debacles, the Pete-gay-bar plot)",
+        "Alex’s resurrection incident and Pete’s role as a bemused, traumatized witness",
+        "Repeated cycles of Alex tormenting Pete for his own good (or her amusement), only to defend him fiercely when it counts"
+      ],
+      "points_of_tension": [
+        "Alex’s relentless chaos causing Pete stress and occasional resentment",
+        "Pete’s resistance to being the subject of her schemes",
+        "Alex’s guilt over pushing Pete too far, and Pete’s worry that he’s not pulling his weight"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  },
+  "rel_2_to_1": {
+    "character1_id": 3,
+    "character2_id": 1,
+    "relationship_type": "friend",
+    "emotional_valence": "+2|friendly",
+    "dynamic": "Pete’s relationship with Alex is a complex tapestry of exasperation, admiration, and genuine warmth. He finds her exhausting, infuriating, and occasionally terrifying, but also deeply respects her intelligence, her drive, and her loyalty to the crew. Over time, Pete has come to see Alex as the sibling he never had—constantly dragging him into chaos, but always pulling him back from the edge when it matters. He’s learned that beneath her bravado and endless scheming, Alex is vulnerable, self-aware, and (when it counts) trustworthy; in return, he feels safe enough to drop his cynicism and let her see him at his most unguarded. He’s still wary of her manipulative side, but he’s no longer afraid of being collateral damage—he knows she cares, even when she’s torturing him for fun.",
+    "recent_events": "Pete endured a full-on, lovingly-orchestrated ‘awakening’ at Alex’s hands, complete with strategic wing-woman deployment and a stealth gay bar operation. After recovering from his initial shock, he accepted the conspiracy with a mix of resignation and grudging gratitude—especially when Alex and Emilia let him steer his own course and adapt at his own speed. Pete was genuinely touched when Alex checked in on him after the chaos, apologizing for adding to his stress and sincerely offering support. Despite his complaints, he found comfort in their banter and in Alex’s willingness to let him vent, joke, and process things at his own pace. He is still wary of being the perpetual target of Alex’s games, but he knows she always tries to make it right.",
+    "history": "From the beginning, Pete’s relationship with Alex has been a push-pull of mutual suspicion, reluctant respect, and slow-building trust. Alex was always the wildcard—brilliant, manipulative, and capable of dragging the crew into (or out of) any disaster. Pete played the role of the bunker hermit, the skeptical decker who couldn’t stand being the center of attention. Over time, as they faced the dangers of Nexus, the Bridge, and the emotional volatility of their found family, Pete came to see Alex as more than just a leader—she became his friend, his chaos partner, and the person he could rely on to keep pushing him (and everyone else) forward. He’s learned to read her moods, to find the sincerity beneath the games, and to trust that, no matter how much she drives him crazy, Alex will always have his back. Their relationship is built on a foundation of relentless teasing, strategic suffering, and mutual survival—a friendship forged in fire and laughter.",
+    "extra_data": {
+      "schema_type": "interpersonal_bond",
+      "bond_qualities": {
+        "closeness": "close",
+        "history_length": "years",
+        "stability": "fluctuating"
+      },
+      "shared_experiences": [
+        "Surviving the Echo/Nexus/Bridge saga together",
+        "The legendary Pete-gay-bar conspiracy and subsequent self-discovery",
+        "Enduring (and sometimes enjoying) Alex’s relentless schemes, fashion interventions, and chaotic leadership",
+        "Mutual check-ins, honest conversations about burnout, and surviving each other’s worst"
+      ],
+      "points_of_tension": [
+        "Pete’s resistance to being the target of Alex’s games",
+        "Alex’s tendency to push Pete out of his comfort zone",
+        "Occasional friction when Pete’s need for stability clashes with Alex’s chaos"
+      ],
+      "communication_style": {
+        "openness": "transparent",
+        "frequency": "constant"
+      }
+    }
+  }
+}

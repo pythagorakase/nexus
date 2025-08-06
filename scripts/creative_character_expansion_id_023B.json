@@ -1,0 +1,38 @@
+{
+  "characters": [
+    {
+      "character_id": 23,
+      "appearance": "Raven is a striking figure, with piercing gray eyes that miss nothing. Her hair is jet black, cut in a sharp bob that frames her angular face. She dresses in sleek, understated clothing\u2014a tailored black jacket and slim trousers that allow her to blend into the shadows effortlessly. Her skin is pale, a testament to long nights spent in front of glowing screens. Often seen with a subtle smile, her demeanor is calm and composed, exuding an air of quiet authority.",
+      "background": "Originally from the outskirts of New Orleans, Raven grew up amidst the chaos of a city constantly shifting in the wake of corporate power struggles. From a young age, she learned that information could be more valuable than money. Mentored by an enigmatic figure known only as 'The Archivist,' Raven honed her skills in data retrieval and manipulation, eventually striking out on her own. Her reputation as an information broker grew quickly, as she carved out a niche in providing access rather than violence. Her operations are rumored to extend beyond the city, with connections in all major hubs of power.",
+      "personality": "Raven is both analytical and intuitive, always one step ahead in conversations and negotiations. She maintains a dry wit and appreciates intelligence in others, valuing those who can think on their feet. Though she seems aloof, Raven feels a deep sense of responsibility to those she works with, seeing her deals as mutual partnerships rather than mere transactions. Her greatest fear is being powerless\u2014a relic of a past where she was once vulnerable. This drives her to maintain control over her operations and to remain shrouded in mystery.",
+      "emotional_state": "Currently intrigued by Alex's crew, particularly Alex's unorthodox approach. Raven feels a mixture of amusement and genuine curiosity about their potential impact on the delicate balance of power in the city.",
+      "current_activity": "Raven is analyzing encrypted data streams intercepted from a rival information network, searching for insights that might give her an edge in future dealings. She is also monitoring the fallout from her recent deal with Alex's crew, ready to capitalize on any emerging opportunities.",
+      "current_location": "Raven operates from an elegantly sparse office in a repurposed warehouse on the edge of New Orleans' Garden District. The space is filled with high-tech equipment and screens displaying live data feeds from around the city.",
+      "extra_data": {
+        "skills": [
+          "Data encryption and decryption",
+          "Negotiation and manipulation",
+          "Stealth and surveillance",
+          "Network infiltration"
+        ],
+        "allies": [
+          "The Archivist",
+          "Various freelance operatives",
+          "Tech-savvy informants"
+        ],
+        "enemies": [
+          "Corporate espionage agents",
+          "Rival information brokers"
+        ],
+        "signature_tech": [
+          "The Black Feathers - a network of discreet surveillance drones"
+        ],
+        "connection_points": [
+          "Has access to pre-Collapse data archives",
+          "Knows hidden routes through the city",
+          "Holds information on Echo survivors"
+        ]
+      }
+    }
+  ]
+}

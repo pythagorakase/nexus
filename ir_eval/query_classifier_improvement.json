@@ -1,0 +1,203 @@
+{
+  "original": {
+    "precision": {
+      "character": 0.6610169491525424,
+      "location": 1.0,
+      "event": 0.5333333333333333,
+      "relationship": 1.0,
+      "theme": 0.0,
+      "general": 0.3333333333333333
+    },
+    "recall": {
+      "character": 0.75,
+      "location": 0.4166666666666667,
+      "event": 0.4444444444444444,
+      "relationship": 0.24,
+      "theme": 0.0,
+      "general": 0.8333333333333334
+    },
+    "f1": {
+      "character": 0.7027027027027027,
+      "location": 0.5882352941176471,
+      "event": 0.48484848484848486,
+      "relationship": 0.3870967741935484,
+      "theme": 0.0,
+      "general": 0.47619047619047616
+    },
+    "confusion_matrix": [
+      [
+        39,
+        0,
+        2,
+        0,
+        0,
+        11
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0,
+        7
+      ],
+      [
+        3,
+        0,
+        8,
+        0,
+        0,
+        7
+      ],
+      [
+        15,
+        0,
+        4,
+        6,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        2,
+        0,
+        1,
+        0,
+        0,
+        15
+      ]
+    ],
+    "meets_threshold": {
+      "character": false,
+      "location": false,
+      "event": false,
+      "relationship": false,
+      "theme": false,
+      "general": false
+    }
+  },
+  "improved": {
+    "precision": {
+      "character": 0.5443037974683544,
+      "location": 0.7,
+      "event": 0.875,
+      "relationship": 0.0,
+      "theme": 1.0,
+      "general": 0.36666666666666664
+    },
+    "recall": {
+      "character": 0.8269230769230769,
+      "location": 0.5833333333333334,
+      "event": 0.3888888888888889,
+      "relationship": 0.0,
+      "theme": 0.6,
+      "general": 0.6111111111111112
+    },
+    "f1": {
+      "character": 0.6564885496183206,
+      "location": 0.6363636363636364,
+      "event": 0.5384615384615384,
+      "relationship": 0.0,
+      "theme": 0.75,
+      "general": 0.4583333333333333
+    },
+    "confusion_matrix": [
+      [
+        43,
+        0,
+        0,
+        0,
+        0,
+        9
+      ],
+      [
+        0,
+        7,
+        0,
+        0,
+        0,
+        5
+      ],
+      [
+        7,
+        1,
+        7,
+        0,
+        0,
+        3
+      ],
+      [
+        25,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        3,
+        2
+      ],
+      [
+        4,
+        2,
+        1,
+        0,
+        0,
+        11
+      ]
+    ],
+    "meets_threshold": {
+      "character": false,
+      "location": false,
+      "event": false,
+      "relationship": false,
+      "theme": false,
+      "general": false
+    }
+  },
+  "threshold": 0.9,
+  "improvement": {
+    "character": {
+      "precision": -0.11671315168418794,
+      "recall": 0.07692307692307687,
+      "f1": -0.04621415308438215
+    },
+    "location": {
+      "precision": -0.30000000000000004,
+      "recall": 0.16666666666666669,
+      "f1": 0.048128342245989275
+    },
+    "event": {
+      "precision": 0.3416666666666667,
+      "recall": -0.055555555555555525,
+      "f1": 0.053613053613053574
+    },
+    "relationship": {
+      "precision": -1.0,
+      "recall": -0.24,
+      "f1": -0.3870967741935484
+    },
+    "theme": {
+      "precision": 1.0,
+      "recall": 0.6,
+      "f1": 0.75
+    },
+    "general": {
+      "precision": 0.033333333333333326,
+      "recall": -0.2222222222222222,
+      "f1": -0.01785714285714285
+    }
+  }
+}

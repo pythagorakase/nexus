@@ -1,0 +1,740 @@
+#!/usr/bin/env python3
+"""
+Display module for NEXUS IR Evaluation System
+
+This module provides functions for displaying data and results from IR evaluations
+in formatted tables and structured outputs.
+
+Main functions:
+- print_comparison_table: Print comparison of runs
+- print_metrics_table: Print metrics in a formatted table
+- print_configuration_details: Print configuration details
+- print_current_parameters: Print current parameters in copy-paste friendly format
+"""
+
+import os
+import sys
+import json
+import logging
+from typing import Dict, List, Any, Tuple, Optional, Set
+
+# Make sure we can import from the parent directory
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("nexus.display")
+
+def print_comparison_table(comparison: Dict[str, Any]) -> None:
+    """
+    Print a formatted comparison table for IR evaluation runs.
+    
+    Args:
+        comparison: Dictionary with comparison data
+    """
+    run_names = [run["name"] for run in comparison["runs"]]
+    
+    # Print header
+    print("\n" + "="*80)
+    print("NEXUS IR Evaluation - Run Comparison")
+    print("="*80)
+    
+    # Print overall metrics
+    print("\nOverall Metrics:")
+    print("-"*80)
+    
+    # Header row
+    header = "Metric".ljust(10)
+    for name in run_names:
+        header += name.ljust(15)
+    if len(run_names) > 1:
+        header += "Best Run".ljust(15)
+    print(header)
+    print("-"*80)
+    
+    # Metrics rows
+    for metric in ["p@5", "p@10", "mrr", "bpref"]:
+        metric_data = comparison["comparison"]["overall"][metric]
+        row = metric.ljust(10)
+        
+        for i, value in enumerate(metric_data["values"]):
+            cell = f"{value:.4f}"
+            if len(run_names) > 1 and i > 0:
+                change = metric_data["changes"][i]
+                if change > 0:
+                    cell += f" (+{change:.4f})"
+                elif change < 0:
+                    cell += f" ({change:.4f})"
+                else:
+                    cell += " (±0.0000)"
+            row += cell.ljust(15)
+        
+        if len(run_names) > 1:
+            row += metric_data["best_run"].ljust(15)
+        
+        print(row)
+    
+    # Print category metrics if available
+    if comparison["comparison"]["by_category"]:
+        for category, metrics in comparison["comparison"]["by_category"].items():
+            print(f"\n{category.capitalize()} Category Metrics:")
+            print("-"*80)
+            
+            # Header row
+            header = "Metric".ljust(10)
+            for name in run_names:
+                header += name.ljust(15)
+            if len(run_names) > 1:
+                header += "Best Run".ljust(15)
+            print(header)
+            print("-"*80)
+            
+            # Metrics rows
+            for metric in ["p@5", "p@10", "mrr", "bpref"]:
+                if metric in metrics:
+                    metric_data = metrics[metric]
+                    row = metric.ljust(10)
+                    
+                    for i, value in enumerate(metric_data["values"]):
+                        cell = f"{value:.4f}"
+                        if len(run_names) > 1 and i > 0:
+                            change = metric_data["changes"][i]
+                            if change > 0:
+                                cell += f" (+{change:.4f})"
+                            elif change < 0:
+                                cell += f" ({change:.4f})"
+                            else:
+                                cell += " (±0.0000)"
+                        row += cell.ljust(15)
+                    
+                    if len(run_names) > 1:
+                        row += metric_data["best_run"].ljust(15)
+                    
+                    print(row)
+    
+    # Print unjudged document counts
+    print("\nUnjudged Documents:")
+    row = "Count".ljust(10)
+    for run in comparison["runs"]:
+        if run["results"] and "aggregated" in run["results"] and "overall" in run["results"]["aggregated"]:
+            count = run["results"]["aggregated"]["overall"].get("unjudged_count", 0)
+            row += str(count).ljust(15)
+        else:
+            row += "N/A".ljust(15)
+    print(row)
+    
+    # Print best run overall
+    print("\n" + "="*80)
+    best_run = comparison["best_run"]["name"]
+    print(f"BEST OVERALL PERFORMER: {best_run}")
+    print("="*80)
+
+def print_metrics_table(metrics: Dict[str, float], title: str = "Metrics", include_header: bool = True) -> None:
+    """
+    Print metrics in a formatted table.
+    
+    Args:
+        metrics: Dictionary of metrics
+        title: Title for the table
+        include_header: Whether to include a header
+    """
+    if include_header:
+        print(f"\n{title}:")
+        print("-"*50)
+    
+    # Metrics rows
+    for metric_name, value in metrics.items():
+        if isinstance(value, (int, float)):
+            formatted_value = f"{value:.4f}" if isinstance(value, float) else str(value)
+            print(f"{metric_name.ljust(15)}: {formatted_value}")
+    
+    if include_header:
+        print("-"*50)
+
+def print_configuration_details(control_settings: Dict[str, Any], experimental_settings: Dict[str, Any]) -> None:
+    """
+    Print details of control and experimental configurations.
+    
+    Args:
+        control_settings: Control configuration settings
+        experimental_settings: Experimental configuration settings
+    """
+    print("\n" + "="*80)
+    print("Configuration details")
+    print("="*80)
+    
+    # Display control configuration
+    print("\nCONTROL Configuration (from settings.json):")
+    print("-"*80)
+    
+    if control_settings:
+        if "retrieval" in control_settings:
+            retrieval = control_settings["retrieval"]
+            print("\nRetrieval settings:")
+            print(f"  Max results: {retrieval.get('max_results', 'N/A')}")
+            print(f"  Relevance threshold: {retrieval.get('relevance_threshold', 'N/A')}")
+            print(f"  Entity boost factor: {retrieval.get('entity_boost_factor', 'N/A')}")
+            
+            # Hybrid search
+            if "hybrid_search" in retrieval:
+                hybrid = retrieval["hybrid_search"]
+                print("\nHybrid search:")
+                print(f"  Enabled: {hybrid.get('enabled', False)}")
+                print(f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}")
+                print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
+                print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
+            
+            # User character focus boost
+            if "user_character_focus_boost" in retrieval:
+                focus = retrieval["user_character_focus_boost"]
+                print("\nUser character focus boost:")
+                print(f"  Enabled: {focus.get('enabled', False)}")
+        
+        # Models
+        if "models" in control_settings:
+            print("\nModels:")
+            for model, config in control_settings["models"].items():
+                active = config.get("is_active", False)
+                if active:
+                    print(f"  {model}: dimensions={config.get('dimensions', 'N/A')}, weight={config.get('weight', 'N/A')}")
+    else:
+        print("No control settings found")
+    
+    # Display experimental configuration
+    print("\nEXPERIMENTAL Configuration (from golden_queries.json):")
+    print("-"*80)
+    
+    if experimental_settings:
+        if "retrieval" in experimental_settings:
+            retrieval = experimental_settings["retrieval"]
+            print("\nRetrieval settings:")
+            print(f"  Max results: {retrieval.get('max_results', 'N/A')}")
+            print(f"  Relevance threshold: {retrieval.get('relevance_threshold', 'N/A')}")
+            print(f"  Entity boost factor: {retrieval.get('entity_boost_factor', 'N/A')}")
+            
+            # Hybrid search
+            if "hybrid_search" in retrieval:
+                hybrid = retrieval["hybrid_search"]
+                print("\nHybrid search:")
+                print(f"  Enabled: {hybrid.get('enabled', False)}")
+                print(f"  Vector weight: {hybrid.get('vector_weight_default', 'N/A')}")
+                print(f"  Text weight: {hybrid.get('text_weight_default', 'N/A')}")
+                print(f"  Target model: {hybrid.get('target_model', 'N/A')}")
+            
+            # User character focus boost
+            if "user_character_focus_boost" in retrieval:
+                focus = retrieval["user_character_focus_boost"]
+                print("\nUser character focus boost:")
+                print(f"  Enabled: {focus.get('enabled', False)}")
+        
+        # Models
+        if "models" in experimental_settings:
+            print("\nModels:")
+            for model, config in experimental_settings["models"].items():
+                active = config.get("is_active", False)
+                if active:
+                    print(f"  {model}: dimensions={config.get('dimensions', 'N/A')}, weight={config.get('weight', 'N/A')}")
+    else:
+        print("No experimental settings found in golden_queries.json")
+
+def print_current_parameters(settings_path: str, golden_queries_path: str) -> None:
+    """
+    Display current parameter values in a copy-paste friendly format.
+    
+    Args:
+        settings_path: Path to settings.json
+        golden_queries_path: Path to golden_queries.json
+    """
+    print("\n" + "="*80)
+    print("Current Parameters (Copy-Paste Ready)")
+    print("="*80)
+    
+    # Get settings.json
+    settings_content = {}
+    try:
+        with open(settings_path, 'r') as f:
+            settings_content = json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading settings from {settings_path}: {e}")
+    
+    golden_queries_content = {}
+    try:
+        with open(golden_queries_path, 'r') as f:
+            golden_queries_content = json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading golden queries from {golden_queries_path}: {e}")
+    
+    # Extract MEMNON settings
+    memnon_settings = {}
+    if "Agent Settings" in settings_content and "MEMNON" in settings_content["Agent Settings"]:
+        memnon_settings = settings_content["Agent Settings"]["MEMNON"]
+    
+    # Extract experimental settings
+    experimental_settings = {}
+    if "settings" in golden_queries_content:
+        experimental_settings = golden_queries_content["settings"]
+    
+    # Format settings.json relevant parts
+    print("\n```json")
+    print("// Current settings.json MEMNON configuration")
+    if memnon_settings:
+        memnon_formatted = json.dumps(memnon_settings, indent=2)
+        print(memnon_formatted)
+    else:
+        print("{}")
+    print("```\n")
+    
+    # Format golden_queries.json settings
+    print("\n```json")
+    print("// Current golden_queries.json settings configuration")
+    if experimental_settings:
+        experimental_formatted = json.dumps(experimental_settings, indent=2)
+        print(experimental_formatted)
+    else:
+        print("{}")
+    print("```\n")
+    
+    # Print helpful note
+    print("The above JSON blocks can be copied and pasted directly for use in discussions about parameter tuning.")
+    print("To modify settings:")
+    print("1. Edit settings.json to update control configuration")
+    print("2. Edit golden_queries.json to update experimental configuration")
+
+def display_query_variations(query_variation_runs, qrels, db, run_id=None):
+    """
+    Display and analyze query variation runs.
+    
+    Args:
+        query_variation_runs: List of query variation runs
+        qrels: QRELSManager instance
+        db: IRDatabase instance
+        run_id: Optional specific run ID to analyze
+        
+    Returns:
+        Tuple of (selected, run_id) where selected is whether a run was selected,
+        and run_id is the ID of the selected run
+    """
+    if not query_variation_runs:
+        print("\nNo query variation runs found.")
+        return False, None
+        
+    # Display available variation runs if no specific run_id provided
+    if run_id is None:
+        print("\n" + "="*80)
+        print("Available Query Variation Runs")
+        print("="*80)
+        
+        for i, run in enumerate(query_variation_runs, 1):
+            run_id_value = run.get('id', 'N/A')
+            name = run.get('name', 'Unknown')
+            timestamp = run.get('timestamp', 'Unknown')
+            description = run.get('description', 'No description')
+            print(f"{i}. {name} (ID: {run_id_value})")
+            print(f"   Description: {description}")
+            print(f"   Time: {timestamp}")
+            print()
+            
+        print(f"{len(query_variation_runs) + 1}. Return to main menu")
+        
+        # Get user choice
+        try:
+            run_choice = int(input(f"\nSelect run to analyze (1-{len(query_variation_runs) + 1}): "))
+            if run_choice == len(query_variation_runs) + 1:
+                return False, None
+                
+            if 1 <= run_choice <= len(query_variation_runs):
+                selected_run = query_variation_runs[run_choice - 1]
+                run_id = selected_run['id']
+            else:
+                print("Invalid choice. Please try again.")
+                return False, None
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+            return False, None
+    
+    # Get metrics from database for the specified run
+    metrics_data = db.get_run_metrics(run_id)
+    if not metrics_data or "by_query" not in metrics_data:
+        print("\nNo metrics found for this run.")
+        return True, run_id
+    
+    # Group results by original query
+    variations_by_original = {}
+    
+    # Get query results to analyze variations
+    query_results = db.get_run_results(run_id)
+    
+    # Get golden queries directly from database
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT id, text, name, category FROM queries")
+    queries_by_text = {row['text']: row for row in cursor.fetchall()}
+    
+    for query_data in query_results:
+        # Check if this is a variation query
+        query_name = query_data.get("name", "")
+        
+        # Skip if not a variation (if there's no " - Variation" in the name)
+        if " - Variation" not in query_name:
+            continue
+            
+        variation_query = query_data.get("query", "")
+        original_name = query_name.replace(" - Variation", "")
+        
+        # Look up the original query based on original name
+        cursor.execute("SELECT text FROM queries WHERE name = ?", (original_name,))
+        result = cursor.fetchone()
+        
+        if result:
+            original_query = result['text']
+            
+            # Store the pair
+            if original_query not in variations_by_original:
+                variations_by_original[original_query] = {
+                    "original": {
+                        "query": original_query,
+                        "metrics": None
+                    },
+                    "variation": {
+                        "query": variation_query,
+                        "metrics": None
+                    }
+                }
+                
+    # Process metrics for all variations
+    if "by_query" in metrics_data:
+        query_metrics = metrics_data["by_query"]
+        
+        # Assign metrics to variations
+        for query_text, metrics in query_metrics.items():
+            # Find if this is an original or variation query
+            for original_query, data in variations_by_original.items():
+                if query_text == original_query:
+                    data["original"]["metrics"] = metrics
+                elif query_text == data["variation"]["query"]:
+                    data["variation"]["metrics"] = metrics
+    
+    # Display comparison of original vs variation
+    print("\n" + "="*80)
+    print("Query Variation Analysis")
+    print("="*80)
+    
+    # Check if we found any valid pairs
+    if not variations_by_original:
+        print("\nNo valid query variation pairs found in this run.")
+        return True, run_id
+    
+    # Create a simple results table
+    print("\nMetrics comparison: Original Queries vs Variations")
+    print("-"*80)
+    
+    # Header
+    header = "Query Type".ljust(15)
+    header += "p@5".ljust(10)
+    header += "p@10".ljust(10)
+    header += "MRR".ljust(10)
+    header += "bpref".ljust(10)
+    print(header)
+    print("-"*80)
+    
+    # Summary metrics
+    original_metrics = {"p@5": 0, "p@10": 0, "mrr": 0, "bpref": 0, "count": 0}
+    variation_metrics = {"p@5": 0, "p@10": 0, "mrr": 0, "bpref": 0, "count": 0}
+    
+    # Process each variation pair
+    for original_query, data in variations_by_original.items():
+        # Skip if missing metrics
+        if not data["original"]["metrics"] or not data["variation"]["metrics"]:
+            continue
+            
+        # Display individual query comparison
+        print(f"\nOriginal: {original_query}")
+        print(f"Variation: {data['variation']['query']}")
+        print("-"*80)
+        
+        # Original metrics
+        orig_metrics = data["original"]["metrics"]
+        row = "Original".ljust(15)
+        row += f"{orig_metrics.get('p@5', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('p@10', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('mrr', 0):.4f}".ljust(10)
+        row += f"{orig_metrics.get('bpref', 0):.4f}".ljust(10)
+        print(row)
+        
+        # Update summary metrics
+        original_metrics["p@5"] += orig_metrics.get("p@5", 0)
+        original_metrics["p@10"] += orig_metrics.get("p@10", 0)
+        original_metrics["mrr"] += orig_metrics.get("mrr", 0)
+        original_metrics["bpref"] += orig_metrics.get("bpref", 0)
+        original_metrics["count"] += 1
+        
+        # Variation metrics
+        var_metrics = data["variation"]["metrics"]
+        row = "Variation".ljust(15)
+        row += f"{var_metrics.get('p@5', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('p@10', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('mrr', 0):.4f}".ljust(10)
+        row += f"{var_metrics.get('bpref', 0):.4f}".ljust(10)
+        print(row)
+        
+        # Update summary metrics
+        variation_metrics["p@5"] += var_metrics.get("p@5", 0)
+        variation_metrics["p@10"] += var_metrics.get("p@10", 0)
+        variation_metrics["mrr"] += var_metrics.get("mrr", 0)
+        variation_metrics["bpref"] += var_metrics.get("bpref", 0)
+        variation_metrics["count"] += 1
+        
+        # Calculate and show differences
+        diff_p5 = var_metrics.get("p@5", 0) - orig_metrics.get("p@5", 0)
+        diff_p10 = var_metrics.get("p@10", 0) - orig_metrics.get("p@10", 0)
+        diff_mrr = var_metrics.get("mrr", 0) - orig_metrics.get("mrr", 0)
+        diff_bpref = var_metrics.get("bpref", 0) - orig_metrics.get("bpref", 0)
+        
+        row = "Difference".ljust(15)
+        row += f"{diff_p5:.4f}{' (+)' if diff_p5 > 0 else ''}".ljust(10)
+        row += f"{diff_p10:.4f}{' (+)' if diff_p10 > 0 else ''}".ljust(10)
+        row += f"{diff_mrr:.4f}{' (+)' if diff_mrr > 0 else ''}".ljust(10)
+        row += f"{diff_bpref:.4f}{' (+)' if diff_bpref > 0 else ''}".ljust(10)
+        print(row)
+    
+    # Display summary metrics
+    if original_metrics["count"] > 0 and variation_metrics["count"] > 0:
+        # Calculate averages
+        orig_avg_p5 = original_metrics["p@5"] / original_metrics["count"]
+        orig_avg_p10 = original_metrics["p@10"] / original_metrics["count"]
+        orig_avg_mrr = original_metrics["mrr"] / original_metrics["count"]
+        orig_avg_bpref = original_metrics["bpref"] / original_metrics["count"]
+        
+        var_avg_p5 = variation_metrics["p@5"] / variation_metrics["count"]
+        var_avg_p10 = variation_metrics["p@10"] / variation_metrics["count"]
+        var_avg_mrr = variation_metrics["mrr"] / variation_metrics["count"]
+        var_avg_bpref = variation_metrics["bpref"] / variation_metrics["count"]
+        
+        # Display summary table
+        print("\n" + "="*80)
+        print(f"SUMMARY METRICS (Averaged across {original_metrics['count']} query pairs)")
+        print("="*80)
+        
+        # Header
+        header = "Query Type".ljust(15)
+        header += "p@5".ljust(10)
+        header += "p@10".ljust(10)
+        header += "MRR".ljust(10)
+        header += "bpref".ljust(10)
+        print(header)
+        print("-"*80)
+        
+        # Original metrics
+        row = "Original".ljust(15)
+        row += f"{orig_avg_p5:.4f}".ljust(10)
+        row += f"{orig_avg_p10:.4f}".ljust(10)
+        row += f"{orig_avg_mrr:.4f}".ljust(10)
+        row += f"{orig_avg_bpref:.4f}".ljust(10)
+        print(row)
+        
+        # Variation metrics
+        row = "Variation".ljust(15)
+        row += f"{var_avg_p5:.4f}".ljust(10)
+        row += f"{var_avg_p10:.4f}".ljust(10)
+        row += f"{var_avg_mrr:.4f}".ljust(10)
+        row += f"{var_avg_bpref:.4f}".ljust(10)
+        print(row)
+        
+        # Calculate and show differences
+        diff_p5 = var_avg_p5 - orig_avg_p5
+        diff_p10 = var_avg_p10 - orig_avg_p10
+        diff_mrr = var_avg_mrr - orig_avg_mrr
+        diff_bpref = var_avg_bpref - orig_avg_bpref
+        
+        row = "Difference".ljust(15)
+        row += f"{diff_p5:.4f}{' (+)' if diff_p5 > 0 else ''}".ljust(10)
+        row += f"{diff_p10:.4f}{' (+)' if diff_p10 > 0 else ''}".ljust(10)
+        row += f"{diff_mrr:.4f}{' (+)' if diff_mrr > 0 else ''}".ljust(10)
+        row += f"{diff_bpref:.4f}{' (+)' if diff_bpref > 0 else ''}".ljust(10)
+        print(row)
+        
+        # Winner
+        print("\nWINNER: ", end="")
+        metrics_diff_sum = diff_p5 + diff_p10 + diff_mrr + diff_bpref
+        if metrics_diff_sum > 0:
+            print("VARIATIONS (Vector-optimized keyword queries)")
+        elif metrics_diff_sum < 0:
+            print("ORIGINALS (Natural language queries)")
+        else:
+            print("TIE")
+            
+    return True, run_id
+
+def display_query_pairs(run_id, query_pairs, db):
+    """
+    Display comparison of query pairs using predefined pairs.
+    
+    Args:
+        run_id: ID of the run to analyze
+        query_pairs: Dictionary mapping original query IDs to variation query IDs
+        db: IRDatabase instance
+    """
+    # Get metrics for the run
+    metrics_data = db.get_run_metrics(run_id)
+    if not metrics_data or "by_query" not in metrics_data:
+        print("\nNo metrics found for this run.")
+        return
+        
+    # Get all query data from database
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT id, text, category, name FROM queries ORDER BY id")
+    queries = {row['id']: row for row in cursor.fetchall()}
+    
+    # Set up metrics containers
+    original_metrics = {"p@5": 0, "p@10": 0, "mrr": 0, "bpref": 0, "count": 0}
+    variation_metrics = {"p@5": 0, "p@10": 0, "mrr": 0, "bpref": 0, "count": 0}
+    comparison_data = []
+    
+    # Create a lookup table for query text to metrics
+    query_text_to_metrics = {}
+    for query_text, metrics in metrics_data.get("by_query", {}).items():
+        query_text_to_metrics[query_text] = metrics
+    
+    # Process each query pair
+    pairs_with_metrics = []
+    
+    for orig_id, var_id in query_pairs.items():
+        # Skip if either query doesn't exist
+        if orig_id not in queries or var_id not in queries:
+            logger.warning(f"Missing query in pair {orig_id}/{var_id}")
+            continue
+            
+        orig_query = queries[orig_id]
+        var_query = queries[var_id]
+        
+        # Get metrics for both queries
+        orig_text = orig_query.get('text', '')
+        var_text = var_query.get('text', '')
+        
+        orig_metrics = query_text_to_metrics.get(orig_text, None)
+        var_metrics = query_text_to_metrics.get(var_text, None)
+        
+        # Skip if either lacks metrics
+        if not orig_metrics or not var_metrics:
+            logger.warning(f"Missing metrics for query pair {orig_id}/{var_id}")
+            continue
+            
+        # Store pair data
+        pair_data = {
+            'original_id': orig_id,
+            'variation_id': var_id,
+            'original_text': orig_text,
+            'variation_text': var_text,
+            'original_metrics': orig_metrics,
+            'variation_metrics': var_metrics,
+            'change': {
+                key: var_metrics.get(key, 0.0) - orig_metrics.get(key, 0.0) 
+                for key in ['p@5', 'p@10', 'mrr', 'bpref']
+            }
+        }
+        
+        pairs_with_metrics.append(pair_data)
+        
+        # Update aggregated metrics
+        for key in ['p@5', 'p@10', 'mrr', 'bpref']:
+            original_metrics[key] += orig_metrics.get(key, 0.0)
+            variation_metrics[key] += var_metrics.get(key, 0.0)
+        
+        original_metrics["count"] += 1
+        variation_metrics["count"] += 1
+    
+    # Calculate averages
+    if original_metrics["count"] > 0:
+        for key in ['p@5', 'p@10', 'mrr', 'bpref']:
+            original_metrics[key] /= original_metrics["count"]
+            variation_metrics[key] /= variation_metrics["count"]
+    
+    # Display comparison
+    print("\n" + "="*80)
+    print("Query Variation Analysis - Predefined Pairs")
+    print("="*80)
+    
+    # Check if we found any valid pairs
+    if not pairs_with_metrics:
+        print("\nNo valid query pairs found with metrics.")
+        return
+    
+    # Display summary table first
+    print("\nMetrics comparison: Original Queries vs Variations")
+    print("-"*80)
+    
+    # Header
+    header = "Query Type".ljust(15)
+    header += "p@5".ljust(10)
+    header += "p@10".ljust(10)
+    header += "MRR".ljust(10)
+    header += "bpref".ljust(10)
+    print(header)
+    print("-"*80)
+    
+    # Original aggregated metrics
+    row = "Original".ljust(15)
+    row += f"{original_metrics['p@5']:.4f}".ljust(10)
+    row += f"{original_metrics['p@10']:.4f}".ljust(10)
+    row += f"{original_metrics['mrr']:.4f}".ljust(10)
+    row += f"{original_metrics['bpref']:.4f}".ljust(10)
+    print(row)
+    
+    # Variation aggregated metrics
+    row = "Variation".ljust(15)
+    row += f"{variation_metrics['p@5']:.4f}".ljust(10)
+    row += f"{variation_metrics['p@10']:.4f}".ljust(10)
+    row += f"{variation_metrics['mrr']:.4f}".ljust(10)
+    row += f"{variation_metrics['bpref']:.4f}".ljust(10)
+    print(row)
+    
+    # Calculate and show differences
+    diff_p5 = variation_metrics['p@5'] - original_metrics['p@5']
+    diff_p10 = variation_metrics['p@10'] - original_metrics['p@10']
+    diff_mrr = variation_metrics['mrr'] - original_metrics['mrr']
+    diff_bpref = variation_metrics['bpref'] - original_metrics['bpref']
+    
+    row = "Difference".ljust(15)
+    row += f"{diff_p5:+.4f}".ljust(10)
+    row += f"{diff_p10:+.4f}".ljust(10)
+    row += f"{diff_mrr:+.4f}".ljust(10)
+    row += f"{diff_bpref:+.4f}".ljust(10)
+    print(row)
+    
+    # Display individual pair comparisons
+    print("\nComparison by Query Pair:")
+    print("-"*100)
+    print("Orig ID  Var ID   p@5 Δ      p@10 Δ     MRR Δ      bpref Δ    ")
+    print("-"*100)
+    
+    for pair in pairs_with_metrics:
+        orig_id = pair['original_id']
+        var_id = pair['variation_id']
+        changes = pair['change']
+        
+        fmt_pair = f"{orig_id:<8} {var_id:<8}"
+        
+        for metric in ['p@5', 'p@10', 'mrr', 'bpref']:
+            change = changes[metric]
+            if change > 0:
+                fmt_pair += f"+{change:.4f}    "  # Positive change
+            else:
+                fmt_pair += f"{change:.4f}    "   # Negative or no change
+        
+        print(fmt_pair)
+    
+    print("-"*100)
+    
+    # Winner
+    print("\nWINNER: ", end="")
+    metrics_diff_sum = diff_p5 + diff_p10 + diff_mrr + diff_bpref
+    if metrics_diff_sum > 0:
+        print("VARIATIONS (Vector-optimized keyword queries)")
+    elif metrics_diff_sum < 0:
+        print("ORIGINALS (Natural language queries)")
+    else:
+        print("TIE")
+
+if __name__ == "__main__":
+    # Test code if run directly
+    print("Display module - Helper functions for NEXUS IR Evaluation System")
+    print("This module is intended to be imported, not run directly.")
