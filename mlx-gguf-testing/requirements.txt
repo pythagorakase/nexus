@@ -1,9 +1,0 @@
-lmstudio>=0.2.0
-requests>=2.32.0
-psutil>=5.9.0
-pandas>=2.2.0
-matplotlib>=3.8.0
-pyyaml>=6.0
-tabulate>=0.9.0
-numpy>=1.26.0
-tqdm>=4.66.0
