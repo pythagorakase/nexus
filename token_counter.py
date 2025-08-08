@@ -21,13 +21,32 @@ def detect_encoding(file_path: Path) -> str:
 
 def read_file_with_fallback(file_path: Path) -> Optional[str]:
     """Read a file with automatic encoding detection and fallback strategies."""
-    # First, check if it's a binary file type we should skip
+    # Special handling for PDF files
+    if file_path.suffix.lower() == '.pdf':
+        try:
+            import PyPDF2
+            with open(file_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                full_text = []
+                for page_num in range(len(pdf_reader.pages)):
+                    page = pdf_reader.pages[page_num]
+                    full_text.append(page.extract_text())
+                return '\n'.join(full_text)
+        except ImportError:
+            print(f"Warning: PyPDF2 not installed. Cannot read .pdf files.")
+            print(f"Install with: pip install PyPDF2")
+            return None
+        except Exception as e:
+            print(f"Error reading PDF file {file_path.name}: {e}")
+            return None
+    
+    # Check if it's a binary file type we should skip (excluding PDFs now)
     mime_type, _ = mimetypes.guess_type(str(file_path))
     if mime_type and (
         mime_type.startswith('image/') or 
         mime_type.startswith('video/') or 
         mime_type.startswith('audio/') or
-        mime_type in ['application/pdf', 'application/zip', 'application/x-rar']
+        mime_type in ['application/zip', 'application/x-rar']
     ):
         print(f"Skipping binary file: {file_path.name} ({mime_type})")
         return None
@@ -81,7 +100,7 @@ def read_file_with_fallback(file_path: Path) -> Optional[str]:
 def main():
     parser = argparse.ArgumentParser(
         description="Count tokens in provided file(s) or piped input using tiktoken.",
-        epilog="Supports various text formats including .txt, .json, .md, .py, .docx, etc."
+        epilog="Supports various text formats including .txt, .json, .md, .py, .docx, .pdf, etc."
     )
     parser.add_argument("files", nargs="*", help="Path(s) to files to count tokens for")
     parser.add_argument("--model", default="gpt-4o", help="Model encoding to use (default: gpt-4o)")
