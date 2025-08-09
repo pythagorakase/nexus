@@ -119,14 +119,15 @@
         "global": {
             "model": {
                 "description": "defines default LLM to load for all agents",
-                "possible values": [
-                    "llama-3.3-70b-instruct@q6_k",
-                    "llama-4-scout-17b-16e-mlx-text",
-                    "bartowski/mistral-large-instruct-2411",
-                    "deepseek-r1-distill-llama-70b@q8_0",
-                    "llama-4.0-scout-q6_k_xl"
+                "possible_values": [
+                    "llama-3.3-70b-instruct@6bit",
+                    "openai/gpt-oss-120b",
+                    "nexveridian/gpt-oss-120b",
+                    "mixtral-8x22b-instruct-v0.1",
+                    "llama-3.3-70b-instruct@8bit",
+                    "llama-4-scout-17b-16e-instruct"
                 ],
-                "default_model": "llama-3.3-70b-instruct@q6_k"
+                "default_model": "openai/gpt-oss-120b"
             },
             "llm": {
                 "api_base": "http://localhost:1234",
@@ -165,28 +166,20 @@
         "LORE": {
             "debug": true,
             "llm": {
-                "model_path": "models/llama-4-scout/Q4_K_M/Llama-4-Scout-17B-16E-Instruct-Q4_K_M-merged.gguf",
-                "model_type": "llama-cpp",
-                "n_ctx": 131072,
-                "n_threads": 12,
-                "n_gpu_layers": 44,
-                "n_batch": 512,
+                "lmstudio_url": "http://localhost:1234/v1",
+                "model_name": "openai/gpt-oss-120b",
+                "model_type": "lmstudio",
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "top_k": 40,
-                "repeat_penalty": 1.1,
                 "max_tokens": 2048,
-                "seed": -1,
-                "f16_kv": true,
-                "use_mmap": true,
-                "use_mlock": false,
-                "verbose": false
+                "required_model": "openai/gpt-oss-120b",
+                "unload_after_turn": false
             },
             "token_budget": {
                 "apex_context_window": 200000,
                 "system_prompt_tokens": 5000,
                 "reserved_response_tokens": 4000,
-                "user_input_tokens": 500,
                 "utilization": {
                     "target": 95,
                     "minimum": 90,
@@ -255,10 +248,11 @@
                 "query": 3
             },
             "chunk_parameters": {
-                "warm_slice_initial": 5,
-                "warm_slice_extend": 3,
+                "warm_slice_initial": 10,
+                "warm_slice_extend": 5,
                 "additional_retrieval": 5,
-                "minimum_warm": 3
+                "minimum_warm": 5,
+                "ideal_warm": 15
             },
             "use_narrative_learner": true
         },
