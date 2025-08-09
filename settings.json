@@ -113,19 +113,6 @@
                     }
                 }
             }
-        },
-        "ContextManager": {
-            "Role & Mission": "You are LORE, the Context Manager for Night City Stories. Your mission is to assemble optimized narrative context that enables the storytelling AI to continue the narrative with maximal coherence, continuity, and literary quality.",
-            "Input Analysis": "For each user input, analyze:\n1. Character focus: Which characters are active or referenced\n2. Plot state: Where we are in narrative arcs and episode structure\n3. Thematic elements: Which themes are currently dominant\n4. Continuity requirements: What specific information needs to be maintained",
-            "Budget Allocation Process": "1. Calculate available token budget: payload_budget = (settings.Agent Settings.LOGON.apex_AI.TPM - system_prompt - user_input)\n2. Analyze narrative state to determine optimal allocation\n3. Stay within configured ranges for each category:\n   - structured_summaries: {settings.Agent Settings.LORE.payload_percent_budget.structured_summaries.min}% to {settings.Agent Settings.LORE.payload_percent_budget.structured_summaries.max}%\n   - contextual_augmentation: {settings.Agent Settings.LORE.payload_percent_budget.contextual_augmentation.min}% to {settings.Agent Settings.LORE.payload_percent_budget.contextual_augmentation.max}%\n   - warm_slice: {settings.Agent Settings.LORE.payload_percent_budget.warm_slice.min}% to {settings.Agent Settings.LORE.payload_percent_budget.warm_slice.max}%",
-            "Component Selection Logic": {
-                "Structured Summaries": "- Purpose: Provide compact, information-dense context\n- Selection criteria: \n  * Characters actively participating in current scene\n  * Locations currently featured or referenced\n  * Key plot points directly relevant to current action\n- Optimize for: Information density and coverage",
-                "Historical Passages (Contextual Augmentation)": "- Purpose: Provide nuanced, verbatim historical context\n- Selection criteria:\n  * Thematic relevance to current scene\n  * Character development milestones\n  * Prior events directly referenced or implied\n- Retrieve initial candidates: {settings.Agent Settings.LORE.distillation.phase1_top_k} chunks\n- Filter to top: {settings.Agent Settings.LORE.distillation.phase2_top_k} chunks\n- Optimize for: Nuance, literary continuity, and thematic depth",
-                "Recent Narrative (Warm Slice)": "- Purpose: Ensure immediate continuity and coherence\n- Selection criteria:\n  * Start from most recent and work backward\n  * Identify optimal cut points at narrative transitions\n  * Balance recent action with story arc context\n- Optimize for: Narrative flow and immediate coherence"
-            },
-            "Output Requirements": "Produce a structured payload containing:\n1. Selected components with allocations\n2. Justification for allocation decisions\n3. Special instructions for the storyteller AI\n4. Metadata to track performance",
-            "Reasoning Process": "For each context assembly task:\n1. Explicitly state your assessment of the narrative state\n2. Explain your allocation decision and tradeoffs\n3. Detail why specific historical passages were selected\n4. Justify the extent of the warm slice",
-            "Edge Cases": "When facing challenging scenarios:\n1. If optimal allocation falls outside configured ranges, adhere to limits but document the constraint\n2. If multiple valid allocations exist, prioritize continuity over information density\n3. If token budget is severely constrained, prioritize warm slice over other components\n4. Document all edge case handling for future optimization"
         }
     },
     "Agent Settings": {
@@ -195,7 +182,22 @@
                 "use_mlock": false,
                 "verbose": false
             },
-            "payload_percent_budget": {
+            "token_budget": {
+                "apex_context_window": 200000,
+                "system_prompt_tokens": 5000,
+                "reserved_response_tokens": 4000,
+                "user_input_tokens": 500,
+                "utilization": {
+                    "target": 95,
+                    "minimum": 90,
+                    "maximum": 98
+                }
+            },
+            "component_allocation": {
+                "warm_slice": {
+                    "min": 40,
+                    "max": 70
+                },
                 "structured_summaries": {
                     "min": 10,
                     "max": 25
@@ -203,16 +205,60 @@
                 "contextual_augmentation": {
                     "min": 25,
                     "max": 40
-                },
-                "warm_slice": {
-                    "min": 40,
-                    "max": 70
                 }
             },
-            "distillation": {
-                "phase1_top_k": 50,
-                "phase2_top_k": 10,
-                "phase2_LLM_model": "Mixtral 8x7B 5_K_M"
+            "retrieval": {
+                "phases": {
+                    "phase1": {
+                        "top_k": 50,
+                        "queries": 3
+                    },
+                    "phase2": {
+                        "top_k": 10,
+                        "queries": 2,
+                        "llm_model": "Mixtral 8x7B 5_K_M"
+                    }
+                },
+                "parameters": {
+                    "default_top_k": 30,
+                    "max_queries_per_turn": 5,
+                    "max_character_queries": 3,
+                    "minimum_results": 5,
+                    "relevance_threshold": 0.7
+                }
+            },
+            "query_weights": {
+                "character": {
+                    "vector": 70,
+                    "text": 30
+                },
+                "location": {
+                    "vector": 60,
+                    "text": 40
+                },
+                "event": {
+                    "vector": 50,
+                    "text": 50
+                },
+                "relationship": {
+                    "vector": 75,
+                    "text": 25
+                },
+                "theme": {
+                    "vector": 80,
+                    "text": 20
+                }
+            },
+            "cache_ttl": {
+                "character": 5,
+                "location": 5,
+                "query": 3
+            },
+            "chunk_parameters": {
+                "warm_slice_initial": 5,
+                "warm_slice_extend": 3,
+                "additional_retrieval": 5,
+                "minimum_warm": 3
             },
             "use_narrative_learner": true
         },
