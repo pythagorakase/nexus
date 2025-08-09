@@ -11,54 +11,42 @@ Key Responsibilities:
 4. Turn Cycle Management - Handle the complete turn sequence from user input to response
 """
 
+import asyncio
 import logging
 import json
 import time
-from typing import Dict, List, Optional, Any, Union, Tuple
+from typing import Dict, Optional, Any
 from pathlib import Path
-from enum import Enum
 
-# Letta framework imports
-from letta.agents.base_agent import BaseAgent
-from letta.schemas.message import Message
-from letta.schemas.letta_message import UserMessage
-from letta.schemas.agent import AgentState
-from letta.schemas.user import User
-from letta.services.agent_manager import AgentManager
-from letta.services.message_manager import MessageManager
+# Handle imports based on how the module is run
+import sys
+from pathlib import Path
 
-# llama-cpp-python for local LLM
-try:
-    from llama_cpp import Llama
-except ImportError:
-    raise ImportError("llama-cpp-python not installed. Run: CMAKE_ARGS='-DLLAMA_METAL=on' pip install llama-cpp-python")
+# Add parent directories to path for imports
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+sys.path.insert(0, str(current_dir.parent.parent))
 
 # Import utility modules
-from ..memnon.memnon import MEMNON
-# TODO: Import other utilities when converted from agents
-# from ..psyche.psyche_utility import PsycheUtility
-# from ..nemesis.nemesis_utility import NemesisUtility
-# from ..gaia.gaia_utility import GaiaUtility
-# from ..logon.logon_utility import LogonUtility
+from utils.turn_context import TurnContext, TurnPhase
+from utils.turn_cycle import TurnCycleManager
+from utils.token_budget import TokenBudgetManager
+from utils.local_llm import LocalLLMManager
+from logon_utility import LogonUtility
+
+# Import MEMNON if available
+try:
+    from nexus.agents.memnon.memnon import MEMNON
+    MEMNON_AVAILABLE = True
+except ImportError:
+    MEMNON_AVAILABLE = False
+    logging.warning("MEMNON not available. Memory retrieval will be limited.")
 
 # Configure logger
 logger = logging.getLogger("nexus.lore")
 
 
-class TurnPhase(Enum):
-    """Phases of the turn cycle"""
-    USER_INPUT = "user_input"
-    WARM_ANALYSIS = "warm_analysis"
-    WORLD_STATE = "world_state"
-    DEEP_QUERIES = "deep_queries"
-    COLD_DISTILLATION = "cold_distillation"
-    PAYLOAD_ASSEMBLY = "payload_assembly"
-    APEX_GENERATION = "apex_generation"
-    INTEGRATION = "integration"
-    IDLE = "idle"
-
-
-class LORE(BaseAgent):
+class LORE:
     """
     Central orchestration agent for the NEXUS system.
     Manages the complete turn cycle and coordinates all utility modules.
@@ -66,117 +54,127 @@ class LORE(BaseAgent):
     
     def __init__(
         self,
-        agent_id: str,
-        agent_state: AgentState,
-        user: User,
-        message_manager: MessageManager,
-        agent_manager: AgentManager,
-        settings: Optional[Dict[str, Any]] = None,
+        settings_path: Optional[str] = None,
         debug: bool = False
     ):
         """
         Initialize LORE agent.
         
         Args:
-            agent_id: Unique identifier for this agent instance
-            agent_state: Agent state from Letta framework
-            user: User information
-            message_manager: Message management service
-            agent_manager: Agent management service
-            settings: Configuration settings (loaded from settings.json)
+            settings_path: Path to settings.json file
             debug: Enable debug logging
         """
-        # Initialize base agent
-        super().__init__(
-            agent_id=agent_id,
-            openai_client=None,  # We'll use llama-cpp instead
-            message_manager=message_manager,
-            agent_manager=agent_manager,
-            actor=user
-        )
-        
-        self.agent_state = agent_state
-        self.settings = settings or {}
         self.debug = debug
+        self.settings = self._load_settings(settings_path)
         
         # Configure logging
         if debug:
             logger.setLevel(logging.DEBUG)
+        else:
+            logger.setLevel(logging.INFO)
         
-        # Initialize local LLM
-        self.llm = self._initialize_llm()
-        
-        # Initialize utility modules
-        self._initialize_utilities()
+        # Initialize components
+        self.memnon = None
+        self.logon = None
+        self.llm_manager = None
+        self.token_manager = None
+        self.turn_manager = None
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
-        self.turn_context = {}
+        self.turn_context = None
         
-        logger.info(f"LORE agent initialized (id: {agent_id})")
+        # Initialize utilities
+        self._initialize_components()
+        
+        logger.info("LORE agent initialized successfully")
     
-    def _initialize_llm(self) -> Llama:
-        """
-        Initialize the local LLM using llama-cpp-python.
+    def _load_settings(self, settings_path: Optional[str] = None) -> Dict[str, Any]:
+        """Load settings from JSON file"""
+        if not settings_path:
+            settings_path = Path(__file__).parent.parent.parent.parent / "settings.json"
         
-        Returns:
-            Initialized Llama model instance
-        """
-        llm_config = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
+        self.settings_path = settings_path  # Store for later use
         
-        # Get model path
-        model_path = llm_config.get("model_path")
-        if not model_path:
-            raise ValueError("No model_path specified in LORE llm settings")
-        
-        # Resolve model path relative to project root
-        model_path = Path(model_path)
-        if not model_path.is_absolute():
-            model_path = Path.cwd() / model_path
-        
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
-        
-        logger.info(f"Loading LLM from: {model_path}")
-        
-        # Initialize llama-cpp with configuration
         try:
-            llm = Llama(
-                model_path=str(model_path),
-                n_ctx=llm_config.get("n_ctx", 32768),
-                n_threads=llm_config.get("n_threads", 12),
-                n_gpu_layers=llm_config.get("n_gpu_layers", -1),  # -1 = all layers on GPU
-                seed=llm_config.get("seed", -1),
-                f16_kv=llm_config.get("f16_kv", True),
-                verbose=llm_config.get("verbose", False)
-            )
-            logger.info("LLM initialized successfully")
-            return llm
+            with open(settings_path, 'r') as f:
+                settings = json.load(f)
+                logger.info(f"Loaded settings from {settings_path}")
+                return settings
         except Exception as e:
-            logger.error(f"Failed to initialize LLM: {e}")
-            raise
+            logger.error(f"Failed to load settings: {e}")
+            # Return minimal default settings
+            return {
+                "Agent Settings": {
+                    "LORE": {
+                        "debug": True,
+                        "llm": {
+                            "lmstudio_url": "http://localhost:1234/v1",
+                            "model_name": "local-model"
+                        },
+                        "token_budget": {
+                            "apex_context_window": 200000,
+                            "system_prompt_tokens": 5000,
+                            "reserved_response_tokens": 4000
+                        }
+                    }
+                },
+                "API Settings": {
+                    "apex": {
+                        "provider": "openai",
+                        "model": "gpt-4o"
+                    }
+                }
+            }
     
-    def _initialize_utilities(self):
-        """Initialize utility modules (MEMNON, PSYCHE, etc.)"""
-        logger.info("Initializing utility modules...")
+    def _initialize_components(self):
+        """Initialize all components and utilities - FAILS HARD if any component unavailable"""
+        logger.info("Initializing LORE components...")
         
-        # Initialize MEMNON (already exists as a utility)
+        # Initialize managers - all required
+        self.token_manager = TokenBudgetManager(self.settings)
+        settings_path = self.settings_path if hasattr(self, 'settings_path') else None
+        self.llm_manager = LocalLLMManager(self.settings, settings_path)  # Will fail hard if LM Studio not available
+        self.turn_manager = TurnCycleManager(self)
+        
+        # MEMNON is REQUIRED
+        if not MEMNON_AVAILABLE:
+            raise RuntimeError("FATAL: MEMNON module not available! Cannot proceed without memory retrieval.")
+        self._initialize_memnon()
+        if not self.memnon:
+            raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
+        
+        # LOGON is REQUIRED
+        self._initialize_logon()
+        if not self.logon:
+            raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
+        
+        logger.info("Component initialization complete")
+    
+    def _initialize_memnon(self):
+        """Initialize MEMNON utility for memory retrieval"""
         try:
-            # MEMNON needs interface, agent_state, user, and db_url
+            # Create a minimal interface for MEMNON
+            class MinimalInterface:
+                def assistant_message(self, msg): logger.info(f"MEMNON: {msg}")
+                def error_message(self, msg): logger.error(f"MEMNON Error: {msg}")
+            
+            # Get database URL from settings
             memnon_settings = self.settings.get("Agent Settings", {}).get("MEMNON", {})
             db_url = memnon_settings.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
             
-            # Create a minimal interface for MEMNON
-            from types import SimpleNamespace
-            interface = SimpleNamespace(
-                assistant_message=lambda x: logger.info(f"MEMNON: {x}"),
-                error_message=lambda x: logger.error(f"MEMNON Error: {x}")
-            )
+            # Create minimal agent state and user objects
+            class MinimalAgentState:
+                state = {"name": "LORE"}
+            
+            class MinimalUser:
+                id = "lore_system"
+                name = "LORE"
             
             self.memnon = MEMNON(
-                interface=interface,
-                agent_state=self.agent_state,
-                user=self.actor,
+                interface=MinimalInterface(),
+                agent_state=MinimalAgentState(),
+                user=MinimalUser(),
                 db_url=db_url,
                 debug=self.debug
             )
@@ -184,175 +182,206 @@ class LORE(BaseAgent):
         except Exception as e:
             logger.error(f"Failed to initialize MEMNON: {e}")
             self.memnon = None
-        
-        # Initialize placeholders for other utilities
-        self.psyche = None  # TODO: Convert from agent to utility
-        self.nemesis = None  # TODO: Convert from agent to utility
-        self.gaia = None  # TODO: Convert from agent to utility
-        self.logon = None  # TODO: Convert from agent to utility
-        
-        logger.info("Utility initialization complete")
     
-    def _query_llm(self, prompt: str, temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> str:
-        """
-        Query the local LLM with a prompt.
-        
-        Args:
-            prompt: The prompt to send to the LLM
-            temperature: Optional temperature parameter
-            max_tokens: Optional max tokens parameter
-            
-        Returns:
-            LLM response as string
-        """
-        llm_config = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
-        
-        # Use provided parameters or fall back to config
-        temp = temperature if temperature is not None else llm_config.get("temperature", 0.7)
-        max_tok = max_tokens if max_tokens is not None else llm_config.get("max_tokens", 2048)
-        
-        logger.debug(f"Querying LLM with temp={temp}, max_tokens={max_tok}")
-        
+    def _initialize_logon(self):
+        """Initialize LOGON utility for API communication"""
         try:
-            # Create completion using llama-cpp
-            response = self.llm(
-                prompt,
-                max_tokens=max_tok,
-                temperature=temp,
-                top_p=llm_config.get("top_p", 0.9),
-                top_k=llm_config.get("top_k", 40),
-                repeat_penalty=llm_config.get("repeat_penalty", 1.1),
-                echo=False  # Don't include prompt in response
-            )
-            
-            # Extract text from response
-            text = response['choices'][0]['text'].strip()
-            logger.debug(f"LLM response length: {len(text)} chars")
-            return text
-            
+            self.logon = LogonUtility(self.settings)
+            logger.info("LOGON utility initialized")
         except Exception as e:
-            logger.error(f"Error querying LLM: {e}")
-            raise
+            logger.error(f"Failed to initialize LOGON: {e}")
+            self.logon = None
     
-    async def step(self, input_message: UserMessage) -> List[Message]:
+    async def process_turn(self, user_input: str) -> str:
         """
-        Main execution loop for LORE agent.
-        Orchestrates the complete turn cycle.
+        Process a complete turn cycle.
         
         Args:
-            input_message: User input message
+            user_input: The user's input text
             
         Returns:
-            List of messages generated during the turn
+            Generated narrative response
         """
-        logger.info(f"Starting turn cycle with user input: {input_message.text[:100]}...")
+        logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
         
         # Initialize turn context
-        self.turn_context = {
-            "user_input": input_message,
-            "start_time": time.time(),
-            "messages": []
-        }
+        self.turn_context = TurnContext(
+            turn_id=f"turn_{int(time.time())}",
+            user_input=user_input,
+            start_time=time.time()
+        )
         
         try:
+            # Ensure the required model is loaded
+            if self.llm_manager:
+                self.llm_manager.ensure_model_loaded()
+            
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
-            await self._process_user_input(input_message)
+            await self.turn_manager.process_user_input(self.turn_context)
             
             # Phase 2: Warm Analysis
             self.current_phase = TurnPhase.WARM_ANALYSIS
-            await self._perform_warm_analysis()
+            await self.turn_manager.perform_warm_analysis(self.turn_context)
             
-            # Phase 3: World State Report
-            self.current_phase = TurnPhase.WORLD_STATE
-            await self._generate_world_state_report()
+            # Phase 3: Entity State Queries
+            self.current_phase = TurnPhase.ENTITY_STATE
+            await self.turn_manager.query_entity_states(self.turn_context)
             
             # Phase 4: Deep Queries
             self.current_phase = TurnPhase.DEEP_QUERIES
-            await self._execute_deep_queries()
+            await self.turn_manager.execute_deep_queries(self.turn_context)
             
             # Phase 5: Cold Distillation
             self.current_phase = TurnPhase.COLD_DISTILLATION
-            await self._perform_cold_distillation()
+            await self.turn_manager.perform_cold_distillation(self.turn_context)
             
             # Phase 6: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
-            context_payload = await self._assemble_context_payload()
+            await self.turn_manager.assemble_context_payload(self.turn_context)
             
             # Phase 7: Apex AI Generation
             self.current_phase = TurnPhase.APEX_GENERATION
-            apex_response = await self._call_apex_ai(context_payload)
+            response = await self.turn_manager.call_apex_ai(self.turn_context)
             
             # Phase 8: Response Integration
             self.current_phase = TurnPhase.INTEGRATION
-            messages = await self._integrate_response(apex_response)
+            await self.turn_manager.integrate_response(self.turn_context, response)
             
             # Return to idle
             self.current_phase = TurnPhase.IDLE
             
-            # Log turn completion
-            elapsed = time.time() - self.turn_context["start_time"]
+            # Log completion
+            elapsed = time.time() - self.turn_context.start_time
             logger.info(f"Turn cycle completed in {elapsed:.2f} seconds")
             
-            return messages
+            return response
             
         except Exception as e:
             logger.error(f"Error in turn cycle phase {self.current_phase}: {e}")
+            self.turn_context.error_log.append(f"{self.current_phase}: {str(e)}")
             self.current_phase = TurnPhase.IDLE
-            raise
+            return f"Error processing turn: {str(e)}"
+        
+        finally:
+            # Clean up resources after turn - good housekeeping!
+            if self.llm_manager and self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {}).get("unload_after_turn", True):
+                logger.debug("Unloading model after turn cycle to free resources")
+                self.llm_manager.unload_model()
     
-    async def step_stream(self, input_message: UserMessage):
-        """
-        Streaming version of step (not implemented yet).
-        """
-        raise NotImplementedError("Streaming not yet implemented for LORE")
+    def get_turn_summary(self) -> Dict[str, Any]:
+        """Get a summary of the last turn cycle"""
+        if not self.turn_context:
+            return {"status": "No turn processed yet"}
+        
+        elapsed = time.time() - self.turn_context.start_time
+        
+        return {
+            "turn_id": self.turn_context.turn_id,
+            "elapsed_time": f"{elapsed:.2f} seconds",
+            "phases_completed": list(self.turn_context.phase_states.keys()),
+            "token_utilization": self.turn_context.phase_states.get("payload_assembly", {}).get("utilization_percentage", 0),
+            "errors": self.turn_context.error_log,
+            "apex_tokens": self.turn_context.phase_states.get("apex_generation", {}),
+            "components": {
+                "memnon": "available" if self.memnon else "unavailable",
+                "logon": "available" if self.logon else "unavailable",
+                "llm": "available" if self.llm_manager.is_available() else "unavailable"
+            }
+        }
     
-    # Turn cycle phase implementations
+    def get_status(self) -> Dict[str, Any]:
+        """Get current status of LORE and its components"""
+        return {
+            "current_phase": self.current_phase.value,
+            "components": {
+                "memnon": self.memnon is not None,
+                "logon": self.logon is not None,
+                "local_llm": self.llm_manager.is_available() if self.llm_manager else False,
+                "token_manager": self.token_manager is not None,
+                "turn_manager": self.turn_manager is not None
+            },
+            "settings_loaded": bool(self.settings),
+            "debug_mode": self.debug
+        }
+
+
+# Command-line interface for testing
+async def main():
+    """Main entry point for testing LORE"""
+    import argparse
     
-    async def _process_user_input(self, input_message: UserMessage):
-        """Phase 1: Process and validate user input"""
-        logger.debug("Processing user input...")
-        # TODO: Implement input processing
-        pass
+    parser = argparse.ArgumentParser(description="LORE Agent - NEXUS Orchestrator")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    parser.add_argument("--settings", help="Path to settings.json")
+    parser.add_argument("--test", action="store_true", help="Run test turn cycle")
+    parser.add_argument("--status", action="store_true", help="Show component status")
     
-    async def _perform_warm_analysis(self):
-        """Phase 2: Analyze recent narrative context"""
-        logger.debug("Performing warm analysis...")
-        # TODO: Implement warm analysis
-        pass
+    args = parser.parse_args()
     
-    async def _generate_world_state_report(self):
-        """Phase 3: Generate current world state report"""
-        logger.debug("Generating world state report...")
-        # TODO: Implement world state report generation
-        pass
+    # Configure logging
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     
-    async def _execute_deep_queries(self):
-        """Phase 4: Execute deep memory queries"""
-        logger.debug("Executing deep queries...")
-        # TODO: Implement deep query execution
-        pass
+    # Initialize LORE
+    lore = LORE(settings_path=args.settings, debug=args.debug)
     
-    async def _perform_cold_distillation(self):
-        """Phase 5: Distill retrieved information"""
-        logger.debug("Performing cold distillation...")
-        # TODO: Implement cold distillation
-        pass
-    
-    async def _assemble_context_payload(self) -> Dict[str, Any]:
-        """Phase 6: Assemble final context payload"""
-        logger.debug("Assembling context payload...")
-        # TODO: Implement context assembly
-        return {}
-    
-    async def _call_apex_ai(self, context_payload: Dict[str, Any]) -> str:
-        """Phase 7: Call Apex AI for narrative generation"""
-        logger.debug("Calling Apex AI...")
-        # TODO: Implement Apex AI call
-        return "Placeholder narrative response"
-    
-    async def _integrate_response(self, apex_response: str) -> List[Message]:
-        """Phase 8: Integrate Apex response and update state"""
-        logger.debug("Integrating response...")
-        # TODO: Implement response integration
-        return []
+    if args.status:
+        # Show status
+        status = lore.get_status()
+        print("\n" + "="*60)
+        print("LORE STATUS")
+        print("="*60)
+        print(json.dumps(status, indent=2))
+        
+    elif args.test:
+        # Run a test turn
+        test_input = "I examine the neural implant carefully, looking for any markings."
+        logger.info(f"Running test turn with input: {test_input}")
+        
+        response = await lore.process_turn(test_input)
+        
+        print("\n" + "="*60)
+        print("LORE TEST RESULTS")
+        print("="*60)
+        print(f"\nUser Input: {test_input}")
+        print(f"\nGenerated Response:\n{response}")
+        print(f"\nTurn Summary:\n{json.dumps(lore.get_turn_summary(), indent=2)}")
+        
+    else:
+        # Interactive mode
+        print("\n" + "="*60)
+        print("LORE AGENT - Interactive Mode")
+        print("="*60)
+        print("Commands: 'quit', 'status', 'summary'\n")
+        
+        while True:
+            try:
+                user_input = input("\n> ").strip()
+                
+                if user_input.lower() == 'quit':
+                    break
+                elif user_input.lower() == 'status':
+                    print(json.dumps(lore.get_status(), indent=2))
+                    continue
+                elif user_input.lower() == 'summary':
+                    print(json.dumps(lore.get_turn_summary(), indent=2))
+                    continue
+                elif not user_input:
+                    continue
+                
+                response = await lore.process_turn(user_input)
+                print(f"\nLORE: {response}")
+                
+            except KeyboardInterrupt:
+                print("\nExiting...")
+                break
+            except Exception as e:
+                logger.error(f"Error: {e}")
+                print(f"Error: {e}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
