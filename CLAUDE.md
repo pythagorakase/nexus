@@ -184,7 +184,6 @@ From extensive testing, we've learned these critical guidelines:
 - When possible, use `responses.parse(text_format=MyPydanticModel)` instead of building JSON schemas manually
 - For multiple items, use an array-based approach rather than dynamic dictionary keys
 - Start with small, working examples and gradually add complexity
-- Test with lower-cost models like gpt-3.5-turbo before using more expensive ones
 - Include a `--test` mode in scripts to inspect what's being sent to the API
 - For collections, consider applying a reasonable limit (e.g., 5-10 items per API call)
 
