@@ -219,8 +219,15 @@
         "LOGON": {
             "debug": true,
             "apex_AI": {
-                "model": "",
-                "TPM": 30000,
+                "model": {
+                    "target_model": "gpt-5",
+                    "model_roster": [
+                        "gpt-5",
+                        "claude-opus-4-1",
+                        "claude-opus-4-0",
+                        "claude-sonnet-4-0"
+                    ]
+                },
                 "temperature": 0.8
             },
             "obsidian": {
