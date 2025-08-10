@@ -113,7 +113,7 @@
                     }
                 }
             }
-        }
+        },
     },
     "Agent Settings": {
         "global": {
@@ -165,32 +165,8 @@
         },
         "LORE": {
             "debug": true,
-            "llm": {
-                "lmstudio_url": "http://localhost:1234/v1",
-                "model_name": "openai/gpt-oss-120b",
-                "model_type": "lmstudio",
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "top_k": 40,
-                "max_tokens": 2048,
-                "required_model": "openai/gpt-oss-120b",
-                "unload_after_turn": false
-            },
-            "token_budget": {
-                "apex_context_window": 200000,
-                "system_prompt_tokens": 5000,
-                "reserved_response_tokens": 4000,
-                "utilization": {
-                    "target": 95,
-                    "minimum": 90,
-                    "maximum": 98
-                }
-            },
-            "component_allocation": {
-                "warm_slice": {
-                    "min": 40,
-                    "max": 70
-                },
+            "enable_narrative_state_allocation": false,
+            "payload_percent_budget": {
                 "structured_summaries": {
                     "min": 10,
                     "max": 25
@@ -198,69 +174,26 @@
                 "contextual_augmentation": {
                     "min": 25,
                     "max": 40
+                },
+                "warm_slice": {
+                    "min": 40,
+                    "max": 70
                 }
-            },
-            "retrieval": {
-                "phases": {
-                    "phase1": {
-                        "top_k": 50,
-                        "queries": 3
-                    },
-                    "phase2": {
-                        "top_k": 10,
-                        "queries": 2,
-                        "llm_model": "Mixtral 8x7B 5_K_M"
-                    }
-                },
-                "parameters": {
-                    "default_top_k": 30,
-                    "max_queries_per_turn": 5,
-                    "max_character_queries": 3,
-                    "minimum_results": 5,
-                    "relevance_threshold": 0.7
-                }
-            },
-            "query_weights": {
-                "character": {
-                    "vector": 70,
-                    "text": 30
-                },
-                "location": {
-                    "vector": 60,
-                    "text": 40
-                },
-                "event": {
-                    "vector": 50,
-                    "text": 50
-                },
-                "relationship": {
-                    "vector": 75,
-                    "text": 25
-                },
-                "theme": {
-                    "vector": 80,
-                    "text": 20
-                }
-            },
-            "cache_ttl": {
-                "character": 5,
-                "location": 5,
-                "query": 3
-            },
-            "chunk_parameters": {
-                "warm_slice_initial": 10,
-                "warm_slice_extend": 5,
-                "additional_retrieval": 5,
-                "minimum_warm": 5,
-                "ideal_warm": 15
             },
             "use_narrative_learner": true
         },
         "LOGON": {
             "debug": true,
             "apex_AI": {
-                "model": "",
-                "TPM": 30000,
+                "model": {
+                    "target_model": "gpt-5",
+                    "model_roster": [
+                        "gpt-5",
+                        "claude-opus-4-1",
+                        "claude-opus-4-0",
+                        "claude-sonnet-4-0"
+                    ]
+                },
                 "temperature": 0.8
             },
             "obsidian": {
