@@ -6,6 +6,7 @@ Handles dynamic token budget calculation and allocation.
 
 import logging
 from typing import Dict, Any, Optional
+from .chunk_operations import calculate_chunk_tokens
 
 logger = logging.getLogger("nexus.lore.token_budget")
 
@@ -35,8 +36,8 @@ class TokenBudgetManager:
         apex_window = self.token_budget_config.get("apex_context_window", 200000)
         system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
         
-        # Calculate user input tokens (rough estimate: 1 token per 4 chars)
-        user_input_tokens = len(user_input) // 4
+        # Calculate user input tokens using tiktoken
+        user_input_tokens = calculate_chunk_tokens(user_input)
         
         # Check if we're using a reasoning model
         if not apex_model:

@@ -15,6 +15,13 @@ except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
 
+try:
+    from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
+    MEMNON_ANALYZER_AVAILABLE = True
+except ImportError:
+    MEMNON_ANALYZER_AVAILABLE = False
+    logger.warning("MEMNON QueryAnalyzer not available - using fallback query generation")
+
 logger = logging.getLogger("nexus.lore.turn_cycle")
 
 
@@ -30,6 +37,12 @@ class TurnCycleManager:
         """
         self.lore = lore_agent
         self.settings = lore_agent.settings
+        
+        # Initialize MEMNON's QueryAnalyzer if available
+        self.query_analyzer = None
+        if MEMNON_ANALYZER_AVAILABLE:
+            memnon_settings = self.settings.get("Agent Settings", {}).get("MEMNON", {})
+            self.query_analyzer = QueryAnalyzer(memnon_settings)
     
     async def process_user_input(self, turn_context: TurnContext):
         """
@@ -77,27 +90,26 @@ class TurnCycleManager:
                 logger.error(f"Failed to retrieve warm slice: {e}")
                 turn_context.warm_slice = []
         
-        # Analyze with local LLM if available
-        if self.lore.llm_manager and self.lore.llm_manager.is_available():
-            if turn_context.warm_slice:
-                analysis = self.lore.llm_manager.analyze_narrative_context(
-                    turn_context.warm_slice,
-                    turn_context.user_input
-                )
-                turn_context.phase_states["warm_analysis"] = {
-                    "analysis": analysis,
-                    "chunk_count": len(turn_context.warm_slice)
-                }
-            else:
-                turn_context.phase_states["warm_analysis"] = {
-                    "analysis": {"characters": [], "locations": [], "context_type": "unknown"},
-                    "chunk_count": 0
-                }
-        else:
-            turn_context.phase_states["warm_analysis"] = {
-                "analysis": "Warm analysis unavailable",
-                "chunk_count": 0
-            }
+        # Analyze with local LLM - REQUIRED for LORE to function
+        if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
+            raise RuntimeError("FATAL: Local LLM is required for warm analysis. "
+                             "LORE cannot function without semantic understanding. "
+                             "Ensure LM Studio is running with a model loaded.")
+        
+        if not turn_context.warm_slice:
+            raise RuntimeError("FATAL: No warm slice chunks retrieved. "
+                             "Cannot analyze narrative context without recent chunks. "
+                             "Check database connection and chunk retrieval.")
+        
+        analysis = self.lore.llm_manager.analyze_narrative_context(
+            turn_context.warm_slice,
+            turn_context.user_input
+        )
+        
+        turn_context.phase_states["warm_analysis"] = {
+            "analysis": analysis,
+            "chunk_count": len(turn_context.warm_slice)
+        }
     
     async def query_entity_states(self, turn_context: TurnContext):
         """
@@ -156,8 +168,8 @@ class TurnCycleManager:
         """
         Phase 4: Execute deep memory queries.
         
-        Args:
-            turn_context: Current turn context
+        LLM generates retrieval queries based on narrative context,
+        then MEMNON's QueryAnalyzer classifies them for optimal search.
         """
         logger.debug("Executing deep queries...")
         
@@ -165,48 +177,94 @@ class TurnCycleManager:
             logger.warning("MEMNON not available for deep queries")
             return
         
-        # Generate queries based on context analysis
+        # Step 1: LLM generates retrieval queries based on narrative analysis
+        if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
+            raise RuntimeError("FATAL: LLM is required for deep query generation. "
+                             "Cannot generate meaningful retrieval queries without semantic understanding.")
+        
+        analysis = turn_context.phase_states.get("warm_analysis", {}).get("analysis", {})
+        if not isinstance(analysis, dict):
+            raise RuntimeError("FATAL: Warm analysis failed or returned invalid data. "
+                             "Cannot proceed with deep queries without narrative context analysis.")
+        
+        # LLM generates queries from scratch based on what information 
+        # would help continue the narrative
+        llm_queries = self.lore.llm_manager.generate_retrieval_queries(
+            analysis,
+            turn_context.user_input
+        )
+        
+        if not llm_queries:
+            raise RuntimeError("FATAL: LLM failed to generate any retrieval queries. "
+                             "This should not happen - check LLM configuration.")
+        
+        # Step 2: Classify each generated query with MEMNON's QueryAnalyzer
         queries = []
+        for q_text in llm_queries:
+            query_type = "general"
+            if self.query_analyzer:
+                query_info = self.query_analyzer.analyze_query(q_text)
+                query_type = query_info.get("type", "general")
+                logger.debug(f"Query '{q_text[:50]}...' classified as '{query_type}'")
+            
+            queries.append({
+                "text": q_text,
+                "type": query_type,
+                "source": "llm_generated"
+            })
         
-        # Use LLM to generate queries if available
-        if self.lore.llm_manager and self.lore.llm_manager.is_available():
-            analysis = turn_context.phase_states.get("warm_analysis", {}).get("analysis", {})
-            if isinstance(analysis, dict):
-                queries = self.lore.llm_manager.generate_retrieval_queries(
-                    analysis,
-                    turn_context.user_input
-                )
-        else:
-            # Fallback: just use user input
-            queries = [turn_context.user_input] if turn_context.user_input else []
-        
-        # Execute queries
+        # Step 3: Execute queries with proper SearchManager configuration
         all_results = []
-        for query in queries[:3]:  # Limit to 3 queries
+        query_type_counts = {}
+        
+        for query_obj in queries[:5]:  # Limit to 5 queries
             try:
+                # MEMNON's SearchManager uses the query type internally
+                # to adjust vector/text weights for optimal results
                 results = self.lore.memnon.query_memory(
-                    query=query,
-                    k=10,
+                    query=query_obj["text"],
+                    k=15,  # Get more results since we'll deduplicate
                     use_hybrid=True
                 )
+                
+                # Track query types for logging
+                query_type = query_obj["type"]
+                query_type_counts[query_type] = query_type_counts.get(query_type, 0) + 1
+                
+                # Tag results with query metadata
+                for result in results.get("results", []):
+                    result["query_type"] = query_type
+                    result["query_source"] = query_obj["source"]
+                
                 all_results.extend(results.get("results", []))
+                
             except Exception as e:
-                logger.error(f"Query failed for '{query}': {e}")
+                logger.error(f"Query failed for '{query_obj['text'][:50]}...': {e}")
         
-        # Store unique results
-        seen_ids = set()
-        unique_results = []
+        # Store unique results, preserving highest scores
+        seen_ids = {}
         for result in all_results:
             chunk_id = result.get("id")
-            if chunk_id and chunk_id not in seen_ids:
-                seen_ids.add(chunk_id)
-                unique_results.append(result)
+            if chunk_id:
+                if chunk_id not in seen_ids or result.get("score", 0) > seen_ids[chunk_id].get("score", 0):
+                    seen_ids[chunk_id] = result
+        
+        # Sort by score and take top results
+        unique_results = sorted(
+            seen_ids.values(),
+            key=lambda x: x.get("score", 0),
+            reverse=True
+        )[:30]  # Keep top 30 for augmentation
         
         turn_context.retrieved_passages = unique_results
         turn_context.phase_states["deep_queries"] = {
             "queries_executed": len(queries),
+            "query_types": query_type_counts,
             "results_retrieved": len(unique_results)
         }
+        
+        logger.info(f"Deep queries complete: {len(queries)} queries executed "
+                   f"({query_type_counts}), {len(unique_results)} unique results retrieved")
     
     # DEPRECATED: Cold Distillation phase removed - cross-encoders handle reranking
     
