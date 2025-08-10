@@ -232,19 +232,15 @@ class LORE:
             self.current_phase = TurnPhase.DEEP_QUERIES
             await self.turn_manager.execute_deep_queries(self.turn_context)
             
-            # Phase 5: Cold Distillation
-            self.current_phase = TurnPhase.COLD_DISTILLATION
-            await self.turn_manager.perform_cold_distillation(self.turn_context)
-            
-            # Phase 6: Payload Assembly
+            # Phase 5: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
             await self.turn_manager.assemble_context_payload(self.turn_context)
             
-            # Phase 7: Apex AI Generation
+            # Phase 6: Apex AI Generation
             self.current_phase = TurnPhase.APEX_GENERATION
             response = await self.turn_manager.call_apex_ai(self.turn_context)
             
-            # Phase 8: Response Integration
+            # Phase 7: Response Integration
             self.current_phase = TurnPhase.INTEGRATION
             await self.turn_manager.integrate_response(self.turn_context, response)
             
