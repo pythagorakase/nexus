@@ -15,7 +15,6 @@ class TurnPhase(Enum):
     WARM_ANALYSIS = "warm_analysis"
     ENTITY_STATE = "entity_state"
     DEEP_QUERIES = "deep_queries"
-    COLD_DISTILLATION = "cold_distillation"
     PAYLOAD_ASSEMBLY = "payload_assembly"
     APEX_GENERATION = "apex_generation"
     INTEGRATION = "integration"

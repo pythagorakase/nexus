@@ -208,33 +208,11 @@ class TurnCycleManager:
             "results_retrieved": len(unique_results)
         }
     
-    async def perform_cold_distillation(self, turn_context: TurnContext):
-        """
-        Phase 5: Distill retrieved information.
-        
-        Args:
-            turn_context: Current turn context
-        """
-        logger.debug("Performing cold distillation...")
-        
-        # Sort retrieved passages by relevance score
-        if turn_context.retrieved_passages:
-            turn_context.retrieved_passages.sort(
-                key=lambda x: x.get("score", 0),
-                reverse=True
-            )
-            
-            # Keep top passages based on token budget
-            max_passages = 10
-            turn_context.retrieved_passages = turn_context.retrieved_passages[:max_passages]
-        
-        turn_context.phase_states["cold_distillation"] = {
-            "passages_retained": len(turn_context.retrieved_passages)
-        }
+    # DEPRECATED: Cold Distillation phase removed - cross-encoders handle reranking
     
     async def assemble_context_payload(self, turn_context: TurnContext):
         """
-        Phase 6: Assemble final context payload.
+        Phase 5: Assemble final context payload.
         
         Args:
             turn_context: Current turn context
@@ -281,7 +259,7 @@ class TurnCycleManager:
     
     async def call_apex_ai(self, turn_context: TurnContext) -> str:
         """
-        Phase 7: Call Apex AI for narrative generation.
+        Phase 6: Call Apex AI for narrative generation.
         
         Args:
             turn_context: Current turn context
@@ -318,7 +296,7 @@ class TurnCycleManager:
     
     async def integrate_response(self, turn_context: TurnContext, response: str):
         """
-        Phase 8: Integrate Apex response and update state.
+        Phase 7: Integrate Apex response and update state.
         
         Args:
             turn_context: Current turn context

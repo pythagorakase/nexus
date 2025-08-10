@@ -5,7 +5,7 @@ Handles dynamic token budget calculation and allocation.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger("nexus.lore.token_budget")
 
@@ -173,3 +173,108 @@ class TokenBudgetManager:
         
         logger.debug(f"Optimized allocation from {current_utilization:.1f}% to {self.calculate_utilization(optimized):.1f}%")
         return optimized
+    
+    def calculate_token_budget(self, tpm: int, system_tokens: int, user_tokens: int) -> int:
+        """
+        Simple arithmetic: Calculate available tokens for context.
+        NO LLM NEEDED - just subtraction!
+        
+        Args:
+            tpm: Total tokens per message (model context window)
+            system_tokens: Tokens used by system prompt
+            user_tokens: Tokens used by user input
+            
+        Returns:
+            Available tokens for context
+        """
+        return tpm - system_tokens - user_tokens
+    
+    def allocate_percentages(self, narrative_state: str, budget: int) -> Dict[str, int]:
+        """
+        Programmatic percentage allocation based on narrative state.
+        NO LLM NEEDED - just a lookup table!
+        
+        Args:
+            narrative_state: Type of narrative moment (dialogue_heavy, action_sequence, etc.)
+            budget: Total token budget available
+            
+        Returns:
+            Token allocations for each component
+        """
+        # Predefined allocation strategies based on narrative state
+        allocations = {
+            "dialogue_heavy": {"warm": 60, "augment": 30, "structured": 10},
+            "dialogue_intensive": {"warm": 65, "augment": 25, "structured": 10},
+            "action_sequence": {"warm": 70, "augment": 20, "structured": 10},
+            "action_focused": {"warm": 70, "augment": 20, "structured": 10},
+            "world_building": {"warm": 40, "augment": 40, "structured": 20},
+            "character_focus": {"warm": 45, "augment": 35, "structured": 20},
+            "character_development": {"warm": 45, "augment": 35, "structured": 20},
+            "exploration": {"warm": 35, "augment": 45, "structured": 20},
+            "flashback": {"warm": 30, "augment": 50, "structured": 20},
+            "planning": {"warm": 50, "augment": 30, "structured": 20},
+            "investigation": {"warm": 40, "augment": 45, "structured": 15},
+            "combat": {"warm": 75, "augment": 15, "structured": 10},
+            "default": {"warm": 50, "augment": 30, "structured": 20}
+        }
+        
+        # Get percentages for the narrative state (with fallback to default)
+        percentages = allocations.get(narrative_state.lower(), allocations["default"])
+        
+        # Calculate actual token amounts
+        result = {
+            "warm_slice": int(budget * percentages["warm"] / 100),
+            "contextual_augmentation": int(budget * percentages["augment"] / 100),
+            "structured_data": int(budget * percentages["structured"] / 100)
+        }
+        
+        # Log the allocation for debugging
+        logger.debug(f"Allocated tokens for '{narrative_state}' state: warm={result['warm_slice']}, augment={result['contextual_augmentation']}, structured={result['structured_data']}")
+        
+        return result
+    
+    def validate_budget_constraints(self, allocations: Dict[str, int], constraints: Optional[Dict[str, Dict[str, int]]] = None) -> bool:
+        """
+        Validate that allocations meet min/max constraints.
+        NO LLM NEEDED - just comparison operators!
+        
+        Args:
+            allocations: Proposed token allocations
+            constraints: Optional override constraints (defaults to config)
+            
+        Returns:
+            True if allocations are valid, False otherwise
+        """
+        if not constraints:
+            constraints = self.allocation_config
+        
+        total = sum(allocations.values())
+        
+        # Check warm slice constraints
+        warm_tokens = allocations.get("warm_slice", 0)
+        warm_min = int(total * constraints.get("warm_slice", {}).get("min", 40) / 100)
+        warm_max = int(total * constraints.get("warm_slice", {}).get("max", 70) / 100)
+        
+        if not (warm_min <= warm_tokens <= warm_max):
+            logger.warning(f"Warm slice allocation {warm_tokens} outside bounds [{warm_min}, {warm_max}]")
+            return False
+        
+        # Check structured data constraints
+        structured_tokens = allocations.get("structured_data", 0)
+        structured_min = int(total * constraints.get("structured_summaries", {}).get("min", 10) / 100)
+        structured_max = int(total * constraints.get("structured_summaries", {}).get("max", 25) / 100)
+        
+        if not (structured_min <= structured_tokens <= structured_max):
+            logger.warning(f"Structured data allocation {structured_tokens} outside bounds [{structured_min}, {structured_max}]")
+            return False
+        
+        # Check augmentation constraints  
+        augment_tokens = allocations.get("contextual_augmentation", 0)
+        augment_min = int(total * constraints.get("contextual_augmentation", {}).get("min", 25) / 100)
+        augment_max = int(total * constraints.get("contextual_augmentation", {}).get("max", 40) / 100)
+        
+        if not (augment_min <= augment_tokens <= augment_max):
+            logger.warning(f"Augmentation allocation {augment_tokens} outside bounds [{augment_min}, {augment_max}]")
+            return False
+        
+        return True
