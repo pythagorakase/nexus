@@ -300,7 +300,6 @@ class TestTurnCycle(unittest.TestCase):
             await self.lore.turn_manager.perform_warm_analysis(self.lore.turn_context)
             await self.lore.turn_manager.query_entity_states(self.lore.turn_context)
             await self.lore.turn_manager.execute_deep_queries(self.lore.turn_context)
-            await self.lore.turn_manager.perform_cold_distillation(self.lore.turn_context)
             await self.lore.turn_manager.assemble_context_payload(self.lore.turn_context)
             
             # Check the assembled context
