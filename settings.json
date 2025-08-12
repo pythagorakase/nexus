@@ -113,7 +113,7 @@
                     }
                 }
             }
-        },
+        }
     },
     "Agent Settings": {
         "global": {
@@ -127,7 +127,7 @@
                     "llama-3.3-70b-instruct@8bit",
                     "llama-4-scout-17b-16e-instruct"
                 ],
-                "default_model": "openai/gpt-oss-120b"
+                "default_model": "nexveridian/gpt-oss-120b"
             },
             "llm": {
                 "api_base": "http://localhost:1234",
