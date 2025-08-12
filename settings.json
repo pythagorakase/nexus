@@ -131,6 +131,7 @@
             },
             "llm": {
                 "api_base": "http://localhost:1234",
+                "context_window": 65536,
                 "temperature": 0.8,
                 "max_tokens": 2048,
                 "top_k": 40,
