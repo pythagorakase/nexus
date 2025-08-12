@@ -166,6 +166,7 @@
         "LORE": {
             "debug": true,
             "enable_narrative_state_allocation": false,
+            "agentic_sql": true,
             "payload_percent_budget": {
                 "structured_summaries": {
                     "min": 10,
