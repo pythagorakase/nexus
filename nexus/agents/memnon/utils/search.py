@@ -90,6 +90,11 @@ class SearchManager:
             else:
                 vector_weight = hybrid_config.get("vector_weight_default", 0.6)
                 text_weight = hybrid_config.get("text_weight_default", 0.4)
+
+            # Temporary toggle: allow disabling text leg entirely
+            if hybrid_config.get("disable_text_search", False):
+                vector_weight = 1.0
+                text_weight = 0.0
             
             # Normalize weights to ensure they sum to 1.0
             total_weight = vector_weight + text_weight
@@ -283,7 +288,7 @@ class SearchManager:
             List of matching chunks with scores and metadata
         """
         try:
-            # Use prepare_tsquery for consistent processing
+            # Prefer websearch_to_tsquery for more natural queries, with a fallback to ILIKE for single tokens
             processed_query = prepare_tsquery(query_text)
             
             # Build query with filters
@@ -310,14 +315,14 @@ class SearchManager:
                 cm.season, 
                 cm.episode, 
                 cm.scene as scene_number,
-                ts_rank(to_tsvector('english', nc.raw_text), to_tsquery('english', :query)) as score,
-                ts_headline('english', nc.raw_text, to_tsquery('english', :query), 'MaxFragments=3, MinWords=15, MaxWords=35') as highlights
+                ts_rank(to_tsvector('english', nc.raw_text), websearch_to_tsquery('english', :query)) as score,
+                ts_headline('english', nc.raw_text, websearch_to_tsquery('english', :query), 'MaxFragments=3, MinWords=15, MaxWords=35') as highlights
             FROM 
                 narrative_chunks nc
             JOIN 
                 chunk_metadata cm ON nc.id = cm.chunk_id
             WHERE 
-                to_tsvector('english', nc.raw_text) @@ to_tsquery('english', :query)
+                to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', :query)
                 {filter_sql}
             ORDER BY 
                 score DESC
@@ -335,12 +340,9 @@ class SearchManager:
                     query_params["world_layer"] = filters['world_layer']
             
             result = session.execute(text(query_sql), query_params)
-            
-            # Process results
-            text_results = []
+            text_results: List[Dict[str, Any]] = []
             for row in result:
                 chunk_id, raw_text, season, episode, scene_number, score, highlights = row
-                
                 text_results.append({
                     'id': str(chunk_id),
                     'chunk_id': str(chunk_id),
@@ -355,6 +357,54 @@ class SearchManager:
                     'score': float(score),
                     'source': 'text_search'
                 })
+
+            # Fallback: if no matches and the query is a single token, try ILIKE
+            if not text_results:
+                single = (query_text or "").strip()
+                if single and len(single.split()) == 1:
+                    like_sql = f"""
+                    SELECT 
+                        nc.id, 
+                        nc.raw_text, 
+                        cm.season, 
+                        cm.episode, 
+                        cm.scene as scene_number,
+                        0.05 as score,
+                        NULL as highlights
+                    FROM 
+                        narrative_chunks nc
+                    JOIN 
+                        chunk_metadata cm ON nc.id = cm.chunk_id
+                    WHERE 
+                        nc.raw_text ILIKE '%' || :like || '%'
+                        {filter_sql}
+                    LIMIT :limit
+                    """
+                    like_params = {"like": single, "limit": limit}
+                    if filters:
+                        if 'season' in filters:
+                            like_params["season"] = filters['season']
+                        if 'episode' in filters:
+                            like_params["episode"] = filters['episode']
+                        if 'world_layer' in filters:
+                            like_params["world_layer"] = filters['world_layer']
+                    like_result = session.execute(text(like_sql), like_params)
+                    for row in like_result:
+                        chunk_id, raw_text, season, episode, scene_number, score, highlights = row
+                        text_results.append({
+                            'id': str(chunk_id),
+                            'chunk_id': str(chunk_id),
+                            'text': raw_text,
+                            'content_type': 'narrative',
+                            'metadata': {
+                                'season': season,
+                                'episode': episode,
+                                'scene_number': scene_number,
+                                'highlights': highlights
+                            },
+                            'score': float(score),
+                            'source': 'text_search_like'
+                        })
             
             return text_results
         

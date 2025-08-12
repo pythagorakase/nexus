@@ -33,8 +33,32 @@ class ModelManager:
         self.settings_path = settings_path or Path(__file__).parent.parent.parent.parent.parent / "settings.json"
         self.settings = self._load_settings()
         
-        # Configure LM Studio client
-        lms.configure_default_client("localhost:1234")
+        # Configure LM Studio client (idempotent)
+        try:
+            # Derive host from settings if available
+            lore_llm_cfg = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
+            base_url = lore_llm_cfg.get("lmstudio_url", "http://localhost:1234/v1")
+            host = (
+                str(base_url)
+                .replace("https://", "")
+                .replace("http://", "")
+                .replace("/v1", "")
+                .strip("/")
+            ) or "localhost:1234"
+            # Configure only if not already configured. If already configured, ensure host matches.
+            try:
+                lms.configure_default_client(host)
+            except Exception as e:
+                if "Default client is already created" in str(e):
+                    logger.debug("Default client already exists; verifying connectivity")
+                else:
+                    raise
+        except Exception as e:
+            # If default client already exists, reuse it silently
+            if "Default client is already created" in str(e):
+                logger.debug("Default LM Studio client already configured; reusing existing client")
+            else:
+                raise
         
         # Track current loaded model
         self.current_model = None
@@ -255,8 +279,9 @@ class ModelManager:
         # Check if we should unload after use
         lore_config = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
         if lore_config.get("unload_after_turn", True):
-            logger.info("Unloading model as per unload_after_turn setting")
-            self.unload_model()
+            # Best-effort unload; if ws inactive, skip without warning
+            if not self.unload_model():
+                logger.debug("Model unload skipped or already inactive")
 
 
 def main():

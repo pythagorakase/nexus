@@ -5,7 +5,8 @@ Handles initialization and interaction with local language models via LM Studio 
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Type, Union
+from typing import Literal
 from pathlib import Path
 from pydantic import BaseModel, Field
 
@@ -31,6 +32,19 @@ class NarrativeAnalysis(BaseModel):
     confidence_score: float = Field(default=0.8, description="Confidence in the analysis")
 
 
+class QAResponse(BaseModel):
+    """Structured Q&A response for LORE synthesis"""
+    answer: str
+    reasoning: str
+    cited_chunk_ids: List[int] = Field(default_factory=list)
+
+
+class SQLStep(BaseModel):
+    """Structured planner step for agentic SQL."""
+    action: Literal["sql", "final"]
+    sql: Optional[str] = None
+
+
 class LocalLLMManager:
     """Manages local LLM for LORE's reasoning capabilities via LM Studio SDK"""
     
@@ -53,6 +67,9 @@ class LocalLLMManager:
         self.model = None
         self.loaded_model_id = None
         
+        # Whether to unload model on object deletion
+        self.unload_on_exit: bool = bool(self.llm_config.get("unload_on_exit", True))
+
         if LMS_SDK_AVAILABLE:
             self._initialize_sdk_client()
         else:
@@ -220,16 +237,31 @@ Provide a structured analysis of characters, locations, context type, and entiti
                         "maxTokens": 500
                     }
                 )
-                
-                # Convert Pydantic model to dict
-                analysis = result.parsed
-                return {
-                    "characters": analysis.characters,
-                    "locations": analysis.locations,
-                    "context_type": analysis.context_type,
-                    "entities_for_retrieval": analysis.entities_for_retrieval,
-                    "confidence_score": analysis.confidence_score
-                }
+
+                # Convert structured output to dict safely
+                try:
+                    if hasattr(result, "parsed") and result.parsed is not None:
+                        analysis = result.parsed
+                        # result.parsed may already be a dict or a Pydantic model
+                        if isinstance(analysis, dict):
+                            return {
+                                "characters": analysis.get("characters", []),
+                                "locations": analysis.get("locations", []),
+                                "context_type": analysis.get("context_type", "unknown"),
+                                "entities_for_retrieval": analysis.get("entities_for_retrieval", []),
+                                "confidence_score": analysis.get("confidence_score", 0.8),
+                            }
+                        else:
+                            return {
+                                "characters": getattr(analysis, "characters", []),
+                                "locations": getattr(analysis, "locations", []),
+                                "context_type": getattr(analysis, "context_type", "unknown"),
+                                "entities_for_retrieval": getattr(analysis, "entities_for_retrieval", []),
+                                "confidence_score": getattr(analysis, "confidence_score", 0.8),
+                            }
+                except Exception as e:
+                    logger.error(f"Error processing structured analysis: {e}")
+                    # Fall through to text parsing
                 
             except Exception as e:
                 logger.error(f"SDK structured analysis failed: {e}, falling back to text parsing")
@@ -301,34 +333,30 @@ Response format - use exact headers:"""
         Returns:
             List of retrieval queries
         """
-        queries = []
-        
-        # Always include user input as a query
+        queries: List[str] = []
+
+        # 1) Always include the user's exact question as the first query
         if user_input:
             queries.append(user_input)
-        
-        # Generate character-specific queries
-        for character in context_analysis.get("characters", [])[:2]:
-            queries.append(f"{character} history personality relationships")
-        
-        # Generate location queries if relevant
-        for location in context_analysis.get("locations", [])[:1]:
-            queries.append(f"{location} description environment inhabitants")
-        
-        # Add entity-specific queries
+
+        # 2) Minimal, targeted follow-ups: detected character names and entities
+        # Avoid generic catch-all phrases; keep precision high
+        for character in context_analysis.get("characters", [])[:3]:
+            if isinstance(character, str) and character:
+                queries.append(character)
+
         for entity in context_analysis.get("entities_for_retrieval", [])[:2]:
-            queries.append(f"{entity} context background")
-        
-        # Context-specific queries
-        context_type = context_analysis.get("context_type", "")
-        if context_type == "dialogue":
-            queries.append("conversation history dialogue relationships")
-        elif context_type == "action":
-            queries.append("combat abilities skills consequences")
-        elif context_type == "exploration":
-            queries.append("environment details discoveries hidden")
-        
-        return queries[:5]  # Limit to 5 queries
+            if isinstance(entity, str) and entity:
+                queries.append(entity)
+
+        # De-duplicate while preserving order and cap
+        seen = set()
+        deduped: List[str] = []
+        for q in queries:
+            if q not in seen:
+                deduped.append(q)
+                seen.add(q)
+        return deduped[:5]
     
     def is_available(self) -> bool:
         """Check if local LLM is available via LM Studio"""
@@ -391,7 +419,7 @@ Response format - use exact headers:"""
     
     def __del__(self):
         """Cleanup on deletion - unload any loaded models"""
-        if hasattr(self, 'model') and self.model:
+        if self.unload_on_exit and hasattr(self, 'model') and self.model:
             try:
                 self.unload_model()
             except:
@@ -418,3 +446,43 @@ Response format - use exact headers:"""
         except:
             pass
         return []
+
+    def structured_query(
+        self,
+        prompt: str,
+        response_model: Type[BaseModel],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None,
+    ) -> Union[BaseModel, Dict[str, Any]]:
+        """
+        Query the local LLM requesting structured output via LM Studio SDK when available.
+        Falls back to plain text JSON parsing with `query()` when SDK structured mode is unavailable.
+        """
+        if LMS_SDK_AVAILABLE and self.model:
+            chat = lms.Chat(system_prompt or "You are LORE, a narrative intelligence system.")
+            chat.add_user_message(prompt)
+            try:
+                result = self.model.respond(
+                    chat,
+                    response_format=response_model,
+                    config={
+                        "temperature": temperature if temperature is not None else self.llm_config.get("temperature", 0.3),
+                        "maxTokens": max_tokens if max_tokens is not None else self.llm_config.get("max_tokens", 1024),
+                        "topP": self.llm_config.get("top_p", 0.9),
+                    },
+                )
+                if hasattr(result, "parsed") and result.parsed is not None:
+                    return result.parsed
+            except Exception as e:
+                logger.error(f"SDK structured_query failed: {e}; falling back to JSON parsing")
+
+        # Fallback: call plain query with JSON instructions and parse
+        raw = self.query(prompt, temperature=temperature, max_tokens=max_tokens, system_prompt=system_prompt)
+        try:
+            data = json.loads(raw)
+            return data
+        except Exception:
+            # Return raw content in a dict-like shape
+            return {"answer": raw, "reasoning": "unstructured"}
