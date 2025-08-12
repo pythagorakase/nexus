@@ -1,0 +1,46 @@
+LORE NARRATIVE ANALYSIS OUTPUT
+======================================================================
+
+PROMPT:
+You are analyzing a narrative. The user asks: "What happened when Victor betrayed Alex?"
+
+Based on this query, identify:
+1. Key entities to search for
+2. The narrative context type 
+3. Natural language queries to find relevant content
+
+Respond in natural language.
+
+LLM RESPONSE:
+<|channel|>analysis<|message|>We need answer.<|end|><|start|>assistant<|channel|>final<|message|>**1. Key entities to search for**
+
+- **Victor** – the character who committed the betrayal  
+- **Alex** – the character who was betrayed (and possibly reacts)  
+- **Supporting characters** who might be involved in or witness the event (e.g., “Mara”, “the Council”, “the Overseer”)  
+- **Locations** where the betrayal occurs (e.g., “the underground bunker”, “the summit hall”, “the ship’s bridge”)  
+- **Objects/plot devices linked to the act** (e.g., “the encrypted data chip”, “the secret dossier”, “the weapon cache”)  
+
+**2. Narrative context type**
+
+The query is looking for a **specific plot event** – the moment of betrayal and its immediate consequences. This falls under the narrative‑context categories:
+
+- **Plot point / turning‑point** (a pivotal action that changes the story’s direction)  
+- **Conflict & resolution** (the conflict triggered by Victor’s betrayal and how it unfolds)  
+- **Character interaction** (dialogue, motivations, and emotional fallout between Victor and Alex)
+
+**3. Natural‑language queries to retrieve relevant content**
+
+1. *“What does the text say about Victor betraying Alex?”*  
+2. *“Describe the scene where Victor turns on Alex.”*  
+3. *“How does Alex react when Victor betr
+
+ANALYSIS RESULT:
+{
+  "characters": [],
+  "locations": [],
+  "context_type": "unknown",
+  "entities_for_retrieval": []
+}
+
+GENERATED QUERIES:
+- What led to Victor betraying Alex?
