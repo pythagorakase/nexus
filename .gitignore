@@ -19,7 +19,7 @@
 
 # Ignore logs
 *.log
-/error_log.txt
+/log.txt
 /memnon*.log
 /*_processing.log
 /season_episode_extraction.log
