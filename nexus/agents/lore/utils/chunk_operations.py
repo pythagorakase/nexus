@@ -230,6 +230,8 @@ def get_chunk_time_range(chunks: List[Dict]) -> Dict[str, Any]:
     Returns:
         Dictionary with start_time, end_time, and duration
     """
+    from datetime import datetime, timedelta
+    
     primary_chunks = [c for c in chunks 
                       if c.get('world_layer') == 'primary' and c.get('world_time')]
     
@@ -242,8 +244,20 @@ def get_chunk_time_range(chunks: List[Dict]) -> Dict[str, Any]:
     
     times = [c['world_time'] for c in primary_chunks]
     
-    return {
-        'start_time': min(times),
-        'end_time': max(times),
-        'duration': max(times) - min(times) if len(times) > 1 else None
-    }
+    # Handle both datetime objects and strings
+    if times and isinstance(times[0], str):
+        # For string times, just return min/max without duration calculation
+        return {
+            'start_time': min(times),
+            'end_time': max(times),
+            'duration': None  # Can't easily calculate duration for strings
+        }
+    else:
+        # For datetime objects, calculate actual duration
+        min_time = min(times)
+        max_time = max(times)
+        return {
+            'start_time': min_time,
+            'end_time': max_time,
+            'duration': max_time - min_time if len(times) > 1 else None
+        }
