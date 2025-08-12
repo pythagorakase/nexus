@@ -744,8 +744,8 @@ def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(description="Update raw text in narrative chunks while preserving metadata.")
     
-    parser.add_argument("file_pattern", nargs="?", default="*.md",
-                        help="File pattern to match (default: *.md)")
+    parser.add_argument("file_pattern", nargs="?", default="transcripts/*.md",
+                        help="File pattern to match (default: transcripts/*.md)")
     parser.add_argument("--db-url", dest="db_url", 
                         help="PostgreSQL database URL")
     parser.add_argument("--backup", action="store_true", default=True,

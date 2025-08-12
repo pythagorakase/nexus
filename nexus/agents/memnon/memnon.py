@@ -389,6 +389,103 @@ class MEMNON:
         }
         
         logger.info("MEMNON agent initialized (Headless Mode - No LLM)")
+
+    def get_schema_summary(self, tables: Optional[List[str]] = None) -> str:
+        """
+        Return a concise schema summary for whitelisted tables/columns.
+        Uses SQLAlchemy inspection to enumerate columns.
+        """
+        try:
+            inspector = inspect(self.db_manager.engine)
+            # Default allowed tables if none provided
+            allowed = tables or [
+                "characters", "episodes", "seasons", "events",
+                "factions", "places", "chunk_metadata", "narrative_chunks"
+            ]
+            lines: List[str] = []
+            for table_name in allowed:
+                try:
+                    cols = inspector.get_columns(table_name)
+                    col_list = ", ".join([c.get("name", "?") for c in cols])
+                    lines.append(f"- {table_name}({col_list})")
+                except Exception:
+                    # If table not present, skip silently
+                    continue
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error(f"Error generating schema summary: {e}")
+            return ""
+
+    def execute_readonly_sql(self, sql: str, max_rows: int = 50, timeout_ms: int = 3000) -> Dict[str, Any]:
+        """
+        Execute a read-only, whitelisted SELECT statement safely.
+        - Only allows single-statement SELECT queries
+        - Enforces allowed table list and LIMIT
+        - Applies a short statement timeout
+        Returns { columns: [...], rows: [{...}, ...], row_count: int } or { error: str }
+        """
+        try:
+            if not sql or not isinstance(sql, str):
+                return {"error": "Empty SQL"}
+            original_sql = sql
+            sql_str = sql.strip().rstrip(";")
+            lowered = sql_str.lower()
+            # Must be a single SELECT
+            if not lowered.startswith("select "):
+                return {"error": "Only SELECT statements are allowed"}
+            forbidden = [";", " update ", " insert ", " delete ", " alter ", " create ", " drop ", " grant ", " revoke ", " truncate ", " vacuum ", " copy "]
+            for kw in forbidden:
+                if kw in f" {lowered} ":
+                    return {"error": f"Forbidden keyword in SQL: {kw.strip()}"}
+            # Whitelist tables referenced in FROM/JOIN
+            import re
+            allowed_tables = {
+                "characters", "episodes", "seasons", "events",
+                "factions", "places", "chunk_metadata", "narrative_chunks"
+            }
+            referenced: List[str] = []
+            for pattern in [r"\\bfrom\\s+([a-zA-Z_\\.\"]+)", r"\\bjoin\\s+([a-zA-Z_\\.\"]+)"]:
+                for m in re.finditer(pattern, lowered):
+                    name = m.group(1).strip().strip('"')
+                    # remove optional schema prefix like public.
+                    if "." in name:
+                        name = name.split(".")[-1]
+                    referenced.append(name)
+            for tbl in referenced:
+                if tbl and tbl not in allowed_tables:
+                    return {"error": f"Table not allowed: {tbl}"}
+            # Enforce LIMIT if absent
+            if " limit " not in lowered:
+                sql_str = f"{sql_str} LIMIT {max_rows}"
+            # Execute
+            with self.db_manager.engine.connect() as conn:
+                # Apply a short statement timeout
+                try:
+                    conn.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
+                except Exception:
+                    pass
+                result = conn.execute(text(sql_str))
+                rows = result.fetchall()
+                columns = list(result.keys())
+            # Truncate long text fields
+            formatted_rows: List[Dict[str, Any]] = []
+            for row in rows[:max_rows]:
+                row_dict = {}
+                for col, val in zip(columns, row):
+                    if isinstance(val, str) and len(val) > 2000:
+                        row_dict[col] = val[:2000] + "..."
+                    else:
+                        row_dict[col] = val
+                formatted_rows.append(row_dict)
+            return {
+                "columns": columns,
+                "rows": formatted_rows,
+                "row_count": len(formatted_rows),
+                "sql": original_sql.strip(),
+            }
+        except Exception as e:
+            logger.error(f"Error executing read-only SQL: {e}")
+            return {"error": str(e)}
     
     def _initialize_memory_blocks(self):
         """Initialize specialized memory blocks if not present."""
@@ -724,10 +821,10 @@ class MEMNON:
         try:
             with self.Session() as session:
                 if table == "characters":
-                    # Query characters
-                    # First check for exact name matches
+                    # Query characters (schema: id, name, summary, background, personality, emotional_state, current_activity, current_location, extra_data)
+                    # Exact name or alias match
                     name_match_query = text("""
-                    SELECT DISTINCT c.id, c.name, c.description, c.role, c.faction, c.status,
+                    SELECT DISTINCT c.id, c.name, c.summary, c.current_activity, c.current_location,
                            array_agg(DISTINCT ca.alias) as aliases
                     FROM characters c
                     LEFT JOIN character_aliases ca ON c.id = ca.character_id
@@ -736,9 +833,8 @@ class MEMNON:
                         SELECT 1 FROM character_aliases ca2 
                         WHERE ca2.character_id = c.id AND LOWER(ca2.alias) = LOWER(:query)
                     )
-                    GROUP BY c.id, c.name, c.description, c.role, c.faction, c.status
+                    GROUP BY c.id, c.name, c.summary, c.current_activity, c.current_location
                     """)
-                    
                     result = session.execute(name_match_query, {"query": query_text})
                     exact_matches = []
                     for row in result:
@@ -746,33 +842,26 @@ class MEMNON:
                         exact_matches.append({
                             "id": row.id,
                             "name": row.name,
-                            "description": row.description,
-                            "role": row.role,
+                            "summary": row.summary,
+                            "current_activity": row.current_activity,
+                            "current_location": row.current_location,
                             "aliases": aliases,
-                            "faction": row.faction,
-                            "status": row.status,
-                            "score": 1.0,  # Exact match gets top score
+                            "score": 1.0,
                             "content_type": "character",
                             "source": "structured_data"
                         })
-                    
                     if exact_matches:
                         return exact_matches
-                    
-                    # Then look for partial matches
+                    # Partial match by name or summary text
                     partial_match_query = text("""
-                    SELECT DISTINCT c.id, c.name, c.description, c.role, c.faction, c.status,
-                           array_agg(DISTINCT ca.alias) as aliases,
-                           similarity(LOWER(c.name), LOWER(:query)) AS match_score
+                    SELECT DISTINCT c.id, c.name, c.summary, c.current_activity, c.current_location,
+                           array_agg(DISTINCT ca.alias) as aliases
                     FROM characters c
                     LEFT JOIN character_aliases ca ON c.id = ca.character_id
-                    WHERE LOWER(c.name) LIKE '%' || LOWER(:query) || '%'
-                    OR LOWER(c.description) LIKE '%' || LOWER(:query) || '%'
-                    GROUP BY c.id, c.name, c.description, c.role, c.faction, c.status
-                    ORDER BY match_score DESC
+                    WHERE c.name ILIKE '%' || :query || '%' OR c.summary ILIKE '%' || :query || '%'
+                    GROUP BY c.id, c.name, c.summary, c.current_activity, c.current_location
                     LIMIT :limit
                     """)
-                    
                     result = session.execute(partial_match_query, {"query": query_text, "limit": limit})
                     partial_matches = []
                     for row in result:
@@ -780,16 +869,14 @@ class MEMNON:
                         partial_matches.append({
                             "id": row.id,
                             "name": row.name,
-                            "description": row.description,
-                            "role": row.role,
+                            "summary": row.summary,
+                            "current_activity": row.current_activity,
+                            "current_location": row.current_location,
                             "aliases": aliases,
-                            "faction": row.faction,
-                            "status": row.status,
-                            "score": float(row.match_score),
+                            "score": 0.75,
                             "content_type": "character",
                             "source": "structured_data"
                         })
-                    
                     return partial_matches
                 
                 elif table == "places":
@@ -1311,8 +1398,8 @@ class MEMNON:
         try:
             with self.Session() as session:
                 query = text("""
-                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene_number,
-                           cm.world_layer, cm.perspective, cm.location
+                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                           cm.world_layer, cm.perspective
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     ORDER BY nc.id DESC
@@ -1331,8 +1418,7 @@ class MEMNON:
                             "episode": result.episode,
                             "scene_number": result.scene_number,
                             "world_layer": result.world_layer,
-                            "perspective": result.perspective,
-                            "location": result.location
+                            "perspective": result.perspective
                         },
                         "score": 1.0,  # Recent chunks have perfect relevance
                         "source": "recent_chunks"
@@ -1364,8 +1450,8 @@ class MEMNON:
         try:
             with self.Session() as session:
                 query = text("""
-                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene_number,
-                           cm.world_layer, cm.perspective, cm.location
+                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                           cm.world_layer, cm.perspective
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     WHERE nc.id = :chunk_id
@@ -1385,8 +1471,7 @@ class MEMNON:
                                 "episode": result.episode,
                                 "scene_number": result.scene_number,
                                 "world_layer": result.world_layer,
-                                "perspective": result.perspective,
-                                "location": result.location
+                                "perspective": result.perspective
                             },
                             "score": 1.0,  # Perfect match for ID query
                             "source": "direct_id_lookup"

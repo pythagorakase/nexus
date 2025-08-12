@@ -788,72 +788,33 @@ def execute_multi_model_hybrid_search(
                 
                 # First, run text search to get initial text scores
                 
-                # When building the text search SQL query, use weighted query if IDF is available
-                if idf_dict and hasattr(idf_dict, 'generate_weighted_query'):
-                    weighted_query = idf_dict.generate_weighted_query(query_text)
-                    logger.debug(f"Using weighted query: {weighted_query}")
-                    
-                    text_search_sql = f"""
-                    SELECT 
-                        nc.id, 
-                        nc.raw_text,
-                        cm.season, 
-                        cm.episode, 
-                        cm.scene as scene_number,
-                        ts_rank(to_tsvector('english', nc.raw_text), 
-                                to_tsquery('english', %s)) AS text_score
-                    FROM 
-                        narrative_chunks nc
-                    JOIN 
-                        chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE 
-                        to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
-                        {filter_sql}
-                    ORDER BY 
-                        text_score DESC
-                    LIMIT %s
-                    """
-                    
-                    # Use weighted query for both parameters
-                    cursor.execute(text_search_sql, (
-                        weighted_query, 
-                        weighted_query, 
-                        top_k * 3  # Get more results for combining with vector scores
-                    ))
-                else:
-                    # Use our new prepare_tsquery function to safely process the query
-                    ts_query = prepare_tsquery(query_text)
-                    
-                    # Log the processed query with OR operators
-                    logger.info(f"Text search using OR-based query: '{ts_query}'")
-                    
-                    text_search_sql = f"""
-                    SELECT 
-                        nc.id, 
-                        nc.raw_text,
-                        cm.season, 
-                        cm.episode, 
-                        cm.scene as scene_number,
-                        ts_rank(to_tsvector('english', nc.raw_text), 
-                                to_tsquery('english', %s)) AS text_score
-                    FROM 
-                        narrative_chunks nc
-                    JOIN 
-                        chunk_metadata cm ON nc.id = cm.chunk_id
-                    WHERE 
-                        to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
-                        {filter_sql}
-                    ORDER BY 
-                        text_score DESC
-                    LIMIT %s
-                    """
-                    
-                    # Execute text search
-                    cursor.execute(text_search_sql, (
-                        ts_query,  # Use the processed query with OR operators 
-                        ts_query,  # Use the processed query with OR operators
-                        top_k * 3  # Get more results for text search
-                    ))
+                # Use websearch_to_tsquery for robust text search (can be disabled by caller via weights)
+                logger.info(f"Text search using websearch_to_tsquery: '{query_text}'")
+                text_search_sql = f"""
+                SELECT 
+                    nc.id, 
+                    nc.raw_text,
+                    cm.season, 
+                    cm.episode, 
+                    cm.scene as scene_number,
+                    ts_rank(to_tsvector('english', nc.raw_text), 
+                            websearch_to_tsquery('english', %s)) AS text_score
+                FROM 
+                    narrative_chunks nc
+                JOIN 
+                    chunk_metadata cm ON nc.id = cm.chunk_id
+                WHERE 
+                    to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
+                    {filter_sql}
+                ORDER BY 
+                    text_score DESC
+                LIMIT %s
+                """
+                cursor.execute(text_search_sql, (
+                    query_text,
+                    query_text,
+                    top_k * 3
+                ))
                 
                 all_text_scores = []
                 
@@ -896,6 +857,46 @@ def execute_multi_model_hybrid_search(
                         del result['raw_text_score']
                 
                 logger.info(f"Text search found {len(results)} results with non-zero scores")
+
+                # Fallback: if no text results and single-token query, try ILIKE
+                if not results:
+                    single = (query_text or "").strip()
+                    if single and len(single.split()) == 1:
+                        like_sql = f"""
+                        SELECT 
+                            nc.id, 
+                            nc.raw_text,
+                            cm.season, 
+                            cm.episode, 
+                            cm.scene as scene_number
+                        FROM 
+                            narrative_chunks nc
+                        JOIN 
+                            chunk_metadata cm ON nc.id = cm.chunk_id
+                        WHERE 
+                            nc.raw_text ILIKE '%%' || %s || '%%'
+                            {filter_sql}
+                        LIMIT %s
+                        """
+                        cursor.execute(like_sql, (single, top_k * 3))
+                        for row in cursor.fetchall():
+                            chunk_id, raw_text, season, episode, scene_number = row
+                            chunk_id = str(chunk_id)
+                            if chunk_id not in results:
+                                results[chunk_id] = {
+                                    'id': chunk_id,
+                                    'chunk_id': chunk_id,
+                                    'text': raw_text,
+                                    'content_type': 'narrative',
+                                    'metadata': {
+                                        'season': season,
+                                        'episode': episode,
+                                        'scene_number': scene_number
+                                    },
+                                    'model_scores': {},
+                                    'text_score': 0.05,
+                                    'vector_score': 0.0
+                                }
                 
                 # Now run vector searches for each model
                 for model_key, embedding in query_embeddings.items():
