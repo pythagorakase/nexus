@@ -392,29 +392,91 @@ class MEMNON:
 
     def get_schema_summary(self, tables: Optional[List[str]] = None) -> str:
         """
-        Return a concise schema summary for whitelisted tables/columns.
-        Uses SQLAlchemy inspection to enumerate columns.
+        Return a concise schema summary for non-empty, relevant tables.
+        Excludes embedding tables and includes table/column comments.
         """
         try:
+            from sqlalchemy import text
             inspector = inspect(self.db_manager.engine)
-            # Default allowed tables if none provided
+            
+            # Only include tables that are relevant for LORE's queries
+            # Exclude embedding tables and nonexistent tables
             allowed = tables or [
-                "characters", "episodes", "seasons", "events",
-                "factions", "places", "chunk_metadata", "narrative_chunks"
+                "characters", "places", "chunk_metadata", "narrative_chunks"
             ]
+            
             lines: List[str] = []
+            
             for table_name in allowed:
                 try:
+                    # Check if table exists
+                    if not inspector.has_table(table_name):
+                        continue
+                    
+                    # Check if table has any rows (skip empty tables)
+                    with self.db_manager.engine.connect() as conn:
+                        count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        row_count = count_result.scalar()
+                        if row_count == 0:
+                            continue
+                    
+                    # Get table comment if available
+                    table_comment = ""
+                    try:
+                        comment_result = conn.execute(
+                            text("SELECT obj_description(c.oid) FROM pg_class c WHERE c.relname = :table"),
+                            {"table": table_name}
+                        )
+                        comment = comment_result.scalar()
+                        if comment:
+                            table_comment = f" -- {comment}"
+                    except:
+                        pass
+                    
+                    # Get columns with comments
                     cols = inspector.get_columns(table_name)
-                    col_list = ", ".join([c.get("name", "?") for c in cols])
-                    lines.append(f"- {table_name}({col_list})")
-                except Exception:
-                    # If table not present, skip silently
+                    col_descriptions = []
+                    
+                    for col in cols:
+                        col_name = col.get("name", "?")
+                        col_type = str(col.get("type", ""))[:20]  # Truncate long types
+                        
+                        # Try to get column comment
+                        col_comment = ""
+                        try:
+                            comment_result = conn.execute(
+                                text("""
+                                SELECT col_description(c.oid, a.attnum) 
+                                FROM pg_class c 
+                                JOIN pg_attribute a ON a.attrelid = c.oid 
+                                WHERE c.relname = :table AND a.attname = :column
+                                """),
+                                {"table": table_name, "column": col_name}
+                            )
+                            comment = comment_result.scalar()
+                            if comment:
+                                col_comment = f":{comment}"
+                        except:
+                            pass
+                        
+                        col_descriptions.append(f"{col_name}{col_comment}")
+                    
+                    col_list = ", ".join(col_descriptions)
+                    lines.append(f"- {table_name}({col_list}){table_comment}")
+                    
+                except Exception as e:
+                    # Skip tables with errors
+                    logger.debug(f"Skipping table {table_name}: {e}")
                     continue
+            
+            if not lines:
+                return "No populated tables found in database."
+            
             return "\n".join(lines)
+            
         except Exception as e:
             logger.error(f"Error generating schema summary: {e}")
-            return ""
+            return "Error retrieving schema information."
 
     def execute_readonly_sql(self, sql: str, max_rows: int = 50, timeout_ms: int = 3000) -> Dict[str, Any]:
         """
