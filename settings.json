@@ -141,6 +141,7 @@
                 "presence_penalty": 0.5,
                 "frequency_penalty": 0.5,
                 "timeout": 120,
+                "reasoning_effort": "high",
                 "system_prompt": "You are a narrative intelligence system that has perfect recall of story elements."
             }
         },

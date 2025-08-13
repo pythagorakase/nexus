@@ -206,8 +206,24 @@ class ModelManager:
                 self.unload_model()
                 time.sleep(2)  # Extra time between unload and load
             
-            # Load the new model using the correct SDK syntax
-            self.current_model = lms.llm(model_id)
+            # Get context window from settings
+            global_llm_config = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
+            context_window = global_llm_config.get("context_window", 65536)
+            
+            # Load the new model with explicit context window
+            logger.info(f"Loading with context_window: {context_window}")
+            
+            # According to LM Studio docs, context length is set via load options
+            # Note: This requires LM Studio SDK v0.3.0+
+            try:
+                # Try with contextLength option (newer SDK versions)
+                self.current_model = lms.llm(model_id, config={"contextLength": context_window})
+                logger.info(f"Loaded with contextLength: {context_window}")
+            except TypeError:
+                # Fall back to basic load if config not supported
+                logger.warning("contextLength parameter not supported in this SDK version")
+                self.current_model = lms.llm(model_id)
+            
             self.current_model_id = model_id
             
             # Wait for model to initialize
