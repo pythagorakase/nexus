@@ -390,8 +390,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LORE Q&A TUI or headless CLI")
     parser.add_argument("--qa", help="Run headless Q&A with the given question (no TUI)")
     parser.add_argument("--repl", action="store_true", help="Run interactive headless CLI (no TUI)")
-    parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL during headless Q&A")
-    parser.add_argument("--settings", help="Path to settings.json for LORE")
+    parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL (default: ON via settings.json)")
+    parser.add_argument("--settings", default="settings.json", help="Path to settings.json for LORE (default: settings.json)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging for headless mode")
     parser.add_argument("--save-json", help="Path to save JSON transcript (headless mode)")
     parser.add_argument("--save-md", help="Path to save Markdown summary (headless mode)")
@@ -410,6 +410,7 @@ if __name__ == "__main__":
                 from nexus.agents.lore.lore import LORE
 
                 lore = LORE(settings_path=args.settings, debug=args.debug)
+                # Agentic SQL is ON by default in settings.json; flag forces ON if provided
                 if args.agentic_sql:
                     lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
                 if args.keep_model and getattr(lore, "llm_manager", None):
