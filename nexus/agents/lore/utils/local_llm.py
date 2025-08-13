@@ -151,14 +151,24 @@ class LocalLLMManager:
                 chat = lms.Chat(system_prompt or "You are LORE, a narrative intelligence system.")
                 chat.add_user_message(prompt)
                 
-                result = self.model.respond(
-                    chat,
-                    config={
-                        "temperature": temp,
-                        "maxTokens": max_tok,
-                        "topP": self.llm_config.get("top_p", 0.9)
-                    }
-                )
+                config = {
+                    "temperature": temp,
+                    "maxTokens": max_tok,
+                    "topP": self.llm_config.get("top_p", 0.9)
+                }
+                
+                # Add reasoning effort for GPT-OSS models
+                if "gpt-oss" in str(self.loaded_model_id).lower():
+                    # Get reasoning effort from settings or use high for Q&A
+                    reasoning_effort = self.llm_config.get("reasoning_effort", "high")
+                    config["reasoning"] = {"effort": reasoning_effort}
+                    logger.debug(f"Using {reasoning_effort} reasoning effort for GPT-OSS model")
+                
+                # Debug log the config being sent
+                logger.debug(f"LLM query config: {config}")
+                logger.debug(f"Prompt length: {len(prompt)} chars")
+                
+                result = self.model.respond(chat, config=config)
                 
                 return result.content.strip()
                 
@@ -333,30 +343,10 @@ Response format - use exact headers:"""
         Returns:
             List of retrieval queries
         """
-        queries: List[str] = []
-
-        # 1) Always include the user's exact question as the first query
-        if user_input:
-            queries.append(user_input)
-
-        # 2) Minimal, targeted follow-ups: detected character names and entities
-        # Avoid generic catch-all phrases; keep precision high
-        for character in context_analysis.get("characters", [])[:3]:
-            if isinstance(character, str) and character:
-                queries.append(character)
-
-        for entity in context_analysis.get("entities_for_retrieval", [])[:2]:
-            if isinstance(entity, str) and entity:
-                queries.append(entity)
-
-        # De-duplicate while preserving order and cap
-        seen = set()
-        deduped: List[str] = []
-        for q in queries:
-            if q not in seen:
-                deduped.append(q)
-                seen.add(q)
-        return deduped[:5]
+        # For Q&A mode, just return the user's exact question
+        # The analyze_narrative_context is pulling entities from warm_slice 
+        # that aren't relevant to the question
+        return [user_input] if user_input else []
     
     def is_available(self) -> bool:
         """Check if local LLM is available via LM Studio"""
@@ -464,14 +454,22 @@ Response format - use exact headers:"""
             chat = lms.Chat(system_prompt or "You are LORE, a narrative intelligence system.")
             chat.add_user_message(prompt)
             try:
+                config = {
+                    "temperature": temperature if temperature is not None else self.llm_config.get("temperature", 0.3),
+                    "maxTokens": max_tokens if max_tokens is not None else self.llm_config.get("max_tokens", 1024),
+                    "topP": self.llm_config.get("top_p", 0.9),
+                }
+                
+                # Add reasoning effort for GPT-OSS models in structured queries too
+                if "gpt-oss" in str(self.loaded_model_id).lower():
+                    reasoning_effort = self.llm_config.get("reasoning_effort", "high")
+                    config["reasoning"] = {"effort": reasoning_effort}
+                    logger.debug(f"Using {reasoning_effort} reasoning effort for structured query")
+                
                 result = self.model.respond(
                     chat,
                     response_format=response_model,
-                    config={
-                        "temperature": temperature if temperature is not None else self.llm_config.get("temperature", 0.3),
-                        "maxTokens": max_tokens if max_tokens is not None else self.llm_config.get("max_tokens", 1024),
-                        "topP": self.llm_config.get("top_p", 0.9),
-                    },
+                    config=config,
                 )
                 if hasattr(result, "parsed") and result.parsed is not None:
                     return result.parsed

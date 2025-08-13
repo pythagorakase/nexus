@@ -495,6 +495,14 @@ class LORE:
                 "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,summary FROM characters WHERE name ILIKE '%Victor%' LIMIT 5\"}\n"
                 "Result (mock): [{\\\"id\\\":7, \\\"name\\\":\\\"Victor Sato\\\", \\\"summary\\\":\\\"Presumed dead, operating in exile; continues work from Data Barge Okami.\\\"}]\n"
                 "> {\"action\":\"final\"}\n\n"
+                # Location/GIS example
+                "Location query (with GIS data)\n"
+                "User: How far is it from Night City to Pete's Silo?\n"
+                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,description FROM places WHERE name ILIKE '%Night City%' OR name ILIKE '%Silo%' LIMIT 10\"}\n"
+                "Result (mock): [{\\\"id\\\":1,\\\"name\\\":\\\"Night City\\\",\\\"description\\\":\\\"Cyberpunk metropolis\\\"},{\\\"id\\\":12,\\\"name\\\":\\\"Pete's Silo\\\",\\\"description\\\":\\\"Abandoned missile silo\\\"}]\n"
+                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,gis_coordinates,zone,extra_data FROM places WHERE id IN (1,12)\"}\n"
+                "Result (mock): [{\\\"id\\\":1,\\\"name\\\":\\\"Night City\\\",\\\"gis_coordinates\\\":[38.9,-77.0],\\\"zone\\\":\\\"Central\\\"},{\\\"id\\\":12,\\\"name\\\":\\\"Pete's Silo\\\",\\\"gis_coordinates\\\":[39.2,-76.5],\\\"zone\\\":\\\"Wastes\\\"}]\n"
+                "> {\"action\":\"final\"}\n\n"
                 # Iterative multi-step example
                 "Iterative (event aftermath)\n"
                 "User: What was the aftermath of the raid on the Dynacorp black site?\n"
@@ -541,6 +549,22 @@ class LORE:
                     break
                 if action == "sql":
                     sql = str(step.get("sql", "")).strip()
+                    
+                    # Fix common SQL quote issues from LLM generation
+                    import re
+                    
+                    # Only fix double-quoted strings (wrong SQL syntax)
+                    # Convert "string" to 'string' and escape internal apostrophes
+                    def fix_double_quotes(match):
+                        keyword = match.group(1)  # ILIKE or =
+                        content = match.group(2)
+                        # Escape any apostrophes by doubling them
+                        content = content.replace("'", "''")
+                        return f"{keyword} '{content}'"
+                    
+                    # Only process double-quoted strings, leave single-quoted ones alone
+                    sql = re.sub(r'(ILIKE|=)\s+"([^"]*)"', fix_double_quotes, sql, flags=re.IGNORECASE)
+                    
                     # Guard against duplicate SQL proposals
                     if sql in executed_sql:
                         # Nudge planner to refine or finish
