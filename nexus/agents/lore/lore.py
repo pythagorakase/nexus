@@ -481,44 +481,34 @@ class LORE:
         sql_attempts: List[Dict[str, Any]] = []
         sql_context = ""
         if agentic_sql_enabled and self.memnon:
-            # Provide schema summary and a miniature tool spec
+            # Load the system prompt which contains SQL guidance
+            system_prompt_path = Path(__file__).parent / "lore_system_prompt.md"
+            sql_section = ""
+            try:
+                with open(system_prompt_path, 'r') as f:
+                    full_prompt = f.read()
+                # Extract the Agentic SQL Mode section
+                if "## Agentic SQL Mode" in full_prompt:
+                    start = full_prompt.find("## Agentic SQL Mode")
+                    end = full_prompt.find("### LOGON (API Interface)", start)
+                    if end == -1:
+                        end = full_prompt.find("## ", start + 1)
+                    if end != -1:
+                        sql_section = full_prompt[start:end].strip()
+                    else:
+                        sql_section = full_prompt[start:].strip()
+            except Exception as e:
+                qa_logger.warning(f"Could not load system prompt: {e}")
+                sql_section = "Use SELECT queries with LIMIT. Respond with JSON: {\"action\": \"sql\"|\"final\", \"sql\": \"...\"}."
+            
+            # Get schema and construct prompt
             schema = self.memnon.get_schema_summary()
-            tool_spec = (
-                "Respond with exactly one JSON Step per turn (schema: {action: 'sql'|'final', sql?: string}).\n"
-                "Use only SELECT over the shown schema. Keep queries focused, add LIMIT 20, prefer summaries.\n"
-                "Do not repeat identical SQL; if a query returns the needed fact, emit {\\\"action\\\": \\\"final\\\"}.\n"
-                "If SELECT id,name,summary from characters returns a hit, refine by selecting more columns for that id (e.g., current_activity, current_location, extra_data) instead of repeating the same SQL.\n\n"
-                "Few-shot examples with mock results (for refinement):\n\n"
-                # Simple example
-                "Simple (character status)\n"
-                "User: What happened to Victor?\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,summary FROM characters WHERE name ILIKE '%Victor%' LIMIT 5\"}\n"
-                "Result (mock): [{\\\"id\\\":7, \\\"name\\\":\\\"Victor Sato\\\", \\\"summary\\\":\\\"Presumed dead, operating in exile; continues work from Data Barge Okami.\\\"}]\n"
-                "> {\"action\":\"final\"}\n\n"
-                # Location/GIS example
-                "Location query (with GIS data)\n"
-                "User: How far is it from Night City to Pete's Silo?\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,description FROM places WHERE name ILIKE '%Night City%' OR name ILIKE '%Silo%' LIMIT 10\"}\n"
-                "Result (mock): [{\\\"id\\\":1,\\\"name\\\":\\\"Night City\\\",\\\"description\\\":\\\"Cyberpunk metropolis\\\"},{\\\"id\\\":12,\\\"name\\\":\\\"Pete's Silo\\\",\\\"description\\\":\\\"Abandoned missile silo\\\"}]\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,gis_coordinates,zone,extra_data FROM places WHERE id IN (1,12)\"}\n"
-                "Result (mock): [{\\\"id\\\":1,\\\"name\\\":\\\"Night City\\\",\\\"gis_coordinates\\\":[38.9,-77.0],\\\"zone\\\":\\\"Central\\\"},{\\\"id\\\":12,\\\"name\\\":\\\"Pete's Silo\\\",\\\"gis_coordinates\\\":[39.2,-76.5],\\\"zone\\\":\\\"Wastes\\\"}]\n"
-                "> {\"action\":\"final\"}\n\n"
-                # Iterative multi-step example
-                "Iterative (event aftermath)\n"
-                "User: What was the aftermath of the raid on the Dynacorp black site?\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT id,name,summary FROM factions WHERE name ILIKE '%Dynacorp%' LIMIT 5\"}\n"
-                "Result (mock): [{\\\"id\\\":2, \\\"name\\\":\\\"Dynacorp\\\", \\\"summary\\\":\\\"Global biotech conglomerate; security incident referenced in S01.\\\"}]\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT ideology, history, extra_data FROM factions WHERE id = 2\"}\n"
-                "Result (mock): [{\\\"history\\\":\\\"Mentions black-site raid; details sparse; see episode summaries.\\\"}]\n"
-                "> {\"action\":\"sql\",\"sql\":\"SELECT season, episode, summary FROM episodes WHERE summary::text ILIKE '%raid%' LIMIT 10\"}\n"
-                "Result (mock): [{\\\"season\\\":1,\\\"episode\\\":9,\\\"summary\\\":\\\"Raid on black site; casualties and data exfiltration.\\\"},{\\\"season\\\":1,\\\"episode\\\":10,\\\"summary\\\":\\\"Aftermath: Emilia & Nyati recruited under 'NEXUS'.\\\"}]\n"
-                "> {\"action\":\"final\"}\n\n"
-                "Tip: After you find facts via SQL, request narrative search by emitting no further SQL and proceeding to answer; the system will gather chunk_id citations separately."
-            )
             planning_prompt = (
-                f"Task: Before answering, check relevant facts via SQL if helpful.\n\nSchema:\n{schema}\n\n"
-                f"User question: {question}\n\n{tool_spec}\n"
-                "Return one JSON object per step and wait for results. Limit to 3 SQL steps."
+                f"Task: Answer the user's question by checking relevant facts via SQL.\n\n"
+                f"Schema:\n{schema}\n\n"
+                f"User question: {question}\n\n"
+                f"{sql_section}\n\n"
+                f"Return one JSON object per step and wait for results. Limit to 3 SQL steps."
             )
             # Simple loop: 3 steps max
             max_steps = 3
