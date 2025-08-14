@@ -87,7 +87,7 @@ class LocalLLMManager:
             
             # Use model manager to ensure correct model is loaded
             from .model_manager import ModelManager
-            manager = ModelManager(self.settings_path)
+            manager = ModelManager(self.settings_path, unload_on_exit=self.unload_on_exit)
             model_id = manager.ensure_default_model()
             
             # Get the model handle - already loaded by manager
@@ -389,7 +389,7 @@ Response format - use exact headers:"""
             try:
                 # Use model manager for proper unloading
                 from .model_manager import ModelManager
-                manager = ModelManager(self.settings_path)
+                manager = ModelManager(self.settings_path, unload_on_exit=self.unload_on_exit)
                 if manager.unload_model():
                     logger.info(f"Unloaded model: {self.loaded_model_id}")
                 else:
@@ -424,7 +424,8 @@ Response format - use exact headers:"""
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit - clean up resources"""
-        self.unload_model()
+        if self.unload_on_exit:
+            self.unload_model()
         return False
     
     def list_available_models(self) -> List[str]:

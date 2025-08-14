@@ -19,6 +19,7 @@
 
 # Ignore logs
 *.log
+log.md
 /log.txt
 /memnon*.log
 /*_processing.log
