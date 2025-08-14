@@ -497,6 +497,12 @@ if __name__ == "__main__":
             try:
                 from nexus.agents.lore.lore import LORE
                 lore = LORE(settings_path=args.settings, debug=args.debug)
+                # Apply runtime options immediately so they affect the run
+                if args.keep_model and getattr(lore, "llm_manager", None):
+                    try:
+                        lore.llm_manager.unload_on_exit = False  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
                 if args.agentic_sql:
                     lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
                 start = time.time()
@@ -532,11 +538,7 @@ if __name__ == "__main__":
                         pass
                 # Print to stdout
                 print(json.dumps(result, indent=2))
-                if args.keep_model and getattr(lore, "llm_manager", None):
-                    try:
-                        lore.llm_manager.unload_on_exit = False  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
+                # keep-model already applied before run
                 return 0
             except Exception as e:
                 print(json.dumps({"error": str(e)}))
