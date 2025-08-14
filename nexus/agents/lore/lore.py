@@ -9,6 +9,26 @@ Key Responsibilities:
 2. Utility Orchestration - Coordinate MEMNON, PSYCHE, NEMESIS, GAIA, and LOGON
 3. Intelligent Context Assembly - Dynamically determine and balance information needs
 4. Turn Cycle Management - Handle the complete turn sequence from user input to response
+
+Usage Examples:
+--------------
+# Single retrieval directive for a specific chunk:
+python -m nexus.agents.lore.lore "What happened to Victor?" --chunk 100
+
+# Multiple retrieval directives for the same chunk:
+python -m nexus.agents.lore.lore "Alex and Emilia relationship" "What happened to Victor?" "Information about The Silo" --chunk 100
+
+# Debug mode to see SQL reasoning between queries:
+python -m nexus.agents.lore.lore "Victor's current status" --chunk 888 --debug
+
+# Keep model loaded after execution (for testing):
+python -m nexus.agents.lore.lore "Eclipse Biotech corporate structure" --chunk 1247 --keep-model
+
+# Debug mode with verbose logging:
+python -m nexus.agents.lore.lore "Neural implant technology" --chunk 60 --debug
+
+Note: The --chunk parameter is REQUIRED when providing retrieval directives.
+Each directive gets 5 SQL queries by default (configurable via settings.json: Agent Settings > LORE > query_budget).
 """
 
 import asyncio
@@ -309,21 +329,29 @@ class LORE:
         # Load the specific chunk and surrounding context if chunk_id provided
         warm_slice = []
         chunk_context = None
+        target_chunk_text = ""
         if chunk_id:
             try:
-                # Get the specific chunk and a few before it for context
+                # Get the specific chunk - this is our continuation point
                 chunk_result = self.memnon.get_chunk_by_id(chunk_id) if self.memnon else None
                 if chunk_result:
                     chunk_context = chunk_result
-                    # Also get a few chunks before this one for narrative continuity
-                    recent = self.memnon.get_chunks_before(chunk_id, limit=3) if self.memnon else {"results": []}
-                    warm_slice = recent.get("results", [])
-                    if chunk_context:
-                        warm_slice.append(chunk_context)
+                    # Store the full text with header for later use
+                    target_chunk_text = f"📍 TARGET CHUNK (continuation point):\n{chunk_result.get('full_text', chunk_result.get('text', ''))}"
+                    
+                    # Add it to warm slice with a clear marker
+                    warm_slice.append({
+                        "id": chunk_id,
+                        "text": target_chunk_text,
+                        "is_target": True
+                    })
+                    qa_logger.info(f"Loaded target chunk {chunk_id}")
                 else:
                     qa_logger.warning(f"Could not find chunk {chunk_id}")
+                    raise ValueError(f"Target chunk {chunk_id} not found in database")
             except Exception as e:
                 qa_logger.error(f"Failed to retrieve chunk {chunk_id}: {e}")
+                raise
         
         if not warm_slice:
             # Fallback to recent chunks if no specific chunk
@@ -337,25 +365,27 @@ class LORE:
         # Process each directive sequentially and aggregate results
         all_results = {
             "chunk_id": chunk_id,
-            "retrieved_context": {},
-            "sources": [],
-            "queries": [],
-            "retrieval_reasoning": {},
-            "sql_attempts": [],
-            "search_progress": []
+            "directives": {},  # Store all per-directive data here
+            "sources": [],     # Combined sources from all directives
+            "queries": []      # Combined queries from all directives
         }
         
         # Process each retrieval directive independently
         for directive in retrieval_directives:
-            directive_result = await self._process_single_directive(directive, chunk_id, warm_slice)
+            directive_result = await self._process_single_directive(directive, chunk_id, warm_slice, target_chunk_text)
             
-            # Aggregate results
-            all_results["retrieved_context"][directive] = directive_result["retrieved_context"]
+            # Store per-directive results
+            all_results["directives"][directive] = {
+                "retrieved_context": directive_result["retrieved_context"],
+                "reasoning": directive_result["reasoning"],
+                "sql_attempts": directive_result.get("sql_attempts", []),
+                "search_progress": directive_result.get("search_progress", []),
+                "sources": directive_result["sources"]
+            }
+            
+            # Also aggregate sources and queries for convenience
             all_results["sources"].extend(directive_result["sources"])
             all_results["queries"].extend(directive_result["queries"])
-            all_results["retrieval_reasoning"][directive] = directive_result["reasoning"]
-            all_results["sql_attempts"].extend(directive_result.get("sql_attempts", []))
-            all_results["search_progress"].extend(directive_result.get("search_progress", []))
         
         # Deduplicate sources while preserving order
         all_results["sources"] = list(dict.fromkeys(all_results["sources"]))
@@ -378,7 +408,7 @@ class LORE:
         qa_logger.warning("answer_question is deprecated. Use retrieve_context with directives instead.")
         return await self.retrieve_context([question], chunk_id=None)
 
-    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict]) -> Dict[str, Any]:
+    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict], target_chunk_text: str = "") -> Dict[str, Any]:
         """
         Process a single retrieval directive with full iterative capability.
         
@@ -471,9 +501,8 @@ class LORE:
             planning_prompt = (
                 f"Task: Retrieve contextual information for this continuity element via SQL.\n\n"
                 f"Schema:\n{schema}\n\n"
-                f"Retrieval directive: {directive}\n"
-                f"Context: This is for narrative chunk {chunk_id}\n\n" if chunk_id else "\n\n"
-            ) + (
+                f"Retrieval directive: {directive}\n" +
+                (f"Context: This is for narrative chunk {chunk_id}\n\n" if chunk_id else "\n\n") +
                 f"{sql_section}\n\n"
                 f"Return one JSON object per step and wait for results. Limit to {query_budget} SQL steps."
             )
@@ -483,46 +512,90 @@ class LORE:
             for step_num in range(query_budget):
                 from nexus.agents.lore.utils.local_llm import SQLStep
                 
-                step_struct = self.llm_manager.structured_query(
-                    planning_prompt,
-                    response_model=SQLStep,
-                    temperature=0.1,
-                    max_tokens=200,
-                    system_prompt="Propose exactly one Step JSON per turn."
+                # Debug: Log what the LLM is seeing
+                if step_num > 0:
+                    qa_logger.info(f"SQL Step {step_num + 1} - Building on previous results...")
+                    qa_logger.debug(f"Prompt includes {len(executed_sql)} previous queries and results")
+                
+                # Get the LLM's reasoning AND the SQL step
+                step_prompt = planning_prompt + (
+                    f"\n\nStep {step_num + 1}: Based on the results so far, what should the next query be?\n"
+                    "First explain your reasoning, then provide the JSON step."
                 )
                 
+                # Get both reasoning and structured output
+                # Use settings from settings.json - no fallbacks!
+                llm_settings = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
+                if not llm_settings:
+                    raise RuntimeError("FATAL: LLM settings not found in settings.json")
+                
+                raw_response = self.llm_manager.query(
+                    step_prompt,
+                    system_prompt=llm_settings["system_prompt"] + " When iterating on SQL queries, explain your reasoning then provide JSON.",
+                    temperature=llm_settings["temperature"],
+                    max_tokens=llm_settings["max_tokens"]
+                )
+                
+                # Log the reasoning
+                qa_logger.info(f"Step {step_num + 1} reasoning: {raw_response[:200]}...")
+                
+                # Extract the JSON from the response
+                import re
+                json_match = re.search(r'\{[^}]*"action"[^}]*\}', raw_response)
+                if not json_match:
+                    qa_logger.warning(f"No JSON found in response: {raw_response}")
+                    continue
+                
                 try:
-                    if hasattr(step_struct, "action"):
-                        step = {"action": step_struct.action, "sql": getattr(step_struct, "sql", None)}
-                    elif isinstance(step_struct, dict):
-                        step = step_struct
-                    else:
-                        step = json.loads(str(step_struct))
-                    
-                    if step.get("action") == "final":
-                        qa_logger.info(f"SQL agent finished after {step_num + 1} steps")
-                        break
-                    
-                    if step.get("action") == "sql" and step.get("sql"):
-                        sql_query = step["sql"]
-                        if sql_query not in executed_sql:
-                            executed_sql.add(sql_query)
-                            result = self.memnon.execute_sql(sql_query, read_only=True)
-                            sql_attempts.append({"sql": sql_query, "result": result})
+                    step = json.loads(json_match.group())
+                except json.JSONDecodeError as e:
+                    qa_logger.warning(f"Failed to parse JSON: {e}")
+                    continue
+                
+                # Check if we're done
+                if step.get("action") == "final":
+                    qa_logger.info(f"SQL agent finished after {step_num + 1} steps")
+                    break
+                
+                # Execute the SQL query
+                if step.get("action") == "sql" and step.get("sql"):
+                    sql_query = step["sql"]
+                    if sql_query not in executed_sql:
+                        executed_sql.add(sql_query)
+                        try:
+                            result = self.memnon.execute_readonly_sql(sql_query)
+                            sql_attempts.append({"sql": sql_query, "result": result, "reasoning": raw_response[:500]})
                             
-                            # Add result to prompt for next iteration
+                            # Add result to prompt for next iteration - don't truncate!
                             planning_prompt += f"\n\nStep {step_num + 1} SQL: {sql_query}\n"
-                            planning_prompt += f"Result: {json.dumps(result, indent=2)[:500]}\n"
+                            # Show full results for proper iteration
+                            result_str = json.dumps(result, indent=2)
+                            if len(result_str) > 2000:  # Only truncate if truly massive
+                                planning_prompt += f"Result (truncated to first 10 rows):\n"
+                                truncated_result = {
+                                    "row_count": result.get("row_count"),
+                                    "columns": result.get("columns"),
+                                    "rows": result.get("rows", [])[:10]
+                                }
+                                planning_prompt += json.dumps(truncated_result, indent=2) + "\n"
+                            else:
+                                planning_prompt += f"Result: {result_str}\n"
+                            
+                            # Add clear guidance for next iteration
+                            remaining = query_budget - (step_num + 1)
+                            if remaining > 0:
+                                planning_prompt += f"\n🔄 Next query for '{directive[:50]}...'\n"
+                                planning_prompt += f"Queries remaining: {remaining}/{query_budget}\n"
+                                planning_prompt += "Based on these results, what should the next query be? Or respond with {\"action\": \"final\"} if done.\n"
                             
                             # Extract SQL context for synthesis
                             if result.get("rows"):
                                 sql_context += f"\nSQL Query: {sql_query}\n"
                                 sql_context += f"Result ({len(result['rows'])} rows):\n"
                                 sql_context += json.dumps(result["rows"][:3], indent=2)[:1000] + "\n"
-                
-                except Exception as e:
-                    qa_logger.warning(f"SQL step {step_num + 1} failed: {e}")
-                    continue
+                        except Exception as e:
+                            qa_logger.warning(f"SQL execution failed: {e}")
+                            sql_attempts.append({"sql": sql_query, "error": str(e)})
         
         # Sort results by score and prepare for synthesis
         sorted_results = sorted(
@@ -551,22 +624,35 @@ class LORE:
         if sql_context:
             sources_text = f"SQL Results:\n{sql_context}\n\nText Search Results:\n{sources_text}"
         
-        # Generate synthesis
+        # Generate synthesis with final reminder about the target chunk
         synthesis_prompt = (
-            f"Retrieval directive: {directive}\n"
-            f"Target chunk: {chunk_id}\n\n" if chunk_id else "\n"
-        ) + (
+            f"Retrieval directive: {directive}\n\n"
             f"Available sources:\n{sources_text}\n\n"
-            f"Synthesize the relevant contextual information that addresses this directive. "
-            f"Be specific and include chunk IDs where applicable."
+        )
+        
+        # Add the target chunk reminder at the end as per OpenAI's guidance
+        if target_chunk_text:
+            synthesis_prompt += (
+                f"\n{'='*50}\n"
+                f"REMINDER - This context is being assembled to continue the story from:\n"
+                f"{target_chunk_text}\n"
+                f"{'='*50}\n\n"
+            )
+        
+        synthesis_prompt += (
+            "Synthesize the relevant contextual information that addresses the retrieval directive. "
+            "This context will enable the Storyteller AI to continue the narrative from the target chunk shown above. "
+            "Be specific and include relevant details that inform the continuation."
         )
         
         try:
+            # Use proper settings from settings.json
+            llm_settings = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
             synthesis = self.llm_manager.query(
                 synthesis_prompt,
-                system_prompt="You are assembling narrative context. Be concise but thorough.",
-                temperature=0.3,
-                max_tokens=500
+                system_prompt=llm_settings.get("system_prompt", "You are a narrative intelligence system"),
+                temperature=llm_settings.get("temperature", 0.8),
+                max_tokens=llm_settings.get("max_tokens", 2048)
             )
         except Exception as e:
             qa_logger.error(f"Synthesis failed: {e}")
@@ -671,7 +757,83 @@ async def main():
         
         logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")
         result = await lore.retrieve_context(directives, chunk_id=args.chunk)
-        print(json.dumps(result, indent=2))
+        
+        # Format output to follow the actual reasoning flow
+        print(f"\n{'='*60}")
+        print(f"CONTEXTUAL RETRIEVAL FOR CHUNK {args.chunk}")
+        print(f"{'='*60}\n")
+        
+        # For each directive, show the full reasoning flow
+        for directive, directive_data in result.get("directives", {}).items():
+            print(f"🎯 DIRECTIVE: {directive}")
+            print("=" * 50)
+            
+            # 1. Show initial text/vector search results
+            search_progress = directive_data.get("search_progress", [])
+            if search_progress:
+                print(f"\n1️⃣  Initial Vector Search:")
+                for sp in search_progress:
+                    print(f"   Query: {sp['query']}")
+                    print(f"   → Found {sp['result_count']} chunks")
+            
+            # 2. Show initial reasoning if available
+            reasoning = directive_data.get("reasoning")
+            if reasoning and isinstance(reasoning, str):
+                print(f"\n2️⃣  Initial Analysis:")
+                print(f"   {reasoning[:300]}...")
+            
+            # 3. Show SQL iterations with reasoning for THIS directive
+            sql_attempts = directive_data.get("sql_attempts", [])
+            if sql_attempts:
+                print(f"\n3️⃣  SQL Refinement ({len(sql_attempts)} queries):")
+                for i, attempt in enumerate(sql_attempts, 1):
+                    print(f"\n   Step {i}:")
+                    if attempt.get('reasoning'):
+                        # Extract just the reasoning part, not the JSON
+                        reasoning = attempt['reasoning'].split('{')[0].strip()
+                        if reasoning:
+                            print(f"   💭 Thinking: {reasoning[:200]}...")
+                    print(f"   📝 Query: {attempt.get('sql', 'N/A')}")
+                    if attempt.get('result', {}).get('row_count') is not None:
+                        print(f"   ✓ Result: {attempt['result']['row_count']} rows")
+                        # Show first row if available for context
+                        if attempt['result'].get('rows') and len(attempt['result']['rows']) > 0:
+                            first_row = attempt['result']['rows'][0]
+                            print(f"   → Sample: {str(first_row)[:150]}...")
+                    elif attempt.get('error'):
+                        print(f"   ✗ Error: {attempt['error']}")
+            
+            # 4. Show final synthesis
+            print(f"\n4️⃣  Final Synthesis:")
+            print("-" * 40)
+            print(directive_data.get("retrieved_context", "No context retrieved"))
+            print()
+        
+        # Summary statistics
+        print(f"📊 Summary:")
+        if result.get("sources"):
+            print(f"   Total chunks used: {len(result['sources'])}")
+        
+        # Count SQL queries across all directives
+        total_sql = sum(len(d.get("sql_attempts", [])) for d in result.get("directives", {}).values())
+        if total_sql:
+            print(f"   SQL queries executed: {total_sql}")
+        
+        # Count text search results across all directives  
+        total_search = sum(
+            sum(sp.get("result_count", 0) for sp in d.get("search_progress", []))
+            for d in result.get("directives", {}).values()
+        )
+        if total_search:
+            print(f"   Text search results: {total_search}")
+        
+        print(f"\n{'='*60}\n")
+        
+        # Optionally save full JSON if requested
+        if args.debug:
+            print("Full JSON response (debug mode):")
+            print(json.dumps(result, indent=2))
+        
         if args.keep_model and lore.llm_manager:
             lore.llm_manager.unload_on_exit = False
 
