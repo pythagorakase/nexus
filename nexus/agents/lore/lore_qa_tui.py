@@ -26,6 +26,15 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import DataTable, Footer, Input, Static, Log
 
+# Command registry for CLI-like UX
+AVAILABLE_COMMANDS: List[Dict[str, str]] = [
+    {"name": "chunk", "usage": ":chunk <id>", "description": "Set target narrative chunk id"},
+    {"name": "help", "usage": ":help [command]", "description": "Show available commands or details"},
+    {"name": "status", "usage": ":status", "description": "Show LORE component status"},
+    {"name": "clear", "usage": ":clear", "description": "Clear conversation and telemetry"},
+    {"name": "keep-model", "usage": ":keep-model on|off", "description": "Keep/unload LM Studio model after runs"},
+]
+
 
 # Color/Style Map (1980s cyberpunk terminal)
 COLOR_BG = "#000000"
@@ -127,6 +136,39 @@ class InputBar(Container):
         yield Static(f"[dim]{StatusBar().hint_text}[/]", id="hints")
 
 
+class CommandSuggestions(Static):
+    """Bottom-of-screen suggestions for commands with simple filtering."""
+
+    entries: List[Dict[str, str]]
+
+    def on_mount(self) -> None:  # type: ignore[override]
+        self.entries = []
+        self.display = False
+        self.update("")
+
+    def show_matches(self, query: str) -> None:
+        prefix = query.lower().lstrip(":").strip()
+        if not prefix:
+            matches = AVAILABLE_COMMANDS
+        else:
+            matches = [c for c in AVAILABLE_COMMANDS if c["name"].startswith(prefix)]
+        self.entries = matches[:6]
+        if not self.entries:
+            self.display = False
+            self.update("")
+            return
+        # Render compact list
+        lines = [
+            f"[bold {COLOR_SYSTEM}]:{e['name']}[/] [dim]{e['description']}[/]" for e in self.entries
+        ]
+        self.update("\n".join(lines))
+        self.display = True
+
+    def hide(self) -> None:
+        self.display = False
+        self.update("")
+
+
 class LoreQATerminal(App[None]):
     CSS = f"""
     Screen {{
@@ -148,7 +190,7 @@ class LoreQATerminal(App[None]):
 
     InputBar {{
         dock: bottom;
-        height: 3;
+        height: 5;
         background: {COLOR_BG};
         padding: 0 1;
     }}
@@ -156,6 +198,12 @@ class LoreQATerminal(App[None]):
         border: tall {COLOR_USER_ALT};
     }}
     InputBar > Static#hints {{
+        color: {COLOR_SYSTEM};
+        padding-left: 1;
+    }}
+
+    CommandSuggestions {{
+        height: 2;
         color: {COLOR_SYSTEM};
         padding-left: 1;
     }}
@@ -194,12 +242,14 @@ class LoreQATerminal(App[None]):
     input_history: List[str]
     history_index: int
     lore: Optional[object]
+    current_chunk: Optional[int]
 
     def __init__(self) -> None:
         super().__init__()
         self.input_history = []
         self.history_index = -1
         self.lore = None
+        self.current_chunk = None
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield StatusBar(id="status")
@@ -207,6 +257,7 @@ class LoreQATerminal(App[None]):
             yield ConversationView(id="conversation")
             yield TelemetryPanel(id="telemetry")
         yield InputBar(id="inputbar")
+        yield CommandSuggestions(id="suggestions")
         yield Footer()
 
     def on_mount(self) -> None:  # type: ignore[override]
@@ -255,9 +306,95 @@ class LoreQATerminal(App[None]):
 
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:  # type: ignore[override]
-        question = (event.value or "").strip()
-        if not question:
+        raw = (event.value or "").strip()
+        if not raw:
             return
+
+        # Update command suggestions based on current input
+        try:
+            if raw.startswith(":"):
+                self.query_one(CommandSuggestions).show_matches(raw)
+            else:
+                self.query_one(CommandSuggestions).hide()
+        except Exception:
+            pass
+
+        # Simple command: set chunk id with ":chunk <id>"
+        if raw.lower().startswith(":chunk"):
+            parts = raw.split()
+            if len(parts) >= 2:
+                try:
+                    self.current_chunk = int(parts[1])
+                    self.query_one(ConversationView).add_lore(f"[system] Target chunk set to {self.current_chunk}")
+                except ValueError:
+                    self.query_one(ConversationView).add_error("Chunk id must be an integer")
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
+
+        # :status → show component status
+        if raw.lower().startswith(":status"):
+            try:
+                await self._ensure_lore()
+                s = self.lore.get_status() if self.lore else {}
+                self.query_one(ConversationView).add_lore("[system] Status:")
+                self.query_one(ConversationView).write(json.dumps(s, indent=2))
+            except Exception as e:
+                self.query_one(ConversationView).add_error(str(e))
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
+
+        # :clear → clear panes
+        if raw.lower().startswith(":clear"):
+            self.action_clear_all()
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
+
+        # :help [name]
+        if raw.lower().startswith(":help"):
+            parts = raw.split()
+            if len(parts) == 1:
+                # List commands
+                lines = [f":{c['name']} — {c['description']} (usage: {c['usage']})" for c in AVAILABLE_COMMANDS]
+                self.query_one(ConversationView).add_lore("[system] Commands:\n" + "\n".join(lines))
+            else:
+                name = parts[1].lstrip(":")
+                found = next((c for c in AVAILABLE_COMMANDS if c["name"] == name), None)
+                if found:
+                    self.query_one(ConversationView).add_lore(f"[system] :{found['name']} — {found['description']}\nusage: {found['usage']}")
+                else:
+                    self.query_one(ConversationView).add_error(f"No such command: {name}")
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
+
+        # :keep-model on|off
+        if raw.lower().startswith(":keep-model"):
+            parts = raw.split()
+            if len(parts) >= 2:
+                flag = parts[1].lower()
+                try:
+                    await self._ensure_lore()
+                    if self.lore and getattr(self.lore, "llm_manager", None):
+                        if flag == "on":
+                            self.lore.llm_manager.unload_on_exit = False  # type: ignore[attr-defined]
+                            self.query_one(ConversationView).add_lore("[system] keep-model: ON")
+                        elif flag == "off":
+                            self.lore.llm_manager.unload_on_exit = True  # type: ignore[attr-defined]
+                            self.query_one(ConversationView).add_lore("[system] keep-model: OFF")
+                        else:
+                            self.query_one(ConversationView).add_error("Usage: :keep-model on|off")
+                except Exception as e:
+                    self.query_one(ConversationView).add_error(str(e))
+            else:
+                self.query_one(ConversationView).add_error("Usage: :keep-model on|off")
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
+
+        question = raw
 
         # Update conversation and UI state
         conversation = self.query_one(ConversationView)
@@ -323,15 +460,22 @@ class LoreQATerminal(App[None]):
             lore = self.lore
             assert lore is not None
 
-            # Call backend
-            result: Dict[str, Any] = await lore.answer_question(question)  # type: ignore[attr-defined]
+            # Call backend: use retrieval mode with optional target chunk
+            result: Dict[str, Any] = await lore.retrieve_context([question], chunk_id=self.current_chunk)  # type: ignore[attr-defined]
 
-            # Populate conversation
-            answer = str(result.get("answer", "")).strip()
-            conversation.add_lore(answer or "I don't know based on the available story data.")
+            # Extract directive payload
+            directives = result.get("directives") or {}
+            directive_data = directives.get(question) if isinstance(directives, dict) else None
+            if not directive_data and isinstance(directives, dict) and directives:
+                # Fallback to first entry
+                directive_data = list(directives.values())[0]
+
+            # Populate conversation with synthesized context
+            synthesis = str((directive_data or {}).get("retrieved_context", "")).strip()
+            conversation.add_lore(synthesis or "No context retrieved.")
 
             # Citations
-            sources = result.get("sources") or []
+            sources = (directive_data or {}).get("sources") or []
             if sources:
                 conversation.write("[dim]citations:[/]")
                 for cid in sources[:10]:
@@ -339,12 +483,20 @@ class LoreQATerminal(App[None]):
 
             # Reasoning
             reasoning.clear()
-            if result.get("reasoning"):
-                reasoning.write(result["reasoning"])  # type: ignore[index]
+            dir_reason = (directive_data or {}).get("reasoning")
+            if isinstance(dir_reason, dict):
+                # Pretty-print structured reasoning
+                reasoning.write("[dim]structured reasoning:[/]")
+                try:
+                    reasoning.write(json.dumps(dir_reason, indent=2))
+                except Exception:
+                    reasoning.write(str(dir_reason))
+            elif dir_reason:
+                reasoning.write(str(dir_reason))
             else:
-                reasoning.write("[dim]No reasoning trace provided.[/]")
+                reasoning.write("[dim]No reasoning provided.[/]")
 
-            # Queries
+            # Queries (aggregated)
             queries_table.clear(columns=False)
             queries = result.get("queries") or []
             for i, q in enumerate(queries, start=1):
@@ -352,19 +504,18 @@ class LoreQATerminal(App[None]):
                 q_text = q_text if len(q_text) <= 160 else q_text[:157] + "…"
                 queries_table.add_row(str(i), q_text)
 
-            # Search progress
+            # Search progress (per-directive)
             progress_table.clear(columns=False)
-            sp = result.get("search_progress") or []
+            sp = (directive_data or {}).get("search_progress") or []
             for idx, item in enumerate(sp, start=1):
                 if isinstance(item, dict):
-                    q = str(item.get("query", ""))
                     cnt = str(item.get("result_count", ""))
                     notes = ""
                     progress_table.add_row(str(idx), cnt, notes)
 
-            # SQL attempts
+            # SQL attempts (per-directive)
             sql_table.clear(columns=False)
-            attempts = result.get("sql_attempts") or []
+            attempts = (directive_data or {}).get("sql_attempts") or []
             for i, att in enumerate(attempts, start=1):
                 if isinstance(att, dict):
                     sql = str(att.get("sql", "")).replace("\n", " ")
