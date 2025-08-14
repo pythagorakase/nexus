@@ -27,6 +27,9 @@ log.md
 /time_delta_processor.log
 /lm_studio_log.txt
 
+# Ignore Temporary Files
+temp*.*
+
 # Ignore binaries and database files
 *.sqlite3
 
