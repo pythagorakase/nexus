@@ -1447,6 +1447,58 @@ class MEMNON:
         
         return results
     
+    def get_chunk_by_id(self, chunk_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a specific chunk by ID with minimal scene metadata.
+        
+        Args:
+            chunk_id: The ID of the chunk to retrieve
+            
+        Returns:
+            Dictionary containing the chunk text and scene header info
+        """
+        try:
+            with self.Session() as session:
+                query = text("""
+                    SELECT 
+                        nc.id,
+                        nc.raw_text,
+                        cm.season,
+                        cm.episode,
+                        cm.scene,
+                        cm.place,
+                        nv.world_time,
+                        p.name as place_name
+                    FROM narrative_chunks nc
+                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                    LEFT JOIN narrative_view nv ON nc.id = nv.id
+                    LEFT JOIN places p ON cm.place = p.id
+                    WHERE nc.id = :chunk_id
+                """)
+                
+                result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
+                
+                if result:
+                    # Format the scene header
+                    header = f"Season {result.season}, Episode {result.episode}, Scene {result.scene}\n"
+                    header += f"(chunk {chunk_id})\n"
+                    if result.world_time:
+                        header += f"{result.world_time}\n"
+                    if result.place_name:
+                        header += f"{result.place_name}\n"
+                    
+                    return {
+                        "id": result.id,
+                        "text": result.raw_text,
+                        "header": header,
+                        "full_text": header + "\n" + result.raw_text
+                    }
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error fetching chunk {chunk_id}: {str(e)}")
+            return None
+    
     def get_recent_chunks(self, limit: int = 10) -> Dict[str, Any]:
         """
         Retrieve the most recent narrative chunks.
