@@ -4,6 +4,8 @@ import sys
 import tiktoken
 import chardet
 import mimetypes
+import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -21,13 +23,32 @@ def detect_encoding(file_path: Path) -> str:
 
 def read_file_with_fallback(file_path: Path) -> Optional[str]:
     """Read a file with automatic encoding detection and fallback strategies."""
-    # First, check if it's a binary file type we should skip
+    # Special handling for PDF files
+    if file_path.suffix.lower() == '.pdf':
+        try:
+            import PyPDF2
+            with open(file_path, 'rb') as pdf_file:
+                pdf_reader = PyPDF2.PdfReader(pdf_file)
+                full_text = []
+                for page_num in range(len(pdf_reader.pages)):
+                    page = pdf_reader.pages[page_num]
+                    full_text.append(page.extract_text())
+                return '\n'.join(full_text)
+        except ImportError:
+            print(f"Warning: PyPDF2 not installed. Cannot read .pdf files.")
+            print(f"Install with: pip install PyPDF2")
+            return None
+        except Exception as e:
+            print(f"Error reading PDF file {file_path.name}: {e}")
+            return None
+    
+    # Check if it's a binary file type we should skip (excluding PDFs now)
     mime_type, _ = mimetypes.guess_type(str(file_path))
     if mime_type and (
         mime_type.startswith('image/') or 
         mime_type.startswith('video/') or 
         mime_type.startswith('audio/') or
-        mime_type in ['application/pdf', 'application/zip', 'application/x-rar']
+        mime_type in ['application/zip', 'application/x-rar']
     ):
         print(f"Skipping binary file: {file_path.name} ({mime_type})")
         return None
@@ -78,18 +99,50 @@ def read_file_with_fallback(file_path: Path) -> Optional[str]:
         print(f"Error reading file {file_path.name}: {e}")
         return None
 
+def get_target_model() -> str:
+    """Get the target model from settings.json for accurate token counting."""
+    # Find settings.json by looking up from script location
+    script_dir = Path(__file__).parent
+    nexus_root = script_dir.parent
+    settings_path = nexus_root / "settings.json"
+    
+    if settings_path.exists():
+        try:
+            with open(settings_path, 'r') as f:
+                settings = json.load(f)
+                target_model = settings.get("Agent Settings", {}).get("LOGON", {}).get("apex_AI", {}).get("model", {}).get("target_model")
+                if target_model:
+                    # Map model names to tiktoken-compatible names
+                    model_map = {
+                        "gpt-5": "gpt-4o",  # Use gpt-4o encoding until gpt-5 is officially supported
+                        "claude-opus-4-1": "gpt-4o",  # Claude uses similar tokenization
+                        "claude-opus-4-0": "gpt-4o",
+                        "claude-sonnet-4-0": "gpt-4o"
+                    }
+                    return model_map.get(target_model, target_model)
+        except Exception as e:
+            pass
+    
+    # Default fallback
+    return "gpt-4o"
+
 def main():
     parser = argparse.ArgumentParser(
         description="Count tokens in provided file(s) or piped input using tiktoken.",
-        epilog="Supports various text formats including .txt, .json, .md, .py, .docx, etc."
+        epilog="Supports various text formats including .txt, .json, .md, .py, .docx, .pdf, etc."
     )
     parser.add_argument("files", nargs="*", help="Path(s) to files to count tokens for")
-    parser.add_argument("--model", default="gpt-4o", help="Model encoding to use (default: gpt-4o)")
+    parser.add_argument("--model", default=None, help="Model encoding to use (default: from settings.json)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show verbose output")
     args = parser.parse_args()
 
+    # Use specified model or get from settings
+    model_name = args.model if args.model else get_target_model()
+    if args.verbose:
+        print(f"Using tokenizer for model: {model_name}")
+    
     # Get the encoder for the specified model.
-    encoding = tiktoken.encoding_for_model(args.model)
+    encoding = tiktoken.encoding_for_model(model_name)
 
     total_tokens = 0
 

@@ -1,0 +1,55 @@
+LORE NARRATIVE ANALYSIS OUTPUT
+======================================================================
+
+PROMPT:
+You are analyzing a narrative. The user asks: "What happened when Victor betrayed Alex?"
+
+Based on this query, identify:
+1. Key entities to search for
+2. The narrative context type 
+3. Natural language queries to find relevant content
+
+Respond in natural language.
+
+LLM RESPONSE:
+<|channel|>analysis<|message|>The user wants: "You are analyzing a narrative. The user asks: 'What happened when Victor betrayed...'" They want identification of key entities to search for, the narrative context type, and natural language queries to find relevant content.
+
+We need to respond with a description: list of key entities (Victor, Alex, maybe others). Narrative context type could be betrayal event, plot twist, conflict. Natural language queries: "Victor betrays Alex", "what happened after Victor's betrayal", etc.
+
+We must follow the instruction: respond in natural language. No disallowed content. Provide answer accordingly.<|end|><|start|>assistant<|channel|>final<|message|>**1. Key entities to look for**
+
+- **Victor** – the character who commits the betrayal.  
+- **Alex** – the person (or group) that Victor betrays.  
+- Any **third‑party witnesses** or “bystanders” who are present when the betrayal occurs (e.g., a confidant, an antagonist, a neutral observer).  
+- **Objects or artifacts** tied to the betrayal (e.g., a secret document, a weapon, a coded message, a hidden safe‑house).  
+- **Locations** where the betrayal takes place (e.g., a meeting room, a battlefield, a hidden lab, an underground bunker).  
+- **Motivation/Goal** – what Victor hopes to gain (power, revenge, survival) and what Alex loses or risks as a result.  
+-
+
+ANALYSIS RESULT:
+{
+  "characters": [
+    "Victor",
+    "Alex",
+    "Victor",
+    "Alex"
+  ],
+  "locations": [
+    "(Not specified)"
+  ],
+  "context_type": "",
+  "entities_for_retrieval": [
+    "Victor's betrayal, Alex, motivations, cause.",
+    "Victor's betrayal",
+    "Alex",
+    "Motivation behind the betrayal",
+    "Cause of Victor's decision to betray Alex"
+  ]
+}
+
+GENERATED QUERIES:
+- What led to Victor betraying Alex?
+- Victor history personality relationships
+- Alex history personality relationships
+- (Not specified) description environment inhabitants
+- Victor's betrayal, Alex, motivations, cause. context background
