@@ -89,8 +89,8 @@ def load_settings() -> Dict[str, Any]:
                     hybrid = settings["Agent Settings"]["MEMNON"]["retrieval"]["hybrid_search"]
                     temporal_factor = hybrid.get("temporal_boost_factor", "not set")
                     query_specific = hybrid.get("use_query_type_temporal_factors", "not set")
-                    settings_logger.info(f"SETTINGS DEBUG - temporal_boost_factor: {temporal_factor}")
-                    settings_logger.info(f"SETTINGS DEBUG - use_query_type_temporal_factors: {query_specific}")
+                    # settings_logger.info(f"SETTINGS DEBUG - temporal_boost_factor: {temporal_factor}")
+                    # settings_logger.info(f"SETTINGS DEBUG - use_query_type_temporal_factors: {query_specific}")
                 
                 return settings
         else:
@@ -389,6 +389,172 @@ class MEMNON:
         }
         
         logger.info("MEMNON agent initialized (Headless Mode - No LLM)")
+
+    def get_schema_summary(self, tables: Optional[List[str]] = None) -> str:
+        """
+        Return a concise schema summary for non-empty, relevant tables.
+        Excludes embedding tables and includes table/column comments.
+        """
+        try:
+            from sqlalchemy import text
+            inspector = inspect(self.db_manager.engine)
+            
+            # If no specific tables requested, get all tables dynamically
+            if tables:
+                allowed = tables
+            else:
+                # Get all tables from the database
+                all_tables = inspector.get_table_names()
+                # Exclude embedding tables and other irrelevant tables
+                allowed = [
+                    t for t in all_tables 
+                    if not t.startswith('chunk_embeddings_')
+                    and t != 'alembic_version'  # Skip Alembic migration table
+                ]
+            
+            lines: List[str] = []
+            
+            for table_name in allowed:
+                try:
+                    # Check if table exists
+                    if not inspector.has_table(table_name):
+                        continue
+                    
+                    # Check if table has any rows (skip empty tables)
+                    with self.db_manager.engine.connect() as conn:
+                        count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                        row_count = count_result.scalar()
+                        if row_count == 0:
+                            continue
+                    
+                    # Get table comment if available
+                    table_comment = ""
+                    try:
+                        comment_result = conn.execute(
+                            text("SELECT obj_description(c.oid) FROM pg_class c WHERE c.relname = :table"),
+                            {"table": table_name}
+                        )
+                        comment = comment_result.scalar()
+                        if comment:
+                            table_comment = f" -- {comment}"
+                    except:
+                        pass
+                    
+                    # Get columns with comments
+                    cols = inspector.get_columns(table_name)
+                    col_descriptions = []
+                    
+                    for col in cols:
+                        col_name = col.get("name", "?")
+                        col_type = str(col.get("type", ""))[:20]  # Truncate long types
+                        
+                        # Try to get column comment
+                        col_comment = ""
+                        try:
+                            comment_result = conn.execute(
+                                text("""
+                                SELECT col_description(c.oid, a.attnum) 
+                                FROM pg_class c 
+                                JOIN pg_attribute a ON a.attrelid = c.oid 
+                                WHERE c.relname = :table AND a.attname = :column
+                                """),
+                                {"table": table_name, "column": col_name}
+                            )
+                            comment = comment_result.scalar()
+                            if comment:
+                                col_comment = f":{comment}"
+                        except:
+                            pass
+                        
+                        col_descriptions.append(f"{col_name}{col_comment}")
+                    
+                    col_list = ", ".join(col_descriptions)
+                    lines.append(f"- {table_name}({col_list}){table_comment}")
+                    
+                except Exception as e:
+                    # Skip tables with errors
+                    logger.debug(f"Skipping table {table_name}: {e}")
+                    continue
+            
+            if not lines:
+                return "No populated tables found in database."
+            
+            return "\n".join(lines)
+            
+        except Exception as e:
+            logger.error(f"Error generating schema summary: {e}")
+            return "Error retrieving schema information."
+
+    def execute_readonly_sql(self, sql: str, max_rows: int = 50, timeout_ms: int = 3000) -> Dict[str, Any]:
+        """
+        Execute a read-only, whitelisted SELECT statement safely.
+        - Only allows single-statement SELECT queries
+        - Enforces allowed table list and LIMIT
+        - Applies a short statement timeout
+        Returns { columns: [...], rows: [{...}, ...], row_count: int } or { error: str }
+        """
+        try:
+            if not sql or not isinstance(sql, str):
+                return {"error": "Empty SQL"}
+            original_sql = sql
+            sql_str = sql.strip().rstrip(";")
+            lowered = sql_str.lower()
+            # Must be a single SELECT
+            if not lowered.startswith("select "):
+                return {"error": "Only SELECT statements are allowed"}
+            forbidden = [";", " update ", " insert ", " delete ", " alter ", " create ", " drop ", " grant ", " revoke ", " truncate ", " vacuum ", " copy "]
+            for kw in forbidden:
+                if kw in f" {lowered} ":
+                    return {"error": f"Forbidden keyword in SQL: {kw.strip()}"}
+            # Whitelist tables referenced in FROM/JOIN
+            import re
+            allowed_tables = {
+                "characters", "episodes", "seasons", "events",
+                "factions", "places", "chunk_metadata", "narrative_chunks"
+            }
+            referenced: List[str] = []
+            for pattern in [r"\\bfrom\\s+([a-zA-Z_\\.\"]+)", r"\\bjoin\\s+([a-zA-Z_\\.\"]+)"]:
+                for m in re.finditer(pattern, lowered):
+                    name = m.group(1).strip().strip('"')
+                    # remove optional schema prefix like public.
+                    if "." in name:
+                        name = name.split(".")[-1]
+                    referenced.append(name)
+            for tbl in referenced:
+                if tbl and tbl not in allowed_tables:
+                    return {"error": f"Table not allowed: {tbl}"}
+            # Enforce LIMIT if absent
+            if " limit " not in lowered:
+                sql_str = f"{sql_str} LIMIT {max_rows}"
+            # Execute
+            with self.db_manager.engine.connect() as conn:
+                # Apply a short statement timeout
+                try:
+                    conn.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
+                except Exception:
+                    pass
+                result = conn.execute(text(sql_str))
+                rows = result.fetchall()
+                columns = list(result.keys())
+            # Truncate long text fields
+            formatted_rows: List[Dict[str, Any]] = []
+            for row in rows[:max_rows]:
+                row_dict = {}
+                for col, val in zip(columns, row):
+                    if isinstance(val, str) and len(val) > 2000:
+                        row_dict[col] = val[:2000] + "..."
+                    else:
+                        row_dict[col] = val
+                formatted_rows.append(row_dict)
+            return {
+                "columns": columns,
+                "rows": formatted_rows,
+                "row_count": len(formatted_rows),
+                "sql": original_sql.strip(),
+            }
+        except Exception as e:
+            logger.error(f"Error executing read-only SQL: {e}")
+            return {"error": str(e)}
     
     def _initialize_memory_blocks(self):
         """Initialize specialized memory blocks if not present."""
@@ -724,10 +890,10 @@ class MEMNON:
         try:
             with self.Session() as session:
                 if table == "characters":
-                    # Query characters
-                    # First check for exact name matches
+                    # Query characters (schema: id, name, summary, background, personality, emotional_state, current_activity, current_location, extra_data)
+                    # Exact name or alias match
                     name_match_query = text("""
-                    SELECT DISTINCT c.id, c.name, c.description, c.role, c.faction, c.status,
+                    SELECT DISTINCT c.id, c.name, c.summary, c.current_activity, c.current_location,
                            array_agg(DISTINCT ca.alias) as aliases
                     FROM characters c
                     LEFT JOIN character_aliases ca ON c.id = ca.character_id
@@ -736,9 +902,8 @@ class MEMNON:
                         SELECT 1 FROM character_aliases ca2 
                         WHERE ca2.character_id = c.id AND LOWER(ca2.alias) = LOWER(:query)
                     )
-                    GROUP BY c.id, c.name, c.description, c.role, c.faction, c.status
+                    GROUP BY c.id, c.name, c.summary, c.current_activity, c.current_location
                     """)
-                    
                     result = session.execute(name_match_query, {"query": query_text})
                     exact_matches = []
                     for row in result:
@@ -746,33 +911,26 @@ class MEMNON:
                         exact_matches.append({
                             "id": row.id,
                             "name": row.name,
-                            "description": row.description,
-                            "role": row.role,
+                            "summary": row.summary,
+                            "current_activity": row.current_activity,
+                            "current_location": row.current_location,
                             "aliases": aliases,
-                            "faction": row.faction,
-                            "status": row.status,
-                            "score": 1.0,  # Exact match gets top score
+                            "score": 1.0,
                             "content_type": "character",
                             "source": "structured_data"
                         })
-                    
                     if exact_matches:
                         return exact_matches
-                    
-                    # Then look for partial matches
+                    # Partial match by name or summary text
                     partial_match_query = text("""
-                    SELECT DISTINCT c.id, c.name, c.description, c.role, c.faction, c.status,
-                           array_agg(DISTINCT ca.alias) as aliases,
-                           similarity(LOWER(c.name), LOWER(:query)) AS match_score
+                    SELECT DISTINCT c.id, c.name, c.summary, c.current_activity, c.current_location,
+                           array_agg(DISTINCT ca.alias) as aliases
                     FROM characters c
                     LEFT JOIN character_aliases ca ON c.id = ca.character_id
-                    WHERE LOWER(c.name) LIKE '%' || LOWER(:query) || '%'
-                    OR LOWER(c.description) LIKE '%' || LOWER(:query) || '%'
-                    GROUP BY c.id, c.name, c.description, c.role, c.faction, c.status
-                    ORDER BY match_score DESC
+                    WHERE c.name ILIKE '%' || :query || '%' OR c.summary ILIKE '%' || :query || '%'
+                    GROUP BY c.id, c.name, c.summary, c.current_activity, c.current_location
                     LIMIT :limit
                     """)
-                    
                     result = session.execute(partial_match_query, {"query": query_text, "limit": limit})
                     partial_matches = []
                     for row in result:
@@ -780,16 +938,14 @@ class MEMNON:
                         partial_matches.append({
                             "id": row.id,
                             "name": row.name,
-                            "description": row.description,
-                            "role": row.role,
+                            "summary": row.summary,
+                            "current_activity": row.current_activity,
+                            "current_location": row.current_location,
                             "aliases": aliases,
-                            "faction": row.faction,
-                            "status": row.status,
-                            "score": float(row.match_score),
+                            "score": 0.75,
                             "content_type": "character",
                             "source": "structured_data"
                         })
-                    
                     return partial_matches
                 
                 elif table == "places":
@@ -1298,6 +1454,178 @@ class MEMNON:
         
         return results
     
+    def get_chunk_by_id(self, chunk_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a specific chunk by ID with minimal scene metadata.
+        
+        Args:
+            chunk_id: The ID of the chunk to retrieve
+            
+        Returns:
+            Dictionary containing the chunk text and scene header info
+        """
+        try:
+            with self.Session() as session:
+                query = text("""
+                    SELECT 
+                        nc.id,
+                        nc.raw_text,
+                        cm.season,
+                        cm.episode,
+                        cm.scene,
+                        cm.place,
+                        nv.world_time,
+                        p.name as place_name
+                    FROM narrative_chunks nc
+                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                    LEFT JOIN narrative_view nv ON nc.id = nv.id
+                    LEFT JOIN places p ON cm.place = p.id
+                    WHERE nc.id = :chunk_id
+                """)
+                
+                result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
+                
+                if result:
+                    # Format the scene header
+                    header = f"Season {result.season}, Episode {result.episode}, Scene {result.scene}\n"
+                    header += f"(chunk {chunk_id})\n"
+                    if result.world_time:
+                        header += f"{result.world_time}\n"
+                    if result.place_name:
+                        header += f"{result.place_name}\n"
+                    
+                    return {
+                        "id": result.id,
+                        "text": result.raw_text,
+                        "header": header,
+                        "full_text": header + "\n" + result.raw_text
+                    }
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error fetching chunk {chunk_id}: {str(e)}")
+            return None
+    
+    def get_recent_chunks(self, limit: int = 10) -> Dict[str, Any]:
+        """
+        Retrieve the most recent narrative chunks.
+        
+        Args:
+            limit: Maximum number of chunks to retrieve
+            
+        Returns:
+            Dictionary containing the recent chunks and metadata
+        """
+        try:
+            with self.Session() as session:
+                query = text("""
+                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                           cm.world_layer, cm.perspective
+                    FROM narrative_chunks nc
+                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                    ORDER BY nc.id DESC
+                    LIMIT :limit
+                """)
+                
+                results = session.execute(query, {"limit": limit}).fetchall()
+                
+                chunks = []
+                for result in results:
+                    chunks.append({
+                        "id": result.id,
+                        "text": result.raw_text,
+                        "metadata": {
+                            "season": result.season,
+                            "episode": result.episode,
+                            "scene_number": result.scene_number,
+                            "world_layer": result.world_layer,
+                            "perspective": result.perspective
+                        },
+                        "score": 1.0,  # Recent chunks have perfect relevance
+                        "source": "recent_chunks"
+                    })
+                
+                return {
+                    "query": "recent_chunks",
+                    "query_type": "recent",
+                    "results": chunks,
+                    "metadata": {
+                        "search_strategies": ["recent_chunks"],
+                        "result_count": len(chunks)
+                    }
+                }
+        except Exception as e:
+            logger.error(f"Error retrieving recent chunks: {e}")
+            raise RuntimeError(f"FATAL: Failed to retrieve recent chunks from database: {e}")
+    
+    def _get_chunk_by_id(self, chunk_id: int) -> Dict[str, Any]:
+        """
+        Retrieve a specific chunk by its ID.
+        
+        Args:
+            chunk_id: The ID of the chunk to retrieve
+            
+        Returns:
+            Dictionary containing the chunk data and metadata
+        """
+        try:
+            with self.Session() as session:
+                query = text("""
+                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                           cm.world_layer, cm.perspective
+                    FROM narrative_chunks nc
+                    LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                    WHERE nc.id = :chunk_id
+                """)
+                
+                result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
+                
+                if result:
+                    return {
+                        "query": f"chunk_id:{chunk_id}",
+                        "query_type": "direct_id",
+                        "results": [{
+                            "id": result.id,
+                            "text": result.raw_text,
+                            "metadata": {
+                                "season": result.season,
+                                "episode": result.episode,
+                                "scene_number": result.scene_number,
+                                "world_layer": result.world_layer,
+                                "perspective": result.perspective
+                            },
+                            "score": 1.0,  # Perfect match for ID query
+                            "source": "direct_id_lookup"
+                        }],
+                        "metadata": {
+                            "search_strategies": ["direct_id_lookup"],
+                            "result_count": 1
+                        }
+                    }
+                else:
+                    return {
+                        "query": f"chunk_id:{chunk_id}",
+                        "query_type": "direct_id",
+                        "results": [],
+                        "metadata": {
+                            "search_strategies": ["direct_id_lookup"],
+                            "result_count": 0,
+                            "error": f"Chunk with ID {chunk_id} not found"
+                        }
+                    }
+        except Exception as e:
+            logger.error(f"Error retrieving chunk by ID {chunk_id}: {e}")
+            return {
+                "query": f"chunk_id:{chunk_id}",
+                "query_type": "direct_id",
+                "results": [],
+                "metadata": {
+                    "search_strategies": ["direct_id_lookup"],
+                    "result_count": 0,
+                    "error": str(e)
+                }
+            }
+    
     def query_memory(self, query: str, query_type: Optional[str] = None, 
                    filters: Optional[Dict[str, Any]] = None, 
                    k: Optional[int] = None, use_hybrid: bool = True) -> Dict[str, Any]:
@@ -1316,6 +1644,15 @@ class MEMNON:
         """
         # Log the query
         logger.info(f"Querying memory: {query}")
+        
+        # Check if this is a direct chunk ID query
+        if query.startswith("chunk_id:"):
+            try:
+                chunk_id = int(query.replace("chunk_id:", "").strip())
+                return self._get_chunk_by_id(chunk_id)
+            except ValueError:
+                logger.error(f"Invalid chunk_id format in query: {query}")
+                # Fall through to regular query processing
         
         # Use default limit if not specified
         if k is None:

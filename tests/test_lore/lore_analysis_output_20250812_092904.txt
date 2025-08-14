@@ -1,0 +1,65 @@
+LORE NARRATIVE ANALYSIS OUTPUT
+======================================================================
+
+PROMPT:
+You are analyzing a narrative. The user asks: "What happened when Victor betrayed Alex?"
+
+Based on this query, identify:
+1. Key entities to search for
+2. The narrative context type 
+3. Natural language queries to find relevant content
+
+Respond in natural language.
+
+LLM RESPONSE:
+<|channel|>analysis<|message|>The user: "You are analyzing a narrative. The user asks: 'What happened when Victor betrayed Alex?'
+
+We need to respond with:
+
+1. Key entities to search for: likely "Victor", "Alex", maybe other related characters, events like betrayal, consequences.
+
+2. Narrative context type: likely "plot event", "character interaction", maybe "betrayal scene". Could be a specific narrative type: fiction, story, novel, etc. So we need to identify context such as "plot development", "character conflict".
+
+3. Natural language queries to find relevant content: Provide example search queries like "Victor betrays Alex", "what happened after Victor betrayed Alex", "consequences of Victor's betrayal of Alex", etc.
+
+The user wants us to respond in natural language, identifying key entities, narrative context type, and NL queries.
+
+Thus answer: list of key entities, description of narrative context (e.g., conflict, climax), and sample queries.
+
+Will produce bullet points.<|end|><|start|>assistant<|channel|>final<|message|>Below is a concise “search‑plan” you can use to locate the passage (or passages) that describe **Victor’s betrayal of Alex** and what follows.
+
+---
+
+### 1. Key entities to look for  
+- **Victor** – the betrayer (full name, nickname, title, or any alias he might use).  
+- **Alex** – the betrayed party (full name, nickname, or any epithet that distinguishes him
+
+ANALYSIS RESULT:
+{
+  "characters": [
+    "Victor",
+    "Alex",
+    "If other characters appear in recent narrative, unknown. We'll just list those.",
+    "Victor",
+    "Alex"
+  ],
+  "locations": [
+    "(Not specified in the provided narrative)"
+  ],
+  "context_type": "**",
+  "entities_for_retrieval": [
+    "We have only \"Recent narrative:\" but not provided. We need to infer from user question: \"What led to Victor betraying Alex?\" So characters likely include Victor, Alex, maybe others. Locations unknown; we can list possible location(s) based on typical narrative: perhaps \"the secret lab\", \"the city outskirts\". But we have no explicit location. We might leave blank? Probably need to list known locations from recent narrative, but we don't have it. Could output \"Unknown\" or leave empty.",
+    "We need to be precise and concise.",
+    "Thus answer:",
+    "Victor\u2019s motivations for betrayal",
+    "Alex\u2019s relationship with Victor",
+    "Events or pressures leading up to the betrayal (e.g., secret mission, external influence)"
+  ]
+}
+
+GENERATED QUERIES:
+- What led to Victor betraying Alex?
+- Victor history personality relationships
+- Alex history personality relationships
+- (Not specified in the provided narrative) description environment inhabitants
+- We have only "Recent narrative:" but not provided. We need to infer from user question: "What led to Victor betraying Alex?" So characters likely include Victor, Alex, maybe others. Locations unknown; we can list possible location(s) based on typical narrative: perhaps "the secret lab", "the city outskirts". But we have no explicit location. We might leave blank? Probably need to list known locations from recent narrative, but we don't have it. Could output "Unknown" or leave empty. context background

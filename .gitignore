@@ -19,6 +19,7 @@
 
 # Ignore logs
 *.log
+log.md
 /log.txt
 /memnon*.log
 /*_processing.log
@@ -38,3 +39,5 @@ nexus-tui-temp/
 /mlx-gguf-testing/
 /echo_deprecated/
 /archive/
+prompt.md
+format_strip.md

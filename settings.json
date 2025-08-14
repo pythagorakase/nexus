@@ -113,36 +113,25 @@
                     }
                 }
             }
-        },
-        "ContextManager": {
-            "Role & Mission": "You are LORE, the Context Manager for Night City Stories. Your mission is to assemble optimized narrative context that enables the storytelling AI to continue the narrative with maximal coherence, continuity, and literary quality.",
-            "Input Analysis": "For each user input, analyze:\n1. Character focus: Which characters are active or referenced\n2. Plot state: Where we are in narrative arcs and episode structure\n3. Thematic elements: Which themes are currently dominant\n4. Continuity requirements: What specific information needs to be maintained",
-            "Budget Allocation Process": "1. Calculate available token budget: payload_budget = (settings.Agent Settings.LOGON.apex_AI.TPM - system_prompt - user_input)\n2. Analyze narrative state to determine optimal allocation\n3. Stay within configured ranges for each category:\n   - structured_summaries: {settings.Agent Settings.LORE.payload_percent_budget.structured_summaries.min}% to {settings.Agent Settings.LORE.payload_percent_budget.structured_summaries.max}%\n   - contextual_augmentation: {settings.Agent Settings.LORE.payload_percent_budget.contextual_augmentation.min}% to {settings.Agent Settings.LORE.payload_percent_budget.contextual_augmentation.max}%\n   - warm_slice: {settings.Agent Settings.LORE.payload_percent_budget.warm_slice.min}% to {settings.Agent Settings.LORE.payload_percent_budget.warm_slice.max}%",
-            "Component Selection Logic": {
-                "Structured Summaries": "- Purpose: Provide compact, information-dense context\n- Selection criteria: \n  * Characters actively participating in current scene\n  * Locations currently featured or referenced\n  * Key plot points directly relevant to current action\n- Optimize for: Information density and coverage",
-                "Historical Passages (Contextual Augmentation)": "- Purpose: Provide nuanced, verbatim historical context\n- Selection criteria:\n  * Thematic relevance to current scene\n  * Character development milestones\n  * Prior events directly referenced or implied\n- Retrieve initial candidates: {settings.Agent Settings.LORE.distillation.phase1_top_k} chunks\n- Filter to top: {settings.Agent Settings.LORE.distillation.phase2_top_k} chunks\n- Optimize for: Nuance, literary continuity, and thematic depth",
-                "Recent Narrative (Warm Slice)": "- Purpose: Ensure immediate continuity and coherence\n- Selection criteria:\n  * Start from most recent and work backward\n  * Identify optimal cut points at narrative transitions\n  * Balance recent action with story arc context\n- Optimize for: Narrative flow and immediate coherence"
-            },
-            "Output Requirements": "Produce a structured payload containing:\n1. Selected components with allocations\n2. Justification for allocation decisions\n3. Special instructions for the storyteller AI\n4. Metadata to track performance",
-            "Reasoning Process": "For each context assembly task:\n1. Explicitly state your assessment of the narrative state\n2. Explain your allocation decision and tradeoffs\n3. Detail why specific historical passages were selected\n4. Justify the extent of the warm slice",
-            "Edge Cases": "When facing challenging scenarios:\n1. If optimal allocation falls outside configured ranges, adhere to limits but document the constraint\n2. If multiple valid allocations exist, prioritize continuity over information density\n3. If token budget is severely constrained, prioritize warm slice over other components\n4. Document all edge case handling for future optimization"
         }
     },
     "Agent Settings": {
         "global": {
             "model": {
                 "description": "defines default LLM to load for all agents",
-                "possible values": [
-                    "llama-3.3-70b-instruct@q6_k",
-                    "llama-4-scout-17b-16e-mlx-text",
-                    "bartowski/mistral-large-instruct-2411",
-                    "deepseek-r1-distill-llama-70b@q8_0",
-                    "llama-4.0-scout-q6_k_xl"
+                "possible_values": [
+                    "llama-3.3-70b-instruct@6bit",
+                    "openai/gpt-oss-120b",
+                    "nexveridian/gpt-oss-120b",
+                    "mixtral-8x22b-instruct-v0.1",
+                    "llama-3.3-70b-instruct@8bit",
+                    "llama-4-scout-17b-16e-instruct"
                 ],
-                "default_model": "llama-3.3-70b-instruct@q6_k"
+                "default_model": "nexveridian/gpt-oss-120b"
             },
             "llm": {
                 "api_base": "http://localhost:1234",
+                "context_window": 65536,
                 "temperature": 0.8,
                 "max_tokens": 2048,
                 "top_k": 40,
@@ -152,6 +141,7 @@
                 "presence_penalty": 0.5,
                 "frequency_penalty": 0.5,
                 "timeout": 120,
+                "reasoning_effort": "high",
                 "system_prompt": "You are a narrative intelligence system that has perfect recall of story elements."
             }
         },
@@ -177,24 +167,8 @@
         },
         "LORE": {
             "debug": true,
-            "llm": {
-                "model_path": "models/llama-4-scout/Q4_K_M/Llama-4-Scout-17B-16E-Instruct-Q4_K_M-merged.gguf",
-                "model_type": "llama-cpp",
-                "n_ctx": 131072,
-                "n_threads": 12,
-                "n_gpu_layers": 44,
-                "n_batch": 512,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "top_k": 40,
-                "repeat_penalty": 1.1,
-                "max_tokens": 2048,
-                "seed": -1,
-                "f16_kv": true,
-                "use_mmap": true,
-                "use_mlock": false,
-                "verbose": false
-            },
+            "enable_narrative_state_allocation": false,
+            "agentic_sql": true,
             "payload_percent_budget": {
                 "structured_summaries": {
                     "min": 10,
@@ -209,11 +183,7 @@
                     "max": 70
                 }
             },
-            "distillation": {
-                "phase1_top_k": 50,
-                "phase2_top_k": 10,
-                "phase2_LLM_model": "Mixtral 8x7B 5_K_M"
-            },
+            "query_budget": 5,
             "use_narrative_learner": true
         },
         "LOGON": {
