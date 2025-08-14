@@ -98,8 +98,8 @@ try:
         "batch": 30,
         "rate_limit": 300
     })
-    logger.info(f"Loaded API TPM limits from settings.json: {TPM_LIMITS}")
-    logger.info(f"Loaded API cooldown values from settings.json: {COOLDOWNS}")
+    # logger.info(f"Loaded API TPM limits from settings.json: {TPM_LIMITS}")
+    # logger.info(f"Loaded API cooldown values from settings.json: {COOLDOWNS}")
 except Exception as e:
     logger.warning(f"Failed to load settings.json: {str(e)}. Using default TPM limits: {DEFAULT_TPM_LIMITS}")
     TPM_LIMITS = DEFAULT_TPM_LIMITS

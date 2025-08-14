@@ -89,8 +89,8 @@ def load_settings() -> Dict[str, Any]:
                     hybrid = settings["Agent Settings"]["MEMNON"]["retrieval"]["hybrid_search"]
                     temporal_factor = hybrid.get("temporal_boost_factor", "not set")
                     query_specific = hybrid.get("use_query_type_temporal_factors", "not set")
-                    settings_logger.info(f"SETTINGS DEBUG - temporal_boost_factor: {temporal_factor}")
-                    settings_logger.info(f"SETTINGS DEBUG - use_query_type_temporal_factors: {query_specific}")
+                    # settings_logger.info(f"SETTINGS DEBUG - temporal_boost_factor: {temporal_factor}")
+                    # settings_logger.info(f"SETTINGS DEBUG - use_query_type_temporal_factors: {query_specific}")
                 
                 return settings
         else:
