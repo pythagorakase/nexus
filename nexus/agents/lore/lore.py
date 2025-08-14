@@ -317,7 +317,10 @@ class LORE:
 
         # Ensure the default LM Studio model is loaded (auto load/unload as needed)
         try:
-            manager = ModelManager(self.settings_path if hasattr(self, 'settings_path') else None)
+            manager = ModelManager(
+                self.settings_path if hasattr(self, 'settings_path') else None,
+                unload_on_exit=self.llm_manager.unload_on_exit
+            )
             ensured_model_id = manager.ensure_default_model()
             qa_logger.info(f"Ensured LM Studio model loaded: {ensured_model_id}")
             # Hint LocalLLMManager about the loaded model id
@@ -809,6 +812,11 @@ async def main():
             # Override setting for this run
             lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
         
+        # Set keep-model flag BEFORE retrieval
+        if args.keep_model and lore.llm_manager:
+            lore.llm_manager.unload_on_exit = False
+            logger.info("Model will be kept loaded after retrieval (--keep-model)")
+        
         logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")
         result = await lore.retrieve_context(directives, chunk_id=args.chunk)
         
@@ -859,9 +867,6 @@ async def main():
         if args.debug:
             print("Full JSON response (debug mode):")
             print(json.dumps(result, indent=2))
-        
-        if args.keep_model and lore.llm_manager:
-            lore.llm_manager.unload_on_exit = False
 
     elif args.test:
         # Run a test turn
