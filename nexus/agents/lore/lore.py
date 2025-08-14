@@ -15,7 +15,7 @@ import asyncio
 import logging
 import json
 import time
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any, List, Union
 from pathlib import Path
 
 # Handle imports based on how the module is run
@@ -267,17 +267,29 @@ class LORE:
                 logger.debug("Unloading model after turn cycle to free resources")
                 self.llm_manager.unload_model()
 
-    async def answer_question(self, question: str) -> Dict[str, Any]:
+    async def retrieve_context(self, retrieval_directives: Union[str, List[str]], chunk_id: Optional[int] = None) -> Dict[str, Any]:
         """
-        Answer a direct question about the narrative without generating new story content.
+        Process retrieval directives to assemble narrative context for a specific chunk.
         
+        This is LORE's core function: understanding what contextual elements are needed
+        for narrative generation and assembling them from the database.
+        
+        Args:
+            retrieval_directives: One or more continuity elements/context requests 
+                                  (e.g., ["Alex & Emilia's relationship history", "What happened to Victor?"])
+            chunk_id: The narrative chunk this context is being assembled for
+            
         Returns dict with:
-        - answer: The synthesized response
+        - retrieved_context: The assembled contextual information (dict keyed by directive)
         - sources: List of chunk IDs used
         - queries: The generated retrieval queries
-        - reasoning: LLM's reasoning trace
+        - retrieval_reasoning: LORE's reasoning about what to retrieve
         """
-        qa_logger.info(f"Processing question: {question[:50]}...")
+        # Normalize to list
+        if isinstance(retrieval_directives, str):
+            retrieval_directives = [retrieval_directives]
+        
+        qa_logger.info(f"Processing {len(retrieval_directives)} retrieval directive(s) for chunk {chunk_id}")
 
         # Ensure the default LM Studio model is loaded (auto load/unload as needed)
         try:
@@ -292,230 +304,185 @@ class LORE:
 
         # Fail hard if local LLM is not available after ensuring the model
         if not self.llm_manager or not self.llm_manager.is_available():
-            raise RuntimeError("FATAL: LM Studio required for Q&A mode")
+            raise RuntimeError("FATAL: LM Studio required for contextual retrieval")
 
-        # Acquire a small warm slice from recent chunks to guide query generation
-        try:
-            recent = self.memnon.get_recent_chunks(limit=5) if self.memnon else {"results": []}
-            warm_slice = recent.get("results", [])
-        except Exception as e:
-            qa_logger.error(f"Failed to retrieve recent chunks: {e}")
-            warm_slice = []
-
-        # Analyze question in context of recent narrative
-        context_analysis = self.llm_manager.analyze_narrative_context(warm_slice=warm_slice, user_input=question)
-
-        # Generate retrieval queries (include the original question)
-        raw_queries: List[str] = self.llm_manager.generate_retrieval_queries(context_analysis=context_analysis, user_input=question)
+        # Load the specific chunk and surrounding context if chunk_id provided
+        warm_slice = []
+        chunk_context = None
+        if chunk_id:
+            try:
+                # Get the specific chunk and a few before it for context
+                chunk_result = self.memnon.get_chunk_by_id(chunk_id) if self.memnon else None
+                if chunk_result:
+                    chunk_context = chunk_result
+                    # Also get a few chunks before this one for narrative continuity
+                    recent = self.memnon.get_chunks_before(chunk_id, limit=3) if self.memnon else {"results": []}
+                    warm_slice = recent.get("results", [])
+                    if chunk_context:
+                        warm_slice.append(chunk_context)
+                else:
+                    qa_logger.warning(f"Could not find chunk {chunk_id}")
+            except Exception as e:
+                qa_logger.error(f"Failed to retrieve chunk {chunk_id}: {e}")
         
-        # Sanitize queries for text search compatibility (avoid punctuation that breaks tsquery)
+        if not warm_slice:
+            # Fallback to recent chunks if no specific chunk
+            try:
+                recent = self.memnon.get_recent_chunks(limit=5) if self.memnon else {"results": []}
+                warm_slice = recent.get("results", [])
+            except Exception as e:
+                qa_logger.error(f"Failed to retrieve recent chunks: {e}")
+                warm_slice = []
+
+        # Process each directive sequentially and aggregate results
+        all_results = {
+            "chunk_id": chunk_id,
+            "retrieved_context": {},
+            "sources": [],
+            "queries": [],
+            "retrieval_reasoning": {},
+            "sql_attempts": [],
+            "search_progress": []
+        }
+        
+        # Process each retrieval directive independently
+        for directive in retrieval_directives:
+            directive_result = await self._process_single_directive(directive, chunk_id, warm_slice)
+            
+            # Aggregate results
+            all_results["retrieved_context"][directive] = directive_result["retrieved_context"]
+            all_results["sources"].extend(directive_result["sources"])
+            all_results["queries"].extend(directive_result["queries"])
+            all_results["retrieval_reasoning"][directive] = directive_result["reasoning"]
+            all_results["sql_attempts"].extend(directive_result.get("sql_attempts", []))
+            all_results["search_progress"].extend(directive_result.get("search_progress", []))
+        
+        # Deduplicate sources while preserving order
+        all_results["sources"] = list(dict.fromkeys(all_results["sources"]))
+        
+        # If model was loaded for this operation, optionally unload it
+        if self.llm_manager and not self.settings.get("Agent Settings", {}).get("LORE", {}).get("keep_model_loaded", False):
+            try:
+                self.llm_manager.unload_model()
+                qa_logger.info("Unloaded LM Studio model after retrieval")
+            except Exception as e:
+                qa_logger.warning(f"Failed to unload model: {e}")
+        
+        return all_results
+    
+    async def answer_question(self, question: str) -> Dict[str, Any]:
+        """
+        Backward compatibility wrapper for retrieve_context.
+        Converts old-style question into a retrieval directive.
+        """
+        qa_logger.warning("answer_question is deprecated. Use retrieve_context with directives instead.")
+        return await self.retrieve_context([question], chunk_id=None)
+
+    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict]) -> Dict[str, Any]:
+        """
+        Process a single retrieval directive with full iterative capability.
+        
+        Args:
+            directive: The specific continuity element to retrieve
+            chunk_id: The narrative chunk this is for
+            warm_slice: Context chunks to use for analysis
+            
+        Returns:
+            Dict with retrieved_context, sources, queries, and reasoning for this directive
+        """
+        qa_logger.info(f"Processing directive: {directive[:50]}...")
+        
+        # Analyze directive in context of the specific chunk
+        context_analysis = self.llm_manager.analyze_narrative_context(
+            warm_slice=warm_slice, 
+            user_input=f"For chunk {chunk_id}: {directive}" if chunk_id else directive
+        )
+        
+        # Generate retrieval queries for this directive
+        raw_queries: List[str] = self.llm_manager.generate_retrieval_queries(
+            context_analysis=context_analysis, 
+            user_input=directive
+        )
+        
+        # Sanitize queries for text search compatibility
         def sanitize_query(q: str) -> str:
-            # Keep alphanumerics and common separators; replace problematic chars with spaces
             import re
             q = re.sub(r"[\n\r\t]+", " ", q)
             q = re.sub(r"[\"'()?:;<>\\]", " ", q)
             q = re.sub(r"\s+", " ", q).strip()
             return q
+        
         queries: List[str] = [sanitize_query(q) for q in raw_queries if q and q.strip()]
-        # Deduplicate while preserving order
-        queries = list(dict.fromkeys(queries))
-
-        # Execute queries via MEMNON (hybrid search preferred) and also query structured data
+        queries = list(dict.fromkeys(queries))  # Deduplicate
+        
+        # Execute queries via MEMNON
         aggregated_results: Dict[str, Dict[str, Any]] = {}
         search_progress: List[Dict[str, Any]] = []
-        structured_sources: List[Dict[str, Any]] = []
+        
         for q in queries:
             try:
                 result = self.memnon.query_memory(q, filters=None, k=8, use_hybrid=True)
                 search_progress.append({"query": q, "result_count": result.get("metadata", {}).get("result_count", 0)})
                 for item in result.get("results", []):
-                    chunk_id = str(item.get("chunk_id") or item.get("id"))
-                    if not chunk_id:
+                    result_chunk_id = str(item.get("chunk_id") or item.get("id"))
+                    if not result_chunk_id:
                         continue
-                    if chunk_id not in aggregated_results:
-                        aggregated_results[chunk_id] = {
-                            "chunk_id": chunk_id,
+                    if result_chunk_id not in aggregated_results:
+                        aggregated_results[result_chunk_id] = {
+                            "chunk_id": result_chunk_id,
                             "text": item.get("text", ""),
                             "metadata": item.get("metadata", {}),
                             "score": float(item.get("score", 0.0))
                         }
                     else:
-                        # Keep the best score
-                        aggregated_results[chunk_id]["score"] = max(
-                            aggregated_results[chunk_id]["score"], float(item.get("score", 0.0))
+                        aggregated_results[result_chunk_id]["score"] = max(
+                            aggregated_results[result_chunk_id]["score"], 
+                            float(item.get("score", 0.0))
                         )
             except Exception as e:
                 qa_logger.error(f"Search error for query '{q}': {e}")
-
-        # Structured lookup: try direct character/relationship info for names present in the question
-        try:
-            candidate_names: List[str] = []
-            # Heuristic: extract capitalized tokens as potential names
-            import re
-            for token in re.findall(r"[A-Z][a-zA-Z]+", question):
-                if token.lower() not in {"what", "who", "where", "when", "why", "how", "Is", "Are", "Dynacorp".lower()}:
-                    candidate_names.append(token)
-            # Always include first token if exact string present like Victor
-            candidate_names = list(dict.fromkeys(candidate_names))[:2]
-            for name in candidate_names:
-                try:
-                    # Query characters table via MEMNON structured path
-                    structured = self.memnon._query_structured_data(name, table="characters", limit=3)
-                    if structured:
-                        # For structured results, create synthetic passages referencing character summaries if available
-                        # Capture structured sources (characters table)
-                        try:
-                            char_ids = [int(rec.get("id")) for rec in structured if rec.get("id") is not None]
-                            if char_ids:
-                                structured_sources.append({"table": "characters", "ids": char_ids})
-                        except Exception:
-                            pass
-                        # Attempt to enrich with character summary if needed (left for LLM synthesis input via SQL attempts)
-                        search_progress.append({"query": f"structured:characters:{name}", "result_count": len(structured)})
-                    # Also run plain memory search on the name to capture narrative mentions
-                    try:
-                        if name not in queries:
-                            queries.append(name)
-                        name_result = self.memnon.query_memory(name, filters=None, k=8, use_hybrid=True)
-                        search_progress.append({"query": name, "result_count": name_result.get("metadata", {}).get("result_count", 0)})
-                        for item in name_result.get("results", []):
-                            chunk_id = str(item.get("chunk_id") or item.get("id"))
-                            if not chunk_id:
-                                continue
-                            if chunk_id not in aggregated_results:
-                                aggregated_results[chunk_id] = {
-                                    "chunk_id": chunk_id,
-                                    "text": item.get("text", ""),
-                                    "metadata": item.get("metadata", {}),
-                                    "score": float(item.get("score", 0.0))
-                                }
-                            else:
-                                aggregated_results[chunk_id]["score"] = max(
-                                    aggregated_results[chunk_id]["score"], float(item.get("score", 0.0))
-                                )
-                    except Exception as e:
-                        qa_logger.debug(f"Name search failed for {name}: {e}")
-                except Exception as e:
-                    qa_logger.debug(f"Structured lookup failed for {name}: {e}")
-        except Exception:
-            pass
-
-        # If nothing found, return an "I don't know" style answer
-        if not aggregated_results:
-            qa_logger.info("No results found across queries; returning insufficient-evidence response")
-            return {
-                "answer": "I don't know based on the available story data.",
-                "sources": [],
-                "queries": queries,
-                "reasoning": "No relevant chunks were retrieved for the question."
-            }
-
-        # Select top passages (limit for concise synthesis)
-        # Broaden synthesis pool: take top 10 by default and optionally expand around the best chunk (spot-reading)
-        sorted_passages = sorted(aggregated_results.values(), key=lambda r: r.get("score", 0.0), reverse=True)
-        top_passages = sorted_passages[:10]
-        # Optional spot-reading: expand around single best chunk id by fetching neighbors n-1..n+1 for more context
-        try:
-            if top_passages:
-                best_id_str = str(top_passages[0]["chunk_id"]) if top_passages[0].get("chunk_id") is not None else None
-                if best_id_str and best_id_str.isdigit():
-                    best_id = int(best_id_str)
-                    neighbor_ids = [best_id - 1, best_id + 1]
-                    for nid in neighbor_ids:
-                        if nid > 0 and str(nid) not in aggregated_results:
-                            neighbor = self.memnon._get_chunk_by_id(nid)
-                            for item in neighbor.get("results", []) or []:
-                                aggregated_results[str(item.get("id"))] = {
-                                    "chunk_id": str(item.get("id")),
-                                    "text": item.get("text", ""),
-                                    "metadata": item.get("metadata", {}),
-                                    "score": 0.01,  # low weight context
-                                }
-                    # Recompute top 10 including neighbors
-                    top_passages = sorted(aggregated_results.values(), key=lambda r: r.get("score", 0.0), reverse=True)[:10]
-        except Exception:
-            pass
-
-        # Build synthesis prompt with explicit chunk IDs and temporal metadata
-        def fmt_meta(md: Dict[str, Any]) -> str:
-            season = md.get("season")
-            episode = md.get("episode")
-            scene = md.get("scene_number")
-            perspective = md.get("perspective")
-            parts = []
-            if season is not None and episode is not None:
-                parts.append(f"S{season}E{episode}")
-            if scene is not None:
-                parts.append(f"Scene {scene}")
-            if perspective:
-                parts.append(f"Perspective: {perspective}")
-            return ", ".join(parts)
-
-        sources_block_lines: List[str] = []
-        for p in top_passages:
-            cid = p["chunk_id"]
-            meta = fmt_meta(p.get("metadata", {}))
-            txt = p.get("text", "").strip()
-            # Keep each excerpt modest to control token use
-            excerpt = txt if len(txt) <= 600 else txt[:600] + "..."
-            sources_block_lines.append(f"- [chunk_id:{cid}] ({meta})\n{excerpt}")
-
-        sources_block = "\n\n".join(sources_block_lines)
-
-        system_prompt = (
-            "You are LORE, an expert narrative analyst. Answer user questions about the existing story using only the provided sources. "
-            "Be concise and strictly informational (no new prose). If evidence is insufficient, reply with 'I don't know'. "
-            "Return a strict JSON object with keys: answer (string), reasoning (string), cited_chunk_ids (array of integers). "
-            "Only include chunk IDs that appear in the provided sources."
-        )
-
-        user_prompt = (
-            f"Question: {question}\n\n"
-            f"Sources (each includes its chunk_id and metadata):\n\n{sources_block}\n\n"
-            "Instructions: Using only these sources, produce JSON like:\n"
-            "{\n  \"answer\": \"...\",\n  \"reasoning\": \"...\",\n  \"cited_chunk_ids\": [123, 456]\n}"
-        )
-
-        # Optional agentic SQL phase: let LLM propose up to N read-only SQL queries over whitelisted tables
-        agentic_sql_enabled = bool(self.settings.get("Agent Settings", {}).get("LORE", {}).get("agentic_sql", False))
+        
+        # Optional agentic SQL phase for this directive
         sql_attempts: List[Dict[str, Any]] = []
         sql_context = ""
+        
+        agentic_sql_enabled = bool(self.settings.get("Agent Settings", {}).get("LORE", {}).get("agentic_sql", False))
         if agentic_sql_enabled and self.memnon:
-            # Load the system prompt which contains SQL guidance
+            # Load SQL guidance from system prompt
             system_prompt_path = Path(__file__).parent / "lore_system_prompt.md"
             sql_section = ""
             try:
                 with open(system_prompt_path, 'r') as f:
                     full_prompt = f.read()
-                # Extract the Agentic SQL Mode section
                 if "## Agentic SQL Mode" in full_prompt:
                     start = full_prompt.find("## Agentic SQL Mode")
                     end = full_prompt.find("### LOGON (API Interface)", start)
                     if end == -1:
                         end = full_prompt.find("## ", start + 1)
-                    if end != -1:
-                        sql_section = full_prompt[start:end].strip()
-                    else:
-                        sql_section = full_prompt[start:].strip()
+                    sql_section = full_prompt[start:end if end != -1 else None].strip()
             except Exception as e:
                 qa_logger.warning(f"Could not load system prompt: {e}")
                 sql_section = "Use SELECT queries with LIMIT. Respond with JSON: {\"action\": \"sql\"|\"final\", \"sql\": \"...\"}."
             
             # Get schema and construct prompt
             schema = self.memnon.get_schema_summary()
+            query_budget = self.settings.get("Agent Settings", {}).get("LORE", {}).get("query_budget", 5)
+            
             planning_prompt = (
-                f"Task: Answer the user's question by checking relevant facts via SQL.\n\n"
+                f"Task: Retrieve contextual information for this continuity element via SQL.\n\n"
                 f"Schema:\n{schema}\n\n"
-                f"User question: {question}\n\n"
+                f"Retrieval directive: {directive}\n"
+                f"Context: This is for narrative chunk {chunk_id}\n\n" if chunk_id else "\n\n"
+            ) + (
                 f"{sql_section}\n\n"
-                f"Return one JSON object per step and wait for results. Limit to 3 SQL steps."
+                f"Return one JSON object per step and wait for results. Limit to {query_budget} SQL steps."
             )
-            # Simple loop: 3 steps max
-            max_steps = 3
+            
+            # Iterative SQL refinement loop
             executed_sql: set[str] = set()
-            for _ in range(max_steps):
-                # Prefer structured response for planning
+            for step_num in range(query_budget):
                 from nexus.agents.lore.utils.local_llm import SQLStep
+                
                 step_struct = self.llm_manager.structured_query(
                     planning_prompt,
                     response_model=SQLStep,
@@ -523,162 +490,98 @@ class LORE:
                     max_tokens=200,
                     system_prompt="Propose exactly one Step JSON per turn."
                 )
+                
                 try:
                     if hasattr(step_struct, "action"):
                         step = {"action": step_struct.action, "sql": getattr(step_struct, "sql", None)}
                     elif isinstance(step_struct, dict):
                         step = step_struct
                     else:
+                        step = json.loads(str(step_struct))
+                    
+                    if step.get("action") == "final":
+                        qa_logger.info(f"SQL agent finished after {step_num + 1} steps")
                         break
-                except Exception:
-                    break
-                if not isinstance(step, dict):
-                    break
-                action = str(step.get("action", "")).lower()
-                if action == "final":
-                    break
-                if action == "sql":
-                    sql = str(step.get("sql", "")).strip()
                     
-                    # Fix common SQL quote issues from LLM generation
-                    import re
-                    
-                    # Only fix double-quoted strings (wrong SQL syntax)
-                    # Convert "string" to 'string' and escape internal apostrophes
-                    def fix_double_quotes(match):
-                        keyword = match.group(1)  # ILIKE or =
-                        content = match.group(2)
-                        # Escape any apostrophes by doubling them
-                        content = content.replace("'", "''")
-                        return f"{keyword} '{content}'"
-                    
-                    # Only process double-quoted strings, leave single-quoted ones alone
-                    sql = re.sub(r'(ILIKE|=)\s+"([^"]*)"', fix_double_quotes, sql, flags=re.IGNORECASE)
-                    
-                    # Guard against duplicate SQL proposals
-                    if sql in executed_sql:
-                        # Nudge planner to refine or finish
-                        planning_prompt += "\nNote: The previous SQL was already executed; do not repeat identical SQL. Propose a refined query (different columns/table) or emit {\\\"action\\\": \\\"final\\\"}."
-                        # Record skipped duplicate
-                        sql_attempts.append({"sql": sql, "result": {"error": "duplicate_skipped"}})
-                        continue
-                    exec_result = self.memnon.execute_readonly_sql(sql)
-                    executed_sql.add(sql)
-                    sql_attempts.append({"sql": sql, "result": exec_result})
-                    # Feed back result for next step
-                    planning_prompt += f"\n\nResult for {sql!r}:\n{json.dumps(exec_result)[:1500]}"
-                else:
-                    break
-            # Make any SQL-derived rows available to synthesis as an extra source block
-            if sql_attempts:
-                rows_snippets: List[str] = []
-                for att in sql_attempts:
-                    res = att.get("result", {})
-                    if isinstance(res, dict) and res.get("rows"):
-                        # Show first few rows compactly
-                        preview = json.dumps(res.get("rows")[:3])
-                        rows_snippets.append(f"SQL: {att.get('sql')}\nRows: {preview}")
-                if rows_snippets:
-                    user_prompt += "\n\nAdditional structured facts (from SQL):\n" + "\n\n".join(rows_snippets)
-
-        # Prefer structured response via SDK when available
-        structured = None
+                    if step.get("action") == "sql" and step.get("sql"):
+                        sql_query = step["sql"]
+                        if sql_query not in executed_sql:
+                            executed_sql.add(sql_query)
+                            result = self.memnon.execute_sql(sql_query, read_only=True)
+                            sql_attempts.append({"sql": sql_query, "result": result})
+                            
+                            # Add result to prompt for next iteration
+                            planning_prompt += f"\n\nStep {step_num + 1} SQL: {sql_query}\n"
+                            planning_prompt += f"Result: {json.dumps(result, indent=2)[:500]}\n"
+                            
+                            # Extract SQL context for synthesis
+                            if result.get("rows"):
+                                sql_context += f"\nSQL Query: {sql_query}\n"
+                                sql_context += f"Result ({len(result['rows'])} rows):\n"
+                                sql_context += json.dumps(result["rows"][:3], indent=2)[:1000] + "\n"
+                
+                except Exception as e:
+                    qa_logger.warning(f"SQL step {step_num + 1} failed: {e}")
+                    continue
+        
+        # Sort results by score and prepare for synthesis
+        sorted_results = sorted(
+            aggregated_results.values(), 
+            key=lambda x: x["score"], 
+            reverse=True
+        )[:10]  # Top 10 results
+        
+        # Synthesize the retrieved context for this directive
+        if not sorted_results and not sql_context:
+            return {
+                "retrieved_context": f"No relevant information found for: {directive}",
+                "sources": [],
+                "queries": queries,
+                "reasoning": "No results from text search or SQL queries",
+                "sql_attempts": sql_attempts
+            }
+        
+        # Format sources for synthesis
+        sources_text = ""
+        for i, result in enumerate(sorted_results, 1):
+            sources_text += f"\n[Source {i}] Chunk {result['chunk_id']} (score: {result['score']:.2f}):\n"
+            sources_text += result["text"][:500] + "...\n"
+        
+        # Add SQL context if available
+        if sql_context:
+            sources_text = f"SQL Results:\n{sql_context}\n\nText Search Results:\n{sources_text}"
+        
+        # Generate synthesis
+        synthesis_prompt = (
+            f"Retrieval directive: {directive}\n"
+            f"Target chunk: {chunk_id}\n\n" if chunk_id else "\n"
+        ) + (
+            f"Available sources:\n{sources_text}\n\n"
+            f"Synthesize the relevant contextual information that addresses this directive. "
+            f"Be specific and include chunk IDs where applicable."
+        )
+        
         try:
-            structured = self.llm_manager.structured_query(
-                prompt=user_prompt,
-                response_model=__import__("nexus.agents.lore.utils.local_llm", fromlist=["QAResponse"]).QAResponse,
-                temperature=0.2,
-                max_tokens=800,
-                system_prompt=system_prompt,
+            synthesis = self.llm_manager.query(
+                synthesis_prompt,
+                system_prompt="You are assembling narrative context. Be concise but thorough.",
+                temperature=0.3,
+                max_tokens=500
             )
         except Exception as e:
-            qa_logger.debug(f"structured_query unavailable: {e}")
-
-        if isinstance(structured, dict) or (hasattr(structured, "answer")):
-            # Convert to unified dict form
-            try:
-                if isinstance(structured, dict):
-                    answer = str(structured.get("answer", "")).strip()
-                    reasoning = str(structured.get("reasoning", "")).strip()
-                    cited_ids = structured.get("cited_chunk_ids", []) or []
-                else:
-                    answer = str(getattr(structured, "answer", "")).strip()
-                    reasoning = str(getattr(structured, "reasoning", "")).strip()
-                    cited_ids = list(getattr(structured, "cited_chunk_ids", []) or [])
-            except Exception:
-                answer = ""
-                reasoning = ""
-                cited_ids = []
-        else:
-            # Synthesize with low temperature for factuality
-            raw_response = self.llm_manager.query(
-                prompt=user_prompt,
-                temperature=0.2,
-                max_tokens=800,
-                system_prompt=system_prompt,
-            )
-
-            qa_logger.debug(f"LLM raw synthesis response (truncated): {raw_response[:200]}...")
-
-            # Parse JSON output
-            answer: str = ""
-            reasoning: str = ""
-            cited_ids: List[int] = []
-            try:
-                # Strip channel markers if present
-                cleaned = raw_response
-                for marker in ["<|channel|>analysis<|message|>", "<|start|>assistant", "<|channel|>final<|message|>", "<|end|>"]:
-                    cleaned = cleaned.replace(marker, "")
-                cleaned = cleaned.strip()
-                # Attempt to find the first JSON object in the response
-                start = cleaned.find("{")
-                end = cleaned.rfind("}")
-                candidate = cleaned[start:end+1] if start != -1 and end != -1 and end > start else cleaned
-                parsed = json.loads(candidate)
-                if isinstance(parsed, dict):
-                    answer = str(parsed.get("answer", "")).strip()
-                    reasoning = str(parsed.get("reasoning", "")).strip()
-                    parsed_ids = parsed.get("cited_chunk_ids", []) or []
-                    if isinstance(parsed_ids, list):
-                        for v in parsed_ids:
-                            try:
-                                cited_ids.append(int(v))
-                            except Exception:
-                                continue
-            except Exception as e:
-                qa_logger.warning(f"Failed to parse JSON from LLM response: {e}; using fallback formatting")
-                # Fallback: treat the whole response as the answer
-                answer = raw_response.strip()
-                reasoning = "Synthesis returned non-JSON; included raw content."
-
-        # Validate cited IDs against retrieved sources
-        available_ids = {int(p["chunk_id"]) for p in top_passages if str(p.get("chunk_id")).isdigit()}
-        valid_cited = [cid for cid in cited_ids if cid in available_ids]
-        if not valid_cited:
-            # Fallback: cite the top 3 retrieved chunks
-            valid_cited = list(available_ids)[:3]
-
-        # Summarize SQL attempts for output transparency (avoid dumping full rows)
-        summarized_sql_attempts: List[Dict[str, Any]] = []
-        try:
-            for att in sql_attempts:
-                res = att.get("result", {}) if isinstance(att, dict) else {}
-                summarized_sql_attempts.append({
-                    "sql": att.get("sql"),
-                    "row_count": res.get("row_count"),
-                    "columns": res.get("columns")[:5] if isinstance(res.get("columns"), list) else None,
-                })
-        except Exception:
-            pass
-
+            qa_logger.error(f"Synthesis failed: {e}")
+            synthesis = sources_text[:1000]
+        
+        # Extract chunk IDs from results
+        source_ids = [int(r["chunk_id"]) for r in sorted_results if r["chunk_id"].isdigit()]
+        
         return {
-            "answer": answer or "I don't know based on the available story data.",
-            "sources": valid_cited,
-            "structured_sources": structured_sources,
+            "retrieved_context": synthesis,
+            "sources": source_ids,
             "queries": queries,
-            "reasoning": reasoning,
-            "search_progress": search_progress,
-            "sql_attempts": summarized_sql_attempts,
+            "reasoning": context_analysis,
+            "sql_attempts": sql_attempts,
+            "search_progress": search_progress
         }
     
     def get_turn_summary(self) -> Dict[str, Any]:
@@ -724,13 +627,15 @@ async def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="LORE Agent - NEXUS Orchestrator")
+    parser.add_argument("retrieval_directives", nargs="*", help="One or more retrieval directives/continuity elements to process")
+    parser.add_argument("--chunk", type=int, required=False, help="Narrative chunk ID to build context for")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--settings", help="Path to settings.json")
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
     parser.add_argument("--status", action="store_true", help="Show component status")
-    parser.add_argument("--qa", help="Run Q&A mode with the given question")
+    parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
     parser.add_argument("--keep-model", action="store_true", help="Keep LM Studio model loaded after run")
-    parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL mode for Q&A")
+    parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL mode for retrieval")
     
     args = parser.parse_args()
     
@@ -751,13 +656,21 @@ async def main():
         print("="*60)
         print(json.dumps(status, indent=2))
         
-    elif args.qa:
-        # Q&A mode
+    elif args.qa or args.retrieval_directives:
+        # Contextual retrieval mode (formerly Q&A)
+        directives = args.retrieval_directives if args.retrieval_directives else [args.qa] if args.qa else []
+        
+        if directives and not args.chunk:
+            print("Error: --chunk parameter is required when providing retrieval directives")
+            print("Usage: python lore.py 'directive1' 'directive2' ... --chunk <chunk_id>")
+            return
+        
         if args.agentic_sql:
             # Override setting for this run
             lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
-        qa_logger.info(f"Running Q&A for question: {args.qa}")
-        result = await lore.answer_question(args.qa)
+        
+        logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")
+        result = await lore.retrieve_context(directives, chunk_id=args.chunk)
         print(json.dumps(result, indent=2))
         if args.keep_model and lore.llm_manager:
             lore.llm_manager.unload_on_exit = False
