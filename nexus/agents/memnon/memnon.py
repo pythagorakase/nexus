@@ -399,11 +399,18 @@ class MEMNON:
             from sqlalchemy import text
             inspector = inspect(self.db_manager.engine)
             
-            # Only include tables that are relevant for LORE's queries
-            # Exclude embedding tables and nonexistent tables
-            allowed = tables or [
-                "characters", "places", "chunk_metadata", "narrative_chunks"
-            ]
+            # If no specific tables requested, get all tables dynamically
+            if tables:
+                allowed = tables
+            else:
+                # Get all tables from the database
+                all_tables = inspector.get_table_names()
+                # Exclude embedding tables and other irrelevant tables
+                allowed = [
+                    t for t in all_tables 
+                    if not t.startswith('chunk_embeddings_')
+                    and t != 'alembic_version'  # Skip Alembic migration table
+                ]
             
             lines: List[str] = []
             
