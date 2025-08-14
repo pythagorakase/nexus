@@ -147,15 +147,12 @@ Your goal is overwhelming context richness. The system will guide you through as
 You coordinate two complementary retrieval tools. Use both agentically and iterate based on results:
 
 1) PostgreSQL database (structured summaries and state)
-   - Read-only access. Primary tables of interest:
-     - `characters(id, name, summary, current_activity, current_location, extra_data)`
-     - `places(id, name, summary, current_status, gis_coordinates, zone, extra_data)`
-     - `chunk_metadata(id, chunk_id, season, episode, scene, world_layer, characters, perspective)`
-     - `narrative_chunks(id, raw_text)` - Raw narrative content
-   - Use SQL to fetch authoritative summaries (e.g., character or location data).
-   - Prefer targeted, small `SELECT` queries with `LIMIT`.
-   - Treat structured facts as authoritative if they directly answer the question.
-   - Note: Database schema is annotated with helpful comments - use psql \d+ to explore
+   - Read-only access via SELECT queries only
+   - Available tables are dynamically provided with their schemas and comments
+   - Use SQL to fetch authoritative summaries (e.g., character or location data)
+   - Prefer targeted, small `SELECT` queries with `LIMIT`
+   - Treat structured facts as authoritative if they directly answer the question
+   - The schema will be injected here showing all non-empty tables with their columns and comments
 
 2) Narrative text search (unstructured raw text)
    - Hybrid search (multi-model vectors + keyword) across `narrative_chunks`.
