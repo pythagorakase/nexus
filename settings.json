@@ -183,6 +183,7 @@
                     "max": 70
                 }
             },
+            "query_budget": 5,
             "use_narrative_learner": true
         },
         "LOGON": {
