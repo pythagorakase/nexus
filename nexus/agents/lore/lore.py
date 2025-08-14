@@ -282,8 +282,12 @@ class LORE:
             return f"Error processing turn: {str(e)}"
         
         finally:
-            # Clean up resources after turn - good housekeeping!
-            if self.llm_manager and self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {}).get("unload_after_turn", True):
+            # Clean up resources after turn - honor runtime keep-model override and settings
+            if (
+                self.llm_manager
+                and self.llm_manager.unload_on_exit  # allow --keep-model to disable
+                and self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {}).get("unload_after_turn", True)
+            ):
                 logger.debug("Unloading model after turn cycle to free resources")
                 self.llm_manager.unload_model()
 
@@ -391,12 +395,16 @@ class LORE:
         all_results["sources"] = list(dict.fromkeys(all_results["sources"]))
         
         # If model was loaded for this operation, optionally unload it
-        if self.llm_manager and not self.settings.get("Agent Settings", {}).get("LORE", {}).get("keep_model_loaded", False):
-            try:
-                self.llm_manager.unload_model()
-                qa_logger.info("Unloaded LM Studio model after retrieval")
-            except Exception as e:
-                qa_logger.warning(f"Failed to unload model: {e}")
+        # Honor both settings.json keep_model_loaded and runtime overrides (unload_on_exit=False)
+        try:
+            unload_after = not self.settings.get("Agent Settings", {}).get("LORE", {}).get("keep_model_loaded", False)
+            if self.llm_manager:
+                # If caller wants to keep the model, they should set unload_on_exit=False before calling
+                if self.llm_manager.unload_on_exit and unload_after:
+                    self.llm_manager.unload_model()
+                    qa_logger.info("Unloaded LM Studio model after retrieval")
+        except Exception as e:
+            qa_logger.warning(f"Model unload decision failed: {e}")
         
         return all_results
     
@@ -536,8 +544,22 @@ class LORE:
                     max_tokens=llm_settings["max_tokens"]
                 )
                 
-                # Log the reasoning
-                qa_logger.info(f"Step {step_num + 1} reasoning: {raw_response[:200]}...")
+                # Log full model output at debug level to avoid duplicating terminal prints
+                qa_logger.debug(f"Step {step_num + 1} raw response: {raw_response}")
+                
+                # Output reasoning in real-time - extract ONLY the first analysis channel
+                if '<|channel|>analysis<|message|>' in raw_response:
+                    # Extract just the analysis part, not the final/JSON part
+                    analysis_part = raw_response.split('<|channel|>analysis<|message|>', 1)[1]
+                    # Prefer to stop at <|end|>, otherwise stop at the next channel marker if present
+                    if '<|end|>' in analysis_part:
+                        analysis_part = analysis_part.split('<|end|>', 1)[0]
+                    elif '<|channel|>' in analysis_part:
+                        analysis_part = analysis_part.split('<|channel|>', 1)[0]
+                    analysis_part = analysis_part.strip()
+                    if analysis_part:
+                        print("\nReasoning:")
+                        print(analysis_part)
                 
                 # Extract the JSON from the response
                 import re
@@ -562,9 +584,29 @@ class LORE:
                     sql_query = step["sql"]
                     if sql_query not in executed_sql:
                         executed_sql.add(sql_query)
+                        
+                        # Output query in real-time
+                        print("\nQuery:")
+                        print(sql_query)
+                        
                         try:
                             result = self.memnon.execute_readonly_sql(sql_query)
-                            sql_attempts.append({"sql": sql_query, "result": result, "reasoning": raw_response[:500]})
+                            # Store for later use
+                            sql_attempts.append({"sql": sql_query, "result": result, "reasoning": raw_response})
+                            
+                            # Output result in real-time
+                            print("\nResult:")
+                            if result.get("row_count", 0) == 0:
+                                print("No rows returned")
+                            else:
+                                print(f"{result.get('row_count')} rows returned")
+                                # Show sample of results
+                                if result.get("rows"):
+                                    sample = result["rows"][:3]  # Show first 3 rows
+                                    for row in sample:
+                                        print(f"  {str(row)[:150]}..." if len(str(row)) > 150 else f"  {row}")
+                                    if result.get("row_count", 0) > 3:
+                                        print(f"  ... and {result['row_count'] - 3} more rows")
                             
                             # Add result to prompt for next iteration - don't truncate!
                             planning_prompt += f"\n\nStep {step_num + 1} SQL: {sql_query}\n"
@@ -596,6 +638,10 @@ class LORE:
                         except Exception as e:
                             qa_logger.warning(f"SQL execution failed: {e}")
                             sql_attempts.append({"sql": sql_query, "error": str(e)})
+                            
+                            # Output error in real-time
+                            print("\nResult:")
+                            print(f"Error: {e}")
         
         # Sort results by score and prepare for synthesis
         sorted_results = sorted(
@@ -648,12 +694,20 @@ class LORE:
         try:
             # Use proper settings from settings.json
             llm_settings = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
-            synthesis = self.llm_manager.query(
+            raw_synthesis = self.llm_manager.query(
                 synthesis_prompt,
                 system_prompt=llm_settings.get("system_prompt", "You are a narrative intelligence system"),
                 temperature=llm_settings.get("temperature", 0.8),
                 max_tokens=llm_settings.get("max_tokens", 2048)
             )
+            # Prefer content from final channel if present
+            synthesis = raw_synthesis
+            if '<|channel|>final<|message|>' in raw_synthesis:
+                synthesis = raw_synthesis.split('<|channel|>final<|message|>', 1)[1].strip()
+            # Clean trailing control tokens
+            for marker in ("<|end|>",):
+                if marker in synthesis:
+                    synthesis = synthesis.split(marker, 1)[0].strip()
         except Exception as e:
             qa_logger.error(f"Synthesis failed: {e}")
             synthesis = sources_text[:1000]
@@ -763,51 +817,22 @@ async def main():
         print(f"CONTEXTUAL RETRIEVAL FOR CHUNK {args.chunk}")
         print(f"{'='*60}\n")
         
-        # For each directive, show the full reasoning flow
+        # For each directive, show only the final synthesis (queries were output in real-time)
         for directive, directive_data in result.get("directives", {}).items():
-            print(f"🎯 DIRECTIVE: {directive}")
+            print(f"\n🎯 DIRECTIVE: {directive}")
             print("=" * 50)
             
-            # 1. Show initial text/vector search results
-            search_progress = directive_data.get("search_progress", [])
-            if search_progress:
-                print(f"\n1️⃣  Initial Vector Search:")
-                for sp in search_progress:
-                    print(f"   Query: {sp['query']}")
-                    print(f"   → Found {sp['result_count']} chunks")
+            # The SQL queries and reasoning have already been output in real-time
+            # during the _process_single_directive() function
+            # Just show the final synthesis here
             
-            # 2. Show initial reasoning if available
-            reasoning = directive_data.get("reasoning")
-            if reasoning and isinstance(reasoning, str):
-                print(f"\n2️⃣  Initial Analysis:")
-                print(f"   {reasoning[:300]}...")
-            
-            # 3. Show SQL iterations with reasoning for THIS directive
-            sql_attempts = directive_data.get("sql_attempts", [])
-            if sql_attempts:
-                print(f"\n3️⃣  SQL Refinement ({len(sql_attempts)} queries):")
-                for i, attempt in enumerate(sql_attempts, 1):
-                    print(f"\n   Step {i}:")
-                    if attempt.get('reasoning'):
-                        # Extract just the reasoning part, not the JSON
-                        reasoning = attempt['reasoning'].split('{')[0].strip()
-                        if reasoning:
-                            # Show full reasoning without truncation
-                            print(f"   💭 Thinking: {reasoning}")
-                    print(f"   📝 Query: {attempt.get('sql', 'N/A')}")
-                    if attempt.get('result', {}).get('row_count') is not None:
-                        print(f"   ✓ Result: {attempt['result']['row_count']} rows")
-                        # Show first row if available for context
-                        if attempt['result'].get('rows') and len(attempt['result']['rows']) > 0:
-                            first_row = attempt['result']['rows'][0]
-                            print(f"   → Sample: {str(first_row)[:150]}...")
-                    elif attempt.get('error'):
-                        print(f"   ✗ Error: {attempt['error']}")
-            
-            # 4. Show final synthesis
-            print(f"\n4️⃣  Final Synthesis:")
+            print(f"\nFinal Synthesis:")
             print("-" * 40)
-            print(directive_data.get("retrieved_context", "No context retrieved"))
+            
+            # Just output the synthesis as-is - TUI will handle formatting
+            synthesis = directive_data.get("retrieved_context", "No context retrieved")
+            print("\nResponse:")
+            print(synthesis)
             print()
         
         # Summary statistics
