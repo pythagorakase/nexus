@@ -792,7 +792,8 @@ async def main():
                         # Extract just the reasoning part, not the JSON
                         reasoning = attempt['reasoning'].split('{')[0].strip()
                         if reasoning:
-                            print(f"   💭 Thinking: {reasoning[:200]}...")
+                            # Show full reasoning without truncation
+                            print(f"   💭 Thinking: {reasoning}")
                     print(f"   📝 Query: {attempt.get('sql', 'N/A')}")
                     if attempt.get('result', {}).get('row_count') is not None:
                         print(f"   ✓ Result: {attempt['result']['row_count']} rows")

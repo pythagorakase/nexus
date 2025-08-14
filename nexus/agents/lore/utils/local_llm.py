@@ -154,7 +154,8 @@ class LocalLLMManager:
                 config = {
                     "temperature": temp,
                     "maxTokens": max_tok,
-                    "topP": self.llm_config.get("top_p", 0.9)
+                    "topP": self.llm_config.get("top_p", 0.9),
+                    "contextLength": self.llm_config.get("context_window", 65536)
                 }
                 
                 # Add reasoning effort for GPT-OSS models
@@ -244,7 +245,8 @@ Provide a structured analysis of characters, locations, context type, and entiti
                     response_format=NarrativeAnalysis,
                     config={
                         "temperature": 0.3,
-                        "maxTokens": 500
+                        "maxTokens": 500,
+                        "contextLength": self.llm_config.get("context_window", 65536)
                     }
                 )
 
@@ -458,6 +460,7 @@ Response format - use exact headers:"""
                     "temperature": temperature if temperature is not None else self.llm_config.get("temperature", 0.3),
                     "maxTokens": max_tokens if max_tokens is not None else self.llm_config.get("max_tokens", 1024),
                     "topP": self.llm_config.get("top_p", 0.9),
+                    "contextLength": self.llm_config.get("context_window", 65536)
                 }
                 
                 # Add reasoning effort for GPT-OSS models in structured queries too
