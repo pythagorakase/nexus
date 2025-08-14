@@ -23,15 +23,17 @@ logger = logging.getLogger("nexus.lore.model_manager")
 class ModelManager:
     """Manages LM Studio model lifecycle based on settings configuration"""
     
-    def __init__(self, settings_path: Optional[str] = None):
+    def __init__(self, settings_path: Optional[str] = None, unload_on_exit: bool = True):
         """
         Initialize model manager with settings
         
         Args:
             settings_path: Path to settings.json
+            unload_on_exit: Whether to unload models on cleanup (overrides settings)
         """
         self.settings_path = settings_path or Path(__file__).parent.parent.parent.parent.parent / "settings.json"
         self.settings = self._load_settings()
+        self.unload_on_exit = unload_on_exit
         
         # Configure LM Studio client (idempotent)
         try:
@@ -281,8 +283,16 @@ class ModelManager:
                 return default_model
             else:
                 logger.info(f"Current model {current} != default {default_model}")
-                # Unload current and load default
-                self.unload_model()
+                # Only unload if we're supposed to manage model lifecycle
+                if self.unload_on_exit:
+                    # Unload current and load default
+                    self.unload_model()
+                else:
+                    logger.info("Keeping current model due to unload_on_exit=False")
+                    # Return the current model instead of switching
+                    self.current_model = lms.llm()
+                    self.current_model_id = current
+                    return current
         
         # Load the default model
         if self.load_model(default_model):
@@ -293,6 +303,11 @@ class ModelManager:
     def cleanup(self) -> None:
         """Clean up resources - optionally unload model"""
         # Check if we should unload after use
+        # Runtime flag overrides settings
+        if not self.unload_on_exit:
+            logger.debug("Model unload skipped due to unload_on_exit=False")
+            return
+            
         lore_config = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
         if lore_config.get("unload_after_turn", True):
             # Best-effort unload; if ws inactive, skip without warning
