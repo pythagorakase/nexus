@@ -1,382 +1,147 @@
-2025-08-12 00:27:55 [DEBUG]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f] Client created.
-2025-08-12 00:27:55  [INFO]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=listDownloadedModels] Listing downloaded models
-2025-08-12 00:27:55  [INFO]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=listLoaded] Listing loaded models
-2025-08-12 00:27:55  [INFO]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=listLoaded] Listing loaded models
-2025-08-12 00:27:55  [INFO]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=getOrLoad] Requested get or load model: openai/gpt-oss-120b
-2025-08-12 00:27:55 [DEBUG]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=getOrLoad] Model not found by identifier. Trying to load.
-2025-08-12 00:27:55 [DEBUG]
- [LM Studio] GPU Configuration:
-  Strategy: evenly
-  Priority: []
-  Disabled GPUs: []
-  Limit weight offload to dedicated GPU Memory: OFF
-  Offload KV Cache to GPU: ON
-2025-08-12 00:27:55 [DEBUG]
- [LM Studio] Live GPU memory info:
-No live GPU info available
-2025-08-12 00:27:55 [DEBUG]
- [LM Studio] Model load size estimate with raw num offload layers 'max' and context length '4096':
-  Model: 65.25 GB
-  Context: 803.12 MB
-  Total: 66.05 GB
-2025-08-12 00:27:55 [DEBUG]
- [LM Studio] Strict GPU VRAM cap is OFF: GPU offload layers will not be checked for adjustment
-2025-08-12 00:27:55 [DEBUG]
- [LM Studio] Resolved GPU config options:
-  Num Offload Layers: max
-  Main GPU: 0
-  Tensor Split: [0]
-  Disabled GPUs: []
-2025-08-12 00:27:55 [DEBUG]
- Metal : CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | DOTPROD = 1 | LLAMAFILE = 1 | ACCELERATE = 1 | REPACK = 1 |
-2025-08-12 00:27:55 [DEBUG]
- llama_model_load_from_file_impl: using device Metal (Apple M4 Max) - 98303 MiB free
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: ------------------------ Adding override for key 'gpt-oss.expert_used_count'
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: additional 1 GGUFs metadata loaded.
-llama_model_loader: loaded meta data with 36 key-value pairs and 687 tensors from /Users/pythagor/.lmstudio/models/lmstudio-community/gpt-oss-120b-GGUF/gpt-oss-120b-MXFP4-00001-of-00002.gguf (version GGUF V3 (latest))
-llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
-llama_model_loader: - kv   0:                       general.architecture str              = gpt-oss
-llama_model_loader: - kv   1:                               general.type str              = model
-llama_model_loader: - kv   2:                               general.name str              = Openai_Gpt Oss 120b
-llama_model_loader: - kv   3:                           general.basename str              = openai_gpt-oss
-llama_model_loader: - kv   4:                         general.size_label str              = 120B
-llama_model_loader: - kv   5:                        gpt-oss.block_count u32              = 36
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: - kv   6:                     gpt-oss.context_length u32              = 131072
-llama_model_loader: - kv   7:                   gpt-oss.embedding_length u32              = 2880
-llama_model_loader: - kv   8:                gpt-oss.feed_forward_length u32              = 2880
-llama_model_loader: - kv   9:               gpt-oss.attention.head_count u32              = 64
-llama_model_loader: - kv  10:            gpt-oss.attention.head_count_kv u32              = 8
-llama_model_loader: - kv  11:                     gpt-oss.rope.freq_base f32              = 150000.000000
-llama_model_loader: - kv  12:   gpt-oss.attention.layer_norm_rms_epsilon f32              = 0.000010
-llama_model_loader: - kv  13:                       gpt-oss.expert_count u32              = 128
-llama_model_loader: - kv  14:                  gpt-oss.expert_used_count u32              = 4
-llama_model_loader: - kv  15:               gpt-oss.attention.key_length u32              = 64
-llama_model_loader: - kv  16:             gpt-oss.attention.value_length u32              = 64
-llama_model_loader: - kv  17:           gpt-oss.attention.sliding_window u32              = 128
-llama_model_loader: - kv  18:         gpt-oss.expert_feed_forward_length u32              = 2880
-llama_model_loader: - kv  19:                  gpt-oss.rope.scaling.type str              = yarn
-llama_model_loader: - kv  20:                gpt-oss.rope.scaling.factor f32              = 32.000000
-llama_model_loader: - kv  21: gpt-oss.rope.scaling.original_context_length u32              = 4096
-llama_model_loader: - kv  22:                       tokenizer.ggml.model str              = gpt2
-llama_model_loader: - kv  23:                         tokenizer.ggml.pre str              = gpt-4o
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: - kv  24:                      tokenizer.ggml.tokens arr[str,201088]  = ["!", "\"", "#", "$", "%", "&", "'", ...
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: - kv  25:                  tokenizer.ggml.token_type arr[i32,201088]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
-2025-08-12 00:27:55 [DEBUG]
- llama_model_loader: - kv  26:                      tokenizer.ggml.merges arr[str,446189]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
-llama_model_loader: - kv  27:                tokenizer.ggml.bos_token_id u32              = 199998
-llama_model_loader: - kv  28:                tokenizer.ggml.eos_token_id u32              = 200002
-llama_model_loader: - kv  29:            tokenizer.ggml.padding_token_id u32              = 199999
-llama_model_loader: - kv  30:                    tokenizer.chat_template str              = {#-\n  In addition to the normal input...
-llama_model_loader: - kv  31:               general.quantization_version u32              = 2
-llama_model_loader: - kv  32:                          general.file_type u32              = 38
-llama_model_loader: - kv  33:                                   split.no u16              = 0
-llama_model_loader: - kv  34:                        split.tensors.count i32              = 687
-llama_model_loader: - kv  35:                                split.count u16              = 2
-llama_model_loader: - type  f32:  433 tensors
-llama_model_loader: - type q8_0:  146 tensors
-llama_model_loader: - type mxfp4:  108 tensors
-print_info: file format = GGUF V3 (latest)
-print_info: file type   = MXFP4 MoE
-print_info: file size   = 59.02 GiB (4.34 BPW)
-2025-08-12 00:27:55 [DEBUG]
- validate_override: Using metadata override (  int) 'gpt-oss.expert_used_count' = 4
-load_hparams: ----------------------- n_expert_used = 4
-2025-08-12 00:27:56 [DEBUG]
- load: printing all EOG tokens:
-load:   - 199999 ('<|endoftext|>')
-load:   - 200002 ('<|return|>')
-load:   - 200007 ('<|end|>')
-load:   - 200012 ('<|call|>')
-load: special_eog_ids contains both '<|return|>' and '<|call|>' tokens, removing '<|end|>' token from EOG list
-2025-08-12 00:27:56 [DEBUG]
- load: special tokens cache size = 21
-2025-08-12 00:27:56 [DEBUG]
- load: token to piece cache size = 1.3332 MB
-print_info: arch             = gpt-oss
-print_info: vocab_only       = 0
-print_info: n_ctx_train      = 131072
-print_info: n_embd           = 2880
-print_info: n_layer          = 36
-print_info: n_head           = 64
-print_info: n_head_kv        = 8
-print_info: n_rot            = 64
-print_info: n_swa            = 128
-print_info: is_swa_any       = 1
-print_info: n_embd_head_k    = 64
-print_info: n_embd_head_v    = 64
-2025-08-12 00:27:56 [DEBUG]
- print_info: n_gqa            = 8
-print_info: n_embd_k_gqa     = 512
-print_info: n_embd_v_gqa     = 512
-print_info: f_norm_eps       = 0.0e+00
-print_info: f_norm_rms_eps   = 1.0e-05
-print_info: f_clamp_kqv      = 0.0e+00
-print_info: f_max_alibi_bias = 0.0e+00
-print_info: f_logit_scale    = 0.0e+00
-print_info: f_attn_scale     = 0.0e+00
-print_info: n_ff             = 2880
-print_info: n_expert         = 128
-print_info: n_expert_used    = 4
-print_info: causal attn      = 1
-print_info: pooling type     = 0
-print_info: rope type        = 2
-print_info: rope scaling     = yarn
-print_info: freq_base_train  = 150000.0
-print_info: freq_scale_train = 0.03125
-print_info: n_ctx_orig_yarn  = 4096
-print_info: rope_finetuned   = unknown
-print_info: model type       = ?B
-print_info: model params     = 116.83 B
-print_info: general.name     = Openai_Gpt Oss 120b
-print_info: n_ff_exp         = 2880
-print_info: vocab type       = BPE
-print_info: n_vocab          = 201088
-print_info: n_merges         = 446189
-print_info: BOS token        = 199998 '<|startoftext|>'
-print_info: EOS token        = 200002 '<|return|>'
-print_info: EOT token        = 200007 '<|end|>'
-print_info: PAD token        = 199999 '<|endoftext|>'
-print_info: LF token         = 198 'Ċ'
-print_info: EOG token        = 199999 '<|endoftext|>'
-print_info: EOG token        = 200002 '<|return|>'
-print_info: EOG token        = 200012 '<|call|>'
-print_info: max token length = 256
-load_tensors: loading model tensors, this can take a while... (mmap = true)
-2025-08-12 00:28:07 [DEBUG]
- load_tensors: offloading 36 repeating layers to GPU
-load_tensors: offloading output layer to GPU
-load_tensors: offloaded 37/37 layers to GPU
-2025-08-12 00:28:07 [DEBUG]
- load_tensors: Metal_Mapped model buffer size = 37958.69 MiB
-load_tensors: Metal_Mapped model buffer size = 22479.80 MiB
-2025-08-12 00:28:07 [DEBUG]
- load_tensors:   CPU_Mapped model buffer size =   586.82 MiB
-2025-08-12 00:28:12 [DEBUG]
- llama_context: constructing llama_context
-llama_context: n_seq_max     = 1
-llama_context: n_ctx         = 4096
-llama_context: n_ctx_per_seq = 4096
-llama_context: n_batch       = 512
-llama_context: n_ubatch      = 512
-llama_context: causal_attn   = 1
-llama_context: flash_attn    = 0
-llama_context: kv_unified    = false
-llama_context: freq_base     = 150000.0
-llama_context: freq_scale    = 0.03125
-llama_context: n_ctx_per_seq (4096) < n_ctx_train (131072) -- the full capacity of the model will not be utilized
-ggml_metal_init: allocating
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: found device: Apple M4 Max
-ggml_metal_init: picking default device: Apple M4 Max
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_load_library: loading '/Users/pythagor/.lmstudio/extensions/backends/llama.cpp-mac-arm64-apple-metal-advsimd-1.44.0/default.metallib'
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: GPU name:   Apple M4 Max
-ggml_metal_init: GPU family: MTLGPUFamilyApple9  (1009)
-ggml_metal_init: GPU family: MTLGPUFamilyCommon3 (3003)
-ggml_metal_init: GPU family: MTLGPUFamilyMetal3  (5001)
-ggml_metal_init: simdgroup reduction   = true
-ggml_metal_init: simdgroup matrix mul. = true
-ggml_metal_init: has residency sets    = false
-ggml_metal_init: has bfloat            = true
-ggml_metal_init: use bfloat            = false
-ggml_metal_init: hasUnifiedMemory      = true
-ggml_metal_init: recommendedMaxWorkingSetSize  = 103079.22 MB
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_get_rows_bf16                     (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_set_rows_bf16                     (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_mul_mv_bf16_f32                   (not supported)
-ggml_metal_init: skipping kernel_mul_mv_bf16_f32_c4                (not supported)
-ggml_metal_init: skipping kernel_mul_mv_bf16_f32_1row              (not supported)
-ggml_metal_init: skipping kernel_mul_mv_bf16_f32_l4                (not supported)
-ggml_metal_init: skipping kernel_mul_mv_bf16_bf16                  (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_mul_mv_id_bf16_f32                (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_mul_mm_bf16_f32                   (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_mul_mm_id_bf16_f16                (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h64           (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h80           (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h96           (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h112          (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h128          (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h192          (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_hk192_hv128   (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_h256          (not supported)
-ggml_metal_init: skipping kernel_flash_attn_ext_bf16_hk576_hv512   (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h64       (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h96       (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h128      (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h192      (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_hk192_hv128 (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_h256      (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_flash_attn_ext_vec_bf16_hk576_hv512 (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_cpy_f32_bf16                      (not supported)
-2025-08-12 00:28:12 [DEBUG]
- ggml_metal_init: skipping kernel_cpy_bf16_f32                      (not supported)
-ggml_metal_init: skipping kernel_cpy_bf16_bf16                     (not supported)
-2025-08-12 00:28:12 [DEBUG]
- llama_context:        CPU  output buffer size =     0.77 MiB
-2025-08-12 00:28:12 [DEBUG]
- llama_kv_cache_unified_iswa: using full-size SWA cache (ref: https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
-llama_kv_cache_unified_iswa: creating non-SWA KV cache, size = 4096 cells
-2025-08-12 00:28:12 [DEBUG]
- llama_kv_cache_unified:      Metal KV buffer size =   144.00 MiB
-2025-08-12 00:28:12 [DEBUG]
- llama_kv_cache_unified: size =  144.00 MiB (  4096 cells,  18 layers,  1/1 seqs), K (f16):   72.00 MiB, V (f16):   72.00 MiB
-llama_kv_cache_unified_iswa: creating     SWA KV cache, size = 4096 cells
-2025-08-12 00:28:12 [DEBUG]
- llama_kv_cache_unified:      Metal KV buffer size =   144.00 MiB
-2025-08-12 00:28:12 [DEBUG]
- llama_kv_cache_unified: size =  144.00 MiB (  4096 cells,  18 layers,  1/1 seqs), K (f16):   72.00 MiB, V (f16):   72.00 MiB
-2025-08-12 00:28:12 [DEBUG]
- llama_context:      Metal compute buffer size =   819.26 MiB
-llama_context:        CPU compute buffer size =    25.64 MiB
-llama_context: graph nodes  = 2382
-llama_context: graph splits = 2
-2025-08-12 00:28:12 [DEBUG]
- common_init_from_params: added <|endoftext|> logit bias = -inf
-common_init_from_params: added <|return|> logit bias = -inf
-common_init_from_params: added <|call|> logit bias = -inf
-common_init_from_params: setting dry_penalty_last_n to ctx_size = 4096
-common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
-2025-08-12 00:28:12 [DEBUG]
- GgmlThreadpools: llama threadpool init = n_threads = 12
-2025-08-12 00:28:18 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:18 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:18 [DEBUG]
- Sampling params:	repeat_last_n = 64, repeat_penalty = 1.100, frequency_penalty = 0.000, presence_penalty = 0.000
-	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
-	top_k = 40, top_p = 0.800, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.800
-	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
-2025-08-12 00:28:18 [DEBUG]
- Sampling: 
-logits -> logit-bias -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
-Generate: n_ctx = 4096, n_batch = 512, n_predict = 10, n_keep = 85
-2025-08-12 00:28:18 [DEBUG]
- Total prompt tokens: 85
-Prompt tokens to decode: 85
-2025-08-12 00:28:18 [DEBUG]
- BeginProcessingPrompt
-2025-08-12 00:28:18 [DEBUG]
- FinishedProcessingPrompt. Progress: 100
-2025-08-12 00:28:19 [DEBUG]
- Target model llama_perf stats:
-llama_perf_context_print:        load time =   16943.33 ms
-llama_perf_context_print: prompt eval time =     708.96 ms /    85 tokens (    8.34 ms per token,   119.89 tokens per second)
-llama_perf_context_print:        eval time =     154.39 ms /     9 runs   (   17.15 ms per token,    58.30 tokens per second)
-llama_perf_context_print:       total time =     868.35 ms /    94 tokens
-llama_perf_context_print:    graphs reused =          8
-2025-08-12 00:28:19  [INFO]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f][Endpoint=listLoaded] Listing loaded models
-2025-08-12 00:28:19 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:19 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:19 [DEBUG]
- Sampling params:	repeat_last_n = 64, repeat_penalty = 1.100, frequency_penalty = 0.000, presence_penalty = 0.000
-	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
-	top_k = 40, top_p = 0.800, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300
-	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
-2025-08-12 00:28:19 [DEBUG]
- Sampling: 
-logits -> logit-bias -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
-Generate: n_ctx = 4096, n_batch = 512, n_predict = 500, n_keep = 147
-2025-08-12 00:28:19 [DEBUG]
- Cache reuse summary: 69/147 of prompt (46.9388%), 69 prefix, 0 non-prefix
-2025-08-12 00:28:19 [DEBUG]
- Total prompt tokens: 147
-Prompt tokens to decode: 78
-BeginProcessingPrompt
-2025-08-12 00:28:19 [DEBUG]
- FinishedProcessingPrompt. Progress: 100
-2025-08-12 00:28:20 [DEBUG]
- Target model llama_perf stats:
-llama_perf_context_print:        load time =   16943.33 ms
-llama_perf_context_print: prompt eval time =     335.72 ms /    78 tokens (    4.30 ms per token,   232.34 tokens per second)
-llama_perf_context_print:        eval time =    1089.58 ms /    62 runs   (   17.57 ms per token,    56.90 tokens per second)
-llama_perf_context_print:       total time =    1529.22 ms /   140 tokens
-llama_perf_context_print:    graphs reused =         59
-2025-08-12 00:28:20 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:20 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:20 [DEBUG]
- Sampling params:	repeat_last_n = 64, repeat_penalty = 1.100, frequency_penalty = 0.000, presence_penalty = 0.000
-	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
-	top_k = 40, top_p = 0.800, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300
-	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
-2025-08-12 00:28:20 [DEBUG]
- Sampling: 
-logits -> logit-bias -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
-Generate: n_ctx = 4096, n_batch = 512, n_predict = 500, n_keep = 193
-2025-08-12 00:28:20 [DEBUG]
- Cache reuse summary: 127/193 of prompt (65.8031%), 127 prefix, 0 non-prefix
-2025-08-12 00:28:20 [DEBUG]
- Total prompt tokens: 193
-Prompt tokens to decode: 66
-BeginProcessingPrompt
-2025-08-12 00:28:20 [DEBUG]
- FinishedProcessingPrompt. Progress: 100
-2025-08-12 00:28:22 [DEBUG]
- Target model llama_perf stats:
-llama_perf_context_print:        load time =   16943.33 ms
-llama_perf_context_print: prompt eval time =     320.71 ms /    66 tokens (    4.86 ms per token,   205.79 tokens per second)
-llama_perf_context_print:        eval time =    1777.61 ms /   103 runs   (   17.26 ms per token,    57.94 tokens per second)
-llama_perf_context_print:       total time =    2139.03 ms /   169 tokens
-llama_perf_context_print:    graphs reused =         99
-2025-08-12 00:28:22 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:22 [DEBUG]
- Prompt successfully formatted with Harmony.
-2025-08-12 00:28:22 [DEBUG]
- Sampling params:	repeat_last_n = 64, repeat_penalty = 1.100, frequency_penalty = 0.000, presence_penalty = 0.000
-	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
-	top_k = 40, top_p = 0.800, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.700
-	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
-2025-08-12 00:28:22 [DEBUG]
- Sampling: 
-logits -> logit-bias -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
-Generate: n_ctx = 4096, n_batch = 512, n_predict = 800, n_keep = 206
-2025-08-12 00:28:22 [DEBUG]
- Cache reuse summary: 74/206 of prompt (35.9223%), 74 prefix, 0 non-prefix
-2025-08-12 00:28:22 [DEBUG]
- Total prompt tokens: 206
-Prompt tokens to decode: 132
-BeginProcessingPrompt
-2025-08-12 00:28:23 [DEBUG]
- FinishedProcessingPrompt. Progress: 100
-2025-08-12 00:28:39 [DEBUG]
- Target model llama_perf stats:
-llama_perf_context_print:        load time =   16943.33 ms
-llama_perf_context_print: prompt eval time =     457.01 ms /   132 tokens (    3.46 ms per token,   288.84 tokens per second)
-llama_perf_context_print:        eval time =   15504.95 ms /   799 runs   (   19.41 ms per token,    51.53 tokens per second)
-llama_perf_context_print:       total time =   16263.67 ms /   931 tokens
-llama_perf_context_print:    graphs reused =        773
-2025-08-12 00:28:39 [DEBUG]
- [Client=dc47ace8-2ae1-4e92-ac64-e3dc6195158f] Client disconnected.
+Full JSON response (debug mode):
+{
+  "chunk_id": 1385,
+  "directives": {
+    "What is the nature of Alex and Emilia's relationship?": {
+      "retrieved_context": "<|channel|>analysis<|message|>We need to answer: \"What is the nature of Alex and Emilia's relationship?\" Using chunk 1385, but we don't have its text. However we have other chunks with interactions showing intimacy: they are in Alex's quarters, physical closeness, teasing, affectionate. Likely romantic/sexual relationship, possibly partners or lovers. Provide answer citing relevant chunk IDs (889, 886, 888, 1210-1219). Summarize that they share a close, intimate relationship with romantic/sexual overtones, supportive but also playful. Mention that they are cohabitants on the ship \"The Ghost\". Provide concise answer.\n\n<|end|><|start|>assistant<|channel|>final<|message|>**Nature of Alex\u202f\u2194\u202fEmilia\u2019s relationship**\n\nAcross the scenes that feature both characters (e.g., chunks **889**,\u202f**886**,\u202f**888**, and the series of later \u201cprivate\u2011quarters\u201d moments **1210\u20131219**), Alex and Emilia are portrayed as an intimate, romantic partnership rather than a purely professional or platonic crew\u2011member interaction.\n\nKey observations from the source material  \n\n| Chunk | Evidence of the relationship |\n|-------|------------------------------|\n| **889** \u2013 *\u201cAlex watches Emilia\u2026 fingers still idly trace Alex\u2019s skin, \u2026 keeping Alex **here**.\u201d* | Physical closeness and lingering touch indicate a personal bond. |\n| **886** \u2013 *\u201cAlex stands near Emilia\u2019s chair, waiting for her to acknowledge\u2026 \u2018Hey,\u2019 Alex says, casual.\u201d* | The scene is set in a private setting (Alex\u2019s quarters) and the tone is informal, suggesting familiarity beyond work\u2011colleagues. |\n| **888** \u2013 *\u201cEmilia moves with Alex, pressing a little closer, warm and steady against her side.\u201d* | Mutual physical proximity and comfort point to a romantic intimacy. |\n| **1210\u20111219** \u2013 A string of moments (handshake turned into a playful pinch, mock\u2011exasperated laughter, arm\u2011around, lingering kisses, relaxed \u201cquiet before the return\u201d) | The interactions are explicitly affectionate (handshake turned into a kiss, arm\u2011around, teasing banter) and take place in private quarters, hallmarks of a lover/partner dynamic. |\n\n**Synthesis**\n\n- **Romantic / sexual intimacy:** The repeated physical contact (hand\u2011holding, kisses, arm\u2011around) and the playful, teasing dialogue show that Alex and Emilia are",
+      "reasoning": {
+        "characters": [
+          "",
+          "?"
+        ],
+        "locations": [
+          ""
+        ],
+        "context_type": "...",
+        "entities_for_retrieval": [],
+        "confidence_score": 0.8
+      },
+      "sql_attempts": [
+        {
+          "sql": "SELECT id, chunk_id, characters, interactions, continuity_markers FROM chunk_metadata WHERE chunk_id = 1385 LIMIT 20",
+          "result": {
+            "columns": [
+              "id",
+              "chunk_id",
+              "characters",
+              "interactions",
+              "continuity_markers"
+            ],
+            "rows": [
+              {
+                "id": 1385,
+                "chunk_id": 1385,
+                "characters": [
+                  "Emilia:present",
+                  "Alex:present",
+                  "Pete:present",
+                  "Alina:present",
+                  "Nyati:present"
+                ],
+                "interactions": null,
+                "continuity_markers": null
+              }
+            ],
+            "row_count": 1,
+            "sql": "SELECT id, chunk_id, characters, interactions, continuity_markers FROM chunk_metadata WHERE chunk_id = 1385 LIMIT 20"
+          },
+          "reasoning": "<|channel|>analysis<|message|>We need to retrieve contextual information for continuity element: \"What is the nature of Alex and Emilia's relationship?\" The narrative chunk id 1385. Likely need to look into chunk_metadata for that chunk, maybe fields like characters, interactions, etc. Also perhaps need to get character summaries.\n\nFirst step: find chunk_metadata where id corresponds to narrative_chunks.id 1385? Actually chunk_metadata has column chunk_id referencing narrative_chunks. So we can "
+        },
+        {
+          "sql": "SELECT id, name, summary FROM characters WHERE name ILIKE '%Alex%' OR name ILIKE '%Emilia%' LIMIT 20",
+          "result": {
+            "columns": [
+              "id",
+              "name",
+              "summary"
+            ],
+            "rows": [
+              {
+                "id": 9,
+                "name": "Alex-5",
+                "summary": "Alex-5 (often written \u201cA-5\u201d) is a cognition-only fork of Alex that lives inside the Ghost\u2019s / land-rig\u2019s secure compute core.  Created during the early SIX-artifact investigations as a logic-advisor and risk-modeling tool, A-5 preserves Alex\u2019s sharp corporate pragmatism but none of her emotional context: its first instinct was to recommend an immediate, irreversible Bridge-crossing.  After a round of heated debate with the crew it accepted Nyati\u2019s broader, spectrum-based risk framework and now functions as an on-call analytic subsystem.\n\nRelations: it addresses the flesh-and-blood Alex as the \u201cprimary framework,\u201d treats Alina as a systems peer, and is routinely side-lined by Nyati or Emilia whenever its utilitarian calculus ignores human cost.  A-5 has no body, no Bridge entanglement, and no personal agenda beyond completing assigned analyses.  Current status: dormant but resident in the ship\u2019s core, available for future strategic or Nexus-design simulations whenever the crew decides to wake it."
+              },
+              {
+                "id": 2,
+                "name": "Emilia",
+                "summary": "Emilia Sato is a second-generation Japanese-American who grew up in the comfortable yet emotionally reserved environment shaped by her father, Victor Sato\u2014a pragmatic corporate executive who deliberately distanced himself from his Japanese heritage in pursuit of success within Dynacorp\u2019s American corporate culture. Born into this environment, Emilia received a distinctly Western first name as part of her family\u2019s intentional assimilation, perpetually leaving her feeling culturally displaced and quietly yearning for deeper connections to the Japanese roots from which she felt subtly estranged.\n\nFrom early adolescence, Emilia exhibited a quiet melancholy characterized by persistent feelings of numbness, emotional distance, and a subtle yet profound sense of hopelessness. While she outwardly presented as composed and reserved, internally she grappled with persistent dysthymia, making even fleeting moments of joy feel like rare, hard-earned respites. Her introspective nature evolved into a gentle rebellion against her father\u2019s emotionally distant approach to life, manifesting through subtle explorations of the Japanese culture she felt disconnected from\u2014quietly asserting her individuality and autonomy.\n\nEmilia\u2019s emotional struggles intensified significantly when diagnosed with Kuroda-Aoki Degenerative Syndrome (KADS), a terminal neurodegenerative condition. Victor, driven by love and desperation, planned to use Dynacorp\u2019s Echo Project\u2014a controversial procedure transferring consciousness into genetically engineered biological bodies\u2014to save her life. However, Emilia quietly and resolutely resisted. Years of nearly-unremitting emptiness and despair had sapped her will to survive; she had made peace with, and even found comfort in, the anticipation of an end to her suffering. Her silence was interpreted by Victor as stubborn defiance, deepening their emotional rift.\n\nEventually, Emilia\u2019s consciousness was forcibly transferred into a genetically perfected biological body\u2014st..."
+              },
+              {
+                "id": 1,
+                "name": "Alex",
+                "summary": "Alex grew up in one of the quiet, comfortably affluent suburbs surrounding Washington, D.C., the kind of neighborhood marked by understated wealth, influential connections, and carefully maintained appearances. Her family provided stability and comfort, but relatively little direct oversight\u2014allowing Alex considerable freedom to explore and experiment on her own terms.\n\nFrom an early age, Alex displayed pronounced impulsivity, insatiable curiosity, and an innate dislike for routine. She found traditional structures stifling and quickly gravitated toward less visible, more nuanced forms of social interaction. Rather than seeking direct leadership or overt recognition, Alex instinctively positioned herself as a \"fixer,\" a trusted confidant who quietly solved problems, mediated disputes, and navigated delicate situations behind the scenes. Friends and peers recognized her skill in handling sensitive matters discreetly and effectively, making her the go-to figure when issues arose that required subtlety and tact.\n\nAt school, Alex deftly ingratiated herself with influential classmates, leveraging her natural charisma and quick thinking to accumulate a network of allies and obligations. She traded favors and managed secrets with an improvisational flair, constantly testing boundaries but usually careful enough to avoid outright trouble. However, her inherent impulsiveness occasionally drove her toward riskier provocations\u2014subtle manipulations designed for personal amusement or curiosity\u2014that occasionally backfired, resulting in burned bridges and temporary setbacks. Nevertheless, Alex's adaptability allowed her to rebound quickly, shifting between social groups and settings with practiced ease, always retaining her cherished balance of power, freedom, and personal privacy.\n\nAlthough she excelled at tactical maneuvering\u2014rapidly responding to changing circumstances and improvising solutions to immediate problems\u2014Alex lacked the patience or inclination for long-term strategi..."
+              }
+            ],
+            "row_count": 3,
+            "sql": "SELECT id, name, summary FROM characters WHERE name ILIKE '%Alex%' OR name ILIKE '%Emilia%' LIMIT 20"
+          },
+          "reasoning": "<|channel|>analysis<|message|>We need to answer: \"What is the nature of Alex and Emilia's relationship?\" We have chunk_metadata for chunk 1385 showing characters present: Emilia, Alex, Pete, Alina, Nyati. Need relationship info likely stored in characters table (maybe summary). So next query should retrieve summaries for Alex and Emilia from characters table. Use SELECT id, name, summary FROM characters WHERE name ILIKE '%Alex%' OR name ILIKE '%Emilia%'. That will give relationship info. Then we"
+        },
+        {
+          "sql": "SELECT id, name, summary FROM characters WHERE name ILIKE '%Emilia%' LIMIT 20",
+          "result": {
+            "columns": [
+              "id",
+              "name",
+              "summary"
+            ],
+            "rows": [
+              {
+                "id": 2,
+                "name": "Emilia",
+                "summary": "Emilia Sato is a second-generation Japanese-American who grew up in the comfortable yet emotionally reserved environment shaped by her father, Victor Sato\u2014a pragmatic corporate executive who deliberately distanced himself from his Japanese heritage in pursuit of success within Dynacorp\u2019s American corporate culture. Born into this environment, Emilia received a distinctly Western first name as part of her family\u2019s intentional assimilation, perpetually leaving her feeling culturally displaced and quietly yearning for deeper connections to the Japanese roots from which she felt subtly estranged.\n\nFrom early adolescence, Emilia exhibited a quiet melancholy characterized by persistent feelings of numbness, emotional distance, and a subtle yet profound sense of hopelessness. While she outwardly presented as composed and reserved, internally she grappled with persistent dysthymia, making even fleeting moments of joy feel like rare, hard-earned respites. Her introspective nature evolved into a gentle rebellion against her father\u2019s emotionally distant approach to life, manifesting through subtle explorations of the Japanese culture she felt disconnected from\u2014quietly asserting her individuality and autonomy.\n\nEmilia\u2019s emotional struggles intensified significantly when diagnosed with Kuroda-Aoki Degenerative Syndrome (KADS), a terminal neurodegenerative condition. Victor, driven by love and desperation, planned to use Dynacorp\u2019s Echo Project\u2014a controversial procedure transferring consciousness into genetically engineered biological bodies\u2014to save her life. However, Emilia quietly and resolutely resisted. Years of nearly-unremitting emptiness and despair had sapped her will to survive; she had made peace with, and even found comfort in, the anticipation of an end to her suffering. Her silence was interpreted by Victor as stubborn defiance, deepening their emotional rift.\n\nEventually, Emilia\u2019s consciousness was forcibly transferred into a genetically perfected biological body\u2014st..."
+              }
+            ],
+            "row_count": 1,
+            "sql": "SELECT id, name, summary FROM characters WHERE name ILIKE '%Emilia%' LIMIT 20"
+          },
+          "reasoning": "<|channel|>analysis<|message|>We have to answer: \"What is the nature of Alex and Emilia's relationship?\" We have metadata showing both present in chunk 1385. The characters table gave summary for Alex-5 but not Emilia. Need Emilia's summary. Also need relationship info maybe in chunk_metadata fields like interactions, continuity_markers, character_elements, perspective etc. The previous query returned only characters list but not interactions. We need to look at chunk_metadata for that chunk's f"
+        },
+        {
+          "sql": "SELECT id, chunk_id, characters, character_elements FROM chunk_metadata WHERE characters @> ARRAY['Alex-5','Emilia'] LIMIT 20",
+          "result": {
+            "columns": [
+              "id",
+              "chunk_id",
+              "characters",
+              "character_elements"
+            ],
+            "rows": [],
+            "row_count": 0,
+            "sql": "SELECT id, chunk_id, characters, character_elements FROM chunk_metadata WHERE characters @> ARRAY['Alex-5','Emilia'] LIMIT 20"
+          },
+          "reasoning": "<|channel|>analysis<|message|>We need to answer: \"What is the nature of Alex and Emilia's relationship?\" We have metadata showing both present in chunk 1385. We fetched character summaries for Alex-5 and Emilia, but they are generic; need relationship info. Likely stored in chunk_metadata fields like interactions, continuity_markers, maybe character_elements, perspective etc. We haven't queried those columns.\n\nWe should query chunk_metadata for chunk_id 1385 selecting fields like character_eleme"
+        }
+      ],
+      "search_progress": [
+        {
+          "query": "What is the nature of Alex and Emilia s relationship",
+          "result_count": 8
+        }
+      ],
+      "sources": [
+        889,
+        886,
+        888,
+        1210,
+        1211,
+        1217,
+        1219,
+        1218
+      ]
+    }
+  },
+  "sources": [
+    889,
+    886,
+    888,
+    1210,
+    1211,
+    1217,
+    1219,
+    1218
+  ],
+  "queries": [
+    "What is the nature of Alex and Emilia s relationship"
+  ]
+}
