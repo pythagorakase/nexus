@@ -28,6 +28,7 @@ from textual.widgets import DataTable, Footer, Input, Static, Log
 
 # Command registry for CLI-like UX
 AVAILABLE_COMMANDS: List[Dict[str, str]] = [
+    {"name": "read", "usage": "/read s03e05[c004]|<chunk_id>", "description": "View scene (or by chunk id) with surrounding chunks"},
     {"name": "chunk", "usage": ":chunk <id>", "description": "Set target narrative chunk id"},
     {"name": "help", "usage": ":help [command]", "description": "Show available commands or details"},
     {"name": "status", "usage": ":status", "description": "Show LORE component status"},
@@ -147,7 +148,8 @@ class CommandSuggestions(Static):
         self.update("")
 
     def show_matches(self, query: str) -> None:
-        prefix = query.lower().lstrip(":").strip()
+        # Support both ':' and '/' prefixes
+        prefix = query.lower().lstrip(":/").strip()
         if not prefix:
             matches = AVAILABLE_COMMANDS
         else:
@@ -312,12 +314,74 @@ class LoreQATerminal(App[None]):
 
         # Update command suggestions based on current input
         try:
-            if raw.startswith(":"):
+            if raw.startswith(":") or raw.startswith("/"):
                 self.query_one(CommandSuggestions).show_matches(raw)
             else:
                 self.query_one(CommandSuggestions).hide()
         except Exception:
             pass
+
+        # /read s03e05[c004] | /read <chunk_id>
+        if raw.lower().startswith("/read"):
+            arg = raw[5:].strip()
+            try:
+                await self._ensure_lore()
+            except Exception as e:
+                self.query_one(ConversationView).add_error(str(e))
+                event.input.value = ""
+                self.query_one(CommandSuggestions).hide()
+                return
+
+            # Numeric -> direct chunk id
+            if arg.isdigit():
+                chunk_id = int(arg)
+                await self._display_chunk_and_neighbors(chunk_id)
+                event.input.value = ""
+                self.query_one(CommandSuggestions).hide()
+                return
+
+            # Pattern sXXeYY[cZZZ]
+            import re
+            m = re.match(r"s(\d{1,2})e(\d{1,2})(?:c(\d{1,3}))?", arg, flags=re.IGNORECASE)
+            if not m:
+                self.query_one(ConversationView).add_error("Usage: /read s03e05[c004] or /read <chunk_id>")
+                event.input.value = ""
+                self.query_one(CommandSuggestions).hide()
+                return
+            season = int(m.group(1))
+            episode = int(m.group(2))
+            scene = int(m.group(3)) if m.group(3) else 1
+            try:
+                # Fetch first chunk for season/episode/scene via MEMNON pathway
+                memnon = getattr(self.lore, "memnon", None)
+                if not memnon:
+                    raise RuntimeError("MEMNON unavailable")
+                # Direct SQL via MEMNON utility method (if available), else lightweight query
+                from sqlalchemy import text as _sqltext  # type: ignore
+                # Use the private session for a simple, read-only lookup
+                with memnon.Session() as session:  # type: ignore[attr-defined]
+                    row = session.execute(
+                        _sqltext(
+                            """
+                            SELECT nc.id
+                            FROM narrative_chunks nc
+                            JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+                            WHERE cm.season = :s AND cm.episode = :e AND cm.scene = :c
+                            ORDER BY nc.id ASC
+                            LIMIT 1
+                            """
+                        ),
+                        {"s": season, "e": episode, "c": scene},
+                    ).fetchone()
+                if not row:
+                    self.query_one(ConversationView).add_error("No chunk found for that S/E/Scene")
+                else:
+                    await self._display_chunk_and_neighbors(int(row[0]))
+            except Exception as e:
+                self.query_one(ConversationView).add_error(str(e))
+            event.input.value = ""
+            self.query_one(CommandSuggestions).hide()
+            return
 
         # Simple command: set chunk id with ":chunk <id>"
         if raw.lower().startswith(":chunk"):
@@ -420,6 +484,43 @@ class LoreQATerminal(App[None]):
     def _set_status_ready(self, elapsed_s: float) -> None:
         status = self.query_one(StatusBar)
         status.latency_ms = f"{int(elapsed_s * 1000)} ms"
+
+    async def _display_chunk_and_neighbors(self, chunk_id: int, window: int = 2) -> None:
+        """Render a chunk with a scrolling window of neighbors for context."""
+        try:
+            memnon = getattr(self.lore, "memnon", None)
+            if not memnon:
+                raise RuntimeError("MEMNON unavailable")
+            # Fetch target
+            target = memnon.get_chunk_by_id(chunk_id)
+            if not target:
+                self.query_one(ConversationView).add_error(f"Chunk {chunk_id} not found")
+                return
+            # Fetch neighbors by direct ids (best-effort)
+            ids = list(range(max(1, chunk_id - window), chunk_id + window + 1))
+            rendered = []
+            for cid in ids:
+                data = memnon.get_chunk_by_id(cid)
+                if not data:
+                    continue
+                header = data.get("header", f"(chunk {cid})")
+                body = data.get("text", "")
+                # Simple perspective coloring: make Storyteller vs You distinct heuristically
+                # Assume second-person ('you') lines are the user's POV, mark differently
+                colored_lines = []
+                for line in body.splitlines():
+                    if line.strip().lower().startswith(("you ", "you\t", "you,")) or " you " in line.lower():
+                        colored_lines.append(f"[bold {COLOR_USER_ALT}]{line}[/]")
+                    else:
+                        colored_lines.append(f"[bold {COLOR_LORE_PRIMARY}]{line}[/]")
+                rendered.append(f"[dim]{header}[/]\n" + "\n".join(colored_lines))
+            # Display
+            convo = self.query_one(ConversationView)
+            convo.add_lore(f"[system] Showing chunk {chunk_id} +/- {window}")
+            for block in rendered:
+                convo.write(block)
+        except Exception as e:
+            self.query_one(ConversationView).add_error(str(e))
 
     def _populate_status_from_lore(self) -> None:
         try:
