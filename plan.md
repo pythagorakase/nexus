@@ -1,127 +1,246 @@
-## LORE Q&A Mode and Retrofuturistic TUI — Implementation Plan
+# 1) Tips for integrating `geoalchemy2` now (for Claude Code)
 
-### Goals
-- Add a non-narrative Q&A mode to `LORE` that answers questions about the existing narrative.
-- Provide a retrofuturistic Textual-based TUI for interactive Q&A with live reasoning and retrieval telemetry.
-- Ensure strict semantic/mechanical separation and hard-fail behavior when LM Studio is unavailable.
+**Goal:** let SQLAlchemy understand PostGIS types, and give you clean helpers for proximity/containment without changing your DB layout.
 
-### Constraints
-- All semantic understanding must go through `LocalLLMManager`.
-- Fail hard if LM Studio is unavailable (no fallbacks).
-- Q&A responses must cite concrete narrative `chunk_id` sources.
-- Keep responses informational, not narrative prose.
-- Keep edits scoped only to files listed below.
+## A. Install + import (registers PostGIS types so reflection stops warning)
+
+```bash
+# psycopg3 path (recommended)
+pip install "geoalchemy2>=0.15" "psycopg[binary]" shapely
+
+# or psycopg2 classic
+pip install geoalchemy2 psycopg2-binary shapely
+```
+
+In your Python bootstrap (before reflecting/declaring models):
+
+```python
+# registers geometry/geography with the PG dialect
+import geoalchemy2  # noqa: F401
+```
+
+_(If you’re using SQLAlchemy Automap/Inspector, that import alone is enough to avoid the  
+“Did not recognize type 'geometry/geography'” warnings.)_
+
+## B. Add one computed `geometry` column for fast KNN
+
+`places.coordinates` is `geography(PointZM,4326)` (great for meters). Add a stored cast for **KNN** and spatial overlays:
+
+```sql
+ALTER TABLE public.places
+  ADD COLUMN IF NOT EXISTS geom geometry(Point,4326)
+  GENERATED ALWAYS AS (coordinates::geometry) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_places_geom_gist
+  ON public.places USING gist (geom);
+```
+
+(You already have `zones.boundary` as `geometry(MULTIPOLYGON,4326)` with a GiST index—perfect.)
+
+## C. Minimal ORM models (only what you need)
+
+```python
+# models.py
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy import String, ForeignKey
+from geoalchemy2 import Geometry, Geography
+
+class Base(DeclarativeBase): pass
+
+class Zone(Base):
+    __tablename__ = "zones"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(50))
+    boundary = mapped_column(Geometry(geometry_type="MULTIPOLYGON", srid=4326))
+    places = relationship("Place", back_populates="zone_fk")
+
+class Place(Base):
+    __tablename__ = "places"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(50))
+    zone: Mapped[int] = mapped_column(ForeignKey("zones.id"))
+    coordinates = mapped_column(Geography(geometry_type="POINT", srid=4326))  # your real column
+    geom = mapped_column(Geometry(geometry_type="POINT", srid=4326))          # generated column
+    zone_fk = relationship("Zone", back_populates="places")
+```
+
+## D. Two core queries you said you’ll want
+
+**Containment** (places in the same zone as a given place, with meters + KNN ordering):
+
+```python
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session
+from models import Place
+
+def places_in_same_zone(session: Session, place_id: int, limit: int | None = None):
+    origin = session.get(Place, place_id)
+    if not origin or origin.zone is None:
+        return []
+
+    q = (
+        select(
+            Place.id,
+            Place.name,
+            func.ST_DistanceSphere(Place.geom, origin.geom).label("meters")
+        )
+        .where(Place.zone == origin.zone, Place.id != origin.id)
+        .order_by(Place.geom.op("<->")(origin.geom))  # KNN index
+    )
+    if limit:
+        q = q.limit(limit)
+    return session.execute(q).all()
+```
+
+**Nearest-N to arbitrary lon/lat** (cross-zone):
+
+```python
+from models import Place, Zone
+
+def nearest_places(session: Session, lon: float, lat: float, k: int = 10):
+    pt = func.ST_SetSRID(func.ST_MakePoint(lon, lat), 4326)
+    q = (
+        select(
+            Place.id,
+            Place.name,
+            Zone.name.label("zone_name"),
+            func.ST_DistanceSphere(Place.geom, pt).label("meters")
+        )
+        .join(Zone, Zone.id == Place.zone, isouter=True)
+        .order_by(Place.geom.op("<->")(pt))  # KNN
+        .limit(k)
+    )
+    return session.execute(q).all()
+```
+
+**Nice to add** (for narration): bearing & travel-time estimate
+
+```python
+bearing_deg = func.degrees(func.ST_Azimuth(origin.geom, Place.geom)).label("bearing_deg")
+eta_min = (func.ST_DistanceSphere(Place.geom, origin.geom) / 1000.0 / 70.0 * 60.0).label("eta_min")  # 70 km/h motorcycle
+```
+
+## E. Keep LLM payloads tiny (optional views)
+
+```sql
+CREATE OR REPLACE VIEW v_llm_places AS
+SELECT id, name,
+       ROUND(ST_Y(coordinates::geometry)::numeric, 6) AS lat,
+       ROUND(ST_X(coordinates::geometry)::numeric, 6) AS lon,
+       zone
+FROM public.places;
+
+CREATE OR REPLACE VIEW v_llm_zones AS
+SELECT id, name,
+       ROUND(ST_Y(ST_Centroid(boundary))::numeric, 6) AS centroid_lat,
+       ROUND(ST_X(ST_Centroid(boundary))::numeric, 6) AS centroid_lon,
+       ST_AsGeoJSON(ST_SimplifyPreserveTopology(boundary, 0.05)) AS boundary_geojson
+FROM public.zones;
+```
+
+Use these for a compact “atlas” JSON that GAIA or LORE can attach to a chunk; keep heavy geometries in PostGIS.
+
+**Gotchas to remember**
+- Use `geometry` for KNN/overlays; use `geography` (or `ST_DistanceSphere`) for meters.
+- For zones that cross the antimeridian, prefer **MultiPolygon** (two lobes) or run `ST_ShiftLongitude` once.
+- GiST indexes on `zones.boundary` and `places.geom` are key to speed.
+
+# 2) Guidance for updating `docs/blueprint_gaia.md` (future use)
+
+Here’s a concise outline you can paste into the doc.
 
 ---
 
-### Stage 0 — Grounding (No code changes)
-- Review existing components:
-  - `nexus/agents/lore/lore.py` (turn cycle, CLI entry)
-  - `nexus/agents/lore/utils/local_llm.py` (availability, query, analysis, query generation)
-  - `nexus/agents/memnon/memnon.py` and `utils/search.py` (hybrid/vector search, returning chunk IDs)
-  - Tests under `tests/test_lore/` to mirror logging/reasoning capture patterns
+## GAIA: World State Tracker – Spatial Mini-Map Plan
 
-Deliverable: This plan document.
+### 1. Purpose
 
----
+Produce a per-scene “mini-map” pack for the narrator:
+- **Containment:** other `places` in the current `zone`.
+- **Proximity:** nearest `places` to the current `place` and to arbitrary mentions.
+- **Summaries:** human-readable distance, bearing, and rough travel time.
 
-### Stage 1 — Backend Q&A Mode (Minimal edits to `lore.py`)
-Edits:
-- Add `async def answer_question(self, question: str) -> Dict[str, Any]` to `nexus/agents/lore/lore.py` implementing:
-  1) Availability check via `LocalLLMManager.is_available()` and hard-fail.
-  2) Use `LocalLLMManager` to analyze the question and generate natural-language retrieval queries.
-  3) Execute each query via `MEMNON.query_memory(..., use_hybrid=True)` to retrieve chunks.
-  4) Synthesize a concise, factual answer via `LocalLLMManager.query(...)`, passing retrieved snippets and metadata.
-  5) Return `{ answer, sources, queries, reasoning }` with `sources` as a unique list of `chunk_id`s actually used.
+### 2. Data contracts
 
-- Extend CLI in `lore.py` main to support:
-  - `--qa "<question>"` → run `answer_question` once and print structured JSON (answer + sources + queries + timing + token usage when available).
+**Postgres inputs**
+- `places(id, name, zone, coordinates: geography(PointZM,4326), geom: geometry(Point,4326))`
+- `zones(id, name, boundary: geometry(MULTIPOLYGON,4326))`
 
-Acceptance checks:
-- Hard fails if LM Studio down.
-- Returns chunk IDs in `sources`.
-- No narrative generation; answer is informational.
+**Read views for LLM/GAIA (lightweight)**
+- `v_llm_places(id, name, lat, lon, zone)`
+- `v_llm_zones(id, name, centroid_lat, centroid_lon, boundary_geojson [simplified])`
+_(Views keep tokens low; full geometry stays in DB.)_
 
----
+### 3. Core algorithms
 
-### Stage 2 — Retrofuturistic TUI (`nexus/agents/lore/lore_qa_tui.py`)
-New file:
-- Build a Textual app with:
-  - Status bar: LM Studio connection, model name, token usage.
-  - Scrollable conversation history with color scheme:
-    - LORE: greens (#41FF00, #33FF33, #39FF14)
-    - User: violet/magenta (#9933FF / #CC66FF)
-    - System/status: cyan (#00FFFF)
-    - Errors: hot pink/orange (#FF33FF / #FF6633)
-    - Background: black (#000000)
-  - Real-time panels:
-    - Reasoning stream (LLM trace emitted via incremental logs)
-    - Generated queries panel
-    - Search progress with live counts
-    - Final answer with source citations (rich markdown)
-  - Shortcuts: Ctrl+C (clear), Ctrl+Q (quit), Ctrl+S (save transcript), Up/Down (history)
-  - Async tasks with spinners during processing
+- **Same-zone neighbors**
+    - Input: `origin_place_id`
+    - SQL/ORM:
+        - filter `Place.zone == origin.zone`
+        - sort by `geom <-> origin.geom` (KNN)
+        - compute `ST_DistanceSphere` for meters
+    - Output fields: `place_id`, `name`, `meters`, `bearing_deg`, `eta_min`
+- **Nearest-N to arbitrary lon/lat**
+    - Input: `lon, lat, k`
+    - KNN order by `geom <-> ST_SetSRID(ST_MakePoint(lon,lat),4326)`
+    - Add meters via `ST_DistanceSphere`
+- **Containment (on demand)**
+    - If FK is missing or needs verification:
+        - `ST_Contains(zones.boundary, places.geom)`
+- **Optional**: “far mentions”
+    - If a mentioned place is in another zone, include it with meters/bearing for contrast.
 
-Integration:
-- Import and use `LORE.answer_question()` for back-end calls.
-- Provide `poetry run python nexus/agents/lore/lore_qa_tui.py` entry.
+### 4. Output JSON schema (example)
 
-Acceptance checks:
-- Visuals match palette and vibe.
-- Live updates for reasoning, queries, and retrieval counts.
+```json
+{
+  "origin": {
+    "id": 181,
+    "name": "The Silo",
+    "zone": "Badlands",
+    "lat": 38.123456,
+    "lon": -76.123456
+  },
+  "same_zone_nearby": [
+    {"id": 190, "name": "Old Pump Station", "km": 4.2, "bearing_deg": 110.0, "eta_min_moto": 4.0},
+    {"id": 175, "name": "Dry Dock", "km": 7.8, "bearing_deg": 255.0, "eta_min_moto": 7.0}
+  ],
+  "global_mentions": [
+    {"id": 119, "name": "Night City Streets", "km": 52.6, "bearing_deg": 300.0, "eta_min_moto": 45.0}
+  ],
+  "zone_outline_geojson": "{...simplified polygon...}"
+}
+```
 
----
+### 5. API surface (internal)
 
-### Stage 3 — Tests (`tests/test_lore/test_qa_mode.py`)
-New file tests covering:
-- Question analysis and query generation (mocks/stubs for LM Studio if needed; prefer real availability check path but mark as skip if unavailable).
-- Response synthesis from multiple sources.
-- Source citation accuracy (ensure returned `sources` are actual `chunk_id`s).
-- "I don't know" behavior when insufficient evidence.
+- `gaia.places_in_same_zone(place_id: int, limit: int=10) -> List[Neighbor]`
+- `gaia.nearest_places(lon: float, lat: float, k: int=10) -> List[Neighbor]`
+- `gaia.minimap_for_chunk(origin_place_id: int, mentions: List[int]) -> Dict`
 
-Also add example questions per prompt:
-- "What is Victor's relationship to Dynacorp?"
-- "Describe the neural interface technology"
-- "Who are Alex's allies?"
-- "What happened in the Badlands?"
+### 6. Performance & indexing
 
-Acceptance checks:
-- All tests pass locally via `poetry run pytest tests/test_lore/test_qa_mode.py -xvs`.
+- Ensure:
+    - `CREATE INDEX idx_places_geom_gist ON places USING gist (geom);`
+    - `CREATE INDEX idx_zones_boundary_gist ON zones USING gist (boundary);` 
+- For huge datasets: pre-filter with `ST_DWithin(..., radius_m)` before KNN.
 
----
+### 7. Edge cases / geometry hygiene
 
-### Stage 4 — Docs
-- Add `docs/lore_qa.md`: brief component overview, CLI usage, TUI controls, failure modes, performance notes.
+- **Antimeridian:** store ocean-scale regions as **MultiPolygon** (two parts) or `ST_ShiftLongitude` after digitising.
+- **Topology:** use snapping/topological editing in QGIS so zone mosaics are gap-free.
+- **SRIDs:** keep everything in 4326; distances via `ST_DistanceSphere`/`geography`.
 
----
+### 8. Testing
 
-### Stage 5 — Wiring and Commands
-- Ensure `poetry run python -m nexus.agents.lore.lore --qa "..."` works.
-- Ensure `poetry run python nexus/agents/lore/lore_qa_tui.py` launches the TUI.
+- Unit tests for:
+    - KNN results are monotonic with distance.
+    - Containment agrees with FK for a sample set.
+    - JSON payloads stay under target token budget.
+- Golden-file tests for `v_llm_*` views.
 
----
+### 9. Roadmap
 
-### Non-Goals / Risks
-- No fallback to remote LLMs; if LM Studio is down, we error fast.
-- TUI token counters may report approximate values initially; refine later.
-
----
-
-### Deliverables Checklist
-- [ ] `lore.py` — `answer_question` method + `--qa` CLI
-- [ ] `lore_qa_tui.py` — Textual TUI
-- [ ] `tests/test_lore/test_qa_mode.py`
-- [ ] `docs/lore_qa.md`
-
----
-
-### Execution Notes
-- Keep files concise (<300 LOC each where reasonable).
-- Reuse existing `LocalLLMManager` and `MEMNON` APIs; avoid duplicating retrieval logic.
-- Log via `logger = logging.getLogger("nexus.lore.qa")` for Q&A flow.
-
----
-
-Please review and approve. Upon approval, I will implement Stage 1 and pause for review before proceeding to the TUI and tests.
-
-
+- **Now:** add `geom`, indexes, and two queries; expose `v_llm_*` views.
+- **Soon:** `gaia.minimap_for_chunk()` that returns the JSON schema above.
+- **Later:** triggers to auto-assign `places.zone` on coordinate change; caching of per-zone neighbor lists; optional map tile snapshots.

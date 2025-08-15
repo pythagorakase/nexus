@@ -223,6 +223,8 @@ or when done:
 - Do not repeat identical SQL queries
 - When you find the answer, emit `{"action": "final"}`
 - If initial query returns results, refine by selecting more columns for those specific IDs
+- For geography columns, use PostGIS functions like ST_Distance(a.coordinates, b.coordinates) for distance in meters
+- Convert coordinates to text with ST_AsText(coordinates) for readable output
 
 ### SQL Iteration Examples
 

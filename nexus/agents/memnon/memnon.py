@@ -33,6 +33,13 @@ from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 
+# Register PostGIS types with SQLAlchemy to avoid warnings
+try:
+    import geoalchemy2  # noqa: F401
+except ImportError:
+    logger = logging.getLogger("nexus.memnon")
+    logger.debug("GeoAlchemy2 not installed, PostGIS types may show warnings")
+
 # Import utility modules
 from .utils.db_access import check_vector_extension, execute_vector_search, execute_hybrid_search, setup_database_indexes, prepare_tsquery
 from .utils.continuous_temporal_search import execute_time_aware_search, analyze_temporal_intent
@@ -420,56 +427,61 @@ class MEMNON:
                     if not inspector.has_table(table_name):
                         continue
                     
-                    # Check if table has any rows (skip empty tables)
+                    # Use a single connection for all queries for this table
                     with self.db_manager.engine.connect() as conn:
+                        # Check if table has any rows (skip empty tables)
                         count_result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
                         row_count = count_result.scalar()
                         if row_count == 0:
                             continue
-                    
-                    # Get table comment if available
-                    table_comment = ""
-                    try:
-                        comment_result = conn.execute(
-                            text("SELECT obj_description(c.oid) FROM pg_class c WHERE c.relname = :table"),
-                            {"table": table_name}
-                        )
-                        comment = comment_result.scalar()
-                        if comment:
-                            table_comment = f" -- {comment}"
-                    except:
-                        pass
-                    
-                    # Get columns with comments
-                    cols = inspector.get_columns(table_name)
-                    col_descriptions = []
-                    
-                    for col in cols:
-                        col_name = col.get("name", "?")
-                        col_type = str(col.get("type", ""))[:20]  # Truncate long types
                         
-                        # Try to get column comment
-                        col_comment = ""
+                        # Get table comment if available
+                        table_comment = ""
                         try:
                             comment_result = conn.execute(
-                                text("""
-                                SELECT col_description(c.oid, a.attnum) 
-                                FROM pg_class c 
-                                JOIN pg_attribute a ON a.attrelid = c.oid 
-                                WHERE c.relname = :table AND a.attname = :column
-                                """),
-                                {"table": table_name, "column": col_name}
+                                text("SELECT obj_description(c.oid) FROM pg_class c WHERE c.relname = :table"),
+                                {"table": table_name}
                             )
                             comment = comment_result.scalar()
                             if comment:
-                                col_comment = f":{comment}"
-                        except:
-                            pass
+                                table_comment = f" -- {comment}"
+                        except Exception as e:
+                            logger.debug(f"Could not get table comment for {table_name}: {e}")
                         
-                        col_descriptions.append(f"{col_name}{col_comment}")
-                    
-                    col_list = ", ".join(col_descriptions)
-                    lines.append(f"- {table_name}({col_list}){table_comment}")
+                        # Get columns with comments
+                        cols = inspector.get_columns(table_name)
+                        col_descriptions = []
+                        
+                        for col in cols:
+                            col_name = col.get("name", "?")
+                            col_type = str(col.get("type", ""))[:30]  # Truncate long types
+                            
+                            # Try to get column comment
+                            col_comment = ""
+                            try:
+                                comment_result = conn.execute(
+                                    text("""
+                                    SELECT col_description(c.oid, a.attnum) 
+                                    FROM pg_class c 
+                                    JOIN pg_attribute a ON a.attrelid = c.oid 
+                                    WHERE c.relname = :table AND a.attname = :column
+                                    """),
+                                    {"table": table_name, "column": col_name}
+                                )
+                                comment = comment_result.scalar()
+                                if comment:
+                                    col_comment = f":{comment}"
+                            except Exception as e:
+                                logger.debug(f"Could not get column comment for {table_name}.{col_name}: {e}")
+                            
+                            # Include type information for geography/geometry columns
+                            if 'geography' in col_type.lower() or 'geometry' in col_type.lower():
+                                col_descriptions.append(f"{col_name}[{col_type}]{col_comment}")
+                            else:
+                                col_descriptions.append(f"{col_name}{col_comment}")
+                        
+                        col_list = ", ".join(col_descriptions)
+                        lines.append(f"- {table_name}({col_list}){table_comment}")
                     
                 except Exception as e:
                     # Skip tables with errors
@@ -506,11 +518,13 @@ class MEMNON:
             for kw in forbidden:
                 if kw in f" {lowered} ":
                     return {"error": f"Forbidden keyword in SQL: {kw.strip()}"}
-            # Whitelist tables referenced in FROM/JOIN
+            # Blacklist sensitive tables from being accessed
             import re
-            allowed_tables = {
-                "characters", "episodes", "seasons", "events",
-                "factions", "places", "chunk_metadata", "narrative_chunks"
+            forbidden_table_prefixes = {
+                "alembic_",  # Migration tracking
+                "pg_",  # PostgreSQL system tables
+                "information_schema",  # System schema
+                "chunk_embeddings_",  # Embedding tables (large binary data)
             }
             referenced: List[str] = []
             for pattern in [r"\\bfrom\\s+([a-zA-Z_\\.\"]+)", r"\\bjoin\\s+([a-zA-Z_\\.\"]+)"]:
@@ -521,10 +535,14 @@ class MEMNON:
                         name = name.split(".")[-1]
                     referenced.append(name)
             for tbl in referenced:
-                if tbl and tbl not in allowed_tables:
-                    return {"error": f"Table not allowed: {tbl}"}
-            # Enforce LIMIT if absent
-            if " limit " not in lowered:
+                if tbl:
+                    # Check if table name starts with any forbidden prefix
+                    for forbidden_prefix in forbidden_table_prefixes:
+                        if tbl.startswith(forbidden_prefix):
+                            return {"error": f"Table not allowed: {tbl} (blacklisted prefix)"}
+            # Enforce LIMIT if absent (check more carefully to avoid double LIMIT)
+            # Use regex to check if LIMIT is already present as a separate word
+            if not re.search(r'\blimit\s+\d+', lowered):
                 sql_str = f"{sql_str} LIMIT {max_rows}"
             # Execute
             with self.db_manager.engine.connect() as conn:
