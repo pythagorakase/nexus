@@ -31,7 +31,7 @@ echo "   Local:   http://localhost:5173"
 echo "   Network: http://${LOCAL_IP}:5173"
 
 # Start frontend
-cd /Users/pythagor/nexus/nexus-ui-react
+cd /Users/pythagor/nexus/iris
 
 # Update .env with current IP if needed
 echo "VITE_API_URL=http://${LOCAL_IP}:8000" > .env.development.local
