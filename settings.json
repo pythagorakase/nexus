@@ -184,7 +184,15 @@
                 }
             },
             "query_budget": 5,
-            "use_narrative_learner": true
+            "follow_up_query_budget": 3,
+            "initial_search_limit": 15,
+            "inclusion_threshold": "low",
+            "use_narrative_learner": true,
+            "llm": {
+                "context_overflow_policy": "truncateMiddle",
+                "context_window": 131072,
+                "unload_on_exit": true
+            }
         },
         "LOGON": {
             "debug": true,

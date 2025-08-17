@@ -120,6 +120,37 @@ class LocalLLMManager:
                                  f"ACTION REQUIRED: Start LM Studio and enable the local server on port 1234")
         return True
     
+    def check_context_fit(self, prompt: str, system_prompt: Optional[str] = None) -> bool:
+        """
+        Check if a prompt will fit within the context window.
+        
+        Args:
+            prompt: User prompt to check
+            system_prompt: Optional system prompt
+            
+        Returns:
+            True if the prompt will fit, False otherwise
+        """
+        if not LMS_SDK_AVAILABLE or not self.model:
+            # Can't check without SDK, assume it fits
+            return True
+        
+        try:
+            chat = lms.Chat(system_prompt or "You are LORE, a narrative intelligence system.")
+            chat.add_user_message(prompt)
+            
+            # Apply prompt template and tokenize
+            formatted = self.model.apply_prompt_template(chat)
+            token_count = len(self.model.tokenize(formatted))
+            context_length = self.model.get_context_length()
+            
+            logger.debug(f"Token count: {token_count}, Context length: {context_length}")
+            
+            return token_count < context_length
+        except Exception as e:
+            logger.warning(f"Could not check context fit: {e}")
+            return True  # Assume it fits if we can't check
+    
     def query(self, 
               prompt: str, 
               temperature: Optional[float] = None, 
@@ -155,7 +186,8 @@ class LocalLLMManager:
                     "temperature": temp,
                     "maxTokens": max_tok,
                     "topP": self.llm_config.get("top_p", 0.9),
-                    "contextLength": self.llm_config.get("context_window", 65536)
+                    "contextLength": self.llm_config.get("context_window", 65536),
+                    "contextOverflowPolicy": self.llm_config.get("context_overflow_policy", "truncateMiddle")
                 }
                 
                 # Add reasoning effort for GPT-OSS models

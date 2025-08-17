@@ -35,7 +35,8 @@ import asyncio
 import logging
 import json
 import time
-from typing import Dict, Optional, Any, List, Union
+from datetime import datetime
+from typing import Dict, Optional, Any, List, Union, Set
 from pathlib import Path
 
 # Handle imports based on how the module is run
@@ -62,6 +63,22 @@ try:
 except ImportError:
     MEMNON_AVAILABLE = False
     logging.warning("MEMNON not available. Memory retrieval will be limited.")
+
+# Import PSYCHE if available
+try:
+    from nexus.agents.psyche import PSYCHE
+    PSYCHE_AVAILABLE = True
+except ImportError:
+    PSYCHE_AVAILABLE = False
+    logging.warning("PSYCHE not available. Character context will be limited.")
+
+# Import GAIA if available
+try:
+    from nexus.agents.gaia import GAIA
+    GAIA_AVAILABLE = True
+except ImportError:
+    GAIA_AVAILABLE = False
+    logging.warning("GAIA not available. Place context will be limited.")
 
 # Configure logger
 logger = logging.getLogger("nexus.lore")
@@ -101,6 +118,8 @@ class LORE:
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
+        self.psyche = None
+        self.gaia = None
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
@@ -170,6 +189,24 @@ class LORE:
         self._initialize_logon()
         if not self.logon:
             raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
+        
+        # Initialize PSYCHE utility if available
+        if PSYCHE_AVAILABLE and self.memnon:
+            try:
+                self.psyche = PSYCHE(self.memnon)
+                logger.info("PSYCHE utility initialized for character context")
+            except Exception as e:
+                logger.warning(f"PSYCHE initialization failed: {e}")
+                self.psyche = None
+        
+        # Initialize GAIA utility if available
+        if GAIA_AVAILABLE and self.memnon:
+            try:
+                self.gaia = GAIA(self.memnon)
+                logger.info("GAIA utility initialized for place context")
+            except Exception as e:
+                logger.warning(f"GAIA initialization failed: {e}")
+                self.gaia = None
         
         logger.info("Component initialization complete")
     
@@ -381,11 +418,15 @@ class LORE:
         for directive in retrieval_directives:
             directive_result = await self._process_single_directive(directive, chunk_id, warm_slice, target_chunk_text)
             
-            # Store per-directive results
+            # Store per-directive results - updated for new format
             all_results["directives"][directive] = {
-                "retrieved_context": directive_result["retrieved_context"],
+                "included_chunks": directive_result.get("included_chunks", []),
+                "retrieved_chunks": directive_result.get("retrieved_chunks", []),
+                "chunk_evaluations": directive_result.get("chunk_evaluations", []),
+                "summary": directive_result.get("summary", ""),
                 "reasoning": directive_result["reasoning"],
                 "sql_attempts": directive_result.get("sql_attempts", []),
+                "sql_context": directive_result.get("sql_context", ""),
                 "search_progress": directive_result.get("search_progress", []),
                 "sources": directive_result["sources"]
             }
@@ -419,7 +460,7 @@ class LORE:
         qa_logger.warning("answer_question is deprecated. Use retrieve_context with directives instead.")
         return await self.retrieve_context([question], chunk_id=None)
 
-    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict], target_chunk_text: str = "") -> Dict[str, Any]:
+    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict], target_chunk_text: str = "", follow_up_budget: int = 0) -> Dict[str, Any]:
         """
         Process a single retrieval directive with full iterative capability.
         
@@ -459,29 +500,103 @@ class LORE:
         # Execute queries via MEMNON
         aggregated_results: Dict[str, Dict[str, Any]] = {}
         search_progress: List[Dict[str, Any]] = []
+        executed_queries: Set[str] = set()  # Track queries to prevent duplicates
         
+        # Initial queries
         for q in queries:
+            if q not in executed_queries:
+                executed_queries.add(q)
+                try:
+                    result = self.memnon.query_memory(q, filters=None, k=15, use_hybrid=True)
+                    search_progress.append({"query": q, "result_count": result.get("metadata", {}).get("result_count", 0)})
+                    for item in result.get("results", []):
+                        result_chunk_id = str(item.get("chunk_id") or item.get("id"))
+                        if not result_chunk_id:
+                            continue
+                        if result_chunk_id not in aggregated_results:
+                            aggregated_results[result_chunk_id] = {
+                                "chunk_id": result_chunk_id,
+                                "text": item.get("text", ""),
+                                "metadata": item.get("metadata", {}),
+                                "score": float(item.get("score", 0.0))
+                            }
+                        else:
+                            aggregated_results[result_chunk_id]["score"] = max(
+                                aggregated_results[result_chunk_id]["score"], 
+                                float(item.get("score", 0.0))
+                            )
+                except Exception as e:
+                    qa_logger.error(f"Search error for query '{q}': {e}")
+        
+        # Follow-up queries if budget allows
+        follow_up_budget = self.settings.get("Agent Settings", {}).get("LORE", {}).get("follow_up_query_budget", 3)
+        if follow_up_budget > 0 and len(aggregated_results) > 0:
+            qa_logger.info(f"Generating up to {follow_up_budget} follow-up queries")
+            
+            # Prepare context for follow-up query generation
+            current_results_summary = f"Current results ({len(aggregated_results)} chunks found):\n"
+            for chunk_id, data in list(aggregated_results.items())[:5]:  # Show top 5
+                current_results_summary += f"- Chunk {chunk_id}: {data['text'][:100]}...\n"
+            
+            follow_up_prompt = (
+                f"Original directive: {directive}\n\n"
+                f"Initial queries executed: {', '.join(queries)}\n\n"
+                f"{current_results_summary}\n\n"
+                f"Based on the initial results, generate up to {follow_up_budget} follow-up queries "
+                f"to find additional relevant chunks. Focus on:\n"
+                f"1. Gaps in the current results\n"
+                f"2. Related context not yet retrieved\n"
+                f"3. Different phrasings or angles\n\n"
+                f"DO NOT repeat any of these queries: {', '.join(executed_queries)}\n\n"
+                f"Return a JSON array of query strings."
+            )
+            
             try:
-                result = self.memnon.query_memory(q, filters=None, k=8, use_hybrid=True)
-                search_progress.append({"query": q, "result_count": result.get("metadata", {}).get("result_count", 0)})
-                for item in result.get("results", []):
-                    result_chunk_id = str(item.get("chunk_id") or item.get("id"))
-                    if not result_chunk_id:
-                        continue
-                    if result_chunk_id not in aggregated_results:
-                        aggregated_results[result_chunk_id] = {
-                            "chunk_id": result_chunk_id,
-                            "text": item.get("text", ""),
-                            "metadata": item.get("metadata", {}),
-                            "score": float(item.get("score", 0.0))
-                        }
-                    else:
-                        aggregated_results[result_chunk_id]["score"] = max(
-                            aggregated_results[result_chunk_id]["score"], 
-                            float(item.get("score", 0.0))
-                        )
+                llm_settings = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
+                follow_up_response = self.llm_manager.query(
+                    follow_up_prompt,
+                    system_prompt="Generate follow-up search queries to expand context retrieval.",
+                    temperature=0.7,
+                    max_tokens=512
+                )
+                
+                # Extract follow-up queries
+                import re
+                json_match = re.search(r'\[.*?\]', follow_up_response, re.DOTALL)
+                if json_match:
+                    try:
+                        follow_up_queries = json.loads(json_match.group())
+                        # Sanitize and deduplicate
+                        follow_up_queries = [sanitize_query(q) for q in follow_up_queries if q and q.strip()]
+                        follow_up_queries = [q for q in follow_up_queries if q not in executed_queries][:follow_up_budget]
+                        
+                        # Execute follow-up queries
+                        for q in follow_up_queries:
+                            if q not in executed_queries:
+                                executed_queries.add(q)
+                                qa_logger.info(f"Executing follow-up query: {q}")
+                                try:
+                                    result = self.memnon.query_memory(q, filters=None, k=10, use_hybrid=True)
+                                    search_progress.append({"query": q, "result_count": result.get("metadata", {}).get("result_count", 0), "follow_up": True})
+                                    for item in result.get("results", []):
+                                        result_chunk_id = str(item.get("chunk_id") or item.get("id"))
+                                        if not result_chunk_id:
+                                            continue
+                                        if result_chunk_id not in aggregated_results:
+                                            aggregated_results[result_chunk_id] = {
+                                                "chunk_id": result_chunk_id,
+                                                "text": item.get("text", ""),
+                                                "metadata": item.get("metadata", {}),
+                                                "score": float(item.get("score", 0.0)) * 0.9  # Slightly lower score for follow-up results
+                                            }
+                                except Exception as e:
+                                    qa_logger.error(f"Follow-up search error for query '{q}': {e}")
+                                    
+                    except json.JSONDecodeError as e:
+                        qa_logger.warning(f"Failed to parse follow-up queries JSON: {e}")
+                        
             except Exception as e:
-                qa_logger.error(f"Search error for query '{q}': {e}")
+                qa_logger.warning(f"Follow-up query generation failed: {e}")
         
         # Optional agentic SQL phase for this directive
         sql_attempts: List[Dict[str, Any]] = []
@@ -646,86 +761,187 @@ class LORE:
                             print("\nResult:")
                             print(f"Error: {e}")
         
-        # Sort results by score and prepare for synthesis
+        # Sort results by score and prepare for inclusion flagging
         sorted_results = sorted(
             aggregated_results.values(), 
             key=lambda x: x["score"], 
             reverse=True
-        )[:10]  # Top 10 results
+        )[:15]  # Top 15 results for better coverage
         
-        # Synthesize the retrieved context for this directive
+        # Check if we have any results
         if not sorted_results and not sql_context:
             return {
-                "retrieved_context": f"No relevant information found for: {directive}",
+                "retrieved_chunks": [],
+                "included_chunks": [],
+                "summary": f"No relevant information found for: {directive}",
                 "sources": [],
                 "queries": queries,
                 "reasoning": "No results from text search or SQL queries",
                 "sql_attempts": sql_attempts
             }
         
-        # Format sources for synthesis
-        sources_text = ""
+        # Prepare chunks for inclusion evaluation
+        chunks_for_evaluation = []
         for i, result in enumerate(sorted_results, 1):
-            sources_text += f"\n[Source {i}] Chunk {result['chunk_id']} (score: {result['score']:.2f}):\n"
-            sources_text += result["text"][:500] + "...\n"
+            chunks_for_evaluation.append({
+                "chunk_id": result['chunk_id'],
+                "score": result['score'],
+                "preview": result["text"][:300] + "..." if len(result["text"]) > 300 else result["text"]
+            })
         
-        # Add SQL context if available
-        if sql_context:
-            sources_text = f"SQL Results:\n{sql_context}\n\nText Search Results:\n{sources_text}"
-        
-        # Generate synthesis with final reminder about the target chunk
-        synthesis_prompt = (
+        # Ask LLM to flag which chunks should be included
+        inclusion_prompt = (
             f"Retrieval directive: {directive}\n\n"
-            f"Available sources:\n{sources_text}\n\n"
         )
         
-        # Add the target chunk reminder at the end as per OpenAI's guidance
         if target_chunk_text:
-            synthesis_prompt += (
-                f"\n{'='*50}\n"
-                f"REMINDER - This context is being assembled to continue the story from:\n"
-                f"{target_chunk_text}\n"
-                f"{'='*50}\n\n"
+            inclusion_prompt += (
+                f"Target chunk (continuation point):\n{target_chunk_text[:500]}...\n\n"
             )
         
-        synthesis_prompt += (
-            "Synthesize the relevant contextual information that addresses the retrieval directive. "
-            "This context will enable the Storyteller AI to continue the narrative from the target chunk shown above. "
-            "Be specific and include relevant details that inform the continuation."
+        inclusion_prompt += (
+            f"Retrieved chunks to evaluate:\n"
         )
+        
+        for i, chunk in enumerate(chunks_for_evaluation, 1):
+            inclusion_prompt += f"\n[{i}] Chunk {chunk['chunk_id']} (score: {chunk['score']:.2f}):\n{chunk['preview']}\n"
+        
+        inclusion_prompt += (
+            "\nFor each chunk, indicate whether it should be INCLUDED in the context package "
+            "for the Apex AI. Be generous with inclusion - when in doubt, include.\n\n"
+            "Respond with a JSON array where each element is:\n"
+            "{\"chunk_id\": \"<id>\", \"include\": true/false, \"relevance\": \"<brief reason>\"}\n\n"
+            "Be inclusive - the threshold for inclusion should be low."
+        )
+        
+        included_chunks = []
+        chunk_evaluations = []
         
         try:
-            # Use proper settings from settings.json
             llm_settings = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
-            raw_synthesis = self.llm_manager.query(
-                synthesis_prompt,
-                system_prompt=llm_settings.get("system_prompt", "You are a narrative intelligence system"),
-                temperature=llm_settings.get("temperature", 0.8),
-                max_tokens=llm_settings.get("max_tokens", 2048)
+            raw_response = self.llm_manager.query(
+                inclusion_prompt,
+                system_prompt="You are evaluating narrative chunks for inclusion in a context package. Be generous - include anything potentially relevant.",
+                temperature=0.3,  # Lower temperature for consistent evaluation
+                max_tokens=2048
             )
-            # Prefer content from final channel if present
-            synthesis = raw_synthesis
-            if '<|channel|>final<|message|>' in raw_synthesis:
-                synthesis = raw_synthesis.split('<|channel|>final<|message|>', 1)[1].strip()
-            # Clean trailing control tokens
-            for marker in ("<|end|>",):
-                if marker in synthesis:
-                    synthesis = synthesis.split(marker, 1)[0].strip()
+            
+            # Extract JSON from response
+            import re
+            json_match = re.search(r'\[.*?\]', raw_response, re.DOTALL)
+            if json_match:
+                try:
+                    chunk_evaluations = json.loads(json_match.group())
+                    # Build list of included chunk IDs
+                    for eval_item in chunk_evaluations:
+                        if eval_item.get("include", False):
+                            chunk_id = eval_item.get("chunk_id")
+                            if chunk_id:
+                                included_chunks.append(chunk_id)
+                except json.JSONDecodeError as e:
+                    qa_logger.warning(f"Failed to parse inclusion JSON: {e}")
+                    # Fallback: include top chunks by score
+                    included_chunks = [r['chunk_id'] for r in sorted_results[:10]]
+                    
         except Exception as e:
-            qa_logger.error(f"Synthesis failed: {e}")
-            synthesis = sources_text[:1000]
+            qa_logger.error(f"Inclusion evaluation failed: {e}")
+            # Fallback: include top chunks by score
+            included_chunks = [r['chunk_id'] for r in sorted_results[:10]]
         
-        # Extract chunk IDs from results
+        # Get full text for included chunks
+        included_chunk_data = []
+        for chunk_id in included_chunks:
+            for result in sorted_results:
+                if result['chunk_id'] == chunk_id:
+                    included_chunk_data.append({
+                        "chunk_id": chunk_id,
+                        "text": result["text"],
+                        "score": result["score"],
+                        "metadata": result.get("metadata", {})
+                    })
+                    break
+        
+        # Generate a brief summary for debugging/logging
+        summary = f"Retrieved {len(sorted_results)} chunks, included {len(included_chunks)} for directive: {directive}"
+        if sql_context:
+            summary += f"\nAlso included SQL query results."
+        
+        # Extract all chunk IDs (for source tracking)
         source_ids = [int(r["chunk_id"]) for r in sorted_results if r["chunk_id"].isdigit()]
         
         return {
-            "retrieved_context": synthesis,
+            "retrieved_chunks": sorted_results,  # All retrieved chunks
+            "included_chunks": included_chunk_data,  # Chunks flagged for inclusion
+            "chunk_evaluations": chunk_evaluations,  # Evaluation details
+            "summary": summary,
             "sources": source_ids,
             "queries": queries,
             "reasoning": context_analysis,
             "sql_attempts": sql_attempts,
+            "sql_context": sql_context,
             "search_progress": search_progress
         }
+    
+    def save_context_package(self, context: Dict[str, Any], chunk_id: int, directives: List[str]) -> str:
+        """
+        Save context package to JSON file for inspection.
+        
+        Args:
+            context: The complete context package
+            chunk_id: The chunk this context is for
+            directives: The retrieval directives used
+            
+        Returns:
+            Path to the saved JSON file
+        """
+        # Create output directory
+        output_dir = Path("context_packages")
+        output_dir.mkdir(exist_ok=True)
+        
+        # Timestamp filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = output_dir / f"chunk_{chunk_id}_{timestamp}.json"
+        
+        # Calculate statistics
+        stats = {
+            "total_directives": len(directives),
+            "total_included_chunks": 0,
+            "total_retrieved_chunks": 0,
+            "character_count": 0,
+            "place_count": 0,
+            "relationship_count": 0
+        }
+        
+        # Count chunks across all directives
+        for directive_data in context.get("directives", {}).values():
+            stats["total_included_chunks"] += len(directive_data.get("included_chunks", []))
+            stats["total_retrieved_chunks"] += len(directive_data.get("retrieved_chunks", []))
+        
+        # Add character/place context if integrated
+        if hasattr(self, 'psyche') and self.psyche:
+            # Could add character context stats here
+            pass
+        if hasattr(self, 'gaia') and self.gaia:
+            # Could add place context stats here
+            pass
+        
+        # Build complete package
+        package = {
+            "metadata": {
+                "chunk_id": chunk_id,
+                "timestamp": timestamp,
+                "directives": directives,
+                "statistics": stats
+            },
+            "context": context
+        }
+        
+        # Save to file
+        with open(filename, 'w') as f:
+            json.dump(package, f, indent=2, default=str)
+        
+        qa_logger.info(f"Saved context package to {filename}")
+        return str(filename)
     
     def get_turn_summary(self) -> Dict[str, Any]:
         """Get a summary of the last turn cycle"""
@@ -779,6 +995,7 @@ async def main():
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
     parser.add_argument("--keep-model", action="store_true", help="Keep LM Studio model loaded after run")
     parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL mode for retrieval")
+    parser.add_argument("--save", action="store_true", help="Save context package to JSON file")
     
     args = parser.parse_args()
     
@@ -820,27 +1037,44 @@ async def main():
         logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")
         result = await lore.retrieve_context(directives, chunk_id=args.chunk)
         
+        # Save to JSON if requested
+        if args.save:
+            saved_path = lore.save_context_package(result, args.chunk, directives)
+            print(f"\n📁 Context package saved to: {saved_path}")
+        
         # Format output to follow the actual reasoning flow
         print(f"\n{'='*60}")
         print(f"CONTEXTUAL RETRIEVAL FOR CHUNK {args.chunk}")
         print(f"{'='*60}\n")
         
-        # For each directive, show only the final synthesis (queries were output in real-time)
+        # For each directive, show the chunks flagged for inclusion
         for directive, directive_data in result.get("directives", {}).items():
             print(f"\n🎯 DIRECTIVE: {directive}")
             print("=" * 50)
             
             # The SQL queries and reasoning have already been output in real-time
             # during the _process_single_directive() function
-            # Just show the final synthesis here
             
-            print(f"\nFinal Synthesis:")
+            # Show chunk inclusion summary
+            included = directive_data.get("included_chunks", [])
+            retrieved = directive_data.get("retrieved_chunks", [])
+            
+            print(f"\nChunk Inclusion Summary:")
             print("-" * 40)
+            print(f"Retrieved: {len(retrieved)} chunks")
+            print(f"Included: {len(included)} chunks")
             
-            # Just output the synthesis as-is - TUI will handle formatting
-            synthesis = directive_data.get("retrieved_context", "No context retrieved")
-            print("\nResponse:")
-            print(synthesis)
+            if included:
+                print("\nIncluded chunks:")
+                for chunk in included[:5]:  # Show first 5
+                    print(f"  - Chunk {chunk['chunk_id']} (score: {chunk['score']:.2f})")
+                if len(included) > 5:
+                    print(f"  ... and {len(included) - 5} more")
+            
+            # Show SQL context if available
+            if directive_data.get("sql_context"):
+                print("\nSQL context included")
+            
             print()
         
         # Summary statistics

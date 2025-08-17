@@ -278,6 +278,306 @@ class GAIA:
         """
         raise NotImplementedError("Timeline tracking not yet implemented")
     
+    # ========== Auto-generation Methods for LORE ==========
+    
+    def generate_place_context(
+        self,
+        setting_place_ids: List[int],
+        mentioned_place_ids: List[int],
+        expand_details: bool = False,
+        include_inhabitants: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate automatic place context for narrative generation.
+        
+        Args:
+            setting_place_ids: IDs of places where scenes occur
+            mentioned_place_ids: IDs of places mentioned but not visited
+            expand_details: Whether to include full place details
+            include_inhabitants: Whether to include inhabitant lists
+            
+        Returns:
+            Dict containing place context organized by category
+        """
+        context = {
+            "setting_places": {},
+            "mentioned_places": {},
+            "zones": {},
+            "summary": ""
+        }
+        
+        # Process setting places (where action occurs)
+        for place_id in setting_place_ids:
+            place_data = self._get_place_essentials(
+                place_id,
+                include_current_status=True,
+                include_inhabitants=include_inhabitants
+            )
+            if place_data:
+                context["setting_places"][place_id] = place_data
+                # Track zone
+                if place_data.get("zone"):
+                    zone_id = place_data["zone"]
+                    if zone_id not in context["zones"]:
+                        context["zones"][zone_id] = self._get_zone_summary(zone_id)
+        
+        # Process mentioned places
+        for place_id in mentioned_place_ids:
+            # Skip if already in setting
+            if place_id not in setting_place_ids:
+                place_data = self._get_place_essentials(
+                    place_id,
+                    include_current_status=False,
+                    include_inhabitants=False
+                )
+                if place_data:
+                    context["mentioned_places"][place_id] = place_data
+        
+        # Add expanded details if requested
+        if expand_details:
+            for place_id in setting_place_ids:
+                if place_id in context["setting_places"]:
+                    expanded = self._get_place_expanded(place_id)
+                    if expanded:
+                        context["setting_places"][place_id].update(expanded)
+        
+        # Generate summary
+        context["summary"] = self._generate_place_summary(context)
+        
+        return context
+    
+    def _get_place_essentials(
+        self,
+        place_id: int,
+        include_current_status: bool = False,
+        include_inhabitants: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get essential place information.
+        
+        Args:
+            place_id: Place ID
+            include_current_status: Include current_status field
+            include_inhabitants: Include inhabitants array
+            
+        Returns:
+            Place data dict or None if not found
+        """
+        # Build dynamic field list
+        fields = ["id", "name", "type", "zone", "summary"]
+        if include_current_status:
+            fields.append("current_status")
+        if include_inhabitants:
+            fields.append("inhabitants")
+        
+        # Also get coordinates for spatial context
+        sql = f"""
+        SELECT 
+            {', '.join(fields)},
+            ST_Y(coordinates::geometry) as lat,
+            ST_X(coordinates::geometry) as lon
+        FROM places
+        WHERE id = {place_id}
+        """
+        
+        result = self.memnon.execute_readonly_sql(sql)
+        
+        if not result or not result.get('rows'):
+            logger.warning(f"Place {place_id} not found")
+            return None
+        
+        row = result['rows'][0]
+        place_data = {field: row.get(field) for field in fields if row.get(field) is not None}
+        
+        # Add coordinates if available
+        if row.get('lat') and row.get('lon'):
+            place_data['coordinates'] = {
+                'lat': row['lat'],
+                'lon': row['lon']
+            }
+        
+        return place_data
+    
+    def _get_place_expanded(self, place_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get expanded place details.
+        
+        Args:
+            place_id: Place ID
+            
+        Returns:
+            Expanded place data or None
+        """
+        sql = f"""
+        SELECT 
+            history, secrets, extra_data
+        FROM places
+        WHERE id = {place_id}
+        """
+        
+        result = self.memnon.execute_readonly_sql(sql)
+        
+        if not result or not result.get('rows'):
+            return None
+        
+        row = result['rows'][0]
+        expanded = {}
+        
+        if row.get('history'):
+            expanded['history'] = row['history']
+        if row.get('secrets'):
+            expanded['secrets'] = row['secrets']
+        if row.get('extra_data'):
+            expanded['extra_data'] = row['extra_data']
+        
+        return expanded if expanded else None
+    
+    def _get_zone_summary(self, zone_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get zone summary information.
+        
+        Args:
+            zone_id: Zone ID
+            
+        Returns:
+            Zone summary or None
+        """
+        sql = f"""
+        SELECT 
+            id, name, summary,
+            ST_Y(ST_Centroid(boundary)) as centroid_lat,
+            ST_X(ST_Centroid(boundary)) as centroid_lon
+        FROM zones
+        WHERE id = {zone_id}
+        """
+        
+        result = self.memnon.execute_readonly_sql(sql)
+        
+        if not result or not result.get('rows'):
+            return None
+        
+        row = result['rows'][0]
+        return {
+            'id': row['id'],
+            'name': row.get('name'),
+            'summary': row.get('summary'),
+            'centroid': {
+                'lat': row.get('centroid_lat'),
+                'lon': row.get('centroid_lon')
+            } if row.get('centroid_lat') else None
+        }
+    
+    def _generate_place_summary(self, context: Dict[str, Any]) -> str:
+        """
+        Generate a brief summary of the place context.
+        
+        Args:
+            context: The full place context dict
+            
+        Returns:
+            Summary string
+        """
+        setting_count = len(context.get("setting_places", {}))
+        mentioned_count = len(context.get("mentioned_places", {}))
+        zone_count = len(context.get("zones", {}))
+        
+        summary_parts = []
+        
+        if setting_count > 0:
+            setting_names = [p.get("name", "Unknown") for p in context["setting_places"].values()]
+            summary_parts.append(f"Settings: {', '.join(setting_names[:2])}" +
+                                (" and others" if setting_count > 2 else ""))
+        
+        if mentioned_count > 0:
+            mentioned_names = [p.get("name", "Unknown") for p in context["mentioned_places"].values()]
+            summary_parts.append(f"Mentioned: {', '.join(mentioned_names[:2])}" +
+                                (" and others" if mentioned_count > 2 else ""))
+        
+        if zone_count > 0:
+            zone_names = [z.get("name", "Unknown") for z in context["zones"].values()]
+            summary_parts.append(f"Zones: {', '.join(zone_names)}")
+        
+        return " | ".join(summary_parts) if summary_parts else "No place context"
+    
+    def analyze_chunk_places(self, chunk_id: int) -> Dict[str, Any]:
+        """
+        Analyze place references in a specific chunk.
+        
+        Args:
+            chunk_id: Narrative chunk ID
+            
+        Returns:
+            Dict with setting and mentioned place IDs
+        """
+        # First check chunk_metadata for primary place
+        primary_sql = f"""
+        SELECT place
+        FROM chunk_metadata
+        WHERE chunk_id = {chunk_id}
+        """
+        
+        primary_result = self.memnon.execute_readonly_sql(primary_sql)
+        primary_place = None
+        if primary_result and primary_result.get('rows') and primary_result['rows'][0].get('place'):
+            primary_place = primary_result['rows'][0]['place']
+        
+        # Then check place_chunk_references
+        refs_sql = f"""
+        SELECT 
+            place_id,
+            reference_type
+        FROM place_chunk_references
+        WHERE chunk_id = {chunk_id}
+        """
+        
+        refs_result = self.memnon.execute_readonly_sql(refs_sql)
+        
+        setting = []
+        mentioned = []
+        
+        # Add primary place as setting if it exists
+        if primary_place:
+            setting.append(primary_place)
+        
+        if refs_result and refs_result.get('rows'):
+            for row in refs_result['rows']:
+                place_id = row['place_id']
+                ref_type = row.get('reference_type')
+                
+                if ref_type == 'setting' and place_id not in setting:
+                    setting.append(place_id)
+                elif ref_type == 'mentioned':
+                    mentioned.append(place_id)
+                elif ref_type == 'transit':
+                    # Transit places could be considered mentioned
+                    mentioned.append(place_id)
+        
+        return {
+            "chunk_id": chunk_id,
+            "setting_place_ids": setting,
+            "mentioned_place_ids": mentioned
+        }
+    
+    def get_place_list(self) -> List[Dict[str, Any]]:
+        """
+        Get minimal list of all places (for Apex AI reference).
+        
+        Returns:
+            List of dicts with place id and name
+        """
+        sql = """
+        SELECT id, name
+        FROM places
+        ORDER BY id
+        """
+        
+        result = self.memnon.execute_readonly_sql(sql)
+        
+        if not result or not result.get('rows'):
+            return []
+        
+        return [{"id": row['id'], "name": row['name']} for row in result['rows']]
+    
     # ========== Helper Methods ==========
     
     def _format_spatial_results(
