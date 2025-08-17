@@ -359,7 +359,7 @@ class ContentProcessor:
         """
         # Map of model dimensions to table names
         dimension_table_map = {
-            384: 'chunk_embeddings_0384d',
+            # 384: 'chunk_embeddings_0384d',  # Deprecated - removed
             1024: 'chunk_embeddings_1024d',
             1536: 'chunk_embeddings_1536d'
         }

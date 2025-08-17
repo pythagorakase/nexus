@@ -26,15 +26,7 @@ class NarrativeChunk(Base):
     created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 # Define the dimension-specific embedding tables
-class ChunkEmbedding384D(Base):
-    __tablename__ = 'chunk_embeddings_0384d'
-    
-    id = Column(sa.Integer, primary_key=True)
-    chunk_id = Column(sa.BigInteger, sa.ForeignKey('narrative_chunks.id'), nullable=False)
-    model = Column(sa.String(255), nullable=False)
-    # Note: This is a proper vector type with 384 dimensions
-    embedding = Column(sa.String, nullable=False)  # Will be treated as vector by PostgreSQL
-    created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
+# DEPRECATED: ChunkEmbedding384D removed - no longer using 384-dimension embeddings
 
 class ChunkEmbedding1024D(Base):
     __tablename__ = 'chunk_embeddings_1024d'
@@ -213,7 +205,7 @@ class DatabaseManager:
             "chunk_metadata": ChunkMetadata,
             "characters": Character,
             "places": Place,
-            "chunk_embeddings_0384d": ChunkEmbedding384D,
+            # "chunk_embeddings_0384d": ChunkEmbedding384D,  # Deprecated - removed
             "chunk_embeddings_1024d": ChunkEmbedding1024D,
             "chunk_embeddings_1536d": ChunkEmbedding1536D
         } 

@@ -120,7 +120,7 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                 
                 # Map dimensions to table names
                 dimension_table_map = {
-                    384: 'chunk_embeddings_0384d',
+                    # 384: 'chunk_embeddings_0384d',  # Deprecated - removed
                     1024: 'chunk_embeddings_1024d',
                     1536: 'chunk_embeddings_1536d'
                 }
@@ -414,7 +414,7 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                 
                 # Map dimensions to table names
                 dimension_table_map = {
-                    384: 'chunk_embeddings_0384d',
+                    # 384: 'chunk_embeddings_0384d',  # Deprecated - removed
                     1024: 'chunk_embeddings_1024d',
                     1536: 'chunk_embeddings_1536d'
                 }
@@ -630,7 +630,7 @@ def setup_database_indexes(db_url: str) -> bool:
                 """)
                 
                 # Create indexes on dimension-specific tables if they don't exist
-                for dim_table in ['chunk_embeddings_0384d', 'chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
+                for dim_table in ['chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
                     try:
                         logger.info(f"Creating model index on {dim_table}...")
                         cursor.execute(f"""
@@ -642,7 +642,7 @@ def setup_database_indexes(db_url: str) -> bool:
                         continue
                 
                 # Create vector indexes for dimension-specific tables
-                for dim_table in ['chunk_embeddings_0384d', 'chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
+                for dim_table in ['chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
                     try:
                         # Check if table exists
                         cursor.execute(f"""

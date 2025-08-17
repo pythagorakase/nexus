@@ -90,27 +90,71 @@ class SpatialQuery:
             return []
         
         # Query for places in same zone with distances
+        # If same zone doesn't yield enough results, expand search
         neighbors_sql = f"""
-        SELECT 
-            p.id,
-            p.name,
-            ST_Y(p.coordinates::geometry) as lat,
-            ST_X(p.coordinates::geometry) as lon,
-            ST_Distance(
-                (SELECT coordinates FROM places WHERE id = {place_id}),
-                p.coordinates
-            ) as distance_meters,
-            degrees(
-                ST_Azimuth(
-                    (SELECT geom FROM places WHERE id = {place_id}),
-                    p.geom
-                )
-            ) as bearing_degrees
-        FROM places p
-        WHERE p.zone = {origin['zone']} 
-          AND p.id != {place_id}
-          AND p.coordinates IS NOT NULL
-        ORDER BY (SELECT geom FROM places WHERE id = {place_id}) <-> p.geom
+        WITH zone_places AS (
+            -- First try to get places in same zone
+            SELECT 
+                p.id,
+                p.name,
+                p.zone,
+                z.name as zone_name,
+                ST_Y(p.coordinates::geometry) as lat,
+                ST_X(p.coordinates::geometry) as lon,
+                ST_Distance(
+                    (SELECT coordinates FROM places WHERE id = {place_id}),
+                    p.coordinates
+                ) as distance_meters,
+                degrees(
+                    ST_Azimuth(
+                        (SELECT geom FROM places WHERE id = {place_id}),
+                        p.geom
+                    )
+                ) as bearing_degrees,
+                1 as priority  -- Same zone gets priority
+            FROM places p
+            LEFT JOIN zones z ON p.zone = z.id
+            WHERE p.zone = {origin['zone']} 
+              AND p.id != {place_id}
+              AND p.coordinates IS NOT NULL
+            ORDER BY (SELECT geom FROM places WHERE id = {place_id}) <-> p.geom
+            LIMIT {limit if limit else 10}
+        ),
+        other_places AS (
+            -- If we don't have enough from same zone, get from other zones
+            SELECT 
+                p.id,
+                p.name,
+                p.zone,
+                z.name as zone_name,
+                ST_Y(p.coordinates::geometry) as lat,
+                ST_X(p.coordinates::geometry) as lon,
+                ST_Distance(
+                    (SELECT coordinates FROM places WHERE id = {place_id}),
+                    p.coordinates
+                ) as distance_meters,
+                degrees(
+                    ST_Azimuth(
+                        (SELECT geom FROM places WHERE id = {place_id}),
+                        p.geom
+                    )
+                ) as bearing_degrees,
+                2 as priority  -- Other zones get lower priority
+            FROM places p
+            LEFT JOIN zones z ON p.zone = z.id
+            WHERE p.zone != {origin['zone']} 
+              AND p.id != {place_id}
+              AND p.coordinates IS NOT NULL
+              AND (SELECT COUNT(*) FROM zone_places) < 3  -- Only if we need more
+            ORDER BY (SELECT geom FROM places WHERE id = {place_id}) <-> p.geom
+            LIMIT {limit if limit else 10}
+        )
+        SELECT * FROM (
+            SELECT * FROM zone_places
+            UNION ALL
+            SELECT * FROM other_places
+        ) combined
+        ORDER BY priority, distance_meters
         LIMIT {limit if limit else 10}
         """
         
@@ -127,8 +171,8 @@ class SpatialQuery:
                 name=row['name'],
                 lat=row['lat'],
                 lon=row['lon'],
-                zone_id=origin['zone'],
-                zone_name=origin.get('zone_name')
+                zone_id=row.get('zone', origin['zone']),
+                zone_name=row.get('zone_name', origin.get('zone_name'))
             )
             
             distance_m = row['distance_meters']
