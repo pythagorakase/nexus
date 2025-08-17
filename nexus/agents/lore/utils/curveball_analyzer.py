@@ -124,12 +124,17 @@ class CurveballAnalyzer:
         }
         
         # Step 4: Use LLM to analyze for gaps
-        prompt = self.prompts["pass2_gap_detection"].format(
-            pass1_summary=json.dumps(pass1_summary, indent=2),
-            user_text=user_text,
-            chunk_ids=auto_vector_results.get("chunk_ids", []),
-            entity_rosters=json.dumps(entity_rosters, indent=2)[:2000]  # Truncate if too long
-        )
+        # Use the prompt template, being careful with the JSON formatting
+        if "pass2_gap_detection" in self.prompts:
+            prompt_template = self.prompts["pass2_gap_detection"]
+        else:
+            prompt_template = self.prompts.get("fallback_prompt", "")
+        
+        # Replace placeholders safely
+        prompt = prompt_template.replace("{pass1_summary}", json.dumps(pass1_summary, indent=2))
+        prompt = prompt.replace("{user_text}", user_text)
+        prompt = prompt.replace("{chunk_ids}", str(auto_vector_results.get("chunk_ids", [])))
+        prompt = prompt.replace("{entity_rosters}", json.dumps(entity_rosters, indent=2)[:2000])
         
         try:
             # Let the LLM analyze
@@ -181,8 +186,8 @@ class CurveballAnalyzer:
             "characters": "SELECT id, name FROM characters ORDER BY id",
             "zones": "SELECT id, name FROM zones ORDER BY id",
             "places": "SELECT id, name FROM places ORDER BY id",
-            "factions": "SELECT id, name FROM factions ORDER BY id",
-            "events": "SELECT id, name FROM events ORDER BY id LIMIT 100"  # Limit events
+            "factions": "SELECT id, name FROM factions ORDER BY id"
+            # "events": table doesn't exist yet
         }
         
         for entity_type, query in queries.items():
@@ -214,7 +219,7 @@ class CurveballAnalyzer:
                 # Extract Pass 2 Gap Detection Prompt
                 if "### Pass 2 Gap Detection Prompt" in content:
                     start = content.find("### Pass 2 Gap Detection Prompt")
-                    start = content.find("```", start) + 3
+                    start = content.find("```", start) + 4  # Skip past ```\n
                     end = content.find("```", start)
                     prompts["pass2_gap_detection"] = content[start:end].strip()
                 

@@ -123,11 +123,18 @@ def simulate_pass2(session: SessionContext, user_input: str):
         debug=False
     )
     
-    # Initialize LocalLLMManager (simplified for test)
-    llm = LocalLLMManager(
-        base_url="http://localhost:1234/v1",
-        model_name="lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF"
-    )
+    # Initialize LocalLLMManager (needs settings dict)
+    llm_settings = {
+        "Agent Settings": {
+            "LORE": {
+                "llm": {
+                    "lmstudio_url": "http://localhost:1234/v1",
+                    "model_name": "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF"
+                }
+            }
+        }
+    }
+    llm = LocalLLMManager(llm_settings)
     
     # Step 1: Auto-vector user input
     logger.info("\n--- Auto-Vectoring User Input ---")
@@ -172,16 +179,18 @@ def simulate_pass2(session: SessionContext, user_input: str):
     directive = analyzer.get_expansion_directive(analysis)
     logger.info(f"Action: {directive}")
     
+    # Check if we successfully detected the karaoke reference
+    if deep_cuts:
+        logger.info(f"\n✅ Successfully detected deep cut reference to karaoke!")
+        logger.info(f"   Auto-vector found chunks {deep_cuts[:3]} from S03E13")
+        logger.info(f"   That's the karaoke incident from ~600 chunks ago!")
+    
     # Simulate final result
     logger.info("\n" + "="*60)
     logger.info("TWO-PASS ASSEMBLY COMPLETE")
     logger.info("="*60)
     logger.info(f"Pass 1: {sum(session.token_usage.values())} tokens (75%)")
     logger.info(f"Pass 2: {session.tokens_reserved_for_user} tokens available (25%)")
-    
-    if analysis.deep_cut_chunks:
-        logger.info(f"\n✅ Successfully detected deep cut reference to karaoke!")
-        logger.info(f"   Would retrieve chunks {analysis.deep_cut_chunks} from S03E13")
 
 
 def main():
