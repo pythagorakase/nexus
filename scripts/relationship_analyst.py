@@ -31,6 +31,7 @@ Options:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from typing import List, Tuple, Dict, Union, Literal, Optional, Any
@@ -259,21 +260,126 @@ def count_tokens(text: str) -> int:
         return len(text) // 4  # Rough approximation, 1 token ≈ 4 chars
 
 
-def select_model_params(token_count: int) -> Tuple[str, Dict[str, Any]]:
+def minify_schema(node: object) -> None:
+    """
+    Remove verbose keys from schema to reduce token usage.
+    Keeps only validation-critical fields.
+    """
+    VERBOSE_KEYS = {"title", "description", "examples", "default", "nullable", "format"}
+    
+    if isinstance(node, dict):
+        for k in list(node.keys()):
+            if k in VERBOSE_KEYS:
+                node.pop(k, None)
+        for v in node.values():
+            minify_schema(v)
+    elif isinstance(node, list):
+        for item in node:
+            minify_schema(item)
+
+
+def count_schema_tokens(schema: Dict) -> int:
+    """
+    Count tokens in the schema that will be sent to the API.
+    """
+    schema_str = json.dumps(schema, separators=(',', ':'))
+    return count_tokens(schema_str)
+
+
+def save_context_json(filepath: str, char1_data: Dict, char2_data: Dict, 
+                      chunks: List[Dict], system_prompt: Dict, 
+                      season_summaries: Optional[str] = None) -> None:
+    """
+    Save context data to JSON file for manual editing.
+    
+    Args:
+        filepath: Path to save the JSON file
+        char1_data: Character 1 data
+        char2_data: Character 2 data
+        chunks: List of narrative chunks
+        system_prompt: System prompt dictionary
+        season_summaries: Optional season summaries
+    """
+    context = {
+        "char1_data": char1_data,
+        "char2_data": char2_data,
+        "chunks": chunks,
+        "system_prompt": system_prompt,
+        "season_summaries": season_summaries,
+        "metadata": {
+            "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "chunk_count": len(chunks)
+        }
+    }
+    
+    with open(filepath, 'w') as f:
+        json.dump(context, f, indent=2, default=str)
+    
+    print(f"Context saved to: {filepath}")
+    print(f"  Character 1: {char1_data['name']} (ID: {char1_data['id']})")
+    print(f"  Character 2: {char2_data['name']} (ID: {char2_data['id']})")
+    print(f"  Chunks: {len(chunks)}")
+
+
+def load_context_json(filepath: str) -> Tuple[Dict, Dict, List[Dict], Dict, Optional[str]]:
+    """
+    Load context data from JSON file.
+    
+    Args:
+        filepath: Path to the JSON file
+        
+    Returns:
+        Tuple of (char1_data, char2_data, chunks, system_prompt, season_summaries)
+    """
+    with open(filepath, 'r') as f:
+        context = json.load(f)
+    
+    return (
+        context["char1_data"],
+        context["char2_data"],
+        context["chunks"],
+        context["system_prompt"],
+        context.get("season_summaries")
+    )
+
+
+def select_model_params(token_count: int, schema_tokens: int) -> Tuple[str, Dict[str, Any]]:
     """
     Select the appropriate model and parameters based on token count.
     
     Args:
-        token_count: Estimated tokens in the API request
+        token_count: Estimated tokens in the messages
+        schema_tokens: Estimated tokens in the schema
         
     Returns:
         Tuple of (model_name, model_params) 
     """
-    # Only two options as per specification
-    if token_count > 200000:
-        return "gpt-4.1", {"temperature": 0.7}
+    # Total input includes messages + schema + overhead
+    OVERHEAD = 5000  # Increased buffer for protocol overhead and tokenizer differences
+    MAX_OUTPUT = 30000  # Output token reservation
+    total_input = token_count + schema_tokens + OVERHEAD
+    
+    # GPT-5 has 400k window, minus output reservation
+    # Be more conservative to avoid hitting limits
+    GPT5_INPUT_LIMIT = 400000 - MAX_OUTPUT - 5000  # Extra 5k safety margin
+    
+    # Binary model selection: GPT-5 if it fits, otherwise gpt-4.1
+    # Both use Responses API for consistency
+    if total_input < GPT5_INPUT_LIMIT:  # ~370k after reserving output
+        # GPT-5 with reasoning effort
+        return "gpt-5", {
+            "use_responses_api": True,
+            "max_output_tokens": MAX_OUTPUT,
+            "reasoning": {"effort": "high"},
+            "text": {"verbosity": "medium"}
+        }
     else:
-        return "o3", {"reasoning_effort": "high"}
+        # gpt-4.1 for larger contexts
+        return "gpt-4.1", {
+            "use_responses_api": True,
+            "max_output_tokens": MAX_OUTPUT,
+            "temperature": 0.7
+        }
 
 
 def load_system_prompt() -> Dict[str, Any]:
@@ -310,68 +416,132 @@ def format_api_messages(char1_data: Dict, char2_data: Dict, chunks: List[Dict], 
     Returns:
         List of messages for the API call
     """
-    # Convert system prompt dictionary to a string - format with proper indentation for readability
-    # but keep the raw JSON structure for use in the API call
+    # Convert system prompt dictionary to a string for the system role only
     system_content = json.dumps(system_prompt, indent=2)
     
-    # Create user prompt with context
+    # Get character IDs and names for the instruction capsules
+    char1_id = char1_data.get('id')
+    char2_id = char2_data.get('id')
+    char1_name = char1_data.get('name')
+    char2_name = char2_data.get('name')
+    
+    # Check if this is a problematic pair (both IDs between 2-5)
+    # These are the main allied characters who travel with Alex
+    is_problematic_pair = (2 <= char1_id <= 5) and (2 <= char2_id <= 5)
+    
+    # Create the TOP instruction capsule
+    top_capsule = f"""ROLE: Relationship Analyst. Produce a bidirectional relationship analysis for two target characters identified below.
+
+OBJECTIVE: Analyze their current relationship, recent joint events, dynamics, and likely near-term trajectory, using only the provided context.
+
+STRICT PAIR LOCK (use these exact IDs/names; never substitute):
+rel_1_to_2.character1_id = {char1_id}  # {char1_name}
+rel_1_to_2.character2_id = {char2_id}  # {char2_name}
+rel_2_to_1.character1_id = {char2_id}  # {char2_name}
+rel_2_to_1.character2_id = {char1_id}  # {char1_name}
+
+POV & STYLE:
+- The underlying story often uses second-person ("you") for Alex (ID=1). Unless 1 appears in the target pair, treat any "you/Alex" references in the context as bystander material. Do NOT include Alex in the analysis if 1 is not in the pair.
+- Write narrative fields in third person, naming only the two target characters.
+- Be specific, cite concrete events from the provided context; do not invent.
+
+OUTPUT FORMAT:
+- Return ONLY valid JSON that conforms to the provided JSON Schema and field descriptions.
+- No extra keys, no commentary outside JSON."""
+    
+    # Add CRITICAL WARNING for problematic pairs
+    if is_problematic_pair:
+        critical_warning = f"""
+
+⚠️ ⚠️ ⚠️ CRITICAL POV DISAMBIGUATION ⚠️ ⚠️ ⚠️
+
+You are analyzing {char1_name} (ID:{char1_id}) and {char2_name} (ID:{char2_id}) ONLY.
+
+Alex (ID:1) is NOT part of this relationship analysis. The narrative chunks use "you" to show 
+Alex observing these characters, but Alex is merely a witness to {char1_name} and {char2_name}'s 
+interactions. 
+
+CORRECT examples:
+- "{char1_name} trusts {char2_name} with sensitive information..."
+- "{char2_name} often challenges {char1_name}'s decisions..."
+- "The bond between {char1_name} and {char2_name} has grown stronger..."
+
+INCORRECT examples (DO NOT WRITE LIKE THIS):
+- "Alex and {char1_name} work together..." ❌
+- "You/Alex watch as {char1_name} talks to {char2_name}..." ❌  
+- "{char1_name} helps Alex while {char2_name} provides support..." ❌
+
+If you mention Alex ANYWHERE in your analysis, you have misunderstood the task.
+Focus EXCLUSIVELY on how {char1_name} and {char2_name} relate to each other.
+Their relationship exists independently of Alex's presence or perspective."""
+        
+        top_capsule += critical_warning
+    
+    # Create the BOTTOM instruction capsule
+    bottom_capsule = f"""REMINDERS:
+- Use the exact IDs in STRICT PAIR LOCK.
+- Third person only; exclude Alex unless ID=1 is in the pair.
+- Output must validate against the schema; no extra keys; JSON only."""
+    
+    # Add extra reminder for problematic pairs
+    if is_problematic_pair:
+        bottom_capsule += f"""
+- ⚠️ CRITICAL: This analysis is about {char1_name} and {char2_name} ONLY. Alex (ID:1) is NOT involved."""
+    
+    bottom_capsule += """
+FINAL CHECK: Validate continuity and ID mapping, then emit the JSON."""
+    
+    # Format chunks with metadata
     chunk_texts = []
     for chunk in chunks:
         # Add chunk metadata as a header
         metadata = chunk.get('metadata', {})
-        header = f"--- CHUNK ID: {chunk['id']} ---\n"
+        header = f"### Chunk {chunk['id']}"
         
         if metadata:
             season = metadata.get('season')
             episode = metadata.get('episode')
             scene = metadata.get('scene')
             if all(v is not None for v in [season, episode, scene]):
-                header += f"Season {season}, Episode {episode}, Scene {scene}\n"
+                header += f" - Season {season}, Episode {episode}, Scene {scene}"
         
-        # Add the chunk text
-        chunk_texts.append(f"{header}\n{chunk['raw_text']}\n")
+        chunk_text = chunk['raw_text']
+        chunk_texts.append(f"{header}\n\n{chunk_text}")
     
     # Join all chunks together
     all_chunks_text = "\n\n".join(chunk_texts)
     
-    # Create the base user content with character info
-    user_content = f"""
-{system_content}
+    # Build the user message with capsules and structured context
+    user_content = f"""{top_capsule}
 
-Please analyze the relationship between these two characters:
+## Character Summaries
 
-CHARACTER 1:
-ID: {char1_data.get('id')}
-Name: {char1_data.get('name')}
-Aliases: {', '.join(char1_data.get('aliases', [])) if char1_data.get('aliases') else 'None'}
-Summary: {char1_data.get('summary', 'No summary available')}
+**{char1_name} (ID: {char1_id})**
+- Aliases: {', '.join(char1_data.get('aliases', [])) if char1_data.get('aliases') else 'None'}
+- Summary: {char1_data.get('summary', 'No summary available')}
 
-CHARACTER 2:
-ID: {char2_data.get('id')}
-Name: {char2_data.get('name')}
-Aliases: {', '.join(char2_data.get('aliases', [])) if char2_data.get('aliases') else 'None'}
-Summary: {char2_data.get('summary', 'No summary available')}
+**{char2_name} (ID: {char2_id})**
+- Aliases: {', '.join(char2_data.get('aliases', [])) if char2_data.get('aliases') else 'None'}
+- Summary: {char2_data.get('summary', 'No summary available')}
 """
     
     # Add season summaries if provided
     if season_summaries:
-        user_content += f"""
-SEASON SUMMARIES FOR CONTEXT:
+        user_content += f"""\n## Season Context
+
 {season_summaries}
 """
     
-    # Add narrative chunks and closing
-    user_content += f"""
+    # Add narrative chunks
+    user_content += f"""\n## Narrative Chunks
+
 Below are all narrative chunks where both characters appear together:
 
 {all_chunks_text}
 
-Based on these interactions, generate detailed bidirectional relationship data for these characters.
-
-{system_content}
-"""
+{bottom_capsule}"""
     
-    # Create the full message list
+    # Create the message list with system prompt only in system role
     messages = [
         {"role": "system", "content": system_content},
         {"role": "user", "content": user_content},
@@ -427,33 +597,99 @@ def call_openai_api(messages: List[Dict], model: str, model_params: Dict, char1_
         
         # Clean up the schema
         prune_refs(schema)
+        minify_schema(schema)  # Remove verbose fields to reduce token usage
+        
+        # SCHEMA HARD-LOCK: Enforce character IDs at schema level
+        # This prevents the model from returning different IDs than requested
+        # The schema uses $ref, so we need to modify the referenced definition
+        if '$defs' in schema and 'CharacterRelationship' in schema['$defs']:
+            rel_schema = schema['$defs']['CharacterRelationship']
+            if 'properties' in rel_schema:
+                # Add const constraints to enforce exact IDs
+                # We need to handle both directions properly
+                # For rel_1_to_2: char1_id -> char2_id
+                # For rel_2_to_1: char2_id -> char1_id
+                
+                # Create two separate schemas for each direction
+                schema['$defs']['CharacterRelationship_1_to_2'] = json.loads(json.dumps(rel_schema))
+                schema['$defs']['CharacterRelationship_2_to_1'] = json.loads(json.dumps(rel_schema))
+                
+                # Set constraints for first direction
+                schema['$defs']['CharacterRelationship_1_to_2']['properties']['character1_id']['const'] = char1_id
+                schema['$defs']['CharacterRelationship_1_to_2']['properties']['character2_id']['const'] = char2_id
+                
+                # Set constraints for second direction  
+                schema['$defs']['CharacterRelationship_2_to_1']['properties']['character1_id']['const'] = char2_id
+                schema['$defs']['CharacterRelationship_2_to_1']['properties']['character2_id']['const'] = char1_id
+                
+                # Update the references
+                schema['properties']['rel_1_to_2']['$ref'] = '#/$defs/CharacterRelationship_1_to_2'
+                schema['properties']['rel_2_to_1']['$ref'] = '#/$defs/CharacterRelationship_2_to_1'
 
-        params = {
-            "model": model,  # Use the model parameter passed to the function
-            "messages": messages,
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name":   "character_relationship_pair",
-                    "schema": schema,
-                    "strict": True                            # Keeping the strict parameter
+        # All models now use the Responses API
+        use_responses_api = model_params.pop('use_responses_api', True)
+        
+        if use_responses_api:  # Always true now, but keeping structure for clarity
+            # Use the Responses API for GPT-5 and gpt-4.1
+            params = {
+                "model": model,
+                "input": messages,  # 'input' instead of 'messages'
+                "text": {
+                    "format": {
+                        "type": "json_schema",
+                        "name": "character_relationship_pair",
+                        "schema": schema,  # schema goes directly here for Responses API
+                        "strict": True
+                    },
+                    **model_params.get('text', {})
                 },
-            },
-            **model_params,
-        }
+                "max_output_tokens": model_params.get('max_output_tokens', 30000),
+            }
+            
+            # Add reasoning parameter if present
+            if 'reasoning' in model_params:
+                params['reasoning'] = model_params['reasoning']
+            
+            # Add temperature if present
+            if 'temperature' in model_params:
+                params['temperature'] = model_params['temperature']
+            
+            response = client.responses.create(**params)
+            
+            # Parse the response from Responses API
+            content = response.output_text
+        else:
+            # Use the standard Chat Completions API
+            # Remove responses-specific params if any
+            clean_params = {k: v for k, v in model_params.items() 
+                          if k not in ['reasoning', 'text', 'max_output_tokens']}
+            
+            params = {
+                "model": model,
+                "messages": messages,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "character_relationship_pair",
+                        "schema": schema,
+                        "strict": True
+                    },
+                },
+                **clean_params,
+            }
+            
+            response = client.chat.completions.create(**params)
+            
+            # Parse the response from Chat Completions API
+            content = response.choices[0].message.content
         
-        response = client.chat.completions.create(**params)
-        
-        # Parse the response
-        content = response.choices[0].message.content
-        
-        # Save the response for reference
+        # Save the raw response for debugging
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         os.makedirs(API_RESPONSE_DIR, exist_ok=True)
         
         response_path = os.path.join(
             API_RESPONSE_DIR, 
-            f"relationship_response_{timestamp}.json"
+            f"relationship_response_{char1_id}_{char2_id}_{timestamp}.json"
         )
         
         with open(response_path, 'w') as f:
@@ -462,19 +698,50 @@ def call_openai_api(messages: List[Dict], model: str, model_params: Dict, char1_
         # Parse the content as JSON
         response_json = json.loads(content)
         
-        # Convert to Pydantic model and validate character IDs
+        # Convert to Pydantic model
         relationship_pair = CharacterRelationshipPair.model_validate(response_json)
         
-        # Validate and fix character IDs if needed
-        if relationship_pair.rel_1_to_2.character1_id != char1_id or relationship_pair.rel_1_to_2.character2_id != char2_id:
-            # Fix the relationship from char1 to char2
-            relationship_pair.rel_1_to_2.character1_id = char1_id
-            relationship_pair.rel_1_to_2.character2_id = char2_id
+        # FAIL-FAST VALIDATION: Check for ID mismatches and raise error instead of silently fixing
+        if (relationship_pair.rel_1_to_2.character1_id != char1_id or 
+            relationship_pair.rel_1_to_2.character2_id != char2_id):
+            raise ValueError(
+                f"ID mismatch in rel_1_to_2. Expected ({char1_id}->{char2_id}), "
+                f"got ({relationship_pair.rel_1_to_2.character1_id}->{relationship_pair.rel_1_to_2.character2_id}). "
+                f"This indicates the model is confusing character identities."
+            )
             
-        if relationship_pair.rel_2_to_1.character1_id != char2_id or relationship_pair.rel_2_to_1.character2_id != char1_id:
-            # Fix the relationship from char2 to char1
-            relationship_pair.rel_2_to_1.character1_id = char2_id
-            relationship_pair.rel_2_to_1.character2_id = char1_id
+        if (relationship_pair.rel_2_to_1.character1_id != char2_id or 
+            relationship_pair.rel_2_to_1.character2_id != char1_id):
+            raise ValueError(
+                f"ID mismatch in rel_2_to_1. Expected ({char2_id}->{char1_id}), "
+                f"got ({relationship_pair.rel_2_to_1.character1_id}->{relationship_pair.rel_2_to_1.character2_id}). "
+                f"This indicates the model is confusing character identities."
+            )
+        
+        # OUTPUT VALIDATION: Check for Alex mentions when Alex not in pair
+        if char1_id != 1 and char2_id != 1:
+            # Check all text fields for Alex mentions
+            import re
+            alex_pattern = re.compile(r'\bAlex\b', re.IGNORECASE)
+            
+            fields_to_check = [
+                ('rel_1_to_2.dynamic', relationship_pair.rel_1_to_2.dynamic),
+                ('rel_1_to_2.recent_events', relationship_pair.rel_1_to_2.recent_events),
+                ('rel_1_to_2.history', relationship_pair.rel_1_to_2.history),
+                ('rel_2_to_1.dynamic', relationship_pair.rel_2_to_1.dynamic),
+                ('rel_2_to_1.recent_events', relationship_pair.rel_2_to_1.recent_events),
+                ('rel_2_to_1.history', relationship_pair.rel_2_to_1.history),
+            ]
+            
+            alex_mentions = []
+            for field_name, field_value in fields_to_check:
+                if field_value and alex_pattern.search(field_value):
+                    alex_mentions.append(field_name)
+            
+            if alex_mentions:
+                print(f"WARNING: Alex mentioned in fields {alex_mentions} when analyzing pair ({char1_id}, {char2_id})")
+                print("This suggests the model is incorrectly including Alex in the analysis.")
+                # Could optionally raise an error or trigger a retry here
         
         return relationship_pair
     
@@ -578,7 +845,7 @@ def save_relationship_data(
                 
                 # No more relationship IDs - just return the character IDs as confirmation
                 char1_id = row_1_to_2['character1_id'] 
-                char2_id = row_2_to_1['character1_id']
+                char2_id = row_1_to_2['character2_id']
                 
                 # Commit transaction (should happen automatically with context manager)
             
@@ -610,6 +877,13 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--season-summaries', action='store_true',
                        help='Include season summaries in the context for more background')
     
+    # Context save/load options
+    context_group = parser.add_argument_group('Context Options')
+    context_group.add_argument('--save', type=str, metavar='FILE',
+                       help='Save context to JSON file without making API call')
+    context_group.add_argument('--load', type=str, metavar='FILE',
+                       help='Load context from JSON file and make API call')
+    
     # Debug options
     debug_group = parser.add_argument_group('Debug Options')
     debug_group.add_argument('--debug', action='store_true',
@@ -623,14 +897,22 @@ def parse_arguments() -> argparse.Namespace:
     
     args = parser.parse_args()
     
-    # Validate characters argument
-    try:
-        char_ids = [int(char_id.strip()) for char_id in args.c.split(',')]
-        if len(char_ids) != 2:
-            raise ValueError("Exactly two character IDs must be provided")
-        args.character_ids = char_ids
-    except ValueError as e:
-        parser.error(f"Invalid character IDs: {e}")
+    # Check for conflicting arguments
+    if args.save and args.load:
+        parser.error("Cannot use --save and --load together")
+    
+    # Validate characters argument (not required for --load)
+    if not args.load:
+        try:
+            char_ids = [int(char_id.strip()) for char_id in args.c.split(',')]
+            if len(char_ids) != 2:
+                raise ValueError("Exactly two character IDs must be provided")
+            args.character_ids = char_ids
+        except ValueError as e:
+            parser.error(f"Invalid character IDs: {e}")
+    else:
+        # For --load, we'll get character IDs from the loaded file
+        args.character_ids = None
     
     # Set up terminal colors (if supported and not disabled)
     # This modifies args in place to add color-related attributes
@@ -736,6 +1018,95 @@ def check_existing_relationships(engine, char1_id: int, char2_id: int) -> bool:
         result2 = session.execute(stmt2).first()
         
         return bool(result1 or result2)
+
+
+def get_existing_relationships(engine, char1_id: int, char2_id: int) -> Optional[Dict]:
+    """Fetch existing relationship data from the database for comparison."""
+    with Session(engine) as session:
+        relationships_table = Table('character_relationships', MetaData(), autoload_with=engine)
+        
+        # Get both directions
+        stmt1 = select(relationships_table).where(
+            relationships_table.c.character1_id == char1_id,
+            relationships_table.c.character2_id == char2_id
+        )
+        stmt2 = select(relationships_table).where(
+            relationships_table.c.character1_id == char2_id,
+            relationships_table.c.character2_id == char1_id
+        )
+        
+        result1 = session.execute(stmt1).first()
+        result2 = session.execute(stmt2).first()
+        
+        if not result1 and not result2:
+            return None
+            
+        existing_data = {}
+        if result1:
+            existing_data['rel_1_to_2'] = dict(result1._mapping)
+        if result2:
+            existing_data['rel_2_to_1'] = dict(result2._mapping)
+            
+        return existing_data
+
+
+def confirm_overwrite_with_preview(
+    existing_data: Dict,
+    new_data: CharacterRelationshipPair,
+    char1_name: str,
+    char2_name: str,
+    args
+) -> bool:
+    """
+    Show a comparison of existing vs new relationship data and ask for confirmation.
+    
+    Returns:
+        True if user confirms overwrite, False otherwise
+    """
+    print(f"\n{args.YELLOW}═══ EXISTING vs NEW RELATIONSHIP DATA ═══{args.RESET}\n")
+    
+    # Show rel_1_to_2 comparison
+    print(f"{args.BLUE}━━━ {char1_name} → {char2_name} ━━━{args.RESET}")
+    
+    if 'rel_1_to_2' in existing_data:
+        old = existing_data['rel_1_to_2']
+        new = new_data.rel_1_to_2.model_dump()
+        
+        print(f"\n{args.RED}[EXISTING]{args.RESET}")
+        print(f"  Type: {old.get('relationship_type', 'N/A')}")
+        print(f"  Valence: {old.get('emotional_valence', 'N/A')}")
+        print(f"  Dynamic: {old.get('dynamic', 'N/A')[:200]}..." if old.get('dynamic') else "  Dynamic: N/A")
+        print(f"  Recent: {old.get('recent_events', 'N/A')[:200]}..." if old.get('recent_events') else "  Recent: N/A")
+        
+        print(f"\n{args.GREEN}[NEW]{args.RESET}")
+        print(f"  Type: {new['relationship_type']}")
+        print(f"  Valence: {new['emotional_valence']}")
+        print(f"  Dynamic: {new['dynamic'][:200]}...")
+        print(f"  Recent: {new['recent_events'][:200]}...")
+    
+    # Show rel_2_to_1 comparison
+    print(f"\n{args.BLUE}━━━ {char2_name} → {char1_name} ━━━{args.RESET}")
+    
+    if 'rel_2_to_1' in existing_data:
+        old = existing_data['rel_2_to_1']
+        new = new_data.rel_2_to_1.model_dump()
+        
+        print(f"\n{args.RED}[EXISTING]{args.RESET}")
+        print(f"  Type: {old.get('relationship_type', 'N/A')}")
+        print(f"  Valence: {old.get('emotional_valence', 'N/A')}")
+        print(f"  Dynamic: {old.get('dynamic', 'N/A')[:200]}..." if old.get('dynamic') else "  Dynamic: N/A")
+        print(f"  Recent: {old.get('recent_events', 'N/A')[:200]}..." if old.get('recent_events') else "  Recent: N/A")
+        
+        print(f"\n{args.GREEN}[NEW]{args.RESET}")
+        print(f"  Type: {new['relationship_type']}")
+        print(f"  Valence: {new['emotional_valence']}")
+        print(f"  Dynamic: {new['dynamic'][:200]}...")
+        print(f"  Recent: {new['recent_events'][:200]}...")
+    
+    print(f"\n{args.YELLOW}═══════════════════════════════════════{args.RESET}\n")
+    
+    confirm = input(f"{args.YELLOW}Do you want to overwrite the existing data with the new data? (y/n): {args.RESET}")
+    return confirm.lower() == 'y'
 
 
 def get_character_data(engine, char_id: int) -> Optional[Dict]:
@@ -1034,71 +1405,130 @@ def main():
     """Main entry point for the script."""
     args = parse_arguments()
     
-    if not args.quiet:
-        print(f"{args.BLUE}Generating relationship data for characters: {args.character_ids}{args.RESET}")
-    
-    # Create database connection
-    engine = create_db_connection()
-    
-    # Extract character IDs
-    char1_id, char2_id = args.character_ids
-    
-    # Get character data
-    char1_data = get_character_data(engine, char1_id)
-    char2_data = get_character_data(engine, char2_id)
-    
-    if not char1_data or not char2_data:
-        print(f"{args.RED}Error: One or both characters not found. Exiting.{args.RESET}")
-        return 1
-    
-    if not args.quiet:
-        print(f"Analyzing relationship between {args.GREEN}{char1_data['name']}{args.RESET} and {args.GREEN}{char2_data['name']}{args.RESET}")
-    
-    # Check for existing relationships
-    if check_existing_relationships(engine, char1_id, char2_id) and not args.force:
-        confirm = input(f"{args.YELLOW}Relationships already exist between {char1_data['name']} and {char2_data['name']}. Overwrite? (y/n): {args.RESET}")
-        if confirm.lower() != 'y':
-            print("Operation cancelled.")
+    # Handle --load option: load context from file and skip to API call
+    if args.load:
+        if not os.path.exists(args.load):
+            print(f"{args.RED}Error: File {args.load} not found.{args.RESET}")
+            return 1
+            
+        if not args.quiet:
+            print(f"Loading context from {args.load}")
+        
+        # Load context from file
+        char1_data, char2_data, chunks, system_prompt, season_summaries = load_context_json(args.load)
+        
+        # Set character IDs for later use
+        char1_id = char1_data['id']
+        char2_id = char2_data['id']
+        
+        if not args.quiet:
+            print(f"Loaded context for {char1_data['name']} and {char2_data['name']}")
+            print(f"Chunks in file: {len(chunks)}")
+        
+        # Create database connection (still needed for saving results)
+        engine = create_db_connection()
+        
+    else:
+        # Normal flow: gather context from database
+        if not args.quiet:
+            print(f"{args.BLUE}Generating relationship data for characters: {args.character_ids}{args.RESET}")
+        
+        # Create database connection
+        engine = create_db_connection()
+        
+        # Extract character IDs
+        char1_id, char2_id = args.character_ids
+        
+        # Get character data
+        char1_data = get_character_data(engine, char1_id)
+        char2_data = get_character_data(engine, char2_id)
+        
+        if not char1_data or not char2_data:
+            print(f"{args.RED}Error: One or both characters not found. Exiting.{args.RESET}")
+            return 1
+        
+        if not args.quiet:
+            print(f"Analyzing relationship between {args.GREEN}{char1_data['name']}{args.RESET} and {args.GREEN}{char2_data['name']}{args.RESET}")
+        
+        # Check for existing relationships (skip for --save)
+        if not args.save:
+            if check_existing_relationships(engine, char1_id, char2_id) and not args.force:
+                confirm = input(f"{args.YELLOW}Relationships already exist between {char1_data['name']} and {char2_data['name']}. Overwrite? (y/n): {args.RESET}")
+                if confirm.lower() != 'y':
+                    print("Operation cancelled.")
+                    return 0
+        
+        # Get narrative chunks where both characters appear
+        chunks = get_shared_narrative_chunks(engine, char1_id, char2_id, args.debug)
+        
+        if not chunks:
+            print(f"{args.RED}No shared narrative chunks found for {char1_data['name']} and {char2_data['name']}.{args.RESET}")
+            if not args.quiet:
+                print("Characters must appear together in at least one narrative chunk to generate relationship data.")
+            return 1
+        
+        if not args.quiet:
+            print(f"Found {args.GREEN}{len(chunks)}{args.RESET} shared narrative chunks")
+        
+        # Load the system prompt
+        system_prompt = load_system_prompt()
+        
+        # Get season summaries if requested
+        season_summaries = None
+        if args.season_summaries:
+            if not args.quiet:
+                print(f"Retrieving season summaries for additional context...")
+            season_summaries = get_season_summaries(engine)
+        
+        # Handle --save option: save context and exit
+        if args.save:
+            save_context_json(args.save, char1_data, char2_data, chunks, system_prompt, season_summaries)
             return 0
-    
-    # Get narrative chunks where both characters appear
-    chunks = get_shared_narrative_chunks(engine, char1_id, char2_id, args.debug)
-    
-    if not chunks:
-        print(f"{args.RED}No shared narrative chunks found for {char1_data['name']} and {char2_data['name']}.{args.RESET}")
-        if not args.quiet:
-            print("Characters must appear together in at least one narrative chunk to generate relationship data.")
-        return 1
-    
-    if not args.quiet:
-        print(f"Found {args.GREEN}{len(chunks)}{args.RESET} shared narrative chunks")
-    
-    # We no longer truncate chunks in test mode as we want to see all chunks
-    # This allows us to verify they're being fetched and sorted correctly
-    
-    # Load the system prompt
-    system_prompt = load_system_prompt()
-    
-    # Get season summaries if requested
-    season_summaries = None
-    if args.season_summaries:
-        if not args.quiet:
-            print(f"Retrieving season summaries for additional context...")
-        season_summaries = get_season_summaries(engine)
     
     # Format API messages
     messages = format_api_messages(char1_data, char2_data, chunks, system_prompt, season_summaries)
     
-    # Count tokens for all messages combined
-    combined_text = ''.join(msg['content'] for msg in messages)
-    token_count = count_tokens(combined_text)
+    # Count tokens for messages including JSON structure
+    # For Responses API, the input is serialized as JSON
+    # We need to count the actual payload that will be sent
+    messages_json = json.dumps(messages, separators=(',', ':'))
+    message_tokens = count_tokens(messages_json)
     
-    # Select model and parameters based on token count
-    model, model_params = select_model_params(token_count)
+    # Add extra overhead for Responses API wrapper
+    # The API adds protocol overhead around our input
+    PROTOCOL_OVERHEAD = 500  # Additional tokens for API protocol
+    
+    # Calculate schema tokens (we need to generate and minify the schema first)
+    schema = CharacterRelationshipPair.model_json_schema()
+    
+    # Clean up schema - same process as in API call
+    def prune_refs(node: object) -> None:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                for extra in list(node.keys() - {"$ref"}):
+                    node.pop(extra, None)
+            for v in node.values():
+                prune_refs(v)
+        elif isinstance(node, list):
+            for item in node:
+                prune_refs(item)
+    
+    prune_refs(schema)
+    minify_schema(schema)
+    schema_tokens = count_schema_tokens(schema)
+    
+    # Select model and parameters based on total token count
+    model, model_params = select_model_params(message_tokens, schema_tokens)
+    
+    # Always print token counts and model selection
+    total_tokens = message_tokens + schema_tokens + 2000 + PROTOCOL_OVERHEAD
+    print(f"Message tokens: {args.BLUE}{message_tokens:,}{args.RESET}")
+    print(f"Schema tokens: {args.BLUE}{schema_tokens:,}{args.RESET}")
+    print(f"Protocol overhead: {args.BLUE}{2000 + PROTOCOL_OVERHEAD:,}{args.RESET}")
+    print(f"Total input: {args.BLUE}{total_tokens:,}{args.RESET} tokens")
+    print(f"Selected model: {args.GREEN}{model}{args.RESET}")
     
     if args.debug:
-        print(f"Token count: {args.BLUE}{token_count}{args.RESET}")
-        print(f"Selected model: {args.BLUE}{model}{args.RESET}")
         print(f"Model parameters: {model_params}")
     
     # Save context for debugging if requested
@@ -1139,7 +1569,24 @@ def main():
         relationship_data = call_openai_api(messages, model, model_params, char1_id, char2_id)
         
         if not args.quiet:
-            print(f"{args.GREEN}API call successful. Saving relationship data to database...{args.RESET}")
+            print(f"{args.GREEN}API call successful.{args.RESET}")
+        
+        # Check if we need to show comparison and get confirmation
+        existing_data = get_existing_relationships(engine, char1_id, char2_id)
+        if existing_data and not args.force:
+            # Show comparison and ask for confirmation
+            if not confirm_overwrite_with_preview(
+                existing_data, 
+                relationship_data, 
+                char1_data['name'], 
+                char2_data['name'],
+                args
+            ):
+                print("Operation cancelled. New data was not saved.")
+                return 0
+        
+        if not args.quiet:
+            print(f"Saving relationship data to database...")
         
         char_ids = save_relationship_data(engine, relationship_data)
         
