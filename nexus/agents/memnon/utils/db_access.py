@@ -144,6 +144,7 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                     cm.season, 
                     cm.episode, 
                     cm.scene as scene_number,
+                    nv.world_time,
                     1 - (ce.embedding <=> %s::vector({dimensions})) as score  -- Cosine similarity (1 - distance)
                 FROM 
                     narrative_chunks nc
@@ -151,6 +152,8 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                     {table_name} ce ON nc.id = ce.chunk_id
                 JOIN 
                     chunk_metadata cm ON nc.id = cm.chunk_id
+                LEFT JOIN
+                    narrative_view nv ON nc.id = nv.id
                 WHERE 
                     ce.model = %s
                     {filter_sql}
@@ -166,7 +169,7 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                 
                 # Process results
                 for result in query_results:
-                    chunk_id, raw_text, season, episode, scene_number, score = result
+                    chunk_id, raw_text, season, episode, scene_number, world_time, score = result
                     chunk_id = str(chunk_id)
                     
                     if chunk_id not in results:
@@ -178,7 +181,8 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                             'metadata': {
                                 'season': season,
                                 'episode': episode,
-                                'scene_number': scene_number
+                                'scene_number': scene_number,
+                                'world_time': world_time
                             },
                             'model_scores': {},
                             'score': float(score) if score is not None else 0.0,
@@ -316,12 +320,15 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                         cm.season, 
                         cm.episode, 
                         cm.scene as scene_number,
+                        nv.world_time,
                         ts_rank(to_tsvector('english', nc.raw_text), 
                                 to_tsquery('english', %s)) AS text_score
                     FROM 
                         narrative_chunks nc
                     JOIN 
                         chunk_metadata cm ON nc.id = cm.chunk_id
+                    LEFT JOIN
+                        narrative_view nv ON nc.id = nv.id
                     WHERE 
                         to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
                         {filter_sql}
@@ -350,12 +357,15 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                         cm.season, 
                         cm.episode, 
                         cm.scene as scene_number,
+                        nv.world_time,
                         ts_rank(to_tsvector('english', nc.raw_text), 
                                 to_tsquery('english', %s)) AS text_score
                     FROM 
                         narrative_chunks nc
                     JOIN 
                         chunk_metadata cm ON nc.id = cm.chunk_id
+                    LEFT JOIN
+                        narrative_view nv ON nc.id = nv.id
                     WHERE 
                         to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
                         {filter_sql}
@@ -376,7 +386,7 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                 
                 # First pass: collect all text scores to find max for normalization
                 for result in cursor.fetchall():
-                    chunk_id, raw_text, season, episode, scene_number, text_score = result
+                    chunk_id, raw_text, season, episode, scene_number, world_time, text_score = result
                     text_score = float(text_score)
                     all_text_scores.append(text_score)
                     chunk_id = str(chunk_id)
@@ -386,7 +396,8 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                         'metadata': {
                             'season': season,
                             'episode': episode,
-                            'scene_number': scene_number
+                            'scene_number': scene_number,
+                            'world_time': world_time
                         },
                         'raw_text_score': text_score,  # Keep raw score temporarily
                         'vector_score': 0.0  # Default until we get vector scores
@@ -797,12 +808,15 @@ def execute_multi_model_hybrid_search(
                     cm.season, 
                     cm.episode, 
                     cm.scene as scene_number,
+                    nv.world_time,
                     ts_rank(to_tsvector('english', nc.raw_text), 
                             websearch_to_tsquery('english', %s)) AS text_score
                 FROM 
                     narrative_chunks nc
                 JOIN 
                     chunk_metadata cm ON nc.id = cm.chunk_id
+                LEFT JOIN
+                    narrative_view nv ON nc.id = nv.id
                 WHERE 
                     to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
                     {filter_sql}
@@ -820,7 +834,7 @@ def execute_multi_model_hybrid_search(
                 
                 # First pass: collect all text scores to find max for normalization
                 for result in cursor.fetchall():
-                    chunk_id, raw_text, season, episode, scene_number, text_score = result
+                    chunk_id, raw_text, season, episode, scene_number, world_time, text_score = result
                     text_score = float(text_score)
                     all_text_scores.append(text_score)
                     chunk_id = str(chunk_id)
@@ -834,7 +848,8 @@ def execute_multi_model_hybrid_search(
                             'metadata': {
                                 'season': season,
                                 'episode': episode,
-                                'scene_number': scene_number
+                                'scene_number': scene_number,
+                                'world_time': world_time
                             },
                             'model_scores': {},  # Will store scores for each model
                             'text_score': 0.0,   # Will be normalized
@@ -868,11 +883,14 @@ def execute_multi_model_hybrid_search(
                             nc.raw_text,
                             cm.season, 
                             cm.episode, 
-                            cm.scene as scene_number
+                            cm.scene as scene_number,
+                            nv.world_time
                         FROM 
                             narrative_chunks nc
                         JOIN 
                             chunk_metadata cm ON nc.id = cm.chunk_id
+                        LEFT JOIN
+                            narrative_view nv ON nc.id = nv.id
                         WHERE 
                             nc.raw_text ILIKE '%%' || %s || '%%'
                             {filter_sql}
@@ -880,7 +898,7 @@ def execute_multi_model_hybrid_search(
                         """
                         cursor.execute(like_sql, (single, top_k * 3))
                         for row in cursor.fetchall():
-                            chunk_id, raw_text, season, episode, scene_number = row
+                            chunk_id, raw_text, season, episode, scene_number, world_time = row
                             chunk_id = str(chunk_id)
                             if chunk_id not in results:
                                 results[chunk_id] = {
@@ -891,7 +909,8 @@ def execute_multi_model_hybrid_search(
                                     'metadata': {
                                         'season': season,
                                         'episode': episode,
-                                        'scene_number': scene_number
+                                        'scene_number': scene_number,
+                                        'world_time': world_time
                                     },
                                     'model_scores': {},
                                     'text_score': 0.05,
