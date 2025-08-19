@@ -12,12 +12,16 @@
 /.obsidian/
 /.venv/
 /llama.cpp/
+/context_packages/
+/results/
+/sessions/
 /models/
 /nexus/models/
 /data/
 /.git/objects/pack/
 
-# Ignore logs
+# Ignore logs and temporary files
+temp*.*
 *.log
 log.md
 /log.txt
