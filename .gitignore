@@ -15,11 +15,11 @@
 /.venv/
 /llama.cpp/
 /context_packages/
-/results/
-/sessions/
 /models/
 /nexus/models/
 /data/
+/results/
+/sessions/
 /.git/objects/pack/
 
 # Ignore logs and temporary files
