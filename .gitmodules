@@ -1,3 +1,6 @@
 [submodule "letta"]
 	path = letta
 	url = https://github.com/letta-ai/letta.git
+[submodule "iris"]
+	path = iris
+	url = https://github.com/pythagorakase/nexus-iris.git
