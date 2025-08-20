@@ -31,7 +31,7 @@ There are already numerous rogue-like dungeon-crawlers with satisfyingly deep ru
 Real-time functionality is neither needed nor desired. The system is intentionally and strictly turn-based. In accordance with the overriding emphasis on quality latency is not just acceptable—it is expected.
 
 ## 1.3 Key Concepts
-- **Apex AI**: Frontier LLM (Claude/GPT/Grok) that generates narrative content
+- **Apex AI**: Frontier LLM (Claude/GPT/etc) that generates narrative content
 - **Memory Tiers**: The three-part memory architecture (Strategic, Entity, Narrative)
 - **Warm Slice**: Most recent narrative chunks plus new user input
 - **Cold Distillation**: The process of retrieving and filtering narrative memory
@@ -58,7 +58,7 @@ NEXUS is built on a single-agent orchestration architecture that extends the Let
             ┌─────────────┴─────────────┐
             │      Utility Modules      │
             ├───────────────────────────┤
-            │ PSYCHE │ GAIA │ MEMNON   │
+            │ PSYCHE │ GAIA │ MEMNON    │
             │ NEMESIS│ LOGON│           │
             └─────────────┬─────────────┘
                           │                          
@@ -82,7 +82,7 @@ The system employs two tiers of AI:
 - Generate new narrative to continue from last user input
 - Updates to world state variables
 - Update hidden information
-**Local LLMs** (Llama)
+**Local LLMs** (currently developing and testing with `GPT-OSS`, 120B, 4-bit MLX)
 - LORE agent reasoning and orchestration
 - Utility functions (analysis, retrieval, coordination)
 - Preparation for new narrative
@@ -104,8 +104,7 @@ Data flows through a unified PostgreSQL database with vector extensions that sto
 - Causal Tracking: Understands how past events connect to present situations.
 - Metadata Enhancement: Adds rich contextual metadata to narrative chunks for improved future retrieval.
 
-Module Specifications:
-[[blueprint_lore]]
+*Module specifications under development*
 
 ### PSYCHE (Utility Module)
 `Character Psychology Analysis`
@@ -115,8 +114,7 @@ Module Specifications:
 - Identifies psychological inconsistencies in narrative development
 - Provides character-focused annotations for narrative generation
 
-Module Specifications:
-[[blueprint_psyche]]
+*Module specifications under development*
 
 ### GAIA (Utility Module)
 `World State Tracking`
@@ -131,8 +129,7 @@ Module Specifications:
 - Records new relationships or modifications to existing ones
 - Maintains database consistency and resolves conflicts
 
-Module Specifications:
-[[blueprint_gaia]]
+*Module specifications under development*
 
 ### NEMESIS (Utility Module)
 `Threat Analysis & Narrative Tension`
@@ -141,8 +138,7 @@ Module Specifications:
 - For each threat, identifies potential user courses of action that could escalate or deescalate them.
 - Generates per-turn threat assessment report for Apex AI.
 
-Module Specifications:
-[[blueprint_nemesis]]
+*Module specifications under development*
 
 ### LOGON (Utility Module)
 `API Communication Handler`
@@ -151,8 +147,7 @@ Module Specifications:
 - Make the single API call to generate narrative text
 - Handle API response parsing and error recovery
 
-Module Specifications:
-[[blueprint_logon]]
+*Module specifications under development*
 
 ### MEMNON (Utility Module - Fully Operational)
 `Memory Access & Retrieval System`
@@ -183,6 +178,27 @@ MEMNON is a sophisticated, fully operational information retrieval system that s
 - Comprehensive logging and error handling
 
 Implementation: `nexus/agents/memnon/`
+
+### IRIS (TUI Submodule)
+`Terminal User Interface`
+
+IRIS is a modern React-based terminal user interface for the NEXUS system, developed using the Lovable.dev platform. It provides a retro-terminal aesthetic with modern web technologies.
+
+**Technologies Used**:
+- React with TypeScript
+- Vite for build tooling
+- Tailwind CSS for styling
+- shadcn/ui components
+- Mobile-responsive design with hamburger menu navigation
+
+**Features**:
+- Mechanical keyboard typing animation for narrative display
+- LORE status indicator
+- Map visualization interface
+- Mobile-optimized drawer navigation
+- Real-time narrative streaming
+
+Implementation: `iris/` submodule
 
 ### Auxiliary Modules
 
@@ -215,6 +231,8 @@ The framework is extended with LORE as the primary agent and a series of utility
 - **Tiktoken**: Token counting library for managing context window constraints
 - **Requests**: HTTP library for API interactions
 - **Letta**: Framework for building stateful agents with long-term memory (maintained as a submodule)
+- **GeoAlchemy2**: SQLAlchemy extension for spatial databases, enabling PostGIS functionality for geographic data
+- **Shapely**: Python library for manipulation and analysis of planar geometric objects, supporting GIS operations
 
 ### Hardware
 Performance quality and latency will depend on the user's ability to run a capable local LLM.
@@ -303,46 +321,94 @@ and
 	- emotional tones --> passages with specific moods
 
 # 4. Core Workflows
-## 4.1 Turn Cycle Sequence
+## 4.1 Turn Cycle Sequence (Two-Pass System)
 
 ```
+   ┌─────────────────┐
+   │  Storyteller    │
+   │  Narrative      │
+   └────────┬────────┘
+            │
+            ▼
    ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-   │     User        │   │      Warm       │   │      World      │
-┌─►│     Input       │──►│    Analysis     │──►│      State      │
-│  │                 │   │                 │   │     Report      │
+   │     Pass 1:     │   │    Analysis &   │   │    Store        │
+   │  Context Build  │──►│     Queries     │──►│    Context      │
+   │                 │   │                 │   │                 │
+   └─────────────────┘   └─────────────────┘   └────────┬────────┘
+                                                       │
+                                                       ▼
+   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+   │     User        │   │     Pass 2:     │   │      Gap        │
+┌─►│     Input       │──►│  User Analysis  │──►│    Detection    │
+│  │                 │   │                 │   │                 │
 │  └─────────────────┘   └─────────────────┘   └────────┬────────┘
 │                                                       │
 │                                                       ▼
 │  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │    Payload      │   │      Cold       │   │        Deep     │
-│  │   Assembly      │◄──│  Distillation   │◄──│     Queries     │
-│  │                 │   │                 │   │                 │
-│  └───────┬─────────┘   └─────────────────┘   └─────────────────┘
-│          │
-│          ▼                  
-│  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │     Apex        │   │   [Potential]   │   │        Apex     │
-│  │      API        │──►│     Offline     │──►│         API     │
-│  │     Call        │   │      Mode       │   │    Response     │
+│  │    Context      │   │      Warm       │   │    Payload      │
+│  │   Expansion     │──►│     Slice       │──►│    Assembly     │
+│  │                 │   │    Extension    │   │                 │
 │  └─────────────────┘   └─────────────────┘   └────────┬────────┘
 │                                                       │
-│                                                       ▼ 
+│                                                       ▼
 │  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  │                 │   │                 │   │      World      │
-└──│      Idle       │◄──│    Narrative    │◄──│      State      │
-   │     State       │   │   Integration   │   │     Update      │
-   └─────────────────┘   └─────────────────┘   └─────────────────┘
+│  │     Apex        │   │    Narrative    │   │      State      │
+│  │      API        │──►│   Generation    │──►│     Updates     │
+│  │     Call        │   │                 │   │                 │
+│  └─────────────────┘   └─────────────────┘   └────────┬────────┘
+│                                                       │
+│                                                       ▼
+│  ┌─────────────────┐                       ┌─────────────────┐
+└──│      Idle       │◄───────────────────────│   Integration   │
+   │     State       │                       │   & Storage     │
+   └─────────────────┘                       └─────────────────┘
 ```
 
-Details:
-[[turn_flow_sequence]]
+*Detailed specifications available in `docs/turn_flow_sequence.md`*
 
-## 4.2 Context Assembly Process
-1. `LORE` dynamically calculates a context budget based on Apex AI TPM limits, assigning percentage shares for warm slice, historical passage quotes, and structured information.
-2. `LORE` calls `PSYCHE` utility to formulate queries for most pertinent characters, relationships, and events.
-3. `LORE` uses `MEMNON` utility to retrieve broad pool of candidate chunks using multi-model embeddings, with intermediate filtering and cross-encoder reranking for final selections.
+## 4.2 Context Assembly Process (Two-Pass System)
 
-## 4.3 Query Framework
+The system uses a sophisticated two-pass approach with memory persistence between passes:
+
+### Pass 1: Storyteller-Driven Assembly (75% of token budget)
+When the Storyteller generates narrative:
+1. **Entity Extraction**: Identify all characters, places, events referenced
+2. **Auto-Context Generation**: Use PSYCHE for characters, GAIA for places  
+3. **Vector Retrieval**: Pipe directives directly to MEMNON hybrid search
+4. **Follow-Up Queries**: Execute additional queries to dig deeper
+5. **Self-Summary**: Generate structured memory for Pass 2
+
+### Pass 2: User-Driven Refinement (25% of token budget)
+When user input arrives:
+1. **Load Memory**: Retrieve Pass 1 summary from persistent storage
+2. **Auto-Vector User Input**: Pipe directly to vector search
+3. **Gap Detection**: Use inference to check if novel content exists
+4. **Strategy Decision**:
+   - Novel content → Gap filling with targeted retrieval
+   - No gaps → Simple warm slice expansion
+5. **Fill Until Full**: Continue until ~95-100% token utilization
+
+### Memory Persistence
+The system maintains structured memory between passes, allowing context assembly to resume even after system restarts. This includes entity IDs in context, narrative understanding, known gaps, and executed queries.
+
+## 4.3 Dual-Layer Narrative Architecture
+
+The system operates on two complementary information layers:
+
+### The Visible Layer (Narrative Text)
+- Scenes and events as witnessed by the POV character
+- Dialogue, actions, sensory details
+- Limited by 2nd-person POV perspective
+
+### The Hidden Reality Layer (Structured Data)
+- Episode/season summaries for narrative continuity
+- Character secrets, hidden motivations, inner thoughts
+- Off-screen activities and developments
+- World events beyond protagonist awareness
+
+Both layers are essential: narrative text provides immersive storytelling while structured data maintains hidden states and continuity that create a living, breathing world.
+
+## 4.4 Query Framework
 The Query Framework serves as the communication backbone of NEXUS, enabling structured information exchange between LORE and its utility modules. It extends Letta's existing query capabilities with narrative-specific enhancements.
 
 - **Specialized Query Types**: Purpose-built queries for different narrative needs:
@@ -350,9 +416,10 @@ The Query Framework serves as the communication backbone of NEXUS, enabling stru
     - World state queries (locations, factions, objects, conditions)
     - Narrative context queries (themes, plot continuity, motifs)
     - Multi-domain synthesis queries (complex historical analysis)
-- **Two-Phase Retrieval Process**:
-    - Phase 1: Broad retrieval across memory types using multi-model embeddings
-    - Phase 2: Cross-encoder reranking for final result refinement
+- **Iterative Retrieval Process**:
+    - Initial broad retrieval using multi-model embeddings
+    - Cross-encoder reranking for final result refinement
+    - Adaptive refinement based on results
 - **Cross-Reference System**: Core innovation that connects:
     - Entity-to-narrative links (characters/locations → relevant passages)
     - Temporal indexing (story time + narrative order)
