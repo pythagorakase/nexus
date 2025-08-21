@@ -3,7 +3,6 @@ from collections import defaultdict
 import requests
 from openai import AzureOpenAI
 
-
 from letta.llm_api.openai import prepare_openai_payload
 from letta.schemas.llm_config import LLMConfig
 from letta.schemas.openai.chat_completion_response import ChatCompletionResponse
@@ -37,8 +36,8 @@ def azure_openai_get_deployed_model_list(base_url: str, api_key: str, api_versio
 
     try:
         models_list = client.models.list()
-    except requests.RequestException as e:
-        raise RuntimeError(f"Failed to retrieve model list: {e}")
+    except Exception:
+        return []
 
     all_available_models = [model.to_dict() for model in models_list.data]
 

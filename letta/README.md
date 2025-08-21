@@ -8,26 +8,13 @@
 
 <div align="center">
 <h1>Letta (previously MemGPT)</h1>
-
-**☄️ New release: Letta Agent Development Environment (_read more [here](#-access-the-ade-agent-development-environment)_) ☄️**
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/letta-ai/letta/refs/heads/main/assets/example_ade_screenshot.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/letta-ai/letta/refs/heads/main/assets/example_ade_screenshot_light.png">
-    <img alt="Letta logo" src="https://raw.githubusercontent.com/letta-ai/letta/refs/heads/main/assets/example_ade_screenshot.png" width="800">
-  </picture>
-</p>
-
----
-
 <h3>
 
 [Homepage](https://letta.com) // [Documentation](https://docs.letta.com) // [ADE](https://docs.letta.com/agent-development-environment) // [Letta Cloud](https://forms.letta.com/early-access)
 
 </h3>
 
-**👾 Letta** is an open source framework for building stateful LLM applications. You can use Letta to build **stateful agents** with advanced reasoning capabilities and transparent long-term memory. The Letta framework is white box and model-agnostic.
+**👾 Letta** is an open source framework for building **stateful agents** with advanced reasoning capabilities and transparent long-term memory. The Letta framework is white box and model-agnostic.
 
 [![Discord](https://img.shields.io/discord/1161736243340640419?label=Discord&logo=discord&logoColor=5865F2&style=flat-square&color=5865F2)](https://discord.gg/letta)
 [![Twitter Follow](https://img.shields.io/badge/Follow-%40Letta__AI-1DA1F2?style=flat-square&logo=x&logoColor=white)](https://twitter.com/Letta_AI)
@@ -157,7 +144,7 @@ No, the data in your Letta server database stays on your machine. The Letta ADE 
 
 > _"Do I have to use your ADE? Can I build my own?"_
 
-The ADE is built on top of the (fully open source) Letta server and Letta Agents API. You can build your own application like the ADE on top of the REST API (view the documention [here](https://docs.letta.com/api-reference)).
+The ADE is built on top of the (fully open source) Letta server and Letta Agents API. You can build your own application like the ADE on top of the REST API (view the documentation [here](https://docs.letta.com/api-reference)).
 
 > _"Can I interact with Letta agents via the CLI?"_
 
@@ -180,8 +167,8 @@ docker exec -it $(docker ps -q -f ancestor=letta/letta) letta run
 In the CLI tool, you'll be able to create new agents, or load existing agents:
 ```
 🧬 Creating new agent...
-? Select LLM model: letta-free [type=openai] [ip=https://inference.memgpt.ai]
-? Select embedding model: letta-free [type=hugging-face] [ip=https://embeddings.memgpt.ai]
+? Select LLM model: letta-free [type=openai] [ip=https://inference.letta.com]
+? Select embedding model: letta-free [type=hugging-face] [ip=https://embeddings.letta.com]
 ->  🤖 Using persona profile: 'sam_pov'
 ->  🧑 Using human profile: 'basic'
 ->  🛠️  8 tools: send_message, pause_heartbeats, conversation_search, conversation_search_date, archival_memory_insert, archival_memory_search, core_memory_append, core_memory_replace
@@ -246,8 +233,8 @@ letta run
 ```
 ```
 🧬 Creating new agent...
-? Select LLM model: letta-free [type=openai] [ip=https://inference.memgpt.ai]
-? Select embedding model: letta-free [type=hugging-face] [ip=https://embeddings.memgpt.ai]
+? Select LLM model: letta-free [type=openai] [ip=https://inference.letta.com]
+? Select embedding model: letta-free [type=hugging-face] [ip=https://embeddings.letta.com]
 ->  🤖 Using persona profile: 'sam_pov'
 ->  🧑 Using human profile: 'basic'
 ->  🛠️  8 tools: send_message, pause_heartbeats, conversation_search, conversation_search_date, archival_memory_insert, archival_memory_search, core_memory_append, core_memory_replace

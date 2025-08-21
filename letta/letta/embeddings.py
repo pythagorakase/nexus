@@ -139,10 +139,11 @@ class AzureOpenAIEmbedding:
 
 class OllamaEmbeddings:
 
+    # Uses OpenAI API standard
     # Format:
-    # curl http://localhost:11434/api/embeddings -d '{
+    # curl http://localhost:11434/v1/embeddings -d '{
     #   "model": "mxbai-embed-large",
-    #   "prompt": "Llamas are members of the camelid family"
+    #   "input": "Llamas are members of the camelid family"
     # }'
 
     def __init__(self, model: str, base_url: str, ollama_additional_kwargs: dict):
@@ -154,18 +155,18 @@ class OllamaEmbeddings:
         import httpx
 
         headers = {"Content-Type": "application/json"}
-        json_data = {"model": self.model, "prompt": text}
+        json_data = {"model": self.model, "input": text}
         json_data.update(self.ollama_additional_kwargs)
 
         with httpx.Client() as client:
             response = client.post(
-                f"{self.base_url}/api/embeddings",
+                f"{self.base_url}/embeddings",
                 headers=headers,
                 json=json_data,
             )
 
         response_json = response.json()
-        return response_json["embedding"]
+        return response_json["data"][0]["embedding"]
 
 
 class GoogleEmbeddings:
@@ -190,7 +191,6 @@ class GoogleEmbeddings:
 
 
 class GoogleVertexEmbeddings:
-
     def __init__(self, model: str, project_id: str, region: str):
         from google import genai
 
@@ -203,7 +203,6 @@ class GoogleVertexEmbeddings:
 
 
 class OpenAIEmbeddings:
-
     def __init__(self, api_key: str, model: str, base_url: str):
         if base_url:
             self.client = OpenAI(api_key=api_key, base_url=base_url)
@@ -237,7 +236,7 @@ def embedding_model(config: EmbeddingConfig, user_id: Optional[uuid.UUID] = None
         return OpenAIEmbeddings(
             api_key=model_settings.openai_api_key,
             model=config.embedding_model,
-            base_url=model_settings.openai_api_base,
+            base_url=config.embedding_endpoint or model_settings.openai_api_base,
         )
 
     elif endpoint_type == "azure":

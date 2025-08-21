@@ -1,9 +1,12 @@
-from typing import Dict
+from typing import Dict, Optional
 
 from marshmallow import fields, post_dump, pre_load
+from sqlalchemy import func
+from sqlalchemy.orm import sessionmaker
 
 import letta
 from letta.orm import Agent
+from letta.orm import Message as MessageModel
 from letta.schemas.agent import AgentState as PydanticAgentState
 from letta.schemas.user import User
 from letta.serialize_schemas.marshmallow_agent_environment_variable import SerializedAgentEnvironmentVariableSchema
@@ -13,7 +16,7 @@ from letta.serialize_schemas.marshmallow_custom_fields import EmbeddingConfigFie
 from letta.serialize_schemas.marshmallow_message import SerializedMessageSchema
 from letta.serialize_schemas.marshmallow_tag import SerializedAgentTagSchema
 from letta.serialize_schemas.marshmallow_tool import SerializedToolSchema
-from letta.server.db import SessionLocal
+from letta.settings import DatabaseChoice, settings
 
 
 class MarshmallowAgentSchema(BaseSchema):
@@ -27,22 +30,23 @@ class MarshmallowAgentSchema(BaseSchema):
     FIELD_VERSION = "version"
     FIELD_MESSAGES = "messages"
     FIELD_MESSAGE_IDS = "message_ids"
-    FIELD_IN_CONTEXT = "in_context"
+    FIELD_IN_CONTEXT_INDICES = "in_context_message_indices"
     FIELD_ID = "id"
 
     llm_config = LLMConfigField()
     embedding_config = EmbeddingConfigField()
+
     tool_rules = ToolRulesField()
 
-    messages = fields.List(fields.Nested(SerializedMessageSchema))
     core_memory = fields.List(fields.Nested(SerializedBlockSchema))
     tools = fields.List(fields.Nested(SerializedToolSchema))
     tool_exec_environment_variables = fields.List(fields.Nested(SerializedAgentEnvironmentVariableSchema))
     tags = fields.List(fields.Nested(SerializedAgentTagSchema))
 
-    def __init__(self, *args, session: SessionLocal, actor: User, **kwargs):
+    def __init__(self, *args, session: sessionmaker, actor: User, max_steps: Optional[int] = None, **kwargs):
         super().__init__(*args, actor=actor, **kwargs)
         self.session = session
+        self.max_steps = max_steps
 
         # Propagate session and actor to nested schemas automatically
         for field in self.fields.values():
@@ -54,22 +58,163 @@ class MarshmallowAgentSchema(BaseSchema):
                 field.schema.actor = actor
 
     @post_dump
+    def attach_messages(self, data: Dict, **kwargs):
+        """
+        After dumping the agent, load all its Message rows and serialize them here.
+        """
+        # TODO: This is hacky, but want to move fast, please refactor moving forward
+        from letta.server.db import db_registry
+
+        with db_registry.session() as session:
+            agent_id = data.get("id")
+
+            if self.max_steps is not None:
+                # first, always get the system message
+                system_msg = (
+                    session.query(MessageModel)
+                    .filter(
+                        MessageModel.agent_id == agent_id,
+                        MessageModel.organization_id == self.actor.organization_id,
+                        MessageModel.role == "system",
+                    )
+                    .order_by(MessageModel.sequence_id.asc())
+                    .first()
+                )
+
+                if settings.database_engine is DatabaseChoice.POSTGRES:
+                    # efficient PostgreSQL approach using subquery
+                    user_msg_subquery = (
+                        session.query(MessageModel.sequence_id)
+                        .filter(
+                            MessageModel.agent_id == agent_id,
+                            MessageModel.organization_id == self.actor.organization_id,
+                            MessageModel.role == "user",
+                        )
+                        .order_by(MessageModel.sequence_id.desc())
+                        .limit(self.max_steps)
+                        .subquery()
+                    )
+
+                    # get the minimum sequence_id from the subquery
+                    cutoff_sequence_id = session.query(func.min(user_msg_subquery.c.sequence_id)).scalar()
+
+                    if cutoff_sequence_id:
+                        # get messages from cutoff, excluding system message to avoid duplicates
+                        step_msgs = (
+                            session.query(MessageModel)
+                            .filter(
+                                MessageModel.agent_id == agent_id,
+                                MessageModel.organization_id == self.actor.organization_id,
+                                MessageModel.sequence_id >= cutoff_sequence_id,
+                                MessageModel.role != "system",
+                            )
+                            .order_by(MessageModel.sequence_id.asc())
+                            .all()
+                        )
+                        # combine system message with step messages
+                        msgs = [system_msg] + step_msgs if system_msg else step_msgs
+                    else:
+                        # no user messages, just return system message
+                        msgs = [system_msg] if system_msg else []
+                else:
+                    # sqlite approach: get all user messages first, then get messages from cutoff
+                    user_messages = (
+                        session.query(MessageModel.sequence_id)
+                        .filter(
+                            MessageModel.agent_id == agent_id,
+                            MessageModel.organization_id == self.actor.organization_id,
+                            MessageModel.role == "user",
+                        )
+                        .order_by(MessageModel.sequence_id.desc())
+                        .limit(self.max_steps)
+                        .all()
+                    )
+
+                    if user_messages:
+                        # get the minimum sequence_id
+                        cutoff_sequence_id = min(msg.sequence_id for msg in user_messages)
+
+                        # get messages from cutoff, excluding system message to avoid duplicates
+                        step_msgs = (
+                            session.query(MessageModel)
+                            .filter(
+                                MessageModel.agent_id == agent_id,
+                                MessageModel.organization_id == self.actor.organization_id,
+                                MessageModel.sequence_id >= cutoff_sequence_id,
+                                MessageModel.role != "system",
+                            )
+                            .order_by(MessageModel.sequence_id.asc())
+                            .all()
+                        )
+                        # combine system message with step messages
+                        msgs = [system_msg] + step_msgs if system_msg else step_msgs
+                    else:
+                        # no user messages, just return system message
+                        msgs = [system_msg] if system_msg else []
+            else:
+                # if no limit, get all messages in ascending order
+                msgs = (
+                    session.query(MessageModel)
+                    .filter(
+                        MessageModel.agent_id == agent_id,
+                        MessageModel.organization_id == self.actor.organization_id,
+                    )
+                    .order_by(MessageModel.sequence_id.asc())
+                    .all()
+                )
+
+            # overwrite the "messages" key with a fully serialized list
+            data[self.FIELD_MESSAGES] = [SerializedMessageSchema(session=self.session, actor=self.actor).dump(m) for m in msgs]
+
+        return data
+
+    @post_dump
     def sanitize_ids(self, data: Dict, **kwargs):
         """
         - Removes `message_ids`
         - Adds versioning
-        - Marks messages as in-context
+        - Marks messages as in-context, preserving the order of the original `message_ids`
         - Removes individual message `id` fields
         """
-        data = super().sanitize_ids(data, **kwargs)
+        del data["id"]
+        del data["_created_by_id"]
+        del data["_last_updated_by_id"]
         data[self.FIELD_VERSION] = letta.__version__
 
-        message_ids = set(data.pop(self.FIELD_MESSAGE_IDS, []))  # Store and remove message_ids
+        original_message_ids = data.pop(self.FIELD_MESSAGE_IDS, [])
+        messages = data.get(self.FIELD_MESSAGES, [])
 
-        for message in data.get(self.FIELD_MESSAGES, []):
-            message[self.FIELD_IN_CONTEXT] = message[self.FIELD_ID] in message_ids  # Mark messages as in-context
-            message.pop(self.FIELD_ID, None)  # Remove the id field
+        # Build a mapping from message id to its first occurrence index and remove the id in one pass
+        id_to_index = {}
+        for idx, message in enumerate(messages):
+            msg_id = message.pop(self.FIELD_ID, None)
+            if msg_id is not None and msg_id not in id_to_index:
+                id_to_index[msg_id] = idx
 
+        # Build in-context indices in the same order as the original message_ids
+        in_context_indices = [id_to_index[msg_id] for msg_id in original_message_ids if msg_id in id_to_index]
+
+        data[self.FIELD_IN_CONTEXT_INDICES] = in_context_indices
+        data[self.FIELD_MESSAGES] = messages
+
+        return data
+
+    @pre_load
+    def regenerate_ids(self, data: Dict, **kwargs) -> Dict:
+        if self.Meta.model:
+            data["id"] = self.generate_id()
+            data["_created_by_id"] = self.actor.id
+            data["_last_updated_by_id"] = self.actor.id
+
+        return data
+
+    @post_dump
+    def hide_tool_exec_environment_variables(self, data: Dict, **kwargs):
+        """Hide the value of tool_exec_environment_variables"""
+
+        for env_var in data.get("tool_exec_environment_variables", []):
+            # need to be re-set at load time
+            env_var["value"] = ""
         return data
 
     @pre_load
@@ -81,21 +226,6 @@ class MarshmallowAgentSchema(BaseSchema):
         del data[self.FIELD_VERSION]
         return data
 
-    @pre_load
-    def remap_in_context_messages(self, data, **kwargs):
-        """
-        Restores `message_ids` by collecting message IDs where `in_context` is True,
-        generates new IDs for all messages, and removes `in_context` from all messages.
-        """
-        message_ids = []
-        for msg in data.get(self.FIELD_MESSAGES, []):
-            msg[self.FIELD_ID] = SerializedMessageSchema.generate_id()  # Generate new ID
-            if msg.pop(self.FIELD_IN_CONTEXT, False):  # If it was in-context, track its new ID
-                message_ids.append(msg[self.FIELD_ID])
-
-        data[self.FIELD_MESSAGE_IDS] = message_ids
-        return data
-
     class Meta(BaseSchema.Meta):
         model = Agent
         exclude = BaseSchema.Meta.exclude + (
@@ -103,6 +233,9 @@ class MarshmallowAgentSchema(BaseSchema):
             "template_id",
             "base_template_id",
             "sources",
-            "source_passages",
-            "agent_passages",
+            "identities",
+            "is_deleted",
+            "groups",
+            "batch_items",
+            "organization",
         )

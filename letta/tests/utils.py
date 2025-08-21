@@ -1,17 +1,17 @@
-import datetime
 import os
+import random
+import string
 import time
-from datetime import datetime
-from importlib import util
-from typing import Dict, Iterator, List, Tuple
+from datetime import datetime, timezone
+from typing import Dict, Iterator, List, Optional, Tuple
 
-import requests
+from letta_client import Letta, SystemMessage
 
 from letta.config import LettaConfig
 from letta.data_sources.connectors import DataConnector
-from letta.schemas.enums import MessageRole
+from letta.functions.functions import parse_source_code
 from letta.schemas.file import FileMetadata
-from letta.schemas.message import Message
+from letta.schemas.tool import Tool
 from letta.settings import TestSettings
 
 from .constants import TIMEOUT
@@ -34,7 +34,7 @@ class DummyDataConnector(DataConnector):
                 file_size=0,  # Set to 0 as a placeholder
                 file_creation_date="1970-01-01",  # Placeholder date
                 file_last_modified_date="1970-01-01",  # Placeholder date
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             self.file_to_text[file_metadata.id] = text
 
@@ -129,29 +129,8 @@ def configure_letta(enable_openai=False, enable_azure=False):
         configure_letta_localllm()
 
 
-def qdrant_server_running() -> bool:
-    """Check if Qdrant server is running."""
-
-    try:
-        response = requests.get("http://localhost:6333", timeout=10.0)
-        response_json = response.json()
-        return response_json.get("title") == "qdrant - vector search engine"
-    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-        return False
-
-
-def with_qdrant_storage(storage: list[str]):
-    """If Qdrant server is running and `qdrant_client` is installed,
-    append `'qdrant'` to the storage list"""
-
-    if util.find_spec("qdrant_client") is not None and qdrant_server_running():
-        storage.append("qdrant")
-
-    return storage
-
-
 def wait_for_incoming_message(
-    client,
+    client: Letta,
     agent_id: str,
     substring: str = "[Incoming message from agent with ID",
     max_wait_seconds: float = 10.0,
@@ -165,14 +144,54 @@ def wait_for_incoming_message(
     deadline = time.time() + max_wait_seconds
 
     while time.time() < deadline:
-        messages = client.server.message_manager.list_messages_for_agent(agent_id=agent_id, actor=client.user)
+        messages = client.agents.messages.list(agent_id)[1:]
 
         # Check for the system message containing `substring`
-        def get_message_text(message: Message) -> str:
-            return message.content[0].text if message.content and len(message.content) == 1 else ""
+        def get_message_text(message: SystemMessage) -> str:
+            return message.content if message.content else ""
 
-        if any(message.role == MessageRole.system and substring in get_message_text(message) for message in messages):
+        if any(isinstance(message, SystemMessage) and substring in get_message_text(message) for message in messages):
             return True
         time.sleep(sleep_interval)
 
     return False
+
+
+def wait_for_server(url, timeout=30, interval=0.5):
+    """Wait for server to become available by polling the given URL."""
+    import requests
+    from requests.exceptions import ConnectionError
+
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get(f"{url}/v1/health", timeout=2)
+            if response.status_code == 200:
+                return True
+        except (ConnectionError, requests.Timeout):
+            pass
+        time.sleep(interval)
+
+    raise TimeoutError(f"Server at {url} did not start within {timeout} seconds")
+
+
+def random_string(length: int) -> str:
+    return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
+
+def create_tool_from_func(
+    func,
+    tags: Optional[List[str]] = None,
+    description: Optional[str] = None,
+):
+    source_code = parse_source_code(func)
+    source_type = "python"
+    if not tags:
+        tags = []
+
+    return Tool(
+        source_type=source_type,
+        source_code=source_code,
+        tags=tags,
+        description=description,
+    )

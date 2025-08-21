@@ -12,29 +12,37 @@ import re
 import subprocess
 import sys
 import uuid
+from collections.abc import Coroutine
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import wraps
 from logging import Logger
-from typing import Any, Coroutine, List, Union, _GenericAlias, get_args, get_origin, get_type_hints
+from typing import Any, Coroutine, Optional, Union, _GenericAlias, get_args, get_origin, get_type_hints
 from urllib.parse import urljoin, urlparse
 
 import demjson3 as demjson
 import tiktoken
 from pathvalidate import sanitize_filename as pathvalidate_sanitize_filename
+from sqlalchemy import text
 
 import letta
 from letta.constants import (
-    CLI_WARNING_PREFIX,
     CORE_MEMORY_HUMAN_CHAR_LIMIT,
     CORE_MEMORY_PERSONA_CHAR_LIMIT,
+    DEFAULT_CORE_MEMORY_SOURCE_CHAR_LIMIT,
+    DEFAULT_MAX_FILES_OPEN,
     ERROR_MESSAGE_PREFIX,
+    FILE_IS_TRUNCATED_WARNING,
     LETTA_DIR,
     MAX_FILENAME_LENGTH,
     TOOL_CALL_ID_MAX_LEN,
 )
 from letta.helpers.json_helpers import json_dumps, json_loads
+from letta.log import get_logger
 from letta.schemas.openai.chat_completion_response import ChatCompletionResponse
+
+logger = get_logger(__name__)
+
 
 DEBUG = False
 if "LOG_LEVEL" in os.environ:
@@ -410,7 +418,6 @@ NOUN_BANK = [
     "unicorn",
     "vaccination",
     "wolverine",
-    "xenophobia",
     "yam",
     "zeppelin",
     "accordion",
@@ -468,17 +475,6 @@ NOUN_BANK = [
 ]
 
 
-def deduplicate(target_list: list) -> list:
-    seen = set()
-    dedup_list = []
-    for i in target_list:
-        if i not in seen:
-            seen.add(i)
-            dedup_list.append(i)
-
-    return dedup_list
-
-
 def smart_urljoin(base_url: str, relative_url: str) -> str:
     """urljoin is stupid and wants a trailing / at the end of the endpoint address, or it will chop the suffix off"""
     if not base_url.endswith("/"):
@@ -515,6 +511,12 @@ def is_optional_type(hint):
 
 
 def enforce_types(func):
+    """Enforces that values passed in match the expected types.
+        Technically will handle coroutines as well.
+
+    TODO (cliandy): use stricter pydantic fields
+    """
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Get type hints, excluding the return type hint
@@ -524,7 +526,7 @@ def enforce_types(func):
         arg_names = inspect.getfullargspec(func).args
 
         # Pair each argument with its corresponding type hint
-        args_with_hints = dict(zip(arg_names[1:], args[1:]))  # Skipping 'self'
+        args_with_hints = dict(zip(arg_names[1:], args[1:], strict=False))  # Skipping 'self'
 
         # Function to check if a value matches a given type hint
         def matches_type(value, hint):
@@ -536,6 +538,10 @@ def enforce_types(func):
             elif origin is list and isinstance(value, list):  # Handle List[T]
                 element_type = args[0] if args else None
                 return all(isinstance(v, element_type) for v in value) if element_type else True
+            elif origin is not None and (
+                str(origin).endswith("Literal") or getattr(origin, "_name", None) == "Literal"
+            ):  # Handle Literal types
+                return value in args
             elif origin:  # Handle other generics like Dict, Tuple, etc.
                 return isinstance(value, origin)
             else:  # Handle non-generic types
@@ -551,14 +557,14 @@ def enforce_types(func):
         for arg_name, arg_value in kwargs.items():
             hint = hints.get(arg_name)
             if hint and not matches_type(arg_value, hint):
-                raise ValueError(f"Argument {arg_name} does not match type {hint}; is {arg_value}")
+                raise ValueError(f"Argument {arg_name} does not match type {hint}; is {arg_value} of type {type(arg_value)}")
 
         return func(*args, **kwargs)
 
     return wrapper
 
 
-def annotate_message_json_list_with_tool_calls(messages: List[dict], allow_tool_roles: bool = False):
+def annotate_message_json_list_with_tool_calls(messages: list[dict], allow_tool_roles: bool = False):
     """Add in missing tool_call_id fields to a list of messages using function call style
 
     Walk through the list forwards:
@@ -578,7 +584,7 @@ def annotate_message_json_list_with_tool_calls(messages: List[dict], allow_tool_
         # If we find a function call w/o a tool call ID annotation, annotate it
         if message["role"] == "assistant" and "function_call" in message:
             if "tool_call_id" in message and message["tool_call_id"] is not None:
-                printd(f"Message already has tool_call_id")
+                printd("Message already has tool_call_id")
                 tool_call_id = message["tool_call_id"]
             else:
                 tool_call_id = str(uuid.uuid4())
@@ -620,7 +626,7 @@ def annotate_message_json_list_with_tool_calls(messages: List[dict], allow_tool_
 
             assistant_tool_call = message["tool_calls"][0]
             if "id" in assistant_tool_call and assistant_tool_call["id"] is not None:
-                printd(f"Message already has id (tool_call_id)")
+                printd("Message already has id (tool_call_id)")
                 tool_call_id = assistant_tool_call["id"]
             else:
                 tool_call_id = str(uuid.uuid4())
@@ -803,7 +809,11 @@ class OpenAIBackcompatUnpickler(pickle.Unpickler):
 
 
 def count_tokens(s: str, model: str = "gpt-4") -> int:
-    encoding = tiktoken.encoding_for_model(model)
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Falling back to cl100k base for token counting.")
+        encoding = tiktoken.get_encoding("cl100k_base")
     return len(encoding.encode(s))
 
 
@@ -812,7 +822,7 @@ def printd(*args, **kwargs):
         print(*args, **kwargs)
 
 
-def united_diff(str1, str2):
+def united_diff(str1: str, str2: str) -> str:
     lines1 = str1.splitlines(True)
     lines2 = str2.splitlines(True)
     diff = difflib.unified_diff(lines1, lines2)
@@ -828,7 +838,7 @@ def parse_json(string) -> dict:
             raise ValueError(f"JSON from string input ({string}) is not a dictionary (type {type(result)}): {result}")
         return result
     except Exception as e:
-        print(f"Error parsing json with json package: {e}")
+        print(f"Error parsing json with json package, falling back to demjson: {e}")
 
     try:
         result = demjson.decode(string)
@@ -836,51 +846,36 @@ def parse_json(string) -> dict:
             raise ValueError(f"JSON from string input ({string}) is not a dictionary (type {type(result)}): {result}")
         return result
     except demjson.JSONDecodeError as e:
-        print(f"Error parsing json with demjson package: {e}")
+        print(f"Error parsing json with demjson package (fatal): {e}")
         raise e
 
 
-def validate_function_response(function_response_string: any, return_char_limit: int, strict: bool = False, truncate: bool = True) -> str:
+def validate_function_response(function_response: Any, return_char_limit: int, strict: bool = False, truncate: bool = True) -> str:
     """Check to make sure that a function used by Letta returned a valid response. Truncates to return_char_limit if necessary.
 
-    Responses need to be strings (or None) that fall under a certain text count limit.
+    This makes sure that we can coerce the function_response into a string that meets our criteria. We handle some soft coercion.
+    If strict is True, we raise a ValueError if function_response is not a string or None.
     """
-    if not isinstance(function_response_string, str):
-        # Soft correction for a few basic types
+    if isinstance(function_response, str):
+        function_response_string = function_response
 
-        if function_response_string is None:
-            # function_response_string = "Empty (no function output)"
-            function_response_string = "None"  # backcompat
+    elif function_response is None:
+        function_response_string = "None"
 
-        elif isinstance(function_response_string, dict):
-            if strict:
-                # TODO add better error message
-                raise ValueError(function_response_string)
+    elif strict:
+        raise ValueError(f"Strict mode violation. Function returned type: {type(function_response).__name__}")
 
-            # Allow dict through since it will be cast to json.dumps()
-            try:
-                # TODO find a better way to do this that won't result in double escapes
-                function_response_string = json_dumps(function_response_string)
-            except:
-                raise ValueError(function_response_string)
+    elif isinstance(function_response, dict):
+        # As functions can return arbitrary data, if there's already nesting somewhere in the response, it's difficult
+        # for us to not result in double escapes.
+        function_response_string = json_dumps(function_response)
+    else:
+        logger.debug(f"Function returned type {type(function_response).__name__}. Coercing to string.")
+        function_response_string = str(function_response)
 
-        else:
-            if strict:
-                # TODO add better error message
-                raise ValueError(function_response_string)
-
-            # Try to convert to a string, but throw a warning to alert the user
-            try:
-                function_response_string = str(function_response_string)
-            except:
-                raise ValueError(function_response_string)
-
-    # Now check the length and make sure it doesn't go over the limit
     # TODO we should change this to a max token limit that's variable based on tokens remaining (or context-window)
     if truncate and len(function_response_string) > return_char_limit:
-        print(
-            f"{CLI_WARNING_PREFIX}function return was over limit ({len(function_response_string)} > {return_char_limit}) and was truncated"
-        )
+        logger.warning(f"function return was over limit ({len(function_response_string)} > {return_char_limit}) and was truncated")
         function_response_string = f"{function_response_string[:return_char_limit]}... [NOTE: function output was truncated since it exceeded the character limit ({len(function_response_string)} > {return_char_limit})]"
 
     return function_response_string
@@ -943,7 +938,7 @@ def get_human_text(name: str, enforce_limit=True):
     for file_path in list_human_files():
         file = os.path.basename(file_path)
         if f"{name}.txt" == file or name == file:
-            human_text = open(file_path, "r", encoding="utf-8").read().strip()
+            human_text = open(file_path, encoding="utf-8").read().strip()
             if enforce_limit and len(human_text) > CORE_MEMORY_HUMAN_CHAR_LIMIT:
                 raise ValueError(f"Contents of {name}.txt is over the character limit ({len(human_text)} > {CORE_MEMORY_HUMAN_CHAR_LIMIT})")
             return human_text
@@ -955,7 +950,7 @@ def get_persona_text(name: str, enforce_limit=True):
     for file_path in list_persona_files():
         file = os.path.basename(file_path)
         if f"{name}.txt" == file or name == file:
-            persona_text = open(file_path, "r", encoding="utf-8").read().strip()
+            persona_text = open(file_path, encoding="utf-8").read().strip()
             if enforce_limit and len(persona_text) > CORE_MEMORY_PERSONA_CHAR_LIMIT:
                 raise ValueError(
                     f"Contents of {name}.txt is over the character limit ({len(persona_text)} > {CORE_MEMORY_PERSONA_CHAR_LIMIT})"
@@ -988,16 +983,17 @@ def create_uuid_from_string(val: str):
     return uuid.UUID(hex=hex_string)
 
 
-def sanitize_filename(filename: str) -> str:
+def sanitize_filename(filename: str, add_uuid_suffix: bool = False) -> str:
     """
     Sanitize the given filename to prevent directory traversal, invalid characters,
     and reserved names while ensuring it fits within the maximum length allowed by the filesystem.
 
     Parameters:
         filename (str): The user-provided filename.
+        add_uuid_suffix (bool): If True, adds a UUID suffix for uniqueness (legacy behavior).
 
     Returns:
-        str: A sanitized filename that is unique and safe for use.
+        str: A sanitized filename.
     """
     # Extract the base filename to avoid directory components
     filename = os.path.basename(filename)
@@ -1012,14 +1008,21 @@ def sanitize_filename(filename: str) -> str:
     if base.startswith("."):
         raise ValueError(f"Invalid filename - derived file name {base} cannot start with '.'")
 
-    # Truncate the base name to fit within the maximum allowed length
-    max_base_length = MAX_FILENAME_LENGTH - len(ext) - 33  # 32 for UUID + 1 for `_`
-    if len(base) > max_base_length:
-        base = base[:max_base_length]
+    if add_uuid_suffix:
+        # Legacy behavior: Truncate the base name to fit within the maximum allowed length
+        max_base_length = MAX_FILENAME_LENGTH - len(ext) - 33  # 32 for UUID + 1 for `_`
+        if len(base) > max_base_length:
+            base = base[:max_base_length]
 
-    # Append a unique UUID suffix for uniqueness
-    unique_suffix = uuid.uuid4().hex
-    sanitized_filename = f"{base}_{unique_suffix}{ext}"
+        # Append a unique UUID suffix for uniqueness
+        unique_suffix = uuid.uuid4().hex[:4]
+        sanitized_filename = f"{base}_{unique_suffix}{ext}"
+    else:
+        max_base_length = MAX_FILENAME_LENGTH - len(ext)
+        if len(base) > max_base_length:
+            base = base[:max_base_length]
+
+        sanitized_filename = f"{base}{ext}"
 
     # Return the sanitized filename
     return sanitized_filename
@@ -1032,6 +1035,20 @@ def get_friendly_error_msg(function_name: str, exception_name: str, exception_me
     if len(error_msg) > MAX_ERROR_MESSAGE_CHAR_LIMIT:
         error_msg = error_msg[:MAX_ERROR_MESSAGE_CHAR_LIMIT]
     return error_msg
+
+
+def parse_stderr_error_msg(stderr_txt: str, last_n_lines: int = 3) -> tuple[str, str]:
+    """
+    Parses out from the last `last_n_line` of `stderr_txt` the Exception type and message.
+    """
+    index = -(last_n_lines + 1)
+    pattern = r"(\w+(?:Error|Exception)): (.+?)$"
+    for line in stderr_txt.split("\n")[:index:-1]:
+        if "Error" in line or "Exception" in line:
+            match = re.search(pattern, line)
+            if match:
+                return match.group(1), match.group(2)
+    return "", ""
 
 
 def run_async_task(coro: Coroutine[Any, Any, Any]) -> Any:
@@ -1064,9 +1081,157 @@ def log_telemetry(logger: Logger, event: str, **kwargs):
     :param event: A string describing the event.
     :param kwargs: Additional key-value pairs for logging metadata.
     """
-    from letta.settings import settings
+    from letta.settings import log_settings
 
-    if settings.verbose_telemetry_logging:
+    if log_settings.verbose_telemetry_logging:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S,%f UTC")  # More readable timestamp
         extra_data = " | ".join(f"{key}={value}" for key, value in kwargs.items() if value is not None)
         logger.info(f"[{timestamp}] EVENT: {event} | {extra_data}")
+
+
+def make_key(*args, **kwargs):
+    return str((args, tuple(sorted(kwargs.items()))))
+
+
+def safe_create_task(coro, logger: Logger, label: str = "background task"):
+    async def wrapper():
+        try:
+            await coro
+        except Exception as e:
+            logger.exception(f"{label} failed with {type(e).__name__}: {e}")
+
+    return asyncio.create_task(wrapper())
+
+
+class CancellationSignal:
+    """
+    A signal that can be checked for cancellation during streaming operations.
+
+    This provides a lightweight way to check if an operation should be cancelled
+    without having to pass job managers and other dependencies through every method.
+    """
+
+    def __init__(self, job_manager=None, job_id=None, actor=None):
+
+        from letta.log import get_logger
+        from letta.schemas.user import User
+        from letta.services.job_manager import JobManager
+
+        self.job_manager: JobManager | None = job_manager
+        self.job_id: str | None = job_id
+        self.actor: User | None = actor
+        self._is_cancelled = False
+        self.logger = get_logger(__name__)
+
+    async def is_cancelled(self) -> bool:
+        """
+        Check if the operation has been cancelled.
+
+        Returns:
+            True if cancelled, False otherwise
+        """
+        from letta.schemas.enums import JobStatus
+
+        if self._is_cancelled:
+            return True
+
+        if not self.job_manager or not self.job_id or not self.actor:
+            return False
+
+        try:
+            job = await self.job_manager.get_job_by_id_async(job_id=self.job_id, actor=self.actor)
+            self._is_cancelled = job.status == JobStatus.cancelled
+            return self._is_cancelled
+        except Exception as e:
+            self.logger.warning(f"Failed to check cancellation status for job {self.job_id}: {e}")
+            return False
+
+    def cancel(self):
+        """Mark this signal as cancelled locally (for testing or direct cancellation)."""
+        self._is_cancelled = True
+
+    async def check_and_raise_if_cancelled(self):
+        """
+        Check for cancellation and raise CancelledError if cancelled.
+
+        Raises:
+            asyncio.CancelledError: If the operation has been cancelled
+        """
+        if await self.is_cancelled():
+            self.logger.info(f"Operation cancelled for job {self.job_id}")
+            raise asyncio.CancelledError(f"Job {self.job_id} was cancelled")
+
+
+class NullCancellationSignal(CancellationSignal):
+    """A null cancellation signal that is never cancelled."""
+
+    def __init__(self):
+        super().__init__()
+
+    async def is_cancelled(self) -> bool:
+        return False
+
+    async def check_and_raise_if_cancelled(self):
+        pass
+
+
+async def get_latest_alembic_revision() -> str:
+    """Get the current alembic revision ID from the alembic_version table."""
+    from letta.server.db import db_registry
+
+    try:
+        async with db_registry.async_session() as session:
+            result = await session.execute(text("SELECT version_num FROM alembic_version"))
+            row = result.fetchone()
+
+            if row:
+                return row[0]
+            else:
+                return "unknown"
+
+    except Exception as e:
+        logger.error("Error getting latest alembic revision: %s", e)
+        return "unknown"
+
+
+def calculate_file_defaults_based_on_context_window(context_window: Optional[int]) -> tuple[int, int]:
+    """Calculate reasonable defaults for max_files_open and per_file_view_window_char_limit
+    based on the model's context window size.
+
+    Args:
+        context_window: The context window size of the model. If None, returns conservative defaults.
+
+    Returns:
+        A tuple of (max_files_open, per_file_view_window_char_limit)
+    """
+    if not context_window:
+        # If no context window info, use conservative defaults
+        return DEFAULT_MAX_FILES_OPEN, DEFAULT_CORE_MEMORY_SOURCE_CHAR_LIMIT
+
+    # Define defaults based on context window ranges
+    # Assuming ~4 chars per token
+    # Available chars = available_tokens * 4
+
+    # TODO: Check my math here
+    if context_window <= 8_000:  # Small models (4K-8K)
+        return 3, 5_000  # ~3.75K tokens
+    elif context_window <= 32_000:  # Medium models (16K-32K)
+        return 5, 15_000  # ~18.75K tokens
+    elif context_window <= 128_000:  # Large models (100K-128K)
+        return 10, 25_000  # ~62.5K tokens
+    elif context_window <= 200_000:  # Very large models (128K-200K)
+        return 10, 40_000  # ~100k tokens
+    else:  # Extremely large models (200K+)
+        return 15, 40_000  # ~1505k tokens
+
+
+def truncate_file_visible_content(visible_content: str, is_open: bool, per_file_view_window_char_limit: int):
+    visible_content = visible_content if visible_content and is_open else ""
+
+    # Truncate content and add warnings here when converting from FileAgent to Block
+    if len(visible_content) > per_file_view_window_char_limit:
+        truncated_warning = f"...[TRUNCATED]\n{FILE_IS_TRUNCATED_WARNING}"
+        visible_content = visible_content[: per_file_view_window_char_limit - len(truncated_warning)]
+        visible_content += truncated_warning
+
+    return visible_content

@@ -1,7 +1,9 @@
+import asyncio
+import logging
 from typing import TYPE_CHECKING, List, Optional
 
 from jinja2 import Template, TemplateSyntaxError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Forward referencing to avoid circular import with Agent -> Memory -> Agent
 if TYPE_CHECKING:
@@ -10,7 +12,8 @@ if TYPE_CHECKING:
 from openai.types.beta.function_tool import FunctionTool as OpenAITool
 
 from letta.constants import CORE_MEMORY_BLOCK_CHAR_LIMIT
-from letta.schemas.block import Block
+from letta.otel.tracing import trace_method
+from letta.schemas.block import Block, FileBlock
 from letta.schemas.message import Message
 
 
@@ -65,13 +68,45 @@ class Memory(BaseModel, validate_assignment=True):
 
     # Memory.block contains the list of memory blocks in the core memory
     blocks: List[Block] = Field(..., description="Memory blocks contained in the agent's in-context memory")
+    file_blocks: List[FileBlock] = Field(
+        default_factory=list, description="Special blocks representing the agent's in-context memory of an attached file"
+    )
+
+    @field_validator("file_blocks")
+    @classmethod
+    def validate_file_blocks_no_duplicates(cls, v: List[Block]) -> List[Block]:
+        """Validate that file_blocks don't contain duplicate labels, log warnings and remove duplicates."""
+        if not v:
+            return v
+
+        seen_labels = set()
+        unique_blocks = []
+        duplicate_labels = []
+
+        for block in v:
+            if block.label in seen_labels:
+                duplicate_labels.append(block.label)
+            else:
+                seen_labels.add(block.label)
+                unique_blocks.append(block)
+
+        if duplicate_labels:
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Duplicate block labels found in file_blocks: {duplicate_labels}. Removing duplicates.")
+
+        return unique_blocks
 
     # Memory.template is a Jinja2 template for compiling memory module into a prompt string.
     prompt_template: str = Field(
         default="{% for block in blocks %}"
-        '<{{ block.label }} characters="{{ block.value|length }}/{{ block.limit }}">\n'
+        "<{{ block.label }}>\n"
+        "<metadata>"
+        'read_only="{{ block.read_only}}" chars_current="{{ block.value|length }}" chars_limit="{{ block.limit }}"'
+        "</metadata>"
+        "<value>"
         "{{ block.value }}\n"
-        "</{{ block.label }}>"
+        "</value>"
+        "</{{ block.label }}>\n"
         "{% if not loop.last %}\n{% endif %}"
         "{% endfor %}",
         description="Jinja2 template for compiling memory blocks into a prompt string",
@@ -81,6 +116,7 @@ class Memory(BaseModel, validate_assignment=True):
         """Return the current Jinja2 template string."""
         return str(self.prompt_template)
 
+    @trace_method
     def set_prompt_template(self, prompt_template: str):
         """
         Set a new Jinja2 template string.
@@ -91,7 +127,7 @@ class Memory(BaseModel, validate_assignment=True):
             Template(prompt_template)
 
             # Validate compatibility with current memory structure
-            Template(prompt_template).render(blocks=self.blocks)
+            Template(prompt_template).render(blocks=self.blocks, file_blocks=self.file_blocks, sources=[], max_files_open=None)
 
             # If we get here, the template is valid and compatible
             self.prompt_template = prompt_template
@@ -100,10 +136,64 @@ class Memory(BaseModel, validate_assignment=True):
         except Exception as e:
             raise ValueError(f"Prompt template is not compatible with current memory structure: {str(e)}")
 
-    def compile(self) -> str:
+    @trace_method
+    async def set_prompt_template_async(self, prompt_template: str):
+        """
+        Async version of set_prompt_template that doesn't block the event loop.
+        """
+        try:
+            # Validate Jinja2 syntax with async enabled
+            Template(prompt_template)
+
+            # Validate compatibility with current memory structure - use async rendering
+            template = Template(prompt_template)
+            await asyncio.to_thread(template.render, blocks=self.blocks, file_blocks=self.file_blocks, sources=[], max_files_open=None)
+
+            # If we get here, the template is valid and compatible
+            self.prompt_template = prompt_template
+        except TemplateSyntaxError as e:
+            raise ValueError(f"Invalid Jinja2 template syntax: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Prompt template is not compatible with current memory structure: {str(e)}")
+
+    @trace_method
+    def compile(self, tool_usage_rules=None, sources=None, max_files_open=None) -> str:
         """Generate a string representation of the memory in-context using the Jinja2 template"""
-        template = Template(self.prompt_template)
-        return template.render(blocks=self.blocks)
+        try:
+            template = Template(self.prompt_template)
+            return template.render(
+                blocks=self.blocks,
+                file_blocks=self.file_blocks,
+                tool_usage_rules=tool_usage_rules,
+                sources=sources,
+                max_files_open=max_files_open,
+            )
+        except TemplateSyntaxError as e:
+            raise ValueError(f"Invalid Jinja2 template syntax: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Prompt template is not compatible with current memory structure: {str(e)}")
+
+    @trace_method
+    async def compile_async(self, tool_usage_rules=None, sources=None, max_files_open=None) -> str:
+        """Async version of compile that doesn't block the event loop"""
+        try:
+            template = Template(self.prompt_template, enable_async=True)
+            return await template.render_async(
+                blocks=self.blocks,
+                file_blocks=self.file_blocks,
+                tool_usage_rules=tool_usage_rules,
+                sources=sources,
+                max_files_open=max_files_open,
+            )
+        except TemplateSyntaxError as e:
+            raise ValueError(f"Invalid Jinja2 template syntax: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Prompt template is not compatible with current memory structure: {str(e)}")
+
+    @trace_method
+    async def compile_in_thread_async(self, tool_usage_rules=None, sources=None, max_files_open=None) -> str:
+        """Compile the memory in a thread"""
+        return await asyncio.to_thread(self.compile, tool_usage_rules=tool_usage_rules, sources=sources, max_files_open=max_files_open)
 
     def list_block_labels(self) -> List[str]:
         """Return a list of the block names held inside the memory object"""
@@ -136,7 +226,7 @@ class Memory(BaseModel, validate_assignment=True):
     def update_block_value(self, label: str, value: str):
         """Update the value of a block"""
         if not isinstance(value, str):
-            raise ValueError(f"Provided value must be a string")
+            raise ValueError("Provided value must be a string")
 
         for block in self.blocks:
             if block.label == label:
@@ -172,7 +262,7 @@ class BasicBlockMemory(Memory):
         Append to the contents of core memory.
 
         Args:
-            label (str): Section of the memory to be edited (persona or human).
+            label (str): Section of the memory to be edited.
             content (str): Content to write to the memory. All unicode (including emojis) are supported.
 
         Returns:
@@ -188,7 +278,7 @@ class BasicBlockMemory(Memory):
         Replace the contents of core memory. To delete memories, use an empty string for new_content.
 
         Args:
-            label (str): Section of the memory to be edited (persona or human).
+            label (str): Section of the memory to be edited.
             old_content (str): String to replace. Must be an exact match.
             new_content (str): Content to write to the memory. All unicode (including emojis) are supported.
 

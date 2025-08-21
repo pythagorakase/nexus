@@ -57,6 +57,9 @@ fi
 if [ -n "$CLICKHOUSE_ENDPOINT" ] && [ -n "$CLICKHOUSE_PASSWORD" ]; then
     echo "Starting OpenTelemetry Collector with Clickhouse export..."
     CONFIG_FILE="/etc/otel/config-clickhouse.yaml"
+elif [ -n "$SIGNOZ_ENDPOINT" ] && [ -n "$SIGNOZ_INGESTION_KEY" ]; then
+    echo "Starting OpenTelemetry Collector with Signoz export..."
+    CONFIG_FILE="/etc/otel/config-signoz.yaml"
 else
     echo "Starting OpenTelemetry Collector with file export only..."
     CONFIG_FILE="/etc/otel/config-file.yaml"
@@ -73,6 +76,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "Starting Letta server at http://$HOST:$PORT..."
+echo "Starting Letta Server at http://$HOST:$PORT..."
 echo "Executing: $CMD"
 exec $CMD

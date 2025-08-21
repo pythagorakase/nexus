@@ -1,7 +1,9 @@
-from typing import Callable, Dict, List
+from typing import TYPE_CHECKING, Callable, Dict, List
 
 from letta.constants import MESSAGE_SUMMARY_REQUEST_ACK
 from letta.llm_api.llm_api_tools import create
+from letta.llm_api.llm_client import LLMClient
+from letta.otel.tracing import trace_method
 from letta.prompts.gpt_summarize import SYSTEM as SUMMARY_PROMPT_SYSTEM
 from letta.schemas.agent import AgentState
 from letta.schemas.enums import MessageRole
@@ -10,6 +12,9 @@ from letta.schemas.memory import Memory
 from letta.schemas.message import Message
 from letta.settings import summarizer_settings
 from letta.utils import count_tokens, printd
+
+if TYPE_CHECKING:
+    from letta.orm import User
 
 
 def get_memory_functions(cls: Memory) -> Dict[str, Callable]:
@@ -45,9 +50,11 @@ def _format_summary_history(message_history: List[Message]):
     return "\n".join([f"{m.role}: {get_message_text(m.content)}" for m in message_history])
 
 
+@trace_method
 def summarize_messages(
     agent_state: AgentState,
     message_sequence_to_summarize: List[Message],
+    actor: "User",
 ):
     """Summarize a message sequence using GPT"""
     # we need the context_window
@@ -60,7 +67,7 @@ def summarize_messages(
         trunc_ratio = (summarizer_settings.memory_warning_threshold * context_window / summary_input_tkns) * 0.8  # For good measure...
         cutoff = int(len(message_sequence_to_summarize) * trunc_ratio)
         summary_input = str(
-            [summarize_messages(agent_state, message_sequence_to_summarize=message_sequence_to_summarize[:cutoff])]
+            [summarize_messages(agent_state, message_sequence_to_summarize=message_sequence_to_summarize[:cutoff], actor=actor)]
             + message_sequence_to_summarize[cutoff:]
         )
 
@@ -74,12 +81,26 @@ def summarize_messages(
     # TODO: We need to eventually have a separate LLM config for the summarizer LLM
     llm_config_no_inner_thoughts = agent_state.llm_config.model_copy(deep=True)
     llm_config_no_inner_thoughts.put_inner_thoughts_in_kwargs = False
-    response = create(
-        llm_config=llm_config_no_inner_thoughts,
-        user_id=agent_state.created_by_id,
-        messages=message_sequence,
-        stream=False,
+
+    llm_client = LLMClient.create(
+        provider_type=agent_state.llm_config.model_endpoint_type,
+        put_inner_thoughts_first=False,
+        actor=actor,
     )
+    # try to use new client, otherwise fallback to old flow
+    # TODO: we can just directly call the LLM here?
+    if llm_client:
+        response = llm_client.send_llm_request(
+            messages=message_sequence,
+            llm_config=llm_config_no_inner_thoughts,
+        )
+    else:
+        response = create(
+            llm_config=llm_config_no_inner_thoughts,
+            user_id=agent_state.created_by_id,
+            messages=message_sequence,
+            stream=False,
+        )
 
     printd(f"summarize_messages gpt reply: {response.choices[0]}")
     reply = response.choices[0].message.content

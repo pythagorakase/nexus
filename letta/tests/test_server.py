@@ -1,34 +1,32 @@
+import asyncio
 import json
 import os
 import shutil
 import uuid
 import warnings
 from typing import List, Tuple
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import delete
 
 import letta.utils as utils
-from letta.constants import BASE_MEMORY_TOOLS, BASE_TOOLS
-from letta.orm import Provider, Step
+from letta.constants import BASE_MEMORY_TOOLS, BASE_TOOLS, LETTA_DIR, LETTA_TOOL_EXECUTION_DIR
+from letta.orm import Provider, ProviderTrace, Step
 from letta.schemas.block import CreateBlock
-from letta.schemas.enums import MessageRole
+from letta.schemas.enums import MessageRole, ProviderCategory, ProviderType, SandboxType
 from letta.schemas.letta_message import LettaMessage, ReasoningMessage, SystemMessage, ToolCallMessage, ToolReturnMessage, UserMessage
 from letta.schemas.llm_config import LLMConfig
-from letta.schemas.providers import Provider as PydanticProvider
+from letta.schemas.providers import ProviderCreate
 from letta.schemas.user import User
+from letta.server.db import db_registry
 
 utils.DEBUG = True
 from letta.config import LettaConfig
 from letta.schemas.agent import CreateAgent, UpdateAgent
-from letta.schemas.embedding_config import EmbeddingConfig
-from letta.schemas.job import Job as PydanticJob
 from letta.schemas.message import Message
-from letta.schemas.source import Source as PydanticSource
 from letta.server.server import SyncServer
 from letta.system import unpack_message
-
-from .utils import DummyDataConnector
 
 WAR_AND_PEACE = """BOOK ONE: 1805
 
@@ -267,8 +265,6 @@ start my apprenticeship as old maid."""
 @pytest.fixture(scope="module")
 def server():
     config = LettaConfig.load()
-    print("CONFIG PATH", config.config_path)
-
     config.save()
 
     server = SyncServer()
@@ -279,12 +275,11 @@ def server():
 def org_id(server):
     # create org
     org = server.organization_manager.create_default_organization()
-    print(f"Created org\n{org.id}")
-
     yield org.id
 
     # cleanup
-    with server.organization_manager.session_maker() as session:
+    with db_registry.session() as session:
+        session.execute(delete(ProviderTrace))
         session.execute(delete(Step))
         session.execute(delete(Provider))
         session.commit()
@@ -334,11 +329,10 @@ def agent_id(server, user_id, base_tools):
             tool_ids=[t.id for t in base_tools],
             memory_blocks=[],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
         actor=actor,
     )
-    print(f"Created agent\n{agent_state}")
     yield agent_state.id
 
     # cleanup
@@ -355,15 +349,22 @@ def other_agent_id(server, user_id, base_tools):
             tool_ids=[t.id for t in base_tools],
             memory_blocks=[],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
         actor=actor,
     )
-    print(f"Created agent\n{agent_state}")
     yield agent_state.id
 
     # cleanup
     server.agent_manager.delete_agent(agent_state.id, actor=actor)
+
+
+@pytest.fixture(scope="session")
+def event_loop(request):
+    """Create an instance of the default event loop for each test case."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
 def test_error_on_nonexistent_agent(server, user, agent_id):
@@ -390,40 +391,6 @@ def test_user_message_memory(server, user, agent_id):
         raise
 
     server.run_command(user_id=user.id, agent_id=agent_id, command="/memory")
-
-
-@pytest.mark.order(3)
-def test_load_data(server, user, agent_id):
-    # create source
-    passages_before = server.agent_manager.list_passages(actor=user, agent_id=agent_id, after=None, limit=10000)
-    assert len(passages_before) == 0
-
-    source = server.source_manager.create_source(
-        PydanticSource(name="test_source", embedding_config=EmbeddingConfig.default_config(provider="openai")), actor=user
-    )
-
-    # load data
-    archival_memories = [
-        "alpha",
-        "Cinderella wore a blue dress",
-        "Dog eat dog",
-        "ZZZ",
-        "Shishir loves indian food",
-    ]
-    connector = DummyDataConnector(archival_memories)
-    server.load_data(user.id, connector, source.name)
-
-    # attach source
-    server.agent_manager.attach_source(agent_id=agent_id, source_id=source.id, actor=user)
-
-    # check archival memory size
-    passages_after = server.agent_manager.list_passages(actor=user, agent_id=agent_id, after=None, limit=10000)
-    assert len(passages_after) == 5
-
-
-def test_save_archival_memory(server, user_id, agent_id):
-    # TODO: insert into archival memory
-    pass
 
 
 @pytest.mark.order(4)
@@ -458,59 +425,60 @@ def test_get_recall_memory(server, org_id, user, agent_id):
         assert message_id in message_ids, f"{message_id} not in {message_ids}"
 
 
-@pytest.mark.order(6)
-def test_get_archival_memory(server, user, agent_id):
-    # test archival memory cursor pagination
-    actor = user
+# @pytest.mark.order(6)
+# def test_get_archival_memory(server, user, agent_id):
+#    # test archival memory cursor pagination
+#    actor = user
+#
+#    # List latest 2 passages
+#    passages_1 = server.agent_manager.list_passages(
+#        actor=actor,
+#        agent_id=agent_id,
+#        ascending=False,
+#        limit=2,
+#    )
+#    assert len(passages_1) == 2, f"Returned {[p.text for p in passages_1]}, not equal to 2"
+#
+#    # List next 3 passages (earliest 3)
+#    cursor1 = passages_1[-1].id
+#    passages_2 = server.agent_manager.list_passages(
+#        actor=actor,
+#        agent_id=agent_id,
+#        ascending=False,
+#        before=cursor1,
+#    )
+#
+#    # List all 5
+#    cursor2 = passages_1[0].created_at
+#    passages_3 = server.agent_manager.list_passages(
+#        actor=actor,
+#        agent_id=agent_id,
+#        ascending=False,
+#        end_date=cursor2,
+#        limit=1000,
+#    )
+#    assert len(passages_2) in [3, 4]  # NOTE: exact size seems non-deterministic, so loosen test
+#    assert len(passages_3) in [4, 5]  # NOTE: exact size seems non-deterministic, so loosen test
+#
+#    latest = passages_1[0]
+#    earliest = passages_2[-1]
+#
+#    # test archival memory
+#    passage_1 = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, limit=1, ascending=True)
+#    assert len(passage_1) == 1
+#    assert passage_1[0].text == "alpha"
+#    passage_2 = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, after=earliest.id, limit=1000, ascending=True)
+#    assert len(passage_2) in [4, 5]  # NOTE: exact size seems non-deterministic, so loosen test
+#    assert all("alpha" not in passage.text for passage in passage_2)
+#    # test safe empty return
+#    passage_none = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, after=latest.id, limit=1000, ascending=True)
+#    assert len(passage_none) == 0
 
-    # List latest 2 passages
-    passages_1 = server.agent_manager.list_passages(
-        actor=actor,
-        agent_id=agent_id,
-        ascending=False,
-        limit=2,
-    )
-    assert len(passages_1) == 2, f"Returned {[p.text for p in passages_1]}, not equal to 2"
 
-    # List next 3 passages (earliest 3)
-    cursor1 = passages_1[-1].id
-    passages_2 = server.agent_manager.list_passages(
-        actor=actor,
-        agent_id=agent_id,
-        ascending=False,
-        before=cursor1,
-    )
-
-    # List all 5
-    cursor2 = passages_1[0].created_at
-    passages_3 = server.agent_manager.list_passages(
-        actor=actor,
-        agent_id=agent_id,
-        ascending=False,
-        end_date=cursor2,
-        limit=1000,
-    )
-    assert len(passages_2) in [3, 4]  # NOTE: exact size seems non-deterministic, so loosen test
-    assert len(passages_3) in [4, 5]  # NOTE: exact size seems non-deterministic, so loosen test
-
-    latest = passages_1[0]
-    earliest = passages_2[-1]
-
-    # test archival memory
-    passage_1 = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, limit=1, ascending=True)
-    assert len(passage_1) == 1
-    assert passage_1[0].text == "alpha"
-    passage_2 = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, after=earliest.id, limit=1000, ascending=True)
-    assert len(passage_2) in [4, 5]  # NOTE: exact size seems non-deterministic, so loosen test
-    assert all("alpha" not in passage.text for passage in passage_2)
-    # test safe empty return
-    passage_none = server.agent_manager.list_passages(actor=actor, agent_id=agent_id, after=latest.id, limit=1000, ascending=True)
-    assert len(passage_none) == 0
-
-
-def test_get_context_window_overview(server: SyncServer, user, agent_id):
+@pytest.mark.asyncio
+async def test_get_context_window_overview(server: SyncServer, user, agent_id):
     """Test that the context window overview fetch works"""
-    overview = server.get_agent_context_window(agent_id=agent_id, actor=user)
+    overview = await server.agent_manager.get_context_window(agent_id=agent_id, actor=user)
     assert overview is not None
 
     # Run some basic checks
@@ -554,7 +522,7 @@ def test_delete_agent_same_org(server: SyncServer, org_id: str, user: User):
             name="nonexistent_tools_agent",
             memory_blocks=[],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
         actor=user,
     )
@@ -566,7 +534,8 @@ def test_delete_agent_same_org(server: SyncServer, org_id: str, user: User):
     server.agent_manager.delete_agent(agent_state.id, actor=another_user)
 
 
-def test_read_local_llm_configs(server: SyncServer, user: User):
+@pytest.mark.asyncio
+async def test_read_local_llm_configs(server: SyncServer, user: User, event_loop):
     configs_base_dir = os.path.join(os.path.expanduser("~"), ".letta", "llm_configs")
     clean_up_dir = False
     if not os.path.exists(configs_base_dir):
@@ -589,7 +558,7 @@ def test_read_local_llm_configs(server: SyncServer, user: User):
 
         # Call list_llm_models
         assert os.path.exists(configs_base_dir)
-        llm_models = server.list_llm_models()
+        llm_models = await server.list_llm_models_async(actor=user)
 
         # Assert that the config is in the returned models
         assert any(
@@ -603,11 +572,11 @@ def test_read_local_llm_configs(server: SyncServer, user: User):
 
         # Try to use in agent creation
         context_window_override = 4000
-        agent = server.create_agent(
+        agent = await server.create_agent_async(
             request=CreateAgent(
                 model="caren/my-custom-model",
                 context_window_limit=context_window_override,
-                embedding="openai/text-embedding-ada-002",
+                embedding="openai/text-embedding-3-small",
             ),
             actor=user,
         )
@@ -726,7 +695,7 @@ def _test_get_messages_letta_format(
 
             elif message.role == MessageRole.tool:
                 assert isinstance(letta_message, ToolReturnMessage)
-                assert message.content[0].text == letta_message.tool_return
+                assert str(json.loads(message.content[0].text)["message"]) == letta_message.tool_return
                 letta_message_index += 1
 
             else:
@@ -801,9 +770,10 @@ def ingest(message: str):
 import pytest
 
 
-def test_tool_run_basic(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_basic(server, disable_e2b_api_key, user):
     """Test running a simple tool from source"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE,
         tool_source_type="python",
@@ -815,9 +785,10 @@ def test_tool_run_basic(server, mock_e2b_api_key_none, user):
     assert not result.stderr
 
 
-def test_tool_run_with_env_var(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_with_env_var(server, disable_e2b_api_key, user):
     """Test running a tool that uses an environment variable"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE_WITH_ENV_VAR,
         tool_source_type="python",
@@ -830,9 +801,10 @@ def test_tool_run_with_env_var(server, mock_e2b_api_key_none, user):
     assert not result.stderr
 
 
-def test_tool_run_invalid_args(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_invalid_args(server, disable_e2b_api_key, user):
     """Test running a tool with incorrect arguments"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE,
         tool_source_type="python",
@@ -846,9 +818,10 @@ def test_tool_run_invalid_args(server, mock_e2b_api_key_none, user):
     assert "missing 1 required positional argument" in result.stderr[0]
 
 
-def test_tool_run_with_distractor(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_with_distractor(server, disable_e2b_api_key, user):
     """Test running a tool with a distractor function in the source"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE_WITH_DISTRACTOR,
         tool_source_type="python",
@@ -861,9 +834,10 @@ def test_tool_run_with_distractor(server, mock_e2b_api_key_none, user):
     assert not result.stderr
 
 
-def test_tool_run_explicit_tool_name(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_explicit_tool_name(server, disable_e2b_api_key, user):
     """Test selecting a tool by name when multiple tools exist in the source"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE_WITH_DISTRACTOR,
         tool_source_type="python",
@@ -877,9 +851,10 @@ def test_tool_run_explicit_tool_name(server, mock_e2b_api_key_none, user):
     assert not result.stderr
 
 
-def test_tool_run_util_function(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_util_function(server, disable_e2b_api_key, user):
     """Test selecting a utility function that does not return anything meaningful"""
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE_WITH_DISTRACTOR,
         tool_source_type="python",
@@ -893,7 +868,8 @@ def test_tool_run_util_function(server, mock_e2b_api_key_none, user):
     assert not result.stderr
 
 
-def test_tool_run_with_explicit_json_schema(server, mock_e2b_api_key_none, user):
+@pytest.mark.asyncio
+async def test_tool_run_with_explicit_json_schema(server, disable_e2b_api_key, user):
     """Test overriding the autogenerated JSON schema with an explicit one"""
     explicit_json_schema = {
         "name": "ingest",
@@ -911,7 +887,7 @@ def test_tool_run_with_explicit_json_schema(server, mock_e2b_api_key_none, user)
         },
     }
 
-    result = server.run_tool_from_source(
+    result = await server.run_tool_from_source(
         actor=user,
         tool_source=EXAMPLE_TOOL_SOURCE,
         tool_source_type="python",
@@ -924,19 +900,7 @@ def test_tool_run_with_explicit_json_schema(server, mock_e2b_api_key_none, user)
     assert not result.stderr
 
 
-def test_composio_client_simple(server):
-    apps = server.get_composio_apps()
-    # Assert there's some amount of apps returned
-    assert len(apps) > 0
-
-    app = apps[0]
-    actions = server.get_composio_actions_from_app_name(composio_app_name=app.name)
-
-    # Assert there's some amount of actions
-    assert len(actions) > 0
-
-
-def test_memory_rebuild_count(server, user, mock_e2b_api_key_none, base_tools, base_memory_tools):
+async def test_memory_rebuild_count(server, user, disable_e2b_api_key, base_tools, base_memory_tools):
     """Test that the memory rebuild is generating the correct number of role=system messages"""
     actor = user
     # create agent
@@ -949,11 +913,10 @@ def test_memory_rebuild_count(server, user, mock_e2b_api_key_none, base_tools, b
                 CreateBlock(label="persona", value="My name is Alice."),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
         actor=actor,
     )
-    print(f"Created agent\n{agent_state}")
 
     def count_system_messages_in_recall() -> Tuple[int, List[LettaMessage]]:
 
@@ -966,10 +929,6 @@ def test_memory_rebuild_count(server, user, mock_e2b_api_key_none, base_tools, b
             return_message_object=False,
         )
         assert all(isinstance(m, LettaMessage) for m in letta_messages)
-
-        print("LETTA_MESSAGES:")
-        for i, m in enumerate(letta_messages):
-            print(f"{i}: {type(m)} ...{str(m)[-50:]}")
 
         # Collect system messages and their texts
         system_messages = [m for m in letta_messages if m.message_type == "system_message"]
@@ -991,132 +950,49 @@ def test_memory_rebuild_count(server, user, mock_e2b_api_key_none, base_tools, b
         server.agent_manager.delete_agent(agent_state.id, actor=actor)
 
 
-def test_load_file_to_source(server: SyncServer, user_id: str, agent_id: str, other_agent_id: str, tmp_path):
+def test_add_nonexisting_tool(server: SyncServer, user_id: str, base_tools):
     actor = server.user_manager.get_user_or_default(user_id)
 
-    existing_sources = server.source_manager.list_sources(actor=actor)
-    if len(existing_sources) > 0:
-        for source in existing_sources:
-            server.agent_manager.detach_source(agent_id=agent_id, source_id=source.id, actor=actor)
-    initial_passage_count = server.agent_manager.passage_size(agent_id=agent_id, actor=actor)
-    assert initial_passage_count == 0
+    # create agent
+    with pytest.raises(ValueError, match="not found"):
+        agent_state = server.create_agent(
+            request=CreateAgent(
+                name="memory_rebuild_test_agent",
+                tools=["fake_nonexisting_tool"],
+                memory_blocks=[
+                    CreateBlock(label="human", value="The human's name is Bob."),
+                    CreateBlock(label="persona", value="My name is Alice."),
+                ],
+                model="openai/gpt-4o-mini",
+                embedding="openai/text-embedding-3-small",
+                include_base_tools=True,
+            ),
+            actor=actor,
+        )
 
-    # Create a source
-    source = server.source_manager.create_source(
-        PydanticSource(
-            name="timber_source",
-            embedding_config=EmbeddingConfig.default_config(provider="openai"),
-            created_by_id=user_id,
-        ),
-        actor=actor,
-    )
-    assert source.created_by_id == user_id
 
-    # Create a test file with some content
-    test_file = tmp_path / "test.txt"
-    test_content = "We have a dog called Timber. He likes to sleep and eat chicken."
-    test_file.write_text(test_content)
+def test_default_tool_rules(server: SyncServer, user_id: str, base_tools, base_memory_tools):
+    actor = server.user_manager.get_user_or_default(user_id)
 
-    # Attach source to agent first
-    server.agent_manager.attach_source(agent_id=agent_id, source_id=source.id, actor=actor)
-
-    # Create a job for loading the first file
-    job = server.job_manager.create_job(
-        PydanticJob(
-            user_id=user_id,
-            metadata={"type": "embedding", "filename": test_file.name, "source_id": source.id},
-        ),
-        actor=actor,
-    )
-
-    # Load the first file to source
-    server.load_file_to_source(
-        source_id=source.id,
-        file_path=str(test_file),
-        job_id=job.id,
-        actor=actor,
-    )
-
-    # Verify job completed successfully
-    job = server.job_manager.get_job_by_id(job_id=job.id, actor=actor)
-    assert job.status == "completed"
-    assert job.metadata["num_passages"] == 1
-    assert job.metadata["num_documents"] == 1
-
-    # Verify passages were added
-    first_file_passage_count = server.agent_manager.passage_size(agent_id=agent_id, actor=actor)
-    assert first_file_passage_count > initial_passage_count
-
-    # Create a second test file with different content
-    test_file2 = tmp_path / "test2.txt"
-    test_file2.write_text(WAR_AND_PEACE)
-
-    # Create a job for loading the second file
-    job2 = server.job_manager.create_job(
-        PydanticJob(
-            user_id=user_id,
-            metadata={"type": "embedding", "filename": test_file2.name, "source_id": source.id},
+    # create agent
+    agent_state = server.create_agent(
+        request=CreateAgent(
+            name="tool_rules_test_agent",
+            tool_ids=[t.id for t in base_tools + base_memory_tools],
+            memory_blocks=[],
+            model="openai/gpt-4o-mini",
+            embedding="openai/text-embedding-3-small",
+            include_base_tools=False,
+            include_base_tool_rules=True,
         ),
         actor=actor,
     )
 
-    # Load the second file to source
-    server.load_file_to_source(
-        source_id=source.id,
-        file_path=str(test_file2),
-        job_id=job2.id,
-        actor=actor,
-    )
-
-    # Verify second job completed successfully
-    job2 = server.job_manager.get_job_by_id(job_id=job2.id, actor=actor)
-    assert job2.status == "completed"
-    assert job2.metadata["num_passages"] >= 10
-    assert job2.metadata["num_documents"] == 1
-
-    # Verify passages were appended (not replaced)
-    final_passage_count = server.agent_manager.passage_size(agent_id=agent_id, actor=actor)
-    assert final_passage_count > first_file_passage_count
-
-    # Verify both old and new content is searchable
-    passages = server.agent_manager.list_passages(
-        agent_id=agent_id,
-        actor=actor,
-        query_text="what does Timber like to eat",
-        embedding_config=EmbeddingConfig.default_config(provider="openai"),
-        embed_query=True,
-    )
-    assert len(passages) == final_passage_count
-    assert any("chicken" in passage.text.lower() for passage in passages)
-    assert any("Anna".lower() in passage.text.lower() for passage in passages)
-
-    # Initially should have no passages
-    initial_agent2_passages = server.agent_manager.passage_size(agent_id=other_agent_id, actor=actor, source_id=source.id)
-    assert initial_agent2_passages == 0
-
-    # Attach source to second agent
-    server.agent_manager.attach_source(agent_id=other_agent_id, source_id=source.id, actor=actor)
-
-    # Verify second agent has same number of passages as first agent
-    agent2_passages = server.agent_manager.passage_size(agent_id=other_agent_id, actor=actor, source_id=source.id)
-    agent1_passages = server.agent_manager.passage_size(agent_id=agent_id, actor=actor, source_id=source.id)
-    assert agent2_passages == agent1_passages
-
-    # Verify second agent can query the same content
-    passages2 = server.agent_manager.list_passages(
-        actor=actor,
-        agent_id=other_agent_id,
-        source_id=source.id,
-        query_text="what does Timber like to eat",
-        embedding_config=EmbeddingConfig.default_config(provider="openai"),
-        embed_query=True,
-    )
-    assert len(passages2) == len(passages)
-    assert any("chicken" in passage.text.lower() for passage in passages2)
-    assert any("Anna".lower() in passage.text.lower() for passage in passages2)
+    assert len(agent_state.tool_rules) == len(base_tools + base_memory_tools)
 
 
-def test_add_remove_tools_update_agent(server: SyncServer, user_id: str, base_tools):
+@pytest.mark.asyncio
+async def test_add_remove_tools_update_agent(server: SyncServer, user_id: str, base_tools, base_memory_tools):
     """Test that the memory rebuild is generating the correct number of role=system messages"""
     actor = server.user_manager.get_user_or_default(user_id)
 
@@ -1130,7 +1006,7 @@ def test_add_remove_tools_update_agent(server: SyncServer, user_id: str, base_to
                 CreateBlock(label="persona", value="My name is Alice."),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
             include_base_tools=False,
         ),
         actor=actor,
@@ -1160,7 +1036,7 @@ def test_add_remove_tools_update_agent(server: SyncServer, user_id: str, base_to
             "embedding_config": {
                 "embedding_endpoint_type": "openai",
                 "embedding_endpoint": "https://api.openai.com/v1",
-                "embedding_model": "text-embedding-ada-002",
+                "embedding_model": "text-embedding-3-small",
                 "embedding_dim": 1536,
                 "embedding_chunk_size": 300,
                 "azure_endpoint": None,
@@ -1180,30 +1056,38 @@ def test_add_remove_tools_update_agent(server: SyncServer, user_id: str, base_to
 
     # Add all the base tools
     request.tool_ids = [b.id for b in base_tools]
-    agent_state = server.agent_manager.update_agent(agent_state.id, agent_update=request, actor=actor)
+    agent_state = await server.agent_manager.update_agent_async(agent_state.id, agent_update=request, actor=actor)
     assert len(agent_state.tools) == len(base_tools)
 
     # Remove one base tool
     request.tool_ids = [b.id for b in base_tools[:-2]]
-    agent_state = server.agent_manager.update_agent(agent_state.id, agent_update=request, actor=actor)
+    agent_state = await server.agent_manager.update_agent_async(agent_state.id, agent_update=request, actor=actor)
     assert len(agent_state.tools) == len(base_tools) - 2
 
 
-def test_messages_with_provider_override(server: SyncServer, user_id: str):
-    actor = server.user_manager.get_user_or_default(user_id)
+@pytest.mark.asyncio
+async def test_messages_with_provider_override(server: SyncServer, user_id: str, event_loop):
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=user_id)
     provider = server.provider_manager.create_provider(
-        provider=PydanticProvider(
-            name="anthropic",
+        request=ProviderCreate(
+            name="caren-anthropic",
+            provider_type=ProviderType.anthropic,
             api_key=os.getenv("ANTHROPIC_API_KEY"),
         ),
         actor=actor,
     )
-    agent = server.create_agent(
+    models = await server.list_llm_models_async(actor=actor, provider_category=[ProviderCategory.byok])
+    assert provider.name in [model.provider_name for model in models]
+
+    models = await server.list_llm_models_async(actor=actor, provider_category=[ProviderCategory.base])
+    assert provider.name not in [model.provider_name for model in models]
+
+    agent = await server.create_agent_async(
         request=CreateAgent(
             memory_blocks=[],
-            model="anthropic/claude-3-opus-20240229",
-            context_window_limit=200000,
-            embedding="openai/text-embedding-ada-002",
+            model="caren-anthropic/claude-3-5-sonnet-20240620",
+            context_window_limit=100000,
+            embedding="openai/text-embedding-3-small",
         ),
         actor=actor,
     )
@@ -1219,7 +1103,7 @@ def test_messages_with_provider_override(server: SyncServer, user_id: str):
     step_ids = set([msg.step_id for msg in get_messages_response])
     completion_tokens, prompt_tokens, total_tokens = 0, 0, 0
     for step_id in step_ids:
-        step = server.step_manager.get_step(step_id=step_id, actor=actor)
+        step = await server.step_manager.get_step_async(step_id=step_id, actor=actor)
         assert step, "Step was not logged correctly"
         assert step.provider_id == provider.id
         assert step.provider_name == agent.llm_config.model_endpoint_type
@@ -1246,9 +1130,9 @@ def test_messages_with_provider_override(server: SyncServer, user_id: str):
     step_ids = set([msg.step_id for msg in get_messages_response])
     completion_tokens, prompt_tokens, total_tokens = 0, 0, 0
     for step_id in step_ids:
-        step = server.step_manager.get_step(step_id=step_id, actor=actor)
+        step = await server.step_manager.get_step_async(step_id=step_id, actor=actor)
         assert step, "Step was not logged correctly"
-        assert step.provider_id == None
+        assert step.provider_id is None
         assert step.provider_name == agent.llm_config.model_endpoint_type
         assert step.model == agent.llm_config.model
         assert step.context_window_limit == agent.llm_config.context_window
@@ -1261,10 +1145,52 @@ def test_messages_with_provider_override(server: SyncServer, user_id: str):
     assert total_tokens == usage.total_tokens
 
 
-def test_unique_handles_for_provider_configs(server: SyncServer):
-    models = server.list_llm_models()
+@pytest.mark.asyncio
+async def test_unique_handles_for_provider_configs(server: SyncServer, user: User, event_loop):
+    models = await server.list_llm_models_async(actor=user)
     model_handles = [model.handle for model in models]
     assert sorted(model_handles) == sorted(list(set(model_handles))), "All models should have unique handles"
-    embeddings = server.list_embedding_models()
+    embeddings = await server.list_embedding_models_async(actor=user)
     embedding_handles = [embedding.handle for embedding in embeddings]
     assert sorted(embedding_handles) == sorted(list(set(embedding_handles))), "All embeddings should have unique handles"
+
+
+def test_make_default_local_sandbox_config():
+    venv_name = "test"
+    default_venv_name = "venv"
+
+    # --- Case 1: tool_exec_dir and tool_exec_venv_name are both explicitly set ---
+    with patch("letta.settings.tool_settings.tool_exec_dir", LETTA_DIR):
+        with patch("letta.settings.tool_settings.tool_exec_venv_name", venv_name):
+            server = SyncServer()
+            actor = server.user_manager.get_default_user()
+
+            local_config = server.sandbox_config_manager.get_or_create_default_sandbox_config(
+                sandbox_type=SandboxType.LOCAL, actor=actor
+            ).get_local_config()
+            assert local_config.sandbox_dir == LETTA_DIR
+            assert local_config.venv_name == venv_name
+            assert local_config.use_venv == True
+
+    # --- Case 2: only tool_exec_dir is set (no custom venv_name provided) ---
+    with patch("letta.settings.tool_settings.tool_exec_dir", LETTA_DIR):
+        server = SyncServer()
+        actor = server.user_manager.get_default_user()
+
+        local_config = server.sandbox_config_manager.get_or_create_default_sandbox_config(
+            sandbox_type=SandboxType.LOCAL, actor=actor
+        ).get_local_config()
+        assert local_config.sandbox_dir == LETTA_DIR
+        assert local_config.venv_name == default_venv_name  # falls back to default
+        assert local_config.use_venv == False  # no custom venv name, so no venv usage
+
+    # --- Case 3: neither tool_exec_dir nor tool_exec_venv_name is set (default fallback behavior) ---
+    server = SyncServer()
+    actor = server.user_manager.get_default_user()
+
+    local_config = server.sandbox_config_manager.get_or_create_default_sandbox_config(
+        sandbox_type=SandboxType.LOCAL, actor=actor
+    ).get_local_config()
+    assert local_config.sandbox_dir == LETTA_TOOL_EXECUTION_DIR
+    assert local_config.venv_name == default_venv_name
+    assert local_config.use_venv == False

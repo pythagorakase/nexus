@@ -1,18 +1,24 @@
-import time
+import asyncio
+import json
 import uuid
 
 import pytest
 
-from letta import create_client
+from letta.agents.letta_agent import LettaAgent
+from letta.config import LettaConfig
 from letta.schemas.letta_message import ToolCallMessage
-from letta.schemas.tool_rule import ChildToolRule, ContinueToolRule, InitToolRule, MaxCountPerStepToolRule, TerminalToolRule
+from letta.schemas.message import MessageCreate
+from letta.schemas.tool_rule import ChildToolRule, ContinueToolRule, InitToolRule, RequiredBeforeExitToolRule, TerminalToolRule
+from letta.server.server import SyncServer
+from letta.services.telemetry_manager import NoopTelemetryManager
 from tests.helpers.endpoints_helper import (
     assert_invoked_function_call,
     assert_invoked_send_message_with_keyword,
     assert_sanity_checks,
     setup_agent,
 )
-from tests.helpers.utils import cleanup, retry_until_success
+from tests.helpers.utils import cleanup
+from tests.utils import create_tool_from_func
 
 # Generate uuid for agent name for this example
 namespace = uuid.NAMESPACE_DNS
@@ -20,106 +26,252 @@ agent_uuid = str(uuid.uuid5(namespace, "test_agent_tool_graph"))
 config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
 
 
-"""Contrived tools for this test case"""
+@pytest.fixture(scope="module")
+def event_loop():
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
-def first_secret_word():
-    """
-    Call this to retrieve the first secret word, which you will need for the second_secret_word function.
-    """
-    return "v0iq020i0g"
+@pytest.fixture()
+def server():
+    config = LettaConfig.load()
+    config.save()
+
+    server = SyncServer()
+    return server
 
 
-def second_secret_word(prev_secret_word: str):
-    """
-    Call this to retrieve the second secret word, which you will need for the third_secret_word function. If you get the word wrong, this function will error.
+@pytest.fixture(scope="function")
+def first_secret_tool(server):
+    def first_secret_word():
+        """
+        Retrieves the initial secret word in a multi-step sequence.
 
-    Args:
-        prev_secret_word (str): The secret word retrieved from calling first_secret_word.
-    """
-    if prev_secret_word != "v0iq020i0g":
-        raise RuntimeError(f"Expected secret {'v0iq020i0g'}, got {prev_secret_word}")
+        Returns:
+            str: The first secret word.
+        """
+        return "v0iq020i0g"
 
-    return "4rwp2b4gxq"
-
-
-def third_secret_word(prev_secret_word: str):
-    """
-    Call this to retrieve the third secret word, which you will need for the fourth_secret_word function. If you get the word wrong, this function will error.
-
-    Args:
-        prev_secret_word (str): The secret word retrieved from calling second_secret_word.
-    """
-    if prev_secret_word != "4rwp2b4gxq":
-        raise RuntimeError(f'Expected secret "4rwp2b4gxq", got {prev_secret_word}')
-
-    return "hj2hwibbqm"
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=first_secret_word), actor=actor)
+    yield tool
 
 
-def fourth_secret_word(prev_secret_word: str):
-    """
-    Call this to retrieve the last secret word, which you will need to output in a send_message later. If you get the word wrong, this function will error.
+@pytest.fixture(scope="function")
+def second_secret_tool(server):
+    def second_secret_word(prev_secret_word: str):
+        """
+        Retrieves the second secret word.
 
-    Args:
-        prev_secret_word (str): The secret word retrieved from calling third_secret_word.
-    """
-    if prev_secret_word != "hj2hwibbqm":
-        raise RuntimeError(f"Expected secret {'hj2hwibbqm'}, got {prev_secret_word}")
+        Args:
+            prev_secret_word (str): The previously retrieved secret word.
 
-    return "banana"
+        Returns:
+            str: The second secret word.
+        """
+        if prev_secret_word != "v0iq020i0g":
+            raise RuntimeError(f"Expected secret {'v0iq020i0g'}, got {prev_secret_word}")
+        return "4rwp2b4gxq"
 
-
-def flip_coin():
-    """
-    Call this to retrieve the password to the secret word, which you will need to output in a send_message later.
-    If it returns an empty string, try flipping again!
-
-    Returns:
-        str: The password or an empty string
-    """
-    import random
-
-    # Flip a coin with 50% chance
-    if random.random() < 0.5:
-        return ""
-    return "hj2hwibbqm"
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=second_secret_word), actor=actor)
+    yield tool
 
 
-def can_play_game():
-    """
-    Call this to start the tool chain.
-    """
-    import random
+@pytest.fixture(scope="function")
+def third_secret_tool(server):
+    def third_secret_word(prev_secret_word: str):
+        """
+        Retrieves the third secret word.
 
-    return random.random() < 0.5
+        Args:
+            prev_secret_word (str): The previously retrieved secret word.
+
+        Returns:
+            str: The third secret word.
+        """
+        if prev_secret_word != "4rwp2b4gxq":
+            raise RuntimeError(f'Expected secret "4rwp2b4gxq", got {prev_secret_word}')
+        return "hj2hwibbqm"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=third_secret_word), actor=actor)
+    yield tool
 
 
-def return_none():
-    """
-    Really simple function
-    """
-    return None
+@pytest.fixture(scope="function")
+def fourth_secret_tool(server):
+    def fourth_secret_word(prev_secret_word: str):
+        """
+        Retrieves the final secret word.
+
+        Args:
+            prev_secret_word (str): The previously retrieved secret word.
+
+        Returns:
+            str: The final secret word.
+        """
+        if prev_secret_word != "hj2hwibbqm":
+            raise RuntimeError(f"Expected secret {'hj2hwibbqm'}, got {prev_secret_word}")
+        return "banana"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=fourth_secret_word), actor=actor)
+    yield tool
 
 
-def auto_error():
-    """
-    If you call this function, it will throw an error automatically.
-    """
-    raise RuntimeError("This should never be called.")
+@pytest.fixture(scope="function")
+def flip_coin_tool(server):
+    def flip_coin():
+        """
+        Simulates a coin flip with a chance to return a secret word.
+
+        Returns:
+            str: A secret word or an empty string.
+        """
+        import random
+
+        return "" if random.random() < 0.5 else "hj2hwibbqm"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=flip_coin), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def can_play_game_tool(server):
+    def can_play_game():
+        """
+        Determines whether a game can be played.
+
+        Returns:
+            bool: True if allowed to play, False otherwise.
+        """
+        import random
+
+        return random.random() < 0.5
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=can_play_game), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def return_none_tool(server):
+    def return_none():
+        """
+        Always returns None.
+
+        Returns:
+            None
+        """
+        return None
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=return_none), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def auto_error_tool(server):
+    def auto_error():
+        """
+        Always raises an error when called.
+
+        Raises:
+            RuntimeError: Always triggered.
+        """
+        raise RuntimeError("This should never be called.")
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=auto_error), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def save_data_tool(server):
+    def save_data():
+        """
+        Saves important data before exiting.
+
+        Returns:
+            str: Confirmation that data was saved.
+        """
+        return "Data saved successfully"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=save_data), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def cleanup_temp_files_tool(server):
+    def cleanup_temp_files():
+        """
+        Cleans up temporary files before exiting.
+
+        Returns:
+            str: Confirmation that cleanup was completed.
+        """
+        return "Temporary files cleaned up"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=cleanup_temp_files), actor=actor)
+    yield tool
+
+
+@pytest.fixture(scope="function")
+def validate_work_tool(server):
+    def validate_work():
+        """
+        Validates that work is complete before exiting.
+
+        Returns:
+            str: Validation result.
+        """
+        return "Work validation passed"
+
+    actor = server.user_manager.get_user_or_default()
+    tool = server.tool_manager.create_or_update_tool(create_tool_from_func(func=validate_work), actor=actor)
+    yield tool
+
+
+@pytest.fixture
+def default_user(server):
+    yield server.user_manager.get_user_or_default()
+
+
+async def run_agent_step(server, agent_id, input_messages, actor):
+    """Helper function to run agent step using LettaAgent directly instead of server.send_messages."""
+    agent_loop = LettaAgent(
+        agent_id=agent_id,
+        message_manager=server.message_manager,
+        agent_manager=server.agent_manager,
+        block_manager=server.block_manager,
+        job_manager=server.job_manager,
+        passage_manager=server.passage_manager,
+        actor=actor,
+        step_manager=server.step_manager,
+        telemetry_manager=NoopTelemetryManager(),
+    )
+
+    return await agent_loop.step(
+        input_messages,
+        max_steps=50,
+        use_assistant_message=False,
+    )
 
 
 @pytest.mark.timeout(60)  # Sets a 60-second timeout for the test since this could loop infinitely
-def test_single_path_agent_tool_call_graph(mock_e2b_api_key_none):
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
+@pytest.mark.asyncio
+async def test_single_path_agent_tool_call_graph(
+    server, disable_e2b_api_key, first_secret_tool, second_secret_tool, third_secret_tool, fourth_secret_tool, auto_error_tool, default_user
+):
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
 
     # Add tools
-    t1 = client.create_or_update_tool(first_secret_word)
-    t2 = client.create_or_update_tool(second_secret_word)
-    t3 = client.create_or_update_tool(third_secret_word)
-    t4 = client.create_or_update_tool(fourth_secret_word)
-    t_err = client.create_or_update_tool(auto_error)
-    tools = [t1, t2, t3, t4, t_err]
+    tools = [first_secret_tool, second_secret_tool, third_secret_tool, fourth_secret_tool, auto_error_tool]
 
     # Make tool rules
     tool_rules = [
@@ -132,8 +284,13 @@ def test_single_path_agent_tool_call_graph(mock_e2b_api_key_none):
     ]
 
     # Make agent state
-    agent_state = setup_agent(client, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
-    response = client.user_message(agent_id=agent_state.id, message="What is the fourth secret word?")
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="What is the fourth secret word?")],
+        actor=default_user,
+    )
 
     # Make checks
     assert_sanity_checks(response)
@@ -145,7 +302,7 @@ def test_single_path_agent_tool_call_graph(mock_e2b_api_key_none):
     assert_invoked_function_call(response.messages, "fourth_secret_word")
 
     # Check ordering of tool calls
-    tool_names = [t.name for t in [t1, t2, t3, t4]]
+    tool_names = [t.name for t in [first_secret_tool, second_secret_tool, third_secret_tool, fourth_secret_tool]]
     tool_names += ["send_message"]
     for m in response.messages:
         if isinstance(m, ToolCallMessage):
@@ -159,175 +316,277 @@ def test_single_path_agent_tool_call_graph(mock_e2b_api_key_none):
     assert_invoked_send_message_with_keyword(response.messages, "banana")
 
     print(f"Got successful response from client: \n\n{response}")
-    cleanup(client=client, agent_uuid=agent_uuid)
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
 
 
-def test_check_tool_rules_with_different_models(mock_e2b_api_key_none):
-    """Test that tool rules are properly checked for different model configurations."""
-    client = create_client()
-
-    config_files = [
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "config_file",
+    [
         "tests/configs/llm_model_configs/claude-3-5-sonnet.json",
         "tests/configs/llm_model_configs/openai-gpt-3.5-turbo.json",
         "tests/configs/llm_model_configs/openai-gpt-4o.json",
-    ]
+    ],
+)
+@pytest.mark.parametrize("init_tools_case", ["single", "multiple"])
+def test_check_tool_rules_with_different_models_parametrized(
+    server, disable_e2b_api_key, first_secret_tool, second_secret_tool, third_secret_tool, default_user, config_file, init_tools_case
+):
+    """Test that tool rules are properly validated across model configurations and init tool scenarios."""
+    agent_uuid = str(uuid.uuid4())
 
-    # Create two test tools
-    t1_name = "first_secret_word"
-    t2_name = "second_secret_word"
-    t1 = client.create_or_update_tool(first_secret_word)
-    t2 = client.create_or_update_tool(second_secret_word)
-    tool_rules = [InitToolRule(tool_name=t1_name), InitToolRule(tool_name=t2_name)]
-    tools = [t1, t2]
+    if init_tools_case == "multiple":
+        tools = [first_secret_tool, second_secret_tool]
+        tool_rules = [
+            InitToolRule(tool_name=first_secret_tool.name),
+            InitToolRule(tool_name=second_secret_tool.name),
+        ]
+    else:  # "single"
+        tools = [third_secret_tool]
+        tool_rules = [InitToolRule(tool_name=third_secret_tool.name)]
 
-    for config_file in config_files:
-        # Setup tools
-        agent_uuid = str(uuid.uuid4())
-
-        if "gpt-4o" in config_file:
-            # Structured output model (should work with multiple init tools)
-            agent_state = setup_agent(client, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
-            assert agent_state is not None
-        else:
-            # Non-structured output model (should raise error with multiple init tools)
-            with pytest.raises(ValueError, match="Multiple initial tools are not supported for non-structured models"):
-                setup_agent(client, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
-
-        # Cleanup
-        cleanup(client=client, agent_uuid=agent_uuid)
-
-    # Create tool rule with single initial tool
-    t3_name = "third_secret_word"
-    t3 = client.create_or_update_tool(third_secret_word)
-    tool_rules = [InitToolRule(tool_name=t3_name)]
-    tools = [t3]
-    for config_file in config_files:
-        agent_uuid = str(uuid.uuid4())
-
-        # Structured output model (should work with single init tool)
-        agent_state = setup_agent(client, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
+    if "gpt-4o" in config_file or init_tools_case == "single":
+        # Should succeed
+        agent_state = setup_agent(
+            server,
+            config_file,
+            agent_uuid=agent_uuid,
+            tool_ids=[t.id for t in tools],
+            tool_rules=tool_rules,
+        )
         assert agent_state is not None
+    else:
+        # Non-structured model with multiple init tools should fail
+        with pytest.raises(ValueError, match="Multiple initial tools are not supported for non-structured models"):
+            setup_agent(
+                server,
+                config_file,
+                agent_uuid=agent_uuid,
+                tool_ids=[t.id for t in tools],
+                tool_rules=tool_rules,
+            )
 
-        cleanup(client=client, agent_uuid=agent_uuid)
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
 
 
-def test_claude_initial_tool_rule_enforced(mock_e2b_api_key_none):
-    """Test that the initial tool rule is enforced for the first message."""
-    client = create_client()
-
-    # Create tool rules that require tool_a to be called first
-    t1_name = "first_secret_word"
-    t2_name = "second_secret_word"
-    t1 = client.create_or_update_tool(first_secret_word)
-    t2 = client.create_or_update_tool(second_secret_word)
+@pytest.mark.timeout(180)
+@pytest.mark.asyncio
+async def test_claude_initial_tool_rule_enforced(
+    server,
+    disable_e2b_api_key,
+    first_secret_tool,
+    second_secret_tool,
+    default_user,
+):
+    """Test that the initial tool rule is enforced for the first message using Claude model."""
     tool_rules = [
-        InitToolRule(tool_name=t1_name),
-        ChildToolRule(tool_name=t1_name, children=[t2_name]),
-        TerminalToolRule(tool_name=t2_name),
+        InitToolRule(tool_name=first_secret_tool.name),
+        ChildToolRule(tool_name=first_secret_tool.name, children=[second_secret_tool.name]),
+        TerminalToolRule(tool_name=second_secret_tool.name),
     ]
-    tools = [t1, t2]
-
-    # Make agent state
+    tools = [first_secret_tool, second_secret_tool]
     anthropic_config_file = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
+
     for i in range(3):
         agent_uuid = str(uuid.uuid4())
         agent_state = setup_agent(
-            client, anthropic_config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules
+            server,
+            anthropic_config_file,
+            agent_uuid=agent_uuid,
+            tool_ids=[t.id for t in tools],
+            tool_rules=tool_rules,
         )
-        response = client.user_message(agent_id=agent_state.id, message="What is the second secret word?")
+
+        response = await run_agent_step(
+            server=server,
+            agent_id=agent_state.id,
+            input_messages=[MessageCreate(role="user", content="What is the second secret word?")],
+            actor=default_user,
+        )
 
         assert_sanity_checks(response)
-        messages = response.messages
 
-        assert_invoked_function_call(messages, "first_secret_word")
-        assert_invoked_function_call(messages, "second_secret_word")
+        # Check that the expected tools were invoked
+        assert_invoked_function_call(response.messages, "first_secret_word")
+        assert_invoked_function_call(response.messages, "second_secret_word")
 
-        tool_names = [t.name for t in [t1, t2]]
-        tool_names += ["send_message"]
-        for m in messages:
+        tool_names = [t.name for t in [first_secret_tool, second_secret_tool]] + ["send_message"]
+        for m in response.messages:
             if isinstance(m, ToolCallMessage):
-                # Check that it's equal to the first one
                 assert m.tool_call.name == tool_names[0]
-
-                # Pop out first one
                 tool_names = tool_names[1:]
 
         print(f"Passed iteration {i}")
-        cleanup(client=client, agent_uuid=agent_uuid)
+        cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
 
-        # Implement exponential backoff with initial time of 10 seconds
+        # Exponential backoff
         if i < 2:
             backoff_time = 10 * (2**i)
-            time.sleep(backoff_time)
+            await asyncio.sleep(backoff_time)
 
 
-@pytest.mark.timeout(60)  # Sets a 60-second timeout for the test since this could loop infinitely
-def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
+@pytest.mark.timeout(60)
+@pytest.mark.parametrize(
+    "config_file",
+    [
+        "tests/configs/llm_model_configs/claude-3-5-sonnet.json",
+        "tests/configs/llm_model_configs/openai-gpt-4o.json",
+    ],
+)
+@pytest.mark.asyncio
+async def test_agent_no_structured_output_with_one_child_tool_parametrized(
+    server,
+    disable_e2b_api_key,
+    default_user,
+    config_file,
+):
+    """Test that agent correctly calls tool chains with unstructured output under various model configs."""
+    send_message = server.tool_manager.get_tool_by_name(tool_name="send_message", actor=default_user)
+    archival_memory_search = server.tool_manager.get_tool_by_name(tool_name="archival_memory_search", actor=default_user)
+    archival_memory_insert = server.tool_manager.get_tool_by_name(tool_name="archival_memory_insert", actor=default_user)
 
-    send_message = client.server.tool_manager.get_tool_by_name(tool_name="send_message", actor=client.user)
-    archival_memory_search = client.server.tool_manager.get_tool_by_name(tool_name="archival_memory_search", actor=client.user)
-    archival_memory_insert = client.server.tool_manager.get_tool_by_name(tool_name="archival_memory_insert", actor=client.user)
+    tools = [send_message, archival_memory_search, archival_memory_insert]
 
-    # Make tool rules
     tool_rules = [
         InitToolRule(tool_name="archival_memory_search"),
         ChildToolRule(tool_name="archival_memory_search", children=["archival_memory_insert"]),
         ChildToolRule(tool_name="archival_memory_insert", children=["send_message"]),
         TerminalToolRule(tool_name="send_message"),
     ]
-    tools = [send_message, archival_memory_search, archival_memory_insert]
 
-    config_files = [
-        "tests/configs/llm_model_configs/claude-3-5-sonnet.json",
-        "tests/configs/llm_model_configs/openai-gpt-4o.json",
+    max_retries = 3
+    last_error = None
+    agent_uuid = str(uuid.uuid4())
+
+    for attempt in range(max_retries):
+        try:
+            agent_state = setup_agent(
+                server,
+                config_file,
+                agent_uuid=agent_uuid,
+                tool_ids=[t.id for t in tools],
+                tool_rules=tool_rules,
+            )
+
+            response = await run_agent_step(
+                server=server,
+                agent_id=agent_state.id,
+                input_messages=[MessageCreate(role="user", content="hi. run archival memory search")],
+                actor=default_user,
+            )
+
+            # Run assertions
+            assert_sanity_checks(response)
+            assert_invoked_function_call(response.messages, "archival_memory_search")
+            assert_invoked_function_call(response.messages, "archival_memory_insert")
+            assert_invoked_function_call(response.messages, "send_message")
+
+            tool_names = [t.name for t in [archival_memory_search, archival_memory_insert, send_message]]
+            for m in response.messages:
+                if isinstance(m, ToolCallMessage):
+                    assert m.tool_call.name == tool_names[0]
+                    tool_names = tool_names[1:]
+
+            print(f"[{config_file}] Got successful response:\n\n{response}")
+            break  # success
+
+        except AssertionError as e:
+            last_error = e
+            print(f"[{config_file}] Attempt {attempt + 1} failed")
+            cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
+
+    if last_error:
+        raise last_error
+
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("include_base_tools", [False, True])
+@pytest.mark.asyncio
+async def test_init_tool_rule_always_fails(
+    server,
+    disable_e2b_api_key,
+    auto_error_tool,
+    default_user,
+    include_base_tools,
+):
+    """Test behavior when InitToolRule invokes a tool that always fails."""
+    config_file = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
+    agent_uuid = str(uuid.uuid4())
+
+    tool_rule = InitToolRule(tool_name=auto_error_tool.name)
+    agent_state = setup_agent(
+        server,
+        config_file,
+        agent_uuid=agent_uuid,
+        tool_ids=[auto_error_tool.id],
+        tool_rules=[tool_rule],
+        include_base_tools=include_base_tools,
+    )
+
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="blah blah blah")],
+        actor=default_user,
+    )
+
+    assert_invoked_function_call(response.messages, auto_error_tool.name)
+
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
+
+
+@pytest.mark.asyncio
+async def test_continue_tool_rule(server, default_user):
+    """Test the continue tool rule by forcing send_message to loop before ending with core_memory_append."""
+    config_file = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
+    agent_uuid = str(uuid.uuid4())
+
+    tool_ids = [
+        server.tool_manager.get_tool_by_name("send_message", actor=default_user).id,
+        server.tool_manager.get_tool_by_name("core_memory_append", actor=default_user).id,
     ]
 
-    for config in config_files:
-        max_retries = 3
-        last_error = None
+    tool_rules = [
+        ContinueToolRule(tool_name="send_message"),
+        TerminalToolRule(tool_name="core_memory_append"),
+    ]
 
-        for attempt in range(max_retries):
-            try:
-                agent_state = setup_agent(client, config, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
-                response = client.user_message(agent_id=agent_state.id, message="hi. run archival memory search")
+    agent_state = setup_agent(
+        server,
+        config_file,
+        agent_uuid,
+        tool_ids=tool_ids,
+        tool_rules=tool_rules,
+        include_base_tools=False,
+        include_base_tool_rules=False,
+    )
+    print(agent_state)
 
-                # Make checks
-                assert_sanity_checks(response)
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Send me some messages, and then call core_memory_append to end your turn.")],
+        actor=default_user,
+    )
+    print(response)
 
-                # Assert the tools were called
-                assert_invoked_function_call(response.messages, "archival_memory_search")
-                assert_invoked_function_call(response.messages, "archival_memory_insert")
-                assert_invoked_function_call(response.messages, "send_message")
+    assert_invoked_function_call(response.messages, "send_message")
+    assert_invoked_function_call(response.messages, "core_memory_append")
 
-                # Check ordering of tool calls
-                tool_names = [t.name for t in [archival_memory_search, archival_memory_insert, send_message]]
-                for m in response.messages:
-                    if isinstance(m, ToolCallMessage):
-                        # Check that it's equal to the first one
-                        assert m.tool_call.name == tool_names[0]
+    # Check order
+    send_idx = next(i for i, m in enumerate(response.messages) if isinstance(m, ToolCallMessage) and m.tool_call.name == "send_message")
+    append_idx = next(
+        i for i, m in enumerate(response.messages) if isinstance(m, ToolCallMessage) and m.tool_call.name == "core_memory_append"
+    )
+    assert send_idx < append_idx, "send_message should occur before core_memory_append"
 
-                        # Pop out first one
-                        tool_names = tool_names[1:]
-
-                print(f"Got successful response from client: \n\n{response}")
-                break  # Test passed, exit retry loop
-
-            except AssertionError as e:
-                last_error = e
-                print(f"Attempt {attempt + 1} failed, retrying..." if attempt < max_retries - 1 else f"All {max_retries} attempts failed")
-                cleanup(client=client, agent_uuid=agent_uuid)
-                continue
-
-        if last_error and attempt == max_retries - 1:
-            raise last_error  # Re-raise the last error if all retries failed
-
-        cleanup(client=client, agent_uuid=agent_uuid)
+    cleanup(server=server, agent_uuid=agent_uuid, actor=default_user)
 
 
 # @pytest.mark.timeout(60)  # Sets a 60-second timeout for the test since this could loop infinitely
-# def test_agent_conditional_tool_easy(mock_e2b_api_key_none):
+# def test_agent_conditional_tool_easy(disable_e2b_api_key):
 #     """
 #     Test the agent with a conditional tool that has a child tool.
 #
@@ -342,7 +601,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 #                     reveal_secret_word
 #     """
 #
-#     client = create_client()
+#
 #     cleanup(client=client, agent_uuid=agent_uuid)
 #
 #     coin_flip_name = "flip_coin"
@@ -395,7 +654,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 
 
 # @pytest.mark.timeout(60)
-# def test_agent_conditional_tool_without_default_child(mock_e2b_api_key_none):
+# def test_agent_conditional_tool_without_default_child(disable_e2b_api_key):
 #     """
 #     Test the agent with a conditional tool that allows any child tool to be called if a function returns None.
 #
@@ -406,7 +665,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 #                      v
 #                 any tool...  <-- When output doesn't match mapping, agent can call any tool
 #     """
-#     client = create_client()
+#
 #     cleanup(client=client, agent_uuid=agent_uuid)
 #
 #     # Create tools - we'll make several available to the agent
@@ -456,7 +715,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 
 
 # @pytest.mark.timeout(60)
-# def test_agent_reload_remembers_function_response(mock_e2b_api_key_none):
+# def test_agent_reload_remembers_function_response(disable_e2b_api_key):
 #     """
 #     Test that when an agent is reloaded, it remembers the last function response for conditional tool chaining.
 #
@@ -467,7 +726,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 #                      v
 #             fourth_secret_word  <-- Should remember coin flip result after reload
 #     """
-#     client = create_client()
+#
 #     cleanup(client=client, agent_uuid=agent_uuid)
 #
 #     # Create tools
@@ -512,7 +771,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 
 
 # @pytest.mark.timeout(60)  # Sets a 60-second timeout for the test since this could loop infinitely
-# def test_simple_tool_rule(mock_e2b_api_key_none):
+# def test_simple_tool_rule(disable_e2b_api_key):
 #     """
 #     Test a simple tool rule where fourth_secret_word must be called after flip_coin.
 #
@@ -522,7 +781,7 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 #            v
 #     fourth_secret_word
 #     """
-#     client = create_client()
+#
 #     cleanup(client=client, agent_uuid=agent_uuid)
 #
 #     # Create tools
@@ -565,163 +824,228 @@ def test_agent_no_structured_output_with_one_child_tool(mock_e2b_api_key_none):
 #     cleanup(client, agent_uuid=agent_state.id)
 
 
-def test_init_tool_rule_always_fails_one_tool():
-    """
-    Test an init tool rule that always fails when called. The agent has only one tool available.
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_single_required_before_exit_tool(server, disable_e2b_api_key, save_data_tool, default_user):
+    """Test that agent is forced to call a single required-before-exit tool before ending."""
+    agent_name = "required_exit_single_tool_agent"
+    config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
 
-    Once that tool fails and the agent removes that tool, the agent should have 0 tools available.
+    # Set up tools and rules
+    tools = [save_data_tool]
+    tool_rules = [
+        InitToolRule(tool_name="send_message"),
+        RequiredBeforeExitToolRule(tool_name="save_data"),
+        TerminalToolRule(tool_name="send_message"),
+    ]
 
-    This means that the agent should return from `step` early.
-    """
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
+    # Create agent
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_name, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
 
-    # Create tools
-    bad_tool = client.create_or_update_tool(auto_error)
-
-    # Create tool rule: InitToolRule
-    tool_rule = InitToolRule(
-        tool_name=bad_tool.name,
+    # Send message that would normally cause exit
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Please finish your work and send me a message.")],
+        actor=default_user,
     )
 
-    # Set up agent with the tool rule
-    claude_config = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
-    agent_state = setup_agent(client, claude_config, agent_uuid, tool_rules=[tool_rule], tool_ids=[bad_tool.id], include_base_tools=False)
-
-    # Start conversation
-    response = client.user_message(agent_id=agent_state.id, message="blah blah blah")
-
-    # Verify the tool calls
-    tool_calls = [msg for msg in response.messages if isinstance(msg, ToolCallMessage)]
-    assert len(tool_calls) >= 1  # Should have at least flip_coin and fourth_secret_word calls
-    assert_invoked_function_call(response.messages, bad_tool.name)
-
-
-def test_init_tool_rule_always_fails_multiple_tools():
-    """
-    Test an init tool rule that always fails when called. The agent has only 1+ tools available.
-    Once that tool fails and the agent removes that tool, the agent should have other tools available.
-    """
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
-
-    # Create tools
-    bad_tool = client.create_or_update_tool(auto_error)
-
-    # Create tool rule: InitToolRule
-    tool_rule = InitToolRule(
-        tool_name=bad_tool.name,
-    )
-
-    # Set up agent with the tool rule
-    claude_config = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
-    agent_state = setup_agent(client, claude_config, agent_uuid, tool_rules=[tool_rule], tool_ids=[bad_tool.id], include_base_tools=True)
-
-    # Start conversation
-    response = client.user_message(agent_id=agent_state.id, message="blah blah blah")
-
-    # Verify the tool calls
-    tool_calls = [msg for msg in response.messages if isinstance(msg, ToolCallMessage)]
-    assert len(tool_calls) >= 1  # Should have at least flip_coin and fourth_secret_word calls
-    assert_invoked_function_call(response.messages, bad_tool.name)
-
-
-def test_continue_tool_rule():
-    """Test the continue tool rule by forcing the send_message tool to continue"""
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
-
-    continue_tool_rule = ContinueToolRule(
-        tool_name="send_message",
-    )
-    terminal_tool_rule = TerminalToolRule(
-        tool_name="core_memory_append",
-    )
-    rules = [continue_tool_rule, terminal_tool_rule]
-
-    core_memory_append_tool = client.get_tool_id("core_memory_append")
-    send_message_tool = client.get_tool_id("send_message")
-
-    # Set up agent with the tool rule
-    claude_config = "tests/configs/llm_model_configs/claude-3-5-sonnet.json"
-    agent_state = setup_agent(
-        client,
-        claude_config,
-        agent_uuid,
-        tool_rules=rules,
-        tool_ids=[core_memory_append_tool, send_message_tool],
-        include_base_tools=False,
-        include_base_tool_rules=False,
-    )
-
-    # Start conversation
-    response = client.user_message(agent_id=agent_state.id, message="blah blah blah")
-
-    # Verify the tool calls
-    tool_calls = [msg for msg in response.messages if isinstance(msg, ToolCallMessage)]
-    assert len(tool_calls) >= 1
+    # Assertions
+    assert_sanity_checks(response)
+    assert_invoked_function_call(response.messages, "save_data")
     assert_invoked_function_call(response.messages, "send_message")
-    assert_invoked_function_call(response.messages, "core_memory_append")
 
-    # ensure send_message called before core_memory_append
-    send_message_call_index = None
-    core_memory_append_call_index = None
-    for i, call in enumerate(tool_calls):
-        if call.tool_call.name == "send_message":
-            send_message_call_index = i
-        if call.tool_call.name == "core_memory_append":
-            core_memory_append_call_index = i
-    assert send_message_call_index < core_memory_append_call_index, "send_message should have been called before core_memory_append"
+    # The key test is that both tools were called - the agent was forced to call save_data
+    # even when it tried to exit early with send_message
+    tool_calls = [m for m in response.messages if isinstance(m, ToolCallMessage)]
+    save_data_calls = [tc for tc in tool_calls if tc.tool_call.name == "save_data"]
+    send_message_calls = [tc for tc in tool_calls if tc.tool_call.name == "send_message"]
+
+    assert len(save_data_calls) >= 1, "save_data should be called at least once"
+    assert len(send_message_calls) >= 1, "send_message should be called at least once"
+
+    print(f"✓ Agent '{agent_name}' successfully called required tool before exit")
 
 
 @pytest.mark.timeout(60)
-@retry_until_success(max_attempts=3, sleep_time_seconds=2)
-def test_max_count_per_step_tool_rule_integration(mock_e2b_api_key_none):
-    """
-    Test an agent with MaxCountPerStepToolRule to ensure a tool can only be called a limited number of times.
+@pytest.mark.asyncio
+async def test_multiple_required_before_exit_tools(server, disable_e2b_api_key, save_data_tool, cleanup_temp_files_tool, default_user):
+    """Test that agent calls all required-before-exit tools before ending."""
+    agent_name = "required_exit_multi_tool_agent"
+    config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
 
-    Tool Flow:
-        repeatable_tool (max 2 times)
-           |
-           v
-       send_message
-    """
-    client = create_client()
-    cleanup(client=client, agent_uuid=agent_uuid)
-
-    # Create tools
-    repeatable_tool_name = "first_secret_word"
-    final_tool_name = "send_message"
-
-    repeatable_tool = client.create_or_update_tool(first_secret_word)
-    send_message_tool = client.get_tool(client.get_tool_id(final_tool_name))  # Assume send_message is a default tool
-
-    # Define tool rules
+    # Set up tools and rules
+    tools = [save_data_tool, cleanup_temp_files_tool]
     tool_rules = [
-        InitToolRule(tool_name=repeatable_tool_name),
-        MaxCountPerStepToolRule(tool_name=repeatable_tool_name, max_count_limit=2),
-        TerminalToolRule(tool_name=final_tool_name),
+        InitToolRule(tool_name="send_message"),
+        RequiredBeforeExitToolRule(tool_name="save_data"),
+        RequiredBeforeExitToolRule(tool_name="cleanup_temp_files"),
+        TerminalToolRule(tool_name="send_message"),
     ]
 
-    tools = [repeatable_tool, send_message_tool]
+    # Create agent
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_name, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
 
-    # Setup agent
-    agent_state = setup_agent(client, config_file, agent_uuid=agent_uuid, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
-
-    # Start conversation
-    response = client.user_message(
-        agent_id=agent_state.id, message=f"Keep calling {repeatable_tool_name} nonstop without calling ANY other tool."
+    # Send message that would normally cause exit
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Complete all necessary tasks and then send me a message.")],
+        actor=default_user,
     )
 
-    # Make checks
+    # Assertions
     assert_sanity_checks(response)
+    assert_invoked_function_call(response.messages, "save_data")
+    assert_invoked_function_call(response.messages, "cleanup_temp_files")
+    assert_invoked_function_call(response.messages, "send_message")
 
-    # Ensure the repeatable tool is only called twice
-    count = sum(1 for m in response.messages if isinstance(m, ToolCallMessage) and m.tool_call.name == repeatable_tool_name)
-    assert count == 2, f"Expected 'first_secret_word' to be called exactly 2 times, but got {count}"
+    # Verify that all required tools were eventually called
+    tool_calls = [m for m in response.messages if isinstance(m, ToolCallMessage)]
+    save_data_calls = [tc for tc in tool_calls if tc.tool_call.name == "save_data"]
+    cleanup_calls = [tc for tc in tool_calls if tc.tool_call.name == "cleanup_temp_files"]
+    send_message_calls = [tc for tc in tool_calls if tc.tool_call.name == "send_message"]
 
-    # Ensure send_message was eventually called
-    assert_invoked_function_call(response.messages, final_tool_name)
+    assert len(save_data_calls) >= 1, "save_data should be called at least once"
+    assert len(cleanup_calls) >= 1, "cleanup_temp_files should be called at least once"
+    assert len(send_message_calls) >= 1, "send_message should be called at least once"
 
-    print(f"Got successful response from client: \n\n{response}")
-    cleanup(client=client, agent_uuid=agent_uuid)
+    print(f"✓ Agent '{agent_name}' successfully called all required tools before exit")
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_required_before_exit_with_other_rules(server, disable_e2b_api_key, first_secret_tool, save_data_tool, default_user):
+    """Test required-before-exit rules work alongside other tool rules."""
+    agent_name = "required_exit_with_rules_agent"
+    config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
+
+    # Set up tools and rules - combine with child tool rules
+    tools = [first_secret_tool, save_data_tool]
+    tool_rules = [
+        InitToolRule(tool_name="first_secret_word"),
+        ChildToolRule(tool_name="first_secret_word", children=["send_message"]),
+        RequiredBeforeExitToolRule(tool_name="save_data"),
+        TerminalToolRule(tool_name="send_message"),
+    ]
+
+    # Create agent
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_name, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
+
+    # Send message that would trigger tool flow
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Get the first secret word and then finish up.")],
+        actor=default_user,
+    )
+
+    # Assertions
+    assert_sanity_checks(response)
+    assert_invoked_function_call(response.messages, "first_secret_word")
+    assert_invoked_function_call(response.messages, "save_data")
+    assert_invoked_function_call(response.messages, "send_message")
+
+    # Verify that all tools were called (first_secret_word due to InitToolRule, save_data due to RequiredBeforeExitToolRule)
+    tool_calls = [m for m in response.messages if isinstance(m, ToolCallMessage)]
+    first_secret_calls = [tc for tc in tool_calls if tc.tool_call.name == "first_secret_word"]
+    save_data_calls = [tc for tc in tool_calls if tc.tool_call.name == "save_data"]
+    send_message_calls = [tc for tc in tool_calls if tc.tool_call.name == "send_message"]
+
+    assert len(first_secret_calls) >= 1, "first_secret_word should be called due to InitToolRule"
+    assert len(save_data_calls) >= 1, "save_data should be called due to RequiredBeforeExitToolRule"
+    assert len(send_message_calls) >= 1, "send_message should be called eventually"
+
+    print(f"✓ Agent '{agent_name}' successfully handled mixed tool rules")
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_required_tools_called_during_normal_flow(server, disable_e2b_api_key, save_data_tool, default_user):
+    """Test that agent can exit normally when required tools are called during regular operation."""
+    agent_name = "required_exit_normal_flow_agent"
+    config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
+
+    # Set up tools and rules
+    tools = [save_data_tool]
+    tool_rules = [
+        InitToolRule(tool_name="save_data"),
+        RequiredBeforeExitToolRule(tool_name="save_data"),
+        TerminalToolRule(tool_name="send_message"),
+    ]
+
+    # Create agent
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_name, tool_ids=[t.id for t in tools], tool_rules=tool_rules)
+
+    # Send message that explicitly mentions calling the required tool
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Please save data and then send me a message when done.")],
+        actor=default_user,
+    )
+
+    # Assertions
+    assert_sanity_checks(response)
+    assert_invoked_function_call(response.messages, "save_data")
+    assert_invoked_function_call(response.messages, "send_message")
+
+    # Should not have excessive tool calls - agent should exit cleanly after requirements are met
+    tool_calls = [m for m in response.messages if isinstance(m, ToolCallMessage)]
+    save_data_calls = [tc for tc in tool_calls if tc.tool_call.name == "save_data"]
+    send_message_calls = [tc for tc in tool_calls if tc.tool_call.name == "send_message"]
+
+    assert len(save_data_calls) == 1, "Should call save_data exactly once"
+    assert len(send_message_calls) == 1, "Should call send_message exactly once"
+
+    print(f"✓ Agent '{agent_name}' exited cleanly after calling required tool normally")
+
+
+@pytest.mark.timeout(60)
+@pytest.mark.asyncio
+async def test_terminal_tool_rule_send_message_request_heartbeat_false(server, disable_e2b_api_key, default_user):
+    """Test that when there's a terminal tool rule on send_message, the tool call has request_heartbeat=False."""
+    agent_name = "terminal_send_message_heartbeat_test"
+    config_file = "tests/configs/llm_model_configs/openai-gpt-4o.json"
+
+    # Set up tool rules with terminal rule on send_message
+    tool_rules = [
+        TerminalToolRule(tool_name="send_message"),
+    ]
+
+    # Create agent
+    agent_state = setup_agent(server, config_file, agent_uuid=agent_name, tool_ids=[], tool_rules=tool_rules)
+
+    # Send message that should trigger send_message tool call
+    response = await run_agent_step(
+        server=server,
+        agent_id=agent_state.id,
+        input_messages=[MessageCreate(role="user", content="Please send me a simple message.")],
+        actor=default_user,
+    )
+
+    # Assertions
+    assert_sanity_checks(response)
+    assert_invoked_function_call(response.messages, "send_message")
+
+    # Find the send_message tool call and check request_heartbeat is False
+    send_message_call = None
+    for message in response.messages:
+        if isinstance(message, ToolCallMessage) and message.tool_call.name == "send_message":
+            send_message_call = message
+            break
+
+    assert send_message_call is not None, "send_message tool call should be found"
+
+    # Parse the arguments and check request_heartbeat
+    try:
+        arguments = json.loads(send_message_call.tool_call.arguments)
+    except json.JSONDecodeError:
+        pytest.fail("Failed to parse tool call arguments as JSON")
+
+    assert "request_heartbeat" in arguments, "request_heartbeat should be present in send_message arguments"
+    assert arguments["request_heartbeat"] is False, "request_heartbeat should be False for terminal tool rule"
+
+    print(f"✓ Agent '{agent_name}' correctly set request_heartbeat=False for terminal send_message")
+
+    cleanup(server=server, agent_uuid=agent_name, actor=default_user)

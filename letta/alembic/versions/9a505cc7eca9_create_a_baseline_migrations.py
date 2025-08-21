@@ -8,12 +8,12 @@ Create Date: 2024-10-11 14:19:19.875656
 
 from typing import Sequence, Union
 
-import pgvector
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 import letta.orm
 from alembic import op
+from letta.settings import settings
 
 # revision identifiers, used by Alembic.
 revision: str = "9a505cc7eca9"
@@ -23,6 +23,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Skip this migration for SQLite
+    if not settings.letta_pg_uri_no_default:
+        return
+
+    import pgvector
+
     op.create_table(
         "agent_source_mapping",
         sa.Column("id", sa.String(), nullable=False),
@@ -173,6 +179,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Skip this migration for SQLite
+    if not settings.letta_pg_uri_no_default:
+        return
+
     op.drop_table("users")
     op.drop_table("tools")
     op.drop_index("tokens_idx_user", table_name="tokens")

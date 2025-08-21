@@ -1,9 +1,10 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from letta.constants import CORE_MEMORY_BLOCK_CHAR_LIMIT
+from letta.constants import CORE_MEMORY_BLOCK_CHAR_LIMIT, DEFAULT_HUMAN_BLOCK_DESCRIPTION, DEFAULT_PERSONA_BLOCK_DESCRIPTION
 from letta.schemas.letta_base import LettaBase
 
 # block of the LLM context
@@ -18,12 +19,17 @@ class BaseBlock(LettaBase, validate_assignment=True):
     value: str = Field(..., description="Value of the block.")
     limit: int = Field(CORE_MEMORY_BLOCK_CHAR_LIMIT, description="Character limit of the block.")
 
+    project_id: Optional[str] = Field(None, description="The associated project id.")
     # template data (optional)
     template_name: Optional[str] = Field(None, description="Name of the block if it is a template.", alias="name")
     is_template: bool = Field(False, description="Whether the block is a template (e.g. saved human/persona options).")
+    preserve_on_migration: Optional[bool] = Field(False, description="Preserve the block on template migration.")
 
     # context window label
     label: Optional[str] = Field(None, description="Label of the block (e.g. 'human', 'persona') in the context window.")
+
+    # permissions of the agent
+    read_only: bool = Field(False, description="Whether the agent has read-only access to the block.")
 
     # metadata
     description: Optional[str] = Field(None, description="Description of the block.")
@@ -70,24 +76,36 @@ class Block(BaseBlock):
 
     id: str = BaseBlock.generate_id_field()
 
-    # associated user/agent
-    organization_id: Optional[str] = Field(None, description="The unique identifier of the organization associated with the block.")
-
     # default orm fields
     created_by_id: Optional[str] = Field(None, description="The id of the user that made this Block.")
     last_updated_by_id: Optional[str] = Field(None, description="The id of the user that last updated this Block.")
+
+
+class FileBlock(Block):
+    file_id: str = Field(..., description="Unique identifier of the file.")
+    source_id: str = Field(..., description="Unique identifier of the source.")
+    is_open: bool = Field(..., description="True if the agent currently has the file open.")
+    last_accessed_at: Optional[datetime] = Field(
+        default_factory=datetime.utcnow,
+        description="UTC timestamp of the agent’s most recent access to this file. Any operations from the open, close, or search tools will update this field.",
+    )
 
 
 class Human(Block):
     """Human block of the LLM context"""
 
     label: str = "human"
+    description: Optional[str] = Field(DEFAULT_HUMAN_BLOCK_DESCRIPTION, description="Description of the block.")
 
 
 class Persona(Block):
     """Persona block of the LLM context"""
 
     label: str = "persona"
+    description: Optional[str] = Field(DEFAULT_PERSONA_BLOCK_DESCRIPTION, description="Description of the block.")
+
+
+DEFAULT_BLOCKS = [Human(value=""), Persona(value="")]
 
 
 class BlockUpdate(BaseBlock):
@@ -95,6 +113,7 @@ class BlockUpdate(BaseBlock):
 
     limit: Optional[int] = Field(None, description="Character limit of the block.")
     value: Optional[str] = Field(None, description="Value of the block.")
+    project_id: Optional[str] = Field(None, description="The associated project id.")
 
     class Config:
         extra = "ignore"  # Ignores extra fields
@@ -107,6 +126,7 @@ class CreateBlock(BaseBlock):
     limit: int = Field(CORE_MEMORY_BLOCK_CHAR_LIMIT, description="Character limit of the block.")
     value: str = Field(..., description="Value of the block.")
 
+    project_id: Optional[str] = Field(None, description="The associated project id.")
     # block templates
     is_template: bool = False
     template_name: Optional[str] = Field(None, description="Name of the block if it is a template.", alias="name")

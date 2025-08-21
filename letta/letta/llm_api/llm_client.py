@@ -1,7 +1,10 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from letta.llm_api.llm_client_base import LLMClientBase
-from letta.schemas.llm_config import LLMConfig
+from letta.schemas.enums import ProviderType
+
+if TYPE_CHECKING:
+    from letta.orm import User
 
 
 class LLMClient:
@@ -9,21 +12,16 @@ class LLMClient:
 
     @staticmethod
     def create(
-        agent_id: str,
-        llm_config: LLMConfig,
+        provider_type: ProviderType,
         put_inner_thoughts_first: bool = True,
-        actor_id: Optional[str] = None,
+        actor: Optional["User"] = None,
     ) -> Optional[LLMClientBase]:
         """
         Create an LLM client based on the model endpoint type.
 
         Args:
-            agent_id: Unique identifier for the agent
-            llm_config: Configuration for the LLM model
+            provider: The model endpoint type
             put_inner_thoughts_first: Whether to put inner thoughts first in the response
-            use_structured_output: Whether to use structured output
-            use_tool_naming: Whether to use tool naming
-            actor_id: Optional actor identifier
 
         Returns:
             An instance of LLMClientBase subclass
@@ -31,18 +29,41 @@ class LLMClient:
         Raises:
             ValueError: If the model endpoint type is not supported
         """
-        match llm_config.model_endpoint_type:
-            case "google_ai":
+        match provider_type:
+            case ProviderType.google_ai:
                 from letta.llm_api.google_ai_client import GoogleAIClient
 
                 return GoogleAIClient(
-                    agent_id=agent_id, llm_config=llm_config, put_inner_thoughts_first=put_inner_thoughts_first, actor_id=actor_id
+                    put_inner_thoughts_first=put_inner_thoughts_first,
+                    actor=actor,
                 )
-            case "google_vertex":
+            case ProviderType.google_vertex:
                 from letta.llm_api.google_vertex_client import GoogleVertexClient
 
                 return GoogleVertexClient(
-                    agent_id=agent_id, llm_config=llm_config, put_inner_thoughts_first=put_inner_thoughts_first, actor_id=actor_id
+                    put_inner_thoughts_first=put_inner_thoughts_first,
+                    actor=actor,
+                )
+            case ProviderType.anthropic:
+                from letta.llm_api.anthropic_client import AnthropicClient
+
+                return AnthropicClient(
+                    put_inner_thoughts_first=put_inner_thoughts_first,
+                    actor=actor,
+                )
+            case ProviderType.bedrock:
+                from letta.llm_api.bedrock_client import BedrockClient
+
+                return BedrockClient(
+                    put_inner_thoughts_first=put_inner_thoughts_first,
+                    actor=actor,
+                )
+            case ProviderType.openai | ProviderType.together | ProviderType.ollama:
+                from letta.llm_api.openai_client import OpenAIClient
+
+                return OpenAIClient(
+                    put_inner_thoughts_first=put_inner_thoughts_first,
+                    actor=actor,
                 )
             case _:
                 return None

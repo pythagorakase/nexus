@@ -3,9 +3,8 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import Field
 
-from letta.orm.enums import JobType
 from letta.orm.errors import NoResultFound
-from letta.schemas.enums import JobStatus, MessageRole
+from letta.schemas.enums import JobStatus, JobType, MessageRole
 from letta.schemas.letta_message import LettaMessageUnion
 from letta.schemas.openai.chat_completion_response import UsageStatistics
 from letta.schemas.run import Run
@@ -19,6 +18,7 @@ router = APIRouter(prefix="/runs", tags=["runs"])
 @router.get("/", response_model=List[Run], operation_id="list_runs")
 def list_runs(
     server: "SyncServer" = Depends(get_letta_server),
+    agent_ids: Optional[List[str]] = Query(None, description="The unique identifier of the agent associated with the run."),
     actor_id: Optional[str] = Header(None, alias="user_id"),  # Extract user_id from header, default to None if not present
 ):
     """
@@ -26,12 +26,18 @@ def list_runs(
     """
     actor = server.user_manager.get_user_or_default(user_id=actor_id)
 
-    return [Run.from_job(job) for job in server.job_manager.list_jobs(actor=actor, job_type=JobType.RUN)]
+    runs = [Run.from_job(job) for job in server.job_manager.list_jobs(actor=actor, job_type=JobType.RUN)]
+
+    if not agent_ids:
+        return runs
+
+    return [run for run in runs if "agent_id" in run.metadata and run.metadata["agent_id"] in agent_ids]
 
 
 @router.get("/active", response_model=List[Run], operation_id="list_active_runs")
 def list_active_runs(
     server: "SyncServer" = Depends(get_letta_server),
+    agent_ids: Optional[List[str]] = Query(None, description="The unique identifier of the agent associated with the run."),
     actor_id: Optional[str] = Header(None, alias="user_id"),  # Extract user_id from header, default to None if not present
 ):
     """
@@ -41,7 +47,12 @@ def list_active_runs(
 
     active_runs = server.job_manager.list_jobs(actor=actor, statuses=[JobStatus.created, JobStatus.running], job_type=JobType.RUN)
 
-    return [Run.from_job(job) for job in active_runs]
+    active_runs = [Run.from_job(job) for job in active_runs]
+
+    if not agent_ids:
+        return active_runs
+
+    return [run for run in active_runs if "agent_id" in run.metadata and run.metadata["agent_id"] in agent_ids]
 
 
 @router.get("/{run_id}", response_model=Run, operation_id="retrieve_run")
@@ -80,7 +91,7 @@ async def list_run_messages(
     after: Optional[str] = Query(None, description="Cursor for pagination"),
     limit: Optional[int] = Query(100, description="Maximum number of messages to return"),
     order: str = Query(
-        "desc", description="Sort order by the created_at timestamp of the objects. asc for ascending order and desc for descending order."
+        "asc", description="Sort order by the created_at timestamp of the objects. asc for ascending order and desc for descending order."
     ),
     role: Optional[MessageRole] = Query(None, description="Filter by role"),
 ):
@@ -103,7 +114,7 @@ async def list_run_messages(
     if order not in ["asc", "desc"]:
         raise HTTPException(status_code=400, detail="Order must be 'asc' or 'desc'")
 
-    actor = server.user_manager.get_user_or_default(user_id=actor_id)
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
 
     try:
         messages = server.job_manager.get_run_messages(
@@ -170,7 +181,7 @@ async def list_run_steps(
     if order not in ["asc", "desc"]:
         raise HTTPException(status_code=400, detail="Order must be 'asc' or 'desc'")
 
-    actor = server.user_manager.get_user_or_default(user_id=actor_id)
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
 
     try:
         steps = server.job_manager.get_job_steps(
@@ -187,7 +198,7 @@ async def list_run_steps(
 
 
 @router.delete("/{run_id}", response_model=Run, operation_id="delete_run")
-def delete_run(
+async def delete_run(
     run_id: str,
     actor_id: Optional[str] = Header(None, alias="user_id"),
     server: "SyncServer" = Depends(get_letta_server),
@@ -195,10 +206,10 @@ def delete_run(
     """
     Delete a run by its run_id.
     """
-    actor = server.user_manager.get_user_or_default(user_id=actor_id)
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
 
     try:
-        job = server.job_manager.delete_job_by_id(job_id=run_id, actor=actor)
+        job = await server.job_manager.delete_job_by_id_async(job_id=run_id, actor=actor)
         return Run.from_job(job)
     except NoResultFound:
         raise HTTPException(status_code=404, detail="Run not found")

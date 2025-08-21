@@ -8,6 +8,7 @@ If you're using Letta Cloud, replace 'baseURL' with 'token'
 See: https://docs.letta.com/api-reference/overview
 
 Execute this script using `poetry run python3 example.py`
+
 This will install `letta_client` and other dependencies.
 """
 client = Letta(
@@ -22,11 +23,12 @@ agent = client.agents.create(
         ),
     ],
     model="openai/gpt-4o-mini",
-    embedding="openai/text-embedding-ada-002",
+    embedding="openai/text-embedding-3-small",
 )
 
 print(f"Created agent with name {agent.name}")
 
+# Example without streaming
 message_text = "What's my name?"
 response = client.agents.messages.create(
     agent_id=agent.id,
@@ -67,6 +69,17 @@ response = client.agents.messages.create(
     ],
 )
 
+for msg in response.messages:
+    if msg.message_type == "assistant_message":
+        print(msg.content)
+    elif msg.message_type == "reasoning_message":
+        print(msg.reasoning)
+    elif msg.message_type == "tool_call_message":
+        print(msg.tool_call.name)
+        print(msg.tool_call.arguments)
+    elif msg.message_type == "tool_return_message":
+        print(msg.tool_return)
+
 print(f"Sent message to agent {agent.name}: {message_text}")
 print(f"Agent thoughts: {response.messages[0].reasoning}")
 print(f"Tool call information: {response.messages[1].tool_call}")
@@ -74,11 +87,44 @@ print(f"Tool response information: {response.messages[2].status}")
 print(f"Agent thoughts: {response.messages[3].reasoning}")
 print(f"Agent response: {response.messages[4].content}")
 
+
+# send a message to the agent (streaming steps)
+message_text = "Repeat my name."
+stream = client.agents.messages.create_stream(
+    agent_id=agent_state.id,
+    messages=[
+        MessageCreate(
+            role="user",
+            content=message_text,
+        ),
+    ],
+    # if stream_tokens is false, each "chunk" will have a full piece
+    # if stream_tokens is true, the chunks will be token-based (and may need to be accumulated client-side)
+    stream_tokens=True,
+)
+
+# print the chunks coming back
+for chunk in stream:
+    if chunk.message_type == "assistant_message":
+        print(chunk.content)
+    elif chunk.message_type == "reasoning_message":
+        print(chunk.reasoning)
+    elif chunk.message_type == "tool_call_message":
+        if chunk.tool_call.name:
+            print(chunk.tool_call.name)
+        if chunk.tool_call.arguments:
+            print(chunk.tool_call.arguments)
+    elif chunk.message_type == "tool_return_message":
+        print(chunk.tool_return)
+    elif chunk.message_type == "usage_statistics":
+        print(chunk)
+
+
 agent_copy = client.agents.create(
     model="openai/gpt-4o-mini",
-    embedding="openai/text-embedding-ada-002",
+    embedding="openai/text-embedding-3-small",
 )
-block = client.agents.blocks.retrieve(agent.id, "human")
+block = client.agents.blocks.retrieve(agent.id, block_label="human")
 agent_copy = client.agents.blocks.attach(agent_copy.id, block.id)
 
 print(f"Created agent copy with shared memory named {agent_copy.name}")
@@ -96,7 +142,7 @@ response = client.agents.messages.create(
 
 print(f"Sent message to agent {agent_copy.name}: {message_text}")
 
-block = client.agents.blocks.retrieve(agent_copy.id, "human")
+block = client.agents.blocks.retrieve(agent_copy.id, block_label="human")
 print(f"New core memory for agent {agent_copy.name}: {block.value}")
 
 message_text = "What's my name?"

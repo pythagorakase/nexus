@@ -1,8 +1,12 @@
 from typing import TYPE_CHECKING, List, Optional
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 
-from letta.schemas.providers import Provider, ProviderCreate, ProviderUpdate
+from letta.errors import LLMAuthenticationError
+from letta.orm.errors import NoResultFound
+from letta.schemas.enums import ProviderType
+from letta.schemas.providers import Provider, ProviderCheck, ProviderCreate, ProviderUpdate
 from letta.server.rest_api.utils import get_letta_server
 
 if TYPE_CHECKING:
@@ -11,8 +15,10 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/providers", tags=["providers"])
 
 
-@router.get("/", tags=["providers"], response_model=List[Provider], operation_id="list_providers")
-def list_providers(
+@router.get("/", response_model=List[Provider], operation_id="list_providers")
+async def list_providers(
+    name: Optional[str] = Query(None),
+    provider_type: Optional[ProviderType] = Query(None),
     after: Optional[str] = Query(None),
     limit: Optional[int] = Query(50),
     actor_id: Optional[str] = Header(None, alias="user_id"),
@@ -22,8 +28,10 @@ def list_providers(
     Get a list of all custom providers in the database
     """
     try:
-        actor = server.user_manager.get_user_or_default(user_id=actor_id)
-        providers = server.provider_manager.list_providers(after=after, limit=limit, actor=actor)
+        actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
+        providers = await server.provider_manager.list_providers_async(
+            after=after, limit=limit, actor=actor, name=name, provider_type=provider_type
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -31,8 +39,8 @@ def list_providers(
     return providers
 
 
-@router.post("/", tags=["providers"], response_model=Provider, operation_id="create_provider")
-def create_provider(
+@router.post("/", response_model=Provider, operation_id="create_provider")
+async def create_provider(
     request: ProviderCreate = Body(...),
     actor_id: Optional[str] = Header(None, alias="user_id"),  # Extract user_id from header, default to None if not present
     server: "SyncServer" = Depends(get_letta_server),
@@ -40,15 +48,17 @@ def create_provider(
     """
     Create a new custom provider
     """
-    actor = server.user_manager.get_user_or_default(user_id=actor_id)
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
 
-    provider = Provider(**request.model_dump())
-    provider = server.provider_manager.create_provider(provider, actor=actor)
+    provider = ProviderCreate(**request.model_dump())
+
+    provider = await server.provider_manager.create_provider_async(provider, actor=actor)
     return provider
 
 
-@router.patch("/", tags=["providers"], response_model=Provider, operation_id="modify_provider")
-def modify_provider(
+@router.patch("/{provider_id}", response_model=Provider, operation_id="modify_provider")
+async def modify_provider(
+    provider_id: str,
     request: ProviderUpdate = Body(...),
     actor_id: Optional[str] = Header(None, alias="user_id"),  # Extract user_id from header, default to None if not present
     server: "SyncServer" = Depends(get_letta_server),
@@ -56,14 +66,29 @@ def modify_provider(
     """
     Update an existing custom provider
     """
-    actor = server.user_manager.get_user_or_default(user_id=actor_id)
-    provider = server.provider_manager.update_provider(request, actor=actor)
-    return provider
+    actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
+    return await server.provider_manager.update_provider_async(provider_id=provider_id, provider_update=request, actor=actor)
 
 
-@router.delete("/", tags=["providers"], response_model=None, operation_id="delete_provider")
-def delete_provider(
-    provider_id: str = Query(..., description="The provider_id key to be deleted."),
+@router.get("/check", response_model=None, operation_id="check_provider")
+async def check_provider(
+    request: ProviderCheck = Body(...),
+    server: "SyncServer" = Depends(get_letta_server),
+):
+    try:
+        await server.provider_manager.check_provider_api_key(provider_check=request)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, content={"message": f"Valid api key for provider_type={request.provider_type.value}"}
+        )
+    except LLMAuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"{e.message}")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"{e}")
+
+
+@router.delete("/{provider_id}", response_model=None, operation_id="delete_provider")
+async def delete_provider(
+    provider_id: str,
     actor_id: Optional[str] = Header(None, alias="user_id"),
     server: "SyncServer" = Depends(get_letta_server),
 ):
@@ -71,8 +96,11 @@ def delete_provider(
     Delete an existing custom provider
     """
     try:
-        actor = server.user_manager.get_user_or_default(user_id=actor_id)
-        server.provider_manager.delete_provider_by_id(provider_id=provider_id, actor=actor)
+        actor = await server.user_manager.get_actor_or_default_async(actor_id=actor_id)
+        await server.provider_manager.delete_provider_by_id_async(provider_id=provider_id, actor=actor)
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": f"Provider id={provider_id} successfully deleted"})
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail=f"Provider provider_id={provider_id} not found for user_id={actor.id}.")
     except HTTPException:
         raise
     except Exception as e:

@@ -1,21 +1,17 @@
 import hashlib
 import json
-import re
-from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 from letta.constants import LETTA_TOOL_EXECUTION_DIR
 from letta.schemas.agent import AgentState
+from letta.schemas.enums import SandboxType
 from letta.schemas.letta_base import LettaBase, OrmMetadataBase
+from letta.schemas.pip_requirement import PipRequirement
 from letta.settings import tool_settings
 
-
 # Sandbox Config
-class SandboxType(str, Enum):
-    E2B = "e2b"
-    LOCAL = "local"
 
 
 class SandboxRunResult(BaseModel):
@@ -25,24 +21,6 @@ class SandboxRunResult(BaseModel):
     stderr: Optional[List[str]] = Field(None, description="Captured stderr from the function invocation")
     status: Literal["success", "error"] = Field(..., description="The status of the tool execution and return object")
     sandbox_config_fingerprint: str = Field(None, description="The fingerprint of the config for the sandbox")
-
-
-class PipRequirement(BaseModel):
-    name: str = Field(..., min_length=1, description="Name of the pip package.")
-    version: Optional[str] = Field(None, description="Optional version of the package, following semantic versioning.")
-
-    @classmethod
-    def validate_version(cls, version: Optional[str]) -> Optional[str]:
-        if version is None:
-            return None
-        semver_pattern = re.compile(r"^\d+(\.\d+){0,2}(-[a-zA-Z0-9.]+)?$")
-        if not semver_pattern.match(version):
-            raise ValueError(f"Invalid version format: {version}. Must follow semantic versioning (e.g., 1.2.3, 2.0, 1.5.0-alpha).")
-        return version
-
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.version = self.validate_version(self.version)
 
 
 class LocalSandboxConfig(BaseModel):
@@ -69,8 +47,8 @@ class LocalSandboxConfig(BaseModel):
             return data
 
         if data.get("sandbox_dir") is None:
-            if tool_settings.local_sandbox_dir:
-                data["sandbox_dir"] = tool_settings.local_sandbox_dir
+            if tool_settings.tool_exec_dir:
+                data["sandbox_dir"] = tool_settings.tool_exec_dir
             else:
                 data["sandbox_dir"] = LETTA_TOOL_EXECUTION_DIR
 
@@ -101,6 +79,17 @@ class E2BSandboxConfig(BaseModel):
         return data
 
 
+class ModalSandboxConfig(BaseModel):
+    timeout: int = Field(5 * 60, description="Time limit for the sandbox (in seconds).")
+    pip_requirements: list[str] | None = Field(None, description="A list of pip packages to install in the Modal sandbox")
+    npm_requirements: list[str] | None = Field(None, description="A list of npm packages to install in the Modal sandbox")
+    language: Literal["python", "typescript"] = "python"
+
+    @property
+    def type(self) -> "SandboxType":
+        return SandboxType.MODAL
+
+
 class SandboxConfigBase(OrmMetadataBase):
     __id_prefix__ = "sandbox"
 
@@ -116,6 +105,9 @@ class SandboxConfig(SandboxConfigBase):
 
     def get_local_config(self) -> LocalSandboxConfig:
         return LocalSandboxConfig(**self.config)
+
+    def get_modal_config(self) -> ModalSandboxConfig:
+        return ModalSandboxConfig(**self.config)
 
     def fingerprint(self) -> str:
         # Only take into account type, org_id, and the config items
@@ -138,10 +130,12 @@ class SandboxConfig(SandboxConfigBase):
 
 
 class SandboxConfigCreate(LettaBase):
-    config: Union[LocalSandboxConfig, E2BSandboxConfig] = Field(..., description="The configuration for the sandbox.")
+    config: Union[LocalSandboxConfig, E2BSandboxConfig, ModalSandboxConfig] = Field(..., description="The configuration for the sandbox.")
 
 
 class SandboxConfigUpdate(LettaBase):
     """Pydantic model for updating SandboxConfig fields."""
 
-    config: Union[LocalSandboxConfig, E2BSandboxConfig] = Field(None, description="The JSON configuration data for the sandbox.")
+    config: Union[LocalSandboxConfig, E2BSandboxConfig, ModalSandboxConfig] = Field(
+        None, description="The JSON configuration data for the sandbox."
+    )

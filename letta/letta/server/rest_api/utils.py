@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import uuid
-import warnings
 from enum import Enum
 from typing import TYPE_CHECKING, AsyncGenerator, Dict, Iterable, List, Optional, Union, cast
 
@@ -13,21 +12,36 @@ from openai.types.chat.chat_completion_message_tool_call import Function as Open
 from openai.types.chat.completion_create_params import CompletionCreateParams
 from pydantic import BaseModel
 
-from letta.constants import DEFAULT_MESSAGE_TOOL, DEFAULT_MESSAGE_TOOL_KWARG, FUNC_FAILED_HEARTBEAT_MESSAGE, REQ_HEARTBEAT_MESSAGE
+from letta.constants import (
+    DEFAULT_MESSAGE_TOOL,
+    DEFAULT_MESSAGE_TOOL_KWARG,
+    FUNC_FAILED_HEARTBEAT_MESSAGE,
+    REQ_HEARTBEAT_MESSAGE,
+    REQUEST_HEARTBEAT_PARAM,
+)
 from letta.errors import ContextWindowExceededError, RateLimitExceededError
-from letta.helpers.datetime_helpers import get_utc_time
+from letta.helpers.datetime_helpers import get_utc_time, get_utc_timestamp_ns, ns_to_ms
+from letta.helpers.message_helper import convert_message_creates_to_messages
 from letta.log import get_logger
+from letta.otel.context import get_ctx_attributes
+from letta.otel.metric_registry import MetricRegistry
+from letta.otel.tracing import tracer
 from letta.schemas.enums import MessageRole
-from letta.schemas.letta_message_content import TextContent
-from letta.schemas.message import Message
+from letta.schemas.letta_message_content import OmittedReasoningContent, ReasoningContent, RedactedReasoningContent, TextContent
+from letta.schemas.llm_config import LLMConfig
+from letta.schemas.message import Message, MessageCreate, ToolReturn
+from letta.schemas.tool_execution_result import ToolExecutionResult
 from letta.schemas.usage import LettaUsageStatistics
 from letta.schemas.user import User
-from letta.server.rest_api.interface import StreamingServerInterface
 from letta.system import get_heartbeat, package_function_response
 
 if TYPE_CHECKING:
     from letta.server.server import SyncServer
 
+SENTRY_ENABLED = bool(os.getenv("SENTRY_DSN"))
+
+if SENTRY_ENABLED:
+    import sentry_sdk
 
 SSE_PREFIX = "data: "
 SSE_SUFFIX = "\n\n"
@@ -50,18 +64,41 @@ async def sse_async_generator(
     generator: AsyncGenerator,
     usage_task: Optional[asyncio.Task] = None,
     finish_message=True,
+    request_start_timestamp_ns: Optional[int] = None,
+    llm_config: Optional[LLMConfig] = None,
 ):
     """
     Wraps a generator for use in Server-Sent Events (SSE), handling errors and ensuring a completion message.
 
     Args:
     - generator: An asynchronous generator yielding data chunks.
+    - usage_task: Optional task that will return usage statistics.
+    - finish_message: Whether to send a completion message.
+    - request_start_timestamp_ns: Optional ns timestamp when the request started, used to measure time to first token.
 
     Yields:
     - Formatted Server-Sent Event strings.
     """
+    first_chunk = True
+    ttft_span = None
+    if request_start_timestamp_ns is not None:
+        ttft_span = tracer.start_span("time_to_first_token", start_time=request_start_timestamp_ns)
+        ttft_span.set_attributes({f"llm_config.{k}": v for k, v in llm_config.model_dump().items() if v is not None})
+
     try:
         async for chunk in generator:
+            # Measure time to first token
+            if first_chunk and ttft_span is not None:
+                now = get_utc_timestamp_ns()
+                ttft_ns = now - request_start_timestamp_ns
+                ttft_span.add_event(name="time_to_first_token_ms", attributes={"ttft_ms": ns_to_ms(ttft_ns)})
+                ttft_span.end()
+                metric_attributes = get_ctx_attributes()
+                if llm_config:
+                    metric_attributes["model.name"] = llm_config.model
+                MetricRegistry().ttft_ms_histogram.record(ns_to_ms(ttft_ns), metric_attributes)
+                first_chunk = False
+
             # yield f"data: {json.dumps(chunk)}\n\n"
             if isinstance(chunk, BaseModel):
                 chunk = chunk.model_dump()
@@ -80,25 +117,25 @@ async def sse_async_generator(
                     err_msg = f"Expected LettaUsageStatistics, got {type(usage)}"
                     logger.error(err_msg)
                     raise ValueError(err_msg)
-                yield sse_formatter(usage.model_dump())
+                yield sse_formatter(usage.model_dump(exclude={"steps_messages"}))
 
             except ContextWindowExceededError as e:
-                log_error_to_sentry(e)
+                capture_sentry_exception(e)
                 logger.error(f"ContextWindowExceededError error: {e}")
                 yield sse_formatter({"error": f"Stream failed: {e}", "code": str(e.code.value) if e.code else None})
 
             except RateLimitExceededError as e:
-                log_error_to_sentry(e)
+                capture_sentry_exception(e)
                 logger.error(f"RateLimitExceededError error: {e}")
                 yield sse_formatter({"error": f"Stream failed: {e}", "code": str(e.code.value) if e.code else None})
 
             except Exception as e:
-                log_error_to_sentry(e)
+                capture_sentry_exception(e)
                 logger.error(f"Caught unexpected Exception: {e}")
-                yield sse_formatter({"error": f"Stream failed (internal error occurred)"})
+                yield sse_formatter({"error": "Stream failed (internal error occurred)"})
 
     except Exception as e:
-        log_error_to_sentry(e)
+        capture_sentry_exception(e)
         logger.error(f"Caught unexpected Exception: {e}")
         yield sse_formatter({"error": "Stream failed (decoder encountered an error)"})
 
@@ -122,66 +159,46 @@ def get_user_id(user_id: Optional[str] = Header(None, alias="user_id")) -> Optio
     return user_id
 
 
-def get_current_interface() -> StreamingServerInterface:
-    return StreamingServerInterface
-
-
-def log_error_to_sentry(e):
-    import traceback
-
-    traceback.print_exc()
-    warnings.warn(f"SSE stream generator failed: {e}")
-
-    # Log the error, since the exception handler upstack (in FastAPI) won't catch it, because this may be a 200 response
-    # Print the stack trace
-    if (os.getenv("SENTRY_DSN") is not None) and (os.getenv("SENTRY_DSN") != ""):
-        import sentry_sdk
-
+def capture_sentry_exception(e: BaseException):
+    """This will capture the exception in sentry, since the exception handler upstack (in FastAPI) won't catch it, because this may be a 200 response"""
+    if SENTRY_ENABLED:
         sentry_sdk.capture_exception(e)
 
 
-def create_user_message(input_message: dict, agent_id: str, actor: User) -> Message:
+def create_input_messages(input_messages: List[MessageCreate], agent_id: str, timezone: str, actor: User) -> List[Message]:
     """
     Converts a user input message into the internal structured format.
+
+    TODO (cliandy): this effectively duplicates the functionality of `convert_message_creates_to_messages`,
+    we should unify this when it's clear what message attributes we need.
     """
-    # Generate timestamp in the correct format
-    # Skip pytz for performance reasons
-    now = get_utc_time().isoformat()
 
-    # Format message as structured JSON
-    structured_message = {"type": "user_message", "message": input_message["content"], "time": now}
-
-    # Construct the Message object
-    user_message = Message(
-        id=f"message-{uuid.uuid4()}",
-        role=MessageRole.user,
-        content=[TextContent(text=json.dumps(structured_message, indent=2))],  # Store structured JSON
-        organization_id=actor.organization_id,
-        agent_id=agent_id,
-        model=None,
-        tool_calls=None,
-        tool_call_id=None,
-        created_at=get_utc_time(),
-    )
-
-    return user_message
+    messages = convert_message_creates_to_messages(input_messages, agent_id, timezone, wrap_user_message=False, wrap_system_message=False)
+    return messages
 
 
-def create_tool_call_messages_from_openai_response(
+def create_letta_messages_from_llm_response(
     agent_id: str,
     model: str,
     function_name: str,
     function_arguments: Dict,
+    tool_execution_result: ToolExecutionResult,
     tool_call_id: str,
     function_call_success: bool,
     function_response: Optional[str],
+    timezone: str,
     actor: User,
-    add_heartbeat_request_system_message: bool = False,
+    continue_stepping: bool = False,
+    heartbeat_reason: Optional[str] = None,
+    reasoning_content: Optional[List[Union[TextContent, ReasoningContent, RedactedReasoningContent, OmittedReasoningContent]]] = None,
+    pre_computed_assistant_message_id: Optional[str] = None,
+    llm_batch_item_id: Optional[str] = None,
+    step_id: str | None = None,
 ) -> List[Message]:
     messages = []
-
     # Construct the tool call with the assistant's message
-    function_arguments["request_heartbeat"] = True
+    # Force set request_heartbeat in tool_args to calculated continue_stepping
+    function_arguments[REQUEST_HEARTBEAT_PARAM] = continue_stepping
     tool_call = OpenAIToolCall(
         id=tool_call_id,
         function=OpenAIFunction(
@@ -190,46 +207,87 @@ def create_tool_call_messages_from_openai_response(
         ),
         type="function",
     )
+    # TODO: Use ToolCallContent instead of tool_calls
+    # TODO: This helps preserve ordering
     assistant_message = Message(
         role=MessageRole.assistant,
-        content=[],
-        organization_id=actor.organization_id,
+        content=reasoning_content if reasoning_content else [],
         agent_id=agent_id,
         model=model,
         tool_calls=[tool_call],
         tool_call_id=tool_call_id,
         created_at=get_utc_time(),
+        batch_item_id=llm_batch_item_id,
     )
+    if pre_computed_assistant_message_id:
+        assistant_message.id = pre_computed_assistant_message_id
     messages.append(assistant_message)
 
+    # TODO: Use ToolReturnContent instead of TextContent
+    # TODO: This helps preserve ordering
     tool_message = Message(
         role=MessageRole.tool,
-        content=[TextContent(text=package_function_response(function_call_success, function_response))],
-        organization_id=actor.organization_id,
+        content=[TextContent(text=package_function_response(function_call_success, function_response, timezone))],
         agent_id=agent_id,
         model=model,
         tool_calls=[],
         tool_call_id=tool_call_id,
         created_at=get_utc_time(),
         name=function_name,
+        batch_item_id=llm_batch_item_id,
+        tool_returns=[
+            ToolReturn(
+                status=tool_execution_result.status,
+                stderr=tool_execution_result.stderr,
+                stdout=tool_execution_result.stdout,
+                # func_return=tool_execution_result.func_return,
+            )
+        ],
     )
     messages.append(tool_message)
 
-    if add_heartbeat_request_system_message:
-        text_content = REQ_HEARTBEAT_MESSAGE if function_call_success else FUNC_FAILED_HEARTBEAT_MESSAGE
-        heartbeat_system_message = Message(
-            role=MessageRole.user,
-            content=[TextContent(text=get_heartbeat(text_content))],
-            organization_id=actor.organization_id,
+    if continue_stepping:
+        heartbeat_system_message = create_heartbeat_system_message(
             agent_id=agent_id,
             model=model,
-            tool_calls=[],
-            tool_call_id=None,
-            created_at=get_utc_time(),
+            function_call_success=function_call_success,
+            actor=actor,
+            timezone=timezone,
+            heartbeat_reason=heartbeat_reason,
         )
         messages.append(heartbeat_system_message)
 
+    for message in messages:
+        message.step_id = step_id
+
     return messages
+
+
+def create_heartbeat_system_message(
+    agent_id: str,
+    model: str,
+    function_call_success: bool,
+    timezone: str,
+    actor: User,
+    llm_batch_item_id: Optional[str] = None,
+    heartbeat_reason: Optional[str] = None,
+) -> Message:
+    if heartbeat_reason:
+        text_content = heartbeat_reason
+    else:
+        text_content = REQ_HEARTBEAT_MESSAGE if function_call_success else FUNC_FAILED_HEARTBEAT_MESSAGE
+
+    heartbeat_system_message = Message(
+        role=MessageRole.user,
+        content=[TextContent(text=get_heartbeat(timezone, text_content))],
+        agent_id=agent_id,
+        model=model,
+        tool_calls=[],
+        tool_call_id=None,
+        created_at=get_utc_time(),
+        batch_item_id=llm_batch_item_id,
+    )
+    return heartbeat_system_message
 
 
 def create_assistant_messages_from_openai_response(
@@ -237,6 +295,7 @@ def create_assistant_messages_from_openai_response(
     agent_id: str,
     model: str,
     actor: User,
+    timezone: str,
 ) -> List[Message]:
     """
     Converts an OpenAI response into Messages that follow the internal
@@ -244,20 +303,22 @@ def create_assistant_messages_from_openai_response(
     """
     tool_call_id = str(uuid.uuid4())
 
-    return create_tool_call_messages_from_openai_response(
+    return create_letta_messages_from_llm_response(
         agent_id=agent_id,
         model=model,
         function_name=DEFAULT_MESSAGE_TOOL,
         function_arguments={DEFAULT_MESSAGE_TOOL_KWARG: response_text},  # Avoid raw string manipulation
+        tool_execution_result=ToolExecutionResult(status="success"),
         tool_call_id=tool_call_id,
         function_call_success=True,
         function_response=None,
+        timezone=timezone,
         actor=actor,
-        add_heartbeat_request_system_message=False,
+        continue_stepping=False,
     )
 
 
-def convert_letta_messages_to_openai(messages: List[Message]) -> List[dict]:
+def convert_in_context_letta_messages_to_openai(in_context_messages: List[Message], exclude_system_messages: bool = False) -> List[dict]:
     """
     Flattens Letta's messages (with system, user, assistant, tool roles, etc.)
     into standard OpenAI chat messages (system, user, assistant).
@@ -268,10 +329,15 @@ def convert_letta_messages_to_openai(messages: List[Message]) -> List[dict]:
       3. User messages might store actual text inside JSON => parse that into content
       4. System => pass through as normal
     """
+    # Always include the system prompt
+    # TODO: This is brittle
+    openai_messages = [in_context_messages[0].to_openai_dict()]
 
-    openai_messages = []
+    for msg in in_context_messages[1:]:
+        if msg.role == MessageRole.system and exclude_system_messages:
+            # Skip if exclude_system_messages is set to True
+            continue
 
-    for msg in messages:
         # 1. Assistant + 'send_message' tool_calls => flatten
         if msg.role == MessageRole.assistant and msg.tool_calls:
             # Find any 'send_message' tool_calls
@@ -289,7 +355,6 @@ def convert_letta_messages_to_openai(messages: List[Message]) -> List[dict]:
                     id=msg.id,
                     role=msg.role,
                     content=[TextContent(text=extracted_text)],
-                    organization_id=msg.organization_id,
                     agent_id=msg.agent_id,
                     model=msg.model,
                     name=msg.name,
@@ -318,7 +383,6 @@ def convert_letta_messages_to_openai(messages: List[Message]) -> List[dict]:
                             id=msg.id,
                             role=msg.role,
                             content=[TextContent(text=actual_user_text)],
-                            organization_id=msg.organization_id,
                             agent_id=msg.agent_id,
                             model=msg.model,
                             name=msg.name,
@@ -329,15 +393,13 @@ def convert_letta_messages_to_openai(messages: List[Message]) -> List[dict]:
                 except json.JSONDecodeError:
                     pass  # It's not JSON, leave as-is
 
-        # 4. System is left as-is (or any other role that doesn't need special handling)
-        #
         # Finally, convert to dict using your existing method
         openai_messages.append(msg.to_openai_dict())
 
     return openai_messages
 
 
-def get_messages_from_completion_request(completion_request: CompletionCreateParams) -> List[Dict]:
+def get_user_message_from_chat_completions_request(completion_request: CompletionCreateParams) -> List[MessageCreate]:
     try:
         messages = list(cast(Iterable[ChatCompletionMessageParam], completion_request["messages"]))
     except KeyError:
@@ -359,4 +421,6 @@ def get_messages_from_completion_request(completion_request: CompletionCreatePar
         logger.error(f"The input message does not have valid content: {input_message}")
         raise HTTPException(status_code=400, detail="'messages[-1].content' must be a 'string'")
 
-    return messages
+    for message in reversed(messages):
+        if message["role"] == "user":
+            return [MessageCreate(role=MessageRole.user, content=[TextContent(text=message["content"])])]

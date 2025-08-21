@@ -5,18 +5,16 @@ from pydantic import Field, model_validator
 from letta.constants import (
     COMPOSIO_TOOL_TAG_NAME,
     FUNCTION_RETURN_CHAR_LIMIT,
+    LETTA_BUILTIN_TOOL_MODULE_NAME,
     LETTA_CORE_TOOL_MODULE_NAME,
+    LETTA_FILES_TOOL_MODULE_NAME,
     LETTA_MULTI_AGENT_TOOL_MODULE_NAME,
+    LETTA_VOICE_TOOL_MODULE_NAME,
     MCP_TOOL_TAG_NAME_PREFIX,
 )
-from letta.functions.ast_parsers import get_function_name_and_description
+from letta.functions.ast_parsers import get_function_name_and_docstring
+from letta.functions.composio_helpers import generate_composio_tool_wrapper
 from letta.functions.functions import derive_openai_json_schema, get_json_schema_from_module
-from letta.functions.helpers import (
-    generate_composio_tool_wrapper,
-    generate_langchain_tool_wrapper,
-    generate_mcp_tool_wrapper,
-    generate_model_from_args_json_schema,
-)
 from letta.functions.mcp_client.types import MCPTool
 from letta.functions.schema_generator import (
     generate_schema_from_args_schema_v2,
@@ -24,8 +22,10 @@ from letta.functions.schema_generator import (
     generate_tool_schema_for_mcp,
 )
 from letta.log import get_logger
-from letta.orm.enums import ToolType
+from letta.schemas.enums import ToolType
 from letta.schemas.letta_base import LettaBase
+from letta.schemas.npm_requirement import NpmRequirement
+from letta.schemas.pip_requirement import PipRequirement
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,6 @@ class Tool(BaseTool):
     tool_type: ToolType = Field(ToolType.CUSTOM, description="The type of the tool.")
     description: Optional[str] = Field(None, description="The description of the tool.")
     source_type: Optional[str] = Field(None, description="The type of the source code.")
-    organization_id: Optional[str] = Field(None, description="The unique identifier of the organization associated with the tool.")
     name: Optional[str] = Field(None, description="The name of the function.")
     tags: List[str] = Field([], description="Metadata tags.")
 
@@ -62,6 +61,8 @@ class Tool(BaseTool):
 
     # tool configuration
     return_char_limit: int = Field(FUNCTION_RETURN_CHAR_LIMIT, description="The maximum number of characters in the response.")
+    pip_requirements: list[PipRequirement] | None = Field(None, description="Optional list of pip packages required by this tool.")
+    npm_requirements: list[NpmRequirement] | None = Field(None, description="Optional list of npm packages required by this tool.")
 
     # metadata fields
     created_by_id: Optional[str] = Field(None, description="The id of the user that made this Tool.")
@@ -73,39 +74,52 @@ class Tool(BaseTool):
         """
         Refresh name, description, source_code, and json_schema.
         """
-        if self.tool_type == ToolType.CUSTOM:
-            # If it's a custom tool, we need to ensure source_code is present
+        from letta.functions.helpers import generate_model_from_args_json_schema
+
+        if self.tool_type is ToolType.CUSTOM:
             if not self.source_code:
-                error_msg = f"Custom tool with id={self.id} is missing source_code field."
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+                logger.error("Custom tool with id=%s is missing source_code field", self.id)
+                raise ValueError(f"Custom tool with id={self.id} is missing source_code field.")
 
             # Always derive json_schema for freshest possible json_schema
-            # TODO: Instead of checking the tag, we should having `COMPOSIO` as a specific ToolType
-            # TODO: We skip this for Composio bc composio json schemas are derived differently
-            if not (COMPOSIO_TOOL_TAG_NAME in self.tags):
-                if self.args_json_schema is not None:
-                    name, description = get_function_name_and_description(self.source_code, self.name)
-                    args_schema = generate_model_from_args_json_schema(self.args_json_schema)
-                    self.json_schema = generate_schema_from_args_schema_v2(
-                        args_schema=args_schema,
-                        name=name,
-                        description=description,
-                    )
-                else:
+            if self.args_json_schema is not None:
+                name, description = get_function_name_and_docstring(self.source_code, self.name)
+                args_schema = generate_model_from_args_json_schema(self.args_json_schema)
+                self.json_schema = generate_schema_from_args_schema_v2(
+                    args_schema=args_schema,
+                    name=name,
+                    description=description,
+                    append_heartbeat=False,
+                )
+            else:  # elif not self.json_schema: # TODO: JSON schema is not being derived correctly the first time?
+                # If there's not a json_schema provided, then we need to re-derive
+                try:
                     self.json_schema = derive_openai_json_schema(source_code=self.source_code)
-        elif self.tool_type in {ToolType.LETTA_CORE, ToolType.LETTA_MEMORY_CORE}:
+                except Exception as e:
+                    logger.error("Failed to derive json schema for tool with id=%s name=%s: %s", self.id, self.name, e)
+        elif self.tool_type in {ToolType.LETTA_CORE, ToolType.LETTA_MEMORY_CORE, ToolType.LETTA_SLEEPTIME_CORE}:
             # If it's letta core tool, we generate the json_schema on the fly here
             self.json_schema = get_json_schema_from_module(module_name=LETTA_CORE_TOOL_MODULE_NAME, function_name=self.name)
         elif self.tool_type in {ToolType.LETTA_MULTI_AGENT_CORE}:
             # If it's letta multi-agent tool, we also generate the json_schema on the fly here
             self.json_schema = get_json_schema_from_module(module_name=LETTA_MULTI_AGENT_TOOL_MODULE_NAME, function_name=self.name)
+        elif self.tool_type in {ToolType.LETTA_VOICE_SLEEPTIME_CORE}:
+            # If it's letta voice tool, we generate the json_schema on the fly here
+            self.json_schema = get_json_schema_from_module(module_name=LETTA_VOICE_TOOL_MODULE_NAME, function_name=self.name)
+        elif self.tool_type in {ToolType.LETTA_BUILTIN}:
+            # If it's letta voice tool, we generate the json_schema on the fly here
+            self.json_schema = get_json_schema_from_module(module_name=LETTA_BUILTIN_TOOL_MODULE_NAME, function_name=self.name)
+        elif self.tool_type in {ToolType.LETTA_FILES_CORE}:
+            # If it's letta files tool, we generate the json_schema on the fly here
+            self.json_schema = get_json_schema_from_module(module_name=LETTA_FILES_TOOL_MODULE_NAME, function_name=self.name)
+        elif self.tool_type in {ToolType.EXTERNAL_COMPOSIO}:
+            # Composio schemas handled separately
+            pass
 
         # At this point, we need to validate that at least json_schema is populated
         if not self.json_schema:
-            error_msg = f"Tool with id={self.id} name={self.name} tool_type={self.tool_type} is missing a json_schema."
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+            logger.error("Tool with id=%s name=%s tool_type=%s is missing a json_schema", self.id, self.name, self.tool_type)
+            raise ValueError(f"Tool with id={self.id} name={self.name} tool_type={self.tool_type} is missing a json_schema.")
 
         # Derive name from the JSON schema if not provided
         if not self.name:
@@ -132,12 +146,13 @@ class ToolCreate(LettaBase):
     )
     args_json_schema: Optional[Dict] = Field(None, description="The args JSON schema of the function.")
     return_char_limit: int = Field(FUNCTION_RETURN_CHAR_LIMIT, description="The maximum number of characters in the response.")
-
-    # TODO should we put the HTTP / API fetch inside from_mcp?
-    # async def from_mcp(cls, mcp_server: str, mcp_tool_name: str) -> "ToolCreate":
+    pip_requirements: list[PipRequirement] | None = Field(None, description="Optional list of pip packages required by this tool.")
+    npm_requirements: list[NpmRequirement] | None = Field(None, description="Optional list of npm packages required by this tool.")
 
     @classmethod
     def from_mcp(cls, mcp_server_name: str, mcp_tool: MCPTool) -> "ToolCreate":
+        from letta.functions.helpers import generate_mcp_tool_wrapper
+
         # Pass the MCP tool to the schema generator
         json_schema = generate_tool_schema_for_mcp(mcp_tool=mcp_tool)
 
@@ -168,8 +183,7 @@ class ToolCreate(LettaBase):
         Returns:
             Tool: A Letta Tool initialized with attributes derived from the Composio tool.
         """
-        from composio import LogLevel
-        from composio_langchain import ComposioToolSet
+        from composio import ComposioToolSet, LogLevel
 
         composio_toolset = ComposioToolSet(logging_level=LogLevel.ERROR, lock=False)
         composio_action_schemas = composio_toolset.get_action_schemas(actions=[action_name], check_connected_accounts=False)
@@ -195,37 +209,6 @@ class ToolCreate(LettaBase):
             json_schema=json_schema,
         )
 
-    @classmethod
-    def from_langchain(
-        cls,
-        langchain_tool: "LangChainBaseTool",
-        additional_imports_module_attr_map: dict[str, str] = None,
-    ) -> "ToolCreate":
-        """
-        Class method to create an instance of Tool from a Langchain tool (must be from langchain_community.tools).
-
-        Args:
-            langchain_tool (LangChainBaseTool): An instance of a LangChain BaseTool (BaseTool from LangChain)
-            additional_imports_module_attr_map (dict[str, str]): A mapping of module names to attribute name. This is used internally to import all the required classes for the langchain tool. For example, you would pass in `{"langchain_community.utilities": "WikipediaAPIWrapper"}` for `from langchain_community.tools import WikipediaQueryRun`. NOTE: You do NOT need to specify the tool import here, that is done automatically for you.
-
-        Returns:
-            Tool: A Letta Tool initialized with attributes derived from the provided LangChain BaseTool object.
-        """
-        description = langchain_tool.description
-        source_type = "python"
-        tags = ["langchain"]
-        # NOTE: langchain tools may come from different packages
-        wrapper_func_name, wrapper_function_str = generate_langchain_tool_wrapper(langchain_tool, additional_imports_module_attr_map)
-        json_schema = generate_schema_from_args_schema_v2(langchain_tool.args_schema, name=wrapper_func_name, description=description)
-
-        return cls(
-            description=description,
-            source_type=source_type,
-            tags=tags,
-            source_code=wrapper_function_str,
-            json_schema=json_schema,
-        )
-
 
 class ToolUpdate(LettaBase):
     description: Optional[str] = Field(None, description="The description of the tool.")
@@ -237,6 +220,8 @@ class ToolUpdate(LettaBase):
     )
     args_json_schema: Optional[Dict] = Field(None, description="The args JSON schema of the function.")
     return_char_limit: Optional[int] = Field(None, description="The maximum number of characters in the response.")
+    pip_requirements: list[PipRequirement] | None = Field(None, description="Optional list of pip packages required by this tool.")
+    npm_requirements: list[NpmRequirement] | None = Field(None, description="Optional list of npm packages required by this tool.")
 
     class Config:
         extra = "ignore"  # Allows extra fields without validation errors
@@ -253,3 +238,5 @@ class ToolRunFromSource(LettaBase):
     json_schema: Optional[Dict] = Field(
         None, description="The JSON schema of the function (auto-generated from source_code if not provided)"
     )
+    pip_requirements: list[PipRequirement] | None = Field(None, description="Optional list of pip packages required by this tool.")
+    npm_requirements: list[NpmRequirement] | None = Field(None, description="Optional list of npm packages required by this tool.")

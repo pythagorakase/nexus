@@ -1,13 +1,53 @@
+import os
+
 import pytest
-from sqlalchemy import delete
 
 from letta.config import LettaConfig
-from letta.orm import Provider, Step
 from letta.schemas.agent import CreateAgent
 from letta.schemas.block import CreateBlock
-from letta.schemas.group import DynamicManager, GroupCreate, SupervisorManager
+from letta.schemas.group import (
+    DynamicManager,
+    DynamicManagerUpdate,
+    GroupCreate,
+    GroupUpdate,
+    ManagerType,
+    RoundRobinManagerUpdate,
+    SupervisorManager,
+)
 from letta.schemas.message import MessageCreate
+from letta.server.db import db_registry
 from letta.server.server import SyncServer
+
+
+# Disable SQLAlchemy connection pooling for tests to prevent event loop issues
+@pytest.fixture(scope="session", autouse=True)
+def disable_db_pooling_for_tests():
+    """Disable database connection pooling for the entire test session."""
+    os.environ["LETTA_DISABLE_SQLALCHEMY_POOLING"] = "true"
+    yield
+    # Clean up environment variable after tests
+    if "LETTA_DISABLE_SQLALCHEMY_POOLING" in os.environ:
+        del os.environ["LETTA_DISABLE_SQLALCHEMY_POOLING"]
+
+
+@pytest.fixture(autouse=True)
+async def cleanup_db_connections():
+    """Cleanup database connections after each test."""
+    yield
+
+    # Dispose async engines in the current event loop
+    try:
+        if hasattr(db_registry, "_async_engines"):
+            for engine in db_registry._async_engines.values():
+                if engine:
+                    await engine.dispose()
+        # Reset async initialization to force fresh connections
+        db_registry._initialized["async"] = False
+        db_registry._async_engines.clear()
+        db_registry._async_session_factories.clear()
+    except Exception as e:
+        # Log the error but don't fail the test
+        print(f"Warning: Failed to cleanup database connections: {e}")
 
 
 @pytest.fixture(scope="module")
@@ -21,32 +61,21 @@ def server():
     return server
 
 
-@pytest.fixture(scope="module")
-def org_id(server):
-    org = server.organization_manager.create_default_organization()
-
-    yield org.id
-
-    # cleanup
-    with server.organization_manager.session_maker() as session:
-        session.execute(delete(Step))
-        session.execute(delete(Provider))
-        session.commit()
-    server.organization_manager.delete_organization_by_id(org.id)
+@pytest.fixture
+async def default_organization(server: SyncServer):
+    """Fixture to create and return the default organization."""
+    yield await server.organization_manager.create_default_organization_async()
 
 
-@pytest.fixture(scope="module")
-def actor(server, org_id):
-    user = server.user_manager.create_default_user()
-    yield user
-
-    # cleanup
-    server.user_manager.delete_user_by_id(user.id)
+@pytest.fixture
+async def default_user(server: SyncServer, default_organization):
+    """Fixture to create and return the default user within the default organization."""
+    yield await server.user_manager.create_default_actor_async(org_id=default_organization.id)
 
 
-@pytest.fixture(scope="module")
-def participant_agent_ids(server, actor):
-    agent_fred = server.create_agent(
+@pytest.fixture
+async def four_participant_agents(server, default_user):
+    agent_fred = await server.create_agent_async(
         request=CreateAgent(
             name="fred",
             memory_blocks=[
@@ -56,11 +85,11 @@ def participant_agent_ids(server, actor):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    agent_velma = server.create_agent(
+    agent_velma = await server.create_agent_async(
         request=CreateAgent(
             name="velma",
             memory_blocks=[
@@ -70,11 +99,11 @@ def participant_agent_ids(server, actor):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    agent_daphne = server.create_agent(
+    agent_daphne = await server.create_agent_async(
         request=CreateAgent(
             name="daphne",
             memory_blocks=[
@@ -84,11 +113,11 @@ def participant_agent_ids(server, actor):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    agent_shaggy = server.create_agent(
+    agent_shaggy = await server.create_agent_async(
         request=CreateAgent(
             name="shaggy",
             memory_blocks=[
@@ -98,22 +127,16 @@ def participant_agent_ids(server, actor):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    yield [agent_fred.id, agent_velma.id, agent_daphne.id, agent_shaggy.id]
-
-    # cleanup
-    server.agent_manager.delete_agent(agent_fred.id, actor=actor)
-    server.agent_manager.delete_agent(agent_velma.id, actor=actor)
-    server.agent_manager.delete_agent(agent_daphne.id, actor=actor)
-    server.agent_manager.delete_agent(agent_shaggy.id, actor=actor)
+    yield [agent_fred, agent_velma, agent_daphne, agent_shaggy]
 
 
-@pytest.fixture(scope="module")
-def manager_agent_id(server, actor):
-    agent_scooby = server.create_agent(
+@pytest.fixture
+async def manager_agent(server, default_user):
+    agent_scooby = await server.create_agent_async(
         request=CreateAgent(
             name="scooby",
             memory_blocks=[
@@ -127,30 +150,27 @@ def manager_agent_id(server, actor):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    yield agent_scooby.id
-
-    # cleanup
-    server.agent_manager.delete_agent(agent_scooby.id, actor=actor)
+    yield agent_scooby
 
 
 @pytest.mark.asyncio
-async def test_round_robin(server, actor, participant_agent_ids):
-    group = server.group_manager.create_group(
+async def test_empty_group(server, default_user):
+    group = await server.group_manager.create_group_async(
         group=GroupCreate(
             description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
-            agent_ids=participant_agent_ids,
+            agent_ids=[],
         ),
-        actor=actor,
+        actor=default_user,
     )
-    try:
-        response = await server.send_group_message_to_agent(
+    with pytest.raises(ValueError, match="Empty group"):
+        await server.send_group_message_to_agent(
             group_id=group.id,
-            actor=actor,
-            messages=[
+            actor=default_user,
+            input_messages=[
                 MessageCreate(
                     role="user",
                     content="what is everyone up to for the holidays?",
@@ -159,16 +179,174 @@ async def test_round_robin(server, actor, participant_agent_ids):
             stream_steps=False,
             stream_tokens=False,
         )
-        assert response.usage.step_count == len(participant_agent_ids)
-        assert len(response.messages) == response.usage.step_count * 2
-
-    finally:
-        server.group_manager.delete_group(group_id=group.id, actor=actor)
+    await server.group_manager.delete_group_async(group_id=group.id, actor=default_user)
 
 
 @pytest.mark.asyncio
-async def test_supervisor(server, actor, participant_agent_ids):
-    agent_scrappy = server.create_agent(
+async def test_modify_group_pattern(server, default_user, four_participant_agents, manager_agent):
+    group = await server.group_manager.create_group_async(
+        group=GroupCreate(
+            description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
+            agent_ids=[agent.id for agent in four_participant_agents],
+        ),
+        actor=default_user,
+    )
+    with pytest.raises(ValueError, match="Cannot change group pattern"):
+        await server.group_manager.modify_group_async(
+            group_id=group.id,
+            group_update=GroupUpdate(
+                manager_config=DynamicManagerUpdate(
+                    manager_type=ManagerType.dynamic,
+                    manager_agent_id=manager_agent.id,
+                ),
+            ),
+            actor=default_user,
+        )
+
+    await server.group_manager.delete_group_async(group_id=group.id, actor=default_user)
+
+
+@pytest.mark.asyncio
+async def test_list_agent_groups(server, default_user, four_participant_agents):
+    group_a = await server.group_manager.create_group_async(
+        group=GroupCreate(
+            description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
+            agent_ids=[agent.id for agent in four_participant_agents],
+        ),
+        actor=default_user,
+    )
+    group_b = await server.group_manager.create_group_async(
+        group=GroupCreate(
+            description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
+            agent_ids=[four_participant_agents[0].id],
+        ),
+        actor=default_user,
+    )
+
+    agent_a_groups = server.agent_manager.list_groups(agent_id=four_participant_agents[0].id, actor=default_user)
+    assert sorted([group.id for group in agent_a_groups]) == sorted([group_a.id, group_b.id])
+    agent_b_groups = server.agent_manager.list_groups(agent_id=four_participant_agents[1].id, actor=default_user)
+    assert [group.id for group in agent_b_groups] == [group_a.id]
+
+    await server.group_manager.delete_group_async(group_id=group_a.id, actor=default_user)
+    await server.group_manager.delete_group_async(group_id=group_b.id, actor=default_user)
+
+
+@pytest.mark.asyncio
+async def test_round_robin(server, default_user, four_participant_agents):
+    description = (
+        "This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries."
+    )
+    group = await server.group_manager.create_group_async(
+        group=GroupCreate(
+            description=description,
+            agent_ids=[agent.id for agent in four_participant_agents],
+        ),
+        actor=default_user,
+    )
+
+    # verify group creation
+    assert group.manager_type == ManagerType.round_robin
+    assert group.description == description
+    assert group.agent_ids == [agent.id for agent in four_participant_agents]
+    assert group.max_turns is None
+    assert group.manager_agent_id is None
+    assert group.termination_token is None
+
+    try:
+        server.group_manager.reset_messages(group_id=group.id, actor=default_user)
+        response = await server.send_group_message_to_agent(
+            group_id=group.id,
+            actor=default_user,
+            input_messages=[
+                MessageCreate(
+                    role="user",
+                    content="what is everyone up to for the holidays?",
+                ),
+            ],
+            stream_steps=False,
+            stream_tokens=False,
+        )
+        assert response.usage.step_count == len(group.agent_ids)
+        assert len(response.messages) == response.usage.step_count * 2
+        for i, message in enumerate(response.messages):
+            assert message.message_type == "reasoning_message" if i % 2 == 0 else "assistant_message"
+            assert message.name == four_participant_agents[i // 2].name
+
+        for agent_id in group.agent_ids:
+            agent_messages = server.get_agent_recall(
+                user_id=default_user.id,
+                agent_id=agent_id,
+                group_id=group.id,
+                reverse=True,
+                return_message_object=False,
+            )
+            assert len(agent_messages) == len(group.agent_ids) + 2  # add one for user message, one for reasoning message
+
+        # TODO: filter this to return a clean conversation history
+        messages = server.group_manager.list_group_messages(
+            group_id=group.id,
+            actor=default_user,
+        )
+        assert len(messages) == (len(group.agent_ids) + 2) * len(group.agent_ids)
+
+        max_turns = 3
+        group = await server.group_manager.modify_group_async(
+            group_id=group.id,
+            group_update=GroupUpdate(
+                agent_ids=[agent.id for agent in four_participant_agents][::-1],
+                manager_config=RoundRobinManagerUpdate(
+                    max_turns=max_turns,
+                ),
+            ),
+            actor=default_user,
+        )
+        assert group.manager_type == ManagerType.round_robin
+        assert group.description == description
+        assert group.agent_ids == [agent.id for agent in four_participant_agents][::-1]
+        assert group.max_turns == max_turns
+        assert group.manager_agent_id is None
+        assert group.termination_token is None
+
+        server.group_manager.reset_messages(group_id=group.id, actor=default_user)
+
+        response = await server.send_group_message_to_agent(
+            group_id=group.id,
+            actor=default_user,
+            input_messages=[
+                MessageCreate(
+                    role="user",
+                    content="when should we plan our next adventure?",
+                ),
+            ],
+            stream_steps=False,
+            stream_tokens=False,
+        )
+        assert response.usage.step_count == max_turns
+        assert len(response.messages) == max_turns * 2
+
+        for i, message in enumerate(response.messages):
+            assert message.message_type == "reasoning_message" if i % 2 == 0 else "assistant_message"
+            assert message.name == four_participant_agents[::-1][i // 2].name
+
+        for i in range(len(group.agent_ids)):
+            agent_messages = server.get_agent_recall(
+                user_id=default_user.id,
+                agent_id=group.agent_ids[i],
+                group_id=group.id,
+                reverse=True,
+                return_message_object=False,
+            )
+            expected_message_count = max_turns + 1 if i >= max_turns else max_turns + 2
+            assert len(agent_messages) == expected_message_count
+
+    finally:
+        await server.group_manager.delete_group_async(group_id=group.id, actor=default_user)
+
+
+@pytest.mark.asyncio
+async def test_supervisor(server, default_user, four_participant_agents):
+    agent_scrappy = await server.create_agent_async(
         request=CreateAgent(
             name="shaggy",
             memory_blocks=[
@@ -182,25 +360,26 @@ async def test_supervisor(server, actor, participant_agent_ids):
                 ),
             ],
             model="openai/gpt-4o-mini",
-            embedding="openai/text-embedding-ada-002",
+            embedding="openai/text-embedding-3-small",
         ),
-        actor=actor,
+        actor=default_user,
     )
-    group = server.group_manager.create_group(
+
+    group = await server.group_manager.create_group_async(
         group=GroupCreate(
             description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
-            agent_ids=participant_agent_ids,
+            agent_ids=[agent.id for agent in four_participant_agents],
             manager_config=SupervisorManager(
                 manager_agent_id=agent_scrappy.id,
             ),
         ),
-        actor=actor,
+        actor=default_user,
     )
     try:
         response = await server.send_group_message_to_agent(
             group_id=group.id,
-            actor=actor,
-            messages=[
+            actor=default_user,
+            input_messages=[
                 MessageCreate(
                     role="user",
                     content="ask everyone what they like to do for fun and then come up with an activity for everyone to do together.",
@@ -219,40 +398,78 @@ async def test_supervisor(server, actor, participant_agent_ids):
             and response.messages[1].tool_call.name == "send_message_to_all_agents_in_group"
         )
         assert response.messages[2].message_type == "tool_return_message" and len(eval(response.messages[2].tool_return)) == len(
-            participant_agent_ids
+            four_participant_agents
         )
         assert response.messages[3].message_type == "reasoning_message"
         assert response.messages[4].message_type == "assistant_message"
 
     finally:
-        server.group_manager.delete_group(group_id=group.id, actor=actor)
-        server.agent_manager.delete_agent(agent_id=agent_scrappy.id, actor=actor)
+        await server.group_manager.delete_group_async(group_id=group.id, actor=default_user)
+        server.agent_manager.delete_agent(agent_id=agent_scrappy.id, actor=default_user)
 
 
 @pytest.mark.asyncio
-async def test_dynamic_group_chat(server, actor, manager_agent_id, participant_agent_ids):
-    group = server.group_manager.create_group(
+@pytest.mark.flaky(max_runs=2)
+async def test_dynamic_group_chat(server, default_user, manager_agent, four_participant_agents):
+    description = (
+        "This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries."
+    )
+    # error on duplicate agent in participant list
+    with pytest.raises(ValueError, match="Duplicate agent ids"):
+        await server.group_manager.create_group_async(
+            group=GroupCreate(
+                description=description,
+                agent_ids=[agent.id for agent in four_participant_agents] + [four_participant_agents[0].id],
+                manager_config=DynamicManager(
+                    manager_agent_id=manager_agent.id,
+                ),
+            ),
+            actor=default_user,
+        )
+    # error on duplicate agent names
+    duplicate_agent_shaggy = server.create_agent(
+        request=CreateAgent(
+            name="shaggy",
+            model="openai/gpt-4o-mini",
+            embedding="openai/text-embedding-3-small",
+        ),
+        actor=default_user,
+    )
+    with pytest.raises(ValueError, match="Duplicate agent names"):
+        await server.group_manager.create_group_async(
+            group=GroupCreate(
+                description=description,
+                agent_ids=[agent.id for agent in four_participant_agents] + [duplicate_agent_shaggy.id],
+                manager_config=DynamicManager(
+                    manager_agent_id=manager_agent.id,
+                ),
+            ),
+            actor=default_user,
+        )
+    server.agent_manager.delete_agent(duplicate_agent_shaggy.id, actor=default_user)
+
+    group = await server.group_manager.create_group_async(
         group=GroupCreate(
-            description="This is a group chat between best friends all like to hang out together. In their free time they like to solve mysteries.",
-            agent_ids=participant_agent_ids,
+            description=description,
+            agent_ids=[agent.id for agent in four_participant_agents],
             manager_config=DynamicManager(
-                manager_agent_id=manager_agent_id,
+                manager_agent_id=manager_agent.id,
             ),
         ),
-        actor=actor,
+        actor=default_user,
     )
     try:
         response = await server.send_group_message_to_agent(
             group_id=group.id,
-            actor=actor,
-            messages=[
+            actor=default_user,
+            input_messages=[
                 MessageCreate(role="user", content="what is everyone up to for the holidays?"),
             ],
             stream_steps=False,
             stream_tokens=False,
         )
-        assert response.usage.step_count == len(participant_agent_ids) * 2
+        assert response.usage.step_count == len(four_participant_agents) * 2
         assert len(response.messages) == response.usage.step_count * 2
 
     finally:
-        server.group_manager.delete_group(group_id=group.id, actor=actor)
+        await server.group_manager.delete_group_async(group_id=group.id, actor=default_user)

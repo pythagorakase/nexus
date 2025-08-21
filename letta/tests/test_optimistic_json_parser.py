@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from letta.server.rest_api.optimistic_json_parser import OptimisticJSONParser
+from letta.server.rest_api.json_parser import OptimisticJSONParser
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def test_parse_number_cases(strict_parser):
 def test_parse_boolean_true(strict_parser):
     assert strict_parser.parse("true") is True, "Should parse 'true'."
     # Check leftover
-    assert strict_parser.last_parse_reminding == None, "No extra tokens expected."
+    assert strict_parser.last_parse_reminding is None, "No extra tokens expected."
 
 
 def test_parse_boolean_false(strict_parser):

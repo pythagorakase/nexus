@@ -12,7 +12,7 @@ from letta.schemas.enums import MessageStreamStatus
 from letta.schemas.letta_message import LettaMessage
 from letta.schemas.message import Message
 from letta.schemas.openai.chat_completion_response import ChatCompletionChunkResponse
-from letta.server.rest_api.optimistic_json_parser import OptimisticJSONParser
+from letta.server.rest_api.json_parser import OptimisticJSONParser
 from letta.streaming_interface import AgentChunkStreamingInterface
 
 logger = get_logger(__name__)
@@ -155,7 +155,14 @@ class ChatCompletionsStreamingInterface(AgentChunkStreamingInterface):
         return
 
     def process_chunk(
-        self, chunk: ChatCompletionChunkResponse, message_id: str, message_date: datetime, expect_reasoning_content: bool = False
+        self,
+        chunk: ChatCompletionChunkResponse,
+        message_id: str,
+        message_date: datetime,
+        expect_reasoning_content: bool = False,
+        name: Optional[str] = None,
+        message_index: int = 0,
+        prev_message_type: Optional[str] = None,
     ) -> None:
         """
         Called externally with a ChatCompletionChunkResponse. Transforms
@@ -172,7 +179,7 @@ class ChatCompletionsStreamingInterface(AgentChunkStreamingInterface):
         """
         return
 
-    def internal_monologue(self, msg: str, msg_obj: Optional[Message] = None) -> None:
+    def internal_monologue(self, msg: str, msg_obj: Optional[Message] = None, chunk_index: Optional[int] = None) -> None:
         """
         Handle LLM reasoning or internal monologue. Example usage: if you want
         to capture chain-of-thought for debugging in a non-streaming scenario.
@@ -186,7 +193,7 @@ class ChatCompletionsStreamingInterface(AgentChunkStreamingInterface):
         """
         return
 
-    def function_message(self, msg: str, msg_obj: Optional[Message] = None) -> None:
+    def function_message(self, msg: str, msg_obj: Optional[Message] = None, chunk_index: Optional[int] = None) -> None:
         """
         Handle function-related log messages, typically of the form:
         It's a no-op by default.
@@ -232,7 +239,7 @@ class ChatCompletionsStreamingInterface(AgentChunkStreamingInterface):
                     return ChatCompletionChunk(
                         id=chunk.id,
                         object=chunk.object,
-                        created=chunk.created.timestamp(),
+                        created=chunk.created,
                         model=chunk.model,
                         choices=[
                             Choice(
@@ -250,7 +257,7 @@ class ChatCompletionsStreamingInterface(AgentChunkStreamingInterface):
                 return ChatCompletionChunk(
                     id=chunk.id,
                     object=chunk.object,
-                    created=chunk.created.timestamp(),
+                    created=chunk.created,
                     model=chunk.model,
                     choices=[
                         Choice(

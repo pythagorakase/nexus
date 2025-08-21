@@ -1,118 +1,37 @@
 import asyncio
+import json
+import logging
 import threading
 from random import uniform
 from typing import Any, Dict, List, Optional, Type, Union
 
 import humps
-from composio.constants import DEFAULT_ENTITY_ID
 from pydantic import BaseModel, Field, create_model
 
-from letta.constants import COMPOSIO_ENTITY_ENV_VAR_KEY, DEFAULT_MESSAGE_TOOL, DEFAULT_MESSAGE_TOOL_KWARG
+from letta.constants import DEFAULT_MESSAGE_TOOL, DEFAULT_MESSAGE_TOOL_KWARG
 from letta.functions.interface import MultiAgentMessagingInterface
 from letta.orm.errors import NoResultFound
 from letta.schemas.enums import MessageRole
 from letta.schemas.letta_message import AssistantMessage
 from letta.schemas.letta_response import LettaResponse
+from letta.schemas.letta_stop_reason import LettaStopReason, StopReasonType
 from letta.schemas.message import Message, MessageCreate
 from letta.schemas.user import User
 from letta.server.rest_api.utils import get_letta_server
 from letta.settings import settings
-from letta.utils import log_telemetry
-
-
-# TODO: This is kind of hacky, as this is used to search up the action later on composio's side
-# TODO: So be very careful changing/removing these pair of functions
-def generate_func_name_from_composio_action(action_name: str) -> str:
-    """
-    Generates the composio function name from the composio action.
-
-    Args:
-        action_name: The composio action name
-
-    Returns:
-        function name
-    """
-    return action_name.lower()
-
-
-def generate_composio_action_from_func_name(func_name: str) -> str:
-    """
-    Generates the composio action from the composio function name.
-
-    Args:
-        func_name: The composio function name
-
-    Returns:
-        composio action name
-    """
-    return func_name.upper()
 
 
 # TODO needed?
 def generate_mcp_tool_wrapper(mcp_tool_name: str) -> tuple[str, str]:
-
     wrapper_function_str = f"""\
 def {mcp_tool_name}(**kwargs):
     raise RuntimeError("Something went wrong - we should never be using the persisted source code for MCP. Please reach out to Letta team")
 """
 
     # Compile safety check
-    assert_code_gen_compilable(wrapper_function_str.strip())
+    _assert_code_gen_compilable(wrapper_function_str.strip())
 
     return mcp_tool_name, wrapper_function_str.strip()
-
-
-def generate_composio_tool_wrapper(action_name: str) -> tuple[str, str]:
-    # Generate func name
-    func_name = generate_func_name_from_composio_action(action_name)
-
-    wrapper_function_str = f"""\
-def {func_name}(**kwargs):
-    raise RuntimeError("Something went wrong - we should never be using the persisted source code for Composio. Please reach out to Letta team")
-"""
-
-    # Compile safety check
-    assert_code_gen_compilable(wrapper_function_str.strip())
-
-    return func_name, wrapper_function_str.strip()
-
-
-def execute_composio_action(
-    action_name: str, args: dict, api_key: Optional[str] = None, entity_id: Optional[str] = None
-) -> tuple[str, str]:
-    import os
-
-    from composio.exceptions import (
-        ApiKeyNotProvidedError,
-        ComposioSDKError,
-        ConnectedAccountNotFoundError,
-        EnumMetadataNotFound,
-        EnumStringNotFound,
-    )
-    from composio_langchain import ComposioToolSet
-
-    entity_id = entity_id or os.getenv(COMPOSIO_ENTITY_ENV_VAR_KEY, DEFAULT_ENTITY_ID)
-    try:
-        composio_toolset = ComposioToolSet(api_key=api_key, entity_id=entity_id, lock=False)
-        response = composio_toolset.execute_action(action=action_name, params=args)
-    except ApiKeyNotProvidedError:
-        raise RuntimeError(
-            f"Composio API key is missing for action '{action_name}'. "
-            "Please set the sandbox environment variables either through the ADE or the API."
-        )
-    except ConnectedAccountNotFoundError:
-        raise RuntimeError(f"No connected account was found for action '{action_name}'. " "Please link an account and try again.")
-    except EnumStringNotFound as e:
-        raise RuntimeError(f"Invalid value provided for action '{action_name}': " + str(e) + ". Please check the action parameters.")
-    except EnumMetadataNotFound as e:
-        raise RuntimeError(f"Invalid value provided for action '{action_name}': " + str(e) + ". Please check the action parameters.")
-    except ComposioSDKError as e:
-        raise RuntimeError(f"An unexpected error occurred in Composio SDK while executing action '{action_name}': " + str(e))
-
-    if response["error"]:
-        raise RuntimeError(f"Error while executing action '{action_name}': " + str(response["error"]))
-
-    return response["data"]
 
 
 def generate_langchain_tool_wrapper(
@@ -120,13 +39,13 @@ def generate_langchain_tool_wrapper(
 ) -> tuple[str, str]:
     tool_name = tool.__class__.__name__
     import_statement = f"from langchain_community.tools import {tool_name}"
-    extra_module_imports = generate_import_code(additional_imports_module_attr_map)
+    extra_module_imports = _generate_import_code(additional_imports_module_attr_map)
 
     # Safety check that user has passed in all required imports:
-    assert_all_classes_are_imported(tool, additional_imports_module_attr_map)
+    _assert_all_classes_are_imported(tool, additional_imports_module_attr_map)
 
     tool_instantiation = f"tool = {generate_imported_tool_instantiation_call_str(tool)}"
-    run_call = f"return tool._run(**kwargs)"
+    run_call = "return tool._run(**kwargs)"
     func_name = humps.decamelize(tool_name)
 
     # Combine all parts into the wrapper function
@@ -140,25 +59,25 @@ def {func_name}(**kwargs):
 """
 
     # Compile safety check
-    assert_code_gen_compilable(wrapper_function_str)
+    _assert_code_gen_compilable(wrapper_function_str)
 
     return func_name, wrapper_function_str
 
 
-def assert_code_gen_compilable(code_str):
+def _assert_code_gen_compilable(code_str):
     try:
         compile(code_str, "<string>", "exec")
     except SyntaxError as e:
         print(f"Syntax error in code: {e}")
 
 
-def assert_all_classes_are_imported(tool: Union["LangChainBaseTool"], additional_imports_module_attr_map: dict[str, str]) -> None:
+def _assert_all_classes_are_imported(tool: Union["LangChainBaseTool"], additional_imports_module_attr_map: dict[str, str]) -> None:
     # Safety check that user has passed in all required imports:
     tool_name = tool.__class__.__name__
     current_class_imports = {tool_name}
     if additional_imports_module_attr_map:
         current_class_imports.update(set(additional_imports_module_attr_map.values()))
-    required_class_imports = set(find_required_class_names_for_import(tool))
+    required_class_imports = set(_find_required_class_names_for_import(tool))
 
     if not current_class_imports.issuperset(required_class_imports):
         err_msg = f"[ERROR] You are missing module_attr pairs in `additional_imports_module_attr_map`. Currently, you have imports for {current_class_imports}, but the required classes for import are {required_class_imports}"
@@ -166,7 +85,7 @@ def assert_all_classes_are_imported(tool: Union["LangChainBaseTool"], additional
         raise RuntimeError(err_msg)
 
 
-def find_required_class_names_for_import(obj: Union["LangChainBaseTool", BaseModel]) -> list[str]:
+def _find_required_class_names_for_import(obj: Union["LangChainBaseTool", BaseModel]) -> list[str]:
     """
     Finds all the class names for required imports when instantiating the `obj`.
     NOTE: This does not return the full import path, only the class name.
@@ -182,7 +101,7 @@ def find_required_class_names_for_import(obj: Union["LangChainBaseTool", BaseMod
 
         # Collect all possible candidates for BaseModel objects
         candidates = []
-        if is_base_model(curr_obj):
+        if _is_base_model(curr_obj):
             # If it is a base model, we get all the values of the object parameters
             # i.e., if obj('b' = <class A>), we would want to inspect <class A>
             fields = dict(curr_obj)
@@ -199,7 +118,7 @@ def find_required_class_names_for_import(obj: Union["LangChainBaseTool", BaseMod
 
         # Filter out all candidates that are not BaseModels
         # In the list example above, ['a', 3, None, <class A>], we want to filter out 'a', 3, and None
-        candidates = filter(lambda x: is_base_model(x), candidates)
+        candidates = filter(lambda x: _is_base_model(x), candidates)
 
         # Classic BFS here
         for c in candidates:
@@ -217,7 +136,7 @@ def generate_imported_tool_instantiation_call_str(obj: Any) -> Optional[str]:
         # If it is a basic Python type, we trivially return the string version of that value
         # Handle basic types
         return repr(obj)
-    elif is_base_model(obj):
+    elif _is_base_model(obj):
         # Otherwise, if it is a BaseModel
         # We want to pull out all the parameters, and reformat them into strings
         # e.g. {arg}={value}
@@ -270,11 +189,11 @@ def generate_imported_tool_instantiation_call_str(obj: Any) -> Optional[str]:
         return None
 
 
-def is_base_model(obj: Any):
+def _is_base_model(obj: Any):
     return isinstance(obj, BaseModel)
 
 
-def generate_import_code(module_attr_map: Optional[dict]):
+def _generate_import_code(module_attr_map: Optional[dict]):
     if not module_attr_map:
         return ""
 
@@ -287,7 +206,7 @@ def generate_import_code(module_attr_map: Optional[dict]):
     return "\n".join(code_lines)
 
 
-def parse_letta_response_for_assistant_message(
+def _parse_letta_response_for_assistant_message(
     target_agent_id: str,
     letta_response: LettaResponse,
 ) -> Optional[str]:
@@ -312,7 +231,7 @@ async def async_execute_send_message_to_agent(
     """
     Async helper to:
       1) validate the target agent exists & is in the same org,
-      2) send a message via async_send_message_with_retries.
+      2) send a message via _async_send_message_with_retries.
     """
     server = get_letta_server()
 
@@ -320,10 +239,10 @@ async def async_execute_send_message_to_agent(
     try:
         server.agent_manager.get_agent_by_id(agent_id=other_agent_id, actor=sender_agent.user)
     except NoResultFound:
-        raise ValueError(f"Target agent {other_agent_id} either does not exist or is not in org " f"({sender_agent.user.organization_id}).")
+        raise ValueError(f"Target agent {other_agent_id} either does not exist or is not in org ({sender_agent.user.organization_id}).")
 
     # 2. Use your async retry logic
-    return await async_send_message_with_retries(
+    return await _async_send_message_with_retries(
         server=server,
         sender_agent=sender_agent,
         target_agent_id=other_agent_id,
@@ -347,11 +266,11 @@ def execute_send_message_to_agent(
     return asyncio.run(async_execute_send_message_to_agent(sender_agent, messages, other_agent_id, log_prefix))
 
 
-async def send_message_to_agent_no_stream(
+async def _send_message_to_agent_no_stream(
     server: "SyncServer",
     agent_id: str,
     actor: User,
-    messages: Union[List[Message], List[MessageCreate]],
+    messages: List[MessageCreate],
     metadata: Optional[dict] = None,
 ) -> LettaResponse:
     """
@@ -367,16 +286,20 @@ async def send_message_to_agent_no_stream(
         server.send_messages,
         actor=actor,
         agent_id=agent_id,
-        messages=messages,
+        input_messages=messages,
         interface=interface,
         metadata=metadata,
     )
 
     final_messages = interface.get_captured_send_messages()
-    return LettaResponse(messages=final_messages, usage=usage_stats)
+    return LettaResponse(
+        messages=final_messages,
+        stop_reason=LettaStopReason(stop_reason=StopReasonType.end_turn.value),
+        usage=usage_stats,
+    )
 
 
-async def async_send_message_with_retries(
+async def _async_send_message_with_retries(
     server: "SyncServer",
     sender_agent: "Agent",
     target_agent_id: str,
@@ -385,18 +308,12 @@ async def async_send_message_with_retries(
     timeout: int,
     logging_prefix: Optional[str] = None,
 ) -> str:
-    logging_prefix = logging_prefix or "[async_send_message_with_retries]"
-    log_telemetry(sender_agent.logger, f"async_send_message_with_retries start", target_agent_id=target_agent_id)
+    logging_prefix = logging_prefix or "[_async_send_message_with_retries]"
 
     for attempt in range(1, max_retries + 1):
         try:
-            log_telemetry(
-                sender_agent.logger,
-                f"async_send_message_with_retries -> asyncio wait for send_message_to_agent_no_stream start",
-                target_agent_id=target_agent_id,
-            )
             response = await asyncio.wait_for(
-                send_message_to_agent_no_stream(
+                _send_message_to_agent_no_stream(
                     server=server,
                     agent_id=target_agent_id,
                     actor=sender_agent.user,
@@ -404,24 +321,15 @@ async def async_send_message_with_retries(
                 ),
                 timeout=timeout,
             )
-            log_telemetry(
-                sender_agent.logger,
-                f"async_send_message_with_retries -> asyncio wait for send_message_to_agent_no_stream finish",
-                target_agent_id=target_agent_id,
-            )
 
             # Then parse out the assistant message
-            assistant_message = parse_letta_response_for_assistant_message(target_agent_id, response)
+            assistant_message = _parse_letta_response_for_assistant_message(target_agent_id, response)
             if assistant_message:
                 sender_agent.logger.info(f"{logging_prefix} - {assistant_message}")
-                log_telemetry(
-                    sender_agent.logger, f"async_send_message_with_retries finish with assistant message", target_agent_id=target_agent_id
-                )
                 return assistant_message
             else:
                 msg = f"(No response from agent {target_agent_id})"
                 sender_agent.logger.info(f"{logging_prefix} - {msg}")
-                log_telemetry(sender_agent.logger, f"async_send_message_with_retries finish no response", target_agent_id=target_agent_id)
                 return msg
 
         except asyncio.TimeoutError:
@@ -439,12 +347,6 @@ async def async_send_message_with_retries(
             await asyncio.sleep(backoff)
         else:
             sender_agent.logger.error(f"{logging_prefix} - Fatal error: {error_msg}")
-            log_telemetry(
-                sender_agent.logger,
-                f"async_send_message_with_retries finish fatal error",
-                target_agent_id=target_agent_id,
-                error_msg=error_msg,
-            )
             raise Exception(error_msg)
 
 
@@ -465,7 +367,7 @@ def fire_and_forget_send_to_agent(
         messages (List[MessageCreate]): The messages to send.
         other_agent_id (str): The ID of the target agent.
         log_prefix (str): Prefix for logging.
-        use_retries (bool): If True, uses async_send_message_with_retries;
+        use_retries (bool): If True, uses _async_send_message_with_retries;
                             if False, calls server.send_message_to_agent directly.
     """
     server = get_letta_server()
@@ -483,7 +385,7 @@ def fire_and_forget_send_to_agent(
     async def background_task():
         try:
             if use_retries:
-                result = await async_send_message_with_retries(
+                result = await _async_send_message_with_retries(
                     server=server,
                     sender_agent=sender_agent,
                     target_agent_id=other_agent_id,
@@ -498,7 +400,7 @@ def fire_and_forget_send_to_agent(
                 await server.send_message_to_agent(
                     agent_id=other_agent_id,
                     actor=sender_agent.user,
-                    messages=messages,
+                    input_messages=messages,
                     stream_steps=False,
                     stream_tokens=False,
                     use_assistant_message=True,
@@ -536,7 +438,7 @@ async def _send_message_to_agents_matching_tags_async(
     sender_agent: "Agent", server: "SyncServer", messages: List[MessageCreate], matching_agents: List["AgentState"]
 ) -> List[str]:
     async def _send_single(agent_state):
-        return await async_send_message_with_retries(
+        return await _async_send_message_with_retries(
             server=server,
             sender_agent=sender_agent,
             target_agent_id=agent_state.id,
@@ -577,7 +479,7 @@ async def _send_message_to_all_agents_in_group_async(sender_agent: "Agent", mess
 
     async def _send_single(agent_state):
         async with sem:
-            return await async_send_message_with_retries(
+            return await _async_send_message_with_retries(
                 server=server,
                 sender_agent=sender_agent,
                 target_agent_id=agent_state.id,
@@ -649,8 +551,22 @@ def _get_field_type(field_schema: Dict[str, Any], nested_models: Dict[str, Type[
             if nested_models and ref_type in nested_models:
                 return nested_models[ref_type]
         elif "additionalProperties" in field_schema:
-            value_type = _get_field_type(field_schema["additionalProperties"], nested_models)
-            return Dict[str, value_type]
+            # TODO: This is totally GPT generated and I'm not sure it works
+            # TODO: This is done to quickly patch some tests, we should nuke this whole pathway asap
+            ap = field_schema["additionalProperties"]
+
+            if ap is True:
+                return dict
+            elif ap is False:
+                raise ValueError("additionalProperties=false is not supported.")
+            else:
+                # Try resolving nested type
+                nested_type = _get_field_type(ap, nested_models)
+                # If nested_type is Any, fall back to `dict`, or raise, depending on how strict you want to be
+                if nested_type == Any:
+                    return dict
+                return Dict[str, nested_type]
+
         return dict
     elif field_schema.get("$ref") is not None:
         ref_type = field_schema["$ref"].split("/")[-1]
@@ -673,3 +589,27 @@ def _get_field_type(field_schema: Dict[str, Any], nested_models: Dict[str, Type[
         else:
             return Union[tuple(types)]
     raise ValueError(f"Unable to convert pydantic field schema to type: {field_schema}")
+
+
+def extract_send_message_from_steps_messages(
+    steps_messages: List[List[Message]],
+    agent_send_message_tool_name: str = DEFAULT_MESSAGE_TOOL,
+    agent_send_message_tool_kwarg: str = DEFAULT_MESSAGE_TOOL_KWARG,
+    logger: Optional[logging.Logger] = None,
+) -> List[str]:
+    extracted_messages = []
+
+    for step in steps_messages:
+        for message in step:
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    if tool_call.function.name == agent_send_message_tool_name:
+                        try:
+                            # Parse arguments to extract the "message" field
+                            arguments = json.loads(tool_call.function.arguments)
+                            if agent_send_message_tool_kwarg in arguments:
+                                extracted_messages.append(arguments[agent_send_message_tool_kwarg])
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to parse arguments for tool call: {tool_call.id}")
+
+    return extracted_messages

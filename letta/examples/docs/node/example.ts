@@ -1,5 +1,5 @@
-import { LettaClient } from '@letta-ai/letta-client';
-import {
+import type { LettaClient } from '@letta-ai/letta-client';
+import type {
   AssistantMessage,
   ReasoningMessage,
   ToolCallMessage,
@@ -27,7 +27,7 @@ const agent = await client.agents.create({
     },
   ],
   model: 'openai/gpt-4o-mini',
-  embedding: 'openai/text-embedding-ada-002',
+  embedding: 'openai/text-embedding-3-small',
 });
 
 console.log('Created agent with name', agent.name);
@@ -52,17 +52,17 @@ console.log(
   (response.messages[1] as AssistantMessage).content,
 );
 
-const custom_tool_source_code = `
+const CUSTOM_TOOL_SOURCE_CODE = `
 def secret_message():
     """Return a secret message."""
     return "Hello world!"
     `.trim();
 
 const tool = await client.tools.upsert({
-  sourceCode: custom_tool_source_code,
+  sourceCode: CUSTOM_TOOL_SOURCE_CODE,
 });
 
-await client.agents.tools.attach(agent.id, tool.id!);
+await client.agents.tools.attach(agent.id, tool.id);
 
 console.log(`Created tool ${tool.name} and attached to agent ${agent.name}`);
 
@@ -100,10 +100,10 @@ console.log(
 
 let agentCopy = await client.agents.create({
   model: 'openai/gpt-4o-mini',
-  embedding: 'openai/text-embedding-ada-002',
+  embedding: 'openai/text-embedding-3-small',
 });
-let block = await client.agents.coreMemory.retrieveBlock(agent.id, 'human');
-agentCopy = await client.agents.coreMemory.attachBlock(agentCopy.id, block.id!);
+let block = await client.agents.blocks.retrieve(agent.id, 'human');
+agentCopy = await client.agents.blocks.attach(agentCopy.id, block.id);
 
 console.log('Created agent copy with shared memory named', agentCopy.name);
 
@@ -120,7 +120,7 @@ response = await client.agents.messages.create(agentCopy.id, {
 
 console.log(`Sent message to agent ${agentCopy.name}: ${messageText}`);
 
-block = await client.agents.coreMemory.retrieveBlock(agentCopy.id, 'human');
+block = await client.agents.blocks.retrieve(agentCopy.id, 'human');
 console.log(`New core memory for agent ${agentCopy.name}: ${block.value}`);
 
 messageText = "What's my name?";

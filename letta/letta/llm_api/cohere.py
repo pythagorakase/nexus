@@ -4,7 +4,7 @@ from typing import List, Optional, Union
 
 import requests
 
-from letta.helpers.datetime_helpers import get_utc_time
+from letta.helpers.datetime_helpers import get_utc_time_int
 from letta.helpers.json_helpers import json_dumps
 from letta.local_llm.utils import count_tokens
 from letta.schemas.message import Message
@@ -207,7 +207,7 @@ def convert_cohere_response_to_chatcompletion(
     return ChatCompletionResponse(
         id=response_json["response_id"],
         choices=[choice],
-        created=get_utc_time(),
+        created=get_utc_time_int(),
         model=model,
         usage=UsageStatistics(
             prompt_tokens=prompt_tokens,
@@ -307,7 +307,7 @@ def cohere_chat_completions_request(
     data = chat_completion_request.model_dump(exclude_none=True)
 
     if "functions" in data:
-        raise ValueError(f"'functions' unexpected in Anthropic API payload")
+        raise ValueError("'functions' unexpected in Anthropic API payload")
 
     # If tools == None, strip from the payload
     if "tools" in data and data["tools"] is None:
@@ -315,7 +315,7 @@ def cohere_chat_completions_request(
         data.pop("tool_choice", None)  # extra safe,  should exist always (default="auto")
 
     # Convert messages to Cohere format
-    msg_objs = [Message.dict_to_message(user_id=uuid.uuid4(), agent_id=uuid.uuid4(), openai_message_dict=m) for m in data["messages"]]
+    msg_objs = [Message.dict_to_message(agent_id=uuid.uuid4(), openai_message_dict=m) for m in data["messages"]]
 
     # System message 0 should instead be a "preamble"
     # See: https://docs.cohere.com/reference/chat

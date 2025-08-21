@@ -6,7 +6,7 @@ import requests
 
 from letta.constants import CLI_WARNING_PREFIX
 from letta.errors import LocalLLMConnectionError, LocalLLMError
-from letta.helpers.datetime_helpers import get_utc_time
+from letta.helpers.datetime_helpers import get_utc_time_int
 from letta.helpers.json_helpers import json_dumps
 from letta.local_llm.constants import DEFAULT_WRAPPER
 from letta.local_llm.function_parser import patch_function
@@ -20,9 +20,9 @@ from letta.local_llm.utils import count_tokens, get_available_wrappers
 from letta.local_llm.vllm.api import get_vllm_completion
 from letta.local_llm.webui.api import get_webui_completion
 from letta.local_llm.webui.legacy_api import get_webui_completion as get_webui_completion_legacy
+from letta.otel.tracing import log_event
 from letta.prompts.gpt_summarize import SYSTEM as SUMMARIZE_SYSTEM_MESSAGE
 from letta.schemas.openai.chat_completion_response import ChatCompletionResponse, Choice, Message, ToolCall, UsageStatistics
-from letta.tracing import log_event
 from letta.utils import get_tool_call_id
 
 has_shown_warning = False
@@ -241,7 +241,7 @@ def get_chat_completion(
                 ),
             )
         ],
-        created=get_utc_time(),
+        created=get_utc_time_int(),
         model=model,
         # "This fingerprint represents the backend configuration that the model runs with."
         # system_fingerprint=user if user is not None else "null",

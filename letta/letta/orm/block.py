@@ -1,11 +1,12 @@
 from typing import TYPE_CHECKING, List, Optional, Type
 
-from sqlalchemy import JSON, BigInteger, Index, Integer, UniqueConstraint, event
-from sqlalchemy.orm import Mapped, attributes, mapped_column, relationship
+from sqlalchemy import JSON, BigInteger, ForeignKey, Index, Integer, String, UniqueConstraint, event
+from sqlalchemy.orm import Mapped, attributes, declared_attr, mapped_column, relationship
 
 from letta.constants import CORE_MEMORY_BLOCK_CHAR_LIMIT
+from letta.orm.block_history import BlockHistory
 from letta.orm.blocks_agents import BlocksAgents
-from letta.orm.mixins import OrganizationMixin
+from letta.orm.mixins import OrganizationMixin, ProjectMixin
 from letta.orm.sqlalchemy_base import SqlalchemyBase
 from letta.schemas.block import Block as PydanticBlock
 from letta.schemas.block import Human, Persona
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
     from letta.orm.identity import Identity
 
 
-class Block(OrganizationMixin, SqlalchemyBase):
+class Block(OrganizationMixin, SqlalchemyBase, ProjectMixin):
     """Blocks are sections of the LLM context, representing a specific part of the total Memory"""
 
     __tablename__ = "block"
@@ -34,16 +35,31 @@ class Block(OrganizationMixin, SqlalchemyBase):
     is_template: Mapped[bool] = mapped_column(
         doc="whether the block is a template (e.g. saved human/persona options as baselines for other templates)", default=False
     )
+    preserve_on_migration: Mapped[Optional[bool]] = mapped_column(doc="preserve the block on template migration", default=False)
     value: Mapped[str] = mapped_column(doc="Text content of the block for the respective section of core memory.")
     limit: Mapped[BigInteger] = mapped_column(Integer, default=CORE_MEMORY_BLOCK_CHAR_LIMIT, doc="Character limit of the block.")
     metadata_: Mapped[Optional[dict]] = mapped_column(JSON, default={}, doc="arbitrary information related to the block.")
 
+    # permissions of the agent
+    read_only: Mapped[bool] = mapped_column(doc="whether the agent has read-only access to the block", default=False)
+
+    # history pointers / locking mechanisms
+    current_history_entry_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("block_history.id", name="fk_block_current_history_entry", use_alter=True), nullable=True, index=True
+    )
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1", doc="Optimistic locking version counter, incremented on each state change."
+    )
+    # NOTE: This takes advantage of built-in optimistic locking functionality by SqlAlchemy
+    # https://docs.sqlalchemy.org/en/20/orm/versioning.html
+    __mapper_args__ = {"version_id_col": version}
+
     # relationships
-    organization: Mapped[Optional["Organization"]] = relationship("Organization")
+    organization: Mapped[Optional["Organization"]] = relationship("Organization", lazy="raise")
     agents: Mapped[List["Agent"]] = relationship(
         "Agent",
         secondary="blocks_agents",
-        lazy="selectin",
+        lazy="raise",
         passive_deletes=True,  # Ensures SQLAlchemy doesn't fetch blocks_agents rows before deleting
         back_populates="core_memory",
         doc="Agents associated with this block.",
@@ -51,8 +67,15 @@ class Block(OrganizationMixin, SqlalchemyBase):
     identities: Mapped[List["Identity"]] = relationship(
         "Identity",
         secondary="identities_blocks",
-        lazy="selectin",
+        lazy="raise",
         back_populates="blocks",
+        passive_deletes=True,
+    )
+    groups: Mapped[List["Group"]] = relationship(
+        "Group",
+        secondary="groups_blocks",
+        lazy="raise",
+        back_populates="shared_blocks",
         passive_deletes=True,
     )
 
@@ -67,6 +90,17 @@ class Block(OrganizationMixin, SqlalchemyBase):
         model_dict = {k: v for k, v in self.__dict__.items() if k in self.__pydantic_model__.model_fields}
         model_dict["metadata"] = self.metadata_
         return Schema.model_validate(model_dict)
+
+    @declared_attr
+    def current_history_entry(cls) -> Mapped[Optional["BlockHistory"]]:
+        # Relationship to easily load the specific history entry that is current
+        return relationship(
+            "BlockHistory",
+            primaryjoin=lambda: cls.current_history_entry_id == BlockHistory.id,
+            foreign_keys=[cls.current_history_entry_id],
+            lazy="joined",  # Typically want current history details readily available
+            post_update=True,
+        )  # Helps manage potential FK cycles
 
 
 @event.listens_for(Block, "after_update")  # Changed from 'before_update'

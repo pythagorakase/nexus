@@ -15,23 +15,27 @@ from letta.llm_api.anthropic import (
 from letta.llm_api.aws_bedrock import has_valid_aws_credentials
 from letta.llm_api.azure_openai import azure_openai_chat_completions_request
 from letta.llm_api.deepseek import build_deepseek_chat_completions_request, convert_deepseek_response_to_chatcompletion
-from letta.llm_api.google_ai import convert_tools_to_google_ai_format, google_ai_chat_completions_request
 from letta.llm_api.helpers import add_inner_thoughts_to_functions, unpack_all_inner_thoughts_from_kwargs
 from letta.llm_api.openai import (
     build_openai_chat_completions_request,
     openai_chat_completions_process_stream,
     openai_chat_completions_request,
+    prepare_openai_payload,
 )
 from letta.local_llm.chat_completion_proxy import get_chat_completion
 from letta.local_llm.constants import INNER_THOUGHTS_KWARG, INNER_THOUGHTS_KWARG_DESCRIPTION
 from letta.local_llm.utils import num_tokens_from_functions, num_tokens_from_messages
+from letta.orm.user import User
+from letta.otel.tracing import log_event, trace_method
+from letta.schemas.enums import ProviderCategory
 from letta.schemas.llm_config import LLMConfig
 from letta.schemas.message import Message
-from letta.schemas.openai.chat_completion_request import ChatCompletionRequest, Tool, cast_message_to_subtype
+from letta.schemas.openai.chat_completion_request import ChatCompletionRequest, cast_message_to_subtype
 from letta.schemas.openai.chat_completion_response import ChatCompletionResponse
+from letta.schemas.provider_trace import ProviderTraceCreate
+from letta.services.telemetry_manager import TelemetryManager
 from letta.settings import ModelSettings
 from letta.streaming_interface import AgentChunkStreamingInterface, AgentRefreshStreamingInterface
-from letta.tracing import log_event, trace_method
 
 LLM_API_PROVIDER_OPTIONS = ["openai", "azure", "anthropic", "google_ai", "cohere", "local", "groq", "deepseek"]
 
@@ -63,7 +67,6 @@ def retry_with_exponential_backoff(
                 # Stop retrying if user hits Ctrl-C
                 raise KeyboardInterrupt("User intentionally stopped thread. Stopping...")
             except requests.exceptions.HTTPError as http_err:
-
                 if not hasattr(http_err, "response") or not http_err.response:
                     raise
 
@@ -141,6 +144,10 @@ def create(
     stream_interface: Optional[Union[AgentRefreshStreamingInterface, AgentChunkStreamingInterface]] = None,
     model_settings: Optional[dict] = None,  # TODO: eventually pass from server
     put_inner_thoughts_first: bool = True,
+    name: Optional[str] = None,
+    telemetry_manager: Optional[TelemetryManager] = None,
+    step_id: Optional[str] = None,
+    actor: Optional[User] = None,
 ) -> ChatCompletionResponse:
     """Return response to chat completion with backoff"""
     from letta.utils import printd
@@ -167,10 +174,15 @@ def create(
 
     # openai
     if llm_config.model_endpoint_type == "openai":
-
         if model_settings.openai_api_key is None and llm_config.model_endpoint == "https://api.openai.com/v1":
             # only is a problem if we are *not* using an openai proxy
             raise LettaConfigurationError(message="OpenAI key is missing from letta config file", missing_fields=["openai_api_key"])
+        elif llm_config.provider_category == ProviderCategory.byok:
+            from letta.services.provider_manager import ProviderManager
+            from letta.services.user_manager import UserManager
+
+            actor = UserManager().get_user_or_default(user_id=user_id)
+            api_key = ProviderManager().get_override_key(llm_config.provider_name, actor=actor)
         elif model_settings.openai_api_key is None:
             # the openai python client requires a dummy API key
             api_key = "DUMMY_API_KEY"
@@ -181,8 +193,8 @@ def create(
             # force function calling for reliability, see https://platform.openai.com/docs/api-reference/chat/create#chat-create-tool_choice
             # TODO(matt) move into LLMConfig
             # TODO: This vllm checking is very brittle and is a patch at most
-            if llm_config.model_endpoint == "https://inference.memgpt.ai" or (llm_config.handle and "vllm" in llm_config.handle):
-                function_call = "auto"  # TODO change to "required" once proxy supports it
+            if llm_config.handle and "vllm" in llm_config.handle:
+                function_call = "auto"
             else:
                 function_call = "required"
 
@@ -207,6 +219,10 @@ def create(
                 api_key=api_key,
                 chat_completion_request=data,
                 stream_interface=stream_interface,
+                name=name,
+                # NOTE: needs to be true for OpenAI proxies that use the `reasoning_content` field
+                # For example, DeepSeek, or LM Studio
+                expect_reasoning_content=False,
             )
         else:  # Client did not request token streaming (expect a blocking backend response)
             data.stream = False
@@ -222,13 +238,22 @@ def create(
                 if isinstance(stream_interface, AgentChunkStreamingInterface):
                     stream_interface.stream_end()
 
+        telemetry_manager.create_provider_trace(
+            actor=actor,
+            provider_trace_create=ProviderTraceCreate(
+                request_json=prepare_openai_payload(data),
+                response_json=response.model_json_schema(),
+                step_id=step_id,
+                organization_id=actor.organization_id,
+            ),
+        )
+
         if llm_config.put_inner_thoughts_in_kwargs:
             response = unpack_all_inner_thoughts_from_kwargs(response=response, inner_thoughts_key=INNER_THOUGHTS_KWARG)
 
         return response
 
     elif llm_config.model_endpoint_type == "xai":
-
         api_key = model_settings.xai_api_key
 
         if function_call is None and functions is not None and len(functions) > 0:
@@ -246,6 +271,13 @@ def create(
             use_structured_output=False,  # NOTE: not supported atm for xAI
         )
 
+        # Specific bug for the mini models (as of Apr 14, 2025)
+        # 400 - {'code': 'Client specified an invalid argument', 'error': 'Argument not supported on this model: presencePenalty'}
+        # 400 - {'code': 'Client specified an invalid argument', 'error': 'Argument not supported on this model: frequencyPenalty'}
+        if "grok-3-mini-" in llm_config.model:
+            data.presence_penalty = None
+            data.frequency_penalty = None
+
         if stream:  # Client requested token streaming
             data.stream = True
             assert isinstance(stream_interface, AgentChunkStreamingInterface) or isinstance(
@@ -256,6 +288,10 @@ def create(
                 api_key=api_key,
                 chat_completion_request=data,
                 stream_interface=stream_interface,
+                name=name,
+                # TODO turn on to support reasoning content from xAI reasoners:
+                # https://docs.x.ai/docs/guides/reasoning#reasoning
+                expect_reasoning_content=False,
             )
         else:  # Client did not request token streaming (expect a blocking backend response)
             data.stream = False
@@ -314,65 +350,20 @@ def create(
 
         return response
 
-    elif llm_config.model_endpoint_type == "google_ai":
-        if stream:
-            raise NotImplementedError(f"Streaming not yet implemented for {llm_config.model_endpoint_type}")
-        if not use_tool_naming:
-            raise NotImplementedError("Only tool calling supported on Google AI API requests")
-
-        if functions is not None:
-            tools = [{"type": "function", "function": f} for f in functions]
-            tools = [Tool(**t) for t in tools]
-            tools = convert_tools_to_google_ai_format(tools, inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs)
-        else:
-            tools = None
-
-        return google_ai_chat_completions_request(
-            base_url=llm_config.model_endpoint,
-            model=llm_config.model,
-            api_key=model_settings.gemini_api_key,
-            # see structure of payload here: https://ai.google.dev/docs/function_calling
-            data=dict(
-                contents=[m.to_google_ai_dict() for m in messages],
-                tools=tools,
-                generation_config={"temperature": llm_config.temperature, "max_output_tokens": llm_config.max_tokens},
-            ),
-            inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs,
-        )
-
-    elif llm_config.model_endpoint_type == "google_vertex":
-        from letta.llm_api.google_vertex import google_vertex_chat_completions_request
-
-        if stream:
-            raise NotImplementedError(f"Streaming not yet implemented for {llm_config.model_endpoint_type}")
-        if not use_tool_naming:
-            raise NotImplementedError("Only tool calling supported on Google Vertex AI API requests")
-
-        if functions is not None:
-            tools = [{"type": "function", "function": f} for f in functions]
-            tools = [Tool(**t) for t in tools]
-            tools = convert_tools_to_google_ai_format(tools, inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs)
-        else:
-            tools = None
-
-        config = {"tools": tools, "temperature": llm_config.temperature, "max_output_tokens": llm_config.max_tokens}
-
-        return google_vertex_chat_completions_request(
-            model=llm_config.model,
-            project_id=model_settings.google_cloud_project,
-            region=model_settings.google_cloud_location,
-            contents=[m.to_google_ai_dict() for m in messages],
-            config=config,
-            inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs,
-        )
-
     elif llm_config.model_endpoint_type == "anthropic":
         if not use_tool_naming:
             raise NotImplementedError("Only tool calling supported on Anthropic API requests")
 
+        if llm_config.enable_reasoner:
+            llm_config.put_inner_thoughts_in_kwargs = False
+
         # Force tool calling
         tool_call = None
-        if force_tool_call is not None:
+        if functions is None:
+            # Special case for summarization path
+            tools = None
+            tool_choice = None
+        elif force_tool_call is not None:
             # tool_call = {"type": "function", "function": {"name": force_tool_call}}
             tool_choice = {"type": "tool", "name": force_tool_call}
             tools = [{"type": "function", "function": f} for f in functions if f["name"] == force_tool_call]
@@ -386,7 +377,7 @@ def create(
                 tool_choice = {"type": "any", "disable_parallel_tool_use": True}
             else:
                 tool_choice = {"type": "auto", "disable_parallel_tool_use": True}
-            tools = [{"type": "function", "function": f} for f in functions]
+            tools = [{"type": "function", "function": f} for f in functions] if functions is not None else None
 
         chat_completion_request = ChatCompletionRequest(
             model=llm_config.model,
@@ -402,10 +393,17 @@ def create(
         if stream:  # Client requested token streaming
             assert isinstance(stream_interface, (AgentChunkStreamingInterface, AgentRefreshStreamingInterface)), type(stream_interface)
 
+            stream_interface.inner_thoughts_in_kwargs = True
             response = anthropic_chat_completions_process_stream(
                 chat_completion_request=chat_completion_request,
                 put_inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs,
                 stream_interface=stream_interface,
+                extended_thinking=llm_config.enable_reasoner,
+                max_reasoning_tokens=llm_config.max_reasoning_tokens,
+                provider_name=llm_config.provider_name,
+                provider_category=llm_config.provider_category,
+                name=name,
+                user_id=user_id,
             )
 
         else:
@@ -413,10 +411,25 @@ def create(
             response = anthropic_chat_completions_request(
                 data=chat_completion_request,
                 put_inner_thoughts_in_kwargs=llm_config.put_inner_thoughts_in_kwargs,
+                extended_thinking=llm_config.enable_reasoner,
+                max_reasoning_tokens=llm_config.max_reasoning_tokens,
+                provider_name=llm_config.provider_name,
+                provider_category=llm_config.provider_category,
+                user_id=user_id,
             )
 
         if llm_config.put_inner_thoughts_in_kwargs:
             response = unpack_all_inner_thoughts_from_kwargs(response=response, inner_thoughts_key=INNER_THOUGHTS_KWARG)
+
+        telemetry_manager.create_provider_trace(
+            actor=actor,
+            provider_trace_create=ProviderTraceCreate(
+                request_json=chat_completion_request.model_json_schema(),
+                response_json=response.model_json_schema(),
+                step_id=step_id,
+                organization_id=actor.organization_id,
+            ),
+        )
 
         return response
 
@@ -448,7 +461,7 @@ def create(
     #     )
     elif llm_config.model_endpoint_type == "groq":
         if stream:
-            raise NotImplementedError(f"Streaming not yet implemented for Groq.")
+            raise NotImplementedError("Streaming not yet implemented for Groq.")
 
         if model_settings.groq_api_key is None and llm_config.model_endpoint == "https://api.groq.com/openai/v1/chat/completions":
             raise LettaConfigurationError(message="Groq key is missing from letta config file", missing_fields=["groq_api_key"])
@@ -501,9 +514,12 @@ def create(
         """TogetherAI endpoint that goes via /completions instead of /chat/completions"""
 
         if stream:
-            raise NotImplementedError(f"Streaming not yet implemented for TogetherAI (via the /completions endpoint).")
+            raise NotImplementedError("Streaming not yet implemented for TogetherAI (via the /completions endpoint).")
 
-        if model_settings.together_api_key is None and llm_config.model_endpoint == "https://api.together.ai/v1/completions":
+        if model_settings.together_api_key is None and (
+            llm_config.model_endpoint == "https://api.together.ai/v1/completions"
+            or llm_config.model_endpoint == "https://api.together.xyz/v1/completions"
+        ):
             raise LettaConfigurationError(message="TogetherAI key is missing from letta config file", missing_fields=["together_api_key"])
 
         return get_chat_completion(
@@ -528,7 +544,7 @@ def create(
         """Anthropic endpoint that goes via /embeddings instead of /chat/completions"""
 
         if stream:
-            raise NotImplementedError(f"Streaming not yet implemented for Anthropic (via the /embeddings endpoint).")
+            raise NotImplementedError("Streaming not yet implemented for Anthropic (via the /embeddings endpoint).")
         if not use_tool_naming:
             raise NotImplementedError("Only tool calling supported on Anthropic API requests")
 
@@ -550,6 +566,9 @@ def create(
                 # NOTE: max_tokens is required for Anthropic API
                 max_tokens=llm_config.max_tokens,
             ),
+            provider_name=llm_config.provider_name,
+            provider_category=llm_config.provider_category,
+            user_id=user_id,
         )
 
     elif llm_config.model_endpoint_type == "deepseek":
@@ -576,6 +595,9 @@ def create(
                 api_key=model_settings.deepseek_api_key,
                 chat_completion_request=data,
                 stream_interface=stream_interface,
+                name=name,
+                # TODO should we toggle for R1 vs V3?
+                expect_reasoning_content=True,
             )
         else:  # Client did not request token streaming (expect a blocking backend response)
             data.stream = False
@@ -606,7 +628,7 @@ def create(
             messages[0].content[0].text += f"<available functions> {''.join(json.dumps(f) for f in functions)} </available functions>"
             messages[0].content[
                 0
-            ].text += f'Select best function to call simply by responding with a single json block with the keys "function" and "params". Use double quotes around the arguments.'
+            ].text += 'Select best function to call simply by responding with a single json block with the keys "function" and "params". Use double quotes around the arguments.'
         return get_chat_completion(
             model=llm_config.model,
             messages=messages,
