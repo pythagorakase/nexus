@@ -54,6 +54,8 @@ from utils.turn_cycle import TurnCycleManager
 from utils.token_budget import TokenBudgetManager
 from utils.local_llm import LocalLLMManager
 from utils.model_manager import ModelManager
+from utils.memory_adapter import MemoryAdapter
+from utils.session_store import SessionStore
 from logon_utility import LogonUtility
 
 # Import MEMNON if available
@@ -79,6 +81,14 @@ try:
 except ImportError:
     GAIA_AVAILABLE = False
     logging.warning("GAIA not available. Place context will be limited.")
+
+# Import LettaMemoryBridge if available
+try:
+    from nexus.memory.letta_bridge import LettaMemoryBridge
+    LETTA_AVAILABLE = True
+except ImportError:
+    LETTA_AVAILABLE = False
+    logging.info("Letta not available. Using SessionStore for memory.")
 
 # Configure logger
 logger = logging.getLogger("nexus.lore")
@@ -120,6 +130,7 @@ class LORE:
         self.turn_manager = None
         self.psyche = None
         self.gaia = None
+        self.memory = None  # Memory provider for two-pass persistence
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
@@ -177,6 +188,9 @@ class LORE:
         settings_path = self.settings_path if hasattr(self, 'settings_path') else None
         self.llm_manager = LocalLLMManager(self.settings, settings_path)  # Will fail hard if LM Studio not available
         self.turn_manager = TurnCycleManager(self)
+        
+        # Initialize memory provider
+        self._initialize_memory()
         
         # MEMNON is REQUIRED
         if not MEMNON_AVAILABLE:
@@ -250,6 +264,32 @@ class LORE:
         except Exception as e:
             logger.error(f"Failed to initialize LOGON: {e}")
             self.logon = None
+    
+    def _initialize_memory(self):
+        """Initialize memory provider for two-pass persistence"""
+        try:
+            # Get memory configuration from settings
+            lore_settings = self.settings.get("Agent Settings", {}).get("LORE", {})
+            memory_config = lore_settings.get("memory_provider", {})
+            provider_type = memory_config.get("type", "session_store")
+            
+            if provider_type == "letta" and LETTA_AVAILABLE:
+                # Use Letta memory provider
+                letta_url = memory_config.get("letta_base_url", "http://localhost:8283")
+                provider = LettaMemoryBridge(letta_base_url=letta_url)
+                logger.info(f"Using LettaMemoryBridge with server at {letta_url}")
+            else:
+                # Default to SessionStore
+                provider = SessionStore()
+                logger.info("Using SessionStore for memory persistence")
+            
+            # Wrap in adapter for unified interface
+            self.memory = MemoryAdapter(provider)
+            logger.info(f"Memory provider initialized: {provider_type}")
+            
+        except Exception as e:
+            logger.warning(f"Memory initialization failed, using default SessionStore: {e}")
+            self.memory = MemoryAdapter(SessionStore())
     
     async def process_turn(self, user_input: str) -> str:
         """

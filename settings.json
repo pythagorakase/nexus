@@ -169,6 +169,10 @@
             "debug": true,
             "enable_narrative_state_allocation": false,
             "agentic_sql": true,
+            "memory_provider": {
+                "type": "session_store",
+                "letta_base_url": "http://localhost:8283"
+            },
             "payload_percent_budget": {
                 "structured_summaries": {
                     "min": 10,
