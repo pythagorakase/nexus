@@ -13,9 +13,9 @@ from anthropic.types.beta import (
     BetaRawMessageDeltaEvent,
     BetaRawMessageStartEvent,
     BetaRawMessageStopEvent,
-    BetaRedactedThinkingBlock,
+    # BetaRedactedThinkingBlock,  # Commented out - not available in anthropic 0.43.1
     BetaTextBlock,
-    BetaThinkingBlock,
+    # BetaThinkingBlock,  # Commented out - not available in anthropic 0.43.1
     BetaToolUseBlock,
 )
 
@@ -641,10 +641,11 @@ def convert_anthropic_stream_event_to_chatcompletion(
             ]
         elif isinstance(event.content_block, BetaTextBlock):
             content = event.content_block.text
-        elif isinstance(event.content_block, BetaThinkingBlock):
-            reasoning_content = event.content_block.thinking
-        elif isinstance(event.content_block, BetaRedactedThinkingBlock):
-            redacted_reasoning_content = event.content_block.data
+        # Commented out - not available in anthropic 0.43.1
+        # elif isinstance(event.content_block, BetaThinkingBlock):
+        #     reasoning_content = event.content_block.thinking
+        # elif isinstance(event.content_block, BetaRedactedThinkingBlock):
+        #     redacted_reasoning_content = event.content_block.data
         else:
             warnings.warn("Unexpected content start type: " + str(type(event.content_block)))
     elif event.type in VALID_EVENT_TYPES:

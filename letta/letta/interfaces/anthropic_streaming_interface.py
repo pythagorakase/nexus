@@ -15,12 +15,12 @@ from anthropic.types.beta import (
     BetaRawMessageStartEvent,
     BetaRawMessageStopEvent,
     BetaRawMessageStreamEvent,
-    BetaRedactedThinkingBlock,
-    BetaSignatureDelta,
+    # BetaRedactedThinkingBlock,  # Not available in anthropic 0.43.1
+    # BetaSignatureDelta,  # Not available in anthropic 0.43.1
     BetaTextBlock,
     BetaTextDelta,
-    BetaThinkingBlock,
-    BetaThinkingDelta,
+    # BetaThinkingBlock,  # Not available in anthropic 0.43.1
+    # BetaThinkingDelta,  # Not available in anthropic 0.43.1
     BetaToolUseBlock,
 )
 
@@ -263,10 +263,11 @@ class AnthropicStreamingInterface:
                         date=datetime.now(timezone.utc).isoformat(),
                     )
                     self.tool_call_buffer.append(tool_call_msg)
-            elif isinstance(content, BetaThinkingBlock):
-                self.anthropic_mode = EventMode.THINKING
-                # TODO: Can capture signature, etc.
-            elif isinstance(content, BetaRedactedThinkingBlock):
+            # Commented out - not available in anthropic 0.43.1
+            # elif isinstance(content, BetaThinkingBlock):
+            #     self.anthropic_mode = EventMode.THINKING
+            #     # TODO: Can capture signature, etc.
+            # elif isinstance(content, BetaRedactedThinkingBlock):
                 self.anthropic_mode = EventMode.REDACTED_THINKING
                 if prev_message_type and prev_message_type != "hidden_reasoning_message":
                     message_index += 1
@@ -413,7 +414,8 @@ class AnthropicStreamingInterface:
 
                 # Set previous parse
                 self.previous_parse = current_parsed
-            elif isinstance(delta, BetaThinkingDelta):
+            # Commented out - not available in anthropic 0.43.1
+            # elif isinstance(delta, BetaThinkingDelta):
                 # Safety check
                 if not self.anthropic_mode == EventMode.THINKING:
                     raise RuntimeError(
@@ -432,7 +434,8 @@ class AnthropicStreamingInterface:
                 self.reasoning_messages.append(reasoning_message)
                 prev_message_type = reasoning_message.message_type
                 yield reasoning_message
-            elif isinstance(delta, BetaSignatureDelta):
+            # Commented out - not available in anthropic 0.43.1
+            # elif isinstance(delta, BetaSignatureDelta):
                 # Safety check
                 if not self.anthropic_mode == EventMode.THINKING:
                     raise RuntimeError(
