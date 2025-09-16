@@ -54,6 +54,7 @@ from utils.token_budget import TokenBudgetManager
 from utils.local_llm import LocalLLMManager
 from utils.model_manager import ModelManager
 from logon_utility import LogonUtility
+from nexus.memory import ContextMemoryManager
 
 # Import MEMNON if available
 try:
@@ -101,6 +102,7 @@ class LORE:
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
+        self.memory_manager = None
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
@@ -157,6 +159,11 @@ class LORE:
         self.token_manager = TokenBudgetManager(self.settings)
         settings_path = self.settings_path if hasattr(self, 'settings_path') else None
         self.llm_manager = LocalLLMManager(self.settings, settings_path)  # Will fail hard if LM Studio not available
+        self.memory_manager = ContextMemoryManager(
+            settings=self.settings,
+            memnon=None,
+            token_manager=self.token_manager,
+        )
         self.turn_manager = TurnCycleManager(self)
         
         # MEMNON is REQUIRED
@@ -165,7 +172,9 @@ class LORE:
         self._initialize_memnon()
         if not self.memnon:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
-        
+        if self.memory_manager:
+            self.memory_manager.attach_memnon(self.memnon)
+
         # LOGON is REQUIRED
         self._initialize_logon()
         if not self.logon:

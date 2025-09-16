@@ -68,28 +68,45 @@ class TurnCycleManager:
     async def perform_warm_analysis(self, turn_context: TurnContext):
         """
         Phase 2: Analyze recent narrative context.
-        
+
         Args:
             turn_context: Current turn context
         """
         logger.debug("Performing warm analysis...")
-        
+
         # Get recent narrative chunks from database if MEMNON available
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
                 chunk_params = self.settings.get("Agent Settings", {}).get("LORE", {}).get("chunk_parameters", {})
                 initial_chunks = chunk_params.get("warm_slice_initial", 10)
-                
+
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
                 turn_context.warm_slice = recent_chunks.get("results", [])
-                
+
                 logger.info(f"Retrieved {len(turn_context.warm_slice)} recent chunks for warm slice")
             except Exception as e:
                 logger.error(f"Failed to retrieve warm slice: {e}")
                 turn_context.warm_slice = []
-        
+
+        # Allow memory manager to adjust warm slice based on Pass 1 state
+        if self.lore.memory_manager:
+            updated_slice, divergence_state = self.lore.memory_manager.prepare_warm_slice_for_user(
+                turn_context.user_input,
+                turn_context.warm_slice,
+            )
+            turn_context.warm_slice = updated_slice
+            if divergence_state:
+                turn_context.phase_states["divergence"] = divergence_state
+                if "remaining_budget" in divergence_state:
+                    turn_context.token_counts["pass2_remaining"] = divergence_state["remaining_budget"]
+                additional_chunks = divergence_state.get("additional_chunks", 0)
+                if additional_chunks:
+                    estimated_tokens = additional_chunks * self.lore.memory_manager.incremental_retriever.estimated_tokens_per_chunk
+                    turn_context.token_counts["warm_slice"] = turn_context.token_counts.get("warm_slice", 0) + estimated_tokens
+                    turn_context.token_counts["pass2_used"] = turn_context.token_counts.get("pass2_used", 0) + estimated_tokens
+
         # Analyze with local LLM - REQUIRED for LORE to function
         if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
             raise RuntimeError("FATAL: Local LLM is required for warm analysis. "
@@ -219,6 +236,8 @@ class TurnCycleManager:
         
         for query_obj in queries[:5]:  # Limit to 5 queries
             try:
+                if self.lore.memory_manager:
+                    self.lore.memory_manager.query_memory.record_pass1_query(query_obj["text"])
                 # MEMNON's SearchManager uses the query type internally
                 # to adjust vector/text weights for optimal results
                 results = self.lore.memnon.query_memory(
@@ -260,9 +279,10 @@ class TurnCycleManager:
         turn_context.phase_states["deep_queries"] = {
             "queries_executed": len(queries),
             "query_types": query_type_counts,
-            "results_retrieved": len(unique_results)
+            "results_retrieved": len(unique_results),
+            "queries": [q.get("text", "") for q in queries],
         }
-        
+
         logger.info(f"Deep queries complete: {len(queries)} queries executed "
                    f"({query_type_counts}), {len(unique_results)} unique results retrieved")
     
@@ -294,7 +314,17 @@ class TurnCycleManager:
                 "timestamp": datetime.now().isoformat()
             }
         }
-        
+
+        if self.lore.memory_manager:
+            memory_state = self.lore.memory_manager.get_complete_context()
+            if memory_state:
+                memory_state["divergence_summary"] = self.lore.memory_manager.get_divergence_summary()
+                turn_context.context_payload["memory_state"] = memory_state
+        if "divergence" in turn_context.phase_states:
+            turn_context.context_payload.setdefault("metadata", {}).update({
+                "divergence": turn_context.phase_states["divergence"]
+            })
+
         # Calculate utilization
         if self.lore.token_manager:
             utilization = self.lore.token_manager.calculate_utilization(
@@ -381,3 +411,7 @@ class TurnCycleManager:
                 logger.info("Would store new narrative chunk to database")
             except Exception as e:
                 logger.error(f"Failed to store narrative chunk: {e}")
+
+        # Trigger Pass 1 baseline capture for next turn
+        if self.lore.memory_manager:
+            self.lore.memory_manager.handle_storyteller_response(response, turn_context)
