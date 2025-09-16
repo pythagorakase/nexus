@@ -54,6 +54,7 @@ from utils.token_budget import TokenBudgetManager
 from utils.local_llm import LocalLLMManager
 from utils.model_manager import ModelManager
 from logon_utility import LogonUtility
+from nexus.memory.manager import ContextMemoryManager
 
 # Import MEMNON if available
 try:
@@ -101,6 +102,7 @@ class LORE:
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
+        self.memory_manager: Optional[ContextMemoryManager] = None
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
@@ -171,7 +173,19 @@ class LORE:
         if not self.logon:
             raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
         
+        self._initialize_memory_manager()
+
         logger.info("Component initialization complete")
+
+    def _initialize_memory_manager(self):
+        """Initialize the custom context memory manager."""
+
+        try:
+            self.memory_manager = ContextMemoryManager(self.settings, self.memnon)
+            logger.info("Context memory manager initialized")
+        except Exception as exc:
+            logger.error(f"Failed to initialize context memory manager: {exc}")
+            self.memory_manager = None
     
     def _initialize_memnon(self):
         """Initialize MEMNON utility for memory retrieval"""
@@ -241,6 +255,10 @@ class LORE:
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
             await self.turn_manager.process_user_input(self.turn_context)
+
+            if self.memory_manager:
+                memory_result = self.memory_manager.process_user_input(user_input)
+                self.turn_context.memory_state["pass2_detection"] = memory_result
             
             # Phase 2: Warm Analysis
             self.current_phase = TurnPhase.WARM_ANALYSIS
@@ -741,6 +759,7 @@ class LORE:
             "token_utilization": self.turn_context.phase_states.get("payload_assembly", {}).get("utilization_percentage", 0),
             "errors": self.turn_context.error_log,
             "apex_tokens": self.turn_context.phase_states.get("apex_generation", {}),
+            "memory_state": self.turn_context.memory_state,
             "components": {
                 "memnon": "available" if self.memnon else "unavailable",
                 "logon": "available" if self.logon else "unavailable",
@@ -757,7 +776,8 @@ class LORE:
                 "logon": self.logon is not None,
                 "local_llm": self.llm_manager.is_available() if self.llm_manager else False,
                 "token_manager": self.token_manager is not None,
-                "turn_manager": self.turn_manager is not None
+                "turn_manager": self.turn_manager is not None,
+                "memory_manager": self.memory_manager is not None
             },
             "settings_loaded": bool(self.settings),
             "debug_mode": self.debug

@@ -80,16 +80,26 @@ class TurnCycleManager:
                 # Get chunk parameters from settings
                 chunk_params = self.settings.get("Agent Settings", {}).get("LORE", {}).get("chunk_parameters", {})
                 initial_chunks = chunk_params.get("warm_slice_initial", 10)
-                
+
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
                 turn_context.warm_slice = recent_chunks.get("results", [])
-                
+
                 logger.info(f"Retrieved {len(turn_context.warm_slice)} recent chunks for warm slice")
             except Exception as e:
                 logger.error(f"Failed to retrieve warm slice: {e}")
                 turn_context.warm_slice = []
-        
+
+        if self.lore.memory_manager:
+            augmented = self.lore.memory_manager.augment_warm_slice(turn_context.warm_slice)
+            turn_context.warm_slice = augmented
+            package = self.lore.memory_manager.get_context_package()
+            turn_context.memory_state["augmented_warm_slice"] = {
+                "total_chunks": len(augmented),
+                "baseline_chunks": len(package.baseline_chunks),
+                "additional_chunks": len(package.additional_chunks),
+            }
+
         # Analyze with local LLM - REQUIRED for LORE to function
         if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
             raise RuntimeError("FATAL: Local LLM is required for warm analysis. "
@@ -198,9 +208,19 @@ class TurnCycleManager:
             raise RuntimeError("FATAL: LLM failed to generate any retrieval queries. "
                              "This should not happen - check LLM configuration.")
         
+        if self.lore.memory_manager:
+            prepared_queries = self.lore.memory_manager.prepare_queries_for_pass(2, llm_queries)
+            if len(prepared_queries) < len(llm_queries):
+                logger.debug(
+                    "Filtered %d duplicate query(ies) based on pass history",
+                    len(llm_queries) - len(prepared_queries)
+                )
+        else:
+            prepared_queries = llm_queries
+
         # Step 2: Classify each generated query with MEMNON's QueryAnalyzer
         queries = []
-        for q_text in llm_queries:
+        for q_text in prepared_queries:
             query_type = "general"
             if self.query_analyzer:
                 query_info = self.query_analyzer.analyze_query(q_text)
@@ -260,9 +280,10 @@ class TurnCycleManager:
         turn_context.phase_states["deep_queries"] = {
             "queries_executed": len(queries),
             "query_types": query_type_counts,
-            "results_retrieved": len(unique_results)
+            "results_retrieved": len(unique_results),
+            "query_texts": [q["text"] for q in queries],
         }
-        
+
         logger.info(f"Deep queries complete: {len(queries)} queries executed "
                    f"({query_type_counts}), {len(unique_results)} unique results retrieved")
     
@@ -294,7 +315,10 @@ class TurnCycleManager:
                 "timestamp": datetime.now().isoformat()
             }
         }
-        
+
+        if self.lore.memory_manager:
+            turn_context.context_payload["memory_state"] = self.lore.memory_manager.get_context_summary()
+
         # Calculate utilization
         if self.lore.token_manager:
             utilization = self.lore.token_manager.calculate_utilization(
@@ -381,3 +405,6 @@ class TurnCycleManager:
                 logger.info("Would store new narrative chunk to database")
             except Exception as e:
                 logger.error(f"Failed to store narrative chunk: {e}")
+
+        if self.lore.memory_manager and response:
+            self.lore.memory_manager.handle_storyteller_response(response, turn_context)

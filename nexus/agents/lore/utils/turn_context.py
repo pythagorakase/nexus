@@ -35,3 +35,4 @@ class TurnContext:
     apex_response: Optional[str] = None
     error_log: List[str] = field(default_factory=list)
     token_counts: Dict[str, int] = field(default_factory=dict)
+    memory_state: Dict[str, Any] = field(default_factory=dict)
