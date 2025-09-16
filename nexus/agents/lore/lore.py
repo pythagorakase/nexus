@@ -55,6 +55,8 @@ from utils.local_llm import LocalLLMManager
 from utils.model_manager import ModelManager
 from logon_utility import LogonUtility
 
+from nexus.memory import ContextMemoryManager
+
 # Import MEMNON if available
 try:
     from nexus.agents.memnon.memnon import MEMNON
@@ -101,6 +103,7 @@ class LORE:
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
+        self.memory_manager = None
         
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
@@ -171,6 +174,14 @@ class LORE:
         if not self.logon:
             raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
         
+        # Memory manager orchestrates Pass 1/Pass 2 state
+        self.memory_manager = ContextMemoryManager(
+            self.settings,
+            memnon=self.memnon,
+            llm_manager=self.llm_manager,
+            token_manager=self.token_manager,
+        )
+
         logger.info("Component initialization complete")
     
     def _initialize_memnon(self):
@@ -757,7 +768,8 @@ class LORE:
                 "logon": self.logon is not None,
                 "local_llm": self.llm_manager.is_available() if self.llm_manager else False,
                 "token_manager": self.token_manager is not None,
-                "turn_manager": self.turn_manager is not None
+                "turn_manager": self.turn_manager is not None,
+                "memory_manager": self.memory_manager is not None
             },
             "settings_loaded": bool(self.settings),
             "debug_mode": self.debug

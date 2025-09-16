@@ -414,6 +414,12 @@
             "debug": true
         }
     },
+    "memory": {
+        "pass2_budget_reserve": 0.25,
+        "divergence_threshold": 0.7,
+        "warm_slice_default": true,
+        "max_sql_iterations": 5
+    },
     "Utility Settings": {
         "agent_base": {
             "debug": true

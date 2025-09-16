@@ -60,10 +60,27 @@ class TurnCycleManager:
             )
         
         # Store processed input
-        turn_context.phase_states["user_input"] = {
+        phase_state = {
             "processed": True,
             "token_count": turn_context.token_counts.get("user_input", 0)
         }
+        turn_context.phase_states["user_input"] = phase_state
+
+        memory_update = {}
+        if getattr(self.lore, "memory_manager", None):
+            try:
+                pass2_update = self.lore.memory_manager.handle_user_input(
+                    turn_context.user_input,
+                    turn_context.token_counts,
+                )
+                memory_update = pass2_update.to_dict()
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Pass 2 memory handling failed: %s", exc)
+                memory_update = {"error": str(exc)}
+
+        if memory_update:
+            turn_context.memory_state["pass2"] = memory_update
+        phase_state["memory_pass2"] = memory_update
     
     async def perform_warm_analysis(self, turn_context: TurnContext):
         """
@@ -90,6 +107,9 @@ class TurnCycleManager:
                 logger.error(f"Failed to retrieve warm slice: {e}")
                 turn_context.warm_slice = []
         
+        if getattr(self.lore, "memory_manager", None):
+            turn_context.warm_slice = self.lore.memory_manager.augment_warm_slice(turn_context.warm_slice)
+
         # Analyze with local LLM - REQUIRED for LORE to function
         if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
             raise RuntimeError("FATAL: Local LLM is required for warm analysis. "
@@ -198,6 +218,9 @@ class TurnCycleManager:
             raise RuntimeError("FATAL: LLM failed to generate any retrieval queries. "
                              "This should not happen - check LLM configuration.")
         
+        if getattr(self.lore, "memory_manager", None):
+            self.lore.memory_manager.reset_pass1_queries()
+
         # Step 2: Classify each generated query with MEMNON's QueryAnalyzer
         queries = []
         for q_text in llm_queries:
@@ -218,6 +241,8 @@ class TurnCycleManager:
         query_type_counts = {}
         
         for query_obj in queries[:5]:  # Limit to 5 queries
+            if getattr(self.lore, "memory_manager", None):
+                self.lore.memory_manager.record_pass1_query(query_obj["text"])
             try:
                 # MEMNON's SearchManager uses the query type internally
                 # to adjust vector/text weights for optimal results
@@ -292,7 +317,8 @@ class TurnCycleManager:
             "metadata": {
                 "turn_id": turn_context.turn_id,
                 "timestamp": datetime.now().isoformat()
-            }
+            },
+            "memory_state": turn_context.memory_state
         }
         
         # Calculate utilization
@@ -355,25 +381,47 @@ class TurnCycleManager:
     async def integrate_response(self, turn_context: TurnContext, response: str):
         """
         Phase 7: Integrate Apex response and update state.
-        
+
         Args:
             turn_context: Current turn context
             response: Generated narrative response
         """
         logger.debug("Integrating response...")
-        
+
         # In a full implementation, this would:
         # 1. Parse the response for state updates
         # 2. Update character states via PSYCHE
-        # 3. Update world state via GAIA  
+        # 3. Update world state via GAIA
         # 4. Store the new narrative chunk in database
-        
+
         # For now, just log the completion
         turn_context.phase_states["integration"] = {
             "response_length": len(response),
             "integration_complete": True
         }
-        
+
+        if getattr(self.lore, "memory_manager", None):
+            try:
+                baseline = self.lore.memory_manager.handle_storyteller_response(
+                    narrative=response,
+                    warm_slice=turn_context.warm_slice,
+                    retrieved_passages=turn_context.retrieved_passages,
+                    token_usage=turn_context.token_counts,
+                    assembled_context=turn_context.context_payload,
+                )
+                transition = self.lore.memory_manager.context_state.transition
+                baseline_snapshot = {
+                    "baseline_chunks": sorted(baseline.baseline_chunks),
+                    "baseline_themes": baseline.baseline_themes,
+                    "expected_user_themes": transition.expected_user_themes if transition else [],
+                    "remaining_budget": self.lore.memory_manager.context_state.get_remaining_budget(),
+                }
+                turn_context.memory_state["pass1"] = baseline_snapshot
+                turn_context.phase_states["integration"]["memory_baseline"] = baseline_snapshot
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Pass 1 baseline storage failed: %s", exc)
+                turn_context.memory_state.setdefault("errors", []).append(str(exc))
+
         # Store narrative chunk if MEMNON available
         if self.lore.memnon and response:
             try:
