@@ -58,7 +58,13 @@ class TurnCycleManager:
             turn_context.token_counts = self.lore.token_manager.calculate_budget(
                 turn_context.user_input
             )
-        
+
+        # Run Pass 2 memory flow before other phases
+        if getattr(self.lore, "memory_manager", None):
+            memory_state = self.lore.memory_manager.handle_user_input(turn_context)
+            if memory_state:
+                turn_context.phase_states["memory_pass2"] = memory_state
+
         # Store processed input
         turn_context.phase_states["user_input"] = {
             "processed": True,
@@ -74,17 +80,17 @@ class TurnCycleManager:
         """
         logger.debug("Performing warm analysis...")
         
-        # Get recent narrative chunks from database if MEMNON available
-        if self.lore.memnon:
+        # Use memory-managed warm slice if available, otherwise pull from MEMNON
+        if not turn_context.warm_slice and self.lore.memnon:
             try:
                 # Get chunk parameters from settings
                 chunk_params = self.settings.get("Agent Settings", {}).get("LORE", {}).get("chunk_parameters", {})
                 initial_chunks = chunk_params.get("warm_slice_initial", 10)
-                
+
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
                 turn_context.warm_slice = recent_chunks.get("results", [])
-                
+
                 logger.info(f"Retrieved {len(turn_context.warm_slice)} recent chunks for warm slice")
             except Exception as e:
                 logger.error(f"Failed to retrieve warm slice: {e}")
@@ -217,6 +223,9 @@ class TurnCycleManager:
         all_results = []
         query_type_counts = {}
         
+        if self.lore.memory_manager:
+            self.lore.memory_manager.record_queries(1, [q["text"] for q in queries], replace=True)
+
         for query_obj in queries[:5]:  # Limit to 5 queries
             try:
                 # MEMNON's SearchManager uses the query type internally
@@ -257,6 +266,8 @@ class TurnCycleManager:
         )[:30]  # Keep top 30 for augmentation
         
         turn_context.retrieved_passages = unique_results
+        if self.lore.memory_manager:
+            self.lore.memory_manager.merge_incremental_results(turn_context)
         turn_context.phase_states["deep_queries"] = {
             "queries_executed": len(queries),
             "query_types": query_type_counts,
@@ -294,6 +305,11 @@ class TurnCycleManager:
                 "timestamp": datetime.now().isoformat()
             }
         }
+
+        if self.lore.memory_manager:
+            memory_summary = self.lore.memory_manager.get_memory_summary()
+            if memory_summary:
+                turn_context.context_payload.setdefault("metadata", {})["memory"] = memory_summary
         
         # Calculate utilization
         if self.lore.token_manager:
@@ -373,7 +389,7 @@ class TurnCycleManager:
             "response_length": len(response),
             "integration_complete": True
         }
-        
+
         # Store narrative chunk if MEMNON available
         if self.lore.memnon and response:
             try:
@@ -381,3 +397,9 @@ class TurnCycleManager:
                 logger.info("Would store new narrative chunk to database")
             except Exception as e:
                 logger.error(f"Failed to store narrative chunk: {e}")
+
+        if self.lore.memory_manager:
+            try:
+                self.lore.memory_manager.handle_storyteller_response(response, turn_context)
+            except Exception as e:  # pragma: no cover - defensive logging
+                logger.error(f"Failed to update memory manager with storyteller output: {e}")

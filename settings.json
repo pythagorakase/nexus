@@ -435,5 +435,11 @@
             "batch": 1,
             "rate_limit": 300
         }
+    },
+    "memory": {
+        "pass2_budget_reserve": 0.25,
+        "divergence_threshold": 0.7,
+        "warm_slice_default": true,
+        "max_sql_iterations": 5
     }
 }
