@@ -772,7 +772,8 @@ class LORE:
                 "memory_manager": self.memory_manager is not None
             },
             "settings_loaded": bool(self.settings),
-            "debug_mode": self.debug
+            "debug_mode": self.debug,
+            "memory": self.memory_manager.get_memory_summary() if self.memory_manager else {}
         }
 
 
