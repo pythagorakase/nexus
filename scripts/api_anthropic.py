@@ -509,42 +509,36 @@ class AnthropicProvider(LLMProvider):
         return model_info["output"] / 1_000_000  # Convert to cost per token
     
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from various potential sources."""
-        # Try environment variable
-        if "ANTHROPIC_API_KEY" in os.environ and os.environ["ANTHROPIC_API_KEY"]:
-            return os.environ["ANTHROPIC_API_KEY"]
-        
-        # Try from a key file
-        key_file_paths = [
-            os.path.expanduser("~/.anthropic/api_key"),
-            os.path.expanduser("~/.config/anthropic/api_key")
-        ]
-        
-        for path in key_file_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        key = f.read().strip()
-                        if key:
-                            return key
-                except:
-                    pass
-        
-        # Try to read from ~/.zshrc
+        """Get Anthropic API key from 1Password CLI."""
+        import subprocess
+
         try:
-            zshrc_path = os.path.expanduser("~/.zshrc")
-            if os.path.exists(zshrc_path):
-                with open(zshrc_path, 'r') as f:
-                    for line in f:
-                        if "ANTHROPIC_API_KEY" in line:
-                            # Extract the key using regex
-                            match = re.search(r'ANTHROPIC_API_KEY=([a-zA-Z0-9_-]+)', line)
-                            if match:
-                                return match.group(1)
-        except:
-            pass
-        
-        raise ValueError("No Anthropic API key found. Please set ANTHROPIC_API_KEY environment variable.")
+            # Fetch from 1Password using the secret reference syntax
+            result = subprocess.run(
+                ["op", "read", "op://API/Anthropic/api key"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            api_key = result.stdout.strip()
+            if api_key:
+                return api_key
+            else:
+                raise ValueError("Empty API key returned from 1Password")
+
+        except subprocess.CalledProcessError as e:
+            # Don't expose the actual error details which might contain sensitive info
+            raise ValueError(
+                "Failed to retrieve Anthropic API key from 1Password. "
+                "Ensure 1Password CLI is installed and you're signed in. "
+                "Run 'op signin' if needed."
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "1Password CLI (op) not found. Please install it from "
+                "https://developer.1password.com/docs/cli/get-started/"
+            )
 
 
 # Database utilities

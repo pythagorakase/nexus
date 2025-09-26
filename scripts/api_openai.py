@@ -537,42 +537,36 @@ class OpenAIProvider(LLMProvider):
         return model_info["output"] / 1_000_000  # Convert to cost per token
     
     def _get_api_key(self) -> str:
-        """Get OpenAI API key from various potential sources."""
-        # Try environment variable
-        if "OPENAI_API_KEY" in os.environ and os.environ["OPENAI_API_KEY"]:
-            return os.environ["OPENAI_API_KEY"]
-        
-        # Try from a key file
-        key_file_paths = [
-            os.path.expanduser("~/.openai/api_key"),
-            os.path.expanduser("~/.config/openai/api_key")
-        ]
-        
-        for path in key_file_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        key = f.read().strip()
-                        if key:
-                            return key
-                except:
-                    pass
-        
-        # Try to read from ~/.zshrc
+        """Get OpenAI API key from 1Password CLI."""
+        import subprocess
+
         try:
-            zshrc_path = os.path.expanduser("~/.zshrc")
-            if os.path.exists(zshrc_path):
-                with open(zshrc_path, 'r') as f:
-                    for line in f:
-                        if "OPENAI_API_KEY" in line:
-                            # Extract the key using regex
-                            match = re.search(r'OPENAI_API_KEY=([a-zA-Z0-9_-]+)', line)
-                            if match:
-                                return match.group(1)
-        except:
-            pass
-        
-        raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+            # Fetch from 1Password using the specific item ID in the API vault
+            result = subprocess.run(
+                ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            api_key = result.stdout.strip()
+            if api_key:
+                return api_key
+            else:
+                raise ValueError("Empty API key returned from 1Password")
+
+        except subprocess.CalledProcessError as e:
+            # Don't expose the actual error details which might contain sensitive info
+            raise ValueError(
+                "Failed to retrieve OpenAI API key from 1Password. "
+                "Ensure 1Password CLI is installed and you're signed in. "
+                "Run 'op signin' if needed."
+            )
+        except FileNotFoundError:
+            raise ValueError(
+                "1Password CLI (op) not found. Please install it from "
+                "https://developer.1password.com/docs/cli/get-started/"
+            )
 
 
 # Database utilities
