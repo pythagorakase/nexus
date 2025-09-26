@@ -34,6 +34,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - `chunk_metadata`: Contains metadata for each chunk (fields: id, chunk_id, world_layer, etc.)
   - `chunk_embeddings`: Contains vector embeddings for search (fields: chunk_id, model, embedding)
 
+## API Key Management
+
+**IMPORTANT: All API keys are securely stored in 1Password. Never store API keys in environment variables, config files, or source code.**
+
+### 1Password Setup
+The codebase uses 1Password CLI for secure API key retrieval:
+
+#### OpenAI API Key
+- **Vault**: API
+- **Item ID**: tyrupcepa4wluec7sou4e7mkza
+- **Access Method**: `op item get tyrupcepa4wluec7sou4e7mkza --fields "api key" --reveal`
+- **Plugin Setup**: 1Password OpenAI shell plugin is configured
+  - Source the plugin: `source /Users/pythagor/.config/op/plugins.sh`
+  - This enables the `openai` CLI command with automatic authentication
+  - Configuration verified with: `op plugin inspect openai`
+
+#### Anthropic API Key
+- **Vault**: API
+- **Reference**: `op://API/Anthropic/api key`
+- **Access Method**: `op read "op://API/Anthropic/api key"`
+
+### Implementation Details
+- `scripts/api_openai.py`: Uses subprocess to call 1Password CLI for OpenAI keys
+- `scripts/api_anthropic.py`: Uses subprocess to call 1Password CLI for Anthropic keys
+- Both scripts will fail with clear error messages if:
+  - 1Password CLI is not installed
+  - User is not signed into 1Password
+  - API keys are not found in the expected vaults
+
+### Security Notes
+- Never fallback to environment variables or config files
+- All API key access requires biometric authentication through 1Password
+- Error messages do not expose sensitive information
+- Keys are only retrieved when needed and not cached in memory
+
 ## User Directives
 - Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `settings.json`, following the established format there, and write your code to pull configurable values from that file.
 - Do not build graceful fallbacks into your code unless the user requests it or explicitly gives permission. While in development, I prefer that errors surface visibly and unmistakebly. If that means a screeching traceback, so be it!

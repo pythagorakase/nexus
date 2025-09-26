@@ -64,6 +64,31 @@ class ContextMemoryManager:
         self.llm_manager = llm_manager
         self.token_manager = token_manager
 
+    def get_memory_summary(self) -> Dict[str, Any]:
+        """Get a summary of the current memory state for status reporting."""
+        current_package = self.context_state.get_current_context()
+        return {
+            "pass1": {
+                "baseline_chunks": len(current_package.baseline_chunks) if current_package else 0,
+                "baseline_themes": current_package.baseline_themes if current_package else [],
+                "token_usage": current_package.token_usage.get("pass1", 0) if current_package else 0
+            },
+            "pass2": {
+                "divergence_detected": current_package.divergence_detected if current_package else False,
+                "divergence_confidence": current_package.divergence_confidence if current_package else 0.0,
+                "additional_chunks": len(current_package.additional_chunks) if current_package else 0,
+                "token_reserve": int(self.pass2_reserve * 100)
+            },
+            "query_memory": {
+                "queries_stored": len(self.query_memory.queries),
+                "max_iterations": self.query_memory.max_iterations
+            },
+            "settings": {
+                "divergence_threshold": self.divergence_threshold,
+                "warm_slice_default": self.warm_slice_default
+            }
+        }
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -139,6 +164,9 @@ class ContextMemoryManager:
         )
         return package
 
+    # ------------------------------------------------------------------
+    # Pass 2: User Input Handling
+    # ------------------------------------------------------------------
     def handle_user_input(
         self,
         user_input: str,
@@ -186,6 +214,9 @@ class ContextMemoryManager:
 
         return Pass2Update(divergence, retrieved, tokens_consumed, baseline_available=True)
 
+    # ------------------------------------------------------------------
+    # Helper Methods
+    # ------------------------------------------------------------------
     def augment_warm_slice(self, warm_slice: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Merge existing warm slice chunks with any incremental additions."""
 
