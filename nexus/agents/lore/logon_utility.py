@@ -1,67 +1,74 @@
-"""
-LOGON Utility - API Communication Handler for LORE
-
-Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
-"""
+"""LOGON Utility - API Communication Handler for LORE."""
 
 import logging
-from typing import Dict, Any, Optional
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
-from scripts.api_openai import OpenAIProvider, LLMResponse
 from scripts.api_anthropic import AnthropicProvider
+from scripts.api_openai import LLMResponse, OpenAIProvider
 
 logger = logging.getLogger("nexus.lore.logon")
 
 
 class LogonUtility:
-    """Wrapper for Apex AI API calls using existing providers"""
-    
+    """Wrapper for Apex AI API calls using existing providers."""
+
     def __init__(self, settings: Dict[str, Any]):
-        """Initialize LOGON utility with configured provider"""
+        """Store settings and defer provider initialization."""
         self.settings = settings
-        self.provider = None
-        self._initialize_provider()
-    
-    def _initialize_provider(self):
-        """Initialize the appropriate API provider based on settings"""
+        self.provider: Optional[Union[OpenAIProvider, AnthropicProvider]] = None
+
+    def ensure_provider(self) -> None:
+        """Public helper to ensure the provider is ready."""
+        self._ensure_provider()
+
+    def _ensure_provider(self) -> None:
+        """Instantiate the provider on demand."""
+        if self.provider is not None:
+            return
+
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_type = apex_settings.get("provider", "openai")
         model = apex_settings.get("model", "gpt-4o")
-        
+
         if provider_type == "openai":
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
                 max_tokens=apex_settings.get("max_tokens", 4000),
-                reasoning_effort=apex_settings.get("reasoning_effort", "medium")
+                reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
             )
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
-                max_tokens=apex_settings.get("max_tokens", 4000)
+                max_tokens=apex_settings.get("max_tokens", 4000),
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
-        
-        logger.info(f"LOGON initialized with {provider_type} provider using model {model}")
-    
-    def generate_narrative(self, context_payload: Dict) -> LLMResponse:
-        """Generate narrative from context payload"""
-        # Format the context into a prompt
+
+        logger.info(
+            "LOGON initialized with %s provider using model %s",
+            provider_type,
+            model,
+        )
+
+    def generate_narrative(self, context_payload: Dict[str, Any]) -> LLMResponse:
+        """Generate narrative from context payload."""
+        self._ensure_provider()
+
+        if not self.provider:
+            raise RuntimeError("LOGON provider failed to initialize")
+
         prompt = self._format_context_prompt(context_payload)
-        
-        # Get completion from provider
-        response = self.provider.get_completion(prompt)
-        return response
+        return self.provider.get_completion(prompt)
     
-    def _format_context_prompt(self, context: Dict) -> str:
-        """Format context payload into a prompt for the Apex AI"""
+    def _format_context_prompt(self, context: Dict[str, Any]) -> str:
+        """Format context payload into a prompt for the Apex AI."""
         sections = []
         
         # Add warm slice
@@ -97,5 +104,5 @@ class LogonUtility:
         sections.append("\n=== INSTRUCTIONS ===")
         sections.append("Continue the narrative based on the provided context and user input.")
         sections.append("Maintain consistency with established characters, locations, and plot.")
-        
+
         return "\n".join(sections)

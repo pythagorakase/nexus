@@ -171,11 +171,11 @@ class LORE:
         if not self.memnon:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
         
-        # LOGON is required unless explicitly disabled (e.g., offline tests)
-        if self.enable_logon:
-            self._initialize_logon()
-            if not self.logon:
-                raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
+        # LOGON initializes lazily to avoid unnecessary provider auth in tests
+        if self.enable_logon and self.logon is None:
+            logger.info("LOGON will initialize lazily on first Apex AI call")
+        elif not self.enable_logon:
+            logger.info("LOGON disabled; skipping provider setup")
         
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
@@ -227,6 +227,16 @@ class LORE:
         except Exception as e:
             logger.error(f"Failed to initialize LOGON: {e}")
             self.logon = None
+
+    def ensure_logon(self) -> Optional[LogonUtility]:
+        """Ensure LOGON is ready if it is enabled."""
+        if not self.enable_logon:
+            return None
+
+        if self.logon is None:
+            self._initialize_logon()
+
+        return self.logon
     
     async def process_turn(self, user_input: str) -> str:
         """

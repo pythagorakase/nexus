@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from nexus.agents.lore.lore import LORE
+from scripts.api_openai import LLMResponse
 
 KARAOKE_CHUNK_ID = 1369
 KARAOKE_DEEP_CUT_RANGE = range(743, 770)
@@ -30,6 +31,57 @@ def lore_agent() -> LORE:
     """Instantiate LORE once with API calls disabled."""
     lore = LORE(debug=True, enable_logon=False)
     return lore
+
+
+@pytest.fixture
+def logon_provider_stub(monkeypatch):
+    """Stub the OpenAI provider so tests can observe lazy initialization."""
+
+    class DummyProvider:
+        def __init__(self, **kwargs):
+            calls["initializations"] += 1
+            calls["init_kwargs"].append(kwargs)
+
+        def get_completion(self, prompt: str) -> LLMResponse:
+            calls["prompts"].append(prompt)
+            return LLMResponse("stubbed narrative", 10, 20, "stub-model")
+
+    calls = {"initializations": 0, "init_kwargs": [], "prompts": []}
+    monkeypatch.setattr("scripts.api_openai.OpenAIProvider", DummyProvider)
+    return calls
+
+
+def test_lore_lazy_logon_init(logon_provider_stub):
+    """Ensure LOGON defers provider creation until narrative generation."""
+
+    lore = LORE(debug=True, enable_logon=True)
+
+    assert lore.logon is None
+    assert logon_provider_stub["initializations"] == 0
+
+
+def test_logon_initializes_on_generate(logon_provider_stub):
+    """Verify that generate_narrative triggers provider startup exactly once."""
+
+    lore = LORE(debug=True, enable_logon=True)
+
+    utility = lore.ensure_logon()
+    assert utility is not None
+    assert utility.provider is None
+    assert logon_provider_stub["initializations"] == 0
+
+    response = utility.generate_narrative(
+        {
+            "user_input": "Hello, world",
+            "warm_slice": {"chunks": []},
+            "entity_data": {},
+            "retrieved_passages": {"results": []},
+        }
+    )
+
+    assert logon_provider_stub["initializations"] == 1
+    assert logon_provider_stub["prompts"]
+    assert response.content == "stubbed narrative"
 
 
 def _build_warm_slice(lore: LORE, chunk_id: int, span: int = 4) -> List[Dict[str, object]]:

@@ -353,14 +353,19 @@ class TurnCycleManager:
         """
         logger.debug("Calling Apex AI...")
         
-        if not self.lore.logon:
-            logger.error("LOGON not available for API calls")
-            return "Error: API communication unavailable"
-        
+        logon = getattr(self.lore, "ensure_logon", lambda: self.lore.logon)()
+        if not logon:
+            logger.warning("LOGON disabled or unavailable; skipping Apex AI call")
+            turn_context.phase_states["apex_generation"] = {
+                "success": False,
+                "error": "LOGON unavailable",
+            }
+            return "LOGON disabled; no narrative generated."
+
         try:
-            response = self.lore.logon.generate_narrative(turn_context.context_payload)
+            response = logon.generate_narrative(turn_context.context_payload)
             turn_context.apex_response = response.content
-            
+
             turn_context.phase_states["apex_generation"] = {
                 "success": True,
                 "input_tokens": response.input_tokens,
