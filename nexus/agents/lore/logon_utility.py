@@ -24,10 +24,9 @@ class LogonUtility:
     def __init__(self, settings: Dict[str, Any]):
         """Initialize LOGON utility with configured provider"""
         self.settings = settings
-        self.provider = None
-        self._initialize_provider()
-    
-    def _initialize_provider(self):
+        self.provider: Optional[object] = None
+
+    def _initialize_provider(self) -> None:
         """Initialize the appropriate API provider based on settings"""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_type = apex_settings.get("provider", "openai")
@@ -51,8 +50,18 @@ class LogonUtility:
         
         logger.info(f"LOGON initialized with {provider_type} provider using model {model}")
     
+    def _ensure_provider(self) -> None:
+        """Ensure the provider is initialized before use."""
+        if self.provider is None:
+            self._initialize_provider()
+
+    def ensure_provider(self) -> None:
+        """Public wrapper for provider initialization."""
+        self._ensure_provider()
+    
     def generate_narrative(self, context_payload: Dict) -> LLMResponse:
         """Generate narrative from context payload"""
+        self._ensure_provider()
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
         

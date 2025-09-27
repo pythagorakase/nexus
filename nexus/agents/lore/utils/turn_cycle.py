@@ -353,10 +353,33 @@ class TurnCycleManager:
         """
         logger.debug("Calling Apex AI...")
         
+        if not self.lore.enable_logon:
+            logger.info("LOGON disabled; skipping Apex AI call")
+            turn_context.phase_states["apex_generation"] = {
+                "success": False,
+                "skipped": True,
+                "reason": "logon_disabled",
+            }
+            return "LOGON disabled"
+
+        try:
+            self.lore.ensure_logon()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error(f"LOGON initialization failed: {exc}")
+            turn_context.phase_states["apex_generation"] = {
+                "success": False,
+                "error": str(exc),
+            }
+            return "Error: API communication unavailable"
+
         if not self.lore.logon:
             logger.error("LOGON not available for API calls")
+            turn_context.phase_states["apex_generation"] = {
+                "success": False,
+                "error": "LOGON unavailable",
+            }
             return "Error: API communication unavailable"
-        
+
         try:
             response = self.lore.logon.generate_narrative(turn_context.context_payload)
             turn_context.apex_response = response.content
