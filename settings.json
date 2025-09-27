@@ -120,6 +120,9 @@
             "model": {
                 "description": "defines default LLM to load for all agents",
                 "possible_values": [
+                    "unsloth-gpt-oss-120b-hi-mlx",
+                    "gpt-oss-120b-mlx",
+                    "openai-gpt-oss-120b-mlx-6",
                     "llama-3.3-70b-instruct@6bit",
                     "openai/gpt-oss-120b",
                     "nexveridian/gpt-oss-120b",
