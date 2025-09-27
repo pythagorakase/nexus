@@ -100,8 +100,9 @@ class LORE:
         
         # Initialize components
         self.memnon = None
-        self.logon = None
+        self.logon: Optional[LogonUtility] = None
         self.enable_logon = enable_logon
+        self._logon_initialized = False
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
@@ -172,11 +173,12 @@ class LORE:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
         
         # LOGON is required unless explicitly disabled (e.g., offline tests)
-        if self.enable_logon:
-            self._initialize_logon()
-            if not self.logon:
-                raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
-        
+        if self.enable_logon and not self._logon_initialized:
+            apex_settings = self.settings.get("API Settings", {}).get("apex")
+            if not apex_settings:
+                raise RuntimeError("FATAL: LOGON configuration missing while LOGON is enabled.")
+            logger.info("LOGON lazy initialization enabled; provider will be created on first use")
+
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
             self.settings,
@@ -219,14 +221,26 @@ class LORE:
             logger.error(f"Failed to initialize MEMNON: {e}")
             self.memnon = None
     
+    def ensure_logon(self) -> None:
+        """Lazily initialize LOGON when first required."""
+        if not self.enable_logon:
+            logger.debug("LOGON disabled; skipping initialization request")
+            return
+
+        if self.logon is None:
+            self._initialize_logon()
+
     def _initialize_logon(self):
         """Initialize LOGON utility for API communication"""
         try:
             self.logon = LogonUtility(self.settings)
-            logger.info("LOGON utility initialized")
+            self._logon_initialized = True
+            logger.info("LOGON utility initialized on first use")
         except Exception as e:
             logger.error(f"Failed to initialize LOGON: {e}")
             self.logon = None
+            self._logon_initialized = False
+            raise RuntimeError("Failed to initialize LOGON") from e
     
     async def process_turn(self, user_input: str) -> str:
         """
