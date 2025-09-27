@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from nexus.agents.lore.lore import LORE
+from nexus.agents.lore import logon_utility
 
 KARAOKE_CHUNK_ID = 1369
 KARAOKE_DEEP_CUT_RANGE = range(743, 770)
@@ -30,6 +31,77 @@ def lore_agent() -> LORE:
     """Instantiate LORE once with API calls disabled."""
     lore = LORE(debug=True, enable_logon=False)
     return lore
+
+
+def test_lore_with_logon_enabled_defers_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure enabling LOGON does not immediately shell out to providers."""
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("Provider should not be constructed during LORE init")
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.OpenAIProvider",
+        _boom,
+    )
+
+    lore = LORE(debug=True, enable_logon=True)
+    try:
+        assert lore.logon is None
+    finally:
+        # Ensure the object is cleaned up to avoid lingering DB sessions
+        if lore.memnon and hasattr(lore.memnon, "Session"):
+            lore.memnon.Session.remove()
+        if lore.llm_manager and getattr(lore.llm_manager, "unload_on_exit", False):
+            lore.llm_manager.unload_model()
+
+
+def test_lore_initializes_provider_on_first_use(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify LOGON initializes the configured provider only when needed."""
+
+    class DummyProvider:
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+            self.calls = 0
+
+        def get_completion(self, prompt: str) -> logon_utility.LLMResponse:
+            self.calls += 1
+            return logon_utility.LLMResponse(
+                content=f"Echo: {prompt[:20]}",
+                input_tokens=10,
+                output_tokens=20,
+                model="dummy-model",
+            )
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.OpenAIProvider",
+        DummyProvider,
+    )
+
+    lore = LORE(debug=True, enable_logon=True)
+
+    assert lore.logon is None
+    assert lore.ensure_logon_initialized() is True
+    assert lore.logon is not None
+    assert lore.logon.provider is None
+
+    payload = {
+        "user_input": "Test",
+        "warm_slice": {"chunks": []},
+        "entity_data": {},
+        "retrieved_passages": {"results": []},
+    }
+
+    response = lore.logon.generate_narrative(payload)
+
+    assert isinstance(lore.logon.provider, DummyProvider)
+    assert lore.logon.provider.calls == 1
+    assert response.content.startswith("Echo: ")
+
+    if lore.memnon and hasattr(lore.memnon, "Session"):
+        lore.memnon.Session.remove()
+    if lore.llm_manager and getattr(lore.llm_manager, "unload_on_exit", False):
+        lore.llm_manager.unload_model()
 
 
 def _build_warm_slice(lore: LORE, chunk_id: int, span: int = 4) -> List[Dict[str, object]]:

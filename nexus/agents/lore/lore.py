@@ -102,6 +102,7 @@ class LORE:
         self.memnon = None
         self.logon = None
         self.enable_logon = enable_logon
+        self._logon_initialized = False
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
@@ -171,12 +172,10 @@ class LORE:
         if not self.memnon:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
         
-        # LOGON is required unless explicitly disabled (e.g., offline tests)
-        if self.enable_logon:
-            self._initialize_logon()
-            if not self.logon:
-                raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
-        
+        # LOGON is initialized lazily on first use when enabled
+        if self.enable_logon and not self._logon_initialized:
+            logger.info("LOGON will initialize lazily on first use")
+
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
             self.settings,
@@ -223,10 +222,27 @@ class LORE:
         """Initialize LOGON utility for API communication"""
         try:
             self.logon = LogonUtility(self.settings)
+            self._logon_initialized = True
             logger.info("LOGON utility initialized")
         except Exception as e:
             logger.error(f"Failed to initialize LOGON: {e}")
             self.logon = None
+            self._logon_initialized = False
+
+    def ensure_logon_initialized(self) -> bool:
+        """Ensure the LOGON utility is ready before making API calls."""
+        if not self.enable_logon:
+            logger.debug("LOGON disabled; skipping initialization")
+            return False
+
+        if self.logon is None and not self._logon_initialized:
+            self._initialize_logon()
+
+        if self.logon is None:
+            logger.error("LOGON unavailable after initialization attempt")
+            return False
+
+        return True
     
     async def process_turn(self, user_input: str) -> str:
         """
