@@ -94,6 +94,10 @@ class ContextStateManager:
     def transition(self) -> Optional[PassTransition]:
         return self._transition
 
+    def get_current_context(self) -> Optional[ContextPackage]:
+        """Convenience accessor used by status reporting."""
+        return self._context
+
     # ------------------------------------------------------------------
     # Chunk helpers
     # ------------------------------------------------------------------
