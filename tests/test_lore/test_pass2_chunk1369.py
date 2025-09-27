@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from nexus.agents.lore.lore import LORE
+from nexus.agents.lore.logon_utility import LLMResponse
 
 KARAOKE_CHUNK_ID = 1369
 KARAOKE_DEEP_CUT_RANGE = range(743, 770)
@@ -30,6 +31,65 @@ def lore_agent() -> LORE:
     """Instantiate LORE once with API calls disabled."""
     lore = LORE(debug=True, enable_logon=False)
     return lore
+
+
+def test_logon_lazy_initialization(monkeypatch: pytest.MonkeyPatch) -> None:
+    """LOGON should not spawn a provider until a narrative is requested."""
+
+    instantiations = 0
+
+    class DummyProvider:
+        def __init__(self, *args, **kwargs):
+            nonlocal instantiations
+            instantiations += 1
+
+        def get_completion(self, prompt: str) -> LLMResponse:
+            return LLMResponse("", 0, 0, "dummy")
+
+    monkeypatch.setattr("nexus.agents.lore.logon_utility.OpenAIProvider", DummyProvider)
+
+    lore = LORE(debug=True, enable_logon=True)
+
+    assert instantiations == 0
+    assert lore.logon is None
+
+    assert lore.ensure_logon() is True
+    assert lore.logon is not None
+    assert instantiations == 0
+
+
+def test_logon_initializes_provider_on_generate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provider initialization should occur on the first narrative request."""
+
+    instantiations = 0
+    prompts: List[str] = []
+
+    class DummyProvider:
+        def __init__(self, *args, **kwargs):
+            nonlocal instantiations
+            instantiations += 1
+
+        def get_completion(self, prompt: str) -> LLMResponse:
+            prompts.append(prompt)
+            return LLMResponse("generated", 10, 20, "dummy")
+
+    monkeypatch.setattr("nexus.agents.lore.logon_utility.OpenAIProvider", DummyProvider)
+
+    lore = LORE(debug=True, enable_logon=True)
+    assert lore.ensure_logon() is True
+
+    response = lore.logon.generate_narrative(
+        {
+            "user_input": "",
+            "warm_slice": {"chunks": []},
+            "entity_data": {},
+            "retrieved_passages": {"results": []},
+        }
+    )
+
+    assert instantiations == 1
+    assert prompts, "Provider should receive the formatted prompt"
+    assert response.content == "generated"
 
 
 def _build_warm_slice(lore: LORE, chunk_id: int, span: int = 4) -> List[Dict[str, object]]:

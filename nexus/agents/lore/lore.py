@@ -102,6 +102,7 @@ class LORE:
         self.memnon = None
         self.logon = None
         self.enable_logon = enable_logon
+        self._logon_initialization_attempted = False
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
@@ -171,12 +172,10 @@ class LORE:
         if not self.memnon:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
         
-        # LOGON is required unless explicitly disabled (e.g., offline tests)
-        if self.enable_logon:
-            self._initialize_logon()
-            if not self.logon:
-                raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
-        
+        # LOGON is initialized lazily when first required
+        if self.enable_logon and not self._logon_initialization_attempted:
+            logger.info("LOGON initialization deferred until first use")
+
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
             self.settings,
@@ -227,6 +226,19 @@ class LORE:
         except Exception as e:
             logger.error(f"Failed to initialize LOGON: {e}")
             self.logon = None
+
+    def ensure_logon(self) -> bool:
+        """Ensure the LOGON utility is initialized before use."""
+        if not self.enable_logon:
+            logger.debug("LOGON disabled; skipping initialization")
+            return False
+
+        if not self.logon:
+            if not self._logon_initialization_attempted:
+                self._logon_initialization_attempted = True
+            self._initialize_logon()
+
+        return self.logon is not None
     
     async def process_turn(self, user_input: str) -> str:
         """

@@ -25,14 +25,22 @@ class LogonUtility:
         """Initialize LOGON utility with configured provider"""
         self.settings = settings
         self.provider = None
-        self._initialize_provider()
-    
-    def _initialize_provider(self):
-        """Initialize the appropriate API provider based on settings"""
+        self._provider_type = None
+
+    def ensure_provider(self) -> bool:
+        """Public helper to initialize the provider on demand."""
+        self._ensure_provider()
+        return self.provider is not None
+
+    def _ensure_provider(self):
+        """Initialize the appropriate API provider on first use."""
+        if self.provider is not None:
+            return
+
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_type = apex_settings.get("provider", "openai")
         model = apex_settings.get("model", "gpt-4o")
-        
+
         if provider_type == "openai":
             self.provider = OpenAIProvider(
                 model=model,
@@ -48,14 +56,19 @@ class LogonUtility:
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
-        
+
+        self._provider_type = provider_type
         logger.info(f"LOGON initialized with {provider_type} provider using model {model}")
-    
+
     def generate_narrative(self, context_payload: Dict) -> LLMResponse:
         """Generate narrative from context payload"""
+        self._ensure_provider()
+        if not self.provider:
+            raise RuntimeError("LOGON provider unavailable")
+
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
-        
+
         # Get completion from provider
         response = self.provider.get_completion(prompt)
         return response
