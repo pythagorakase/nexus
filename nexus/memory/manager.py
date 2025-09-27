@@ -67,21 +67,35 @@ class ContextMemoryManager:
     def get_memory_summary(self) -> Dict[str, Any]:
         """Get a summary of the current memory state for status reporting."""
         current_package = self.context_state.get_current_context()
+        query_snapshot = self.query_memory.snapshot()
+        pass1_usage = {}
+        pass2_usage = {}
+
+        if current_package:
+            pass1_usage = {
+                "baseline_tokens": current_package.token_usage.get("baseline_tokens", 0),
+                "reserved_for_pass2": current_package.token_usage.get("reserved_for_pass2", 0),
+            }
+            pass2_usage = {
+                "reserve_shortfall": current_package.token_usage.get("reserve_shortfall", 0),
+                "remaining_budget": self.context_state.get_remaining_budget(),
+            }
         return {
             "pass1": {
                 "baseline_chunks": len(current_package.baseline_chunks) if current_package else 0,
                 "baseline_themes": current_package.baseline_themes if current_package else [],
-                "token_usage": current_package.token_usage.get("pass1", 0) if current_package else 0
+                "token_usage": pass1_usage,
             },
             "pass2": {
                 "divergence_detected": current_package.divergence_detected if current_package else False,
                 "divergence_confidence": current_package.divergence_confidence if current_package else 0.0,
                 "additional_chunks": len(current_package.additional_chunks) if current_package else 0,
-                "token_reserve": int(self.pass2_reserve * 100)
+                "token_reserve_percent": int(self.pass2_reserve * 100),
+                "usage": pass2_usage,
             },
             "query_memory": {
-                "queries_stored": len(self.query_memory.queries),
-                "max_iterations": self.query_memory.max_iterations
+                "history": query_snapshot,
+                "max_iterations": self.query_memory.max_iterations,
             },
             "settings": {
                 "divergence_threshold": self.divergence_threshold,
@@ -133,7 +147,7 @@ class ContextMemoryManager:
         total_available = token_usage.get("total_available", 0)
         reserved_for_pass2 = max(0, int(total_available * self.pass2_reserve))
         remaining_budget = max(0, total_available - baseline_tokens)
-        remaining_budget = max(remaining_budget, reserved_for_pass2)
+        reserve_shortfall = max(0, reserved_for_pass2 - remaining_budget)
 
         package = ContextPackage(
             baseline_chunks=baseline_chunks,
@@ -143,6 +157,7 @@ class ContextMemoryManager:
                 **token_usage,
                 "baseline_tokens": baseline_tokens,
                 "reserved_for_pass2": reserved_for_pass2,
+                "reserve_shortfall": reserve_shortfall,
             },
         )
 
@@ -188,8 +203,10 @@ class ContextMemoryManager:
             total_available = token_counts.get("total_available", transition.remaining_budget)
             baseline_tokens = context.token_usage.get("baseline_tokens", 0)
             reserve = int(total_available * self.pass2_reserve)
-            new_budget = max(total_available - baseline_tokens, reserve)
+            new_budget = max(0, total_available - baseline_tokens)
             self.context_state.adjust_budget(new_budget)
+            context.token_usage["reserved_for_pass2"] = reserve
+            context.token_usage["reserve_shortfall"] = max(0, reserve - new_budget)
 
         budget = self.context_state.get_remaining_budget()
         retrieved: List[Dict[str, Any]] = []
@@ -211,6 +228,12 @@ class ContextMemoryManager:
             )
         else:
             tokens_consumed = 0
+
+        if context:
+            reserve = context.token_usage.get("reserved_for_pass2", 0)
+            context.token_usage["reserve_shortfall"] = max(
+                0, reserve - self.context_state.get_remaining_budget()
+            )
 
         return Pass2Update(divergence, retrieved, tokens_consumed, baseline_available=True)
 

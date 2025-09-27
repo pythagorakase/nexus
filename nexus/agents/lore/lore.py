@@ -79,7 +79,8 @@ class LORE:
     def __init__(
         self,
         settings_path: Optional[str] = None,
-        debug: bool = False
+        debug: bool = False,
+        enable_logon: bool = True,
     ):
         """
         Initialize LORE agent.
@@ -100,6 +101,7 @@ class LORE:
         # Initialize components
         self.memnon = None
         self.logon = None
+        self.enable_logon = enable_logon
         self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
@@ -169,10 +171,11 @@ class LORE:
         if not self.memnon:
             raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
         
-        # LOGON is REQUIRED
-        self._initialize_logon()
-        if not self.logon:
-            raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
+        # LOGON is required unless explicitly disabled (e.g., offline tests)
+        if self.enable_logon:
+            self._initialize_logon()
+            if not self.logon:
+                raise RuntimeError("FATAL: LOGON initialization failed! Check API settings.")
         
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
