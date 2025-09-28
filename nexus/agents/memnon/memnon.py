@@ -42,6 +42,7 @@ from .utils.search import SearchManager
 from .utils.query_analysis import QueryAnalyzer
 from .utils.db_schema import DatabaseManager
 from .utils.content_processor import ContentProcessor
+from .utils.embedding_tables import DIMENSION_TABLES
 
 # Sentence transformers for embedding
 from sentence_transformers import SentenceTransformer
@@ -143,17 +144,6 @@ class NarrativeChunk(Base):
     created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 # ChunkEmbedding class and table removed since we've migrated to dimension-specific tables
-
-# Define the dimension-specific embedding tables
-class ChunkEmbedding384D(Base):
-    __tablename__ = 'chunk_embeddings_0384d'
-    
-    id = Column(sa.Integer, primary_key=True)
-    chunk_id = Column(sa.BigInteger, sa.ForeignKey('narrative_chunks.id'), nullable=False)
-    model = Column(sa.String(255), nullable=False)
-    # Note: This is a proper vector type with 384 dimensions
-    embedding = Column(sa.String, nullable=False)  # Will be treated as vector by PostgreSQL
-    created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 class ChunkEmbedding1024D(Base):
     __tablename__ = 'chunk_embeddings_1024d'
@@ -1319,11 +1309,7 @@ class MEMNON:
                 model_counts = {}
                 
                 # Check each dimension table
-                dimension_tables = [
-                    'chunk_embeddings_0384d',
-                    'chunk_embeddings_1024d',
-                    'chunk_embeddings_1536d'
-                ]
+                dimension_tables = list(DIMENSION_TABLES)
                 
                 for table_name in dimension_tables:
                     try:
