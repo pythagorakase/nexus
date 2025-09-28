@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Any, Set, Tuple, Union
 from sqlalchemy import text
 
 from .embedding_manager import EmbeddingManager
+from .embedding_tables import resolve_dimension_table
 
 logger = logging.getLogger("nexus.memnon.content_processor")
 
@@ -357,13 +358,6 @@ class ContentProcessor:
             chunk_id: The ID of the chunk
             text: The text to encode
         """
-        # Map of model dimensions to table names
-        dimension_table_map = {
-            384: 'chunk_embeddings_0384d',
-            1024: 'chunk_embeddings_1024d',
-            1536: 'chunk_embeddings_1536d'
-        }
-        
         # Use only active models from embedding manager
         for model_name in self.embedding_manager.get_available_models():
             try:
@@ -382,7 +376,7 @@ class ContentProcessor:
                 embedding_str = f"[{','.join(str(x) for x in embedding)}]"
                 
                 # Determine which table to use based on dimensions
-                table_name = dimension_table_map.get(dim)
+                table_name = resolve_dimension_table(dim)
                 if not table_name:
                     # No specific table exists for this dimension, log error
                     logger.error(f"No dimension-specific table for {dim}D vectors. Cannot store embedding.")

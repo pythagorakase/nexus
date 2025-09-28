@@ -11,6 +11,8 @@ import psycopg2
 from typing import Dict, List, Tuple, Optional, Union, Any, Set
 from urllib.parse import urlparse
 
+from .embedding_tables import DIMENSION_TABLES, resolve_dimension_table
+
 # Set up logging
 logger = logging.getLogger("nexus.memnon.db_access")
 
@@ -119,13 +121,7 @@ def execute_vector_search(db_url: str, query_embedding: list, model_key: str,
                 dimensions = len(query_embedding)
                 
                 # Map dimensions to table names
-                dimension_table_map = {
-                    384: 'chunk_embeddings_0384d',
-                    1024: 'chunk_embeddings_1024d',
-                    1536: 'chunk_embeddings_1536d'
-                }
-                
-                table_name = dimension_table_map.get(dimensions)
+                table_name = resolve_dimension_table(dimensions)
                 if not table_name:
                     logger.error(f"No dimension-specific table for {dimensions}D vectors")
                     return []
@@ -424,13 +420,7 @@ def execute_hybrid_search(db_url: str, query_text: str, query_embedding: list,
                 dimensions = len(query_embedding)
                 
                 # Map dimensions to table names
-                dimension_table_map = {
-                    384: 'chunk_embeddings_0384d',
-                    1024: 'chunk_embeddings_1024d',
-                    1536: 'chunk_embeddings_1536d'
-                }
-                
-                table_name = dimension_table_map.get(dimensions)
+                table_name = resolve_dimension_table(dimensions)
                 if not table_name:
                     logger.error(f"No dimension-specific table for {dimensions}D vectors")
                     # Continue with text search only results
@@ -641,7 +631,20 @@ def setup_database_indexes(db_url: str) -> bool:
                 """)
                 
                 # Create indexes on dimension-specific tables if they don't exist
-                for dim_table in ['chunk_embeddings_0384d', 'chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
+                existing_dimension_tables: Set[str] = set()
+                if DIMENSION_TABLES:
+                    cursor.execute(
+                        """
+                        SELECT table_name
+                        FROM information_schema.tables
+                        WHERE table_schema = 'public'
+                          AND table_name = ANY(%s)
+                        """,
+                        (tuple(DIMENSION_TABLES),),
+                    )
+                    existing_dimension_tables = {row[0] for row in cursor.fetchall()}
+
+                for dim_table in sorted(existing_dimension_tables):
                     try:
                         logger.info(f"Creating model index on {dim_table}...")
                         cursor.execute(f"""
@@ -653,7 +656,7 @@ def setup_database_indexes(db_url: str) -> bool:
                         continue
                 
                 # Create vector indexes for dimension-specific tables
-                for dim_table in ['chunk_embeddings_0384d', 'chunk_embeddings_1024d', 'chunk_embeddings_1536d']:
+                for dim_table in sorted(existing_dimension_tables):
                     try:
                         # Check if table exists
                         cursor.execute(f"""
@@ -922,20 +925,13 @@ def execute_multi_model_hybrid_search(
                     if model_key not in model_weights or model_weights[model_key] <= 0:
                         logger.debug(f"Skipping model {model_key} (zero or negative weight)")
                         continue
-                        
+
                     logger.info(f"Running vector search for model {model_key}")
-                    
+
                     # Get dimensions of the query embedding to determine which table to use
                     dimensions = len(embedding)
-                    
-                    # Map dimensions to table names
-                    dimension_table_map = {
-                        384: 'chunk_embeddings_0384d',
-                        1024: 'chunk_embeddings_1024d',
-                        1536: 'chunk_embeddings_1536d'
-                    }
-                    
-                    table_name = dimension_table_map.get(dimensions)
+
+                    table_name = resolve_dimension_table(dimensions)
                     if not table_name:
                         logger.error(f"No dimension-specific table for {dimensions}D vectors")
                         continue  # Skip this model but continue with others
