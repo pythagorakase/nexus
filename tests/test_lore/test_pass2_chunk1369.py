@@ -97,6 +97,12 @@ def test_pass2_handles_karaoke_divergence(
     token_counts = lore_agent.token_manager.calculate_budget("karaoke divergence probe")
     context = _run_pass1_phases(lore_agent, warm_slice, monkeypatch)
     authorial_passages = _execute_authorial_queries(lore_agent)
+    structured_stub = {
+        "id": "character:karaoke_incident",
+        "name": "Virginia Beach Karaoke Incident",
+        "summary": "Nightclub ambush that led Emilia to avoid stage lights.",
+    }
+    authorial_passages.append(structured_stub)
 
     analysis = context.phase_states.get("warm_analysis", {}).get("analysis", {})
     assert analysis.get("characters"), "Warm analysis should capture characters for notes"
@@ -114,8 +120,24 @@ def test_pass2_handles_karaoke_divergence(
             "retrieved_passages": {"results": authorial_passages},
             "analysis": analysis,
         },
+        authorial_directives=AUTHORIAL_DIRECTIVES,
     )
     assert KARAOKE_CHUNK_ID in baseline.baseline_chunks
+    assert baseline.authorial_directives == AUTHORIAL_DIRECTIVES
+    assert structured_stub in baseline.structured_passages
+
+    state_context = lore_agent.memory_manager.context_state.context
+    transition = lore_agent.memory_manager.context_state.transition
+    assert state_context is not None
+    assert transition is not None
+    assert state_context.authorial_directives == AUTHORIAL_DIRECTIVES
+    assert transition.authorial_directives == AUTHORIAL_DIRECTIVES
+    assert structured_stub in state_context.structured_passages
+    assert state_context.structured_passages == transition.structured_passages
+
+    directive_history = lore_agent.memory_manager.query_memory.snapshot()["pass1"]
+    for directive in AUTHORIAL_DIRECTIVES:
+        assert directive in directive_history
 
     divergence_prompt = (
         "Walk me back through the Virginia Beach karaoke ambush—the Driftlight cocktails, "
@@ -143,4 +165,3 @@ def test_pass2_handles_karaoke_divergence(
     assert summary["pass2"]["usage"]["remaining_budget"] >= 0
 
     assert context.entity_data["characters"], "Structured character summaries should be present"
-

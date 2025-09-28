@@ -6,7 +6,7 @@ import logging
 import re
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
@@ -84,6 +84,8 @@ class ContextMemoryManager:
             "pass1": {
                 "baseline_chunks": len(current_package.baseline_chunks) if current_package else 0,
                 "baseline_themes": current_package.baseline_themes if current_package else [],
+                "authorial_directives": current_package.authorial_directives if current_package else [],
+                "structured_passages": current_package.structured_passages if current_package else [],
                 "token_usage": pass1_usage,
             },
             "pass2": {
@@ -113,6 +115,7 @@ class ContextMemoryManager:
         retrieved_passages: Optional[Iterable[Dict[str, Any]]] = None,
         token_usage: Optional[Dict[str, int]] = None,
         assembled_context: Optional[Dict[str, Any]] = None,
+        authorial_directives: Optional[Iterable[str]] = None,
     ) -> ContextPackage:
         """Run Pass 1 analysis and store baseline context for the next turn."""
 
@@ -124,21 +127,66 @@ class ContextMemoryManager:
         }
         baseline_themes = analysis.get("themes", [])
         expected_user_themes = analysis.get("expected", [])
+        directives = [
+            directive.strip()
+            for directive in (authorial_directives or [])
+            if directive and directive.strip()
+        ]
 
         baseline_chunks: set[int] = set()
         chunk_details: List[Dict[str, Any]] = []
+        existing_ids: Set[int] = set()
+        structured_passages: List[Dict[str, Any]] = []
 
         for collection in (warm_slice or []):
-            chunk_id = self._extract_chunk_id(collection)
-            if chunk_id is not None:
-                baseline_chunks.add(chunk_id)
-                chunk_details.append({"chunk_id": chunk_id, **collection})
+            normalized = dict(collection)
+            chunk_id = self._coerce_chunk_id(normalized)
+            if chunk_id is None:
+                structured_passages.append(normalized)
+                continue
+            normalized.setdefault("chunk_id", chunk_id)
+            baseline_chunks.add(chunk_id)
+            existing_ids.add(chunk_id)
+            chunk_details.append({"chunk_id": chunk_id, **normalized})
 
+        chunk_retrievals: List[Dict[str, Any]] = []
         for passage in (retrieved_passages or []):
-            chunk_id = self._extract_chunk_id(passage)
-            if chunk_id is not None:
-                baseline_chunks.add(chunk_id)
-                chunk_details.append({"chunk_id": chunk_id, **passage})
+            normalized = dict(passage)
+            chunk_id = self._coerce_chunk_id(normalized)
+            if chunk_id is None:
+                structured_passages.append(normalized)
+                continue
+            normalized.setdefault("chunk_id", chunk_id)
+            existing_ids.add(chunk_id)
+            chunk_retrievals.append(normalized)
+
+        directive_chunks: List[Dict[str, Any]] = []
+        directive_structured: List[Dict[str, Any]] = []
+        if directives:
+            directive_chunks, directive_structured = self._execute_authorial_directives(directives, existing_ids)
+            if directive_chunks:
+                chunk_retrievals.extend(directive_chunks)
+            if directive_structured:
+                structured_passages.extend(directive_structured)
+            if assembled_context is not None:
+                if directive_chunks:
+                    retrieval_section = assembled_context.setdefault("retrieved_passages", {})
+                    retrieval_results = retrieval_section.setdefault("results", [])
+                    retrieval_results.extend(dict(result) for result in directive_chunks)
+                if directive_structured:
+                    structured_section = assembled_context.setdefault("structured_passages", [])
+                    structured_section.extend(dict(result) for result in directive_structured)
+
+        if assembled_context is not None:
+            structured_section = assembled_context.setdefault("structured_passages", [])
+            structured_section.extend(dict(result) for result in structured_passages)
+
+        for passage in chunk_retrievals:
+            chunk_id = passage.get("chunk_id")
+            if chunk_id is None:
+                continue
+            baseline_chunks.add(chunk_id)
+            chunk_details.append({"chunk_id": chunk_id, **passage})
 
         token_usage = token_usage or {}
         baseline_tokens = sum(
@@ -153,6 +201,8 @@ class ContextMemoryManager:
             baseline_chunks=baseline_chunks,
             baseline_entities=baseline_entities,
             baseline_themes=baseline_themes,
+            authorial_directives=directives,
+            structured_passages=structured_passages,
             token_usage={
                 **token_usage,
                 "baseline_tokens": baseline_tokens,
@@ -166,9 +216,14 @@ class ContextMemoryManager:
             expected_user_themes=expected_user_themes,
             assembled_context=assembled_context or {},
             remaining_budget=remaining_budget,
+            authorial_directives=directives,
+            structured_passages=structured_passages,
         )
 
         self.context_state.store_baseline(package, transition, chunk_details)
+        if directives:
+            for directive in directives:
+                self.query_memory.record("pass1", directive)
         # Pass 2 queries are always reset when a new baseline is stored
         self.query_memory.reset_pass("pass2")
         logger.debug(
@@ -240,6 +295,67 @@ class ContextMemoryManager:
     # ------------------------------------------------------------------
     # Helper Methods
     # ------------------------------------------------------------------
+    def _execute_authorial_directives(
+        self,
+        directives: List[str],
+        existing_ids: Set[int],
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Execute authorial directives to pre-populate baseline context."""
+
+        if not directives or not getattr(self.incremental, "memnon", None):
+            return [], []
+
+        memnon = self.incremental.memnon
+        chunk_results: List[Dict[str, Any]] = []
+        structured_results: List[Dict[str, Any]] = []
+        seen: Set[int] = set(existing_ids)
+
+        for directive in directives:
+            directive_text = directive.strip()
+            if not directive_text:
+                continue
+
+            if self.query_memory.has_run(directive_text):
+                logger.debug("Skipping duplicate authorial directive: %s", directive_text)
+                continue
+
+            try:
+                payload = memnon.query_memory(query=directive_text, k=6, use_hybrid=True)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.error("Authorial directive query failed for '%s': %s", directive_text, exc)
+                continue
+
+            for result in payload.get("results", []):
+                annotated = dict(result)
+                annotated.setdefault("source", "authorial_directive")
+                annotated.setdefault("query_source", "authorial_directive")
+                annotated["directive"] = directive_text
+
+                chunk_id = self._coerce_chunk_id(annotated)
+                if chunk_id is None:
+                    structured_results.append(annotated)
+                    continue
+
+                if chunk_id in seen:
+                    continue
+
+                seen.add(chunk_id)
+                annotated.setdefault("chunk_id", chunk_id)
+                chunk_results.append(annotated)
+
+        return chunk_results, structured_results
+
+    def _coerce_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
+        """Attempt to coerce a chunk identifier without logging noise."""
+
+        raw_id = chunk.get("chunk_id", chunk.get("id"))
+        if raw_id is None:
+            return None
+        try:
+            return int(raw_id)
+        except (TypeError, ValueError):
+            return None
+
     def augment_warm_slice(self, warm_slice: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Merge existing warm slice chunks with any incremental additions."""
 
@@ -253,9 +369,14 @@ class ContextMemoryManager:
         if not additions:
             return warm_slice
 
-        known_ids = {self._extract_chunk_id(chunk) for chunk in warm_slice}
+        known_ids = {
+            chunk_id
+            for chunk in warm_slice
+            for chunk_id in [self._coerce_chunk_id(chunk)]
+            if chunk_id is not None
+        }
         for chunk in additions:
-            chunk_id = self._extract_chunk_id(chunk)
+            chunk_id = self._coerce_chunk_id(chunk)
             if chunk_id is None or chunk_id in known_ids:
                 continue
             warm_slice.append(chunk)
@@ -319,11 +440,4 @@ class ContextMemoryManager:
             "expected": expected,
         }
 
-    def _extract_chunk_id(self, chunk: Dict[str, Any]) -> Optional[int]:
-        chunk_id = chunk.get("chunk_id") or chunk.get("id")
-        if chunk_id is None:
-            return None
-        try:
-            return int(chunk_id)
-        except (TypeError, ValueError):
-            return None
+    
