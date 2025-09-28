@@ -316,7 +316,8 @@ class TurnCycleManager:
             },
             "metadata": {
                 "turn_id": turn_context.turn_id,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "authorial_directives": turn_context.authorial_directives,
             },
             "memory_state": turn_context.memory_state
         }
@@ -431,6 +432,7 @@ class TurnCycleManager:
                     retrieved_passages=turn_context.retrieved_passages,
                     token_usage=turn_context.token_counts,
                     assembled_context=turn_context.context_payload,
+                    authorial_directives=turn_context.authorial_directives,
                 )
                 transition = self.lore.memory_manager.context_state.transition
                 baseline_snapshot = {
@@ -438,6 +440,8 @@ class TurnCycleManager:
                     "baseline_themes": baseline.baseline_themes,
                     "expected_user_themes": transition.expected_user_themes if transition else [],
                     "remaining_budget": self.lore.memory_manager.context_state.get_remaining_budget(),
+                    "authorial_directives": baseline.authorial_directives,
+                    "structured_passages": baseline.structured_passages,
                 }
                 turn_context.memory_state["pass1"] = baseline_snapshot
                 turn_context.phase_states["integration"]["memory_baseline"] = baseline_snapshot
