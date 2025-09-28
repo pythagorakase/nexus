@@ -92,6 +92,8 @@ def test_pass1_baseline_tracks_chunks_and_budget(minimal_settings, dummy_memnon,
     assert package.token_usage["baseline_tokens"] == 630
     assert package.token_usage["reserved_for_pass2"] == 300
     assert package.token_usage["reserve_shortfall"] == 0
+    assert package.authorial_directives == []
+    assert package.structured_passages == []
 
     transition = manager.context_state.transition
     assert transition is not None
@@ -163,6 +165,65 @@ def test_pass2_divergence_triggers_incremental_retrieval(minimal_settings, dummy
     reserve = int(token_counts["total_available"] * minimal_settings["memory"]["pass2_budget_reserve"])
     assert manager.context_state.context.token_usage["reserved_for_pass2"] == reserve
     assert manager.context_state.context.token_usage["reserve_shortfall"] == max(0, reserve - post_budget)
+
+
+def test_pass1_stores_authorial_directives(minimal_settings, dummy_memnon, baseline_inputs):
+    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+
+    directives = [
+        "  Vault alarm subsystem overrides  ",
+        "Dynacorp retaliation forecasts",
+    ]
+
+    package = manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=baseline_inputs["retrieved"],
+        token_usage=baseline_inputs["token_usage"],
+        authorial_directives=directives,
+    )
+
+    trimmed = [directive.strip() for directive in directives]
+    assert package.authorial_directives == trimmed
+
+    state_context = manager.context_state.context
+    transition = manager.context_state.transition
+    assert state_context is not None
+    assert transition is not None
+    assert state_context.authorial_directives == trimmed
+    assert transition.authorial_directives == trimmed
+
+    history = manager.query_memory.snapshot()
+    for directive in trimmed:
+        assert directive in history["pass1"]
+    assert history["pass2"] == []
+
+
+def test_pass1_separates_structured_passages(minimal_settings, dummy_memnon, baseline_inputs):
+    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+
+    structured = {
+        "id": "character:alex",
+        "name": "Alex Navarro",
+        "summary": "Lead infiltrator, tracking The Ghost",
+    }
+    retrieved = baseline_inputs["retrieved"] + [structured, {"chunk_id": 305, "text": "Bridge diagnostics memo."}]
+
+    package = manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=retrieved,
+        token_usage=baseline_inputs["token_usage"],
+    )
+
+    assert 305 in package.baseline_chunks
+    assert structured in package.structured_passages
+    assert structured in manager.context_state.get_structured_passages()
+
+    chunk_details = manager.context_state.get_all_chunks()
+    chunk_ids = {chunk.get("chunk_id") for chunk in chunk_details}
+    assert 305 in chunk_ids
+    assert all(entry.get("chunk_id") is not None for entry in chunk_details)
 
 
 def test_pass2_warm_slice_expansion_without_divergence(minimal_settings, dummy_memnon, baseline_inputs):
@@ -252,6 +313,8 @@ def test_get_memory_summary_reports_state(minimal_settings, dummy_memnon, baseli
 
     assert summary["pass1"]["baseline_chunks"] == 3
     assert summary["pass1"]["token_usage"]["baseline_tokens"] == 630
+    assert summary["pass1"]["authorial_directives"] == []
+    assert summary["pass1"]["structured_passages"] == []
     assert summary["pass2"]["divergence_detected"] is True
     assert summary["pass2"]["usage"]["remaining_budget"] >= 0
     assert summary["query_memory"]["history"]["pass2"], "Expected stored pass2 queries"

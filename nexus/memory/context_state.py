@@ -16,6 +16,8 @@ class ContextPackage:
     baseline_chunks: Set[int] = field(default_factory=set)
     baseline_entities: Dict[str, Any] = field(default_factory=dict)
     baseline_themes: List[str] = field(default_factory=list)
+    authorial_directives: List[str] = field(default_factory=list)
+    structured_passages: List[Dict[str, Any]] = field(default_factory=list)
     token_usage: Dict[str, int] = field(default_factory=dict)
     divergence_detected: bool = False
     divergence_confidence: float = 0.0
@@ -31,6 +33,8 @@ class PassTransition:
     expected_user_themes: List[str] = field(default_factory=list)
     assembled_context: Dict[str, Any] = field(default_factory=dict)
     remaining_budget: int = 0
+    authorial_directives: List[str] = field(default_factory=list)
+    structured_passages: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ContextStateManager:
@@ -97,6 +101,11 @@ class ContextStateManager:
     def get_current_context(self) -> Optional[ContextPackage]:
         """Convenience accessor used by status reporting."""
         return self._context
+
+    def get_structured_passages(self) -> List[Dict[str, Any]]:
+        if not self._context:
+            return []
+        return list(self._context.structured_passages)
 
     # ------------------------------------------------------------------
     # Chunk helpers
