@@ -13,7 +13,7 @@ Adopt Black (88 columns) and flake8. Group imports stdlib/third-party/local and 
 Pytest drives coverage; mirror test filenames to their targets (e.g., `test_chunk_operations.py`). Reuse fixtures from `tests/test_lore/conftest.py`. Add unit tests for Pass 1 baseline assembly and Pass 2 divergence detection outlined in `nexus/agents/lore/prompt.md`; mark async turn checks with `pytest.mark.asyncio`. Document required PostgreSQL tables (`narrative_chunks`, `chunk_metadata`, embeddings) when a test depends on live data, and keep mutations reversible.
 
 ## Commit & Pull Request Guidelines
-Write concise, imperative commits (`Add divergence guard`). Pair code with its tests. PRs should summarize impact, call out touched agents or memory modules, list manual verification commands, and note any updates to `settings.json` or database schema. Screenshots are only needed when changing rendered output.
+Write concise, imperative commits (`Add divergence guard`). Stage and commit your work proactively; don't leave useful changes sitting unstaged when you pause or hand off. Pair code with its tests. PRs should summarize impact, call out touched agents or memory modules, list manual verification commands, and note any updates to `settings.json` or database schema. Screenshots are only needed when changing rendered output.
 
 ## Security & Configuration Tips
 Fetch API credentials via the 1Password CLI helpers in `scripts/api_openai.py` and `scripts/api_anthropic.py`; never introduce environment variable fallbacks. Ensure `op` authentication and the `NEXUS` PostgreSQL instance with vector extensions are ready before runs. Align local LLM endpoints with the models referenced in `settings.json`.

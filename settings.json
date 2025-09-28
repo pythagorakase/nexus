@@ -174,16 +174,16 @@
             "agentic_sql": true,
             "payload_percent_budget": {
                 "structured_summaries": {
-                    "min": 10,
-                    "max": 25
-                },
-                "contextual_augmentation": {
-                    "min": 25,
+                    "min": 15,
                     "max": 40
                 },
+                "contextual_augmentation": {
+                    "min": 20,
+                    "max": 35
+                },
                 "warm_slice": {
-                    "min": 40,
-                    "max": 70
+                    "min": 30,
+                    "max": 60
                 }
             },
             "query_budget": 5,
