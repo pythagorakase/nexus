@@ -8,12 +8,86 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
+from sqlalchemy import text
+
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
 from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
 
+try:  # pragma: no cover - optional dependency during unit tests
+    from nexus.agents.memnon.utils.alias_search import load_aliases_from_db
+except ImportError:  # pragma: no cover - fallback if module unavailable
+    load_aliases_from_db = None
+
 logger = logging.getLogger(__name__)
+
+
+_COMMON_STOPWORDS: Set[str] = {
+    "about",
+    "above",
+    "after",
+    "again",
+    "against",
+    "almost",
+    "already",
+    "along",
+    "among",
+    "around",
+    "because",
+    "before",
+    "being",
+    "below",
+    "beside",
+    "besides",
+    "between",
+    "beyond",
+    "could",
+    "doing",
+    "during",
+    "either",
+    "every",
+    "having",
+    "however",
+    "inside",
+    "maybe",
+    "nearly",
+    "other",
+    "others",
+    "rather",
+    "since",
+    "still",
+    "storyteller",
+    "their",
+    "there",
+    "these",
+    "those",
+    "through",
+    "toward",
+    "towards",
+    "under",
+    "until",
+    "where",
+    "which",
+    "while",
+    "whose",
+    "would",
+    "could",
+    "should",
+    "might",
+    "afterward",
+    "beforehand",
+    "within",
+    "without",
+    "though",
+    "therefore",
+    "whatever",
+    "whenever",
+    "something",
+    "nothing",
+    "anything",
+    "everything",
+}
 
 
 @dataclass
@@ -63,6 +137,15 @@ class ContextMemoryManager:
 
         self.llm_manager = llm_manager
         self.token_manager = token_manager
+
+        self.alias_lookup: Dict[str, List[str]] = {}
+        self.canonical_name_map: Dict[str, str] = {}
+        self.alias_inverse: Dict[str, str] = {}
+        self.place_lookup: Dict[str, str] = {}
+        self.user_character_name: Optional[str] = None
+        self.idf_dictionary = getattr(memnon, "idf_dictionary", None)
+
+        self._initialize_entity_maps(memnon)
 
     def get_memory_summary(self) -> Dict[str, Any]:
         """Get a summary of the current memory state for status reporting."""
@@ -402,6 +485,107 @@ class ContextMemoryManager:
         }
 
     # ------------------------------------------------------------------
+    # Entity normalization helpers
+    # ------------------------------------------------------------------
+    def _initialize_entity_maps(self, memnon: Optional[object]) -> None:
+        """Load alias and location metadata for canonical entity detection."""
+
+        if not memnon or not load_aliases_from_db:  # pragma: no cover - defensive
+            return
+
+        engine = getattr(getattr(memnon, "db_manager", None), "engine", None)
+        if engine is None:
+            return
+
+        try:
+            with engine.connect() as conn:
+                alias_lookup = load_aliases_from_db(conn)
+
+                for canonical_lc, aliases in alias_lookup.items():
+                    self.alias_lookup[canonical_lc] = list(aliases)
+                    primary = next(
+                        (alias for alias in aliases if alias.lower() == canonical_lc),
+                        aliases[0] if aliases else canonical_lc.title(),
+                    )
+                    self.canonical_name_map[canonical_lc] = primary
+                    for alias in aliases:
+                        self.alias_inverse[alias.lower()] = canonical_lc
+
+                result = conn.execute(
+                    text("SELECT user_character FROM global_variables WHERE id = true")
+                ).fetchone()
+                if result and result[0]:
+                    user_row = conn.execute(
+                        text("SELECT name FROM characters WHERE id = :id"),
+                        {"id": result[0]},
+                    ).fetchone()
+                    if user_row and user_row[0]:
+                        self.user_character_name = user_row[0]
+                        canonical = self.user_character_name.lower()
+                        if canonical not in self.alias_lookup:
+                            self.alias_lookup[canonical] = [self.user_character_name]
+                            self.canonical_name_map[canonical] = self.user_character_name
+                        for alias in self.alias_lookup[canonical]:
+                            self.alias_inverse[alias.lower()] = canonical
+                        for pronoun in ("you", "your", "yours", "yourself"):
+                            self.alias_inverse[pronoun] = canonical
+
+                place_rows = conn.execute(text("SELECT name FROM places")).fetchall()
+                for row in place_rows:
+                    name = row[0]
+                    if not name:
+                        continue
+                    key = name.lower()
+                    self.place_lookup[key] = name
+                    if key.startswith("the "):
+                        self.place_lookup[key[4:]] = name
+
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to load entity metadata: %s", exc)
+
+    def _normalize_character_name(self, token: str) -> Optional[str]:
+        """Map a token to a canonical character name using alias metadata."""
+
+        if not token:
+            return None
+
+        key = token.lower()
+        canonical = self.alias_inverse.get(key)
+        if canonical:
+            return self.canonical_name_map.get(canonical, canonical.title())
+
+        # Handle possessive second-person pronouns e.g., "your"
+        if key.endswith("'s"):
+            base = key[:-2]
+            canonical = self.alias_inverse.get(base)
+            if canonical:
+                return self.canonical_name_map.get(canonical, canonical.title())
+
+        return None
+
+    def _normalize_location_name(self, token: str) -> Optional[str]:
+        """Map a token to a canonical place name."""
+
+        if not token:
+            return None
+
+        key = token.lower()
+        if key in self.place_lookup:
+            return self.place_lookup[key]
+
+        if key.startswith("the "):
+            trimmed = key[4:]
+            if trimmed in self.place_lookup:
+                return self.place_lookup[trimmed]
+
+        if key.endswith("'s"):
+            base = key[:-2]
+            if base in self.place_lookup:
+                return self.place_lookup[base]
+
+        return None
+
+    # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
     def _analyze_storyteller_output(self, narrative: str) -> Dict[str, Any]:
@@ -415,22 +599,45 @@ class ContextMemoryManager:
         locations: List[str] = []
 
         for candidate in character_candidates:
-            candidate = candidate.strip()
-            if candidate.lower() in {"you", "the", "she", "he", "they"}:
+            normalized = re.sub(r"[^A-Za-z0-9\-'\s]", "", candidate).strip()
+            normalized = re.sub(r"'s$", "", normalized)
+            if not normalized:
                 continue
-            if any(token in {"Street", "District", "Bay", "Zone", "Tower", "Market"} for token in candidate.split()):
-                locations.append(candidate)
-            else:
-                characters.append(candidate)
+
+            character_name = self._normalize_character_name(normalized)
+            if character_name:
+                if character_name not in characters:
+                    characters.append(character_name)
+                continue
+
+            location_name = self._normalize_location_name(normalized)
+            if location_name:
+                if location_name not in locations:
+                    locations.append(location_name)
+                continue
 
         tokens = [token.lower() for token in re.findall(r"[a-zA-Z']+", text)]
-        token_counts = Counter(token for token in tokens if len(token) > 4)
-        keywords = [word for word, count in token_counts.most_common(8)]
+        filtered_tokens = [
+            token
+            for token in tokens
+            if len(token) > 4 and token not in _COMMON_STOPWORDS
+        ]
+        token_counts = Counter(filtered_tokens)
+        if self.idf_dictionary and token_counts:
+            scored = []
+            for word, count in token_counts.items():
+                try:
+                    idf = self.idf_dictionary.get_idf(word)
+                except Exception:  # pragma: no cover - defensive
+                    idf = 1.0
+                scored.append((word, count * idf, count, idf))
+            scored.sort(key=lambda item: (-item[1], -item[2], item[0]))
+            keywords = [word for word, *_ in scored[:8]]
+        else:
+            keywords = [word for word, count in token_counts.most_common(8)]
 
-        # Themes: top keywords filtered for variety
-        themes = keywords[:5]
-
-        expected = list(dict.fromkeys(characters + themes))[:10]
+        themes: List[str] = []
+        expected = list(dict.fromkeys(characters))[:10]
 
         return {
             "characters": sorted(set(characters)),
@@ -439,5 +646,6 @@ class ContextMemoryManager:
             "themes": themes,
             "expected": expected,
         }
+
 
     
