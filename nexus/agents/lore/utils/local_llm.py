@@ -68,7 +68,10 @@ class LocalLLMManager:
         self.loaded_model_id = None
         
         # Whether to unload model on object deletion
-        self.unload_on_exit: bool = bool(self.llm_config.get("unload_on_exit", True))
+        # During active development we keep the local model resident unless the
+        # user explicitly opts out. This avoids re-loading 70B+/120B models on
+        # every turn, which can add 45-90 seconds of startup latency.
+        self.unload_on_exit: bool = bool(self.llm_config.get("unload_on_exit", False))
 
         if LMS_SDK_AVAILABLE:
             self._initialize_sdk_client()

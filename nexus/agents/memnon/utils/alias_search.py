@@ -51,13 +51,33 @@ def load_aliases_from_db(conn) -> Dict[str, List[str]]:
                 aliases.append(name)
             # Use lowercase name as the key
             alias_lookup[name.lower()] = aliases
-        
+
         logger.info(f"Loaded aliases for {len(alias_lookup)} characters from database")
-        
-        # Add 'You' to Alex's aliases if not already there
-        if "alex" in alias_lookup and "You" not in alias_lookup["alex"]:
-            alias_lookup["alex"].append("You")
-            logger.info("Added 'You' to Alex's aliases")
+
+        # Ensure the POV character carries second-person aliases
+        try:
+            user_row = conn.execute(
+                text("SELECT user_character FROM global_variables WHERE id = true")
+            ).fetchone()
+            if user_row and user_row[0]:
+                character_row = conn.execute(
+                    text("SELECT name FROM characters WHERE id = :id"),
+                    {"id": user_row[0]},
+                ).fetchone()
+                if character_row and character_row[0]:
+                    canonical = character_row[0].lower()
+                    alias_lookup.setdefault(canonical, [character_row[0]])
+                    # Add the common second-person pronouns so "you" maps correctly
+                    second_person_aliases = ["You", "Your", "Yours", "Yourself"]
+                    for alias in second_person_aliases:
+                        if alias not in alias_lookup[canonical]:
+                            alias_lookup[canonical].append(alias)
+                    logger.info(
+                        "Mapped second-person pronouns to user character '%s'",
+                        character_row[0],
+                    )
+        except Exception as alias_exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to extend aliases with user character pronouns: %s", alias_exc)
             
     except Exception as e:
         logger.error(f"Error loading aliases from database: {e}")

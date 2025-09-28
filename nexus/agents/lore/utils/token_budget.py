@@ -19,7 +19,10 @@ class TokenBudgetManager:
         self.settings = settings
         lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
         self.token_budget_config = lore_settings.get("token_budget", {})
-        self.allocation_config = lore_settings.get("component_allocation", {})
+        allocation = lore_settings.get("component_allocation")
+        if not allocation:
+            allocation = lore_settings.get("payload_percent_budget", {})
+        self.allocation_config = allocation or {}
     
     def calculate_budget(self, user_input: str, apex_model: str = None) -> Dict[str, int]:
         """
