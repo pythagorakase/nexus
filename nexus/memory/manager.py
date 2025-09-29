@@ -616,6 +616,16 @@ class ContextMemoryManager:
                     locations.append(location_name)
                 continue
 
+            # Fallback: treat standalone capitalised tokens as provisional character names
+            lower_normalized = normalized.lower()
+            if (
+                " " not in normalized
+                and normalized[0].isupper()
+                and lower_normalized not in _COMMON_STOPWORDS
+            ):
+                if normalized not in characters:
+                    characters.append(normalized)
+
         tokens = [token.lower() for token in re.findall(r"[a-zA-Z']+", text)]
         filtered_tokens = [
             token
