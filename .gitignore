@@ -4,6 +4,7 @@
 !.env.tpl  # Keep the template file
 .envrc
 
+
 # Ignore transcripts folder
 /transcripts/
 
@@ -22,6 +23,7 @@
 /sessions/
 /.git/objects/pack/
 
+
 # Ignore logs and temporary files
 temp*.*
 *.log
@@ -32,6 +34,7 @@ log.md
 /season_episode_extraction.log
 /time_delta_processor.log
 /lm_studio_log.txt
+/temp/
 
 # Ignore binaries and database files
 *.sqlite3
