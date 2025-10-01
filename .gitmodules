@@ -4,3 +4,6 @@
 [submodule "iris"]
 	path = iris
 	url = https://github.com/pythagorakase/nexus-iris.git
+[submodule "iris2"]
+	path = iris2
+	url = https://github.com/pythagorakase/nexus-iris2.git
