@@ -23,6 +23,7 @@
 /sessions/
 /.git/objects/pack/
 
+/.claude/
 
 # Ignore logs and temporary files
 temp*.*
