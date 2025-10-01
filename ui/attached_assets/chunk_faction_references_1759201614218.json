@@ -1,0 +1,2530 @@
+[
+  {
+    "chunk_id": 1,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 2,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 3,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 7,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 8,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 10,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 11,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 11,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 12,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 13,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 16,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 16,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 16,
+    "faction_id": 8
+  },
+  {
+    "chunk_id": 17,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 17,
+    "faction_id": 8
+  },
+  {
+    "chunk_id": 19,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 22,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 23,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 29,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 30,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 30,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 31,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 32,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 33,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 35,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 40,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 41,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 42,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 45,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 46,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 47,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 48,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 49,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 50,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 50,
+    "faction_id": 7
+  },
+  {
+    "chunk_id": 51,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 52,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 52,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 53,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 53,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 54,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 54,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 55,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 56,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 57,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 57,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 58,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 59,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 59,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 60,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 60,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 61,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 67,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 68,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 69,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 70,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 74,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 74,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 75,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 76,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 77,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 78,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 78,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 79,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 80,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 80,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 81,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 84,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 84,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 85,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 86,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 88,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 89,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 90,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 92,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 93,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 94,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 94,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 95,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 96,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 96,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 98,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 99,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 99,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 99,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 100,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 100,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 101,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 101,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 101,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 102,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 102,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 103,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 103,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 103,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 103,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 104,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 104,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 105,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 105,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 105,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 105,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 106,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 108,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 108,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 108,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 109,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 109,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 110,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 110,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 111,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 111,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 112,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 112,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 113,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 114,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 116,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 117,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 120,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 120,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 121,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 122,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 123,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 123,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 124,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 126,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 127,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 128,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 128,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 129,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 130,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 130,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 130,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 131,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 131,
+    "faction_id": 3
+  },
+  {
+    "chunk_id": 131,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 132,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 132,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 139,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 140,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 141,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 144,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 145,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 145,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 146,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 146,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 147,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 148,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 151,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 152,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 153,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 153,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 153,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 154,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 156,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 156,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 157,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 157,
+    "faction_id": 9
+  },
+  {
+    "chunk_id": 158,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 159,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 160,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 161,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 162,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 163,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 164,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 165,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 166,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 168,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 169,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 170,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 171,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 172,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 173,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 174,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 176,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 177,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 178,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 179,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 180,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 182,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 183,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 184,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 185,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 186,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 187,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 188,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 190,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 191,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 192,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 193,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 194,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 195,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 196,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 197,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 198,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 199,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 201,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 206,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 207,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 208,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 209,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 210,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 211,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 212,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 213,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 214,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 215,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 216,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 217,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 218,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 220,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 222,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 223,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 223,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 224,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 224,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 225,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 225,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 226,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 226,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 227,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 228,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 230,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 231,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 232,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 238,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 238,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 239,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 240,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 241,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 241,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 242,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 242,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 243,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 268,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 270,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 271,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 291,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 292,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 293,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 294,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 300,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 307,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 308,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 309,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 310,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 311,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 312,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 313,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 314,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 314,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 317,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 318,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 319,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 320,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 322,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 323,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 324,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 325,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 326,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 327,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 328,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 329,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 330,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 331,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 332,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 333,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 335,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 336,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 337,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 340,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 342,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 346,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 349,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 361,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 363,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 364,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 369,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 375,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 376,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 380,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 381,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 396,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 397,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 398,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 400,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 406,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 407,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 423,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 424,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 430,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 433,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 434,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 435,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 436,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 437,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 438,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 439,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 440,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 441,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 442,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 443,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 444,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 445,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 446,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 447,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 448,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 449,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 450,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 451,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 452,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 454,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 455,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 456,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 457,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 458,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 459,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 460,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 461,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 462,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 463,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 464,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 466,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 467,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 468,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 469,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 471,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 472,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 473,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 474,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 475,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 476,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 477,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 478,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 479,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 480,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 481,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 481,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 482,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 483,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 484,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 488,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 489,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 489,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 490,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 491,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 492,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 492,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 493,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 493,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 495,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 496,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 497,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 498,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 499,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 500,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 500,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 501,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 501,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 502,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 503,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 504,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 505,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 508,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 508,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 510,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 511,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 512,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 512,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 513,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 513,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 514,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 514,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 521,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 521,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 522,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 522,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 523,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 523,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 526,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 527,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 527,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 528,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 529,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 529,
+    "faction_id": 4
+  },
+  {
+    "chunk_id": 529,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 534,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 542,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 543,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 544,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 548,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 548,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 549,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 550,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 550,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 559,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 567,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 568,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 569,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 570,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 572,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 573,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 575,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 576,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 577,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 578,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 579,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 580,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 581,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 582,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 583,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 584,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 585,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 586,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 587,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 588,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 589,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 590,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 591,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 592,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 594,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 596,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 597,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 598,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 599,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 600,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 600,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 601,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 601,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 602,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 603,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 604,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 605,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 606,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 606,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 607,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 607,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 609,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 610,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 615,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 616,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 617,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 618,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 618,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 619,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 619,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 620,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 621,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 622,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 622,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 631,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 633,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 635,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 635,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 636,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 636,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 637,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 638,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 642,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 644,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 645,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 651,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 652,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 652,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 653,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 653,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 654,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 658,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 659,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 660,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 661,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 661,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 663,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 664,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 665,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 666,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 667,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 668,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 668,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 669,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 670,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 672,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 672,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 673,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 674,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 675,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 675,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 676,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 676,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 677,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 678,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 678,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 679,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 679,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 680,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 681,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 681,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 682,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 682,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 683,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 684,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 685,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 685,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 686,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 686,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 687,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 687,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 688,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 692,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 696,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 697,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 698,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 699,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 700,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 701,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 702,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 703,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 704,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 705,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 706,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 708,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 710,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 710,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 711,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 711,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 716,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 717,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 717,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 718,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 718,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 719,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 719,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 720,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 720,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 721,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 721,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 723,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 724,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 726,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 727,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 729,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 730,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 733,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 734,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 741,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 827,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 828,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 829,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 830,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 831,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 858,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 859,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 859,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 861,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 862,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 862,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 863,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 863,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 864,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 865,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 870,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 871,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 872,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 882,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 883,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 885,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 889,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 889,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 893,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 894,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 895,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 897,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 898,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 899,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 900,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 901,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 904,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 906,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 910,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 911,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 912,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 913,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 914,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 915,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 916,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 917,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 921,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 924,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 925,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 926,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 927,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 928,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 929,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 930,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 931,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 932,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 934,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 935,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 936,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 937,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 938,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 939,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 940,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 942,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 959,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 970,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 971,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1082,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 1167,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1181,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1185,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1260,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1261,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1265,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1270,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1272,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1275,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1286,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1307,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1311,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1312,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1314,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1375,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1377,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1379,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1381,
+    "faction_id": 2
+  },
+  {
+    "chunk_id": 1389,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1403,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 1404,
+    "faction_id": 5
+  },
+  {
+    "chunk_id": 1404,
+    "faction_id": 6
+  },
+  {
+    "chunk_id": 1425,
+    "faction_id": 2
+  }
+]
