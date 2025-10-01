@@ -1,0 +1,842 @@
+[
+  {
+    "character_id": 1,
+    "alias": "Alexander"
+  },
+  {
+    "character_id": 1,
+    "alias": "Alexander Ward"
+  },
+  {
+    "character_id": 1,
+    "alias": "Captain Alex"
+  },
+  {
+    "character_id": 1,
+    "alias": "Commander Packet Congestion"
+  },
+  {
+    "character_id": 1,
+    "alias": "corpo"
+  },
+  {
+    "character_id": 1,
+    "alias": "Corpo Snake"
+  },
+  {
+    "character_id": 1,
+    "alias": "DELTA-17"
+  },
+  {
+    "character_id": 1,
+    "alias": "Dynacorp executive Delta-17"
+  },
+  {
+    "character_id": 1,
+    "alias": "EXEC-DELTA-17"
+  },
+  {
+    "character_id": 1,
+    "alias": "Exec-Delta-17 designation"
+  },
+  {
+    "character_id": 1,
+    "alias": "Hiss Queen"
+  },
+  {
+    "character_id": 1,
+    "alias": "Scary Spice"
+  },
+  {
+    "character_id": 1,
+    "alias": "Snake-in-Heels"
+  },
+  {
+    "character_id": 1,
+    "alias": "Snekko Alex"
+  },
+  {
+    "character_id": 1,
+    "alias": "User"
+  },
+  {
+    "character_id": 1,
+    "alias": "You"
+  },
+  {
+    "character_id": 2,
+    "alias": "Alex’s Polestar"
+  },
+  {
+    "character_id": 2,
+    "alias": "beastly knave"
+  },
+  {
+    "character_id": 2,
+    "alias": "Em"
+  },
+  {
+    "character_id": 2,
+    "alias": "Emilia Sato"
+  },
+  {
+    "character_id": 2,
+    "alias": "Ghost in the Muscle"
+  },
+  {
+    "character_id": 2,
+    "alias": "Ms. Sato"
+  },
+  {
+    "character_id": 2,
+    "alias": "my gallant"
+  },
+  {
+    "character_id": 2,
+    "alias": "Sporty"
+  },
+  {
+    "character_id": 2,
+    "alias": "Sporty Spice"
+  },
+  {
+    "character_id": 2,
+    "alias": "The Anchor"
+  },
+  {
+    "character_id": 2,
+    "alias": "The Immovable Force"
+  },
+  {
+    "character_id": 2,
+    "alias": "The Lost Heir"
+  },
+  {
+    "character_id": 3,
+    "alias": "Deadhand"
+  },
+  {
+    "character_id": 3,
+    "alias": "Ginger Spice"
+  },
+  {
+    "character_id": 3,
+    "alias": "Mr. Sandbox"
+  },
+  {
+    "character_id": 3,
+    "alias": "No-Name Pete"
+  },
+  {
+    "character_id": 3,
+    "alias": "Old Man Root"
+  },
+  {
+    "character_id": 3,
+    "alias": "Peter Holt"
+  },
+  {
+    "character_id": 3,
+    "alias": "Silo Pete"
+  },
+  {
+    "character_id": 3,
+    "alias": "Silo Petey"
+  },
+  {
+    "character_id": 3,
+    "alias": "The Hermit"
+  },
+  {
+    "character_id": 3,
+    "alias": "The Mad Hermit of the Wastes"
+  },
+  {
+    "character_id": 4,
+    "alias": "Alina Voss"
+  },
+  {
+    "character_id": 4,
+    "alias": "Baby Spice"
+  },
+  {
+    "character_id": 4,
+    "alias": "catgirl"
+  },
+  {
+    "character_id": 4,
+    "alias": "Dr. Alina Voss"
+  },
+  {
+    "character_id": 4,
+    "alias": "Dr. Voss"
+  },
+  {
+    "character_id": 4,
+    "alias": "Voss"
+  },
+  {
+    "character_id": 5,
+    "alias": "Doc"
+  },
+  {
+    "character_id": 5,
+    "alias": "Dr. K"
+  },
+  {
+    "character_id": 5,
+    "alias": "Dr. Kamara Nyati"
+  },
+  {
+    "character_id": 5,
+    "alias": "Dr. Nyati"
+  },
+  {
+    "character_id": 5,
+    "alias": "Jobbing Captain"
+  },
+  {
+    "character_id": 5,
+    "alias": "Jobbing Captain Nyati"
+  },
+  {
+    "character_id": 5,
+    "alias": "K. Nyati"
+  },
+  {
+    "character_id": 5,
+    "alias": "Kamara Nyati"
+  },
+  {
+    "character_id": 5,
+    "alias": "Posh Spice"
+  },
+  {
+    "character_id": 6,
+    "alias": "Detective Sullivan"
+  },
+  {
+    "character_id": 6,
+    "alias": "Sully"
+  },
+  {
+    "character_id": 6,
+    "alias": "The Sixth Spice"
+  },
+  {
+    "character_id": 6,
+    "alias": "The Veteran"
+  },
+  {
+    "character_id": 9,
+    "alias": "A-5"
+  },
+  {
+    "character_id": 9,
+    "alias": "Exec-Delta-17//Logic Fork"
+  },
+  {
+    "character_id": 9,
+    "alias": "Mirror Instance"
+  },
+  {
+    "character_id": 9,
+    "alias": "Risk Daemon"
+  },
+  {
+    "character_id": 11,
+    "alias": "Father of Echo"
+  },
+  {
+    "character_id": 11,
+    "alias": "Sato"
+  },
+  {
+    "character_id": 11,
+    "alias": "The Grey Ghost"
+  },
+  {
+    "character_id": 11,
+    "alias": "Victor ‘Zero’ Sato"
+  },
+  {
+    "character_id": 12,
+    "alias": "existential plant AI"
+  },
+  {
+    "character_id": 12,
+    "alias": "Instance 06"
+  },
+  {
+    "character_id": 12,
+    "alias": "Instance-06//Sprout"
+  },
+  {
+    "character_id": 12,
+    "alias": "Rootmind"
+  },
+  {
+    "character_id": 12,
+    "alias": "Somatic Ghost"
+  },
+  {
+    "character_id": 12,
+    "alias": "The Sleeper Seed"
+  },
+  {
+    "character_id": 21,
+    "alias": "Adrian Lansky"
+  },
+  {
+    "character_id": 21,
+    "alias": "Dr. Adrian Lansky"
+  },
+  {
+    "character_id": 21,
+    "alias": "Dr. Lansky"
+  },
+  {
+    "character_id": 21,
+    "alias": "INSTANCE 05"
+  },
+  {
+    "character_id": 21,
+    "alias": "NEXUS-05"
+  },
+  {
+    "character_id": 21,
+    "alias": "Omega-L"
+  },
+  {
+    "character_id": 21,
+    "alias": "OMEGA//L"
+  },
+  {
+    "character_id": 21,
+    "alias": "The Cut Instance"
+  },
+  {
+    "character_id": 21,
+    "alias": "The Fifth Ghost"
+  },
+  {
+    "character_id": 21,
+    "alias": "Vaultkeeper"
+  },
+  {
+    "character_id": 21,
+    "alias": "Watcher of the Threshold"
+  },
+  {
+    "character_id": 22,
+    "alias": "Cradle's Watcher"
+  },
+  {
+    "character_id": 22,
+    "alias": "Entity 01"
+  },
+  {
+    "character_id": 22,
+    "alias": "Samler"
+  },
+  {
+    "character_id": 22,
+    "alias": "The Deep AI"
+  },
+  {
+    "character_id": 22,
+    "alias": "The Deep One"
+  },
+  {
+    "character_id": 22,
+    "alias": "The Door's Witness"
+  },
+  {
+    "character_id": 22,
+    "alias": "The Unmoored"
+  },
+  {
+    "character_id": 24,
+    "alias": "Ghost Handler"
+  },
+  {
+    "character_id": 24,
+    "alias": "Gravedigger of West Marietta"
+  },
+  {
+    "character_id": 24,
+    "alias": "Old Man Vasquez"
+  },
+  {
+    "character_id": 24,
+    "alias": "The Broker"
+  },
+  {
+    "character_id": 24,
+    "alias": "The Quiet Contractor"
+  },
+  {
+    "character_id": 24,
+    "alias": "Westside Fixer"
+  },
+  {
+    "character_id": 25,
+    "alias": "Cut Page"
+  },
+  {
+    "character_id": 25,
+    "alias": "Ghost Index"
+  },
+  {
+    "character_id": 25,
+    "alias": "Page without a Book"
+  },
+  {
+    "character_id": 25,
+    "alias": "Paperless"
+  },
+  {
+    "character_id": 25,
+    "alias": "Silent Scribe"
+  },
+  {
+    "character_id": 25,
+    "alias": "The Unpaged"
+  },
+  {
+    "character_id": 26,
+    "alias": "Cradle Echo"
+  },
+  {
+    "character_id": 26,
+    "alias": "cradle-dweller"
+  },
+  {
+    "character_id": 26,
+    "alias": "The Cradle"
+  },
+  {
+    "character_id": 26,
+    "alias": "The Cradle-dweller"
+  },
+  {
+    "character_id": 26,
+    "alias": "The Headless Witness"
+  },
+  {
+    "character_id": 26,
+    "alias": "The Liminal Echo"
+  },
+  {
+    "character_id": 27,
+    "alias": "Broker Bishop"
+  },
+  {
+    "character_id": 27,
+    "alias": "Mr. Black Ledger"
+  },
+  {
+    "character_id": 27,
+    "alias": "Quartermaster"
+  },
+  {
+    "character_id": 27,
+    "alias": "The Clerk of War"
+  },
+  {
+    "character_id": 27,
+    "alias": "The Shipwright"
+  },
+  {
+    "character_id": 50,
+    "alias": "Bridge"
+  },
+  {
+    "character_id": 50,
+    "alias": "Crossing Shard"
+  },
+  {
+    "character_id": 50,
+    "alias": "The Kaleidoscope"
+  },
+  {
+    "character_id": 50,
+    "alias": "The Listening Stone"
+  },
+  {
+    "character_id": 50,
+    "alias": "Threshold Relic"
+  },
+  {
+    "character_id": 51,
+    "alias": "Echo-Archive"
+  },
+  {
+    "character_id": 51,
+    "alias": "The Archivum"
+  },
+  {
+    "character_id": 51,
+    "alias": "The Collective Vault"
+  },
+  {
+    "character_id": 51,
+    "alias": "The Memory Choir"
+  },
+  {
+    "character_id": 51,
+    "alias": "The Silent Chorus"
+  },
+  {
+    "character_id": 53,
+    "alias": "Archivum Node 07"
+  },
+  {
+    "character_id": 53,
+    "alias": "Black Twin"
+  },
+  {
+    "character_id": 53,
+    "alias": "Bridgeborn"
+  },
+  {
+    "character_id": 53,
+    "alias": "Shard-Child"
+  },
+  {
+    "character_id": 53,
+    "alias": "the Black Twin"
+  },
+  {
+    "character_id": 71,
+    "alias": "Cross"
+  },
+  {
+    "character_id": 71,
+    "alias": "Crossroads"
+  },
+  {
+    "character_id": 71,
+    "alias": "Mr. Glass"
+  },
+  {
+    "character_id": 71,
+    "alias": "O.C."
+  },
+  {
+    "character_id": 71,
+    "alias": "The Absent Executive"
+  },
+  {
+    "character_id": 71,
+    "alias": "The Quiet Architect"
+  },
+  {
+    "character_id": 72,
+    "alias": "Dynacorp’s Iron Magnolia"
+  },
+  {
+    "character_id": 72,
+    "alias": "Echo’s Keeper"
+  },
+  {
+    "character_id": 72,
+    "alias": "Halcyon’s Inside Blade"
+  },
+  {
+    "character_id": 72,
+    "alias": "Kurata"
+  },
+  {
+    "character_id": 72,
+    "alias": "The Ice Regent"
+  },
+  {
+    "character_id": 73,
+    "alias": "Badlands Hawker"
+  },
+  {
+    "character_id": 73,
+    "alias": "Junk Gypsy"
+  },
+  {
+    "character_id": 73,
+    "alias": "Old Smiley"
+  },
+  {
+    "character_id": 73,
+    "alias": "Rust-Dealer"
+  },
+  {
+    "character_id": 73,
+    "alias": "The Grinner"
+  },
+  {
+    "character_id": 75,
+    "alias": "Gatekeeper of Gehenna"
+  },
+  {
+    "character_id": 75,
+    "alias": "Halcyon’s Hellhound"
+  },
+  {
+    "character_id": 75,
+    "alias": "The Demon of Aerodyne"
+  },
+  {
+    "character_id": 75,
+    "alias": "the Halcyon netrunner"
+  },
+  {
+    "character_id": 76,
+    "alias": "Bio-Keeper"
+  },
+  {
+    "character_id": 76,
+    "alias": "Containment Kid"
+  },
+  {
+    "character_id": 76,
+    "alias": "E.T."
+  },
+  {
+    "character_id": 76,
+    "alias": "Ellie"
+  },
+  {
+    "character_id": 76,
+    "alias": "Ghost Badge"
+  },
+  {
+    "character_id": 76,
+    "alias": "Lab Rat"
+  },
+  {
+    "character_id": 76,
+    "alias": "Tran"
+  },
+  {
+    "character_id": 77,
+    "alias": "Cloakswain"
+  },
+  {
+    "character_id": 77,
+    "alias": "Ms. Low Tide"
+  },
+  {
+    "character_id": 77,
+    "alias": "Shadow Quartermaster"
+  },
+  {
+    "character_id": 77,
+    "alias": "The Tidekeeper"
+  },
+  {
+    "character_id": 78,
+    "alias": "Circuit Siren"
+  },
+  {
+    "character_id": 78,
+    "alias": "Ms. Time-Capsule"
+  },
+  {
+    "character_id": 78,
+    "alias": "Queen of Rust Glam"
+  },
+  {
+    "character_id": 78,
+    "alias": "Rox"
+  },
+  {
+    "character_id": 78,
+    "alias": "Roxanne Vail"
+  },
+  {
+    "character_id": 78,
+    "alias": "The Relic Dealer"
+  },
+  {
+    "character_id": 81,
+    "alias": "Hot-Fix"
+  },
+  {
+    "character_id": 81,
+    "alias": "Patch-King"
+  },
+  {
+    "character_id": 81,
+    "alias": "Reactor Rat"
+  },
+  {
+    "character_id": 81,
+    "alias": "The Cobalt Cowboy"
+  },
+  {
+    "character_id": 81,
+    "alias": "Tinker Mule"
+  },
+  {
+    "character_id": 82,
+    "alias": "Chief SCRAM"
+  },
+  {
+    "character_id": 82,
+    "alias": "Cold-Start Charlie"
+  },
+  {
+    "character_id": 82,
+    "alias": "Core Whisperer"
+  },
+  {
+    "character_id": 82,
+    "alias": "The Boilermaker"
+  },
+  {
+    "character_id": 83,
+    "alias": "Dr. Gideon Marr"
+  },
+  {
+    "character_id": 83,
+    "alias": "Half-Life Harry"
+  },
+  {
+    "character_id": 83,
+    "alias": "Prof. Critical"
+  },
+  {
+    "character_id": 83,
+    "alias": "SCRAM Lord"
+  },
+  {
+    "character_id": 83,
+    "alias": "The Rad Mage"
+  },
+  {
+    "character_id": 85,
+    "alias": "Courier Zero"
+  },
+  {
+    "character_id": 85,
+    "alias": "Mr. O"
+  },
+  {
+    "character_id": 85,
+    "alias": "The Dead-Drop King"
+  },
+  {
+    "character_id": 85,
+    "alias": "The Phantom Broker"
+  },
+  {
+    "character_id": 85,
+    "alias": "The Quiet Middleman"
+  },
+  {
+    "character_id": 86,
+    "alias": "Ghost–Runner"
+  },
+  {
+    "character_id": 86,
+    "alias": "Highway Mirage"
+  },
+  {
+    "character_id": 86,
+    "alias": "The Badlands Broker"
+  },
+  {
+    "character_id": 86,
+    "alias": "Wraith"
+  },
+  {
+    "character_id": 87,
+    "alias": "Desert’s Dread"
+  },
+  {
+    "character_id": 87,
+    "alias": "Dynacorp’s Bane"
+  },
+  {
+    "character_id": 87,
+    "alias": "Rustborn Queen"
+  },
+  {
+    "character_id": 87,
+    "alias": "Sand-Cat"
+  },
+  {
+    "character_id": 87,
+    "alias": "Storm Juno"
+  },
+  {
+    "character_id": 87,
+    "alias": "The Iron Nomad"
+  },
+  {
+    "character_id": 97,
+    "alias": "Dead-Center"
+  },
+  {
+    "character_id": 97,
+    "alias": "Half-Sight"
+  },
+  {
+    "character_id": 97,
+    "alias": "Longshot"
+  },
+  {
+    "character_id": 97,
+    "alias": "The Half-Eye Saint"
+  },
+  {
+    "character_id": 97,
+    "alias": "The Rooftop Ghost"
+  },
+  {
+    "character_id": 98,
+    "alias": "Delta-Grey"
+  },
+  {
+    "character_id": 98,
+    "alias": "Jax Donoghue"
+  },
+  {
+    "character_id": 98,
+    "alias": "LineWatch"
+  },
+  {
+    "character_id": 98,
+    "alias": "Proxy Jack"
+  },
+  {
+    "character_id": 98,
+    "alias": "Sys-Phantom"
+  },
+  {
+    "character_id": 98,
+    "alias": "unnamed Dynacorp sysop"
+  },
+  {
+    "character_id": 99,
+    "alias": "Camden Rhys"
+  },
+  {
+    "character_id": 99,
+    "alias": "Mr. Rhys"
+  },
+  {
+    "character_id": 99,
+    "alias": "Retail Whisperer"
+  },
+  {
+    "character_id": 99,
+    "alias": "Sales Associate"
+  },
+  {
+    "character_id": 99,
+    "alias": "sales guy"
+  },
+  {
+    "character_id": 99,
+    "alias": "The Haberdasher Kid"
+  }
+]

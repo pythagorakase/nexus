@@ -45,6 +45,10 @@ log.md
 __pycache__/
 nexus-tui-temp/
 
+# Ignore UI build artifacts and dependencies
+/ui/node_modules/
+/ui/dist/
+
 # Ignore development/testing directories
 /mlx-gguf-testing/
 /echo_deprecated/

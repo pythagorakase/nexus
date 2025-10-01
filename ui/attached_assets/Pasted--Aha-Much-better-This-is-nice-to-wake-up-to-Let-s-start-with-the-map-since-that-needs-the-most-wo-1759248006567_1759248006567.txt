@@ -1,0 +1,119 @@
+
+Aha! Much better. This is nice to wake up to. Let's start with the map since that needs the most work. I asked Claude Code to write you some tips since his implementation in the `iris` submodule got things mostly right.
+
+One thing he doesn't mention that we should probably try for now is not trying to display the zones. I think a simpler and more useful implementation would be to just use them as groupings for a sidebar that lists the locations.
+
+I'm uploading a screenshot of what CC's implementation looks like.
+
+***
+
+⏺ Map Implementation Guide for Replit Agent
+
+  The Problem
+
+  Your current implementation shows all location labels at once, causing severe visual clutter and overlapping text. The correct approach
+  shows labels only on demand (hover, selection, or when the narrative is at that location).
+
+  Core Principle: Conditional Label Visibility
+
+  Always show:
+  - Location pins (small circles/dots) for all locations
+
+  Only show labels when:
+  1. User hovers over the location pin
+  2. Location is explicitly selected
+  3. Current narrative chunk is at that location
+
+  Implementation Details (React + D3.js)
+
+  1. State Management
+
+  const [hoveredLocation, setHoveredLocation] = useState<Location | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [currentChunkLocation, setCurrentChunkLocation] = useState<number | null>(null);
+
+  2. Location Pin Rendering
+
+  // Always render pins for ALL locations
+  pins.selectAll('.location-pin')
+    .data(locations)
+    .enter()
+    .append('circle')
+    .attr('class', 'location-pin')
+    .attr('cx', d => projection([d.lng, d.lat])![0])
+    .attr('cy', d => projection([d.lng, d.lat])![1])
+    .attr('r', 4)
+    .attr('fill', d => {
+      if (d.chunkId === currentChunk) return '#ffff00';      // Yellow for active
+      if (selectedLocation?.id === d.id) return '#00ffff';   // Cyan for selected
+      return '#00ce00';                                       // Green for others
+    })
+    .on('mouseenter', (event, d) => setHoveredLocation(d))
+    .on('mouseleave', () => setHoveredLocation(null))
+
+  3. Label Rendering (KEY PART - This is what Replit got wrong)
+
+  // Create label elements for ALL locations, but control their display style
+  labels.selectAll('.location-label')
+    .data(locations)
+    .enter()
+    .append('text')
+    .attr('class', 'location-label')
+    .attr('x', d => projection([d.lng, d.lat])![0] + 6)
+    .attr('y', d => projection([d.lng, d.lat])![1] - 6)
+    .text(d => d.name)
+    .style('display', d => {
+      // Only show if one of these conditions is true
+      const shouldShow =
+        d.chunkId === currentChunk ||      // Current narrative location
+        selectedLocation?.id === d.id ||    // Explicitly selected
+        hoveredLocation?.id === d.id;       // User is hovering
+
+      return shouldShow ? 'block' : 'none';
+    });
+
+  4. Update Pattern (React useEffect)
+
+  // Update label visibility whenever state changes
+  useEffect(() => {
+    if (!svgRef.current) return;
+
+    d3.select(svgRef.current)
+      .selectAll('.location-label')
+      .style('display', (d: Location) => {
+        const shouldShow =
+          d.chunkId === currentChunk ||
+          selectedLocation?.id === d.id ||
+          hoveredLocation?.id === d.id;
+        return shouldShow ? 'block' : 'none';
+      });
+  }, [currentChunk, selectedLocation, hoveredLocation]);
+
+  Key Implementation Points
+
+  1. DON'T filter locations before rendering - render all pins and labels, but control visibility with CSS display: 'none'
+  2. Use conditional styling, not conditional rendering - this allows smooth transitions and hover effects
+  3. Layer your visuals:
+    - Base layer: Geographic boundaries (countries/zones)
+    - Mid layer: All location pins (dots)
+    - Top layer: Conditional labels (text)
+    - Optional: Glow effects for active/selected locations
+  4. Zoom-aware scaling: Scale pins and labels inversely with zoom level
+  const scaleFactor = 1 / zoomLevel;
+  .attr('r', 4 * scaleFactor)
+  .style('font-size', `${10 * scaleFactor}px`)
+  5. Color coding for state:
+    - Green (#00ce00): Available/default locations
+    - Yellow (#ffff00): Current narrative location
+    - Cyan (#00ffff): Selected location
+
+  What Replit Did Wrong
+
+  - Rendered label text directly on the map for all locations at once
+  - No conditional visibility logic
+  - No hover state management
+  - Labels placed without considering overlap
+
+  File Reference
+
+  See /Users/pythagor/nexus/iris/src/components/MapPane.tsx:212-228 for the exact conditional label implementation.
