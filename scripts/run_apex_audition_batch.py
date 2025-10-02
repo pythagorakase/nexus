@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--register-only", action="store_true", help="Register the condition and exit")
     parser.add_argument("--no-cache", action="store_true", help="Disable prompt caching")
     parser.add_argument("--no-rate-limiting", action="store_true", help="Disable rate limit enforcement")
+    parser.add_argument("--max-retries", type=int, default=3, help="Max retry attempts for failed requests (default 3)")
     parser.add_argument("--verify-first", action="store_true", help="Send single test request before full batch")
     parser.add_argument("--log-level", default="INFO", help="Python logging level (default INFO)")
     return parser.parse_args()
@@ -103,6 +104,7 @@ def main() -> None:
             dry_run=False,
             enable_cache=not args.no_cache,
             use_rate_limiting=not args.no_rate_limiting,
+            max_retries=args.max_retries,
             created_by=args.created_by,
             notes=f"[VERIFICATION] {args.notes or ''}",
         )
@@ -136,6 +138,7 @@ def main() -> None:
         dry_run=args.dry_run,
         enable_cache=not args.no_cache,
         use_rate_limiting=not args.no_rate_limiting,
+        max_retries=args.max_retries,
         created_by=args.created_by,
         notes=args.notes,
     )
