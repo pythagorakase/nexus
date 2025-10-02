@@ -152,6 +152,7 @@ def get_next_comparison(
                 JOIN apex_audition.generations gb ON gb.prompt_id = p.id
                     AND gb.status = 'completed'
                     AND gb.condition_id != ga.condition_id
+                    AND ga.replicate_index = gb.replicate_index
                 JOIN apex_audition.conditions ca ON ca.id = ga.condition_id
                 JOIN apex_audition.conditions cb ON cb.id = gb.condition_id
                 LEFT JOIN apex_audition.comparisons c ON c.prompt_id = p.id
