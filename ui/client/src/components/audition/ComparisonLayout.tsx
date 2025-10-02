@@ -13,19 +13,25 @@ interface ComparisonLayoutProps {
   comparison: ComparisonQueueItem;
   evaluator: string;
   onComplete?: () => void;
+  onSkip?: () => void;
 }
 
 export function ComparisonLayout({
   comparison,
   evaluator,
-  onComplete
+  onComplete,
+  onSkip
 }: ComparisonLayoutProps) {
   const [highlightedPane, setHighlightedPane] = useState<'A' | 'B' | null>(null);
   const [pendingNote, setPendingNote] = useState<string>('');
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
 
-  const handleJudgment = async (winnerConditionId: number | null, skipNote = false) => {
+  const handleJudgment = async (winnerConditionId: number | null) => {
+    if (isRecording) {
+      return;
+    }
+
     try {
       // Highlight the winning pane briefly
       if (winnerConditionId === comparison.condition_a.id) {
@@ -40,7 +46,7 @@ export function ComparisonLayout({
         condition_b_id: comparison.condition_b.id,
         winner_condition_id: winnerConditionId,
         evaluator,
-        notes: skipNote ? undefined : (pendingNote || undefined),
+        notes: pendingNote || undefined,
       });
 
       // Clear note after successful judgment
@@ -66,6 +72,20 @@ export function ComparisonLayout({
       });
       setHighlightedPane(null);
     }
+  };
+
+  const handleSkip = () => {
+    if (isRecording) {
+      return;
+    }
+
+    setPendingNote('');
+    setHighlightedPane(null);
+    toast({
+      title: 'Comparison skipped',
+      description: 'No judgment recorded. Fetching the next pair.',
+    });
+    onSkip?.();
   };
 
   return (
@@ -106,7 +126,7 @@ export function ComparisonLayout({
         onChooseA={() => handleJudgment(comparison.condition_a.id)}
         onChooseB={() => handleJudgment(comparison.condition_b.id)}
         onTie={() => handleJudgment(null)}
-        onSkip={() => handleJudgment(null, true)} // Skip without note
+        onSkip={handleSkip}
         onNote={(note) => setPendingNote(note)}
         disabled={isRecording}
       />
