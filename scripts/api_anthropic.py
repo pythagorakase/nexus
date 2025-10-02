@@ -556,30 +556,44 @@ class AnthropicProvider(LLMProvider):
 
         # Check if prompt contains section markers
         if "=== RECENT STORYTELLER CONTEXT ===" in prompt:
-            # Split into sections
+            # Split into sections while preserving headers so the model
+            # continues to receive structural markers (=== SECTION NAME ===)
             sections = []
-            current_section = []
-            current_name = None
+            current_section: List[str] = []
+            current_name: Optional[str] = None
+            current_header: Optional[str] = None
 
             for line in prompt.split('\n'):
                 if line.startswith('===') and line.endswith('==='):
                     if current_section:
-                        sections.append((current_name, '\n'.join(current_section)))
+                        sections.append((
+                            current_name,
+                            current_header,
+                            '\n'.join(current_section).rstrip('\n'),
+                        ))
                     current_name = line.strip('= ')
+                    current_header = line
                     current_section = []
                 else:
                     current_section.append(line)
 
             if current_section:
-                sections.append((current_name, '\n'.join(current_section)))
+                sections.append((
+                    current_name,
+                    current_header,
+                    '\n'.join(current_section).rstrip('\n'),
+                ))
 
             # Add sections as content blocks, marking large ones for caching
-            for section_name, section_text in sections:
-                block = {"type": "text", "text": section_text}
+            for section_name, header_line, section_body in sections:
+                # Re-attach the header marker so downstream formatting remains intact
+                section_parts = [part for part in [header_line, section_body] if part]
+                block_text = "\n".join(section_parts)
+                block = {"type": "text", "text": block_text}
 
                 # Mark large sections for caching (those over 1024 tokens estimated)
                 # Anthropic caches minimum 1024 tokens, max 4 cache breakpoints
-                estimated_tokens = len(section_text) // 4  # Rough estimate
+                estimated_tokens = len(block_text) // 4  # Rough estimate
 
                 if estimated_tokens > 1024 and section_name in [
                     "RECENT STORYTELLER CONTEXT",
