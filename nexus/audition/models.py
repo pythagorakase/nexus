@@ -96,7 +96,6 @@ class GenerationResult:
     response_payload: Optional[Dict[str, Any]] = None
     input_tokens: int = 0
     output_tokens: int = 0
-    cost_usd: float = 0.0
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

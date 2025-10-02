@@ -134,7 +134,6 @@ def get_next_comparison(
                     ga.response_payload AS generation_a_response_payload,
                     ga.input_tokens AS generation_a_input_tokens,
                     ga.output_tokens AS generation_a_output_tokens,
-                    ga.cost_usd AS generation_a_cost_usd,
                     ga.completed_at AS generation_a_completed_at,
                     gb.id AS generation_b_id,
                     gb.condition_id AS generation_b_condition_id,
@@ -144,7 +143,6 @@ def get_next_comparison(
                     gb.response_payload AS generation_b_response_payload,
                     gb.input_tokens AS generation_b_input_tokens,
                     gb.output_tokens AS generation_b_output_tokens,
-                    gb.cost_usd AS generation_b_cost_usd,
                     gb.completed_at AS generation_b_completed_at
                 FROM apex_audition.prompts p
                 JOIN apex_audition.generations ga ON ga.prompt_id = p.id
@@ -206,7 +204,6 @@ def get_next_comparison(
                 response_payload=row["generation_a_response_payload"],
                 input_tokens=row.get("generation_a_input_tokens"),
                 output_tokens=row.get("generation_a_output_tokens"),
-                cost_usd=row.get("generation_a_cost_usd"),
                 completed_at=row.get("generation_a_completed_at"),
             )
 
@@ -219,7 +216,6 @@ def get_next_comparison(
                 response_payload=row["generation_b_response_payload"],
                 input_tokens=row.get("generation_b_input_tokens"),
                 output_tokens=row.get("generation_b_output_tokens"),
-                cost_usd=row.get("generation_b_cost_usd"),
                 completed_at=row.get("generation_b_completed_at"),
             )
 

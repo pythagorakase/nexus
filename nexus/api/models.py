@@ -32,7 +32,6 @@ class Generation(BaseModel):
     response_payload: Optional[Dict[str, Any]] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
-    cost_usd: Optional[float] = None
     completed_at: Optional[datetime] = None
 
 
