@@ -122,6 +122,8 @@ class AuditionEngine:
         run_label: Optional[str] = None,
         created_by: Optional[str] = None,
         notes: Optional[str] = None,
+        enable_cache: bool = True,
+        use_rate_limiting: bool = True,
     ) -> GenerationRun:
         if replicate_count < 1:
             raise ValueError("replicate_count must be >= 1")
@@ -149,21 +151,35 @@ class AuditionEngine:
         run = self.repository.create_generation_run(run)
 
         provider = None
+        orchestrator = None
+
         if not dry_run:
-            provider = self._build_provider(condition)
+            provider = self._build_provider(condition, enable_cache=enable_cache)
+            if use_rate_limiting:
+                from .batch_orchestrator import BatchOrchestrator
+                orchestrator = BatchOrchestrator()
 
         LOGGER.info(
-            "Starting audition run %s with condition %s over %s prompts (replicates=%s, dry_run=%s)",
+            "Starting audition run %s with condition %s over %s prompts (replicates=%s, dry_run=%s, cache=%s)",
             run.run_id,
             condition.slug,
             len(prompts),
             replicate_count,
             dry_run,
+            enable_cache,
         )
 
+        # Process contexts sequentially to maximize cache hits
         for prompt in prompts:
             if prompt.id is None:
                 raise ValueError(f"Prompt {prompt.chunk_id} has no database identifier; re-ingest contexts before running.")
+
+            LOGGER.info(f"Processing prompt {prompt.id} (chunk {prompt.chunk_id})")
+
+            # For Anthropic with caching: warm cache first, then burst
+            is_anthropic = condition.provider.lower() == "anthropic"
+            first_request_sent = False
+
             for replicate_index in range(replicate_count):
                 prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
                 result = GenerationResult(
@@ -182,13 +198,48 @@ class AuditionEngine:
                     result.completed_at = result.started_at
                 else:
                     try:
-                        llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+                        # Rate limiting
+                        if orchestrator:
+                            estimated_tokens = len(prompt_text) // 4  # Rough estimate
+                            orchestrator.wait_if_needed(
+                                provider=condition.provider,
+                                model=condition.model,
+                                estimated_tokens=estimated_tokens
+                            )
+
+                        # Get completion with caching
+                        if enable_cache and is_anthropic:
+                            # First request warms cache, subsequent hit cache
+                            llm_response = provider.get_completion(prompt_text, enable_cache=True)  # type: ignore[union-attr]
+                            if not first_request_sent and orchestrator:
+                                orchestrator.mark_cache_warm(condition.provider, prompt.id)  # type: ignore[arg-type]
+                                first_request_sent = True
+                        elif enable_cache and condition.provider.lower() == "openai":
+                            # OpenAI has automatic caching, just enable it
+                            llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+                        else:
+                            llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+
                         result.status = "completed"
                         result.response_payload = self._serialize_response(llm_response)
                         result.input_tokens = getattr(llm_response, "input_tokens", 0) or 0
                         result.output_tokens = getattr(llm_response, "output_tokens", 0) or 0
-                        result.cost_usd = self._estimate_cost(provider, result.input_tokens, result.output_tokens)
+                        result.cache_hit = getattr(llm_response, "cache_hit", False)
+                        result.cost_usd = self._estimate_cost(
+                            provider,
+                            result.input_tokens,
+                            result.output_tokens,
+                            cache_creation_tokens=getattr(llm_response, "cache_creation_tokens", 0),
+                            cache_read_tokens=getattr(llm_response, "cache_read_tokens", 0)
+                        )
                         result.completed_at = datetime.now(timezone.utc)
+
+                        if result.cache_hit:
+                            LOGGER.info(
+                                f"Cache HIT for prompt {prompt.id} replicate {replicate_index} "
+                                f"(saved {getattr(llm_response, 'cache_read_tokens', 0)} tokens)"
+                            )
+
                     except Exception as exc:  # pragma: no cover - defensive
                         LOGGER.error("Generation failed for prompt %s replicate %s: %s", prompt.id, replicate_index, exc)
                         result.status = "error"
@@ -207,7 +258,7 @@ class AuditionEngine:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
-    def _build_provider(self, condition: ConditionSpec):
+    def _build_provider(self, condition: ConditionSpec, enable_cache: bool = False):
         params = dict(condition.parameters)
         temperature = params.get("temperature", 0.7)
         max_tokens = params.get("max_output_tokens", params.get("max_tokens", 2048))
@@ -389,13 +440,44 @@ class AuditionEngine:
         return payload
 
     @staticmethod
-    def _estimate_cost(provider, input_tokens: int, output_tokens: int) -> float:
+    def _estimate_cost(
+        provider,
+        input_tokens: int,
+        output_tokens: int,
+        cache_creation_tokens: int = 0,
+        cache_read_tokens: int = 0
+    ) -> float:
+        """
+        Estimate cost with prompt caching discounts.
+
+        Args:
+            provider: LLM provider instance
+            input_tokens: Regular input tokens
+            output_tokens: Output tokens
+            cache_creation_tokens: Tokens written to cache (Anthropic)
+            cache_read_tokens: Tokens read from cache (Anthropic)
+
+        Returns:
+            Estimated cost in USD
+        """
         try:
             input_rate = provider.get_input_token_cost()
             output_rate = provider.get_output_token_cost()
         except Exception:  # pragma: no cover - some providers might not implement
             return 0.0
-        return (input_tokens / 1_000_000) * input_rate + (output_tokens / 1_000_000) * output_rate
+
+        # Base cost
+        cost = (input_tokens / 1_000_000) * input_rate + (output_tokens / 1_000_000) * output_rate
+
+        # Add cache costs (Anthropic)
+        # Cache creation: same as input rate
+        # Cache read: 10% of input rate (90% discount)
+        if cache_creation_tokens > 0:
+            cost += (cache_creation_tokens / 1_000_000) * input_rate
+        if cache_read_tokens > 0:
+            cost += (cache_read_tokens / 1_000_000) * (input_rate * 0.1)
+
+        return cost
 
 
 __all__ = ["AuditionEngine"]
