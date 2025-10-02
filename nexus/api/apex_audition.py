@@ -8,20 +8,24 @@ Provides REST API endpoints for:
 - Viewing leaderboards
 - Exporting comparisons
 """
+import random
+from typing import List, Optional
+
+import psycopg2
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-import psycopg2
 from psycopg2.extras import RealDictCursor
-from uuid import UUID
-from datetime import datetime
 
 from nexus.api.models import (
-    Condition, Generation, Prompt, Comparison, ComparisonCreate,
-    ELORating, ComparisonQueue, ComparisonQueueItem, GenerationRun
+    Condition,
+    ComparisonCreate,
+    ELORating,
+    Generation,
+    GenerationRun,
+    Prompt,
+    ComparisonQueueItem,
 )
 from nexus.audition.elo import calculate_elo_update, outcome_from_winner
-from nexus.audition.comparisons import generate_round_robin_pairs, filter_already_judged
 
 # Database connection parameters
 DB_PARAMS = {
@@ -104,17 +108,52 @@ async def get_next_comparison(
 
             query = f"""
                 SELECT
-                    p.*,
-                    ca.*,
-                    cb.*,
-                    ga.*,
-                    gb.*
+                    p.id AS prompt_id,
+                    p.chunk_id AS prompt_chunk_id,
+                    p.category AS prompt_category,
+                    p.label AS prompt_label,
+                    p.context AS prompt_context,
+                    p.metadata AS prompt_metadata,
+                    ca.id AS condition_a_id,
+                    ca.slug AS condition_a_slug,
+                    ca.provider AS condition_a_provider,
+                    ca.model_name AS condition_a_model_name,
+                    ca.parameters AS condition_a_parameters,
+                    ca.is_active AS condition_a_is_active,
+                    cb.id AS condition_b_id,
+                    cb.slug AS condition_b_slug,
+                    cb.provider AS condition_b_provider,
+                    cb.model_name AS condition_b_model_name,
+                    cb.parameters AS condition_b_parameters,
+                    cb.is_active AS condition_b_is_active,
+                    ga.id AS generation_a_id,
+                    ga.condition_id AS generation_a_condition_id,
+                    ga.prompt_id AS generation_a_prompt_id,
+                    ga.replicate_index AS generation_a_replicate_index,
+                    ga.status AS generation_a_status,
+                    ga.response_payload AS generation_a_response_payload,
+                    ga.input_tokens AS generation_a_input_tokens,
+                    ga.output_tokens AS generation_a_output_tokens,
+                    ga.cost_usd AS generation_a_cost_usd,
+                    ga.completed_at AS generation_a_completed_at,
+                    gb.id AS generation_b_id,
+                    gb.condition_id AS generation_b_condition_id,
+                    gb.prompt_id AS generation_b_prompt_id,
+                    gb.replicate_index AS generation_b_replicate_index,
+                    gb.status AS generation_b_status,
+                    gb.response_payload AS generation_b_response_payload,
+                    gb.input_tokens AS generation_b_input_tokens,
+                    gb.output_tokens AS generation_b_output_tokens,
+                    gb.cost_usd AS generation_b_cost_usd,
+                    gb.completed_at AS generation_b_completed_at
                 FROM apex_audition.prompts p
                 JOIN apex_audition.generations ga ON ga.prompt_id = p.id
                     AND ga.status = 'completed'
                 JOIN apex_audition.generations gb ON gb.prompt_id = p.id
                     AND gb.status = 'completed'
                     AND gb.condition_id != ga.condition_id
+                    AND ga.replicate_index = gb.replicate_index
+                    AND ga.id < gb.id
                 JOIN apex_audition.conditions ca ON ca.id = ga.condition_id
                 JOIN apex_audition.conditions cb ON cb.id = gb.condition_id
                 LEFT JOIN apex_audition.comparisons c ON c.prompt_id = p.id
@@ -131,57 +170,69 @@ async def get_next_comparison(
             if not row:
                 return None
 
-            # Parse row into structured response
-            # This is simplified - in production, you'd properly parse all fields
+            prompt = Prompt(
+                id=row["prompt_id"],
+                chunk_id=row["prompt_chunk_id"],
+                category=row.get("prompt_category"),
+                label=row.get("prompt_label"),
+                context=row["prompt_context"],
+                metadata=row["prompt_metadata"] or {},
+            )
+
+            condition_a = Condition(
+                id=row["condition_a_id"],
+                slug=row["condition_a_slug"],
+                provider=row["condition_a_provider"],
+                model_name=row["condition_a_model_name"],
+                parameters=row["condition_a_parameters"] or {},
+                is_active=row["condition_a_is_active"],
+            )
+
+            condition_b = Condition(
+                id=row["condition_b_id"],
+                slug=row["condition_b_slug"],
+                provider=row["condition_b_provider"],
+                model_name=row["condition_b_model_name"],
+                parameters=row["condition_b_parameters"] or {},
+                is_active=row["condition_b_is_active"],
+            )
+
+            generation_a = Generation(
+                id=row["generation_a_id"],
+                condition_id=row["generation_a_condition_id"],
+                prompt_id=row["generation_a_prompt_id"],
+                replicate_index=row["generation_a_replicate_index"],
+                status=row["generation_a_status"],
+                response_payload=row["generation_a_response_payload"],
+                input_tokens=row.get("generation_a_input_tokens"),
+                output_tokens=row.get("generation_a_output_tokens"),
+                cost_usd=row.get("generation_a_cost_usd"),
+                completed_at=row.get("generation_a_completed_at"),
+            )
+
+            generation_b = Generation(
+                id=row["generation_b_id"],
+                condition_id=row["generation_b_condition_id"],
+                prompt_id=row["generation_b_prompt_id"],
+                replicate_index=row["generation_b_replicate_index"],
+                status=row["generation_b_status"],
+                response_payload=row["generation_b_response_payload"],
+                input_tokens=row.get("generation_b_input_tokens"),
+                output_tokens=row.get("generation_b_output_tokens"),
+                cost_usd=row.get("generation_b_cost_usd"),
+                completed_at=row.get("generation_b_completed_at"),
+            )
+
+            if random.random() < 0.5:
+                condition_a, condition_b = condition_b, condition_a
+                generation_a, generation_b = generation_b, generation_a
+
             return ComparisonQueueItem(
-                prompt=Prompt(
-                    id=row['id'],
-                    chunk_id=row['chunk_id'],
-                    category=row.get('category'),
-                    label=row.get('label'),
-                    context=row['context'],
-                    metadata=row['metadata']
-                ),
-                condition_a=Condition(
-                    id=row['ca.id'],
-                    slug=row['ca.slug'],
-                    provider=row['ca.provider'],
-                    model_name=row['ca.model_name'],
-                    parameters=row['ca.parameters'],
-                    is_active=row['ca.is_active']
-                ),
-                condition_b=Condition(
-                    id=row['cb.id'],
-                    slug=row['cb.slug'],
-                    provider=row['cb.provider'],
-                    model_name=row['cb.model_name'],
-                    parameters=row['cb.parameters'],
-                    is_active=row['cb.is_active']
-                ),
-                generation_a=Generation(
-                    id=row['ga.id'],
-                    condition_id=row['ga.condition_id'],
-                    prompt_id=row['ga.prompt_id'],
-                    replicate_index=row['ga.replicate_index'],
-                    status=row['ga.status'],
-                    response_payload=row['ga.response_payload'],
-                    input_tokens=row.get('ga.input_tokens'),
-                    output_tokens=row.get('ga.output_tokens'),
-                    cost_usd=row.get('ga.cost_usd'),
-                    completed_at=row.get('ga.completed_at')
-                ),
-                generation_b=Generation(
-                    id=row['gb.id'],
-                    condition_id=row['gb.condition_id'],
-                    prompt_id=row['gb.prompt_id'],
-                    replicate_index=row['gb.replicate_index'],
-                    status=row['gb.status'],
-                    response_payload=row['gb.response_payload'],
-                    input_tokens=row.get('gb.input_tokens'),
-                    output_tokens=row.get('gb.output_tokens'),
-                    cost_usd=row.get('gb.cost_usd'),
-                    completed_at=row.get('gb.completed_at')
-                )
+                prompt=prompt,
+                condition_a=condition_a,
+                condition_b=condition_b,
+                generation_a=generation_a,
+                generation_b=generation_b,
             )
 
 
