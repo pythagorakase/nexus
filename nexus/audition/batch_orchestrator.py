@@ -224,24 +224,26 @@ class BatchOrchestrator:
 
     def get_tracker(self, provider: str, model: str) -> SlidingWindowTracker:
         """Get or create a rate limit tracker for a provider/model."""
-        key = f"{provider}:{model}"
+        key = f"{provider.lower()}:{model.lower()}"
         if key not in self.trackers:
             self.trackers[key] = SlidingWindowTracker(window_seconds=60)
         return self.trackers[key]
 
     def get_limits(self, provider: str, model: str) -> RateLimits:
         """Get rate limits for a provider/model combination."""
-        key = f"{provider}:{model}"
+        provider_key = provider.lower()
+        model_key = model.lower()
+        key = f"{provider_key}:{model_key}"
         limits = self.limits.get(key)
         if not limits:
             # Try just provider
             for k, v in self.limits.items():
-                if k.startswith(provider.lower()):
+                if k.startswith(provider_key):
                     limits = v
                     break
 
         if not limits:
-            LOGGER.warning(f"No limits found for {key}, using conservative defaults")
+            LOGGER.warning(f"No limits found for {provider}:{model}, using conservative defaults")
             limits = RateLimits(100_000, 100)  # Very conservative
 
         return limits
