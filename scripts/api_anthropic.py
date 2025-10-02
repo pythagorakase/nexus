@@ -575,11 +575,21 @@ class AnthropicProvider(LLMProvider):
 
             # Add sections as content blocks, marking large ones for caching
             for section_name, section_text in sections:
-                block = {"type": "text", "text": section_text}
+                # Preserve section headers in cached blocks
+                header = f"=== {section_name} ===" if section_name else ""
+                if header and section_text:
+                    block_text = f"{header}\n{section_text}"
+                elif header:
+                    block_text = header
+                else:
+                    block_text = section_text
+
+                block = {"type": "text", "text": block_text}
 
                 # Mark large sections for caching (those over 1024 tokens estimated)
                 # Anthropic caches minimum 1024 tokens, max 4 cache breakpoints
-                estimated_tokens = len(section_text) // 4  # Rough estimate
+                # Use full block text (including header) for token estimation
+                estimated_tokens = len(block_text) // 4  # Rough estimate
 
                 if estimated_tokens > 1024 and section_name in [
                     "RECENT STORYTELLER CONTEXT",
