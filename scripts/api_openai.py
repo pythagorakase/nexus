@@ -111,22 +111,31 @@ except Exception as e:
 
 class LLMResponse:
     """Standardized response object from any LLM provider."""
-    
-    def __init__(self, 
-                content: str, 
-                input_tokens: int, 
+
+    def __init__(self,
+                content: str,
+                input_tokens: int,
                 output_tokens: int,
                 model: str,
-                raw_response: Any = None):
+                raw_response: Any = None,
+                cache_creation_tokens: int = 0,
+                cache_read_tokens: int = 0):
         self.content = content
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.model = model
         self.raw_response = raw_response
-        
+        self.cache_creation_tokens = cache_creation_tokens
+        self.cache_read_tokens = cache_read_tokens
+
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
+
+    @property
+    def cache_hit(self) -> bool:
+        """True if this request benefited from prompt caching."""
+        return self.cache_read_tokens > 0
 
 
 def get_token_count(text: str, model: str) -> int:
