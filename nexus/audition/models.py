@@ -100,6 +100,8 @@ class GenerationResult:
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    batch_job_id: Optional[str] = None
+    cache_hit: bool = False
     id: Optional[int] = None
 
 

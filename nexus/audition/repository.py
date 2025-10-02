@@ -132,6 +132,8 @@ class AuditionRepository:
             Column("error_message", Text),
             Column("started_at", DateTime(timezone=True)),
             Column("completed_at", DateTime(timezone=True)),
+            Column("batch_job_id", Text),
+            Column("cache_hit", Boolean, nullable=False, server_default=text("false")),
             Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
         )
 
@@ -398,6 +400,8 @@ class AuditionRepository:
                 error_message=result.error_message,
                 started_at=result.started_at,
                 completed_at=result.completed_at,
+                batch_job_id=result.batch_job_id,
+                cache_hit=result.cache_hit,
             )
             .returning(self.generations.c.id)
         )
@@ -428,6 +432,8 @@ class AuditionRepository:
                     error_message=row["error_message"],
                     started_at=row["started_at"],
                     completed_at=row["completed_at"],
+                    batch_job_id=row.get("batch_job_id"),
+                    cache_hit=row.get("cache_hit", False),
                     id=row["id"],
                 )
             )
