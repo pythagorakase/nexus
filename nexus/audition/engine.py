@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
@@ -124,6 +125,7 @@ class AuditionEngine:
         notes: Optional[str] = None,
         enable_cache: bool = True,
         use_rate_limiting: bool = True,
+        max_retries: int = 3,
     ) -> GenerationRun:
         if replicate_count < 1:
             raise ValueError("replicate_count must be >= 1")
@@ -197,47 +199,66 @@ class AuditionEngine:
                     result.status = "dry_run"
                     result.completed_at = result.started_at
                 else:
-                    try:
-                        # Rate limiting
-                        if orchestrator:
-                            estimated_tokens = len(prompt_text) // 4  # Rough estimate
-                            orchestrator.wait_if_needed(
-                                provider=condition.provider,
-                                model=condition.model,
-                                estimated_tokens=estimated_tokens
-                            )
+                    # Retry logic with exponential backoff
+                    last_error = None
+                    for attempt in range(max_retries):
+                        try:
+                            # Rate limiting
+                            if orchestrator:
+                                estimated_tokens = len(prompt_text) // 4  # Rough estimate
+                                orchestrator.wait_if_needed(
+                                    provider=condition.provider,
+                                    model=condition.model,
+                                    estimated_tokens=estimated_tokens
+                                )
 
-                        # Get completion with caching
-                        if enable_cache and is_anthropic:
-                            # First request warms cache, subsequent hit cache
-                            llm_response = provider.get_completion(prompt_text, enable_cache=True)  # type: ignore[union-attr]
-                            if not first_request_sent and orchestrator:
-                                orchestrator.mark_cache_warm(condition.provider, prompt.id)  # type: ignore[arg-type]
-                                first_request_sent = True
-                        elif enable_cache and condition.provider.lower() == "openai":
-                            # OpenAI has automatic caching, just enable it
-                            llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
-                        else:
-                            llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+                            # Get completion with caching
+                            if enable_cache and is_anthropic:
+                                # First request warms cache, subsequent hit cache
+                                llm_response = provider.get_completion(prompt_text, enable_cache=True)  # type: ignore[union-attr]
+                                if not first_request_sent and orchestrator:
+                                    orchestrator.mark_cache_warm(condition.provider, prompt.id)  # type: ignore[arg-type]
+                                    first_request_sent = True
+                            elif enable_cache and condition.provider.lower() == "openai":
+                                # OpenAI has automatic caching, just enable it
+                                llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+                            else:
+                                llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
 
-                        result.status = "completed"
-                        result.response_payload = self._serialize_response(llm_response)
-                        result.input_tokens = getattr(llm_response, "input_tokens", 0) or 0
-                        result.output_tokens = getattr(llm_response, "output_tokens", 0) or 0
-                        result.cache_hit = getattr(llm_response, "cache_hit", False)
-                        result.completed_at = datetime.now(timezone.utc)
+                            # Success - record result
+                            result.status = "completed"
+                            result.response_payload = self._serialize_response(llm_response)
+                            result.input_tokens = getattr(llm_response, "input_tokens", 0) or 0
+                            result.output_tokens = getattr(llm_response, "output_tokens", 0) or 0
+                            result.cache_hit = getattr(llm_response, "cache_hit", False)
+                            result.completed_at = datetime.now(timezone.utc)
 
-                        if result.cache_hit:
-                            LOGGER.info(
-                                f"Cache HIT for prompt {prompt.id} replicate {replicate_index} "
-                                f"(saved {getattr(llm_response, 'cache_read_tokens', 0)} tokens)"
-                            )
+                            if result.cache_hit:
+                                LOGGER.info(
+                                    f"Cache HIT for prompt {prompt.id} replicate {replicate_index} "
+                                    f"(saved {getattr(llm_response, 'cache_read_tokens', 0)} tokens)"
+                                )
+                            break  # Success, exit retry loop
 
-                    except Exception as exc:  # pragma: no cover - defensive
-                        LOGGER.error("Generation failed for prompt %s replicate %s: %s", prompt.id, replicate_index, exc)
-                        result.status = "error"
-                        result.error_message = str(exc)
-                        result.completed_at = datetime.now(timezone.utc)
+                        except Exception as exc:  # pragma: no cover - defensive
+                            last_error = exc
+                            if attempt < max_retries - 1:
+                                # Exponential backoff: 2^attempt seconds (1s, 2s, 4s...)
+                                wait_time = 2 ** attempt
+                                LOGGER.warning(
+                                    f"Generation failed for prompt {prompt.id} replicate {replicate_index} "
+                                    f"(attempt {attempt + 1}/{max_retries}): {exc}. Retrying in {wait_time}s..."
+                                )
+                                time.sleep(wait_time)
+                            else:
+                                # Final attempt failed
+                                LOGGER.error(
+                                    f"Generation failed for prompt {prompt.id} replicate {replicate_index} "
+                                    f"after {max_retries} attempts: {exc}"
+                                )
+                                result.status = "error"
+                                result.error_message = str(exc)
+                                result.completed_at = datetime.now(timezone.utc)
 
                 self.repository.record_generation(result)
 
