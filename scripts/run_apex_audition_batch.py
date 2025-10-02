@@ -33,6 +33,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--created-by", help="Audit field for run creator")
     parser.add_argument("--notes", help="Optional notes stored with the batch")
     parser.add_argument("--register-only", action="store_true", help="Register the condition and exit")
+    parser.add_argument("--no-cache", action="store_true", help="Disable prompt caching")
+    parser.add_argument("--no-rate-limiting", action="store_true", help="Disable rate limit enforcement")
+    parser.add_argument("--verify-first", action="store_true", help="Send single test request before full batch")
     parser.add_argument("--log-level", default="INFO", help="Python logging level (default INFO)")
     return parser.parse_args()
 
@@ -88,15 +91,71 @@ def main() -> None:
         LOGGER.info("Condition registration complete; exiting")
         return
 
+    # Verification mode: send single test request
+    if args.verify_first and not args.dry_run:
+        LOGGER.info("=== VERIFICATION MODE ===")
+        LOGGER.info("Sending single test request to verify setup...")
+
+        verify_run = engine.run_generation_batch(
+            condition_slug=args.condition_slug,
+            limit=1,
+            replicate_count=1,
+            dry_run=False,
+            enable_cache=not args.no_cache,
+            use_rate_limiting=not args.no_rate_limiting,
+            created_by=args.created_by,
+            notes=f"[VERIFICATION] {args.notes or ''}",
+        )
+
+        # Check if verification succeeded
+        results = engine.repository.list_generations_for_run(verify_run.run_id)
+        if not results:
+            LOGGER.error("Verification failed: no results recorded")
+            return
+
+        result = results[0]
+        if result.status != "completed":
+            LOGGER.error(f"Verification failed: status={result.status}, error={result.error_message}")
+            return
+
+        LOGGER.info("✓ Verification successful!")
+        LOGGER.info(f"  Input tokens: {result.input_tokens}")
+        LOGGER.info(f"  Output tokens: {result.output_tokens}")
+        LOGGER.info(f"  Cache hit: {result.cache_hit}")
+        LOGGER.info(f"  Cost: ${result.cost_usd:.6f}")
+
+        proceed = input("\nVerification passed. Proceed with full batch? [y/N]: ")
+        if proceed.lower() != 'y':
+            LOGGER.info("Batch cancelled by user")
+            return
+
+    # Run full batch
     run = engine.run_generation_batch(
         condition_slug=args.condition_slug,
         limit=args.limit,
         replicate_count=args.replicates,
         dry_run=args.dry_run,
+        enable_cache=not args.no_cache,
+        use_rate_limiting=not args.no_rate_limiting,
         created_by=args.created_by,
         notes=args.notes,
     )
     LOGGER.info("Run complete: %s", run.run_id)
+
+    # Summary statistics
+    if not args.dry_run:
+        results = engine.repository.list_generations_for_run(run.run_id)
+        total_cost = sum(r.cost_usd for r in results)
+        cache_hits = sum(1 for r in results if r.cache_hit)
+        total_input = sum(r.input_tokens for r in results)
+        total_output = sum(r.output_tokens for r in results)
+
+        LOGGER.info("=== BATCH SUMMARY ===")
+        LOGGER.info(f"Total generations: {len(results)}")
+        LOGGER.info(f"Cache hits: {cache_hits}/{len(results)} ({100 * cache_hits / len(results):.1f}%)")
+        LOGGER.info(f"Total input tokens: {total_input:,}")
+        LOGGER.info(f"Total output tokens: {total_output:,}")
+        LOGGER.info(f"Total cost: ${total_cost:.4f}")
 
 
 if __name__ == "__main__":
