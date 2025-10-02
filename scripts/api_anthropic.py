@@ -198,17 +198,7 @@ class LLMProvider(abc.ABC):
     def get_completion(self, prompt: str) -> LLMResponse:
         """Get a completion from the LLM."""
         pass
-    
-    @abc.abstractmethod
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        pass
-        
-    @abc.abstractmethod
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        pass
-        
+
     def count_tokens(self, text: str) -> int:
         """Count tokens for the provider's model."""
         return get_token_count(text, self.model)
@@ -258,18 +248,7 @@ class AnthropicProvider(LLMProvider):
     
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-haiku-20240307"
-    
-    # Model pricing (per 1M tokens as of April 2025)
-    MODEL_PRICING = {
-        "claude-3-opus-20240229": {"input": 15.0, "output": 75.0},
-        "claude-3-5-sonnet-20240624": {"input": 3.0, "output": 15.0},
-        "claude-3-sonnet-20240229": {"input": 3.0, "output": 15.0},
-        "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
-        "claude-2.1": {"input": 8.0, "output": 24.0},
-        "claude-2.0": {"input": 8.0, "output": 24.0},
-        "claude-instant-1.2": {"input": 0.8, "output": 2.4}
-    }
-    
+
     def __init__(self, 
                 api_key: Optional[str] = None, 
                 model: Optional[str] = None,
@@ -527,16 +506,6 @@ class AnthropicProvider(LLMProvider):
             # Fall back to base implementation if Anthropic's counter fails
             logger.warning(f"Error using Anthropic token counter: {str(e)}. Falling back to approximation.")
             return super().count_tokens(text)
-    
-    def get_input_token_cost(self) -> float:
-        """Get the cost per token for this model's input."""
-        model_info = self.MODEL_PRICING.get(self.model, {"input": 3.0})  # Default to Claude 3 Sonnet pricing
-        return model_info["input"] / 1_000_000  # Convert to cost per token
-        
-    def get_output_token_cost(self) -> float:
-        """Get the cost per token for this model's output."""
-        model_info = self.MODEL_PRICING.get(self.model, {"output": 15.0})  # Default to Claude 3 Sonnet pricing
-        return model_info["output"] / 1_000_000  # Convert to cost per token
 
     def _format_system_with_cache(self) -> List[Dict[str, Any]]:
         """

@@ -202,17 +202,7 @@ class LLMProvider(abc.ABC):
     def get_completion(self, prompt: str) -> LLMResponse:
         """Get a completion from the LLM."""
         pass
-    
-    @abc.abstractmethod
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        pass
-        
-    @abc.abstractmethod
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        pass
-        
+
     def count_tokens(self, text: str) -> int:
         """Count tokens for the provider's model."""
         return get_token_count(text, self.model)
@@ -265,20 +255,7 @@ class OpenAIProvider(LLMProvider):
     
     # Valid reasoning effort levels
     VALID_REASONING_EFFORTS = ["low", "medium", "high", None]
-    
-    # Model pricing (per 1M tokens as of April 2025)
-    MODEL_PRICING = {
-        "gpt-4o": {"input": 5.0, "output": 15.0},
-        "gpt-4o-mini": {"input": 0.15, "output": 0.6},
-        "o3": {"input": 5.0, "output": 15.0},  # o3/o3-mini are aliased to 4o for pricing
-        "o3-mini": {"input": 0.15, "output": 0.6},
-        "o4": {"input": 5.0, "output": 15.0},
-        "o4-mini": {"input": 0.15, "output": 0.6},
-        "gpt-4-turbo": {"input": 10.0, "output": 30.0},
-        "gpt-4": {"input": 30.0, "output": 60.0},
-        "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
-    }
-    
+
     def __init__(self, 
                 api_key: Optional[str] = None, 
                 model: Optional[str] = None,
@@ -534,17 +511,7 @@ class OpenAIProvider(LLMProvider):
             model=self.model,
             raw_response=response
         )
-    
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"input": 5.0})  # Default to GPT-4o pricing
-        return model_info["input"] / 1_000_000  # Convert to cost per token
-        
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"output": 15.0})  # Default to GPT-4o pricing
-        return model_info["output"] / 1_000_000  # Convert to cost per token
-    
+
     def _get_api_key(self) -> str:
         """Get OpenAI API key from 1Password CLI."""
         import subprocess
