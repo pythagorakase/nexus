@@ -361,24 +361,24 @@ class AnthropicProvider(LLMProvider):
         except Exception as e:
             # Handle API errors
             logger.error(f"Error calling Anthropic API: {str(e)}")
-            
+
             # Check for rate limit errors
             if hasattr(e, "status_code") and e.status_code == 429:
                 # Get retry information if available
                 retry_after = None
                 if hasattr(e, "response") and hasattr(e.response, "headers"):
                     retry_after = e.response.headers.get("retry-after")
-                
+
                 logger.warning(f"Rate limit exceeded. Retry after: {retry_after or 'unknown'}")
-                
+
                 # Implement exponential backoff retry
                 retry_wait = int(retry_after) if retry_after and retry_after.isdigit() else COOLDOWNS["rate_limit"]
                 logger.info(f"Waiting {retry_wait} seconds before retrying...")
                 time.sleep(retry_wait)
-                
-                # Retry the request
-                return self.get_completion(prompt)
-            
+
+                # Retry the request with the same caching configuration
+                return self.get_completion(prompt, enable_cache=enable_cache)
+
             # Re-raise other exceptions
             raise
     
@@ -558,15 +558,18 @@ class AnthropicProvider(LLMProvider):
         if "=== RECENT STORYTELLER CONTEXT ===" in prompt:
             # Split into sections
             sections = []
-            current_section = []
-            current_name = None
+            current_section: List[str] = []
+            current_name: Optional[str] = None
 
             for line in prompt.split('\n'):
-                if line.startswith('===') and line.endswith('==='):
+                is_header = line.startswith('===') and line.endswith('===')
+                if is_header:
                     if current_section:
                         sections.append((current_name, '\n'.join(current_section)))
-                    current_name = line.strip('= ')
-                    current_section = []
+                    current_name = line.strip('= ').strip()
+                    # Start a new section including the header line itself so
+                    # downstream consumers still receive the original prompt
+                    current_section = [line]
                 else:
                     current_section.append(line)
 
