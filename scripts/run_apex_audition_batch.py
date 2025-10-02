@@ -122,7 +122,6 @@ def main() -> None:
         LOGGER.info(f"  Input tokens: {result.input_tokens}")
         LOGGER.info(f"  Output tokens: {result.output_tokens}")
         LOGGER.info(f"  Cache hit: {result.cache_hit}")
-        LOGGER.info(f"  Cost: ${result.cost_usd:.6f}")
 
         proceed = input("\nVerification passed. Proceed with full batch? [y/N]: ")
         if proceed.lower() != 'y':
@@ -145,7 +144,6 @@ def main() -> None:
     # Summary statistics
     if not args.dry_run:
         results = engine.repository.list_generations_for_run(run.run_id)
-        total_cost = sum(r.cost_usd for r in results)
         cache_hits = sum(1 for r in results if r.cache_hit)
         total_input = sum(r.input_tokens for r in results)
         total_output = sum(r.output_tokens for r in results)
@@ -155,7 +153,6 @@ def main() -> None:
         LOGGER.info(f"Cache hits: {cache_hits}/{len(results)} ({100 * cache_hits / len(results):.1f}%)")
         LOGGER.info(f"Total input tokens: {total_input:,}")
         LOGGER.info(f"Total output tokens: {total_output:,}")
-        LOGGER.info(f"Total cost: ${total_cost:.4f}")
 
 
 if __name__ == "__main__":
