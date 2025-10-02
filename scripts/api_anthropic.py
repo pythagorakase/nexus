@@ -112,22 +112,31 @@ except Exception as e:
 
 class LLMResponse:
     """Standardized response object from any LLM provider."""
-    
-    def __init__(self, 
-                content: str, 
-                input_tokens: int, 
+
+    def __init__(self,
+                content: str,
+                input_tokens: int,
                 output_tokens: int,
                 model: str,
-                raw_response: Any = None):
+                raw_response: Any = None,
+                cache_creation_tokens: int = 0,
+                cache_read_tokens: int = 0):
         self.content = content
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.model = model
         self.raw_response = raw_response
-        
+        self.cache_creation_tokens = cache_creation_tokens
+        self.cache_read_tokens = cache_read_tokens
+
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
+
+    @property
+    def cache_hit(self) -> bool:
+        """True if this request benefited from prompt caching."""
+        return self.cache_read_tokens > 0
 
 
 def get_token_count(text: str, model: str) -> int:
@@ -311,11 +320,26 @@ class AnthropicProvider(LLMProvider):
         # Log the model type
         logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}")
         
-    def get_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion from Anthropic Claude."""
+    def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
+        """
+        Get a completion from Anthropic Claude.
+
+        Args:
+            prompt: The prompt text
+            enable_cache: Whether to enable prompt caching for this request
+
+        Returns:
+            LLMResponse with completion and cache usage stats
+        """
         # Format messages for the API
-        messages = [{"role": "user", "content": prompt}]
-        
+        if enable_cache:
+            # Use structured content with cache control
+            messages = self._format_messages_with_cache(prompt)
+            system = self._format_system_with_cache() if self.system_prompt else None
+        else:
+            messages = [{"role": "user", "content": prompt}]
+            system = self.system_prompt
+
         # Prepare parameters for the API call
         params = {
             "model": self.model,
@@ -323,31 +347,37 @@ class AnthropicProvider(LLMProvider):
             "max_tokens": self.max_tokens,
             "temperature": self.temperature
         }
-        
+
         # Add optional parameters if provided
-        if self.system_prompt:
-            params["system"] = self.system_prompt
-        
+        if system:
+            params["system"] = system
+
         if self.top_p is not None:
             params["top_p"] = self.top_p
-            
+
         if self.top_k is not None:
             params["top_k"] = self.top_k
-        
+
         try:
             # Call the API
             response = self.client.messages.create(**params)
-            
+
             # Extract the content from the response
             content = response.content[0].text if response.content else ""
-            
+
+            # Extract cache usage if available
+            cache_creation_tokens = getattr(response.usage, 'cache_creation_input_tokens', 0) or 0
+            cache_read_tokens = getattr(response.usage, 'cache_read_input_tokens', 0) or 0
+
             # Create and return a standardized response
             return LLMResponse(
                 content=content,
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
                 model=self.model,
-                raw_response=response
+                raw_response=response,
+                cache_creation_tokens=cache_creation_tokens,
+                cache_read_tokens=cache_read_tokens
             )
         except Exception as e:
             # Handle API errors
@@ -507,7 +537,100 @@ class AnthropicProvider(LLMProvider):
         """Get the cost per token for this model's output."""
         model_info = self.MODEL_PRICING.get(self.model, {"output": 15.0})  # Default to Claude 3 Sonnet pricing
         return model_info["output"] / 1_000_000  # Convert to cost per token
-    
+
+    def _format_system_with_cache(self) -> List[Dict[str, Any]]:
+        """
+        Format system prompt with cache control for prompt caching.
+
+        Returns:
+            System content blocks with cache_control directive
+        """
+        if not self.system_prompt:
+            return []
+
+        return [
+            {
+                "type": "text",
+                "text": self.system_prompt,
+                "cache_control": {"type": "ephemeral"}
+            }
+        ]
+
+    def _format_messages_with_cache(self, prompt: str) -> List[Dict[str, Any]]:
+        """
+        Format user message with cache control blocks for large context.
+
+        This structures the prompt to maximize cache hit rate by marking
+        stable content sections with cache_control directives.
+
+        Args:
+            prompt: The full prompt text (may include sections to cache)
+
+        Returns:
+            List of message dicts with cache_control where appropriate
+        """
+        # Split prompt into cacheable sections
+        # For Apex Audition, the structure is:
+        # 1. Chunk metadata (small, not worth caching)
+        # 2. Target storyteller chunk (medium)
+        # 3. User input (tiny)
+        # 4. Recent context (LARGE - cache this!)
+        # 5. Entity dossiers (LARGE - cache this!)
+        # 6. Historical passages (LARGE - cache this!)
+        # 7. Structured summaries (medium)
+        # 8. Analysis notes (small)
+        # 9. Instructions (tiny)
+
+        # Simple implementation: mark the entire user prompt as cacheable
+        # More sophisticated: split on section markers and cache large sections
+        content_blocks = []
+
+        # Check if prompt contains section markers
+        if "=== RECENT STORYTELLER CONTEXT ===" in prompt:
+            # Split into sections
+            sections = []
+            current_section = []
+            current_name = None
+
+            for line in prompt.split('\n'):
+                if line.startswith('===') and line.endswith('==='):
+                    if current_section:
+                        sections.append((current_name, '\n'.join(current_section)))
+                    current_name = line.strip('= ')
+                    current_section = []
+                else:
+                    current_section.append(line)
+
+            if current_section:
+                sections.append((current_name, '\n'.join(current_section)))
+
+            # Add sections as content blocks, marking large ones for caching
+            for section_name, section_text in sections:
+                block = {"type": "text", "text": section_text}
+
+                # Mark large sections for caching (those over 1024 tokens estimated)
+                # Anthropic caches minimum 1024 tokens, max 4 cache breakpoints
+                estimated_tokens = len(section_text) // 4  # Rough estimate
+
+                if estimated_tokens > 1024 and section_name in [
+                    "RECENT STORYTELLER CONTEXT",
+                    "ENTITY DOSSIER",
+                    "HISTORICAL PASSAGES",
+                    "STRUCTURED SUMMARIES"
+                ]:
+                    block["cache_control"] = {"type": "ephemeral"}
+
+                content_blocks.append(block)
+        else:
+            # Fallback: cache the entire prompt if it's large enough
+            estimated_tokens = len(prompt) // 4
+            block = {"type": "text", "text": prompt}
+            if estimated_tokens > 1024:
+                block["cache_control"] = {"type": "ephemeral"}
+            content_blocks.append(block)
+
+        return [{"role": "user", "content": content_blocks}]
+
     def _get_api_key(self) -> str:
         """Get Anthropic API key from 1Password CLI."""
         import subprocess
