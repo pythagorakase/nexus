@@ -225,7 +225,6 @@ class AuditionEngine:
                         result.input_tokens = getattr(llm_response, "input_tokens", 0) or 0
                         result.output_tokens = getattr(llm_response, "output_tokens", 0) or 0
                         result.cache_hit = getattr(llm_response, "cache_hit", False)
-                        result.cost_usd = 0.0  # Cost tracking disabled - check API console
                         result.completed_at = datetime.now(timezone.utc)
 
                         if result.cache_hit:
