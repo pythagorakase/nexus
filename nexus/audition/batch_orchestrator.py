@@ -183,6 +183,11 @@ class BatchOrchestrator:
                         continue
 
                     model = parts[1].lower()
+
+                    # Skip separator rows (e.g., "| -------- | ------------- |")
+                    if model.startswith('-') or all(c in '-' for c in parts[2].replace(' ', '')):
+                        continue
+
                     tpm = self._parse_number(parts[2])
                     rpm = self._parse_number(parts[3])
                     batch_tpd = self._parse_number(parts[4]) if len(parts) > 4 else None

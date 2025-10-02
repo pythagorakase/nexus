@@ -225,13 +225,7 @@ class AuditionEngine:
                         result.input_tokens = getattr(llm_response, "input_tokens", 0) or 0
                         result.output_tokens = getattr(llm_response, "output_tokens", 0) or 0
                         result.cache_hit = getattr(llm_response, "cache_hit", False)
-                        result.cost_usd = self._estimate_cost(
-                            provider,
-                            result.input_tokens,
-                            result.output_tokens,
-                            cache_creation_tokens=getattr(llm_response, "cache_creation_tokens", 0),
-                            cache_read_tokens=getattr(llm_response, "cache_read_tokens", 0)
-                        )
+                        result.cost_usd = 0.0  # Cost tracking disabled - check API console
                         result.completed_at = datetime.now(timezone.utc)
 
                         if result.cache_hit:
@@ -430,54 +424,24 @@ class AuditionEngine:
         if raw is not None:
             try:
                 if hasattr(raw, "model_dump"):
-                    payload["raw"] = raw.model_dump()
+                    raw_dict = raw.model_dump()
                 elif hasattr(raw, "to_dict"):
-                    payload["raw"] = raw.to_dict()
+                    raw_dict = raw.to_dict()
                 elif hasattr(raw, "__dict__"):
-                    payload["raw"] = dict(raw.__dict__)
+                    raw_dict = dict(raw.__dict__)
+                else:
+                    raw_dict = None
+
+                # Strip duplicate content to save space
+                if raw_dict and isinstance(raw_dict, dict):
+                    raw_dict.pop("content", None)
+                    payload["raw"] = raw_dict
+                else:
+                    payload["raw"] = "<unserializable>"
             except Exception:  # pragma: no cover - best effort
                 payload["raw"] = "<unserializable>"
         return payload
 
-    @staticmethod
-    def _estimate_cost(
-        provider,
-        input_tokens: int,
-        output_tokens: int,
-        cache_creation_tokens: int = 0,
-        cache_read_tokens: int = 0
-    ) -> float:
-        """
-        Estimate cost with prompt caching discounts.
-
-        Args:
-            provider: LLM provider instance
-            input_tokens: Regular input tokens
-            output_tokens: Output tokens
-            cache_creation_tokens: Tokens written to cache (Anthropic)
-            cache_read_tokens: Tokens read from cache (Anthropic)
-
-        Returns:
-            Estimated cost in USD
-        """
-        try:
-            input_rate = provider.get_input_token_cost()
-            output_rate = provider.get_output_token_cost()
-        except Exception:  # pragma: no cover - some providers might not implement
-            return 0.0
-
-        # Base cost
-        cost = (input_tokens / 1_000_000) * input_rate + (output_tokens / 1_000_000) * output_rate
-
-        # Add cache costs (Anthropic)
-        # Cache creation: same as input rate
-        # Cache read: 10% of input rate (90% discount)
-        if cache_creation_tokens > 0:
-            cost += (cache_creation_tokens / 1_000_000) * input_rate
-        if cache_read_tokens > 0:
-            cost += (cache_read_tokens / 1_000_000) * (input_rate * 0.1)
-
-        return cost
 
 
 __all__ = ["AuditionEngine"]
