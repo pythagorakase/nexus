@@ -6,7 +6,6 @@ import { useComparison } from '@/hooks/useComparison';
 import { ComparisonLayout } from '@/components/audition/ComparisonLayout';
 import { LeaderboardView } from '@/components/audition/LeaderboardView';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 
 export default function AuditionTab() {
@@ -25,6 +24,10 @@ export default function AuditionTab() {
   const handleComparisonComplete = () => {
     setComparisonCount((c) => c + 1);
     refetch(); // Fetch next comparison
+  };
+
+  const handleSkip = () => {
+    refetch();
   };
 
   if (activeView === 'leaderboard') {
@@ -107,6 +110,7 @@ export default function AuditionTab() {
           comparison={comparison}
           evaluator={evaluator}
           onComplete={handleComparisonComplete}
+          onSkip={handleSkip}
         />
       </div>
     </div>

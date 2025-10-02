@@ -8,20 +8,21 @@ Provides REST API endpoints for:
 - Viewing leaderboards
 - Exporting comparisons
 """
+from datetime import datetime
+import random
+from typing import List, Optional
+from uuid import UUID
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from uuid import UUID
-from datetime import datetime
 
 from nexus.api.models import (
-    Condition, Generation, Prompt, Comparison, ComparisonCreate,
-    ELORating, ComparisonQueue, ComparisonQueueItem, GenerationRun
+    Condition, Generation, Prompt, ComparisonCreate,
+    ELORating, ComparisonQueueItem, GenerationRun
 )
 from nexus.audition.elo import calculate_elo_update, outcome_from_winner
-from nexus.audition.comparisons import generate_round_robin_pairs, filter_already_judged
 
 # Database connection parameters
 DB_PARAMS = {
@@ -49,7 +50,7 @@ def get_db():
 
 
 @app.get("/api/audition/runs", response_model=List[GenerationRun])
-async def list_generation_runs():
+def list_generation_runs():
     """List all generation runs."""
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -72,7 +73,7 @@ async def list_generation_runs():
 
 
 @app.get("/api/audition/comparisons/next", response_model=Optional[ComparisonQueueItem])
-async def get_next_comparison(
+def get_next_comparison(
     run_id: Optional[str] = Query(None),
     condition_a_id: Optional[int] = Query(None),
     condition_b_id: Optional[int] = Query(None),
@@ -86,7 +87,10 @@ async def get_next_comparison(
     with get_db() as conn:
         with conn.cursor() as cur:
             # Build query conditions
-            where_clauses = ["c.id IS NULL"]  # Not already judged
+            where_clauses = [
+                "c.id IS NULL",
+                "ga.id < gb.id",  # Avoid duplicate pairs in opposite order
+            ]
             params = []
 
             if run_id:
@@ -104,11 +108,44 @@ async def get_next_comparison(
 
             query = f"""
                 SELECT
-                    p.*,
-                    ca.*,
-                    cb.*,
-                    ga.*,
-                    gb.*
+                    p.id AS prompt_id,
+                    p.chunk_id AS prompt_chunk_id,
+                    p.category AS prompt_category,
+                    p.label AS prompt_label,
+                    p.context AS prompt_context,
+                    p.metadata AS prompt_metadata,
+                    ca.id AS condition_a_id,
+                    ca.slug AS condition_a_slug,
+                    ca.provider AS condition_a_provider,
+                    ca.model_name AS condition_a_model_name,
+                    ca.parameters AS condition_a_parameters,
+                    ca.is_active AS condition_a_is_active,
+                    cb.id AS condition_b_id,
+                    cb.slug AS condition_b_slug,
+                    cb.provider AS condition_b_provider,
+                    cb.model_name AS condition_b_model_name,
+                    cb.parameters AS condition_b_parameters,
+                    cb.is_active AS condition_b_is_active,
+                    ga.id AS generation_a_id,
+                    ga.condition_id AS generation_a_condition_id,
+                    ga.prompt_id AS generation_a_prompt_id,
+                    ga.replicate_index AS generation_a_replicate_index,
+                    ga.status AS generation_a_status,
+                    ga.response_payload AS generation_a_response_payload,
+                    ga.input_tokens AS generation_a_input_tokens,
+                    ga.output_tokens AS generation_a_output_tokens,
+                    ga.cost_usd AS generation_a_cost_usd,
+                    ga.completed_at AS generation_a_completed_at,
+                    gb.id AS generation_b_id,
+                    gb.condition_id AS generation_b_condition_id,
+                    gb.prompt_id AS generation_b_prompt_id,
+                    gb.replicate_index AS generation_b_replicate_index,
+                    gb.status AS generation_b_status,
+                    gb.response_payload AS generation_b_response_payload,
+                    gb.input_tokens AS generation_b_input_tokens,
+                    gb.output_tokens AS generation_b_output_tokens,
+                    gb.cost_usd AS generation_b_cost_usd,
+                    gb.completed_at AS generation_b_completed_at
                 FROM apex_audition.prompts p
                 JOIN apex_audition.generations ga ON ga.prompt_id = p.id
                     AND ga.status = 'completed'
@@ -131,62 +168,75 @@ async def get_next_comparison(
             if not row:
                 return None
 
-            # Parse row into structured response
-            # This is simplified - in production, you'd properly parse all fields
+            # Assemble response objects from aliased columns
+            prompt = Prompt(
+                id=row["prompt_id"],
+                chunk_id=row["prompt_chunk_id"],
+                category=row.get("prompt_category"),
+                label=row.get("prompt_label"),
+                context=row["prompt_context"],
+                metadata=row["prompt_metadata"],
+            )
+
+            condition_a = Condition(
+                id=row["condition_a_id"],
+                slug=row["condition_a_slug"],
+                provider=row["condition_a_provider"],
+                model=row["condition_a_model_name"],
+                parameters=row["condition_a_parameters"],
+                is_active=row["condition_a_is_active"],
+            )
+
+            condition_b = Condition(
+                id=row["condition_b_id"],
+                slug=row["condition_b_slug"],
+                provider=row["condition_b_provider"],
+                model=row["condition_b_model_name"],
+                parameters=row["condition_b_parameters"],
+                is_active=row["condition_b_is_active"],
+            )
+
+            generation_a = Generation(
+                id=row["generation_a_id"],
+                condition_id=row["generation_a_condition_id"],
+                prompt_id=row["generation_a_prompt_id"],
+                replicate_index=row["generation_a_replicate_index"],
+                status=row["generation_a_status"],
+                response_payload=row["generation_a_response_payload"],
+                input_tokens=row.get("generation_a_input_tokens"),
+                output_tokens=row.get("generation_a_output_tokens"),
+                cost_usd=row.get("generation_a_cost_usd"),
+                completed_at=row.get("generation_a_completed_at"),
+            )
+
+            generation_b = Generation(
+                id=row["generation_b_id"],
+                condition_id=row["generation_b_condition_id"],
+                prompt_id=row["generation_b_prompt_id"],
+                replicate_index=row["generation_b_replicate_index"],
+                status=row["generation_b_status"],
+                response_payload=row["generation_b_response_payload"],
+                input_tokens=row.get("generation_b_input_tokens"),
+                output_tokens=row.get("generation_b_output_tokens"),
+                cost_usd=row.get("generation_b_cost_usd"),
+                completed_at=row.get("generation_b_completed_at"),
+            )
+
+            if random.random() < 0.5:
+                condition_a, condition_b = condition_b, condition_a
+                generation_a, generation_b = generation_b, generation_a
+
             return ComparisonQueueItem(
-                prompt=Prompt(
-                    id=row['id'],
-                    chunk_id=row['chunk_id'],
-                    category=row.get('category'),
-                    label=row.get('label'),
-                    context=row['context'],
-                    metadata=row['metadata']
-                ),
-                condition_a=Condition(
-                    id=row['ca.id'],
-                    slug=row['ca.slug'],
-                    provider=row['ca.provider'],
-                    model_name=row['ca.model_name'],
-                    parameters=row['ca.parameters'],
-                    is_active=row['ca.is_active']
-                ),
-                condition_b=Condition(
-                    id=row['cb.id'],
-                    slug=row['cb.slug'],
-                    provider=row['cb.provider'],
-                    model_name=row['cb.model_name'],
-                    parameters=row['cb.parameters'],
-                    is_active=row['cb.is_active']
-                ),
-                generation_a=Generation(
-                    id=row['ga.id'],
-                    condition_id=row['ga.condition_id'],
-                    prompt_id=row['ga.prompt_id'],
-                    replicate_index=row['ga.replicate_index'],
-                    status=row['ga.status'],
-                    response_payload=row['ga.response_payload'],
-                    input_tokens=row.get('ga.input_tokens'),
-                    output_tokens=row.get('ga.output_tokens'),
-                    cost_usd=row.get('ga.cost_usd'),
-                    completed_at=row.get('ga.completed_at')
-                ),
-                generation_b=Generation(
-                    id=row['gb.id'],
-                    condition_id=row['gb.condition_id'],
-                    prompt_id=row['gb.prompt_id'],
-                    replicate_index=row['gb.replicate_index'],
-                    status=row['gb.status'],
-                    response_payload=row['gb.response_payload'],
-                    input_tokens=row.get('gb.input_tokens'),
-                    output_tokens=row.get('gb.output_tokens'),
-                    cost_usd=row.get('gb.cost_usd'),
-                    completed_at=row.get('gb.completed_at')
-                )
+                prompt=prompt,
+                condition_a=condition_a,
+                condition_b=condition_b,
+                generation_a=generation_a,
+                generation_b=generation_b,
             )
 
 
 @app.post("/api/audition/comparisons", response_model=dict)
-async def create_comparison(comparison: ComparisonCreate):
+def create_comparison(comparison: ComparisonCreate):
     """
     Record a comparison judgment and update ELO ratings.
     """
@@ -275,7 +325,7 @@ async def create_comparison(comparison: ComparisonCreate):
 
 
 @app.get("/api/audition/leaderboard", response_model=List[ELORating])
-async def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
+def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
     """Get ELO leaderboard."""
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -314,7 +364,7 @@ async def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
 
 
 @app.get("/api/audition/export/{comparison_id}")
-async def export_comparison(comparison_id: int):
+def export_comparison(comparison_id: int):
     """Export a comparison to JSON for external review."""
     with get_db() as conn:
         with conn.cursor() as cur:
