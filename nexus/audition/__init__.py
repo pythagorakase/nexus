@@ -8,12 +8,15 @@ from .models import (
 )
 from .engine import AuditionEngine
 from .repository import AuditionRepository
+from .batch_orchestrator import BatchOrchestrator, RateLimits
 
 __all__ = [
     "AuditionEngine",
     "AuditionRepository",
+    "BatchOrchestrator",
     "ConditionSpec",
     "PromptSnapshot",
     "GenerationRun",
     "GenerationResult",
+    "RateLimits",
 ]
