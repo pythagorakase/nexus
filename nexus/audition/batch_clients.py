@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 try:
     import anthropic
@@ -347,6 +347,8 @@ class OpenAIBatchClient:
         output_dir.mkdir(parents=True, exist_ok=True)
         input_file = output_dir / f"batch_input_{int(time.time())}.jsonl"
 
+        endpoints_used: Set[str] = set()
+
         with open(input_file, 'w') as f:
             for req in requests:
                 # Detect model type
@@ -395,8 +397,20 @@ class OpenAIBatchClient:
                     "body": body
                 }
                 f.write(json.dumps(batch_request) + '\n')
+                endpoints_used.add(endpoint)
 
         LOGGER.info(f"Created batch input file: {input_file} ({len(requests)} requests)")
+
+        if not endpoints_used:
+            raise ValueError("No requests provided for OpenAI batch creation")
+
+        if len(endpoints_used) > 1:
+            raise ValueError(
+                "Mixed OpenAI endpoints detected in batch input. "
+                "Submit separate batches for reasoning and chat models."
+            )
+
+        batch_endpoint = next(iter(endpoints_used))
 
         # Upload file
         with open(input_file, 'rb') as f:
@@ -410,7 +424,7 @@ class OpenAIBatchClient:
         # Create batch
         batch_response = self.client.batches.create(
             input_file_id=upload_response.id,
-            endpoint="/v1/chat/completions",
+            endpoint=batch_endpoint,
             completion_window="24h"
         )
 
