@@ -430,6 +430,177 @@ class AuditionEngine:
 
         return run, batch_id
 
+    def submit_multi_lane_batch(
+        self,
+        *,
+        condition_slugs: Sequence[str],
+        prompt_ids: Optional[Sequence[int]] = None,
+        limit: Optional[int] = None,
+        replicate_count: int = 1,
+        run_label: Optional[str] = None,
+        created_by: Optional[str] = None,
+        notes: Optional[str] = None,
+        enable_cache: bool = True,
+        output_dir: Optional[Path] = None,
+    ) -> tuple[GenerationRun, str]:
+        """
+        Submit a multi-lane batch generation job (asynchronous, 50% discount).
+
+        Combines multiple lanes (conditions) into a single batch submission,
+        enabling cross-lane caching and simplified batch management.
+
+        All lanes must use the same provider (OpenAI or Anthropic).
+
+        Args:
+            condition_slugs: List of condition identifiers to include
+            prompt_ids: Optional subset of prompt IDs to process
+            limit: Max prompts to process
+            replicate_count: Number of completions per prompt per lane
+            run_label: Optional label for this run
+            created_by: Who initiated this run
+            notes: Optional notes
+            enable_cache: Enable prompt caching (stacks with 50% batch discount)
+            output_dir: Directory for OpenAI batch files (defaults to temp/)
+
+        Returns:
+            Tuple of (GenerationRun, batch_id)
+
+        Raises:
+            ValueError: If lanes use different providers or no lanes provided
+        """
+        from .batch_clients import AnthropicBatchClient, BatchRequest, OpenAIBatchClient
+
+        if not condition_slugs:
+            raise ValueError("At least one condition_slug must be provided")
+        if replicate_count < 1:
+            raise ValueError("replicate_count must be >= 1")
+
+        # Fetch all conditions
+        conditions = []
+        for slug in condition_slugs:
+            condition = self.repository.get_condition_by_slug(slug)
+            if not condition or condition.id is None:
+                raise ValueError(f"Unknown condition slug: {slug}")
+            conditions.append(condition)
+
+        # Validate all conditions use same provider
+        providers = {c.provider.lower() for c in conditions}
+        if len(providers) > 1:
+            raise ValueError(
+                f"All lanes must use the same provider. Found: {', '.join(sorted(providers))}"
+            )
+        provider = providers.pop()
+
+        # Get prompts
+        prompts = self.repository.list_prompts()
+        if prompt_ids is not None:
+            prompt_filter = set(prompt_ids)
+            prompts = [p for p in prompts if p.id in prompt_filter]
+        if limit is not None:
+            prompts = prompts[:limit]
+        if not prompts:
+            raise ValueError("No prompts available for generation")
+
+        # Create run
+        run = GenerationRun(
+            provider=provider,
+            storyteller_prompt=conditions[0].system_prompt,  # Use first lane's system prompt
+            created_by=created_by,
+            notes=notes or f"Multi-lane batch: {', '.join(condition_slugs)}",
+            description=run_label or f"Multi-lane batch ({len(conditions)} lanes × {len(prompts)} prompts)",
+        )
+        run = self.repository.create_generation_run(run)
+
+        LOGGER.info(
+            "Submitting multi-lane batch run %s with %s lanes over %s prompts (replicates=%s, cache=%s)",
+            run.run_id,
+            len(conditions),
+            len(prompts),
+            replicate_count,
+            enable_cache,
+        )
+        LOGGER.info("Lanes: %s", ", ".join(condition_slugs))
+
+        # Prepare all batch requests (iterate lanes × prompts × replicates)
+        batch_requests = []
+        for condition in conditions:
+            for prompt in prompts:
+                if prompt.id is None:
+                    raise ValueError(f"Prompt {prompt.chunk_id} has no database identifier")
+
+                for replicate_index in range(replicate_count):
+                    prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
+
+                    custom_id = f"{run.run_id}_{condition.id}_{prompt.id}_{replicate_index}"
+                    # Prefer max_output_tokens, fallback to max_tokens, default to 6000
+                    max_tokens = condition.parameters.get("max_output_tokens")
+                    if max_tokens is None:
+                        max_tokens = condition.parameters.get("max_tokens", 6000)
+
+                    batch_requests.append(BatchRequest(
+                        custom_id=custom_id,
+                        prompt_id=prompt.id,
+                        replicate_index=replicate_index,
+                        prompt_text=prompt_text,
+                        model=condition.model,
+                        temperature=condition.parameters.get("temperature"),
+                        max_tokens=max_tokens,
+                        system_prompt=condition.system_prompt,
+                        enable_cache=enable_cache,
+                        # OpenAI-specific parameters
+                        reasoning_effort=condition.parameters.get("reasoning_effort"),
+                        max_output_tokens=condition.parameters.get("max_output_tokens"),
+                        # Anthropic-specific parameters
+                        thinking_enabled=condition.parameters.get("thinking_enabled", False),
+                        thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
+                        # Lane tracking
+                        lane_id=condition.slug
+                    ))
+
+                    # Create pending result record
+                    result = GenerationResult(
+                        run_id=run.run_id,
+                        condition_id=condition.id,
+                        prompt_id=prompt.id,
+                        replicate_index=replicate_index,
+                        lane_id=condition.slug,
+                        status="batch_pending",
+                        prompt_text=prompt_text,
+                        request_payload=request_payload,
+                        started_at=datetime.now(timezone.utc),
+                    )
+                    self.repository.record_generation(result)
+
+        # Submit batch to appropriate provider
+        if provider == "anthropic":
+            client = self._get_anthropic_batch_client()
+            batch_id = client.create_batch(batch_requests)
+        elif provider == "openai":
+            client = self._get_openai_batch_client()
+            batch_dir = output_dir or Path("temp/batches")
+            batch_id = client.create_batch(batch_requests, batch_dir)
+        else:
+            raise ValueError(f"Unsupported provider for batch mode: {provider}")
+
+        # Update all results with batch_job_id
+        for req in batch_requests:
+            # Parse custom_id to get condition_id, prompt_id and replicate_index
+            _, condition_id_str, prompt_id_str, replicate_str = req.custom_id.split('_')
+            condition_id = int(condition_id_str)
+            prompt_id = int(prompt_id_str)
+            replicate_index = int(replicate_str)
+
+            # Update the generation record
+            self.repository.update_generation_batch_id(
+                run.run_id, prompt_id, replicate_index, batch_id
+            )
+
+        LOGGER.info(f"Multi-lane batch submitted: {batch_id} ({len(batch_requests)} total requests)")
+        LOGGER.info(f"  Breakdown: {len(conditions)} lanes × {len(prompts)} prompts × {replicate_count} replicates")
+        LOGGER.info(f"Use `python scripts/poll_batch.py --batch-id {batch_id} --provider {provider}` to check status")
+
+        return run, batch_id
+
     def retrieve_batch_results(self, batch_id: str, provider: str) -> List[GenerationResult]:
         """
         Retrieve and process results from a completed batch.
