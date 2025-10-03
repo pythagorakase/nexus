@@ -347,6 +347,8 @@ class OpenAIBatchClient:
         output_dir.mkdir(parents=True, exist_ok=True)
         input_file = output_dir / f"batch_input_{int(time.time())}.jsonl"
 
+        endpoints_used = set()
+
         with open(input_file, 'w') as f:
             for req in requests:
                 # Detect model type
@@ -388,6 +390,8 @@ class OpenAIBatchClient:
 
                     endpoint = "/v1/chat/completions"
 
+                endpoints_used.add(endpoint)
+
                 batch_request = {
                     "custom_id": req.custom_id,
                     "method": "POST",
@@ -397,6 +401,15 @@ class OpenAIBatchClient:
                 f.write(json.dumps(batch_request) + '\n')
 
         LOGGER.info(f"Created batch input file: {input_file} ({len(requests)} requests)")
+
+        if not endpoints_used:
+            raise ValueError("No requests provided for batch creation")
+        if len(endpoints_used) > 1:
+            raise ValueError(
+                "Mixed OpenAI endpoints in single batch: "
+                + ", ".join(sorted(endpoints_used))
+            )
+        batch_endpoint = endpoints_used.pop()
 
         # Upload file
         with open(input_file, 'rb') as f:
@@ -410,7 +423,7 @@ class OpenAIBatchClient:
         # Create batch
         batch_response = self.client.batches.create(
             input_file_id=upload_response.id,
-            endpoint="/v1/chat/completions",
+            endpoint=batch_endpoint,
             completion_window="24h"
         )
 
