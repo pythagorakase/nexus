@@ -45,10 +45,18 @@ class BatchRequest:
     replicate_index: int
     prompt_text: str
     model: str
-    temperature: float
+    temperature: Optional[float]
     max_tokens: int
     system_prompt: Optional[str] = None
     enable_cache: bool = True
+    # OpenAI-specific parameters
+    reasoning_effort: Optional[str] = None
+    max_output_tokens: Optional[int] = None
+    # Anthropic-specific parameters
+    thinking_enabled: bool = False
+    thinking_budget_tokens: Optional[int] = None
+    # Lane tracking
+    lane_id: Optional[str] = None
 
 
 @dataclass
@@ -147,6 +155,13 @@ class AnthropicBatchClient:
                 "temperature": req.temperature,
                 "messages": [{"role": "user", "content": user_content}]
             }
+
+            # Add extended thinking parameters if enabled
+            if req.thinking_enabled:
+                params["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": req.thinking_budget_tokens
+                }
 
             # Add system prompt with cache control if enabled
             if req.system_prompt:
@@ -334,21 +349,49 @@ class OpenAIBatchClient:
 
         with open(input_file, 'w') as f:
             for req in requests:
-                # Format request for OpenAI Batch API
-                body: Dict[str, Any] = {
-                    "model": req.model,
-                    "messages": [{"role": "user", "content": req.prompt_text}],
-                    "temperature": req.temperature,
-                    "max_tokens": req.max_tokens
-                }
+                # Detect model type
+                model_lower = req.model.lower()
+                is_reasoning_model = "gpt-5" in model_lower or model_lower == "o3" or model_lower.startswith("o3-")
 
-                if req.system_prompt:
-                    body["messages"].insert(0, {"role": "system", "content": req.system_prompt})
+                # Format request for OpenAI Batch API
+                if is_reasoning_model:
+                    # Reasoning models use /v1/responses endpoint
+                    input_messages = [{"role": "user", "content": req.prompt_text}]
+                    if req.system_prompt:
+                        input_messages.insert(0, {"role": "system", "content": req.system_prompt})
+
+                    body: Dict[str, Any] = {
+                        "model": req.model,
+                        "input": input_messages,
+                        "max_output_tokens": req.max_output_tokens or req.max_tokens
+                    }
+
+                    # Add reasoning effort if provided (NEVER include temperature)
+                    if req.reasoning_effort:
+                        body["reasoning"] = {"effort": req.reasoning_effort}
+
+                    endpoint = "/v1/responses"
+                else:
+                    # Standard models use /v1/chat/completions endpoint
+                    body: Dict[str, Any] = {
+                        "model": req.model,
+                        "messages": [{"role": "user", "content": req.prompt_text}],
+                        "max_tokens": req.max_output_tokens or req.max_tokens
+                    }
+
+                    # Only include temperature if provided (some models may omit it)
+                    if req.temperature is not None:
+                        body["temperature"] = req.temperature
+
+                    if req.system_prompt:
+                        body["messages"].insert(0, {"role": "system", "content": req.system_prompt})
+
+                    endpoint = "/v1/chat/completions"
 
                 batch_request = {
                     "custom_id": req.custom_id,
                     "method": "POST",
-                    "url": "/v1/chat/completions",
+                    "url": endpoint,
                     "body": body
                 }
                 f.write(json.dumps(batch_request) + '\n')

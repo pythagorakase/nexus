@@ -207,6 +207,7 @@ class AuditionEngine:
                     condition_id=condition.id,
                     prompt_id=prompt.id,  # type: ignore[arg-type]
                     replicate_index=replicate_index,
+                    lane_id=condition.slug,
                     status="pending",
                     prompt_text=prompt_text,
                     request_payload=request_payload,
@@ -368,10 +369,18 @@ class AuditionEngine:
                     replicate_index=replicate_index,
                     prompt_text=prompt_text,
                     model=condition.model,
-                    temperature=condition.parameters.get("temperature", 0.7),
-                    max_tokens=condition.parameters.get("max_output_tokens", 2048),
+                    temperature=condition.parameters.get("temperature"),
+                    max_tokens=condition.parameters.get("max_tokens", 2048),
                     system_prompt=condition.system_prompt,
-                    enable_cache=enable_cache
+                    enable_cache=enable_cache,
+                    # OpenAI-specific parameters
+                    reasoning_effort=condition.parameters.get("reasoning_effort"),
+                    max_output_tokens=condition.parameters.get("max_output_tokens"),
+                    # Anthropic-specific parameters
+                    thinking_enabled=condition.parameters.get("thinking_enabled", False),
+                    thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
+                    # Lane tracking
+                    lane_id=condition.slug
                 ))
 
                 # Create pending result record
@@ -380,6 +389,7 @@ class AuditionEngine:
                     condition_id=condition.id,
                     prompt_id=prompt.id,
                     replicate_index=replicate_index,
+                    lane_id=condition.slug,
                     status="batch_pending",
                     prompt_text=prompt_text,
                     request_payload=request_payload,
@@ -550,6 +560,8 @@ class AuditionEngine:
                 system_prompt=condition.system_prompt,
                 top_p=params.get("top_p"),
                 top_k=params.get("top_k"),
+                thinking_enabled=params.get("thinking_enabled", False),
+                thinking_budget_tokens=params.get("thinking_budget_tokens"),
             )
             return provider
         raise ValueError(f"Unsupported provider: {condition.provider}")

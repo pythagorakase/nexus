@@ -17,9 +17,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--condition-slug", required=True, help="Unique identifier for the model condition")
     parser.add_argument("--provider", choices=["openai", "anthropic"], help="Provider for a new condition")
     parser.add_argument("--model", help="Model name for the condition")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
+    parser.add_argument("--temperature", type=float, help="Sampling temperature (omit for reasoning models)")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Max completion tokens")
-    parser.add_argument("--reasoning-effort", choices=["low", "medium", "high"], help="OpenAI reasoning effort")
+    parser.add_argument("--max-output-tokens", type=int, help="Max output tokens (OpenAI reasoning models)")
+    parser.add_argument("--reasoning-effort", choices=["minimal", "low", "medium", "high"], help="OpenAI reasoning effort (GPT-5: minimal/medium/high, o3: low/medium/high)")
+    parser.add_argument("--thinking-enabled", action="store_true", help="Enable Anthropic extended thinking")
+    parser.add_argument("--thinking-budget-tokens", type=int, help="Anthropic thinking budget tokens (requires --thinking-enabled)")
     parser.add_argument("--top-p", type=float, help="Anthropic / OpenAI nucleus sampling")
     parser.add_argument("--top-k", type=int, help="Anthropic top-k value")
     parser.add_argument("--label", help="Human-readable label for the condition")
@@ -51,12 +54,30 @@ def maybe_register_condition(engine: AuditionEngine, args: argparse.Namespace) -
     if not args.provider or not args.model:
         raise SystemExit("Provider and model are required to register a new condition")
 
-    parameters = {
-        "temperature": args.temperature,
-        "max_output_tokens": args.max_tokens,
-    }
+    parameters = {}
+
+    # Only include temperature if provided (reasoning models should omit it)
+    if args.temperature is not None:
+        parameters["temperature"] = args.temperature
+
+    # Set max_tokens (base token budget)
+    parameters["max_tokens"] = args.max_tokens
+
+    # OpenAI-specific parameters
+    if args.max_output_tokens is not None:
+        parameters["max_output_tokens"] = args.max_output_tokens
     if args.reasoning_effort:
         parameters["reasoning_effort"] = args.reasoning_effort
+
+    # Anthropic-specific parameters
+    if args.thinking_enabled:
+        parameters["thinking_enabled"] = True
+        if args.thinking_budget_tokens:
+            parameters["thinking_budget_tokens"] = args.thinking_budget_tokens
+        else:
+            raise SystemExit("--thinking-budget-tokens required when --thinking-enabled is set")
+
+    # Common parameters
     if args.top_p is not None:
         parameters["top_p"] = args.top_p
     if args.top_k is not None:
