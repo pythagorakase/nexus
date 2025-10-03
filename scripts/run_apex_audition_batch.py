@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-cache", action="store_true", help="Disable prompt caching")
     parser.add_argument("--no-rate-limiting", action="store_true", help="Disable rate limit enforcement")
     parser.add_argument("--max-retries", type=int, default=3, help="Max retry attempts for failed requests (default 3)")
+    parser.add_argument("--batch-mode", action="store_true", help="Use Batch API (async, 50%% discount, 24hr processing)")
     parser.add_argument("--verify-first", action="store_true", help="Send single test request before full batch")
     parser.add_argument("--log-level", default="INFO", help="Python logging level (default INFO)")
     return parser.parse_args()
@@ -130,7 +131,38 @@ def main() -> None:
             LOGGER.info("Batch cancelled by user")
             return
 
-    # Run full batch
+    # Batch mode: submit async batch job
+    if args.batch_mode:
+        if args.dry_run:
+            LOGGER.error("--batch-mode cannot be used with --dry-run")
+            return
+        if args.verify_first:
+            LOGGER.error("--batch-mode cannot be used with --verify-first")
+            return
+
+        condition = engine.repository.get_condition_by_slug(args.condition_slug)
+        if not condition:
+            LOGGER.error(f"Condition {args.condition_slug} not found")
+            return
+
+        run, batch_id = engine.submit_batch_generation(
+            condition_slug=args.condition_slug,
+            limit=args.limit,
+            replicate_count=args.replicates,
+            enable_cache=not args.no_cache,
+        )
+
+        LOGGER.info("=== BATCH SUBMITTED ===")
+        LOGGER.info(f"Run ID: {run.run_id}")
+        LOGGER.info(f"Batch ID: {batch_id}")
+        LOGGER.info(f"Provider: {condition.provider}")
+        LOGGER.info(f"Total requests: {len(engine.repository.list_generations_for_run(run.run_id))}")
+        LOGGER.info("")
+        LOGGER.info("To poll batch status and retrieve results:")
+        LOGGER.info(f"  python scripts/poll_batch.py --batch-id {batch_id} --provider {condition.provider} --auto-retrieve")
+        return
+
+    # Run full batch (synchronous)
     run = engine.run_generation_batch(
         condition_slug=args.condition_slug,
         limit=args.limit,

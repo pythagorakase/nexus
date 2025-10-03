@@ -436,6 +436,39 @@ class AuditionRepository:
             )
         return results
 
+    def update_generation_batch_id(self, run_id, prompt_id: int, replicate_index: int, batch_job_id: str) -> None:
+        """Update the batch_job_id for a specific generation."""
+        stmt = (
+            self.generations.update()
+            .where(self.generations.c.run_id == run_id)
+            .where(self.generations.c.prompt_id == prompt_id)
+            .where(self.generations.c.replicate_index == replicate_index)
+            .values(batch_job_id=batch_job_id)
+        )
+        with self.engine.begin() as connection:
+            connection.execute(stmt)
+
+    def update_generation_result(self, result: GenerationResult) -> None:
+        """Update a generation result with completed data."""
+        if result.id is None:
+            raise ValueError("Cannot update generation without ID")
+
+        stmt = (
+            self.generations.update()
+            .where(self.generations.c.id == result.id)
+            .values(
+                status=result.status,
+                response_payload=result.response_payload,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
+                error_message=result.error_message,
+                completed_at=result.completed_at,
+                cache_hit=result.cache_hit,
+            )
+        )
+        with self.engine.begin() as connection:
+            connection.execute(stmt)
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
