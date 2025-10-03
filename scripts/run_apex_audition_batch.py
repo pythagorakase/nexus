@@ -150,6 +150,8 @@ def main() -> None:
             limit=args.limit,
             replicate_count=args.replicates,
             enable_cache=not args.no_cache,
+            created_by=args.created_by,
+            notes=args.notes,
         )
 
         LOGGER.info("=== BATCH SUBMITTED ===")
