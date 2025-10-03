@@ -9,6 +9,14 @@ from .models import (
 from .engine import AuditionEngine
 from .repository import AuditionRepository
 from .batch_orchestrator import BatchOrchestrator, RateLimits
+from .batch_clients import (
+    BatchStatus,
+    BatchRequest,
+    BatchResult,
+    BatchJob,
+    AnthropicBatchClient,
+    OpenAIBatchClient,
+)
 
 __all__ = [
     "AuditionEngine",
@@ -19,4 +27,10 @@ __all__ = [
     "GenerationRun",
     "GenerationResult",
     "RateLimits",
+    "BatchStatus",
+    "BatchRequest",
+    "BatchResult",
+    "BatchJob",
+    "AnthropicBatchClient",
+    "OpenAIBatchClient",
 ]
