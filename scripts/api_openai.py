@@ -316,9 +316,14 @@ class OpenAIProvider(LLMProvider):
         else:
             logger.info(f"Using standard model: {self.model} with temperature: {self.temperature}")
         
-    def get_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion from OpenAI using unified /v1/responses endpoint."""
-        return self._get_completion_unified(prompt)
+    def get_completion(self, prompt: str, cache_key: Optional[str] = None) -> LLMResponse:
+        """Get a completion from OpenAI using unified /v1/responses endpoint.
+
+        Args:
+            prompt: The input prompt
+            cache_key: Optional cache key for prompt caching (best practice for shared context)
+        """
+        return self._get_completion_unified(prompt, cache_key=cache_key)
     
     def get_structured_completion(self, prompt: str, schema_model: Type):
         """
@@ -454,10 +459,14 @@ class OpenAIProvider(LLMProvider):
         # Return both the parsed object and the standard LLMResponse
         return response.output_parsed, llm_response
     
-    def _get_completion_unified(self, prompt: str) -> LLMResponse:
+    def _get_completion_unified(self, prompt: str, cache_key: Optional[str] = None) -> LLMResponse:
         """Get a completion using the unified /v1/responses API.
 
         All OpenAI models (GPT-5, o3, GPT-4o) now use the responses endpoint.
+
+        Args:
+            prompt: The input prompt
+            cache_key: Optional cache key for prompt caching
         """
         # Format input for responses API
         input_messages = [{"role": "user", "content": prompt}]
@@ -473,6 +482,12 @@ class OpenAIProvider(LLMProvider):
             "max_output_tokens": self.max_output_tokens
         }
 
+        # Add cache key for prompt caching (best practice for shared context)
+        # NOTE: prompt_cache_key not supported in Python SDK's responses.create() yet
+        # Relying on automatic prompt caching instead
+        # if cache_key:
+        #     request_params["prompt_cache_key"] = cache_key
+
         # Add temperature if model supports it (GPT-4o and other non-reasoning models)
         if self.supports_temperature and self.temperature is not None:
             request_params["temperature"] = self.temperature
@@ -480,9 +495,9 @@ class OpenAIProvider(LLMProvider):
         # Add reasoning effort if provided (GPT-5, o3)
         if self.reasoning_effort:
             request_params["reasoning"] = {"effort": self.reasoning_effort}
-            logger.info(f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}")
+            logger.info(f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}, cache_key: {cache_key}")
         else:
-            logger.info(f"Using OpenAI responses API with model {self.model}")
+            logger.info(f"Using OpenAI responses API with model {self.model}, cache_key: {cache_key}")
 
         # Create the response
         response = self.client.responses.create(**request_params)
