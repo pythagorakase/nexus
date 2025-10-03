@@ -363,6 +363,10 @@ class AuditionEngine:
                 prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
 
                 custom_id = f"{run.run_id}_{prompt.id}_{replicate_index}"
+                max_tokens = condition.parameters.get("max_output_tokens")
+                if max_tokens is None:
+                    max_tokens = condition.parameters.get("max_tokens", 2048)
+
                 batch_requests.append(BatchRequest(
                     custom_id=custom_id,
                     prompt_id=prompt.id,
@@ -370,7 +374,7 @@ class AuditionEngine:
                     prompt_text=prompt_text,
                     model=condition.model,
                     temperature=condition.parameters.get("temperature"),
-                    max_tokens=condition.parameters.get("max_tokens", 2048),
+                    max_tokens=max_tokens,
                     system_prompt=condition.system_prompt,
                     enable_cache=enable_cache,
                     # OpenAI-specific parameters
