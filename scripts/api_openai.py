@@ -253,33 +253,38 @@ class OpenAIProvider(LLMProvider):
     # Default model if none specified
     DEFAULT_MODEL = "gpt-4.1"
     
-    # Valid reasoning effort levels
-    VALID_REASONING_EFFORTS = ["low", "medium", "high", None]
+    # Valid reasoning effort levels (model-specific)
+    VALID_REASONING_EFFORTS = ["minimal", "medium", "high", "low", None]
 
-    def __init__(self, 
-                api_key: Optional[str] = None, 
+    def __init__(self,
+                api_key: Optional[str] = None,
                 model: Optional[str] = None,
-                temperature: float = 0.1,
+                temperature: Optional[float] = 0.1,
                 max_tokens: int = 4000,
+                max_output_tokens: Optional[int] = None,
                 system_prompt: Optional[str] = None,
                 reasoning_effort: Optional[str] = None):
         """
         Initialize OpenAI provider with additional reasoning parameter.
-        
+
         Args:
             api_key: OpenAI API key
             model: Model name to use
-            temperature: Temperature for generation
-            max_tokens: Maximum tokens to generate
+            temperature: Temperature for generation (NOT used for GPT-5/o3)
+            max_tokens: Maximum tokens to generate (deprecated, use max_output_tokens)
+            max_output_tokens: Maximum output tokens (preferred)
             system_prompt: Optional system prompt
-            reasoning_effort: Optional reasoning effort level ('low', 'medium', 'high')
+            reasoning_effort: Optional reasoning effort level
+                - GPT-5: 'minimal', 'medium', 'high'
+                - o3: 'low', 'medium', 'high'
         """
         self.reasoning_effort = reasoning_effort
-        
+        self.max_output_tokens = max_output_tokens or max_tokens
+
         # Validate reasoning effort if provided
         if reasoning_effort is not None and reasoning_effort not in self.VALID_REASONING_EFFORTS:
             raise ValueError(f"Invalid reasoning effort: {reasoning_effort}. Valid values: {self.VALID_REASONING_EFFORTS}")
-            
+
         # Call parent init
         super().__init__(
             api_key=api_key,
@@ -293,16 +298,21 @@ class OpenAIProvider(LLMProvider):
         """Initialize the OpenAI client."""
         if not openai:
             raise ImportError("The 'openai' package is required for OpenAIProvider. Install with 'pip install openai'.")
-            
+
         self.provider_name = "openai"
         self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
-        self.is_reasoning_model = self.model.startswith("o")
+
+        # Detect model type
+        model_lower = self.model.lower()
+        self.is_reasoning_model = "gpt-5" in model_lower or model_lower == "o3" or model_lower.startswith("o3-")
+        self.supports_temperature = not self.is_reasoning_model
+
         self.client = openai.OpenAI(api_key=self.api_key)
-        
+
         # Log the model type
         if self.is_reasoning_model:
-            logger.info(f"Using reasoning model: {self.model} with effort: {self.reasoning_effort}")
+            logger.info(f"Using reasoning model: {self.model} with effort: {self.reasoning_effort} (temperature NOT supported)")
         else:
             logger.info(f"Using standard model: {self.model} with temperature: {self.temperature}")
         
@@ -450,36 +460,34 @@ class OpenAIProvider(LLMProvider):
         return response.output_parsed, llm_response
     
     def _get_reasoned_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion using the responses API with reasoning parameter."""
+        """Get a completion using the responses API with reasoning parameter.
+
+        For GPT-5 and o3 models that use reasoning_effort instead of temperature.
+        """
         # Format input for responses API
         input_messages = [{"role": "user", "content": prompt}]
-        
+
         # Add system prompt if provided
         if self.system_prompt:
             input_messages.insert(0, {"role": "system", "content": self.system_prompt})
-        
-        # Prepare reasoning parameter if provided
+
+        # Build request parameters (NEVER include temperature for reasoning models)
+        request_params = {
+            "model": self.model,
+            "input": input_messages,
+            "max_output_tokens": self.max_output_tokens
+        }
+
+        # Add reasoning effort if provided
         if self.reasoning_effort:
-            reasoning_param = {"effort": self.reasoning_effort}
+            request_params["reasoning"] = {"effort": self.reasoning_effort}
             logger.info(f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}")
-            
-            # Create the response using the responses API with reasoning
-            response = self.client.responses.create(
-                model=self.model,
-                reasoning=reasoning_param,
-                input=input_messages,
-                max_tokens=self.max_tokens
-            )
         else:
-            # Create the response using the responses API without reasoning (use default effort)
             logger.info(f"Using OpenAI responses API with model {self.model} without explicit reasoning effort")
-            
-            response = self.client.responses.create(
-                model=self.model,
-                input=input_messages,
-                max_tokens=self.max_tokens
-            )
-        
+
+        # Create the response
+        response = self.client.responses.create(**request_params)
+
         # Format response to match our standard format
         return LLMResponse(
             content=response.output_text,
@@ -490,20 +498,29 @@ class OpenAIProvider(LLMProvider):
         )
     
     def _get_standard_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion from OpenAI using standard chat completions API."""
+        """Get a completion from OpenAI using standard chat completions API.
+
+        For non-reasoning models (GPT-4o, GPT-4, etc.) that support temperature.
+        """
         messages = [{"role": "user", "content": prompt}]
-        
+
         # Add system prompt if provided
         if self.system_prompt:
             messages.insert(0, {"role": "system", "content": self.system_prompt})
-            
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens
-        )
-        
+
+        # Build request parameters
+        request_params = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": self.max_output_tokens
+        }
+
+        # Only include temperature if model supports it
+        if self.supports_temperature:
+            request_params["temperature"] = self.temperature
+
+        response = self.client.chat.completions.create(**request_params)
+
         return LLMResponse(
             content=response.choices[0].message.content,
             input_tokens=response.usage.prompt_tokens,
