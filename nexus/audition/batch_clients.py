@@ -347,6 +347,8 @@ class OpenAIBatchClient:
         output_dir.mkdir(parents=True, exist_ok=True)
         input_file = output_dir / f"batch_input_{int(time.time())}.jsonl"
 
+        batch_endpoint: Optional[str] = None
+
         with open(input_file, 'w') as f:
             for req in requests:
                 # Detect model type
@@ -388,6 +390,14 @@ class OpenAIBatchClient:
 
                     endpoint = "/v1/chat/completions"
 
+                if batch_endpoint is None:
+                    batch_endpoint = endpoint
+                elif batch_endpoint != endpoint:
+                    raise ValueError(
+                        "OpenAI batch requests must target a single endpoint; "
+                        f"got mix of {batch_endpoint} and {endpoint}"
+                    )
+
                 batch_request = {
                     "custom_id": req.custom_id,
                     "method": "POST",
@@ -410,7 +420,7 @@ class OpenAIBatchClient:
         # Create batch
         batch_response = self.client.batches.create(
             input_file_id=upload_response.id,
-            endpoint="/v1/chat/completions",
+            endpoint=batch_endpoint or "/v1/chat/completions",
             completion_window="24h"
         )
 
