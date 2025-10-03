@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 try:
     import anthropic
@@ -347,70 +347,38 @@ class OpenAIBatchClient:
         output_dir.mkdir(parents=True, exist_ok=True)
         input_file = output_dir / f"batch_input_{int(time.time())}.jsonl"
 
-        endpoints_used: Set[str] = set()
-
         with open(input_file, 'w') as f:
             for req in requests:
-                # Detect model type
-                model_lower = req.model.lower()
-                is_reasoning_model = "gpt-5" in model_lower or model_lower == "o3" or model_lower.startswith("o3-")
+                # Use unified /v1/responses endpoint for all OpenAI models
+                # Build input messages
+                input_messages = [{"role": "user", "content": req.prompt_text}]
+                if req.system_prompt:
+                    input_messages.insert(0, {"role": "system", "content": req.system_prompt})
 
-                # Format request for OpenAI Batch API
-                if is_reasoning_model:
-                    # Reasoning models use /v1/responses endpoint
-                    input_messages = [{"role": "user", "content": req.prompt_text}]
-                    if req.system_prompt:
-                        input_messages.insert(0, {"role": "system", "content": req.system_prompt})
+                # Build request body
+                body: Dict[str, Any] = {
+                    "model": req.model,
+                    "input": input_messages,
+                    "max_output_tokens": req.max_output_tokens or req.max_tokens
+                }
 
-                    body: Dict[str, Any] = {
-                        "model": req.model,
-                        "input": input_messages,
-                        "max_output_tokens": req.max_output_tokens or req.max_tokens
-                    }
+                # Add temperature if provided (GPT-4o and other non-reasoning models)
+                if req.temperature is not None:
+                    body["temperature"] = req.temperature
 
-                    # Add reasoning effort if provided (NEVER include temperature)
-                    if req.reasoning_effort:
-                        body["reasoning"] = {"effort": req.reasoning_effort}
-
-                    endpoint = "/v1/responses"
-                else:
-                    # Standard models use /v1/chat/completions endpoint
-                    body: Dict[str, Any] = {
-                        "model": req.model,
-                        "messages": [{"role": "user", "content": req.prompt_text}],
-                        "max_tokens": req.max_output_tokens or req.max_tokens
-                    }
-
-                    # Only include temperature if provided (some models may omit it)
-                    if req.temperature is not None:
-                        body["temperature"] = req.temperature
-
-                    if req.system_prompt:
-                        body["messages"].insert(0, {"role": "system", "content": req.system_prompt})
-
-                    endpoint = "/v1/chat/completions"
+                # Add reasoning effort if provided (GPT-5, o3)
+                if req.reasoning_effort:
+                    body["reasoning"] = {"effort": req.reasoning_effort}
 
                 batch_request = {
                     "custom_id": req.custom_id,
                     "method": "POST",
-                    "url": endpoint,
+                    "url": "/v1/responses",
                     "body": body
                 }
                 f.write(json.dumps(batch_request) + '\n')
-                endpoints_used.add(endpoint)
 
         LOGGER.info(f"Created batch input file: {input_file} ({len(requests)} requests)")
-
-        if not endpoints_used:
-            raise ValueError("No requests provided for OpenAI batch creation")
-
-        if len(endpoints_used) > 1:
-            raise ValueError(
-                "Mixed OpenAI endpoints detected in batch input. "
-                "Submit separate batches for reasoning and chat models."
-            )
-
-        batch_endpoint = next(iter(endpoints_used))
 
         # Upload file
         with open(input_file, 'rb') as f:
@@ -421,10 +389,10 @@ class OpenAIBatchClient:
 
         LOGGER.info(f"Uploaded file: {upload_response.id}")
 
-        # Create batch
+        # Create batch (all OpenAI models use /v1/responses)
         batch_response = self.client.batches.create(
             input_file_id=upload_response.id,
-            endpoint=batch_endpoint,
+            endpoint="/v1/responses",
             completion_window="24h"
         )
 

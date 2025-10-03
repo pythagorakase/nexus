@@ -317,13 +317,8 @@ class OpenAIProvider(LLMProvider):
             logger.info(f"Using standard model: {self.model} with temperature: {self.temperature}")
         
     def get_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion from OpenAI."""
-        # For reasoning models (o-prefixed) using the responses API
-        if self.is_reasoning_model:
-            return self._get_reasoned_completion(prompt)
-        else:
-            # Standard chat completions API for all other models
-            return self._get_standard_completion(prompt)
+        """Get a completion from OpenAI using unified /v1/responses endpoint."""
+        return self._get_completion_unified(prompt)
     
     def get_structured_completion(self, prompt: str, schema_model: Type):
         """
@@ -459,10 +454,10 @@ class OpenAIProvider(LLMProvider):
         # Return both the parsed object and the standard LLMResponse
         return response.output_parsed, llm_response
     
-    def _get_reasoned_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion using the responses API with reasoning parameter.
+    def _get_completion_unified(self, prompt: str) -> LLMResponse:
+        """Get a completion using the unified /v1/responses API.
 
-        For GPT-5 and o3 models that use reasoning_effort instead of temperature.
+        All OpenAI models (GPT-5, o3, GPT-4o) now use the responses endpoint.
         """
         # Format input for responses API
         input_messages = [{"role": "user", "content": prompt}]
@@ -471,19 +466,23 @@ class OpenAIProvider(LLMProvider):
         if self.system_prompt:
             input_messages.insert(0, {"role": "system", "content": self.system_prompt})
 
-        # Build request parameters (NEVER include temperature for reasoning models)
+        # Build request parameters
         request_params = {
             "model": self.model,
             "input": input_messages,
             "max_output_tokens": self.max_output_tokens
         }
 
-        # Add reasoning effort if provided
+        # Add temperature if model supports it (GPT-4o and other non-reasoning models)
+        if self.supports_temperature and self.temperature is not None:
+            request_params["temperature"] = self.temperature
+
+        # Add reasoning effort if provided (GPT-5, o3)
         if self.reasoning_effort:
             request_params["reasoning"] = {"effort": self.reasoning_effort}
             logger.info(f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}")
         else:
-            logger.info(f"Using OpenAI responses API with model {self.model} without explicit reasoning effort")
+            logger.info(f"Using OpenAI responses API with model {self.model}")
 
         # Create the response
         response = self.client.responses.create(**request_params)
@@ -493,38 +492,6 @@ class OpenAIProvider(LLMProvider):
             content=response.output_text,
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
-            model=self.model,
-            raw_response=response
-        )
-    
-    def _get_standard_completion(self, prompt: str) -> LLMResponse:
-        """Get a completion from OpenAI using standard chat completions API.
-
-        For non-reasoning models (GPT-4o, GPT-4, etc.) that support temperature.
-        """
-        messages = [{"role": "user", "content": prompt}]
-
-        # Add system prompt if provided
-        if self.system_prompt:
-            messages.insert(0, {"role": "system", "content": self.system_prompt})
-
-        # Build request parameters
-        request_params = {
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": self.max_output_tokens
-        }
-
-        # Only include temperature if model supports it
-        if self.supports_temperature:
-            request_params["temperature"] = self.temperature
-
-        response = self.client.chat.completions.create(**request_params)
-
-        return LLMResponse(
-            content=response.choices[0].message.content,
-            input_tokens=response.usage.prompt_tokens,
-            output_tokens=response.usage.completion_tokens,
             model=self.model,
             raw_response=response
         )
