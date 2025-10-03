@@ -339,6 +339,7 @@ class AuditionEngine:
             storyteller_prompt=condition.system_prompt,
             created_by=created_by,
             notes=notes,
+            description=run_label,
         )
         run = self.repository.create_generation_run(run)
 
