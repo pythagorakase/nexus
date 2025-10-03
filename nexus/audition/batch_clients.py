@@ -52,6 +52,7 @@ class BatchRequest:
     # OpenAI-specific parameters
     reasoning_effort: Optional[str] = None
     max_output_tokens: Optional[int] = None
+    cache_key: Optional[str] = None  # Chunk-based cache key for prompt caching
     # Anthropic-specific parameters
     thinking_enabled: bool = False
     thinking_budget_tokens: Optional[int] = None
@@ -361,6 +362,12 @@ class OpenAIBatchClient:
                     "input": input_messages,
                     "max_output_tokens": req.max_output_tokens or req.max_tokens
                 }
+
+                # Add cache key for prompt caching (best practice for shared context)
+                # NOTE: prompt_cache_key not supported in Python SDK's responses.create() yet
+                # Relying on automatic prompt caching instead
+                # if req.cache_key:
+                #     body["prompt_cache_key"] = req.cache_key
 
                 # Add temperature if provided (GPT-4o and other non-reasoning models)
                 if req.temperature is not None:

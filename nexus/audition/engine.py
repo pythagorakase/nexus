@@ -239,8 +239,9 @@ class AuditionEngine:
                                     orchestrator.mark_cache_warm(condition.provider, prompt.id)  # type: ignore[arg-type]
                                     first_request_sent = True
                             elif enable_cache and condition.provider.lower() == "openai":
-                                # OpenAI has automatic caching, just enable it
-                                llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
+                                # OpenAI prompt caching with chunk-based cache key
+                                cache_key = f"storyteller-chunk-{prompt.chunk_id}"
+                                llm_response = provider.get_completion(prompt_text, cache_key=cache_key)  # type: ignore[union-attr]
                             else:
                                 llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
 
@@ -368,6 +369,11 @@ class AuditionEngine:
                 if max_tokens is None:
                     max_tokens = condition.parameters.get("max_tokens", 6000)
 
+                # Generate cache key for OpenAI prompt caching
+                cache_key = None
+                if enable_cache and condition.provider.lower() == "openai":
+                    cache_key = f"storyteller-chunk-{prompt.chunk_id}"
+
                 batch_requests.append(BatchRequest(
                     custom_id=custom_id,
                     prompt_id=prompt.id,
@@ -381,6 +387,7 @@ class AuditionEngine:
                     # OpenAI-specific parameters
                     reasoning_effort=condition.parameters.get("reasoning_effort"),
                     max_output_tokens=condition.parameters.get("max_output_tokens"),
+                    cache_key=cache_key,
                     # Anthropic-specific parameters
                     thinking_enabled=condition.parameters.get("thinking_enabled", False),
                     thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
@@ -537,6 +544,11 @@ class AuditionEngine:
                     if max_tokens is None:
                         max_tokens = condition.parameters.get("max_tokens", 6000)
 
+                    # Generate cache key for OpenAI prompt caching
+                    cache_key = None
+                    if enable_cache and condition.provider.lower() == "openai":
+                        cache_key = f"storyteller-chunk-{prompt.chunk_id}"
+
                     batch_requests.append(BatchRequest(
                         custom_id=custom_id,
                         prompt_id=prompt.id,
@@ -550,6 +562,7 @@ class AuditionEngine:
                         # OpenAI-specific parameters
                         reasoning_effort=condition.parameters.get("reasoning_effort"),
                         max_output_tokens=condition.parameters.get("max_output_tokens"),
+                        cache_key=cache_key,
                         # Anthropic-specific parameters
                         thinking_enabled=condition.parameters.get("thinking_enabled", False),
                         thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
