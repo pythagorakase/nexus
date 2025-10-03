@@ -588,7 +588,8 @@ class AnthropicProvider(LLMProvider):
                     if current_section:
                         sections.append((current_name, '\n'.join(current_section)))
                     current_name = line.strip('= ')
-                    current_section = []
+                    # Include the section header in the cached content so prompts remain intact
+                    current_section = [line]
                 else:
                     current_section.append(line)
 
