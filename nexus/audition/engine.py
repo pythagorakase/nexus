@@ -339,6 +339,7 @@ class AuditionEngine:
             storyteller_prompt=condition.system_prompt,
             created_by=created_by,
             notes=notes,
+            description=run_label,
         )
         run = self.repository.create_generation_run(run)
 
@@ -441,18 +442,37 @@ class AuditionEngine:
         # Retrieve results
         batch_results = client.retrieve_results(batch_job)
 
+        if not batch_results:
+            LOGGER.warning(f"Batch {batch_id} returned no result records")
+            return []
+
+        # Cache generation lookups per run to avoid redundant queries
+        generation_cache: Dict[str, Dict[tuple[int, int], GenerationResult]] = {}
+
+        def get_generation(run_identifier: str, prompt_identifier: int, replicate: int) -> Optional[GenerationResult]:
+            mapping = generation_cache.get(run_identifier)
+            if mapping is None:
+                records = self.repository.list_generations_for_run(run_identifier)
+                mapping = {
+                    (record.prompt_id, record.replicate_index): record
+                    for record in records
+                }
+                generation_cache[run_identifier] = mapping
+            return mapping.get((prompt_identifier, replicate))
+
         # Process each result
-        processed_results = []
+        processed_results: List[GenerationResult] = []
         for batch_result in batch_results:
             # Parse custom_id: "{run_id}_{prompt_id}_{replicate_index}"
-            parts = batch_result.custom_id.split('_')
-            run_id_str = '_'.join(parts[:-2])  # UUID has hyphens
-            prompt_id = int(parts[-2])
-            replicate_index = int(parts[-1])
+            try:
+                run_id_str, prompt_id_str, replicate_str = batch_result.custom_id.rsplit('_', 2)
+                prompt_id = int(prompt_id_str)
+                replicate_index = int(replicate_str)
+            except (ValueError, AttributeError):
+                LOGGER.error(f"Malformed batch custom_id: {batch_result.custom_id}")
+                continue
 
-            # Get existing generation record
-            generations = self.repository.list_generations_for_run(run_id_str)
-            gen = next((g for g in generations if g.prompt_id == prompt_id and g.replicate_index == replicate_index), None)
+            gen = get_generation(run_id_str, prompt_id, replicate_index)
 
             if not gen:
                 LOGGER.warning(f"No generation record found for {batch_result.custom_id}")
