@@ -249,32 +249,42 @@ class AnthropicProvider(LLMProvider):
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-haiku-20240307"
 
-    def __init__(self, 
-                api_key: Optional[str] = None, 
+    def __init__(self,
+                api_key: Optional[str] = None,
                 model: Optional[str] = None,
                 temperature: float = 0.1,
                 max_tokens: int = 4000,
                 system_prompt: Optional[str] = None,
                 top_p: Optional[float] = None,
                 top_k: Optional[int] = None,
-                timeout: int = 120):
+                timeout: int = 120,
+                thinking_enabled: bool = False,
+                thinking_budget_tokens: Optional[int] = None):
         """
         Initialize Anthropic provider.
-        
+
         Args:
             api_key: Anthropic API key
             model: Model name to use
             temperature: Temperature for generation
-            max_tokens: Maximum tokens to generate
+            max_tokens: Maximum tokens to generate (includes thinking budget if enabled)
             system_prompt: Optional system prompt
             top_p: Optional top-p sampling parameter (0.0-1.0)
             top_k: Optional top-k sampling parameter
             timeout: Request timeout in seconds
+            thinking_enabled: Enable extended thinking (requires Claude 4+ models)
+            thinking_budget_tokens: Thinking token budget (typically 32000)
         """
         self.top_p = top_p
         self.top_k = top_k
         self.timeout = timeout
-        
+        self.thinking_enabled = thinking_enabled
+        self.thinking_budget_tokens = thinking_budget_tokens
+
+        # Validate thinking configuration
+        if thinking_enabled and thinking_budget_tokens is None:
+            raise ValueError("thinking_budget_tokens must be specified when thinking_enabled=True")
+
         # Call parent init
         super().__init__(
             api_key=api_key,
@@ -288,16 +298,21 @@ class AnthropicProvider(LLMProvider):
         """Initialize the Anthropic client."""
         if not anthropic:
             raise ImportError("The 'anthropic' package is required for AnthropicProvider. Install with 'pip install anthropic'.")
-            
+
         self.provider_name = "anthropic"
         self.api_key = self.api_key or self._get_api_key()
         self.model = self.model or self.DEFAULT_MODEL
-        
+
         # Initialize the client
         self.client = anthropic.Anthropic(api_key=self.api_key, timeout=self.timeout)
-        
-        # Log the model type
-        logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}")
+
+        # Log the model type and thinking status
+        if self.thinking_enabled:
+            logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}, "
+                       f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
+                       f"total max_tokens: {self.max_tokens})")
+        else:
+            logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}")
         
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """
@@ -336,6 +351,13 @@ class AnthropicProvider(LLMProvider):
 
         if self.top_k is not None:
             params["top_k"] = self.top_k
+
+        # Add extended thinking parameters if enabled
+        if self.thinking_enabled:
+            params["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget_tokens
+            }
 
         try:
             # Call the API
