@@ -90,6 +90,7 @@ class GenerationResult:
     condition_id: int
     prompt_id: int
     replicate_index: int
+    lane_id: Optional[str]
     status: str
     prompt_text: str
     request_payload: Dict[str, Any]

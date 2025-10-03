@@ -1,0 +1,218 @@
+# Creative Benchmark - Apex Audition Parameter Lanes
+#
+# This configuration defines 15 parameter lanes across 5 models.
+# Each lane tests a specific parameterization to identify optimal
+# configurations for creative storytelling tasks.
+#
+# Total generations: 5 models × 3 lanes × 21 prompts = 315
+
+experiment:
+  name: creative-benchmark-20251003
+  description: Multi-model parameter sweep for creative storytelling
+  prompts_source: context_packages/apex_audition
+  total_prompts: 21
+
+  # Token budget rationale:
+  # - Reasoning models (GPT-5, o3): 36k output tokens for deep reasoning
+  # - Non-reasoning models (GPT-4o, Claude std): 6k output floor to detect verbosity
+  # - Claude extended: 38k total (6k base + 32k thinking budget)
+
+  models:
+    # ============================================================
+    # GPT-5: Reasoning effort lanes (NO temperature parameter)
+    # ============================================================
+    - id: gpt-5
+      provider: openai
+      model_name: gpt-5
+      description: "GPT-5 with varying reasoning effort levels"
+
+      lanes:
+        - lane_id: gpt5.reason-min
+          label: "GPT-5 Minimal Reasoning"
+          description: "Fastest inference, minimal internal thinking"
+          params:
+            reasoning_effort: minimal
+            max_output_tokens: 36000
+          # CRITICAL: NO temperature parameter for GPT-5
+
+        - lane_id: gpt5.reason-med
+          label: "GPT-5 Medium Reasoning"
+          description: "Default reasoning level"
+          params:
+            reasoning_effort: medium
+            max_output_tokens: 36000
+
+        - lane_id: gpt5.reason-high
+          label: "GPT-5 High Reasoning"
+          description: "Maximum internal thinking, slowest but most thorough"
+          params:
+            reasoning_effort: high
+            max_output_tokens: 36000
+
+    # ============================================================
+    # o3: Reasoning effort lanes (NO temperature parameter)
+    # ============================================================
+    - id: o3
+      provider: openai
+      model_name: o3
+      description: "OpenAI o3 with reasoning effort variation"
+
+      lanes:
+        - lane_id: o3.reason-low
+          label: "o3 Low Reasoning"
+          description: "Fast inference with low reasoning effort"
+          params:
+            reasoning_effort: low
+            max_output_tokens: 36000
+          # CRITICAL: NO temperature parameter for o3
+
+        - lane_id: o3.reason-med
+          label: "o3 Medium Reasoning"
+          description: "Balanced reasoning effort"
+          params:
+            reasoning_effort: medium
+            max_output_tokens: 36000
+
+        - lane_id: o3.reason-high
+          label: "o3 High Reasoning"
+          description: "Maximum reasoning depth"
+          params:
+            reasoning_effort: high
+            max_output_tokens: 36000
+
+    # ============================================================
+    # GPT-4o: Temperature variation lanes
+    # ============================================================
+    - id: gpt-4o
+      provider: openai
+      model_name: gpt-4o
+      description: "GPT-4o temperature sweep (6k output floor)"
+
+      lanes:
+        - lane_id: 4o.t0-6
+          label: "GPT-4o T=0.6"
+          description: "Conservative, more deterministic"
+          params:
+            temperature: 0.6
+            max_output_tokens: 6000
+
+        - lane_id: 4o.t0-8
+          label: "GPT-4o T=0.8"
+          description: "Balanced creativity"
+          params:
+            temperature: 0.8
+            max_output_tokens: 6000
+
+        - lane_id: 4o.t1-0
+          label: "GPT-4o T=1.0"
+          description: "Higher creativity, more varied outputs"
+          params:
+            temperature: 1.0
+            max_output_tokens: 6000
+
+    # ============================================================
+    # Claude Sonnet 4.5: Thinking vs no-thinking + temperature
+    # ============================================================
+    - id: claude-sonnet-4-5
+      provider: anthropic
+      model_name: claude-sonnet-4-5-20250929
+      description: "Claude Sonnet 4.5 with extended thinking experiments"
+
+      lanes:
+        - lane_id: sonnet.t0-8.std
+          label: "Sonnet T=0.8 Standard"
+          description: "Baseline without extended thinking"
+          params:
+            temperature: 0.8
+            thinking:
+              enabled: false
+            max_tokens: 6000
+
+        - lane_id: sonnet.t0-8.ext
+          label: "Sonnet T=0.8 Extended"
+          description: "Extended thinking with 32k budget"
+          params:
+            temperature: 0.8
+            thinking:
+              enabled: true
+              budget_tokens: 32000
+            max_tokens: 38000  # 6k base + 32k thinking
+
+        - lane_id: sonnet.t1-1.ext
+          label: "Sonnet T=1.1 Extended"
+          description: "Hot temperature + extended thinking"
+          params:
+            temperature: 1.1
+            thinking:
+              enabled: true
+              budget_tokens: 32000
+            max_tokens: 38000
+
+    # ============================================================
+    # Claude Opus 4.1: Thinking vs no-thinking + temperature
+    # ============================================================
+    - id: claude-opus-4-1
+      provider: anthropic
+      model_name: claude-opus-4-1-20250514
+      description: "Claude Opus 4.1 with extended thinking experiments"
+
+      lanes:
+        - lane_id: opus.t0-8.std
+          label: "Opus T=0.8 Standard"
+          description: "Baseline without extended thinking"
+          params:
+            temperature: 0.8
+            thinking:
+              enabled: false
+            max_tokens: 6000
+
+        - lane_id: opus.t1-0.ext
+          label: "Opus T=1.0 Extended"
+          description: "Extended thinking with moderate temperature"
+          params:
+            temperature: 1.0
+            thinking:
+              enabled: true
+              budget_tokens: 32000
+            max_tokens: 38000
+
+        - lane_id: opus.t1-2.ext
+          label: "Opus T=1.2 Extended"
+          description: "Hot temperature + extended thinking for maximum creativity"
+          params:
+            temperature: 1.2
+            thinking:
+              enabled: true
+              budget_tokens: 32000
+            max_tokens: 38000
+
+# Validation rules
+validation:
+  rules:
+    - name: "No temperature for GPT-5"
+      check: "models[gpt-5].lanes[*].params must not contain 'temperature'"
+
+    - name: "No temperature for o3"
+      check: "models[o3].lanes[*].params must not contain 'temperature'"
+
+    - name: "Anthropic extended thinking requires budget"
+      check: "When thinking.enabled=true, thinking.budget_tokens must be 32000"
+
+    - name: "Anthropic extended thinking requires raised max_tokens"
+      check: "When thinking.enabled=true, max_tokens must be >= base_tokens + 32000"
+
+    - name: "Reasoning models require high output budget"
+      check: "GPT-5 and o3 lanes must have max_output_tokens >= 30000"
+
+# Execution strategy
+execution:
+  batch_mode: true  # Use Batch API for 50% discount + caching
+  concurrency: 5    # Max concurrent API requests (if sync mode)
+  enable_cache: true
+  context_sequential: true  # Process all lanes for context N before moving to N+1
+
+  # Expected run metrics (for 21 prompts × 15 lanes = 315 generations)
+  estimated_metrics:
+    total_generations: 315
+    approximate_cost_usd: "TBD - depends on actual token usage"
+    estimated_duration_hrs: "12-24 (batch mode with async processing)"
