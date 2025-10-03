@@ -423,14 +423,35 @@ class OpenAIBatchClient:
                 continue
             result_data = json.loads(line)
 
-            if result_data.get("response") and result_data["response"].get("status_code") == 200:
+            response_payload = result_data.get("response")
+            if response_payload and response_payload.get("status_code") == 200:
+                body = response_payload.get("body")
+                if isinstance(body, str):
+                    try:
+                        body = json.loads(body)
+                    except json.JSONDecodeError:  # pragma: no cover - defensive
+                        LOGGER.warning(
+                            "Failed to decode OpenAI batch response body for %s; leaving as raw string",
+                            result_data.get("custom_id"),
+                        )
+
                 results.append(BatchResult(
                     custom_id=result_data["custom_id"],
                     status="succeeded",
-                    response=result_data["response"]["body"]
+                    response=body
                 ))
             else:
-                error_msg = result_data.get("error", {}).get("message", "Unknown error")
+                error_msg = "Unknown error"
+                if response_payload:
+                    error_body = response_payload.get("body")
+                    if isinstance(error_body, str):
+                        try:
+                            error_body = json.loads(error_body)
+                        except json.JSONDecodeError:  # pragma: no cover - defensive
+                            pass
+                    if isinstance(error_body, dict):
+                        error_msg = error_body.get("error", {}).get("message", error_msg)
+                error_msg = result_data.get("error", {}).get("message", error_msg)
                 results.append(BatchResult(
                     custom_id=result_data["custom_id"],
                     status="failed",
