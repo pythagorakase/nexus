@@ -121,7 +121,8 @@ class AuditionRepository:
                 ForeignKey("apex_audition.prompts.id", ondelete="CASCADE"),
                 nullable=False,
             ),
-            Column("replicate_index", Integer, nullable=False),
+            Column("replicate_index", Integer, nullable=False, server_default=text("0")),
+            Column("lane_id", String(64)),
             Column("status", String(32), nullable=False),
             Column("prompt_text", Text, nullable=False),
             Column("request_payload", JSONB, nullable=False),
@@ -389,6 +390,7 @@ class AuditionRepository:
                 condition_id=result.condition_id,
                 prompt_id=result.prompt_id,
                 replicate_index=result.replicate_index,
+                lane_id=result.lane_id,
                 status=result.status,
                 prompt_text=result.prompt_text,
                 request_payload=result.request_payload,
@@ -420,6 +422,7 @@ class AuditionRepository:
                     condition_id=row["condition_id"],
                     prompt_id=row["prompt_id"],
                     replicate_index=row["replicate_index"],
+                    lane_id=row.get("lane_id"),
                     status=row["status"],
                     prompt_text=row["prompt_text"],
                     request_payload=row["request_payload"],
@@ -458,6 +461,7 @@ class AuditionRepository:
             .where(self.generations.c.id == result.id)
             .values(
                 status=result.status,
+                lane_id=result.lane_id,
                 response_payload=result.response_payload,
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
