@@ -41,6 +41,24 @@ class AuditionEngine:
         self.repository = repository or AuditionRepository(settings_path=self.settings_path)
         self.context_dir = Path(context_dir) if context_dir else DEFAULT_CONTEXT_DIR
 
+        # Cached batch clients to avoid repeated 1Password authentication
+        self._anthropic_batch_client = None
+        self._openai_batch_client = None
+
+    def _get_anthropic_batch_client(self):
+        """Get or create cached Anthropic batch client."""
+        if self._anthropic_batch_client is None:
+            from .batch_clients import AnthropicBatchClient
+            self._anthropic_batch_client = AnthropicBatchClient()
+        return self._anthropic_batch_client
+
+    def _get_openai_batch_client(self):
+        """Get or create cached OpenAI batch client."""
+        if self._openai_batch_client is None:
+            from .batch_clients import OpenAIBatchClient
+            self._openai_batch_client = OpenAIBatchClient()
+        return self._openai_batch_client
+
     # ------------------------------------------------------------------
     # Context ingestion
     # ------------------------------------------------------------------
@@ -263,6 +281,220 @@ class AuditionEngine:
                 self.repository.record_generation(result)
 
         return run
+
+    def submit_batch_generation(
+        self,
+        *,
+        condition_slug: str,
+        prompt_ids: Optional[Sequence[int]] = None,
+        limit: Optional[int] = None,
+        replicate_count: int = 1,
+        run_label: Optional[str] = None,
+        created_by: Optional[str] = None,
+        notes: Optional[str] = None,
+        enable_cache: bool = True,
+        output_dir: Optional[Path] = None,
+    ) -> tuple[GenerationRun, str]:
+        """
+        Submit a batch generation job (asynchronous, 50% discount).
+
+        This method prepares all requests and submits them as a single batch
+        to the provider's Batch API. Results must be retrieved separately
+        using `retrieve_batch_results()`.
+
+        Args:
+            condition_slug: Condition identifier
+            prompt_ids: Optional subset of prompt IDs to process
+            limit: Max prompts to process
+            replicate_count: Number of completions per prompt
+            run_label: Optional label for this run
+            created_by: Who initiated this run
+            notes: Optional notes
+            enable_cache: Enable prompt caching (stacks with 50% batch discount)
+            output_dir: Directory for OpenAI batch files (defaults to temp/)
+
+        Returns:
+            Tuple of (GenerationRun, batch_id)
+        """
+        from .batch_clients import AnthropicBatchClient, BatchRequest, OpenAIBatchClient
+
+        if replicate_count < 1:
+            raise ValueError("replicate_count must be >= 1")
+
+        condition = self.repository.get_condition_by_slug(condition_slug)
+        if not condition or condition.id is None:
+            raise ValueError(f"Unknown condition slug: {condition_slug}")
+
+        prompts = self.repository.list_prompts()
+        if prompt_ids is not None:
+            prompt_filter = set(prompt_ids)
+            prompts = [p for p in prompts if p.id in prompt_filter]
+        if limit is not None:
+            prompts = prompts[:limit]
+        if not prompts:
+            raise ValueError("No prompts available for generation")
+
+        run = GenerationRun(
+            provider=condition.provider,
+            storyteller_prompt=condition.system_prompt,
+            created_by=created_by,
+            notes=notes,
+        )
+        run = self.repository.create_generation_run(run)
+
+        LOGGER.info(
+            "Submitting batch run %s with condition %s over %s prompts (replicates=%s, cache=%s)",
+            run.run_id,
+            condition.slug,
+            len(prompts),
+            replicate_count,
+            enable_cache,
+        )
+
+        # Prepare all batch requests
+        batch_requests = []
+        for prompt in prompts:
+            if prompt.id is None:
+                raise ValueError(f"Prompt {prompt.chunk_id} has no database identifier")
+
+            for replicate_index in range(replicate_count):
+                prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
+
+                custom_id = f"{run.run_id}_{prompt.id}_{replicate_index}"
+                batch_requests.append(BatchRequest(
+                    custom_id=custom_id,
+                    prompt_id=prompt.id,
+                    replicate_index=replicate_index,
+                    prompt_text=prompt_text,
+                    model=condition.model,
+                    temperature=condition.parameters.get("temperature", 0.7),
+                    max_tokens=condition.parameters.get("max_output_tokens", 2048),
+                    system_prompt=condition.system_prompt,
+                    enable_cache=enable_cache
+                ))
+
+                # Create pending result record
+                result = GenerationResult(
+                    run_id=run.run_id,
+                    condition_id=condition.id,
+                    prompt_id=prompt.id,
+                    replicate_index=replicate_index,
+                    status="batch_pending",
+                    prompt_text=prompt_text,
+                    request_payload=request_payload,
+                    started_at=datetime.now(timezone.utc),
+                )
+                self.repository.record_generation(result)
+
+        # Submit batch to appropriate provider
+        if condition.provider.lower() == "anthropic":
+            client = self._get_anthropic_batch_client()
+            batch_id = client.create_batch(batch_requests)
+        elif condition.provider.lower() == "openai":
+            client = self._get_openai_batch_client()
+            batch_dir = output_dir or Path("temp/batches")
+            batch_id = client.create_batch(batch_requests, batch_dir)
+        else:
+            raise ValueError(f"Unsupported provider for batch mode: {condition.provider}")
+
+        # Update all results with batch_job_id
+        for req in batch_requests:
+            # Parse custom_id to get prompt_id and replicate_index
+            _, prompt_id_str, replicate_str = req.custom_id.split('_')
+            prompt_id = int(prompt_id_str)
+            replicate_index = int(replicate_str)
+
+            # Update the generation record
+            self.repository.update_generation_batch_id(
+                run.run_id, prompt_id, replicate_index, batch_id
+            )
+
+        LOGGER.info(f"Batch submitted: {batch_id} ({len(batch_requests)} requests)")
+        LOGGER.info(f"Use `python scripts/poll_batch.py --batch-id {batch_id}` to check status")
+
+        return run, batch_id
+
+    def retrieve_batch_results(self, batch_id: str, provider: str) -> List[GenerationResult]:
+        """
+        Retrieve and process results from a completed batch.
+
+        Args:
+            batch_id: Batch job ID
+            provider: Provider name ("openai" or "anthropic")
+
+        Returns:
+            List of processed GenerationResult objects
+        """
+        # Get batch client
+        if provider.lower() == "anthropic":
+            client = self._get_anthropic_batch_client()
+        elif provider.lower() == "openai":
+            client = self._get_openai_batch_client()
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        # Get batch status
+        batch_job = client.get_status(batch_id)
+        if batch_job.status.value != "completed":
+            raise ValueError(f"Batch {batch_id} not completed (status: {batch_job.status.value})")
+
+        # Retrieve results
+        batch_results = client.retrieve_results(batch_job)
+
+        # Process each result
+        processed_results = []
+        for batch_result in batch_results:
+            # Parse custom_id: "{run_id}_{prompt_id}_{replicate_index}"
+            parts = batch_result.custom_id.split('_')
+            run_id_str = '_'.join(parts[:-2])  # UUID has hyphens
+            prompt_id = int(parts[-2])
+            replicate_index = int(parts[-1])
+
+            # Get existing generation record
+            generations = self.repository.list_generations_for_run(run_id_str)
+            gen = next((g for g in generations if g.prompt_id == prompt_id and g.replicate_index == replicate_index), None)
+
+            if not gen:
+                LOGGER.warning(f"No generation record found for {batch_result.custom_id}")
+                continue
+
+            if batch_result.status == "succeeded":
+                # Parse response based on provider
+                if provider.lower() == "anthropic":
+                    response_data = batch_result.response
+                    gen.status = "completed"
+                    gen.response_payload = {"content": response_data.get("content", [{}])[0].get("text", ""),
+                                           "model": response_data.get("model"),
+                                           "raw": response_data}
+                    gen.input_tokens = response_data.get("usage", {}).get("input_tokens", 0)
+                    gen.output_tokens = response_data.get("usage", {}).get("output_tokens", 0)
+                    # Check for cache hit
+                    cache_read = response_data.get("usage", {}).get("cache_read_input_tokens", 0)
+                    gen.cache_hit = cache_read > 0
+                elif provider.lower() == "openai":
+                    response_data = batch_result.response
+                    choice = response_data.get("choices", [{}])[0]
+                    gen.status = "completed"
+                    gen.response_payload = {"content": choice.get("message", {}).get("content", ""),
+                                           "model": response_data.get("model"),
+                                           "raw": response_data}
+                    gen.input_tokens = response_data.get("usage", {}).get("prompt_tokens", 0)
+                    gen.output_tokens = response_data.get("usage", {}).get("completion_tokens", 0)
+                    # OpenAI doesn't expose cache hits in batch results currently
+                    gen.cache_hit = False
+
+                gen.completed_at = datetime.now(timezone.utc)
+            else:
+                gen.status = "error"
+                gen.error_message = batch_result.error
+                gen.completed_at = datetime.now(timezone.utc)
+
+            # Update in database
+            self.repository.update_generation_result(gen)
+            processed_results.append(gen)
+
+        LOGGER.info(f"Processed {len(processed_results)} results from batch {batch_id}")
+        return processed_results
 
     # ------------------------------------------------------------------
     # Helpers
