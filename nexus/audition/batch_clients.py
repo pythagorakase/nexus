@@ -441,7 +441,9 @@ class OpenAIBatchClient:
                     response=body
                 ))
             else:
-                error_msg = "Unknown error"
+                # Start with top-level error (generic)
+                error_msg = result_data.get("error", {}).get("message", "Unknown error")
+                # Override with structured error from response body if available (more specific)
                 if response_payload:
                     error_body = response_payload.get("body")
                     if isinstance(error_body, str):
@@ -450,8 +452,9 @@ class OpenAIBatchClient:
                         except json.JSONDecodeError:  # pragma: no cover - defensive
                             pass
                     if isinstance(error_body, dict):
-                        error_msg = error_body.get("error", {}).get("message", error_msg)
-                error_msg = result_data.get("error", {}).get("message", error_msg)
+                        error_field = error_body.get("error")
+                        if isinstance(error_field, dict):
+                            error_msg = error_field.get("message", error_msg)
                 results.append(BatchResult(
                     custom_id=result_data["custom_id"],
                     status="failed",
