@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence
+from uuid import UUID
 
 try:
     from scripts.api_openai import OpenAIProvider
@@ -443,6 +444,7 @@ class AuditionEngine:
 
         # Process each result
         processed_results = []
+        run_cache: Dict[UUID, List[GenerationResult]] = {}
         for batch_result in batch_results:
             # Parse custom_id: "{run_id}_{prompt_id}_{replicate_index}"
             parts = batch_result.custom_id.split('_')
@@ -450,9 +452,20 @@ class AuditionEngine:
             prompt_id = int(parts[-2])
             replicate_index = int(parts[-1])
 
+            try:
+                run_id = UUID(run_id_str)
+            except ValueError:
+                LOGGER.warning("Malformed run_id in custom_id %s", batch_result.custom_id)
+                continue
+
             # Get existing generation record
-            generations = self.repository.list_generations_for_run(run_id_str)
-            gen = next((g for g in generations if g.prompt_id == prompt_id and g.replicate_index == replicate_index), None)
+            if run_id not in run_cache:
+                run_cache[run_id] = self.repository.list_generations_for_run(run_id)
+            generations = run_cache[run_id]
+            gen = next(
+                (g for g in generations if g.prompt_id == prompt_id and g.replicate_index == replicate_index),
+                None,
+            )
 
             if not gen:
                 LOGGER.warning(f"No generation record found for {batch_result.custom_id}")
