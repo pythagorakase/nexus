@@ -9,6 +9,19 @@ import AuditionTab from "@/pages/AuditionTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Book, Map, Users, Sparkles } from "lucide-react";
 
+interface SettingsPayload {
+  ["Agent Settings"]?: {
+    global?: {
+      model?: {
+        default_model?: string;
+      };
+      llm?: {
+        api_base?: string;
+      };
+    };
+  };
+}
+
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
   const [isModelLoaded, setIsModelLoaded] = useState(false);
@@ -20,24 +33,32 @@ export function NexusLayout() {
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
 
   // Fetch settings to get model name
-  const { data: settings } = useQuery({
+  const {
+    data: settings,
+    isSuccess: settingsLoaded,
+    isError: settingsError,
+  } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   // Parse model name from settings
   useEffect(() => {
-    if (settings && settings["Agent Settings"]) {
-      const defaultModel = settings["Agent Settings"]?.global?.model?.default_model;
+    if (settingsLoaded) {
+      const defaultModel = settings?.["Agent Settings"]?.global?.model?.default_model;
 
       if (defaultModel) {
         const modelName = defaultModel.includes("/")
           ? defaultModel.split("/").pop()!.toUpperCase()
           : defaultModel.toUpperCase();
         setCurrentModel(modelName);
+      } else {
+        setCurrentModel("UNCONFIGURED");
       }
+    } else if (settingsError) {
+      setCurrentModel("UNAVAILABLE");
     }
-  }, [settings]);
+  }, [settings, settingsError, settingsLoaded]);
 
   // Check if LLM server is running and has model loaded
   useEffect(() => {
