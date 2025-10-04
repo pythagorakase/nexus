@@ -10,7 +10,7 @@ export interface Condition {
   id: number;
   slug: string;
   provider: string;
-  model: string;
+  model_name: string;
   label?: string;
   parameters: Record<string, any>;
   is_active: boolean;
