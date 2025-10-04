@@ -5,10 +5,11 @@ import { useMemo, useState } from 'react';
 import { useComparison } from '@/hooks/useComparison';
 import { ComparisonLayout } from '@/components/audition/ComparisonLayout';
 import { ResultsDashboard } from '@/components/audition/ResultsDashboard';
+import { GenerateMode } from '@/components/audition/GenerateMode';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
-type AuditionMode = 'judge' | 'results';
+type AuditionMode = 'judge' | 'results' | 'generate';
 
 export default function AuditionTab() {
   const [evaluator] = useState(() => {
@@ -113,6 +114,13 @@ export default function AuditionTab() {
             Judge Mode
           </Button>
           <Button
+            variant={mode === 'generate' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setMode('generate')}
+          >
+            Generate Mode
+          </Button>
+          <Button
             variant={mode === 'results' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setMode('results')}
@@ -129,6 +137,8 @@ export default function AuditionTab() {
       <div className="flex-1 overflow-hidden">
         {mode === 'judge' ? (
           renderJudgeMode()
+        ) : mode === 'generate' ? (
+          <GenerateMode />
         ) : (
           <ResultsDashboard
             sessionSummary={sessionSummary}

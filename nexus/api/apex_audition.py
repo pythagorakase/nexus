@@ -7,10 +7,16 @@ Provides REST API endpoints for:
 - Updating ELO ratings
 - Viewing leaderboards
 - Exporting comparisons
+- Generation job management
 """
 from datetime import datetime
 import random
-from typing import List, Optional
+import re
+import subprocess
+import threading
+import uuid
+from pathlib import Path
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Query
@@ -43,6 +49,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global state for generation jobs
+generation_jobs: Dict[str, Dict] = {}
 
 
 def get_db():
@@ -390,3 +399,117 @@ def export_comparison(comparison_id: int):
                 raise HTTPException(status_code=404, detail="Comparison not found")
 
             return dict(row)
+
+
+# ============================================================================
+# Generation Job Management Endpoints
+# ============================================================================
+
+@app.post("/api/audition/generate/start")
+def start_generation():
+    """Start a generation job (runs regenerate_missing_content.py)."""
+    job_id = str(uuid.uuid4())
+
+    # Get project root (parent of nexus/api/)
+    project_root = Path(__file__).parent.parent.parent
+    script_path = project_root / "scripts" / "regenerate_missing_content.py"
+
+    if not script_path.exists():
+        raise HTTPException(status_code=500, detail=f"Script not found: {script_path}")
+
+    # Start subprocess
+    process = subprocess.Popen(
+        ["python", str(script_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        cwd=str(project_root),
+        bufsize=1  # Line buffered
+    )
+
+    # Buffer to capture output
+    output_lines = []
+
+    def capture_output():
+        """Capture subprocess output in background thread."""
+        try:
+            for line in process.stdout:
+                output_lines.append(line.rstrip())
+        except Exception:
+            pass  # Process terminated
+
+    # Start capture thread
+    thread = threading.Thread(target=capture_output, daemon=True)
+    thread.start()
+
+    # Store job info
+    generation_jobs[job_id] = {
+        "process": process,
+        "thread": thread,
+        "output": output_lines,
+        "started_at": datetime.now(),
+        "script": "regenerate_missing_content.py"
+    }
+
+    return {"job_id": job_id, "status": "started"}
+
+
+@app.get("/api/audition/generate/status")
+def get_generation_status(job_id: str = Query(...)):
+    """Get status of a generation job."""
+    job = generation_jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    process = job["process"]
+
+    if process.poll() is None:
+        return {"status": "running", "job_id": job_id}
+    else:
+        exit_code = process.returncode
+        return {
+            "status": "completed" if exit_code == 0 else "failed",
+            "job_id": job_id,
+            "exit_code": exit_code
+        }
+
+
+@app.get("/api/audition/generate/output")
+def get_generation_output(job_id: str = Query(...)):
+    """Get output and stats from a generation job."""
+    job = generation_jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Get output lines
+    output_lines = job["output"]
+    output = "\n".join(output_lines)
+
+    # Parse latest stats from output
+    stats = None
+    for line in reversed(output_lines):
+        match = re.search(
+            r'Total: (\d+) \| Remaining: (\d+) \| Completed: (\d+) \| Failed: (\d+)',
+            line
+        )
+        if match:
+            stats = {
+                "total": int(match.group(1)),
+                "remaining": int(match.group(2)),
+                "completed": int(match.group(3)),
+                "failed": int(match.group(4))
+            }
+            break
+
+    # Get status
+    process = job["process"]
+    status = "running" if process.poll() is None else "completed"
+
+    return {
+        "output": output,
+        "stats": stats,
+        "status": status,
+        "job_id": job_id
+    }
