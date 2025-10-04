@@ -17,10 +17,22 @@ function resolveContent(generation: Generation): string {
     return '[No content generated]';
   }
 
-  if (typeof payload.content === 'string') {
+  // Check for Anthropic format: raw.content[0].text
+  if (payload.raw?.content?.[0]?.text) {
+    return payload.raw.content[0].text;
+  }
+
+  // Check for OpenAI /v1/responses format: raw.output[0].content[0].text
+  if (payload.raw?.output?.[0]?.content?.[0]?.text) {
+    return payload.raw.output[0].content[0].text;
+  }
+
+  // Fallback: top-level content field (string)
+  if (typeof payload.content === 'string' && payload.content) {
     return payload.content;
   }
 
+  // Legacy OpenAI chat completions format
   if (Array.isArray(payload.choices) && payload.choices.length > 0) {
     const choice = payload.choices[0];
     if (typeof choice?.message?.content === 'string') {
@@ -28,10 +40,12 @@ function resolveContent(generation: Generation): string {
     }
   }
 
+  // Fallback: top-level output field
   if (typeof payload.output === 'string') {
     return payload.output;
   }
 
+  // Last resort: payload itself is a string
   if (typeof payload === 'string') {
     return payload;
   }
