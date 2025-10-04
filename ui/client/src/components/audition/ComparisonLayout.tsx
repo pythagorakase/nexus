@@ -94,7 +94,7 @@ export function ComparisonLayout({
     if (!warmChunks.length) return undefined;
     const currentChunkId = comparison.prompt.chunk_id;
     const chunksBefore = warmChunks
-      .filter((chunk) => (chunk.chunk_id ?? chunk.id ?? -Infinity) < currentChunkId);
+      .filter((chunk) => (chunk.chunk_id ?? chunk.id ?? -Infinity) <= currentChunkId);
     if (chunksBefore.length === 0) {
       return warmChunks[warmChunks.length - 1];
     }
