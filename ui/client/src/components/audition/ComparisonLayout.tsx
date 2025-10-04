@@ -1,69 +1,147 @@
 /**
  * Main comparison layout with side-by-side generations.
  */
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ComparisonQueueItem } from '@/lib/audition-api';
 import { useJudgment } from '@/hooks/useJudgment';
 import { GenerationPane } from './GenerationPane';
 import { JudgmentBar } from './JudgmentBar';
 import { ContextDrawer } from './ContextDrawer';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface ComparisonLayoutProps {
   comparison: ComparisonQueueItem;
   evaluator: string;
   onComplete?: () => void;
   onSkip?: () => void;
+  onExit?: () => void;
+}
+
+interface WarmChunk {
+  chunk_id?: number;
+  id?: number;
+  text?: string;
+  raw_text?: string;
+  rawText?: string;
+}
+
+function extractWarmChunks(context: Record<string, unknown> | undefined): WarmChunk[] {
+  if (!context || typeof context !== 'object') return [];
+
+  const possibleCollections = [
+    (context as any)?.warm_slice?.chunks,
+    (context as any)?.context_payload?.warm_slice?.chunks,
+    (context as any)?.warmSlice?.chunks,
+  ];
+
+  for (const collection of possibleCollections) {
+    if (Array.isArray(collection)) {
+      return collection as WarmChunk[];
+    }
+  }
+
+  return [];
+}
+
+function getChunkText(chunk: WarmChunk | undefined) {
+  if (!chunk) return '';
+  return (
+    chunk.text ||
+    chunk.raw_text ||
+    chunk.rawText ||
+    ''
+  );
+}
+
+function buildSnippet(text: string) {
+  if (!text) return '';
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length <= 6) {
+    return text.trim();
+  }
+  const tail = lines.slice(-6);
+  return ['…', ...tail].join('\n');
 }
 
 export function ComparisonLayout({
   comparison,
   evaluator,
   onComplete,
-  onSkip
+  onSkip,
+  onExit,
 }: ComparisonLayoutProps) {
   const [highlightedPane, setHighlightedPane] = useState<'A' | 'B' | null>(null);
   const [pendingNote, setPendingNote] = useState<string>('');
+  const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
 
-  const handleJudgment = async (winnerConditionId: number | null) => {
+  const warmChunks = useMemo(
+    () => extractWarmChunks(comparison.prompt.context),
+    [comparison.prompt.context],
+  );
+
+  const precedingChunk = useMemo(() => {
+    if (!warmChunks.length) return undefined;
+    const currentChunkId = comparison.prompt.chunk_id;
+    const chunksBefore = warmChunks
+      .filter((chunk) => (chunk.chunk_id ?? chunk.id ?? -Infinity) < currentChunkId);
+    if (chunksBefore.length === 0) {
+      return warmChunks[warmChunks.length - 1];
+    }
+    return chunksBefore[chunksBefore.length - 1];
+  }, [warmChunks, comparison.prompt.chunk_id]);
+
+  const precedingText = useMemo(() => getChunkText(precedingChunk), [precedingChunk]);
+  const precedingSnippet = useMemo(() => buildSnippet(precedingText), [precedingText]);
+
+  const resetHighlightSoon = useCallback(() => {
+    setTimeout(() => setHighlightedPane(null), 400);
+  }, []);
+
+  const handleJudgment = useCallback(async (winnerConditionId: number | null) => {
     if (isRecording) {
       return;
     }
 
     try {
-      // Highlight the winning pane briefly
       if (winnerConditionId === comparison.condition_a.id) {
         setHighlightedPane('A');
       } else if (winnerConditionId === comparison.condition_b.id) {
         setHighlightedPane('B');
+      } else {
+        setHighlightedPane(null);
       }
 
       await recordJudgmentAsync({
         prompt_id: comparison.prompt.id,
         condition_a_id: comparison.condition_a.id,
         condition_b_id: comparison.condition_b.id,
-        winner_condition_id: winnerConditionId,
+        winner_condition_id: winnerConditionId ?? undefined,
         evaluator,
         notes: pendingNote || undefined,
       });
 
-      // Clear note after successful judgment
       setPendingNote('');
 
       toast({
         title: 'Judgment recorded',
-        description: winnerConditionId
-          ? `Winner: ${winnerConditionId === comparison.condition_a.id ? 'A' : 'B'}`
-          : 'Recorded as tie',
+        description: winnerConditionId === null
+          ? 'Recorded as tie'
+          : winnerConditionId === comparison.condition_a.id
+            ? 'Left passage wins'
+            : 'Right passage wins',
       });
 
-      // Call onComplete callback
       onComplete?.();
-
-      // Clear highlight
-      setTimeout(() => setHighlightedPane(null), 500);
+      resetHighlightSoon();
     } catch (error) {
       toast({
         title: 'Error',
@@ -72,9 +150,20 @@ export function ComparisonLayout({
       });
       setHighlightedPane(null);
     }
-  };
+  }, [
+    comparison.condition_a.id,
+    comparison.condition_b.id,
+    comparison.prompt.id,
+    evaluator,
+    isRecording,
+    onComplete,
+    pendingNote,
+    recordJudgmentAsync,
+    resetHighlightSoon,
+    toast,
+  ]);
 
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     if (isRecording) {
       return;
     }
@@ -83,53 +172,115 @@ export function ComparisonLayout({
     setHighlightedPane(null);
     toast({
       title: 'Comparison skipped',
-      description: 'No judgment recorded. Fetching the next pair.',
+      description: 'Fetching the next pair.',
     });
     onSkip?.();
-  };
+  }, [isRecording, onSkip, toast]);
+
+  const handleExit = useCallback(() => {
+    if (isRecording) {
+      return;
+    }
+    setPendingNote('');
+    setHighlightedPane(null);
+    onExit?.();
+  }, [isRecording, onExit]);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (isRecording) return;
+      if (event.key === '1') {
+        event.preventDefault();
+        handleJudgment(comparison.condition_a.id);
+      } else if (event.key === '2') {
+        event.preventDefault();
+        handleJudgment(comparison.condition_b.id);
+      } else if (event.key === '3') {
+        event.preventDefault();
+        handleJudgment(null);
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        handleExit();
+      } else if (event.key === '0' && onSkip) {
+        event.preventDefault();
+        handleSkip();
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [comparison.condition_a.id, comparison.condition_b.id, handleExit, handleJudgment, handleSkip, isRecording, onSkip]);
+
+  const hasPrecedingChunk = Boolean(precedingSnippet);
 
   return (
     <div className="flex flex-col h-full">
-      {/* Status bar */}
-      <div className="border-b border-border px-4 py-2 font-mono text-sm">
-        <div className="flex justify-between items-center">
-          <span className="text-primary">
-            {comparison.condition_a.model} vs {comparison.condition_b.model}
-          </span>
-          <span className="text-muted-foreground">
-            Chunk {comparison.prompt.chunk_id}
-          </span>
+      <div className="border-b border-border px-4 py-3 space-y-3 bg-card/40">
+        <div className="flex items-center justify-between text-xs text-muted-foreground uppercase tracking-wide">
+          <span>Chunk {comparison.prompt.chunk_id}</span>
+          {comparison.prompt.label && <span>{comparison.prompt.label}</span>}
         </div>
+
+        {hasPrecedingChunk ? (
+          <div className="border border-border/70 rounded-md bg-background/70 p-3">
+            <div className="text-[11px] uppercase text-muted-foreground tracking-wider mb-2">
+              Previous chunk tail
+            </div>
+            <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap">{precedingSnippet}</pre>
+            <div className="flex justify-end mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsContextDialogOpen(true)}
+              >
+                View full chunk
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-muted-foreground">
+            No preceding chunk found in context package.
+          </div>
+        )}
       </div>
 
-      {/* Split pane with generations */}
-      <div className="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden">
         <GenerationPane
-          condition={comparison.condition_a}
           generation={comparison.generation_a}
-          label="A"
+          label="1"
           highlighted={highlightedPane === 'A'}
         />
         <GenerationPane
-          condition={comparison.condition_b}
           generation={comparison.generation_b}
-          label="B"
+          label="2"
           highlighted={highlightedPane === 'B'}
         />
       </div>
 
-      {/* Context drawer */}
       <ContextDrawer prompt={comparison.prompt} />
 
-      {/* Judgment controls */}
       <JudgmentBar
-        onChooseA={() => handleJudgment(comparison.condition_a.id)}
-        onChooseB={() => handleJudgment(comparison.condition_b.id)}
+        onChooseLeft={() => handleJudgment(comparison.condition_a.id)}
+        onChooseRight={() => handleJudgment(comparison.condition_b.id)}
         onTie={() => handleJudgment(null)}
-        onSkip={handleSkip}
+        onExit={handleExit}
+        onSkip={onSkip ? handleSkip : undefined}
         onNote={(note) => setPendingNote(note)}
         disabled={isRecording}
       />
+
+      <Dialog open={isContextDialogOpen} onOpenChange={setIsContextDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Previous chunk (full)</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            <pre className="font-mono text-sm whitespace-pre-wrap leading-relaxed">
+              {precedingText || 'No preceding chunk available.'}
+            </pre>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

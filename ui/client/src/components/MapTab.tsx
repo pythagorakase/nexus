@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Loader2, ChevronRight, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,10 +15,6 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
   
-  // Debug: Log when selectedLocation changes
-  useEffect(() => {
-    console.log('[MapTab] selectedLocation changed to:', selectedLocation);
-  }, [selectedLocation]);
   const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
   
   // Map control states
@@ -31,22 +27,25 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const [zoom, setZoom] = useState(1);
 
   // Fetch places
-  const { data: places = [], isLoading: placesLoading } = useQuery<Place[]>({
+  const {
+    data: places = [],
+    isLoading: placesLoading,
+    isError: placesError,
+    error: placesErrorData,
+  } = useQuery<Place[]>({
     queryKey: ["/api/places"],
   });
 
   // Fetch zones
-  const { data: zones = [], isLoading: zonesLoading } = useQuery<Zone[]>({
+  const {
+    data: zones = [],
+    isLoading: zonesLoading,
+    isError: zonesError,
+    error: zonesErrorData,
+  } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
   });
   
-  // Debug: Log when places data is loaded
-  useEffect(() => {
-    if (places.length > 0) {
-      console.log(`[MapTab] Loaded ${places.length} places`);
-    }
-  }, [places]);
-
   useEffect(() => {
     const handleResize = () => {
       if (svgRef.current?.parentElement) {
@@ -61,6 +60,34 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  type Coordinates = { latitude: number; longitude: number };
+
+  const parseCoordinateString = (value?: unknown): Coordinates | null => {
+    if (typeof value !== "string") return null;
+    const match = value.match(/POINT(?:ZM)?\((-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/i);
+    if (!match) return null;
+    const longitude = Number(match[1]);
+    const latitude = Number(match[2]);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+    return { latitude, longitude };
+  };
+
+  const extractCoordinates = (place: Place): Coordinates | null => {
+    const lat = place.latitude !== null && place.latitude !== undefined ? Number(place.latitude) : undefined;
+    const lng = place.longitude !== null && place.longitude !== undefined ? Number(place.longitude) : undefined;
+
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat as number, longitude: lng as number };
+    }
+
+    const coordinatesField = (place as unknown as { coordinates?: unknown; geom?: unknown }).coordinates;
+    const geomField = (place as unknown as { coordinates?: unknown; geom?: unknown }).geom;
+
+    return parseCoordinateString(coordinatesField ?? geomField);
+  };
+
   // Calculate bounds from place data only (zones not needed for display)
   useEffect(() => {
     if (!places.length) return;
@@ -72,15 +99,12 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
     // Extract coordinates from places only
     places.forEach(place => {
-      if (place.longitude && place.latitude) {
-        const lng = parseFloat(place.longitude);
-        const lat = parseFloat(place.latitude);
-        if (!isNaN(lng) && !isNaN(lat)) {
-          minLng = Math.min(minLng, lng);
-          maxLng = Math.max(maxLng, lng);
-          minLat = Math.min(minLat, lat);
-          maxLat = Math.max(maxLat, lat);
-        }
+      const coords = extractCoordinates(place);
+      if (coords) {
+        minLng = Math.min(minLng, coords.longitude);
+        maxLng = Math.max(maxLng, coords.longitude);
+        minLat = Math.min(minLat, coords.latitude);
+        maxLat = Math.max(maxLat, coords.latitude);
       }
     });
 
@@ -120,23 +144,45 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   };
 
   // Get place coordinates
-  const getPlaceCoordinates = (place: Place): { x: number; y: number } | null => {
-    if (place.longitude && place.latitude) {
-      const lng = parseFloat(place.longitude);
-      const lat = parseFloat(place.latitude);
-      if (!isNaN(lng) && !isNaN(lat)) {
-        return transformCoordinates(lng, lat);
-      }
+  const fallbackPositions = useMemo(() => {
+    if (!places.length) {
+      return new Map<number, { x: number; y: number }>();
     }
+    const width = Math.max(mapDimensions.width, 400);
+    const height = Math.max(mapDimensions.height, 300);
+    const radius = Math.min(width, height) * 0.35;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    return new Map<number, { x: number; y: number }>(
+      places.map((place, index) => {
+        const angle = (index / places.length) * Math.PI * 2;
+        const x = centerX + radius * Math.cos(angle);
+        const y = centerY + radius * Math.sin(angle);
+        return [place.id, { x, y }];
+      }),
+    );
+  }, [places, mapDimensions.height, mapDimensions.width]);
+
+  const getPlaceCoordinates = (place: Place): { x: number; y: number } | null => {
+    const coords = extractCoordinates(place);
+    if (coords) {
+      return transformCoordinates(coords.longitude, coords.latitude);
+    }
+
+    const fallback = fallbackPositions.get(place.id);
+    if (fallback) {
+      return fallback;
+    }
+
     return null;
   };
 
-  // Filter places with valid coordinates
-  const visiblePlaces = places.filter(place => place.longitude && place.latitude);
+  const visiblePlaces = places;
 
   // Group places by zone for the sidebar
   const placesByZone = visiblePlaces.reduce((acc, place) => {
-    const zoneId = place.zoneId || 0;
+    const zoneId = place.zoneId ?? (place as any).zone ?? 0;
     if (!acc[zoneId]) acc[zoneId] = [];
     acc[zoneId].push(place);
     return acc;
@@ -158,8 +204,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   // Handle mouse events for drag
   const handleMouseDown = (e: React.MouseEvent) => {
     // Only start dragging on the background, not on interactive elements
-    if (e.button === 0 && e.target === e.currentTarget) { // Left click only on SVG itself
-      console.log('[MapTab] Starting drag');
+    if (e.button === 0 && e.target === e.currentTarget) {
       setIsDragging(true);
       setDragStart({ x: e.clientX, y: e.clientY });
     }
@@ -180,7 +225,6 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
   const handleMouseUp = () => {
     if (isDragging) {
-      console.log('[MapTab] Ending drag');
       setIsDragging(false);
     }
   };
@@ -236,9 +280,22 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     <div className="flex h-full bg-background">
       {/* Map Area */}
       <div className="flex-1 relative overflow-hidden">
-        {isLoading && (
+        {(isLoading) && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-50">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        )}
+
+        {(placesError || zonesError) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/90 z-50 p-6">
+            <div className="text-center space-y-3">
+              <p className="font-mono text-destructive">Failed to load map data.</p>
+              <p className="text-xs text-muted-foreground">
+                {placesError && `Places: ${placesErrorData instanceof Error ? placesErrorData.message : 'Unknown error'}`}
+                {placesError && zonesError ? '\n' : ''}
+                {zonesError && `Zones: ${zonesErrorData instanceof Error ? zonesErrorData.message : 'Unknown error'}`}
+              </p>
+            </div>
           </div>
         )}
 
@@ -311,9 +368,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                 onClick={(e) => {
                   if (!isDragging) {
                     e.stopPropagation();
-                    console.log(`[MapTab] Clicked location ${place.id}: ${place.name}`);
                     setSelectedLocation(place.id);
-                    console.log(`[MapTab] Selected location set to ${place.id}`);
                   }
                 }}
                 data-testid={`place-${place.id}`}
@@ -430,7 +485,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             <MapPin className="h-4 w-4" />
             LOCATION INDEX
           </h3>
-          <div className="text-xs text-muted-foreground mt-1">
+          <div className="text-xs text-foreground/80 mt-1">
             {visiblePlaces.length} locations across {Object.keys(placesByZone).length} zones
           </div>
         </div>
@@ -447,7 +502,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                   <div key={zoneId} className="border border-border rounded-md overflow-hidden">
                     <Button
                       variant="ghost"
-                      className="w-full justify-start p-3 hover-elevate"
+                      className="w-full justify-start p-3 hover-elevate text-foreground"
                       onClick={() => toggleZoneExpansion(Number(zoneId))}
                       data-testid={`button-zone-${zoneId}`}
                     >
@@ -474,7 +529,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                             <Button
                               key={place.id}
                               variant="ghost"
-                              className={`w-full justify-start px-6 py-2 text-xs font-mono hover-elevate ${
+                              className={`w-full justify-start px-6 py-2 text-xs font-mono hover-elevate text-foreground ${
                                 isSelected ? 'bg-accent' : ''
                               } ${isCurrent ? 'text-yellow-400' : ''}`}
                               onClick={() => {
