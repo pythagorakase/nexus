@@ -515,11 +515,17 @@ class OpenAIProvider(LLMProvider):
         )
 
     def _get_api_key(self) -> str:
-        """Get OpenAI API key from 1Password CLI."""
+        """Get OpenAI API key from environment variable or 1Password CLI."""
         import subprocess
+        import os
 
+        # First, check if API key is already in environment (e.g., pre-fetched by parent process)
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key:
+            return api_key
+
+        # Otherwise, fetch from 1Password using the specific item ID in the API vault
         try:
-            # Fetch from 1Password using the specific item ID in the API vault
             result = subprocess.run(
                 ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
                 capture_output=True,

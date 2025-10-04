@@ -110,6 +110,7 @@ export default function AuditionTab() {
             variant={mode === 'judge' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setMode('judge')}
+            className={mode === 'judge' ? '' : 'text-foreground'}
           >
             Judge Mode
           </Button>
@@ -117,6 +118,7 @@ export default function AuditionTab() {
             variant={mode === 'generate' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setMode('generate')}
+            className={mode === 'generate' ? '' : 'text-foreground'}
           >
             Generate Mode
           </Button>
@@ -124,6 +126,7 @@ export default function AuditionTab() {
             variant={mode === 'results' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setMode('results')}
+            className={mode === 'results' ? '' : 'text-foreground'}
           >
             Results Mode
           </Button>
