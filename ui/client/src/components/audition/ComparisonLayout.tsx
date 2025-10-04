@@ -226,7 +226,7 @@ export function ComparisonLayout({
             <div className="text-[11px] uppercase text-muted-foreground tracking-wider mb-2">
               Previous chunk tail
             </div>
-            <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap">{precedingSnippet}</pre>
+            <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground">{precedingSnippet}</pre>
             <div className="flex justify-end mt-2">
               <Button
                 variant="ghost"
@@ -275,7 +275,7 @@ export function ComparisonLayout({
             <DialogTitle>Previous chunk (full)</DialogTitle>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto">
-            <pre className="font-mono text-sm whitespace-pre-wrap leading-relaxed">
+            <pre className="font-mono text-sm whitespace-pre-wrap leading-relaxed text-foreground">
               {precedingText || 'No preceding chunk available.'}
             </pre>
           </div>

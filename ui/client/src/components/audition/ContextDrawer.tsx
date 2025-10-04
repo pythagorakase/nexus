@@ -38,7 +38,7 @@ export function ContextDrawer({ prompt }: ContextDrawerProps) {
           <div className="space-y-3 font-mono text-sm">
             <div>
               <div className="text-muted-foreground mb-1">Chunk ID:</div>
-              <div>{chunkId}</div>
+              <div className="text-foreground">{chunkId}</div>
             </div>
             <div>
               <div className="text-muted-foreground mb-1">User Input:</div>
