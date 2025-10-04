@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin, Loader2, ChevronRight, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Place, Zone } from "@shared/schema";
+import { worldOutline } from "@/lib/world-outline";
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
@@ -53,12 +54,31 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   
   // Map control states
   const svgRef = useRef<SVGSVGElement>(null);
+  const activePointerId = useRef<number | null>(null);
   const [mapDimensions, setMapDimensions] = useState({ width: 800, height: 600 });
   const [mapBounds, setMapBounds] = useState<{ minLng: number; maxLng: number; minLat: number; maxLat: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 800, height: 600 });
   const [zoom, setZoom] = useState(1);
+
+  const clampViewBox = useCallback(
+    (box: { x: number; y: number; width: number; height: number }) => {
+      const safeWidth = Math.max(mapDimensions.width, 1);
+      const safeHeight = Math.max(mapDimensions.height, 1);
+
+      const maxX = Math.max(0, safeWidth - box.width);
+      const maxY = Math.max(0, safeHeight - box.height);
+
+      return {
+        x: Math.min(Math.max(box.x, 0), maxX),
+        y: Math.min(Math.max(box.y, 0), maxY),
+        width: box.width,
+        height: box.height,
+      };
+    },
+    [mapDimensions.height, mapDimensions.width],
+  );
 
   // Fetch places
   const {
@@ -84,8 +104,13 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     const handleResize = () => {
       if (svgRef.current?.parentElement) {
         const { width, height } = svgRef.current.parentElement.getBoundingClientRect();
-        setMapDimensions({ width, height });
-        setViewBox({ x: 0, y: 0, width, height });
+        const safeWidth = Math.max(width, 1);
+        const safeHeight = Math.max(height, 1);
+        setMapDimensions({ width: safeWidth, height: safeHeight });
+        setViewBox({ x: 0, y: 0, width: safeWidth, height: safeHeight });
+        setZoom(1);
+        setIsDragging(false);
+        activePointerId.current = null;
       }
     };
 
@@ -128,17 +153,17 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
     // Add padding (10% on each side) to ensure everything fits nicely
     if (minLng !== Infinity && maxLng !== -Infinity) {
-      const lngRange = maxLng - minLng;
-      const latRange = maxLat - minLat;
+      const lngRange = Math.max(maxLng - minLng, 0.0001);
+      const latRange = Math.max(maxLat - minLat, 0.0001);
       const padding = 0.1;
-      
+
       const bounds = {
         minLng: minLng - lngRange * padding,
         maxLng: maxLng + lngRange * padding,
         minLat: minLat - latRange * padding,
         maxLat: maxLat + latRange * padding
       };
-      
+
       setMapBounds(bounds);
     }
   }, [places]);
@@ -154,10 +179,15 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
       minLat: -90,
       maxLat: 90
     };
-    
-    const x = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * mapDimensions.width;
-    const y = mapDimensions.height - ((lat - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * mapDimensions.height;
-    
+
+    const lngSpan = Math.max(bounds.maxLng - bounds.minLng, 0.0001);
+    const latSpan = Math.max(bounds.maxLat - bounds.minLat, 0.0001);
+    const width = Math.max(mapDimensions.width, 1);
+    const height = Math.max(mapDimensions.height, 1);
+
+    const x = ((lng - bounds.minLng) / lngSpan) * width;
+    const y = height - ((lat - bounds.minLat) / latSpan) * height;
+
     return { x, y };
   };
 
@@ -213,58 +243,109 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     });
   };
 
-  // Handle mouse events for drag
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start dragging on the background, not on interactive elements
-    if (e.button === 0 && e.target === e.currentTarget) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
+  const isInteractiveTarget = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("[data-interactive='true']"));
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      const dx = (e.clientX - dragStart.x) * (1 / zoom);
-      const dy = (e.clientY - dragStart.y) * (1 / zoom);
-      setViewBox(prev => ({
+  const endDrag = useCallback(() => {
+    setIsDragging(false);
+    activePointerId.current = null;
+  }, []);
+
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return;
+    if (isInteractiveTarget(e.target)) return;
+
+    activePointerId.current = e.pointerId;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!isDragging || activePointerId.current !== e.pointerId) {
+      return;
+    }
+
+    e.preventDefault();
+    const deltaX = e.clientX - dragStart.x;
+    const deltaY = e.clientY - dragStart.y;
+
+    setViewBox(prev => {
+      const scaleX = prev.width / Math.max(mapDimensions.width, 1);
+      const scaleY = prev.height / Math.max(mapDimensions.height, 1);
+      const next = clampViewBox({
         ...prev,
-        x: prev.x - dx,
-        y: prev.y - dy
-      }));
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
+        x: prev.x - deltaX * scaleX,
+        y: prev.y - deltaY * scaleY,
+      });
+      return next;
+    });
+
+    setDragStart({ x: e.clientX, y: e.clientY });
   };
 
-  const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (activePointerId.current !== e.pointerId) {
+      return;
     }
+
+    svgRef.current?.releasePointerCapture?.(e.pointerId);
+    endDrag();
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (activePointerId.current !== e.pointerId) {
+      return;
+    }
+
+    svgRef.current?.releasePointerCapture?.(e.pointerId);
+    endDrag();
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (activePointerId.current !== e.pointerId) {
+      return;
+    }
+
+    svgRef.current?.releasePointerCapture?.(e.pointerId);
+    endDrag();
   };
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(Math.max(zoom * delta, 0.5), 5);
-    
-    // Zoom towards mouse position
+    const newZoom = Math.min(Math.max(zoom * delta, 0.2), 100);
+
+    if (newZoom === zoom) {
+      return;
+    }
+
     const rect = svgRef.current?.getBoundingClientRect();
-    if (rect) {
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const svgX = viewBox.x + mouseX * (viewBox.width / rect.width);
-      const svgY = viewBox.y + mouseY * (viewBox.height / rect.height);
-      
-      const newWidth = mapDimensions.width / newZoom;
-      const newHeight = mapDimensions.height / newZoom;
-      
-      setViewBox({
+    if (!rect) {
+      setZoom(newZoom);
+      return;
+    }
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    setViewBox(prev => {
+      const svgX = prev.x + mouseX * (prev.width / rect.width);
+      const svgY = prev.y + mouseY * (prev.height / rect.height);
+      const newWidth = Math.max(mapDimensions.width, 1) / newZoom;
+      const newHeight = Math.max(mapDimensions.height, 1) / newZoom;
+
+      return clampViewBox({
         x: svgX - (mouseX / rect.width) * newWidth,
         y: svgY - (mouseY / rect.height) * newHeight,
         width: newWidth,
-        height: newHeight
+        height: newHeight,
       });
-      setZoom(newZoom);
-    }
+    });
+
+    setZoom(newZoom);
   };
 
   // Determine pin color based on state
@@ -281,31 +362,103 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return "#00ff41"; // Default green
   };
 
-  // Progressive label display based on zoom and importance
-  const isLabelVisible = (place: Place, index: number) => {
-    // Always show for hovered, selected, or current location
-    if (hoveredLocation === place.id ||
-        selectedLocation === place.id ||
-        (currentChunkLocation && place.name === currentChunkLocation)) {
-      return true;
-    }
-
-    // Progressive reveal based on zoom level
-    // At 1.0x zoom: show every 20th place
-    // At 2.0x zoom: show every 5th place
-    // At 3.0x zoom: show all places
+  const shouldDisplayLabelByZoom = useCallback((index: number) => {
     if (zoom >= 3.0) {
       return true;
-    } else if (zoom >= 2.0) {
+    }
+    if (zoom >= 2.0) {
       return index % 5 === 0;
-    } else if (zoom >= 1.5) {
+    }
+    if (zoom >= 1.5) {
       return index % 10 === 0;
-    } else if (zoom >= 1.0) {
+    }
+    if (zoom >= 1.0) {
       return index % 20 === 0;
     }
 
     return false;
-  };
+  }, [zoom]);
+
+  const placeCoordinates = useMemo(() => {
+    const cache = new Map<number, { x: number; y: number } | null>();
+    visiblePlaces.forEach(place => {
+      cache.set(place.id, getPlaceCoordinates(place));
+    });
+    return cache;
+  }, [visiblePlaces, mapBounds, mapDimensions]);
+
+  const labelVisibility = useMemo(() => {
+    const boxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    const visibility = new Map<number, boolean>();
+
+    const prioritized = visiblePlaces
+      .map((place, index) => {
+        const coords = placeCoordinates.get(place.id);
+        if (!coords) return null;
+
+        let priority = 1;
+        if (selectedLocation === place.id) {
+          priority = 4;
+        } else if (hoveredLocation === place.id) {
+          priority = 3;
+        } else if (currentChunkLocation && place.name === currentChunkLocation) {
+          priority = 2;
+        }
+
+        return { place, index, coords, priority };
+      })
+      .filter((entry): entry is { place: Place; index: number; coords: { x: number; y: number }; priority: number } => Boolean(entry));
+
+    prioritized.sort((a, b) => {
+      if (b.priority !== a.priority) {
+        return b.priority - a.priority;
+      }
+      return a.index - b.index;
+    });
+
+    for (const { place, index, coords, priority } of prioritized) {
+      const forceVisible = priority > 1;
+      const baseVisibility = forceVisible || shouldDisplayLabelByZoom(index);
+
+      if (!baseVisibility) {
+        visibility.set(place.id, false);
+        continue;
+      }
+
+      const labelWidth = 80 / zoom;
+      const labelHeight = 16 / zoom;
+      const labelOffsetY = 25 / zoom;
+
+      const rect = {
+        x1: coords.x - labelWidth / 2,
+        y1: coords.y - labelOffsetY,
+        x2: coords.x + labelWidth / 2,
+        y2: coords.y - labelOffsetY + labelHeight,
+      };
+
+      const overlaps = boxes.some(box => {
+        return !(rect.x2 < box.x1 || rect.x1 > box.x2 || rect.y2 < box.y1 || rect.y1 > box.y2);
+      });
+
+      if (overlaps && !forceVisible) {
+        visibility.set(place.id, false);
+        continue;
+      }
+
+      boxes.push(rect);
+      visibility.set(place.id, true);
+    }
+
+    visiblePlaces.forEach(place => {
+      if (!visibility.has(place.id)) {
+        visibility.set(place.id, false);
+      }
+    });
+
+    return visibility;
+  }, [visiblePlaces, placeCoordinates, zoom, selectedLocation, hoveredLocation, currentChunkLocation, shouldDisplayLabelByZoom]);
+
+  const worldPathData = useMemo(() => geoJsonToSvgPath(worldOutline), [mapBounds, mapDimensions]);
 
   return (
     <div className="flex h-full bg-background">
@@ -332,12 +485,14 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
         <svg
           ref={svgRef}
-          className="w-full h-full cursor-move"
+          className={`w-full h-full ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
           viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
           preserveAspectRatio="xMidYMid slice"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerLeave}
+          onPointerCancel={handlePointerCancel}
           onWheel={handleWheel}
         >
           {/* Background */}
@@ -355,6 +510,20 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             </pattern>
           </defs>
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
+
+          {/* World outline */}
+          {worldPathData && (
+            <g opacity="0.45">
+              <path
+                d={worldPathData}
+                fill="#001a00"
+                fillOpacity={0.35}
+                stroke="#00ff41"
+                strokeOpacity={0.4}
+                strokeWidth={1 / zoom}
+              />
+            </g>
+          )}
 
           {/* Zone boundaries */}
           <g opacity="0.6">
@@ -378,11 +547,11 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
           {/* Places - All pins and labels rendered, visibility controlled by CSS */}
           {visiblePlaces.map((place, index) => {
-            const coords = getPlaceCoordinates(place);
+            const coords = placeCoordinates.get(place.id);
             if (!coords) return null;
 
             const pinColor = getPinColor(place);
-            const labelVisible = isLabelVisible(place, index);
+            const labelVisible = labelVisibility.get(place.id) ?? false;
 
             // Scale sizes inversely with zoom to maintain constant visual size
             const pinRadius = 3 / zoom;
@@ -397,15 +566,19 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
               <g
                 key={place.id}
                 className="cursor-pointer"
-                onMouseEnter={() => {
+                data-interactive="true"
+                onPointerEnter={() => {
                   if (!isDragging) {
                     setHoveredLocation(place.id);
                   }
                 }}
-                onMouseLeave={() => {
+                onPointerLeave={() => {
                   if (!isDragging) {
                     setHoveredLocation(null);
                   }
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
                 }}
                 onClick={(e) => {
                   if (!isDragging) {
@@ -516,7 +689,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
         {/* Zoom indicator */}
         <div className="absolute top-4 left-4 bg-card/90 border border-border px-3 py-2 rounded-md font-mono text-xs">
           <div className="text-muted-foreground">
-            ZOOM: {Math.round(zoom * 100)}%
+            ZOOM: {zoom >= 10 ? zoom.toFixed(1) : zoom.toFixed(2)}×
           </div>
         </div>
       </div>
