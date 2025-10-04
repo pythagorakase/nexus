@@ -1,4 +1,1 @@
-[submodule "letta"]
-path = letta
-url = https://github.com/letta-ai/letta.git
-
+# No submodules currently in use
