@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {ScrollArea} from '@/components/ui/scroll-area';
+import {auditionAPI} from '@/lib/audition-api';
 
 interface GenerationStats {
   total: number;
@@ -20,25 +21,45 @@ export function GenerateMode() {
   const [output, setOutput] = useState<string>('');
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [missingCount, setMissingCount] = useState<number | null>(null);
+  const [limit, setLimit] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Fetch count of missing generations on mount and when job completes
+  useEffect(() => {
+    const fetchCount = async () => {
+      try {
+        const data = await auditionAPI.getMissingGenerationCount();
+        setMissingCount(data.count);
+      } catch (err) {
+        console.error('Error fetching missing generation count:', err);
+      }
+    };
+    fetchCount();
+  }, [isRunning]); // Refetch when job starts/stops
 
   // Start generation job
   const startGeneration = async () => {
     setError(null);
     try {
-      const response = await fetch('/api/audition/generate/start', {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to start generation job');
-      }
-
-      const data = await response.json();
+      const limitValue = limit ? parseInt(limit, 10) : undefined;
+      const data = await auditionAPI.startGeneration(limitValue);
       setJobId(data.job_id);
       setIsRunning(true);
       setOutput('');
       setStats({total: 0, remaining: 0, completed: 0, failed: 0});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
+  // Stop generation job
+  const stopGeneration = async () => {
+    if (!jobId) return;
+
+    try {
+      await auditionAPI.stopGeneration(jobId);
+      setIsRunning(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
@@ -50,15 +71,7 @@ export function GenerateMode() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(
-          `/api/audition/generate/output?job_id=${jobId}`
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch job output');
-        }
-
-        const data = await response.json();
+        const data = await auditionAPI.getGenerationOutput(jobId);
 
         setOutput(data.output || '');
         if (data.stats) {
@@ -96,25 +109,52 @@ export function GenerateMode() {
       {/* Status Bar */}
       <div className="border-b border-border bg-card p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Generate Mode</h2>
-          <Button
-            onClick={startGeneration}
-            disabled={isRunning}
-            variant={isRunning ? 'secondary' : 'default'}
-          >
-            {isRunning ? 'Running...' : 'Start Regeneration'}
-          </Button>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Generate Mode</h2>
+            {!isRunning && missingCount !== null && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {missingCount} generation{missingCount !== 1 ? 's' : ''} need{missingCount === 1 ? 's' : ''} regeneration
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2 items-center">
+            {!isRunning && (
+              <div className="flex items-center gap-2">
+                <label htmlFor="limit-input" className="text-sm text-muted-foreground">
+                  Limit:
+                </label>
+                <input
+                  id="limit-input"
+                  type="number"
+                  min="1"
+                  placeholder="All"
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                  className="w-20 px-2 py-1 text-sm border border-border rounded bg-background text-foreground"
+                />
+              </div>
+            )}
+            {isRunning ? (
+              <Button onClick={stopGeneration} variant="destructive">
+                Stop
+              </Button>
+            ) : (
+              <Button onClick={startGeneration} variant="default" disabled={missingCount === 0}>
+                Start Regeneration
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Stats */}
         <div className="flex gap-6 text-sm">
           <div>
             <span className="text-muted-foreground">Total:</span>{' '}
-            <span className="font-mono font-semibold">{stats.total}</span>
+            <span className="font-mono font-semibold text-foreground">{stats.total}</span>
           </div>
           <div>
             <span className="text-muted-foreground">Remaining:</span>{' '}
-            <span className="font-mono font-semibold">{stats.remaining}</span>
+            <span className="font-mono font-semibold text-foreground">{stats.remaining}</span>
           </div>
           <div>
             <span className="text-muted-foreground">Completed:</span>{' '}
