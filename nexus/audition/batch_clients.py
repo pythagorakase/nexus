@@ -363,11 +363,9 @@ class OpenAIBatchClient:
                     "max_output_tokens": req.max_output_tokens or req.max_tokens
                 }
 
-                # Add cache key for prompt caching (best practice for shared context)
-                # NOTE: prompt_cache_key not supported in Python SDK's responses.create() yet
-                # Relying on automatic prompt caching instead
-                # if req.cache_key:
-                #     body["prompt_cache_key"] = req.cache_key
+                # Add cache key for prompt caching so all lanes share the stored prompt
+                if req.cache_key:
+                    body["prompt_cache_key"] = req.cache_key
 
                 # Add temperature if provided (GPT-4o and other non-reasoning models)
                 if req.temperature is not None:

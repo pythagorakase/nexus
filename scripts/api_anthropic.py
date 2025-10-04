@@ -352,15 +352,20 @@ class AnthropicProvider(LLMProvider):
         if self.top_k is not None:
             params["top_k"] = self.top_k
 
-        # Add extended thinking parameters if enabled
+        extra_body: Dict[str, Any] = {}
+
+        # Add extended thinking parameters if enabled. The Anthropic SDK
+        # currently exposes thinking controls only via extra_body.
         if self.thinking_enabled:
-            params["thinking"] = {
+            extra_body["thinking"] = {
                 "type": "enabled",
                 "budget_tokens": self.thinking_budget_tokens
             }
 
         try:
             # Call the API
+            if extra_body:
+                params["extra_body"] = extra_body
             response = self.client.messages.create(**params)
 
             # Extract the content from the response

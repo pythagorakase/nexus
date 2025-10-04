@@ -482,11 +482,11 @@ class OpenAIProvider(LLMProvider):
             "max_output_tokens": self.max_output_tokens
         }
 
-        # Add cache key for prompt caching (best practice for shared context)
-        # NOTE: prompt_cache_key not supported in Python SDK's responses.create() yet
-        # Relying on automatic prompt caching instead
-        # if cache_key:
-        #     request_params["prompt_cache_key"] = cache_key
+        # Inject prompt cache key via extra_body because the SDK has not yet
+        # added first-class support for prompt_cache_key on responses.create.
+        extra_body: Dict[str, Any] = {}
+        if cache_key:
+            extra_body["prompt_cache_key"] = cache_key
 
         # Add temperature if model supports it (GPT-4o and other non-reasoning models)
         if self.supports_temperature and self.temperature is not None:
@@ -498,6 +498,9 @@ class OpenAIProvider(LLMProvider):
             logger.info(f"Using OpenAI responses API with model {self.model} and reasoning effort: {self.reasoning_effort}, cache_key: {cache_key}")
         else:
             logger.info(f"Using OpenAI responses API with model {self.model}, cache_key: {cache_key}")
+
+        if extra_body:
+            request_params["extra_body"] = extra_body
 
         # Create the response
         response = self.client.responses.create(**request_params)
