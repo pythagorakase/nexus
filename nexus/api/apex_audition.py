@@ -61,16 +61,16 @@ def list_generation_runs():
             cur.execute("""
                 SELECT
                     gr.id::text,
-                    gr.label,
-                    gr.started_at,
-                    gr.completed_at,
+                    gr.description as label,
+                    gr.created_at as started_at,
+                    NULL::timestamp as completed_at,
                     COUNT(g.id) as total_generations,
                     COUNT(g.id) FILTER (WHERE g.status = 'completed') as completed_generations,
                     COUNT(g.id) FILTER (WHERE g.status = 'error') as failed_generations
                 FROM apex_audition.generation_runs gr
                 LEFT JOIN apex_audition.generations g ON g.run_id = gr.id
-                GROUP BY gr.id, gr.label, gr.started_at, gr.completed_at
-                ORDER BY gr.started_at DESC
+                GROUP BY gr.id, gr.description, gr.created_at
+                ORDER BY gr.created_at DESC
             """)
             rows = cur.fetchall()
             return [dict(row) for row in rows]
