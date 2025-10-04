@@ -2,6 +2,12 @@ import fs from 'fs';
 import { db } from './db';
 import { zones, places } from '@shared/schema';
 
+if (!db) {
+  throw new Error('Database connection not initialized. Set DATABASE_URL before running import-data.');
+}
+
+const database = db;
+
 // Parse PostGIS MULTIPOLYGON format to extract coordinates
 function parseMultiPolygon(wkt: string): any {
   if (!wkt || wkt === 'NULL') return null;
@@ -85,7 +91,7 @@ async function importZones() {
   // Insert zones into database
   for (const zone of zoneRecords) {
     try {
-      await db.insert(zones).values(zone).onConflictDoNothing();
+      await database.insert(zones).values(zone).onConflictDoNothing();
       console.log(`Inserted zone: ${zone.name} (${zone.id})`);
     } catch (error) {
       console.error(`Error inserting zone ${zone.id}:`, error);
@@ -102,7 +108,7 @@ async function importPlaces() {
   const placesData = fs.readFileSync('/tmp/places_complete.sql', 'utf-8');
   
   // Extract place records using regex - handle multi-line records
-  const placePattern = /\((\d+),\s*'([^']*?)',\s*'([^']*?)',\s*(\d+),\s*((?:'[^']*?'|NULL)),\s*((?:'[^']*?'|NULL)),\s*((?:'[^']*?'|NULL)),\s*((?:'[^']*?'|NULL)),\s*((?:'[^']*?'|NULL)),\s*((?:'[^']*?'|NULL)),\s*'[^']*?',\s*'[^']*?',\s*((?:'SRID=4326;POINTZM\([^)]+\)'|NULL)),\s*(?:'SRID=4326;POINTZM\([^)]+\)'|NULL)\)/gs;
+  const placePattern = /\((\d+),\s*'([\s\S]*?)',\s*'([\s\S]*?)',\s*(\d+),\s*((?:'[\s\S]*?'|NULL)),\s*((?:'[\s\S]*?'|NULL)),\s*((?:'[\s\S]*?'|NULL)),\s*((?:'[\s\S]*?'|NULL)),\s*((?:'[\s\S]*?'|NULL)),\s*((?:'[\s\S]*?'|NULL)),\s*'[\s\S]*?',\s*'[\s\S]*?',\s*((?:'SRID=4326;POINTZM\([^)]*\)'|NULL)),\s*(?:'SRID=4326;POINTZM\([^)]*\)'|NULL)\)/g;
   
   const placeRecords: any[] = [];
   let match;
@@ -143,7 +149,7 @@ async function importPlaces() {
   // Insert places into database
   for (const place of placeRecords) {
     try {
-      await db.insert(places).values(place).onConflictDoNothing();
+      await database.insert(places).values(place).onConflictDoNothing();
       console.log(`Inserted place: ${place.name} (${place.id})`);
     } catch (error) {
       console.error(`Error inserting place ${place.id}:`, error);
@@ -160,8 +166,8 @@ async function main() {
   try {
     // Clear existing data
     console.log('Clearing existing data...');
-    await db.delete(places);
-    await db.delete(zones);
+    await database.delete(places);
+    await database.delete(zones);
     
     // Import zones first (places reference zones)
     const zonesCount = await importZones();
@@ -174,8 +180,8 @@ async function main() {
     console.log(`- Imported ${placesCount} places`);
     
     // Verify import
-    const zoneCount = await db.select().from(zones);
-    const placeCount = await db.select().from(places);
+    const zoneCount = await database.select().from(zones);
+    const placeCount = await database.select().from(places);
     
     console.log(`\nVerification:`);
     console.log(`- Zones in database: ${zoneCount.length}`);

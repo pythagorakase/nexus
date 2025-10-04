@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,29 +21,56 @@ export function NarrativeTab() {
   const [loadingChunk, setLoadingChunk] = useState<number | null>(null);
 
   // Fetch seasons
-  const { data: seasons = [], isLoading: seasonsLoading } = useQuery<Season[]>({
+  const {
+    data: seasons = [],
+    isLoading: seasonsLoading,
+    isError: seasonsError,
+    error: seasonsErrorData,
+  } = useQuery<Season[]>({
     queryKey: ["/api/narrative/seasons"],
   });
 
-  // Fetch episodes for open seasons
-  const episodeQueries = openSeasons.map((seasonId) =>
-    useQuery<Episode[]>({
+  const episodeQueries = useQueries({
+    queries: openSeasons.map((seasonId) => ({
       queryKey: ["/api/narrative/episodes", seasonId],
       queryFn: () => fetch(`/api/narrative/episodes/${seasonId}`).then((r) => r.json()),
-      enabled: openSeasons.includes(seasonId),
-    })
-  );
-
-  // Fetch chunks for open episodes
-  const chunkQueries = openEpisodes.map((episodeKey) => {
-    const [, episodeId] = episodeKey.split("-").map(Number);
-    return useQuery<{ chunks: ChunkWithMetadata[]; total: number }>({
-      queryKey: ["/api/narrative/chunks", episodeId],
-      queryFn: () =>
-        fetch(`/api/narrative/chunks/${episodeId}?limit=100`).then((r) => r.json()),
-      enabled: openEpisodes.includes(episodeKey),
-    });
+    })),
   });
+
+  const episodesBySeason = openSeasons.reduce<Record<number, Episode[]>>((acc, seasonId, index) => {
+    const queryResult = episodeQueries[index];
+    if (queryResult?.data) {
+      acc[seasonId] = queryResult.data;
+    }
+    return acc;
+  }, {});
+
+  const chunkQueries = useQueries({
+    queries: openEpisodes.map((episodeKey) => {
+      const [, episodeId] = episodeKey.split("-").map(Number);
+      return {
+        queryKey: ["/api/narrative/chunks", episodeId],
+        queryFn: () => fetch(`/api/narrative/chunks/${episodeId}?limit=100`).then((r) => r.json()),
+      };
+    }),
+  });
+
+  const chunkQueryStates = openEpisodes.reduce<
+    Record<number, {
+      data?: { chunks: ChunkWithMetadata[]; total: number };
+      isLoading: boolean;
+      isFetching: boolean;
+    }>
+  >((acc, episodeKey, index) => {
+    const [, episodeId] = episodeKey.split("-").map(Number);
+    const queryResult = chunkQueries[index];
+    acc[episodeId] = {
+      data: queryResult?.data,
+      isLoading: Boolean(queryResult?.isLoading),
+      isFetching: Boolean(queryResult?.isFetching),
+    };
+    return acc;
+  }, {});
 
   const toggleSeason = (seasonId: number) => {
     setOpenSeasons((prev) =>
@@ -75,14 +102,18 @@ export function NarrativeTab() {
           </h2>
         </div>
         <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
+          <div className="p-2 space-y-0.5 text-foreground/90">
             {seasonsLoading ? (
               <div className="flex items-center justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
+            ) : seasonsError ? (
+              <div className="p-4 text-xs text-destructive font-mono">
+                Failed to load seasons: {seasonsErrorData instanceof Error ? seasonsErrorData.message : 'Unknown error'}
+              </div>
             ) : (
               seasons.map((season, seasonIndex) => {
-                const episodesData = episodeQueries[seasonIndex]?.data;
+                const episodesData = episodesBySeason[season.id] ?? [];
                 const isSeasonOpen = openSeasons.includes(season.id);
 
                 return (
@@ -94,7 +125,7 @@ export function NarrativeTab() {
                     <CollapsibleTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="w-full justify-start gap-2 font-mono text-xs hover-elevate h-8"
+                        className="w-full justify-start gap-2 font-mono text-xs hover-elevate h-8 text-foreground"
                         data-testid={`button-season-${season.id}`}
                       >
                         <ChevronRight
@@ -106,14 +137,13 @@ export function NarrativeTab() {
                       </Button>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="pl-4 space-y-1">
-                      {episodesData?.map((episode) => {
+                      {episodesData.map((episode) => {
                         const episodeKey = `${episode.season}-${episode.episode}`;
                         const isEpisodeOpen = openEpisodes.includes(episodeKey);
-                        const episodeQueryIndex = openEpisodes.indexOf(episodeKey);
-                        const chunksData =
-                          episodeQueryIndex >= 0
-                            ? chunkQueries[episodeQueryIndex]?.data
-                            : null;
+                        const [, episodeId] = episodeKey.split("-").map(Number);
+                        const chunkState = chunkQueryStates[episodeId];
+                        const chunksData = chunkState?.data;
+                        const isChunksLoading = chunkState?.isLoading || chunkState?.isFetching;
 
                         return (
                           <Collapsible
@@ -124,7 +154,7 @@ export function NarrativeTab() {
                             <CollapsibleTrigger asChild>
                               <Button
                                 variant="ghost"
-                                className="w-full justify-start gap-2 font-mono text-xs hover-elevate h-8"
+                                className="w-full justify-start gap-2 font-mono text-xs hover-elevate h-8 text-foreground"
                                 data-testid={`button-episode-${episodeKey}`}
                               >
                                 <ChevronRight
@@ -136,11 +166,16 @@ export function NarrativeTab() {
                               </Button>
                             </CollapsibleTrigger>
                             <CollapsibleContent className="pl-4 space-y-1">
+                              {isChunksLoading && (
+                                <div className="flex items-center justify-start gap-2 px-2 py-3 text-xs text-muted-foreground">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Loading chunks…
+                                </div>
+                              )}
                               {chunksData?.chunks.map((chunk) => (
                                 <Button
                                   key={chunk.id}
                                   variant="ghost"
-                                  className={`w-full justify-start font-mono text-xs hover-elevate h-8 ${
+                                  className={`w-full justify-start font-mono text-xs hover-elevate h-8 text-foreground ${
                                     selectedChunk?.id === chunk.id
                                       ? "bg-accent text-accent-foreground"
                                       : ""

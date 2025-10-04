@@ -1,117 +1,140 @@
 /**
  * Apex Audition tab for comparing model generations.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useComparison } from '@/hooks/useComparison';
 import { ComparisonLayout } from '@/components/audition/ComparisonLayout';
-import { LeaderboardView } from '@/components/audition/LeaderboardView';
+import { ResultsDashboard } from '@/components/audition/ResultsDashboard';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
+type AuditionMode = 'judge' | 'results';
+
 export default function AuditionTab() {
   const [evaluator] = useState(() => {
-    // Get evaluator name from localStorage or default
     return localStorage.getItem('audition_evaluator') || 'default';
   });
 
-  const [activeView, setActiveView] = useState<'compare' | 'leaderboard'>('compare');
+  const [mode, setMode] = useState<AuditionMode>('judge');
   const [comparisonCount, setComparisonCount] = useState(0);
+  const [skippedCount, setSkippedCount] = useState(0);
 
   const { comparison, isLoading, isError, error, refetch } = useComparison({
-    enabled: activeView === 'compare',
+    enabled: mode === 'judge',
   });
+
+  const sessionSummary = useMemo(() => ({
+    judged: comparisonCount,
+    skipped: skippedCount,
+  }), [comparisonCount, skippedCount]);
 
   const handleComparisonComplete = () => {
     setComparisonCount((c) => c + 1);
-    refetch(); // Fetch next comparison
-  };
-
-  const handleSkip = () => {
     refetch();
   };
 
-  if (activeView === 'leaderboard') {
-    return (
-      <div className="h-full flex flex-col">
-        <div className="border-b border-border px-4 py-3 flex items-center justify-between">
-          <h2 className="text-xl font-mono font-semibold">Leaderboard</h2>
-          <Button
-            variant="outline"
-            onClick={() => setActiveView('compare')}
-          >
-            Back to Comparisons
-          </Button>
-        </div>
-        <div className="flex-1 overflow-auto p-6">
-          <LeaderboardView />
-        </div>
-      </div>
-    );
-  }
+  const handleSkip = () => {
+    setSkippedCount((c) => c + 1);
+    refetch();
+  };
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-          <p className="font-mono text-muted-foreground">Loading comparison...</p>
-        </div>
-      </div>
-    );
-  }
+  const handleExitJudgeMode = () => {
+    setMode('results');
+  };
 
-  if (isError) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="font-mono text-destructive">
-            Error loading comparison: {error?.message || 'Unknown error'}
-          </p>
-          <Button onClick={() => refetch()}>Retry</Button>
+  const renderJudgeMode = () => {
+    if (isLoading) {
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+            <p className="font-mono text-muted-foreground">Loading comparison...</p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (!comparison) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <p className="font-mono text-xl">🎉 All comparisons complete!</p>
-          <p className="text-muted-foreground">
-            Judged {comparisonCount} comparison{comparisonCount !== 1 ? 's' : ''} this session.
-          </p>
-          <Button onClick={() => setActiveView('leaderboard')}>
-            View Leaderboard
-          </Button>
+    if (isError) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const connectivityHint = errorMessage.toLowerCase().includes('failed to fetch');
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="font-mono text-destructive">
+              Error loading comparison: {errorMessage}
+            </p>
+            {connectivityHint && (
+              <p className="text-xs text-muted-foreground">
+                Ensure the audition API is running (`./iris`) and that the database is reachable at {import.meta.env.VITE_AUDITION_API_URL ?? 'http://localhost:8000/api/audition'}.
+              </p>
+            )}
+            <Button onClick={() => refetch()}>Retry</Button>
+          </div>
         </div>
-      </div>
+      );
+    }
+
+    if (!comparison) {
+      return (
+        <div className="h-full flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <p className="font-mono text-xl">🎉 All comparisons complete!</p>
+            <p className="text-muted-foreground">
+              Judged {comparisonCount} comparison{comparisonCount !== 1 ? 's' : ''} this session.
+            </p>
+            <Button onClick={() => setMode('results')}>
+              View Results
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <ComparisonLayout
+        comparison={comparison}
+        evaluator={evaluator}
+        onComplete={handleComparisonComplete}
+        onSkip={handleSkip}
+        onExit={handleExitJudgeMode}
+      />
     );
-  }
+  };
 
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b border-border px-4 py-2 flex items-center justify-between font-mono text-sm">
-        <span className="text-primary">
-          Comparisons judged: {comparisonCount}
-        </span>
-        <div className="flex gap-2">
+      <div className="border-b border-border px-4 py-2 flex items-center justify-between font-mono text-xs sm:text-sm">
+        <div className="flex items-center gap-3">
           <Button
-            variant="ghost"
+            variant={mode === 'judge' ? 'default' : 'ghost'}
             size="sm"
-            onClick={() => setActiveView('leaderboard')}
+            onClick={() => setMode('judge')}
           >
-            [Q] View Leaderboard
+            Judge Mode
+          </Button>
+          <Button
+            variant={mode === 'results' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setMode('results')}
+          >
+            Results Mode
           </Button>
         </div>
+        <div className="flex items-center gap-4 text-muted-foreground">
+          <span>Judged: {sessionSummary.judged}</span>
+          <span>Skipped: {sessionSummary.skipped}</span>
+        </div>
       </div>
+
       <div className="flex-1 overflow-hidden">
-        <ComparisonLayout
-          comparison={comparison}
-          evaluator={evaluator}
-          onComplete={handleComparisonComplete}
-          onSkip={handleSkip}
-        />
+        {mode === 'judge' ? (
+          renderJudgeMode()
+        ) : (
+          <ResultsDashboard
+            sessionSummary={sessionSummary}
+            onResumeJudge={() => setMode('judge')}
+          />
+        )}
       </div>
     </div>
   );
