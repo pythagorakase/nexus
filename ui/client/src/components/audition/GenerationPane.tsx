@@ -57,7 +57,7 @@ function resolveContent(generation: Generation): string {
     return payload;
   }
 
-  return '[Unsupported response payload format]';
+  return `[Unsupported response payload format - generation.id: ${generation.id}]`;
 }
 
 export function GenerationPane({
