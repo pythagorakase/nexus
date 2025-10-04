@@ -3,10 +3,11 @@
 
 This script finds all completed generations where the content field is null
 or empty (despite successful API calls that returned metadata), and regenerates
-them synchronously without caching to get fast results.
+them in parallel without caching to get fast results.
 
-Progress is displayed with a live countdown, and any persistent failures are
-logged to temp/regeneration_errors.log for manual review.
+Uses ThreadPoolExecutor for parallel processing (default 50 workers) to take
+advantage of high API rate limits. Progress is displayed with a live countdown,
+and any persistent failures are logged to temp/regeneration_errors.log.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +51,12 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Print the generations to regenerate without calling APIs",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=50,
+        help="Maximum parallel workers (default: 50)",
     )
     parser.add_argument(
         "--log-level",
@@ -280,11 +289,12 @@ def main() -> None:
             )
         return
 
-    # Initialize progress tracking
+    # Initialize progress tracking (thread-safe)
     total = len(missing)
     completed = 0
     failed = 0
     remaining = total
+    progress_lock = threading.Lock()
 
     # Clear error log
     if ERROR_LOG.exists():
@@ -292,27 +302,44 @@ def main() -> None:
 
     display_progress(total, remaining, completed, failed)
 
-    # Process each generation
-    for generation in missing:
-        success = False
+    LOGGER.info("Processing with %s parallel workers...", args.max_workers)
 
-        # Try up to 2 times
+    # Process generations in parallel
+    def process_with_retry(generation: MissingGeneration) -> bool:
+        """Process a generation with retry logic."""
+        nonlocal completed, failed, remaining
+
+        success = False
         for attempt in range(2):
             generation.retry_count = attempt
             success = regenerate_generation(engine, repo, generation, args.dry_run)
-
             if success:
                 break
 
-        # Update progress
-        if success:
-            completed += 1
-        else:
-            failed += 1
-            log_error(generation, "Failed after 2 attempts")
+        # Update progress (thread-safe)
+        with progress_lock:
+            if success:
+                completed += 1
+            else:
+                failed += 1
+                log_error(generation, "Failed after 2 attempts")
+            remaining -= 1
+            display_progress(total, remaining, completed, failed)
 
-        remaining -= 1
-        display_progress(total, remaining, completed, failed)
+        return success
+
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        # Submit all tasks
+        futures = {executor.submit(process_with_retry, gen): gen for gen in missing}
+
+        # Wait for completion (progress is updated in process_with_retry)
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                gen = futures[future]
+                LOGGER.error("Unexpected error processing generation %s: %s", gen.id, e)
 
     sys.stdout.write("\n")
     LOGGER.info("Regeneration complete!")
