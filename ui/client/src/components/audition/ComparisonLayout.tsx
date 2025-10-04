@@ -242,6 +242,13 @@ export function ComparisonLayout({
                     p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
                     strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                     em: ({node, ...props}) => <em className="italic" {...props} />,
+                    ol: ({node, ...props}) => (
+                      <ol className="ml-5 list-decimal space-y-2" {...props} />
+                    ),
+                    ul: ({node, ...props}) => (
+                      <ul className="ml-5 list-disc space-y-2" {...props} />
+                    ),
+                    li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
                     h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props} />,
                     h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props} />,
                     h3: ({node, ...props}) => <h3 className="font-bold mb-1 mt-2 first:mt-0" {...props} />,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Users, Brain, Loader2, ChevronRight } from "lucide-react";
+import { Users, Brain, Loader2, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +12,72 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
+interface NormalizedRelationship {
+  character1Id: number;
+  character2Id: number;
+  relationshipType: string;
+  emotionalValence: string | null;
+  dynamic: string | null;
+  recentEvents: string | null;
+  history: string | null;
+}
+
+interface RelationshipPair {
+  counterpartId: number;
+  fromSelected?: NormalizedRelationship;
+  toSelected?: NormalizedRelationship;
+}
+
+const normalizeRelationship = (
+  rel: CharacterRelationship & {
+    character1_id?: number;
+    character2_id?: number;
+    relationship_type?: string;
+    emotional_valence?: string;
+    recent_events?: string;
+  },
+): NormalizedRelationship => ({
+  character1Id: rel.character1Id ?? rel.character1_id ?? 0,
+  character2Id: rel.character2Id ?? rel.character2_id ?? 0,
+  relationshipType: rel.relationshipType ?? rel.relationship_type ?? "unknown",
+  emotionalValence: rel.emotionalValence ?? rel.emotional_valence ?? null,
+  dynamic: rel.dynamic ?? null,
+  recentEvents: rel.recentEvents ?? rel.recent_events ?? null,
+  history: rel.history ?? null,
+});
+
+const formatValence = (value: string | null | undefined): string => {
+  if (!value) return "—";
+  return value.includes("|") ? value.replace("|", " | ") : value;
+};
+
+const renderPsychologyField = (label: string, field: unknown) => {
+  if (!field) return null;
+  const renderValue = (value: any) => {
+    if (Array.isArray(value)) {
+      return value.join(", ");
+    }
+    if (typeof value === "object" && value !== null) {
+      return Object.entries(value)
+        .map(([key, nested]) => `${key}: ${Array.isArray(nested) ? nested.join(", ") : String(nested)}`)
+        .join("\n");
+    }
+    return String(value);
+  };
+
+  return (
+    <div className="space-y-1">
+      <h4 className="text-xs font-mono text-primary terminal-glow uppercase">{label}</h4>
+      <pre className="whitespace-pre-wrap text-xs text-foreground/90 leading-relaxed">
+        {renderValue(field)}
+      </pre>
+    </div>
+  );
+};
+
 export function CharactersTab() {
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
+  const [relationshipsOpen, setRelationshipsOpen] = useState(false);
 
   const {
     data: characters = [],
@@ -35,6 +99,10 @@ export function CharactersTab() {
     return characters.find((character) => character.id === selectedCharacterId) ?? null;
   }, [characters, selectedCharacterId]);
 
+  useEffect(() => {
+    setRelationshipsOpen(false);
+  }, [selectedCharacterId]);
+
   const {
     data: relationships = [],
     isLoading: relationshipsLoading,
@@ -55,6 +123,31 @@ export function CharactersTab() {
     },
     enabled: !!selectedCharacter,
   });
+
+  const normalizedRelationships = useMemo(() => {
+    return relationships.map((rel) => normalizeRelationship(rel));
+  }, [relationships]);
+
+  const relationshipPairs: RelationshipPair[] = useMemo(() => {
+    if (!selectedCharacter) return [];
+    const grouped = new Map<number, { fromSelected?: NormalizedRelationship; toSelected?: NormalizedRelationship }>();
+
+    for (const rel of normalizedRelationships) {
+      const fromSelected = rel.character1Id === selectedCharacter.id;
+      const counterpartId = fromSelected ? rel.character2Id : rel.character1Id;
+      const entry = grouped.get(counterpartId) ?? {};
+      if (fromSelected) {
+        entry.fromSelected = rel;
+      } else {
+        entry.toSelected = rel;
+      }
+      grouped.set(counterpartId, entry);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([counterpartId, pair]) => ({ counterpartId, ...pair }))
+      .sort((a, b) => a.counterpartId - b.counterpartId);
+  }, [normalizedRelationships, selectedCharacter]);
 
   const {
     data: psychologyRecord,
@@ -85,26 +178,50 @@ export function CharactersTab() {
     return characters.find((character) => character.id === id)?.name ?? `Character ${id}`;
   };
 
-  const renderPsychologyField = (label: string, field: unknown) => {
-    if (!field) return null;
-    const renderValue = (value: any) => {
-      if (Array.isArray(value)) {
-        return value.join(", ");
-      }
-      if (typeof value === "object" && value !== null) {
-        return Object.entries(value)
-          .map(([key, nested]) => `${key}: ${Array.isArray(nested) ? nested.join(", ") : String(nested)}`)
-          .join("\n");
-      }
-      return String(value);
-    };
+  const renderRelationshipPerspective = (
+    heading: string,
+    rel: NormalizedRelationship | undefined,
+  ) => {
+    if (!rel) {
+      return (
+        <div className="space-y-2">
+          <h4 className="text-xs font-mono text-primary uppercase tracking-wide">{heading}</h4>
+          <p className="text-xs text-muted-foreground italic">No perspective recorded.</p>
+        </div>
+      );
+    }
 
     return (
-      <div className="space-y-1">
-        <h4 className="text-xs font-mono text-primary terminal-glow uppercase">{label}</h4>
-        <pre className="whitespace-pre-wrap text-xs text-foreground/90 leading-relaxed">
-          {renderValue(field)}
-        </pre>
+      <div className="space-y-2">
+        <h4 className="text-xs font-mono text-primary uppercase tracking-wide">{heading}</h4>
+        <div className="space-y-2 text-xs text-foreground/90">
+          <div className="flex items-start gap-2">
+            <span className="w-24 text-muted-foreground uppercase tracking-wide">Type</span>
+            <span className="flex-1">{rel.relationshipType}</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-24 text-muted-foreground uppercase tracking-wide">Valence</span>
+            <span className="flex-1">{formatValence(rel.emotionalValence)}</span>
+          </div>
+          {rel.dynamic && (
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Dynamic</div>
+              <p className="whitespace-pre-wrap leading-relaxed">{rel.dynamic}</p>
+            </div>
+          )}
+          {rel.recentEvents && (
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Recent Events</div>
+              <p className="whitespace-pre-wrap leading-relaxed">{rel.recentEvents}</p>
+            </div>
+          )}
+          {rel.history && (
+            <div>
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">History</div>
+              <p className="whitespace-pre-wrap leading-relaxed text-foreground">{rel.history}</p>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -123,7 +240,7 @@ export function CharactersTab() {
             </div>
           ) : charactersError ? (
             <div className="p-4 text-xs text-destructive font-mono">
-              Failed to load characters: {charactersErrorData instanceof Error ? charactersErrorData.message : 'Unknown error'}
+              Failed to load characters: {charactersErrorData instanceof Error ? charactersErrorData.message : "Unknown error"}
             </div>
           ) : (
             <div className="divide-y divide-border">
@@ -182,97 +299,32 @@ export function CharactersTab() {
                 {selectedCharacter.summary && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Summary</h3>
-                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.summary}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.summary}</p>
                   </section>
                 )}
                 {selectedCharacter.background && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Background</h3>
-                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.background}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.background}</p>
                   </section>
                 )}
                 {selectedCharacter.personality && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Personality</h3>
-                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.personality}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.personality}</p>
                   </section>
                 )}
                 {selectedCharacter.currentActivity && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Activity</h3>
-                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.currentActivity}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.currentActivity}</p>
                   </section>
                 )}
                 {selectedCharacter.currentLocation && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Location</h3>
-                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.currentLocation}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.currentLocation}</p>
                   </section>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/60 border-border">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-mono text-primary">
-                  <Users className="h-4 w-4" />
-                  Relationships
-                </div>
-              </CardHeader>
-              <CardContent>
-                {relationshipsLoading ? (
-                  <div className="flex items-center justify-center h-16 text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  </div>
-                ) : relationshipsError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load relationships: {relationshipsErrorData instanceof Error ? relationshipsErrorData.message : 'Unknown error'}
-                  </p>
-                ) : relationships.length > 0 ? (
-                  <div className="space-y-3 text-sm">
-                    {relationships.map((rel, index) => {
-                      const fromApi = rel as CharacterRelationship & {
-                        character1_id?: number;
-                        character2_id?: number;
-                        relationship_type?: string;
-                        recent_events?: string;
-                      };
-                      const character1Id = fromApi.character1Id ?? fromApi.character1_id ?? 0;
-                      const character2Id = fromApi.character2Id ?? fromApi.character2_id ?? 0;
-                      const relationshipType = fromApi.relationshipType ?? fromApi.relationship_type ?? "unknown";
-                      const recentEvents = fromApi.recentEvents ?? fromApi.recent_events ?? null;
-                      const counterpartId = character1Id === selectedCharacter.id ? character2Id : character1Id;
-
-                      return (
-                        <Collapsible key={`${character1Id}-${character2Id}-${index}`}>
-                          <CollapsibleTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              className="w-full justify-between px-3 py-2 text-xs font-mono text-foreground border border-border/40 hover:bg-card/70"
-                            >
-                              <span className="truncate text-left">{characterNameById(counterpartId)}</span>
-                              <span className="text-muted-foreground ml-3">{relationshipType}</span>
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="border border-border/40 bg-background/70 rounded-md p-3 text-xs space-y-2 mt-2">
-                            <div className="text-muted-foreground/90 leading-relaxed whitespace-pre-wrap">{rel.dynamic}</div>
-                            {recentEvents && (
-                              <div className="text-muted-foreground/80 leading-relaxed whitespace-pre-wrap">
-                                <span className="font-semibold text-primary">Recent:</span> {recentEvents}
-                              </div>
-                            )}
-                            {('history' in rel) && rel.history && (
-                              <div className="text-muted-foreground/70 leading-relaxed whitespace-pre-wrap">
-                                <span className="font-semibold text-primary">History:</span> {rel.history}
-                              </div>
-                            )}
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No relationships documented.</p>
                 )}
               </CardContent>
             </Card>
@@ -297,7 +349,7 @@ export function CharactersTab() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-xs text-destructive">
-                    Failed to load psychology: {psychologyErrorData instanceof Error ? psychologyErrorData.message : 'Unknown error'}
+                    Failed to load psychology: {psychologyErrorData instanceof Error ? psychologyErrorData.message : "Unknown error"}
                   </p>
                 </CardContent>
               </Card>
@@ -319,6 +371,72 @@ export function CharactersTab() {
                 </CardContent>
               </Card>
             ) : null}
+
+            <Card className="bg-card/60 border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-mono text-primary">
+                  <Users className="h-4 w-4" />
+                  Relationships
+                </div>
+                {normalizedRelationships.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {normalizedRelationships.length} records
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {relationshipsLoading ? (
+                  <div className="flex items-center justify-center h-16 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : relationshipsError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load relationships: {relationshipsErrorData instanceof Error ? relationshipsErrorData.message : "Unknown error"}
+                  </p>
+                ) : relationshipPairs.length > 0 ? (
+                  <Collapsible open={relationshipsOpen} onOpenChange={setRelationshipsOpen}>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-between px-3 py-2 text-xs font-mono hover:bg-card/70"
+                      >
+                        <span className="flex items-center gap-2">
+                          {relationshipsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                          {relationshipsOpen ? "Hide relationship matrix" : "Show relationship matrix"}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {relationshipPairs.length} counterpart{relationshipPairs.length === 1 ? "" : "s"}
+                        </span>
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-3 pt-3">
+                      {relationshipPairs.map((pair) => {
+                        const counterpartName = characterNameById(pair.counterpartId);
+                        return (
+                          <div
+                            key={pair.counterpartId}
+                            className="border border-border/40 rounded-md bg-background/70 p-4 space-y-4"
+                          >
+                            <div className="flex items-center justify-between text-sm font-mono text-primary terminal-glow">
+                              <span>{counterpartName}</span>
+                              <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                                ID {pair.counterpartId}
+                              </span>
+                            </div>
+                            <div className="grid gap-4 md:grid-cols-2">
+                              {renderRelationshipPerspective(selectedCharacter.name, pair.fromSelected)}
+                              {renderRelationshipPerspective(counterpartName, pair.toSelected)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No relationships documented.</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground font-mono">
