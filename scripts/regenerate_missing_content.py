@@ -55,13 +55,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=50,
-        help="Maximum parallel workers (default: 50)",
+        default=20,
+        help="Maximum parallel workers (default: 20)",
     )
     parser.add_argument(
         "--log-level",
         default="INFO",
         help="Logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Maximum number of generations to regenerate (for testing)",
     )
     return parser.parse_args()
 
@@ -104,7 +110,7 @@ def update_generation(
 
     query = text("""
         UPDATE apex_audition.generations
-        SET response_payload = :response_payload::jsonb,
+        SET response_payload = CAST(:response_payload AS jsonb),
             input_tokens = :input_tokens,
             output_tokens = :output_tokens,
             cache_hit = :cache_hit,
@@ -275,11 +281,22 @@ def main() -> None:
         LOGGER.info("No generations with missing content found!")
         return
 
-    LOGGER.info(
-        "Found %s generation(s) with missing content%s",
-        len(missing),
-        " (DRY RUN)" if args.dry_run else "",
-    )
+    # Apply limit if specified
+    if args.limit is not None and args.limit > 0:
+        total_found = len(missing)
+        missing = missing[:args.limit]
+        LOGGER.info(
+            "Found %s generation(s) with missing content, limiting to %s%s",
+            total_found,
+            len(missing),
+            " (DRY RUN)" if args.dry_run else "",
+        )
+    else:
+        LOGGER.info(
+            "Found %s generation(s) with missing content%s",
+            len(missing),
+            " (DRY RUN)" if args.dry_run else "",
+        )
 
     if args.dry_run:
         for gen in missing:
@@ -303,8 +320,6 @@ def main() -> None:
         ERROR_LOG.unlink()
 
     display_progress(total, remaining, completed, failed)
-
-    LOGGER.info("Processing with %s parallel workers...", args.max_workers)
 
     # Process generations in parallel
     def process_with_retry(generation: MissingGeneration) -> bool:
@@ -330,10 +345,27 @@ def main() -> None:
 
         return success
 
-    # Use ThreadPoolExecutor for parallel processing
+    # Guardrail: Try first generation with 1 worker to validate setup
+    LOGGER.info("Testing with first generation to validate setup...")
+    first_gen = missing[0]
+    first_success = process_with_retry(first_gen)
+
+    if not first_success:
+        LOGGER.error("First generation failed. Aborting parallel processing.")
+        sys.stdout.write("\n")
+        LOGGER.info("  Total: %s", total)
+        LOGGER.info("  Completed: %s", completed)
+        LOGGER.info("  Failed: %s", failed)
+        LOGGER.info("  Errors logged to: %s", ERROR_LOG)
+        return
+
+    LOGGER.info("First generation succeeded! Processing remaining %s with %s parallel workers...",
+                len(missing) - 1, args.max_workers)
+
+    # Use ThreadPoolExecutor for parallel processing of remaining generations
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        # Submit all tasks
-        futures = {executor.submit(process_with_retry, gen): gen for gen in missing}
+        # Submit remaining tasks (skip first one, already processed)
+        futures = {executor.submit(process_with_retry, gen): gen for gen in missing[1:]}
 
         # Wait for completion (progress is updated in process_with_retry)
         for future in as_completed(futures):

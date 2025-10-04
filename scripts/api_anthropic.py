@@ -369,7 +369,15 @@ class AnthropicProvider(LLMProvider):
             response = self.client.messages.create(**params)
 
             # Extract the content from the response
-            content = response.content[0].text if response.content else ""
+            # For extended thinking, skip "thinking" blocks and get the first text block
+            content = ""
+            if response.content:
+                for block in response.content:
+                    if hasattr(block, 'type') and block.type == 'thinking':
+                        continue  # Skip thinking blocks
+                    if hasattr(block, 'text') and block.text:
+                        content = block.text
+                        break
 
             # Extract cache usage if available
             cache_creation_tokens = getattr(response.usage, 'cache_creation_input_tokens', 0) or 0
@@ -487,10 +495,18 @@ class AnthropicProvider(LLMProvider):
         try:
             # Call the API
             response = self.client.messages.create(**params)
-            
+
             # Extract the content from the response
-            content = response.content[0].text if response.content else ""
-            
+            # For extended thinking, skip "thinking" blocks and get the first text block
+            content = ""
+            if response.content:
+                for block in response.content:
+                    if hasattr(block, 'type') and block.type == 'thinking':
+                        continue  # Skip thinking blocks
+                    if hasattr(block, 'text') and block.text:
+                        content = block.text
+                        break
+
             # Parse the JSON response into the Pydantic model
             try:
                 parsed_obj = schema_model.model_validate_json(content)
@@ -638,11 +654,17 @@ class AnthropicProvider(LLMProvider):
         return [{"role": "user", "content": content_blocks}]
 
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from 1Password CLI."""
+        """Get Anthropic API key from environment variable or 1Password CLI."""
         import subprocess
+        import os
 
+        # First, check if API key is already in environment (e.g., pre-fetched by parent process)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            return api_key
+
+        # Otherwise, fetch from 1Password using the secret reference syntax
         try:
-            # Fetch from 1Password using the secret reference syntax
             result = subprocess.run(
                 ["op", "read", "op://API/Anthropic/api key"],
                 capture_output=True,

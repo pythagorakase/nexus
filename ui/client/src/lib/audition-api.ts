@@ -143,4 +143,52 @@ export const auditionAPI = {
     if (!response.ok) throw new Error('Failed to export comparison');
     return response.json();
   },
+
+  /**
+   * Get count of missing generations that need regeneration.
+   */
+  async getMissingGenerationCount(): Promise<{ count: number }> {
+    const response = await fetch(`${API_BASE}/generate/count`);
+    if (!response.ok) throw new Error('Failed to fetch missing generation count');
+    return response.json();
+  },
+
+  /**
+   * Start a generation job.
+   */
+  async startGeneration(limit?: number): Promise<{ job_id: string; status: string }> {
+    const url = limit && limit > 0
+      ? `${API_BASE}/generate/start?limit=${limit}`
+      : `${API_BASE}/generate/start`;
+    const response = await fetch(url, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to start generation job');
+    return response.json();
+  },
+
+  /**
+   * Stop a generation job.
+   */
+  async stopGeneration(jobId: string): Promise<{ status: string; job_id: string }> {
+    const response = await fetch(`${API_BASE}/generate/stop?job_id=${jobId}`, {
+      method: 'POST',
+    });
+    if (!response.ok) throw new Error('Failed to stop generation job');
+    return response.json();
+  },
+
+  /**
+   * Get output and stats from a generation job.
+   */
+  async getGenerationOutput(jobId: string): Promise<{
+    output: string;
+    stats: { total: number; remaining: number; completed: number; failed: number } | null;
+    status: string;
+    job_id: string;
+  }> {
+    const response = await fetch(`${API_BASE}/generate/output?job_id=${jobId}`);
+    if (!response.ok) throw new Error('Failed to fetch job output');
+    return response.json();
+  },
 };

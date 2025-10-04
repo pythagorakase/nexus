@@ -405,8 +405,24 @@ def export_comparison(comparison_id: int):
 # Generation Job Management Endpoints
 # ============================================================================
 
+@app.get("/api/audition/generate/count")
+def get_missing_generation_count():
+    """Get count of generations with missing content that need regeneration."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM apex_audition.generations
+                WHERE status = 'completed'
+                  AND (response_payload->>'content' IS NULL
+                       OR LENGTH(response_payload->>'content') = 0)
+            """)
+            count = cur.fetchone()[0]
+            return {"count": count}
+
+
 @app.post("/api/audition/generate/start")
-def start_generation():
+def start_generation(limit: Optional[int] = None):
     """Start a generation job (runs regenerate_missing_content.py)."""
     job_id = str(uuid.uuid4())
 
@@ -417,14 +433,55 @@ def start_generation():
     if not script_path.exists():
         raise HTTPException(status_code=500, detail=f"Script not found: {script_path}")
 
-    # Start subprocess
+    # Pre-fetch API keys from 1Password to avoid multiple TouchID prompts
+    # This is done once here instead of in each parallel worker
+    import os
+    env = os.environ.copy()
+
+    try:
+        # Fetch Anthropic API key
+        anthropic_result = subprocess.run(
+            ["op", "read", "op://API/Anthropic/api key"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        env["ANTHROPIC_API_KEY"] = anthropic_result.stdout.strip()
+
+        # Fetch OpenAI API key
+        openai_result = subprocess.run(
+            ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        env["OPENAI_API_KEY"] = openai_result.stdout.strip()
+
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve API keys from 1Password. Ensure you're signed in with 'op signin'."
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail="1Password CLI (op) not found. Install from https://developer.1password.com/docs/cli/get-started/"
+        )
+
+    # Build command with optional limit
+    cmd = ["python", str(script_path)]
+    if limit is not None and limit > 0:
+        cmd.extend(["--limit", str(limit)])
+
+    # Start subprocess with pre-fetched API keys in environment
     process = subprocess.Popen(
-        ["python", str(script_path)],
+        cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         cwd=str(project_root),
-        bufsize=1  # Line buffered
+        bufsize=1,  # Line buffered
+        env=env  # Pass environment with API keys
     )
 
     # Buffer to capture output
@@ -513,3 +570,22 @@ def get_generation_output(job_id: str = Query(...)):
         "status": status,
         "job_id": job_id
     }
+
+
+@app.post("/api/audition/generate/stop")
+def stop_generation(job_id: str = Query(...)):
+    """Stop a running generation job."""
+    job = generation_jobs.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    process = job["process"]
+
+    if process.poll() is None:
+        # Process is still running, kill it forcefully
+        # Use kill() instead of terminate() to immediately stop all worker threads
+        process.kill()
+        return {"status": "stopped", "job_id": job_id}
+    else:
+        return {"status": "already_completed", "job_id": job_id}
