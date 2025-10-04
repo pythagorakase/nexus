@@ -100,9 +100,11 @@ def update_generation(
     cache_hit: bool,
 ) -> None:
     """Update an existing generation row with new content."""
+    import json
+
     query = text("""
         UPDATE apex_audition.generations
-        SET response_payload = :response_payload,
+        SET response_payload = :response_payload::jsonb,
             input_tokens = :input_tokens,
             output_tokens = :output_tokens,
             cache_hit = :cache_hit,
@@ -115,7 +117,7 @@ def update_generation(
             query,
             {
                 "id": generation_id,
-                "response_payload": response_payload,
+                "response_payload": json.dumps(response_payload),  # Serialize to JSON string
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cache_hit": cache_hit,
