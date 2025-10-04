@@ -25,7 +25,7 @@ export function ContextDrawer({ prompt }: ContextDrawerProps) {
       <CollapsibleTrigger asChild>
         <Button
           variant="ghost"
-          className="w-full flex justify-between items-center px-4 py-3 font-mono text-sm hover:bg-accent"
+          className="w-full flex justify-between items-center px-4 py-3 font-mono text-sm hover:bg-accent text-foreground"
         >
           <span>
             Context: {label} ({category})

@@ -101,7 +101,7 @@ export function JudgmentBar({
             size="sm"
             onClick={onChooseLeft}
             disabled={disabled}
-            className="min-w-28"
+            className="min-w-28 text-foreground"
           >
             [1] Left passage
           </Button>
@@ -110,7 +110,7 @@ export function JudgmentBar({
             size="sm"
             onClick={onChooseRight}
             disabled={disabled}
-            className="min-w-28"
+            className="min-w-28 text-foreground"
           >
             [2] Right passage
           </Button>
@@ -119,7 +119,7 @@ export function JudgmentBar({
             size="sm"
             onClick={onTie}
             disabled={disabled}
-            className="min-w-28"
+            className="min-w-28 text-foreground"
           >
             [3] Tie
           </Button>
@@ -129,7 +129,7 @@ export function JudgmentBar({
               size="sm"
               onClick={onSkip}
               disabled={disabled}
-              className="min-w-24"
+              className="min-w-24 text-foreground"
             >
               [0] Skip
             </Button>
@@ -139,7 +139,7 @@ export function JudgmentBar({
             size="sm"
             onClick={() => setNoteDialogOpen(true)}
             disabled={disabled}
-            className="min-w-24"
+            className="min-w-24 text-foreground"
           >
             [N] Add Note
           </Button>
@@ -148,7 +148,7 @@ export function JudgmentBar({
             size="sm"
             onClick={onExit}
             disabled={disabled}
-            className="min-w-24"
+            className="min-w-24 text-foreground"
           >
             [Esc] Exit
           </Button>
