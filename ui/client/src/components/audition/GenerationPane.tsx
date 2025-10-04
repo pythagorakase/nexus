@@ -58,7 +58,7 @@ export function GenerationPane({
         </span>
       </div>
       <ScrollArea className="flex-1 p-4">
-        <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap">
+        <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground">
           {content}
         </pre>
       </ScrollArea>
