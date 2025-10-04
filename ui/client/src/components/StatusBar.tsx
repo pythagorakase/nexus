@@ -10,6 +10,7 @@ interface StatusBarProps {
   isStoryMode: boolean;
   isLoadingModel?: boolean;
   modelLoadProgress?: number;
+  isModelLoaded?: boolean;
   onHamburgerClick?: () => void;
 }
 
@@ -22,6 +23,7 @@ export function StatusBar({
   isStoryMode,
   isLoadingModel,
   modelLoadProgress,
+  isModelLoaded = false,
   onHamburgerClick,
 }: StatusBarProps) {
   const getStatusColor = () => {
@@ -67,7 +69,9 @@ export function StatusBar({
               <span className="text-xs text-muted-foreground">{Math.round(modelLoadProgress || 0)}%</span>
             </div>
           ) : (
-            <span className="text-foreground terminal-glow">{model}</span>
+            <span className={`transition-colors duration-300 ${isModelLoaded ? 'text-foreground terminal-glow' : 'text-muted-foreground'}`}>
+              {model}
+            </span>
           )}
         </div>
 

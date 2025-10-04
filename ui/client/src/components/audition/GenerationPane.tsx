@@ -3,6 +3,7 @@
  */
 import { Generation } from '@/lib/audition-api';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import ReactMarkdown from 'react-markdown';
 
 interface GenerationPaneProps {
   generation: Generation;
@@ -79,9 +80,20 @@ export function GenerationPane({
         </span>
       </div>
       <ScrollArea className="flex-1 p-4">
-        <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-          {content}
-        </pre>
+        <div className="font-mono text-sm leading-relaxed text-foreground">
+          <ReactMarkdown
+            components={{
+              p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+              strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+              em: ({node, ...props}) => <em className="italic" {...props} />,
+              h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props} />,
+              h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props} />,
+              h3: ({node, ...props}) => <h3 className="font-bold mb-1 mt-2 first:mt-0" {...props} />,
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
       </ScrollArea>
     </div>
   );
