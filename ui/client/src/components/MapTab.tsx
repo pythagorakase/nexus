@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Loader2, ChevronRight, ChevronDown } from "lucide-react";
+import { Loader2, ChevronRight, ChevronDown, MapPin } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { BACKGROUND_NORMALISED_HEIGHT, BACKGROUND_NORMALISED_WIDTH, WORLD_OUTLINE_SHAPES } from "@/lib/world-map-outline";
 import type { Place, Zone } from "@shared/schema";
 
 interface MapTabProps {
@@ -56,7 +57,9 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const [mapDimensions, setMapDimensions] = useState({ width: 800, height: 600 });
   const [mapBounds, setMapBounds] = useState<{ minLng: number; maxLng: number; minLat: number; maxLat: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragViewBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const dragMovedRef = useRef(false);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 800, height: 600 });
   const [zoom, setZoom] = useState(1);
 
@@ -84,8 +87,10 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     const handleResize = () => {
       if (svgRef.current?.parentElement) {
         const { width, height } = svgRef.current.parentElement.getBoundingClientRect();
-        setMapDimensions({ width, height });
-        setViewBox({ x: 0, y: 0, width, height });
+        const safeWidth = Math.max(width, 1);
+        const safeHeight = Math.max(height, 1);
+        setMapDimensions({ width: safeWidth, height: safeHeight });
+        setViewBox({ x: 0, y: 0, width: safeWidth, height: safeHeight });
       }
     };
 
@@ -146,7 +151,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const isLoading = placesLoading || zonesLoading;
 
   // Transform coordinates for SVG display using dynamic bounds
-  const transformCoordinates = (lng: number, lat: number) => {
+  const transformCoordinates = useCallback((lng: number, lat: number) => {
     // Use dynamic bounds if available, otherwise use global defaults
     const bounds = mapBounds || {
       minLng: -180,
@@ -154,21 +159,21 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
       minLat: -90,
       maxLat: 90
     };
-    
+
     const x = ((lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * mapDimensions.width;
     const y = mapDimensions.height - ((lat - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * mapDimensions.height;
-    
+
     return { x, y };
-  };
+  }, [mapBounds, mapDimensions.height, mapDimensions.width]);
 
   // Get place coordinates - only return valid coordinates, no fallbacks
-  const getPlaceCoordinates = (place: Place): { x: number; y: number } | null => {
+  const getPlaceCoordinates = useCallback((place: Place): { x: number; y: number } | null => {
     const coords = extractCoordinates(place);
     if (coords) {
       return transformCoordinates(coords.longitude, coords.latitude);
     }
     return null;
-  };
+  }, [transformCoordinates]);
 
   // Convert GeoJSON MultiPolygon coordinates to SVG path data
   const geoJsonToSvgPath = (boundary: any): string | null => {
@@ -215,36 +220,66 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
   // Handle mouse events for drag
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start dragging on the background, not on interactive elements
-    if (e.button === 0 && e.target === e.currentTarget) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-    }
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragMovedRef.current = false;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    dragViewBoxRef.current = { ...viewBox };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      const dx = (e.clientX - dragStart.x) * (1 / zoom);
-      const dy = (e.clientY - dragStart.y) * (1 / zoom);
-      setViewBox(prev => ({
-        ...prev,
-        x: prev.x - dx,
-        y: prev.y - dy
-      }));
-      setDragStart({ x: e.clientX, y: e.clientY });
+    if (!isDragging || !dragStartRef.current || !dragViewBoxRef.current) {
+      return;
     }
+
+    if (!mapDimensions.width || !mapDimensions.height) {
+      return;
+    }
+
+    const deltaX = e.clientX - dragStartRef.current.x;
+    const deltaY = e.clientY - dragStartRef.current.y;
+
+    if (!dragMovedRef.current) {
+      const threshold = 2;
+      if (Math.abs(deltaX) > threshold || Math.abs(deltaY) > threshold) {
+        dragMovedRef.current = true;
+      }
+    }
+
+    const scaleX = dragViewBoxRef.current.width / mapDimensions.width;
+    const scaleY = dragViewBoxRef.current.height / mapDimensions.height;
+
+    setViewBox({
+      x: dragViewBoxRef.current.x - deltaX * scaleX,
+      y: dragViewBoxRef.current.y - deltaY * scaleY,
+      width: dragViewBoxRef.current.width,
+      height: dragViewBoxRef.current.height,
+    });
   };
 
   const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
-    }
+    if (!isDragging) return;
+    setIsDragging(false);
+    dragStartRef.current = null;
+    dragViewBoxRef.current = null;
   };
+
+  useEffect(() => {
+    const handleWindowMouseUp = () => {
+      if (!dragStartRef.current) return;
+      setIsDragging(false);
+      dragStartRef.current = null;
+      dragViewBoxRef.current = null;
+    };
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+    return () => window.removeEventListener("mouseup", handleWindowMouseUp);
+  }, []);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(Math.max(zoom * delta, 0.5), 5);
+    const newZoom = Math.min(Math.max(zoom * delta, 0.5), 100);
     
     // Zoom towards mouse position
     const rect = svgRef.current?.getBoundingClientRect();
@@ -267,6 +302,30 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     }
   };
 
+  const backgroundPaths = useMemo(() => {
+    if (!mapDimensions.width || !mapDimensions.height) {
+      return [];
+    }
+
+    const scaleX = mapDimensions.width / BACKGROUND_NORMALISED_WIDTH;
+    const scaleY = mapDimensions.height / BACKGROUND_NORMALISED_HEIGHT;
+
+    return WORLD_OUTLINE_SHAPES.map(shape => {
+      const commands = shape.points
+        .map(([x, y], index) => {
+          const scaledX = x * scaleX;
+          const scaledY = y * scaleY;
+          return `${index === 0 ? "M" : "L"} ${scaledX} ${scaledY}`;
+        })
+        .join(" ");
+
+      return {
+        id: shape.id,
+        d: `${commands} Z`,
+      };
+    });
+  }, [mapDimensions.height, mapDimensions.width]);
+
   // Determine pin color based on state
   const getPinColor = (place: Place) => {
     if (currentChunkLocation && place.name === currentChunkLocation) {
@@ -282,7 +341,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   };
 
   // Progressive label display based on zoom and importance
-  const isLabelVisible = (place: Place, index: number) => {
+  const isLabelVisible = useCallback((place: Place, index: number) => {
     // Always show for hovered, selected, or current location
     if (hoveredLocation === place.id ||
         selectedLocation === place.id ||
@@ -305,7 +364,76 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     }
 
     return false;
-  };
+  }, [currentChunkLocation, hoveredLocation, selectedLocation, zoom]);
+
+  const labelVisibility = useMemo(() => {
+    const visibility = new Map<number, boolean>();
+    const occupied: Array<{ x1: number; x2: number; y1: number; y2: number }> = [];
+
+    const forcedIds = new Set<number>();
+    if (hoveredLocation) forcedIds.add(hoveredLocation);
+    if (selectedLocation) forcedIds.add(selectedLocation);
+
+    if (currentChunkLocation) {
+      const currentPlace = visiblePlaces.find(place => place.name === currentChunkLocation);
+      if (currentPlace) {
+        forcedIds.add(currentPlace.id);
+      }
+    }
+
+    const entries = visiblePlaces
+      .map((place, index) => ({ place, index, coords: getPlaceCoordinates(place) }))
+      .filter((entry): entry is { place: Place; index: number; coords: { x: number; y: number } } => Boolean(entry.coords));
+
+    entries.sort((a, b) => {
+      const aForced = forcedIds.has(a.place.id);
+      const bForced = forcedIds.has(b.place.id);
+      if (aForced && !bForced) return -1;
+      if (!aForced && bForced) return 1;
+      return a.index - b.index;
+    });
+
+    const labelWidth = 80 / zoom;
+    const labelHeight = 16 / zoom;
+    const labelOffsetY = 25 / zoom;
+    const padding = 2 / zoom;
+
+    for (const { place, index, coords } of entries) {
+      const shouldAttempt = forcedIds.has(place.id) || isLabelVisible(place, index);
+      if (!shouldAttempt) {
+        visibility.set(place.id, false);
+        continue;
+      }
+
+      const bounds = {
+        x1: coords.x - labelWidth / 2 - padding,
+        x2: coords.x + labelWidth / 2 + padding,
+        y1: coords.y - labelOffsetY - padding,
+        y2: coords.y - labelOffsetY + labelHeight + padding,
+      };
+
+      const collides = occupied.some(box => {
+        return !(bounds.x2 < box.x1 || bounds.x1 > box.x2 || bounds.y2 < box.y1 || bounds.y1 > box.y2);
+      });
+
+      const shouldDisplay = forcedIds.has(place.id) || !collides;
+      visibility.set(place.id, shouldDisplay);
+
+      if (shouldDisplay) {
+        occupied.push(bounds);
+      }
+    }
+
+    return visibility;
+  }, [
+    currentChunkLocation,
+    getPlaceCoordinates,
+    hoveredLocation,
+    isLabelVisible,
+    selectedLocation,
+    visiblePlaces,
+    zoom,
+  ]);
 
   return (
     <div className="flex h-full bg-background">
@@ -338,6 +466,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
         >
           {/* Background */}
@@ -355,6 +484,21 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             </pattern>
           </defs>
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
+
+          {/* World outline */}
+          <g opacity="0.6" pointerEvents="none">
+            {backgroundPaths.map((path) => (
+              <path
+                key={path.id}
+                d={path.d}
+                fill="#02110b"
+                stroke="#00ff41"
+                strokeWidth={1 / zoom}
+                strokeOpacity={0.25}
+                fillOpacity={0.2}
+              />
+            ))}
+          </g>
 
           {/* Zone boundaries */}
           <g opacity="0.6">
@@ -382,7 +526,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             if (!coords) return null;
 
             const pinColor = getPinColor(place);
-            const labelVisible = isLabelVisible(place, index);
+            const labelVisible = labelVisibility.get(place.id) ?? false;
 
             // Scale sizes inversely with zoom to maintain constant visual size
             const pinRadius = 3 / zoom;
@@ -408,6 +552,11 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                   }
                 }}
                 onClick={(e) => {
+                  if (dragMovedRef.current) {
+                    dragMovedRef.current = false;
+                    return;
+                  }
+
                   if (!isDragging) {
                     e.stopPropagation();
                     setSelectedLocation(place.id);
