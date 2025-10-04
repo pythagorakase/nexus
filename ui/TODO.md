@@ -51,3 +51,24 @@ The project has a basic React/TypeScript cyberpunk terminal interface with mobil
 5. Test with actual database content
 
 **Key Warning**: Don't try to read all the data - just understand the schema structure. The dataset is too large to process in detail.
+
+## Known Bugs
+
+### Status Bar Model Display
+- **Issue**: Model name in status bar displays "MODEL: LOADING" instead of parsing from settings.json
+- **Expected**: Should read `Agent Settings.global.model.default_model` from settings.json and display the text after "/" in uppercase (e.g., "nexveridian/gpt-oss-120b" → "GPT-OSS-120B")
+- **Current Code**: `NexusLayout.tsx` lines 29-40, `/api/settings` endpoint in `server/routes.ts` lines 141-153
+- **Status**: Settings API endpoint works correctly, parsing logic appears correct but model name still shows as "LOADING"
+
+### Narrative Pane - No Markdown Rendering
+- **Issue**: Narrative pane displays raw markdown instead of rendering it
+- **Location**: NarrativeTab.tsx - chunk content display area
+- **Expected**: Should render markdown formatting like the audition pane does
+- **Status**: Not yet implemented
+
+### Audition Pane - Numbered Lists Not Rendering
+- **Issue**: Ordered lists (numbered lists) don't display numbers, only the text content
+- **Example**: "1. **Dive for cover**" renders as "**Dive for cover**" (bold works, number disappears)
+- **Location**: Previous chunk display in audition pane (uses ReactMarkdown)
+- **Other Markdown**: Bold (**text**) and headings (## text) render correctly
+- **Status**: ReactMarkdown is working but ordered list numbers are missing

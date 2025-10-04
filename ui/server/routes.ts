@@ -137,6 +137,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Settings route
+  app.get("/api/settings", async (req, res) => {
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const settingsPath = path.join(process.cwd(), "..", "settings.json");
+      const settingsData = await fs.readFile(settingsPath, "utf-8");
+      const settings = JSON.parse(settingsData);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

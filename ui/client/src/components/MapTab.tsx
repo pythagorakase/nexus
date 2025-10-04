@@ -4,6 +4,12 @@ import { MapPin, Loader2, ChevronRight, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { Place, Zone } from "@shared/schema";
 
 interface MapTabProps {
@@ -14,7 +20,8 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   // State management for location interactions
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
-  
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
   const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
   
   // Map control states
@@ -60,32 +67,16 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  type Coordinates = { latitude: number; longitude: number };
+  const extractCoordinates = (place: Place): { latitude: number; longitude: number } | null => {
+    // API now returns clean lat/lng extracted from PostGIS
+    const lat = place.latitude !== null && place.latitude !== undefined ? Number(place.latitude) : null;
+    const lng = place.longitude !== null && place.longitude !== undefined ? Number(place.longitude) : null;
 
-  const parseCoordinateString = (value?: unknown): Coordinates | null => {
-    if (typeof value !== "string") return null;
-    const match = value.match(/POINT(?:ZM)?\((-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/i);
-    if (!match) return null;
-    const longitude = Number(match[1]);
-    const latitude = Number(match[2]);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      return null;
-    }
-    return { latitude, longitude };
-  };
-
-  const extractCoordinates = (place: Place): Coordinates | null => {
-    const lat = place.latitude !== null && place.latitude !== undefined ? Number(place.latitude) : undefined;
-    const lng = place.longitude !== null && place.longitude !== undefined ? Number(place.longitude) : undefined;
-
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      return { latitude: lat as number, longitude: lng as number };
+    if (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { latitude: lat, longitude: lng };
     }
 
-    const coordinatesField = (place as unknown as { coordinates?: unknown; geom?: unknown }).coordinates;
-    const geomField = (place as unknown as { coordinates?: unknown; geom?: unknown }).geom;
-
-    return parseCoordinateString(coordinatesField ?? geomField);
+    return null;
   };
 
   // Calculate bounds from place data only (zones not needed for display)
@@ -143,39 +134,33 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return { x, y };
   };
 
-  // Get place coordinates
-  const fallbackPositions = useMemo(() => {
-    if (!places.length) {
-      return new Map<number, { x: number; y: number }>();
-    }
-    const width = Math.max(mapDimensions.width, 400);
-    const height = Math.max(mapDimensions.height, 300);
-    const radius = Math.min(width, height) * 0.35;
-    const centerX = width / 2;
-    const centerY = height / 2;
-
-    return new Map<number, { x: number; y: number }>(
-      places.map((place, index) => {
-        const angle = (index / places.length) * Math.PI * 2;
-        const x = centerX + radius * Math.cos(angle);
-        const y = centerY + radius * Math.sin(angle);
-        return [place.id, { x, y }];
-      }),
-    );
-  }, [places, mapDimensions.height, mapDimensions.width]);
-
+  // Get place coordinates - only return valid coordinates, no fallbacks
   const getPlaceCoordinates = (place: Place): { x: number; y: number } | null => {
     const coords = extractCoordinates(place);
     if (coords) {
       return transformCoordinates(coords.longitude, coords.latitude);
     }
+    return null;
+  };
 
-    const fallback = fallbackPositions.get(place.id);
-    if (fallback) {
-      return fallback;
+  // Convert GeoJSON MultiPolygon coordinates to SVG path data
+  const geoJsonToSvgPath = (boundary: any): string | null => {
+    if (!boundary || boundary.type !== 'MultiPolygon') return null;
+
+    const paths: string[] = [];
+
+    // MultiPolygon structure: [[[polygon coordinates]]]
+    for (const polygon of boundary.coordinates) {
+      for (const ring of polygon) {
+        const pathData = ring.map(([lng, lat]: [number, number], index: number) => {
+          const { x, y } = transformCoordinates(lng, lat);
+          return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+        }).join(' ') + ' Z';
+        paths.push(pathData);
+      }
     }
 
-    return null;
+    return paths.join(' ');
   };
 
   const visiblePlaces = places;
@@ -269,11 +254,30 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return "#00ff41"; // Default green
   };
 
-  // Check if label should be visible
-  const isLabelVisible = (place: Place) => {
-    return hoveredLocation === place.id || 
-           selectedLocation === place.id || 
-           (currentChunkLocation && place.name === currentChunkLocation);
+  // Progressive label display based on zoom and importance
+  const isLabelVisible = (place: Place, index: number) => {
+    // Always show for hovered, selected, or current location
+    if (hoveredLocation === place.id ||
+        selectedLocation === place.id ||
+        (currentChunkLocation && place.name === currentChunkLocation)) {
+      return true;
+    }
+
+    // Progressive reveal based on zoom level
+    // At 1.0x zoom: show every 20th place
+    // At 2.0x zoom: show every 5th place
+    // At 3.0x zoom: show all places
+    if (zoom >= 3.0) {
+      return true;
+    } else if (zoom >= 2.0) {
+      return index % 5 === 0;
+    } else if (zoom >= 1.5) {
+      return index % 10 === 0;
+    } else if (zoom >= 1.0) {
+      return index % 20 === 0;
+    }
+
+    return false;
   };
 
   return (
@@ -325,31 +329,42 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           </defs>
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
 
-          {/* Minimal landmass outlines (simplified boundaries) */}
-          <g opacity="0.2">
-            <path
-              d="M 100 300 Q 200 250 300 280 T 500 320 Q 600 340 700 330"
-              fill="none"
-              stroke="#00ff41"
-              strokeWidth="0.5"
-              strokeDasharray="2,4"
-            />
-            <path
-              d="M 150 400 Q 250 380 350 390 T 550 410"
-              fill="none"
-              stroke="#00ff41"
-              strokeWidth="0.5"
-              strokeDasharray="2,4"
-            />
+          {/* Zone boundaries */}
+          <g opacity="0.6">
+            {zones.map((zone) => {
+              const pathData = geoJsonToSvgPath(zone.boundary);
+              if (!pathData) return null;
+
+              return (
+                <path
+                  key={zone.id}
+                  d={pathData}
+                  fill="none"
+                  stroke="#00ff41"
+                  strokeWidth={2 / zoom}
+                  strokeDasharray={`${4 / zoom},${4 / zoom}`}
+                  data-zone-id={zone.id}
+                />
+              );
+            })}
           </g>
 
           {/* Places - All pins and labels rendered, visibility controlled by CSS */}
-          {visiblePlaces.map((place) => {
+          {visiblePlaces.map((place, index) => {
             const coords = getPlaceCoordinates(place);
             if (!coords) return null;
 
             const pinColor = getPinColor(place);
-            const labelVisible = isLabelVisible(place);
+            const labelVisible = isLabelVisible(place, index);
+
+            // Scale sizes inversely with zoom to maintain constant visual size
+            const pinRadius = 3 / zoom;
+            const ringRadius = 8 / zoom;
+            const fontSize = 11 / zoom;
+            const labelHeight = 16 / zoom;
+            const labelWidth = 80 / zoom;
+            const labelOffsetY = 25 / zoom;
+            const textOffsetY = 12 / zoom;
 
             return (
               <g
@@ -369,6 +384,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                   if (!isDragging) {
                     e.stopPropagation();
                     setSelectedLocation(place.id);
+                    setDetailsDialogOpen(true);
                   }
                 }}
                 data-testid={`place-${place.id}`}
@@ -377,52 +393,52 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                 <circle
                   cx={coords.x}
                   cy={coords.y}
-                  r="3"
+                  r={pinRadius}
                   fill={pinColor}
                   className="transition-all duration-200"
                   style={{
-                    filter: `drop-shadow(0 0 8px ${pinColor})`
+                    filter: `drop-shadow(0 0 ${8 / zoom}px ${pinColor})`
                   }}
                 />
-                
+
                 {/* Outer ring for selected/hovered states */}
                 {(selectedLocation === place.id || hoveredLocation === place.id) && (
                   <circle
                     cx={coords.x}
                     cy={coords.y}
-                    r="8"
+                    r={ringRadius}
                     fill="transparent"
                     stroke={pinColor}
-                    strokeWidth="1"
+                    strokeWidth={1 / zoom}
                     opacity="0.6"
                     className="animate-pulse"
                     style={{
-                      filter: `drop-shadow(0 0 4px ${pinColor})`
+                      filter: `drop-shadow(0 0 ${4 / zoom}px ${pinColor})`
                     }}
                   />
                 )}
-                
+
                 {/* Label - always in DOM, visibility controlled by display property */}
                 <g style={{ display: labelVisible ? '' : 'none' }}>
                   <rect
-                    x={coords.x - 40}
-                    y={coords.y - 25}
-                    width="80"
-                    height="16"
+                    x={coords.x - labelWidth / 2}
+                    y={coords.y - labelOffsetY}
+                    width={labelWidth}
+                    height={labelHeight}
                     fill="#000000"
                     opacity="0.8"
-                    rx="2"
+                    rx={2 / zoom}
                   />
                   <text
                     x={coords.x}
-                    y={coords.y - 12}
+                    y={coords.y - textOffsetY}
                     fill={pinColor}
-                    fontSize="11"
+                    fontSize={fontSize}
                     textAnchor="middle"
                     className="font-mono transition-all duration-200"
-                    style={{ 
+                    style={{
                       userSelect: "none",
-                      filter: `drop-shadow(0 0 2px ${pinColor})`
+                      filter: `drop-shadow(0 0 ${2 / zoom}px ${pinColor})`
                     }}
                   >
                     {place.name}
@@ -534,7 +550,8 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                               } ${isCurrent ? 'text-yellow-400' : ''}`}
                               onClick={() => {
                                 setSelectedLocation(place.id);
-                                // Optionally pan to location
+                                setDetailsDialogOpen(true);
+                                // Pan to location if it has coordinates
                                 const coords = getPlaceCoordinates(place);
                                 if (coords) {
                                   setViewBox({
@@ -577,6 +594,90 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           </div>
         </ScrollArea>
       </div>
+
+      {/* Place Details Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-primary">
+              {selectedLocation ? places.find(p => p.id === selectedLocation)?.name : 'Location Details'}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedLocation && (() => {
+            const place = places.find(p => p.id === selectedLocation);
+            if (!place) return null;
+
+            const zone = zones.find(z => z.id === place.zoneId);
+            const coords = extractCoordinates(place);
+
+            return (
+              <ScrollArea className="max-h-[60vh]">
+                <div className="space-y-4 font-mono text-sm pr-4">
+                  {place.type && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Type</div>
+                      <div className="text-foreground">{place.type}</div>
+                    </div>
+                  )}
+
+                  {zone && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Zone</div>
+                      <div className="text-foreground">{zone.name}</div>
+                    </div>
+                  )}
+
+                  {coords && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Coordinates</div>
+                      <div className="text-foreground">
+                        {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                      </div>
+                    </div>
+                  )}
+
+                  {place.summary && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
+                      <div className="text-foreground">{place.summary}</div>
+                    </div>
+                  )}
+
+                  {place.history && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">History</div>
+                      <div className="text-foreground">{place.history}</div>
+                    </div>
+                  )}
+
+                  {place.currentStatus && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
+                      <div className="text-foreground">{place.currentStatus}</div>
+                    </div>
+                  )}
+
+                  {place.inhabitants && place.inhabitants.length > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
+                      <div className="text-foreground">
+                        {place.inhabitants.join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {place.secrets && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
+                      <div className="text-foreground italic">{place.secrets}</div>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

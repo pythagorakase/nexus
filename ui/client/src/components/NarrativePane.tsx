@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from 'react-markdown';
 
 export interface NarrativeSection {
   type: "you" | "storyteller";
@@ -99,7 +100,15 @@ export function NarrativePane({
                   {mode === "stream" && idx === currentChunkData.sections.length - 1 ? (
                     <TypewriterText text={section.content} />
                   ) : (
-                    section.content
+                    <ReactMarkdown
+                      components={{
+                        p: ({node, ...props}) => <>{props.children}</>,
+                        strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                        em: ({node, ...props}) => <em className="italic" {...props} />,
+                      }}
+                    >
+                      {section.content}
+                    </ReactMarkdown>
                   )}
                 </div>
               ))}
@@ -124,7 +133,15 @@ export function NarrativePane({
               {typingChunkData.sections.map((section, idx) => (
                 <div key={idx} className="text-foreground leading-relaxed">
                   <span className="text-muted-foreground mr-2">{">>"}</span>
-                  <TypewriterText text={section.content} delay={50} />
+                  <ReactMarkdown
+                    components={{
+                      p: ({node, ...props}) => <>{props.children}</>,
+                      strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                      em: ({node, ...props}) => <em className="italic" {...props} />,
+                    }}
+                  >
+                    {section.content}
+                  </ReactMarkdown>
                 </div>
               ))}
             </div>
