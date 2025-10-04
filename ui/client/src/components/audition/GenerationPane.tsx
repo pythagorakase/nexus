@@ -22,9 +22,16 @@ function resolveContent(generation: Generation): string {
     return payload.raw.content[0].text;
   }
 
-  // Check for OpenAI /v1/responses format: raw.output[0].content[0].text
-  if (payload.raw?.output?.[0]?.content?.[0]?.text) {
-    return payload.raw.output[0].content[0].text;
+  // Check for OpenAI /v1/responses format with output array
+  // Reasoning models (GPT-5, o3) have: [0]=reasoning, [1]=message
+  // Standard models (GPT-4o) have: [0]=message
+  if (Array.isArray(payload.raw?.output)) {
+    // Find the first "message" type output (skip "reasoning" type)
+    for (const output of payload.raw.output) {
+      if (output?.content?.[0]?.text && output.type !== 'reasoning') {
+        return output.content[0].text;
+      }
+    }
   }
 
   // Fallback: top-level content field (string)
