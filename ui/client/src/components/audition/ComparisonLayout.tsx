@@ -236,10 +236,10 @@ export function ComparisonLayout({
               Previous chunk
             </div>
             <ScrollArea className="h-32" ref={precedingScrollRef}>
-              <div className="font-mono text-sm leading-relaxed text-foreground pr-4">
+              <div className="font-mono text-sm leading-relaxed text-foreground pr-4 pl-3">
                 <ReactMarkdown
                   components={{
-                    p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+                    p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />, 
                     strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                     em: ({node, ...props}) => <em className="italic" {...props} />,
                     ol: ({node, ...props}) => (

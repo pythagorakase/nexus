@@ -12,6 +12,300 @@ import {
 } from "@/components/ui/dialog";
 import type { Place, Zone } from "@shared/schema";
 
+type WorldFeature = {
+  name: string;
+  polygons: ReadonlyArray<ReadonlyArray<[number, number]>>;
+};
+
+const WORLD_MAP_OUTLINES: ReadonlyArray<WorldFeature> = [
+  {
+    name: "North America",
+    polygons: [
+      [
+        [-168, 72],
+        [-153, 70],
+        [-140, 65],
+        [-132, 58],
+        [-125, 52],
+        [-115, 49],
+        [-105, 50],
+        [-95, 52],
+        [-85, 50],
+        [-78, 44],
+        [-74, 38],
+        [-83, 30],
+        [-95, 23],
+        [-108, 23],
+        [-120, 27],
+        [-128, 33],
+        [-135, 42],
+        [-145, 54],
+        [-158, 63],
+        [-168, 72],
+      ],
+    ],
+  },
+  {
+    name: "Greenland",
+    polygons: [
+      [
+        [-55, 83],
+        [-47, 82],
+        [-38, 78],
+        [-32, 72],
+        [-38, 65],
+        [-45, 61],
+        [-53, 68],
+        [-55, 83],
+      ],
+    ],
+  },
+  {
+    name: "South America",
+    polygons: [
+      [
+        [-82, 12],
+        [-74, 7],
+        [-68, 0],
+        [-64, -10],
+        [-66, -20],
+        [-72, -32],
+        [-70, -46],
+        [-60, -52],
+        [-50, -55],
+        [-45, -50],
+        [-48, -30],
+        [-56, -10],
+        [-65, 0],
+        [-70, 6],
+        [-82, 12],
+      ],
+    ],
+  },
+  {
+    name: "Europe",
+    polygons: [
+      [
+        [-10, 71],
+        [0, 72],
+        [20, 70],
+        [35, 66],
+        [40, 60],
+        [32, 50],
+        [22, 44],
+        [15, 40],
+        [5, 36],
+        [-5, 42],
+        [-10, 55],
+        [-10, 71],
+      ],
+      [
+        [-8, 58],
+        [-2, 58],
+        [0, 55],
+        [-3, 51],
+        [-8, 52],
+        [-8, 58],
+      ],
+      [
+        [5, 60],
+        [12, 63],
+        [20, 64],
+        [25, 60],
+        [20, 57],
+        [12, 57],
+        [5, 60],
+      ],
+    ],
+  },
+  {
+    name: "Africa",
+    polygons: [
+      [
+        [-18, 35],
+        [0, 37],
+        [15, 34],
+        [28, 32],
+        [35, 24],
+        [40, 10],
+        [42, -5],
+        [36, -15],
+        [30, -25],
+        [20, -33],
+        [10, -35],
+        [0, -30],
+        [-10, -25],
+        [-15, -10],
+        [-18, 10],
+        [-18, 35],
+      ],
+      [
+        [45, -12],
+        [50, -12],
+        [50, -17],
+        [45, -22],
+        [42, -18],
+        [45, -12],
+      ],
+    ],
+  },
+  {
+    name: "Middle East & Central Asia",
+    polygons: [
+      [
+        [30, 40],
+        [40, 45],
+        [55, 45],
+        [65, 40],
+        [70, 35],
+        [65, 30],
+        [55, 25],
+        [45, 25],
+        [35, 30],
+        [30, 35],
+        [30, 40],
+      ],
+    ],
+  },
+  {
+    name: "Asia",
+    polygons: [
+      [
+        [40, 75],
+        [55, 78],
+        [80, 76],
+        [100, 70],
+        [115, 65],
+        [130, 58],
+        [145, 52],
+        [155, 45],
+        [155, 35],
+        [145, 30],
+        [135, 20],
+        [145, 15],
+        [155, 10],
+        [150, 5],
+        [135, 5],
+        [120, 10],
+        [108, 5],
+        [100, 10],
+        [90, 5],
+        [80, 10],
+        [75, 18],
+        [70, 28],
+        [60, 35],
+        [50, 45],
+        [45, 55],
+        [40, 65],
+        [40, 75],
+      ],
+      [
+        [128, 36],
+        [135, 38],
+        [142, 38],
+        [142, 32],
+        [135, 32],
+        [128, 36],
+      ],
+      [
+        [139, 46],
+        [145, 46],
+        [150, 43],
+        [148, 38],
+        [142, 38],
+        [139, 46],
+      ],
+    ],
+  },
+  {
+    name: "Southeast Asia",
+    polygons: [
+      [
+        [95, 25],
+        [105, 20],
+        [110, 15],
+        [105, 5],
+        [98, 0],
+        [92, 10],
+        [95, 25],
+      ],
+      [
+        [110, 5],
+        [120, 8],
+        [126, 5],
+        [122, -2],
+        [114, -4],
+        [110, 5],
+      ],
+      [
+        [120, -5],
+        [130, -2],
+        [135, -8],
+        [128, -12],
+        [118, -10],
+        [120, -5],
+      ],
+    ],
+  },
+  {
+    name: "Australia",
+    polygons: [
+      [
+        [110, -10],
+        [130, -12],
+        [145, -18],
+        [150, -28],
+        [145, -38],
+        [130, -42],
+        [118, -38],
+        [112, -28],
+        [110, -10],
+      ],
+    ],
+  },
+  {
+    name: "New Zealand",
+    polygons: [
+      [
+        [165, -34],
+        [175, -36],
+        [175, -45],
+        [167, -47],
+        [165, -34],
+      ],
+      [
+        [170, -45],
+        [178, -47],
+        [178, -52],
+        [170, -52],
+        [170, -45],
+      ],
+    ],
+  },
+  {
+    name: "Antarctica",
+    polygons: [
+      [
+        [-180, -70],
+        [-120, -72],
+        [-60, -74],
+        [0, -78],
+        [60, -74],
+        [120, -72],
+        [180, -70],
+        [180, -82],
+        [120, -84],
+        [60, -86],
+        [0, -88],
+        [-60, -86],
+        [-120, -84],
+        [-180, -82],
+        [-180, -70],
+      ],
+    ],
+  },
+];
+
 interface MapTabProps {
   currentChunkLocation?: string | null;
 }
@@ -92,6 +386,19 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    window.addEventListener("mouseleave", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+      window.removeEventListener("mouseleave", handleGlobalMouseUp);
+    };
   }, []);
 
   const extractCoordinates = (place: Place): { latitude: number; longitude: number } | null => {
@@ -192,6 +499,42 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
   const visiblePlaces = places;
 
+  const placeOrder = useMemo(() => {
+    return new Map(visiblePlaces.map((place, index) => [place.id, index]));
+  }, [visiblePlaces]);
+
+  const placesForRendering = useMemo(() => {
+    const priorityForPlace = (place: Place) => {
+      if (currentChunkLocation && place.name === currentChunkLocation) {
+        return 3;
+      }
+      if (selectedLocation === place.id) {
+        return 2;
+      }
+      if (hoveredLocation === place.id) {
+        return 1;
+      }
+      return 0;
+    };
+
+    return [...visiblePlaces].sort((a, b) => {
+      const priorityDiff = priorityForPlace(b) - priorityForPlace(a);
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+
+      const indexA = placeOrder.get(a.id) ?? 0;
+      const indexB = placeOrder.get(b.id) ?? 0;
+      if (indexA !== indexB) {
+        return indexA - indexB;
+      }
+
+      return a.id - b.id;
+    });
+  }, [visiblePlaces, hoveredLocation, selectedLocation, currentChunkLocation, placeOrder]);
+
+  const placedLabelBoxes: { x1: number; y1: number; x2: number; y2: number }[] = [];
+
   // Group places by zone for the sidebar
   const placesByZone = visiblePlaces.reduce((acc, place) => {
     const zoneId = place.zoneId ?? (place as any).zone ?? 0;
@@ -215,11 +558,16 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
   // Handle mouse events for drag
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start dragging on the background, not on interactive elements
-    if (e.button === 0 && e.target === e.currentTarget) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
+    if (e.button !== 0) return;
+
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('[data-interactive="true"]')) {
+      return;
     }
+
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -244,7 +592,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(Math.max(zoom * delta, 0.5), 5);
+    const newZoom = Math.min(Math.max(zoom * delta, 0.25), 100);
     
     // Zoom towards mouse position
     const rect = svgRef.current?.getBoundingClientRect();
@@ -338,10 +686,16 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
         >
           {/* Background */}
-          <rect width={mapDimensions.width} height={mapDimensions.height} fill="#000000" />
+          <rect
+            width={mapDimensions.width}
+            height={mapDimensions.height}
+            fill="#000000"
+            style={{ pointerEvents: "none" }}
+          />
 
           {/* Grid pattern for cyberpunk aesthetic */}
           <defs>
@@ -354,10 +708,48 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
               />
             </pattern>
           </defs>
-          <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
+          <rect
+            width={mapDimensions.width}
+            height={mapDimensions.height}
+            fill="url(#grid)"
+            style={{ pointerEvents: "none" }}
+          />
+
+          {/* World outlines */}
+          <g
+            opacity="0.25"
+            stroke="#00ff41"
+            strokeWidth={1.2 / zoom}
+            fill="none"
+            style={{ pointerEvents: "none" }}
+          >
+            {WORLD_MAP_OUTLINES.map(feature => {
+              const pathData = feature.polygons
+                .map(polygon =>
+                  polygon
+                    .map(([lng, lat], index) => {
+                      const { x, y } = transformCoordinates(lng, lat);
+                      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+                    })
+                    .join(" ") + " Z"
+                )
+                .join(" ");
+
+              if (!pathData) return null;
+
+              return (
+                <path
+                  key={feature.name}
+                  d={pathData}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              );
+            })}
+          </g>
 
           {/* Zone boundaries */}
-          <g opacity="0.6">
+          <g opacity="0.6" style={{ pointerEvents: "none" }}>
             {zones.map((zone) => {
               const pathData = geoJsonToSvgPath(zone.boundary);
               if (!pathData) return null;
@@ -377,26 +769,51 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           </g>
 
           {/* Places - All pins and labels rendered, visibility controlled by CSS */}
-          {visiblePlaces.map((place, index) => {
+          {placesForRendering.map((place) => {
             const coords = getPlaceCoordinates(place);
             if (!coords) return null;
 
             const pinColor = getPinColor(place);
-            const labelVisible = isLabelVisible(place, index);
+            const originalIndex = placeOrder.get(place.id) ?? 0;
+            let labelVisible = isLabelVisible(place, originalIndex);
 
             // Scale sizes inversely with zoom to maintain constant visual size
             const pinRadius = 3 / zoom;
             const ringRadius = 8 / zoom;
             const fontSize = 11 / zoom;
-            const labelHeight = 16 / zoom;
-            const labelWidth = 80 / zoom;
-            const labelOffsetY = 25 / zoom;
-            const textOffsetY = 12 / zoom;
+            const baseLabelWidth = Math.max(96, place.name.length * 8);
+            const labelWidth = baseLabelWidth / zoom;
+            const labelHeight = 20 / zoom;
+            const labelOffsetY = 30 / zoom;
+            const textOffsetY = 14 / zoom;
+
+            if (labelVisible) {
+              const x1 = coords.x - labelWidth / 2;
+              const y1 = coords.y - labelOffsetY;
+              const x2 = x1 + labelWidth;
+              const y2 = y1 + labelHeight;
+
+              const overlaps = placedLabelBoxes.some(box => {
+                return (
+                  x1 < box.x2 &&
+                  x2 > box.x1 &&
+                  y1 < box.y2 &&
+                  y2 > box.y1
+                );
+              });
+
+              if (!overlaps) {
+                placedLabelBoxes.push({ x1, y1, x2, y2 });
+              } else {
+                labelVisible = false;
+              }
+            }
 
             return (
               <g
                 key={place.id}
                 className="cursor-pointer"
+                data-interactive="true"
                 onMouseEnter={() => {
                   if (!isDragging) {
                     setHoveredLocation(place.id);
