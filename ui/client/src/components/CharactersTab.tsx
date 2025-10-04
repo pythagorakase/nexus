@@ -1,351 +1,331 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { User, Users, Brain, Heart, Loader2, ChevronDown } from "lucide-react";
+import { Users, Brain, Loader2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Character, CharacterRelationship, CharacterPsychology } from "@shared/schema";
+import alexPortrait from "@assets/Alex - Art Nouveau Choker Frame - Portrait_1759207751777.png";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import type { Character, CharacterRelationship, CharacterPsychology } from "@shared/schema";
-import alexPortrait from "@assets/Alex - Art Nouveau Choker Frame - Portrait_1759207751777.png";
-
-interface CharacterGroup {
-  label: string;
-  startId: number;
-  endId: number;
-}
-
-const characterGroups: CharacterGroup[] = [
-  { label: "Main Characters", startId: 1, endId: 10 },
-  { label: "Supporting Characters", startId: 11, endId: 20 },
-  { label: "Minor Characters (21-30)", startId: 21, endId: 30 },
-  { label: "Minor Characters (31-40)", startId: 31, endId: 40 },
-  { label: "Background Characters", startId: 41, endId: 1000 },
-];
 
 export function CharactersTab() {
-  const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
-  const [showRelationships, setShowRelationships] = useState(false);
-  const [showPsychology, setShowPsychology] = useState(false);
-  const [openGroups, setOpenGroups] = useState<string[]>(["Main Characters"]);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
 
-  // Fetch all characters
-  const { data: allCharacters = [], isLoading: charactersLoading } = useQuery<Character[]>({
+  const {
+    data: characters = [],
+    isLoading: charactersLoading,
+    isError: charactersError,
+    error: charactersErrorData,
+  } = useQuery<Character[]>({
     queryKey: ["/api/characters"],
+    select: (data) => [...data].sort((a, b) => a.id - b.id),
   });
 
-  // Fetch relationships for selected character
-  const { data: relationships = [] } = useQuery<CharacterRelationship[]>({
-    queryKey: ["/api/characters", selectedCharacter?.id, "relationships"],
-    queryFn: () =>
-      fetch(`/api/characters/${selectedCharacter?.id}/relationships`).then((r) => r.json()),
-    enabled: !!selectedCharacter && showRelationships,
-  });
-
-  // Fetch psychology for selected character
-  const { data: psychology } = useQuery<CharacterPsychology>({
-    queryKey: ["/api/characters", selectedCharacter?.id, "psychology"],
-    queryFn: () =>
-      fetch(`/api/characters/${selectedCharacter?.id}/psychology`).then((r) => 
-        r.ok ? r.json() : null
-      ),
-    enabled: !!selectedCharacter && showPsychology,
-  });
-
-  const toggleGroup = (groupLabel: string) => {
-    setOpenGroups((prev) =>
-      prev.includes(groupLabel)
-        ? prev.filter((g) => g !== groupLabel)
-        : [...prev, groupLabel]
-    );
-  };
-
-  const getCharacterImage = (character: Character) => {
-    if (character.id === 1) {
-      return alexPortrait;
+  useEffect(() => {
+    if (!selectedCharacterId && characters.length > 0) {
+      setSelectedCharacterId(characters[0].id);
     }
-    return null;
+  }, [characters, selectedCharacterId]);
+
+  const selectedCharacter = useMemo(() => {
+    return characters.find((character) => character.id === selectedCharacterId) ?? null;
+  }, [characters, selectedCharacterId]);
+
+  const {
+    data: relationships = [],
+    isLoading: relationshipsLoading,
+    isError: relationshipsError,
+    error: relationshipsErrorData,
+  } = useQuery<CharacterRelationship[]>({
+    queryKey: ["/api/characters", selectedCharacter?.id, "relationships"],
+    queryFn: async () => {
+      if (!selectedCharacter) return [];
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/relationships`);
+      if (response.status === 404) {
+        return [];
+      }
+      if (!response.ok) {
+        throw new Error("Failed to load relationships");
+      }
+      return response.json();
+    },
+    enabled: !!selectedCharacter,
+  });
+
+  const {
+    data: psychologyRecord,
+    isLoading: psychologyLoading,
+    isError: psychologyError,
+    error: psychologyErrorData,
+  } = useQuery<CharacterPsychology | null>({
+    queryKey: ["/api/characters", selectedCharacter?.id, "psychology"],
+    queryFn: async () => {
+      if (!selectedCharacter) return null;
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/psychology`);
+      if (response.status === 404) {
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error("Failed to load psychology");
+      }
+      return response.json();
+    },
+    enabled: !!selectedCharacter,
+  });
+
+  const getPortrait = (character: Character) => {
+    return character.id === 1 ? alexPortrait : null;
   };
 
-  const renderPsychologyField = (field: any, title: string) => {
+  const characterNameById = (id: number) => {
+    return characters.find((character) => character.id === id)?.name ?? `Character ${id}`;
+  };
+
+  const renderPsychologyField = (label: string, field: unknown) => {
     if (!field) return null;
+    const renderValue = (value: any) => {
+      if (Array.isArray(value)) {
+        return value.join(", ");
+      }
+      if (typeof value === "object" && value !== null) {
+        return Object.entries(value)
+          .map(([key, nested]) => `${key}: ${Array.isArray(nested) ? nested.join(", ") : String(nested)}`)
+          .join("\n");
+      }
+      return String(value);
+    };
 
     return (
-      <div className="space-y-2">
-        <h4 className="text-xs font-mono text-primary terminal-glow">{title}</h4>
-        {typeof field === "object" && !Array.isArray(field) ? (
-          <div className="space-y-1 text-xs">
-            {Object.entries(field).map(([key, value]) => (
-              <div key={key}>
-                <span className="text-muted-foreground">{key}: </span>
-                <span className="text-foreground">
-                  {Array.isArray(value) ? value.join(", ") : String(value)}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-xs text-foreground">{String(field)}</div>
-        )}
+      <div className="space-y-1">
+        <h4 className="text-xs font-mono text-primary terminal-glow uppercase">{label}</h4>
+        <pre className="whitespace-pre-wrap text-xs text-foreground/90 leading-relaxed">
+          {renderValue(field)}
+        </pre>
       </div>
     );
   };
 
   return (
     <div className="flex h-full bg-background">
-      <ScrollArea className="flex-1">
-        <div className="p-6 space-y-6">
+      <aside className="w-72 border-r border-border bg-card/40 flex flex-col">
+        <div className="px-4 py-3 border-b border-border">
+          <h2 className="text-sm font-mono text-primary terminal-glow">[CHARACTER INDEX]</h2>
+          <p className="text-xs text-muted-foreground">Sorted by ID</p>
+        </div>
+        <ScrollArea className="flex-1">
           {charactersLoading ? (
-            <div className="flex items-center justify-center p-16">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="flex items-center justify-center h-32 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : charactersError ? (
+            <div className="p-4 text-xs text-destructive font-mono">
+              Failed to load characters: {charactersErrorData instanceof Error ? charactersErrorData.message : 'Unknown error'}
             </div>
           ) : (
-            characterGroups.map((group) => {
-              const groupCharacters = allCharacters.filter(
-                (c) => c.id >= group.startId && c.id <= group.endId
-              );
-
-              if (groupCharacters.length === 0) return null;
-
-              const isOpen = openGroups.includes(group.label);
-
-              return (
-                <Collapsible
-                  key={group.label}
-                  open={isOpen}
-                  onOpenChange={() => toggleGroup(group.label)}
-                >
-                  <CollapsibleTrigger asChild>
-                    <div className="flex items-center justify-between p-4 bg-card/30 border border-border rounded-md hover-elevate cursor-pointer" data-testid={`button-group-${group.label}`}>
-                      <h3 className="text-sm font-mono text-primary terminal-glow">
-                        {group.label} ({groupCharacters.length})
-                      </h3>
-                      <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground transition-transform ${
-                          isOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </div>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {groupCharacters.map((character) => {
-                        const image = getCharacterImage(character);
-
-                        return (
-                          <Card
-                            key={character.id}
-                            className="bg-card/50 border-border hover-elevate cursor-pointer"
-                            onClick={() => {
-                              setSelectedCharacter(character);
-                              setShowRelationships(false);
-                              setShowPsychology(false);
-                            }}
-                            data-testid={`card-character-${character.id}`}
-                          >
-                            <CardHeader className="pb-3">
-                              <div className="flex items-start gap-3">
-                                <div className="w-16 h-16 rounded-md overflow-hidden bg-muted/20 border border-border flex-shrink-0">
-                                  {image ? (
-                                    <img
-                                      src={image}
-                                      alt={character.name}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-b from-muted/10 to-muted/30">
-                                      <User className="h-8 w-8 text-muted-foreground/50" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <h3 className="text-sm font-mono text-primary terminal-glow truncate">
-                                    {character.name}
-                                  </h3>
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    ID: {character.id}
-                                  </p>
-                                </div>
-                              </div>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="space-y-2 text-xs">
-                                {character.summary && (
-                                  <p className="text-foreground line-clamp-3">{character.summary}</p>
-                                )}
-                                {character.currentLocation && (
-                                  <p className="text-muted-foreground">
-                                    📍 {character.currentLocation}
-                                  </p>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })
+            <div className="divide-y divide-border">
+              {characters.map((character) => {
+                const isActive = character.id === selectedCharacterId;
+                return (
+                  <button
+                    key={character.id}
+                    type="button"
+                    className={`w-full text-left px-4 py-3 flex items-center gap-3 font-mono text-xs transition-colors ${
+                      isActive ? "bg-primary/10 text-primary" : "hover:bg-card/70 text-foreground"
+                    }`}
+                    onClick={() => {
+                      setSelectedCharacterId(character.id);
+                    }}
+                  >
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/20 text-primary">
+                      {character.id}
+                    </span>
+                    <span className="truncate flex-1">{character.name}</span>
+                    {isActive && <ChevronRight className="h-3 w-3" />}
+                  </button>
+                );
+              })}
+            </div>
           )}
-        </div>
-      </ScrollArea>
+        </ScrollArea>
+      </aside>
 
-      {/* Character Details Modal */}
-      <Dialog open={!!selectedCharacter} onOpenChange={() => setSelectedCharacter(null)}>
-        <DialogContent className="bg-card border-primary/50 max-w-2xl max-h-[80vh] font-mono">
-          <DialogHeader>
-            <DialogTitle className="text-primary terminal-glow flex items-center gap-2">
-              {selectedCharacter?.name}
-              <span className="text-xs text-muted-foreground">(ID: {selectedCharacter?.id})</span>
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-4 text-sm">
-              {/* Character Portrait */}
-              {selectedCharacter && getCharacterImage(selectedCharacter) && (
-                <div className="w-32 h-32 rounded-md overflow-hidden bg-muted/20 border border-border mx-auto">
-                  <img
-                    src={getCharacterImage(selectedCharacter)!}
-                    alt={selectedCharacter.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              )}
-
-              {/* Basic Info */}
-              {selectedCharacter?.summary && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Summary</h4>
-                  <p className="text-foreground">{selectedCharacter.summary}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.appearance && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Appearance</h4>
-                  <p className="text-foreground">{selectedCharacter.appearance}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.background && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Background</h4>
-                  <p className="text-foreground">{selectedCharacter.background}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.personality && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Personality</h4>
-                  <p className="text-foreground">{selectedCharacter.personality}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.emotionalState && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Emotional State</h4>
-                  <p className="text-foreground">{selectedCharacter.emotionalState}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.currentActivity && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Current Activity</h4>
-                  <p className="text-foreground">{selectedCharacter.currentActivity}</p>
-                </div>
-              )}
-
-              {selectedCharacter?.currentLocation && (
-                <div>
-                  <h4 className="text-xs text-primary terminal-glow mb-1">Current Location</h4>
-                  <p className="text-foreground">{selectedCharacter.currentLocation}</p>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowRelationships(!showRelationships)}
-                  className="font-mono text-xs"
-                  data-testid="button-relationships"
-                >
-                  <Users className="h-3 w-3 mr-1" />
-                  Relationships
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPsychology(!showPsychology)}
-                  className="font-mono text-xs"
-                  data-testid="button-psychology"
-                >
-                  <Brain className="h-3 w-3 mr-1" />
-                  Psychology
-                </Button>
-              </div>
-
-              {/* Relationships Section */}
-              {showRelationships && (
-                <div className="border-t border-border pt-4">
-                  <h4 className="text-xs text-primary terminal-glow mb-2">Relationships</h4>
-                  {relationships.length > 0 ? (
-                    <div className="space-y-3">
-                      {relationships.map((rel, idx) => (
-                        <div key={idx} className="p-3 bg-muted/10 rounded-md">
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-xs text-foreground">
-                              Character {rel.character2Id}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {rel.relationshipType}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">{rel.dynamic}</p>
-                          {rel.recentEvents && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Recent: {rel.recentEvents}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+      <main className="flex-1 overflow-hidden">
+        {selectedCharacter ? (
+          <div className="h-full overflow-auto p-6 space-y-6">
+            <Card className="bg-card/70 border-border">
+              <CardHeader className="flex flex-row items-start gap-4">
+                <div className="w-20 h-20 rounded-md overflow-hidden border border-border bg-muted/40 flex-shrink-0">
+                  {getPortrait(selectedCharacter) ? (
+                    <img
+                      src={getPortrait(selectedCharacter)!}
+                      alt={selectedCharacter.name}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <p className="text-xs text-muted-foreground">No relationships found</p>
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground/60">
+                      <Users className="h-6 w-6" />
+                    </div>
                   )}
                 </div>
-              )}
-
-              {/* Psychology Section */}
-              {showPsychology && psychology && (
-                <div className="border-t border-border pt-4 space-y-3">
-                  <h4 className="text-xs text-primary terminal-glow">Psychology Profile</h4>
-                  {renderPsychologyField(psychology.selfConcept, "Self Concept")}
-                  {renderPsychologyField(psychology.behavior, "Behavior")}
-                  {renderPsychologyField(psychology.cognitiveFramework, "Cognitive Framework")}
-                  {renderPsychologyField(psychology.temperament, "Temperament")}
-                  {renderPsychologyField(psychology.relationalStyle, "Relational Style")}
-                  {renderPsychologyField(psychology.defenseMechanisms, "Defense Mechanisms")}
-                  {renderPsychologyField(psychology.characterArc, "Character Arc")}
-                  {renderPsychologyField(psychology.secrets, "Secrets")}
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-lg font-mono text-primary terminal-glow">
+                    {selectedCharacter.name}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">ID: {selectedCharacter.id}</p>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm font-mono">
+                {selectedCharacter.summary && (
+                  <section>
+                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Summary</h3>
+                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.summary}</p>
+                  </section>
+                )}
+                {selectedCharacter.background && (
+                  <section>
+                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Background</h3>
+                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.background}</p>
+                  </section>
+                )}
+                {selectedCharacter.personality && (
+                  <section>
+                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Personality</h3>
+                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.personality}</p>
+                  </section>
+                )}
+                {selectedCharacter.currentActivity && (
+                  <section>
+                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Activity</h3>
+                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.currentActivity}</p>
+                  </section>
+                )}
+                {selectedCharacter.currentLocation && (
+                  <section>
+                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Location</h3>
+                    <p className="text-foreground/90 leading-relaxed">{selectedCharacter.currentLocation}</p>
+                  </section>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/60 border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-mono text-primary">
+                  <Users className="h-4 w-4" />
+                  Relationships
+                </div>
+              </CardHeader>
+              <CardContent>
+                {relationshipsLoading ? (
+                  <div className="flex items-center justify-center h-16 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : relationshipsError ? (
+                  <p className="text-xs text-destructive">
+                    Failed to load relationships: {relationshipsErrorData instanceof Error ? relationshipsErrorData.message : 'Unknown error'}
+                  </p>
+                ) : relationships.length > 0 ? (
+                  <div className="space-y-3 text-sm">
+                    {relationships.map((rel, index) => {
+                      const fromApi = rel as CharacterRelationship & {
+                        character1_id?: number;
+                        character2_id?: number;
+                        relationship_type?: string;
+                        recent_events?: string;
+                      };
+                      const character1Id = fromApi.character1Id ?? fromApi.character1_id ?? 0;
+                      const character2Id = fromApi.character2Id ?? fromApi.character2_id ?? 0;
+                      const relationshipType = fromApi.relationshipType ?? fromApi.relationship_type ?? "unknown";
+                      const recentEvents = fromApi.recentEvents ?? fromApi.recent_events ?? null;
+                      const counterpartId = character1Id === selectedCharacter.id ? character2Id : character1Id;
+
+                      return (
+                        <Collapsible key={`${character1Id}-${character2Id}-${index}`}>
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className="w-full justify-between px-3 py-2 text-xs font-mono text-foreground border border-border/40 hover:bg-card/70"
+                            >
+                              <span className="truncate text-left">{characterNameById(counterpartId)}</span>
+                              <span className="text-muted-foreground ml-3">{relationshipType}</span>
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="border border-border/40 bg-background/70 rounded-md p-3 text-xs space-y-2 mt-2">
+                            <div className="text-muted-foreground/90 leading-relaxed whitespace-pre-wrap">{rel.dynamic}</div>
+                            {recentEvents && (
+                              <div className="text-muted-foreground/80 leading-relaxed whitespace-pre-wrap">
+                                <span className="font-semibold text-primary">Recent:</span> {recentEvents}
+                              </div>
+                            )}
+                            {('history' in rel) && rel.history && (
+                              <div className="text-muted-foreground/70 leading-relaxed whitespace-pre-wrap">
+                                <span className="font-semibold text-primary">History:</span> {rel.history}
+                              </div>
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No relationships documented.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {psychologyLoading ? (
+              <Card className="bg-card/60 border-border">
+                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
+                  <Brain className="h-4 w-4" />
+                  Psychology
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-center h-16 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : psychologyError ? (
+              <Card className="bg-card/60 border-border">
+                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
+                  <Brain className="h-4 w-4" />
+                  Psychology
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-destructive">
+                    Failed to load psychology: {psychologyErrorData instanceof Error ? psychologyErrorData.message : 'Unknown error'}
+                  </p>
+                </CardContent>
+              </Card>
+            ) : psychologyRecord ? (
+              <Card className="bg-card/60 border-border">
+                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
+                  <Brain className="h-4 w-4" />
+                  Psychology
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {renderPsychologyField("Self Concept", psychologyRecord.selfConcept)}
+                  {renderPsychologyField("Behavior", psychologyRecord.behavior)}
+                  {renderPsychologyField("Cognitive Framework", psychologyRecord.cognitiveFramework)}
+                  {renderPsychologyField("Temperament", psychologyRecord.temperament)}
+                  {renderPsychologyField("Relational Style", psychologyRecord.relationalStyle)}
+                  {renderPsychologyField("Defense Mechanisms", psychologyRecord.defenseMechanisms)}
+                  {renderPsychologyField("Character Arc", psychologyRecord.characterArc)}
+                  {renderPsychologyField("Secrets", psychologyRecord.secrets)}
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground font-mono">
+            Select a character to view details.
+          </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Judgment control bar with keyboard shortcuts.
  *
- * Handles: A (choose A), B (choose B), T (tie), S (skip), N (notes)
+ * Handles: 1 (left), 2 (right), 3 (tie), ESC (exit), 0 (skip), N (notes)
  */
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -16,59 +16,73 @@ import {
 } from '@/components/ui/dialog';
 
 interface JudgmentBarProps {
-  onChooseA: () => void;
-  onChooseB: () => void;
+  onChooseLeft: () => void;
+  onChooseRight: () => void;
   onTie: () => void;
-  onSkip: () => void;
+  onExit: () => void;
   onNote: (note: string) => void;
+  onSkip?: () => void;
   disabled?: boolean;
 }
 
 export function JudgmentBar({
-  onChooseA,
-  onChooseB,
+  onChooseLeft,
+  onChooseRight,
   onTie,
-  onSkip,
+  onExit,
   onNote,
-  disabled = false
+  onSkip,
+  disabled = false,
 }: JudgmentBarProps) {
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
 
   useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
+    const handleKeyPress = (event: KeyboardEvent) => {
       if (disabled) return;
-      if (noteDialogOpen) return; // Don't handle shortcuts when note dialog is open
+      if (noteDialogOpen) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setNoteDialogOpen(false);
+        }
+        return;
+      }
 
-      const key = e.key.toLowerCase();
-
-      switch (key) {
-        case 'a':
-          e.preventDefault();
-          onChooseA();
+      switch (event.key) {
+        case '1':
+          event.preventDefault();
+          onChooseLeft();
           break;
-        case 'b':
-          e.preventDefault();
-          onChooseB();
+        case '2':
+          event.preventDefault();
+          onChooseRight();
           break;
-        case 't':
-          e.preventDefault();
+        case '3':
+          event.preventDefault();
           onTie();
           break;
-        case 's':
-          e.preventDefault();
-          onSkip();
+        case '0':
+          if (onSkip) {
+            event.preventDefault();
+            onSkip();
+          }
           break;
-        case 'n':
-          e.preventDefault();
-          setNoteDialogOpen(true);
+        case 'Escape':
+          event.preventDefault();
+          onExit();
           break;
+        default: {
+          if (event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            setNoteDialogOpen(true);
+          }
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [disabled, noteDialogOpen, onChooseA, onChooseB, onTie, onSkip]);
+  }, [disabled, noteDialogOpen, onChooseLeft, onChooseRight, onTie, onExit, onSkip]);
 
   const handleSubmitNote = () => {
     if (noteText.trim()) {
@@ -80,44 +94,46 @@ export function JudgmentBar({
 
   return (
     <>
-      <div className="border-t border-border bg-card p-4">
-        <div className="flex gap-3 justify-center items-center font-mono text-sm">
+      <div className="border-t border-border bg-card/90 p-4">
+        <div className="flex flex-wrap gap-3 justify-center items-center font-mono text-xs sm:text-sm">
           <Button
             variant="outline"
             size="sm"
-            onClick={onChooseA}
+            onClick={onChooseLeft}
             disabled={disabled}
-            className="min-w-24"
+            className="min-w-28"
           >
-            [A] Choose A
+            [1] Left passage
           </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={onChooseB}
+            onClick={onChooseRight}
             disabled={disabled}
-            className="min-w-24"
+            className="min-w-28"
           >
-            [B] Choose B
+            [2] Right passage
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={onTie}
             disabled={disabled}
-            className="min-w-24"
+            className="min-w-28"
           >
-            [T] Tie
+            [3] Tie
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSkip}
-            disabled={disabled}
-            className="min-w-24"
-          >
-            [S] Skip
-          </Button>
+          {onSkip && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onSkip}
+              disabled={disabled}
+              className="min-w-24"
+            >
+              [0] Skip
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -126,6 +142,15 @@ export function JudgmentBar({
             className="min-w-24"
           >
             [N] Add Note
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onExit}
+            disabled={disabled}
+            className="min-w-24"
+          >
+            [Esc] Exit
           </Button>
         </div>
       </div>
@@ -145,7 +170,7 @@ export function JudgmentBar({
                 id="note"
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
-                placeholder="e.g., 'Generation B has stilted dialog'"
+                placeholder="e.g., 'Generation 2 loses coherency'"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();

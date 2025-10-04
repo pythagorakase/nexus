@@ -1,59 +1,67 @@
 /**
  * Display panel for a single generation.
- *
- * Shows the generated narrative content with condition metadata.
  */
-import { Condition, Generation } from '@/lib/audition-api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Generation } from '@/lib/audition-api';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface GenerationPaneProps {
-  condition: Condition;
   generation: Generation;
-  label: 'A' | 'B';
+  label: '1' | '2';
   highlighted?: boolean;
 }
 
+function resolveContent(generation: Generation): string {
+  const payload = generation.response_payload as any;
+
+  if (!payload) {
+    return '[No content generated]';
+  }
+
+  if (typeof payload.content === 'string') {
+    return payload.content;
+  }
+
+  if (Array.isArray(payload.choices) && payload.choices.length > 0) {
+    const choice = payload.choices[0];
+    if (typeof choice?.message?.content === 'string') {
+      return choice.message.content;
+    }
+  }
+
+  if (typeof payload.output === 'string') {
+    return payload.output;
+  }
+
+  if (typeof payload === 'string') {
+    return payload;
+  }
+
+  return '[Unsupported response payload format]';
+}
+
 export function GenerationPane({
-  condition,
   generation,
   label,
-  highlighted = false
+  highlighted = false,
 }: GenerationPaneProps) {
-  const content = generation.response_payload?.content || '[No content generated]';
-  const tokenCount = generation.output_tokens || 0;
-  const costUSD = generation.cost_usd || 0;
-
-  // Extract temperature from parameters if available
-  const temp = condition.parameters?.temperature || 'N/A';
+  const content = resolveContent(generation);
 
   return (
-    <Card className={`h-full flex flex-col ${highlighted ? 'ring-2 ring-primary' : ''}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-mono">
-            [{label}] {condition.model}
-          </CardTitle>
-          <div className="flex gap-2">
-            <Badge variant="outline">{condition.provider}</Badge>
-            <Badge variant="secondary">temp: {temp}</Badge>
-          </div>
-        </div>
-        <div className="flex gap-3 text-sm text-muted-foreground font-mono">
-          <span>{tokenCount}t</span>
-          <span>${costUSD.toFixed(4)}</span>
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="prose prose-sm prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
-              {content}
-            </pre>
-          </div>
-        </ScrollArea>
-      </CardContent>
-    </Card>
+    <div
+      className={`relative h-full flex flex-col border border-border/70 rounded-lg bg-background/80 transition-shadow ${
+        highlighted ? 'ring-2 ring-primary shadow-lg' : 'shadow-sm'
+      }`}
+    >
+      <div className="px-4 py-2 border-b border-border/60">
+        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary/20 text-primary font-semibold text-sm">
+          {label}
+        </span>
+      </div>
+      <ScrollArea className="flex-1 p-4">
+        <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap">
+          {content}
+        </pre>
+      </ScrollArea>
+    </div>
   );
 }

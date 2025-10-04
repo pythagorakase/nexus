@@ -4,7 +4,7 @@
  * All functions return promises that can be used with TanStack Query.
  */
 
-const API_BASE = '/api/audition';
+const API_BASE = import.meta.env.VITE_AUDITION_API_URL ?? '/api/audition';
 
 export interface Condition {
   id: number;
