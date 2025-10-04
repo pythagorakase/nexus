@@ -35,13 +35,10 @@ DB_PARAMS = {
 app = FastAPI(title="Apex Audition API", version="1.0.0")
 
 # Configure CORS for local development
+# Allow all localhost origins since UI uses dynamic port selection
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5000",
-        "http://127.0.0.1:5000",
-    ],
+    allow_origin_regex=r"http://localhost:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
