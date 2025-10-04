@@ -17,12 +17,17 @@ function resolveContent(generation: Generation): string {
     return '[No content generated]';
   }
 
-  // Check for Anthropic format: raw.content[0].text
+  // Priority 1: Top-level content field (most reliable for recent generations)
+  if (typeof payload.content === 'string' && payload.content) {
+    return payload.content;
+  }
+
+  // Priority 2: Anthropic format: raw.content[0].text (legacy sync generations)
   if (payload.raw?.content?.[0]?.text) {
     return payload.raw.content[0].text;
   }
 
-  // Check for OpenAI /v1/responses format with output array
+  // Priority 3: OpenAI /v1/responses format with output array
   // Reasoning models (GPT-5, o3) have: [0]=reasoning, [1]=message
   // Standard models (GPT-4o) have: [0]=message
   if (Array.isArray(payload.raw?.output)) {
@@ -34,12 +39,7 @@ function resolveContent(generation: Generation): string {
     }
   }
 
-  // Fallback: top-level content field (string)
-  if (typeof payload.content === 'string' && payload.content) {
-    return payload.content;
-  }
-
-  // Legacy OpenAI chat completions format
+  // Priority 4: Legacy OpenAI chat completions format
   if (Array.isArray(payload.choices) && payload.choices.length > 0) {
     const choice = payload.choices[0];
     if (typeof choice?.message?.content === 'string') {
@@ -47,7 +47,7 @@ function resolveContent(generation: Generation): string {
     }
   }
 
-  // Fallback: top-level output field
+  // Priority 5: top-level output field
   if (typeof payload.output === 'string') {
     return payload.output;
   }
