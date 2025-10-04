@@ -205,12 +205,17 @@ export class PostgresStorage implements IStorage {
         id,
         name,
         type,
+        description,
         zone,
         summary,
         inhabitants,
         history,
         current_status,
         secrets,
+        elevation,
+        address,
+        district,
+        faction_dominant_id,
         extra_data,
         created_at,
         updated_at,
@@ -221,20 +226,27 @@ export class PostgresStorage implements IStorage {
     `);
 
     return (result.rows as any[]).map(row => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      zoneId: row.zone,
-      summary: row.summary,
-      inhabitants: row.inhabitants,
-      history: row.history,
-      currentStatus: row.current_status,
-      secrets: row.secrets,
-      extraData: row.extra_data,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      longitude: row.longitude,
-      latitude: row.latitude,
+      id: Number(row.id),
+      name: row.name as string,
+      type: row.type ?? null,
+      description: row.description ?? null,
+      zoneId: row.zone ?? null,
+      summary: row.summary ?? null,
+      inhabitants: row.inhabitants ?? null,
+      history: row.history ?? null,
+      currentStatus: row.current_status ?? null,
+      secrets: row.secrets ?? null,
+      elevation: row.elevation !== null && row.elevation !== undefined ? Number(row.elevation) : null,
+      address: row.address ?? null,
+      district: row.district ?? null,
+      factionDominantId: row.faction_dominant_id !== null && row.faction_dominant_id !== undefined
+        ? Number(row.faction_dominant_id)
+        : null,
+      extraData: row.extra_data ?? null,
+      createdAt: row.created_at ? new Date(row.created_at) : null,
+      updatedAt: row.updated_at ? new Date(row.updated_at) : null,
+      longitude: row.longitude !== null && row.longitude !== undefined ? Number(row.longitude) : null,
+      latitude: row.latitude !== null && row.latitude !== undefined ? Number(row.latitude) : null,
     })) as Place[];
   }
 
@@ -267,6 +279,22 @@ export class PostgresStorage implements IStorage {
     return await this.db.select().from(factions).orderBy(factions.id);
   }
 }
+
+const toNumber = (value: unknown): number | null => {
+  const parsed = typeof value === "string" ? Number.parseFloat(value) : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const coerceJson = <T>(value: unknown): T | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return value as T;
+  if (typeof value !== "string") return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+};
 
 class MemStorage implements IStorage {
   private seasons: Season[] = [];
@@ -301,54 +329,60 @@ class MemStorage implements IStorage {
     };
 
     this.seasons = load<any[]>("seasons_", []).map((season) => ({
-      id: season.id,
-      summary: season.summary ?? null,
+      id: Number(season.id),
+      summary: coerceJson<Record<string, unknown>>(season.summary) ?? season.summary ?? null,
     })) as Season[];
 
     this.episodes = load<any[]>("episodes_", []).map((episode) => ({
-      season: episode.season,
-      episode: episode.episode,
+      season: Number(episode.season),
+      episode: Number(episode.episode),
       chunkSpan: episode.chunk_span ?? null,
-      summary: episode.summary ?? null,
+      summary: coerceJson<Record<string, unknown>>(episode.summary) ?? episode.summary ?? null,
       tempSpan: episode.temp_span ?? null,
     })) as Episode[];
 
     this.chunks = load<any[]>("narrative_chunks_", []).map((chunk) => ({
-      id: chunk.id,
+      id: Number(chunk.id),
       rawText: chunk.raw_text,
       createdAt: chunk.created_at ?? null,
     })) as NarrativeChunk[];
 
     this.metadata = load<any[]>("chunk_metadata_", []).map((meta) => ({
-      id: meta.id,
-      chunkId: meta.chunk_id,
-      season: meta.season ?? null,
-      episode: meta.episode ?? null,
-      scene: meta.scene ?? null,
+      id: Number(meta.id),
+      chunkId: Number(meta.chunk_id),
+      season: meta.season !== undefined ? Number(meta.season) : null,
+      episode: meta.episode !== undefined ? Number(meta.episode) : null,
+      scene: meta.scene !== undefined ? Number(meta.scene) : null,
       worldLayer: meta.world_layer ?? null,
       timeDelta: meta.time_delta ?? null,
-      place: meta.place ?? null,
+      place: meta.place !== undefined ? Number(meta.place) : null,
       atmosphere: meta.atmosphere ?? null,
       arcPosition: meta.arc_position ?? null,
-      direction: meta.direction ?? null,
+      direction: coerceJson<unknown[]>(meta.direction) ?? meta.direction ?? null,
       magnitude: meta.magnitude ?? null,
-      characterElements: meta.character_elements ?? null,
-      perspective: meta.perspective ?? null,
-      interactions: meta.interactions ?? null,
-      dialogueAnalysis: meta.dialogue_analysis ?? null,
-      emotionalTone: meta.emotional_tone ?? null,
-      narrativeFunction: meta.narrative_function ?? null,
-      narrativeTechniques: meta.narrative_techniques ?? null,
-      thematicElements: meta.thematic_elements ?? null,
-      causality: meta.causality ?? null,
-      continuityMarkers: meta.continuity_markers ?? null,
+      characterElements:
+        coerceJson<Record<string, unknown>>(meta.character_elements) ?? meta.character_elements ?? null,
+      perspective: coerceJson<Record<string, unknown>>(meta.perspective) ?? meta.perspective ?? null,
+      interactions: coerceJson<unknown[]>(meta.interactions) ?? meta.interactions ?? null,
+      dialogueAnalysis:
+        coerceJson<Record<string, unknown>>(meta.dialogue_analysis) ?? meta.dialogue_analysis ?? null,
+      emotionalTone: coerceJson<Record<string, unknown>>(meta.emotional_tone) ?? meta.emotional_tone ?? null,
+      narrativeFunction:
+        coerceJson<Record<string, unknown>>(meta.narrative_function) ?? meta.narrative_function ?? null,
+      narrativeTechniques:
+        coerceJson<Record<string, unknown>>(meta.narrative_techniques) ?? meta.narrative_techniques ?? null,
+      thematicElements:
+        coerceJson<Record<string, unknown>>(meta.thematic_elements) ?? meta.thematic_elements ?? null,
+      causality: coerceJson<Record<string, unknown>[]>(meta.causality) ?? meta.causality ?? null,
+      continuityMarkers:
+        coerceJson<Record<string, unknown>[]>(meta.continuity_markers) ?? meta.continuity_markers ?? null,
       metadataVersion: meta.metadata_version ?? null,
       generationDate: meta.generation_date ?? null,
       slug: meta.slug ?? null,
     })) as ChunkMetadata[];
 
     this.characters = load<any[]>("characters_", []).map((character) => ({
-      id: character.id,
+      id: Number(character.id),
       name: character.name,
       summary: character.summary ?? null,
       appearance: character.appearance ?? null,
@@ -375,65 +409,78 @@ class MemStorage implements IStorage {
 
     const rawRelationships = load<any[]>("character_relationships_", []);
     this.characterRelationships = rawRelationships.map((rel) => ({
-      character1Id: rel.character1Id ?? rel.character1_id,
-      character2Id: rel.character2Id ?? rel.character2_id,
+      character1Id: toNumber(rel.character1Id ?? rel.character1_id) ?? 0,
+      character2Id: toNumber(rel.character2Id ?? rel.character2_id) ?? 0,
       relationshipType: rel.relationshipType ?? rel.relationship_type,
       emotionalValence: rel.emotionalValence ?? rel.emotional_valence,
       dynamic: rel.dynamic,
       recentEvents: rel.recentEvents ?? rel.recent_events,
       history: rel.history,
-      extraData: rel.extraData ?? rel.extra_data ?? null,
+      extraData: coerceJson<Record<string, unknown>>(rel.extraData ?? rel.extra_data) ?? null,
       createdAt: rel.createdAt ?? rel.created_at ?? null,
       updatedAt: rel.updatedAt ?? rel.updated_at ?? null,
     })) as CharacterRelationship[];
 
     const rawPsychology = load<any[]>("character_psychology_", []);
     this.characterPsychology = rawPsychology.map((entry) => ({
-      characterId: entry.characterId ?? entry.character_id,
-      selfConcept: entry.selfConcept ?? entry.self_concept ?? null,
-      behavior: entry.behavior ?? null,
-      cognitiveFramework: entry.cognitiveFramework ?? entry.cognitive_framework ?? null,
-      temperament: entry.temperament ?? null,
-      relationalStyle: entry.relationalStyle ?? entry.relational_style ?? null,
-      defenseMechanisms: entry.defenseMechanisms ?? entry.defense_mechanisms ?? null,
-      characterArc: entry.characterArc ?? entry.character_arc ?? null,
-      secrets: entry.secrets ?? null,
-      validationEvidence: entry.validationEvidence ?? entry.validation_evidence ?? null,
+      characterId: Number(entry.characterId ?? entry.character_id),
+      selfConcept: coerceJson<Record<string, unknown>>(entry.selfConcept ?? entry.self_concept) ?? null,
+      behavior: coerceJson<Record<string, unknown>>(entry.behavior) ?? entry.behavior ?? null,
+      cognitiveFramework:
+        coerceJson<Record<string, unknown>>(entry.cognitiveFramework ?? entry.cognitive_framework) ?? null,
+      temperament: coerceJson<Record<string, unknown>>(entry.temperament) ?? entry.temperament ?? null,
+      relationalStyle:
+        coerceJson<Record<string, unknown>>(entry.relationalStyle ?? entry.relational_style) ?? null,
+      defenseMechanisms:
+        coerceJson<Record<string, unknown>>(entry.defenseMechanisms ?? entry.defense_mechanisms) ?? null,
+      characterArc: coerceJson<Record<string, unknown>>(entry.characterArc ?? entry.character_arc) ?? null,
+      secrets: coerceJson<Record<string, unknown>>(entry.secrets) ?? entry.secrets ?? null,
+      validationEvidence:
+        coerceJson<Record<string, unknown>>(entry.validationEvidence ?? entry.validation_evidence) ?? null,
       createdAt: entry.createdAt ?? entry.created_at ?? null,
       updatedAt: entry.updatedAt ?? entry.updated_at ?? null,
     })) as CharacterPsychology[];
     this.places = load<any[]>("places_", []).map((place) => {
       const parsedCoords = parsePoint(place.coordinates ?? place.geom ?? null);
-      return {
-        id: place.id,
+      const placeRecord = {
+        id: Number(place.id),
         name: place.name,
         type: place.type ?? null,
         description: place.description ?? null,
         summary: place.summary ?? null,
-        latitude: place.latitude ?? parsedCoords?.latitude ?? null,
-        longitude: place.longitude ?? parsedCoords?.longitude ?? null,
-        elevation: place.elevation ?? null,
+        inhabitants: Array.isArray(place.inhabitants)
+          ? place.inhabitants.map(String).join(", ")
+          : place.inhabitants ?? null,
+        history: place.history ?? null,
+        currentStatus: place.current_status ?? null,
+        secrets: place.secrets ?? null,
+        latitude: toNumber(place.latitude) ?? parsedCoords?.latitude ?? null,
+        longitude: toNumber(place.longitude) ?? parsedCoords?.longitude ?? null,
+        elevation: toNumber(place.elevation) ?? null,
         address: place.address ?? null,
         district: place.district ?? null,
-        zoneId: place.zone_id ?? place.zone ?? null,
-        factionDominantId: place.faction_dominant_id ?? null,
-        createdAt: place.created_at ?? null,
-        updatedAt: place.updated_at ?? null,
-      } as Place;
+        zoneId: toNumber(place.zone_id ?? place.zone) ?? null,
+        factionDominantId: toNumber(place.faction_dominant_id) ?? null,
+        createdAt: place.created_at ? new Date(place.created_at) : null,
+        updatedAt: place.updated_at ? new Date(place.updated_at) : null,
+        extraData: coerceJson<Record<string, unknown>>(place.extra_data) ?? place.extra_data ?? null,
+      };
+
+      return placeRecord as unknown as Place;
     }) as Place[];
 
     this.zones = load<any[]>("zones_", []).map((zone) => ({
-      id: zone.id,
+      id: Number(zone.id),
       name: zone.name,
       summary: zone.summary ?? null,
-      boundary: zone.boundary ?? null,
-      worldlayerId: zone.worldlayer_id ?? null,
+      boundary: coerceJson<Record<string, unknown>>(zone.boundary) ?? zone.boundary ?? null,
+      worldlayerId: toNumber(zone.worldlayer_id) ?? null,
       createdAt: zone.created_at ?? null,
       updatedAt: zone.updated_at ?? null,
     })) as Zone[];
 
     this.factions = load<any[]>("factions_", []).map((faction) => ({
-      id: faction.id,
+      id: Number(faction.id),
       name: faction.name,
       summary: faction.summary ?? null,
       ideology: faction.ideology ?? null,

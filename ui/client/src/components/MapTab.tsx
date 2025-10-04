@@ -16,6 +16,33 @@ interface MapTabProps {
   currentChunkLocation?: string | null;
 }
 
+const parseInhabitants = (value: unknown): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+
+  const withoutBraces = trimmed.replace(/^[{\[]|[}\]]$/g, "");
+  return withoutBraces
+    .split(/","|",\s*"|\"\s*,\s*\"/)
+    .map((segment) => segment.replace(/^"/, "").replace(/"$/, "").replace(/\\"/g, '"').trim())
+    .filter(Boolean);
+};
+
+const toParagraphs = (value: string | null | undefined): string[] => {
+  if (!value) return [];
+  return value
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+};
+
 export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   // State management for location interactions
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
@@ -501,7 +528,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             <MapPin className="h-4 w-4" />
             LOCATION INDEX
           </h3>
-          <div className="text-xs text-foreground/80 mt-1">
+          <div className="text-xs text-foreground mt-1">
             {visiblePlaces.length} locations across {Object.keys(placesByZone).length} zones
           </div>
         </div>
@@ -578,7 +605,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                                   {place.name}
                                 </span>
                                 {place.type && (
-                                  <span className="text-[10px] text-muted-foreground ml-auto">
+                                  <span className="text-[10px] text-foreground/70 ml-auto">
                                     {place.type}
                                   </span>
                                 )}
@@ -609,6 +636,10 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
             const zone = zones.find(z => z.id === place.zoneId);
             const coords = extractCoordinates(place);
+            const historyParagraphs = toParagraphs(place.history);
+            const statusParagraphs = toParagraphs(place.currentStatus);
+            const secretsParagraphs = toParagraphs(place.secrets);
+            const inhabitantsList = parseInhabitants(place.inhabitants);
 
             return (
               <ScrollArea className="max-h-[60vh]">
@@ -639,37 +670,51 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                   {place.summary && (
                     <div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
-                      <div className="text-foreground">{place.summary}</div>
+                      <div className="text-foreground whitespace-pre-wrap leading-relaxed">{place.summary}</div>
                     </div>
                   )}
 
-                  {place.history && (
+                  {historyParagraphs.length > 0 && (
                     <div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">History</div>
-                      <div className="text-foreground">{place.history}</div>
-                    </div>
-                  )}
-
-                  {place.currentStatus && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
-                      <div className="text-foreground">{place.currentStatus}</div>
-                    </div>
-                  )}
-
-                  {place.inhabitants && place.inhabitants.length > 0 && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
-                      <div className="text-foreground">
-                        {place.inhabitants.join(', ')}
+                      <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
+                        {historyParagraphs.map((paragraph, index) => (
+                          <p key={`history-${index}`}>{paragraph}</p>
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {place.secrets && (
+                  {statusParagraphs.length > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
+                      <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
+                        {statusParagraphs.map((paragraph, index) => (
+                          <p key={`status-${index}`}>{paragraph}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {inhabitantsList.length > 0 && (
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
+                      <ul className="list-disc pl-4 space-y-1 text-foreground whitespace-pre-wrap">
+                        {inhabitantsList.map((name, index) => (
+                          <li key={`inhabitant-${index}`}>{name}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {secretsParagraphs.length > 0 && (
                     <div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
-                      <div className="text-foreground italic">{place.secrets}</div>
+                      <div className="space-y-3 text-foreground italic whitespace-pre-wrap leading-relaxed">
+                        {secretsParagraphs.map((paragraph, index) => (
+                          <p key={`secret-${index}`}>{paragraph}</p>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
