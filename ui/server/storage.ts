@@ -199,12 +199,67 @@ export class PostgresStorage implements IStorage {
 
   // Place methods
   async getAllPlaces(): Promise<Place[]> {
-    return await this.db.select().from(places).orderBy(places.id);
+    // Use raw SQL to extract coordinates properly from PostGIS geography
+    const result = await this.db.execute(sql`
+      SELECT
+        id,
+        name,
+        type,
+        zone,
+        summary,
+        inhabitants,
+        history,
+        current_status,
+        secrets,
+        extra_data,
+        created_at,
+        updated_at,
+        ST_X(coordinates::geometry) as longitude,
+        ST_Y(coordinates::geometry) as latitude
+      FROM places
+      ORDER BY id
+    `);
+
+    return (result.rows as any[]).map(row => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      zoneId: row.zone,
+      summary: row.summary,
+      inhabitants: row.inhabitants,
+      history: row.history,
+      currentStatus: row.current_status,
+      secrets: row.secrets,
+      extraData: row.extra_data,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      longitude: row.longitude,
+      latitude: row.latitude,
+    })) as Place[];
   }
 
   // Zone methods
   async getAllZones(): Promise<Zone[]> {
-    return await this.db.select().from(zones).orderBy(zones.id);
+    // Use raw SQL to extract boundary as GeoJSON from PostGIS geometry
+    const result = await this.db.execute(sql`
+      SELECT
+        id,
+        name,
+        summary,
+        ST_AsGeoJSON(boundary)::text as boundary_geojson
+      FROM zones
+      ORDER BY id
+    `);
+
+    return (result.rows as any[]).map(row => ({
+      id: row.id,
+      name: row.name,
+      summary: row.summary,
+      boundary: row.boundary_geojson ? JSON.parse(row.boundary_geojson) : null,
+      worldlayerId: null,
+      createdAt: null,
+      updatedAt: null,
+    })) as Zone[];
   }
 
   // Faction methods

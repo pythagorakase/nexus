@@ -218,12 +218,6 @@ export function NarrativeTab() {
                       <span className="text-primary terminal-glow">
                         {selectedChunk.metadata.slug}
                       </span>
-                      {selectedChunk.metadata.atmosphere && (
-                        <span>• {selectedChunk.metadata.atmosphere}</span>
-                      )}
-                      {selectedChunk.metadata.arcPosition && (
-                        <span>• {selectedChunk.metadata.arcPosition}</span>
-                      )}
                     </div>
                   </div>
                 )}

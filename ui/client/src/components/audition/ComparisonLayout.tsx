@@ -1,13 +1,13 @@
 /**
  * Main comparison layout with side-by-side generations.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComparisonQueueItem } from '@/lib/audition-api';
 import { useJudgment } from '@/hooks/useJudgment';
 import { GenerationPane } from './GenerationPane';
 import { JudgmentBar } from './JudgmentBar';
-import { ContextDrawer } from './ContextDrawer';
 import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import ReactMarkdown from 'react-markdown';
 
 interface ComparisonLayoutProps {
   comparison: ComparisonQueueItem;
@@ -80,6 +81,7 @@ export function ComparisonLayout({
   const [highlightedPane, setHighlightedPane] = useState<'A' | 'B' | null>(null);
   const [pendingNote, setPendingNote] = useState<string>('');
   const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
+  const precedingScrollRef = useRef<HTMLDivElement>(null);
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
 
@@ -101,6 +103,13 @@ export function ComparisonLayout({
 
   const precedingText = useMemo(() => getChunkText(precedingChunk), [precedingChunk]);
   const precedingSnippet = useMemo(() => buildSnippet(precedingText), [precedingText]);
+
+  // Auto-scroll previous chunk to bottom when loaded
+  useEffect(() => {
+    if (precedingScrollRef.current) {
+      precedingScrollRef.current.scrollTop = precedingScrollRef.current.scrollHeight;
+    }
+  }, [precedingText]);
 
   const resetHighlightSoon = useCallback(() => {
     setTimeout(() => setHighlightedPane(null), 400);
@@ -224,18 +233,24 @@ export function ComparisonLayout({
         {hasPrecedingChunk ? (
           <div className="border border-border/70 rounded-md bg-background/70 p-3">
             <div className="text-[11px] uppercase text-muted-foreground tracking-wider mb-2">
-              Previous chunk tail
+              Previous chunk
             </div>
-            <pre className="font-mono text-sm leading-relaxed whitespace-pre-wrap text-foreground">{precedingSnippet}</pre>
-            <div className="flex justify-end mt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsContextDialogOpen(true)}
-              >
-                View full chunk
-              </Button>
-            </div>
+            <ScrollArea className="h-32" ref={precedingScrollRef}>
+              <div className="font-mono text-sm leading-relaxed text-foreground pr-4">
+                <ReactMarkdown
+                  components={{
+                    p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+                    strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                    em: ({node, ...props}) => <em className="italic" {...props} />,
+                    h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props} />,
+                    h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props} />,
+                    h3: ({node, ...props}) => <h3 className="font-bold mb-1 mt-2 first:mt-0" {...props} />,
+                  }}
+                >
+                  {precedingText}
+                </ReactMarkdown>
+              </div>
+            </ScrollArea>
           </div>
         ) : (
           <div className="text-xs text-muted-foreground">
@@ -244,20 +259,22 @@ export function ComparisonLayout({
         )}
       </div>
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden">
-        <GenerationPane
-          generation={comparison.generation_a}
-          label="1"
-          highlighted={highlightedPane === 'A'}
-        />
-        <GenerationPane
-          generation={comparison.generation_b}
-          label="2"
-          highlighted={highlightedPane === 'B'}
-        />
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden min-h-0">
+        <div className="min-h-0 h-full">
+          <GenerationPane
+            generation={comparison.generation_a}
+            label="1"
+            highlighted={highlightedPane === 'A'}
+          />
+        </div>
+        <div className="min-h-0 h-full">
+          <GenerationPane
+            generation={comparison.generation_b}
+            label="2"
+            highlighted={highlightedPane === 'B'}
+          />
+        </div>
       </div>
-
-      <ContextDrawer prompt={comparison.prompt} />
 
       <JudgmentBar
         onChooseLeft={() => handleJudgment(comparison.condition_a.id)}

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "./StatusBar";
 import { CommandBar } from "./CommandBar";
 import { NarrativeTab } from "./NarrativeTab";
@@ -9,13 +10,51 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Book, Map, Users, Sparkles } from "lucide-react";
 
 export function NexusLayout() {
-  const [currentModel, setCurrentModel] = useState("Llama 3.3");
+  const [currentModel, setCurrentModel] = useState("LOADING");
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isStoryMode, setIsStoryMode] = useState(true);
   const [apexStatus, setApexStatus] = useState<
     "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING"
   >("READY");
   const [activeTab, setActiveTab] = useState("narrative");
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
+
+  // Fetch settings to get model name
+  const { data: settings } = useQuery({
+    queryKey: ["/api/settings"],
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Parse model name from settings
+  useEffect(() => {
+    if (settings && settings["Agent Settings"]) {
+      const defaultModel = settings["Agent Settings"]?.global?.model?.default_model;
+
+      if (defaultModel) {
+        const modelName = defaultModel.includes("/")
+          ? defaultModel.split("/").pop()!.toUpperCase()
+          : defaultModel.toUpperCase();
+        setCurrentModel(modelName);
+      }
+    }
+  }, [settings]);
+
+  // Check if LLM server is running and has model loaded
+  useEffect(() => {
+    const checkModelStatus = async () => {
+      try {
+        const apiBase = settings?.["Agent Settings"]?.global?.llm?.api_base || "http://localhost:1234";
+        const response = await fetch(`${apiBase}/v1/models`);
+        setIsModelLoaded(response.ok);
+      } catch {
+        setIsModelLoaded(false);
+      }
+    };
+
+    checkModelStatus();
+    const interval = setInterval(checkModelStatus, 5000);
+    return () => clearInterval(interval);
+  }, [settings]);
 
   const handleCommand = (command: string) => {
     console.log("Command:", command);
@@ -66,6 +105,7 @@ export function NexusLayout() {
         scene={1}
         apexStatus={apexStatus}
         isStoryMode={isStoryMode}
+        isModelLoaded={isModelLoaded}
         onHamburgerClick={() => {
           // Can be used for mobile menu in the future
         }}
@@ -133,15 +173,17 @@ export function NexusLayout() {
         </TabsContent>
       </Tabs>
 
-      <CommandBar
-        onCommand={handleCommand}
-        placeholder={
-          isStoryMode
-            ? "continue the story"
-            : "Enter directive or /command..."
-        }
-        userPrefix={isStoryMode ? "ALEX" : "NEXUS:USER"}
-      />
+      {activeTab === "narrative" && (
+        <CommandBar
+          onCommand={handleCommand}
+          placeholder={
+            isStoryMode
+              ? "continue the story"
+              : "Enter directive or /command..."
+          }
+          userPrefix={isStoryMode ? "ALEX" : "NEXUS:USER"}
+        />
+      )}
     </div>
   );
 }

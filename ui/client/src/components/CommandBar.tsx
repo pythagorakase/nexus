@@ -43,7 +43,10 @@ export function CommandBar({
           data-testid="text-command-prefix"
         >
           {userPrefix}
-          {showCursor && <span className="inline-block w-1 md:w-2 h-3 md:h-4 bg-primary ml-1" />}
+          <span
+            className="inline-block w-1 md:w-2 h-3 md:h-4 bg-primary ml-1 transition-opacity duration-100"
+            style={{ opacity: showCursor ? 1 : 0 }}
+          />
         </span>
         <Input
           ref={inputRef}
