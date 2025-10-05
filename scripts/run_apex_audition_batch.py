@@ -54,40 +54,19 @@ def maybe_register_condition(engine: AuditionEngine, args: argparse.Namespace) -
     if not args.provider or not args.model:
         raise SystemExit("Provider and model are required to register a new condition")
 
-    parameters = {}
-
-    # Only include temperature if provided (reasoning models should omit it)
-    if args.temperature is not None:
-        parameters["temperature"] = args.temperature
-
-    # Set max_tokens (base token budget)
-    parameters["max_tokens"] = args.max_tokens
-
-    # OpenAI-specific parameters
-    if args.max_output_tokens is not None:
-        parameters["max_output_tokens"] = args.max_output_tokens
-    if args.reasoning_effort:
-        parameters["reasoning_effort"] = args.reasoning_effort
-
-    # Anthropic-specific parameters
-    if args.thinking_enabled:
-        parameters["thinking_enabled"] = True
-        if args.thinking_budget_tokens:
-            parameters["thinking_budget_tokens"] = args.thinking_budget_tokens
-        else:
-            raise SystemExit("--thinking-budget-tokens required when --thinking-enabled is set")
-
-    # Common parameters
-    if args.top_p is not None:
-        parameters["top_p"] = args.top_p
-    if args.top_k is not None:
-        parameters["top_k"] = args.top_k
+    # Validate Anthropic-specific parameters
+    if args.thinking_enabled and not args.thinking_budget_tokens:
+        raise SystemExit("--thinking-budget-tokens required when --thinking-enabled is set")
 
     spec = ConditionSpec(
         slug=args.condition_slug,
         provider=args.provider,
         model=args.model,
-        parameters=parameters,
+        temperature=args.temperature,
+        reasoning_effort=args.reasoning_effort,
+        thinking_enabled=args.thinking_enabled,
+        max_output_tokens=args.max_output_tokens or args.max_tokens,
+        thinking_budget_tokens=args.thinking_budget_tokens,
         label=args.label,
         description=args.description,
         system_prompt=args.system_prompt or None,

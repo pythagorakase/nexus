@@ -17,7 +17,9 @@ import argparse
 import logging
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -33,6 +35,9 @@ from nexus.audition.batch_clients import BatchStatus
 
 LOGGER = logging.getLogger("nexus.apex_audition.run_full_sequential")
 
+# Global lock for synchronized output
+_output_lock = threading.Lock()
+
 
 # Lane ordering chosen to favour cache reuse for Anthropic.
 OPENAI_LANES = [
@@ -42,18 +47,18 @@ OPENAI_LANES = [
     "o3.reason-low",
     "o3.reason-med",
     "o3.reason-high",
-    "4o.t0-6",
-    "4o.t0-8",
+    "4o.t0-7",
     "4o.t1-0",
+    "4o.t1-3",
 ]
 
 ANTHROPIC_LANES = [
-    "sonnet.t0-8.std",
-    "sonnet.t0-8.ext",
-    "sonnet.t1-1.ext",
-    "opus.t0-8.std",
+    "sonnet.t0-7.std",
+    "sonnet.t1-0.std",
+    "sonnet.t1-0.ext",
+    "opus.t0-7.std",
+    "opus.t1-0.std",
     "opus.t1-0.ext",
-    "opus.t1-2.ext",
 ]
 
 TEST_CHUNK_IDS = {4242}  # skip pytest harness fixtures
@@ -87,6 +92,17 @@ def parse_args() -> argparse.Namespace:
         "--log-level",
         default="INFO",
         help="Logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Limit number of prompts to process",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=7,
+        help="Maximum number of concurrent workers (default: 7)",
     )
     return parser.parse_args()
 
@@ -223,14 +239,16 @@ def compute_summary(
 
 
 def display_summary(summary: Dict[str, int]) -> None:
-    line = (
-        f"Total: {summary['total']} | "
-        f"Unsent: {summary['unsent']} | "
-        f"Sent: {summary['sent']} (processing {summary['processing']}, "
-        f"completed {summary['completed']}, failed {summary['failed']})"
-    )
-    sys.stdout.write("\r" + line.ljust(120))
-    sys.stdout.flush()
+    with _output_lock:
+        remaining = summary['total'] - summary['completed'] - summary['failed']
+        line = (
+            f"Total: {summary['total']} | "
+            f"Remaining: {remaining} | "
+            f"Completed: {summary['completed']} | "
+            f"Failed: {summary['failed']}"
+        )
+        sys.stdout.write("\r" + line.ljust(120))
+        sys.stdout.flush()
 
 
 def has_completed_generation(repo: AuditionRepository, condition_id: int, prompt_id: int) -> bool:
@@ -264,15 +282,14 @@ def run_lane(
     all_conditions: List[ConditionSpec],
 ) -> None:
     if dry_run:
-        LOGGER.info(
-            "[DRY-RUN] %s on chunk %s (prompt %s) cache=%s",
-            condition.slug,
-            prompt.chunk_id,
-            prompt.id,
-            enable_cache,
-        )
-        summary = compute_summary(repo, prompts, all_conditions)
-        display_summary(summary)
+        with _output_lock:
+            LOGGER.info(
+                "[DRY-RUN] %s on chunk %s (prompt %s) cache=%s",
+                condition.slug,
+                prompt.chunk_id,
+                prompt.id,
+                enable_cache,
+            )
         return
 
     run = engine.run_generation_batch(
@@ -286,14 +303,13 @@ def run_lane(
         created_by=created_by,
         notes=notes,
     )
-    LOGGER.info(
-        "Completed %s chunk %s -> run %s",
-        condition.slug,
-        prompt.chunk_id,
-        run.run_id,
-    )
-    summary = compute_summary(repo, prompts, all_conditions)
-    display_summary(summary)
+    with _output_lock:
+        LOGGER.info(
+            "Completed %s chunk %s -> run %s",
+            condition.slug,
+            prompt.chunk_id,
+            run.run_id,
+        )
 
 
 def poll_pending_batches(
@@ -368,6 +384,10 @@ def main() -> None:
         if prompt.id is not None and prompt.chunk_id not in TEST_CHUNK_IDS
     ]
 
+    if args.limit is not None and args.limit > 0:
+        prompts = prompts[:args.limit]
+        LOGGER.info("Limiting to first %s prompts", args.limit)
+
     LOGGER.info(
         "Starting rollout across %s prompts (%s OpenAI lanes, %s Anthropic lanes)",
         len(prompts),
@@ -377,72 +397,33 @@ def main() -> None:
 
     display_summary(compute_summary(repo, prompts, all_conditions))
 
-    pending_batches: List[Dict[str, str]] = []
-    poll_interval = 60.0
+    LOGGER.info("=== Processing all prompts across all lanes (max %d concurrent) ===", args.max_workers)
 
-    LOGGER.info("=== OpenAI burst phase ===")
-    for condition in openai_conditions:
-        pending_ids = []
-        for prompt in prompts:
-            if has_completed_generation(repo, condition.id, prompt.id):
-                continue
-            pending_ids.append(prompt.id)
-
-        if not pending_ids:
-            LOGGER.info("Lane %s: nothing to send", condition.slug)
-            continue
-
-        LOGGER.info(
-            "Lane %s: submitting %s prompt(s) via batch (%s)",
-            condition.slug,
-            len(pending_ids),
-            "dry-run" if args.dry_run else "live",
-        )
-
-        if args.dry_run:
-            continue
-
-        run, batch_id = engine.submit_batch_generation(
-            condition_slug=condition.slug,
-            prompt_ids=pending_ids,
-            replicate_count=1,
-            enable_cache=False,
-            created_by=args.created_by,
-            notes=args.notes,
-        )
-        LOGGER.info(
-            "Submitted %s prompts for %s -> batch %s (run %s)",
-            len(pending_ids),
-            condition.slug,
-            batch_id,
-            run.run_id,
-        )
-        pending_batches.append(
-            {
-                "batch_id": batch_id,
-                "provider": condition.provider.lower(),
-                "condition": condition.slug,
-            }
-        )
-        display_summary(compute_summary(repo, prompts, all_conditions))
-
-    next_poll_time = time.time() + poll_interval if pending_batches else float("inf")
-
-    LOGGER.info("=== Anthropic sequential phase ===")
+    # Build list of tasks to execute
+    tasks = []
     for prompt in prompts:
-        if pending_batches and time.time() >= next_poll_time:
-            poll_pending_batches(engine, pending_batches, repo, prompts, all_conditions)
-            next_poll_time = time.time() + poll_interval if pending_batches else float("inf")
-
-        LOGGER.info("Chunk %s (prompt %s)", prompt.chunk_id, prompt.id)
-        for condition in anthropic_conditions:
+        for condition in all_conditions:
             if has_completed_generation(repo, condition.id, prompt.id):
                 continue
-            run_lane(
+            tasks.append((condition, prompt))
+
+    LOGGER.info("Total tasks to execute: %s", len(tasks))
+
+    # Execute tasks with configured number of workers
+    completed_count = 0
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        futures = []
+        for condition, prompt in tasks:
+            # Disable caching for all providers since parallel execution prevents cache reuse
+            # (Anthropic charges +25% to write cache, OpenAI provides no cross-parameter cache hits)
+            enable_cache = False
+
+            future = executor.submit(
+                run_lane,
                 engine,
                 condition,
                 prompt,
-                enable_cache=True,
+                enable_cache=enable_cache,
                 dry_run=args.dry_run,
                 created_by=args.created_by,
                 notes=args.notes,
@@ -450,12 +431,19 @@ def main() -> None:
                 prompts=prompts,
                 all_conditions=all_conditions,
             )
+            futures.append(future)
 
-    while pending_batches:
-        LOGGER.info("Waiting for %s OpenAI batch(es) to finish...", len(pending_batches))
-        poll_pending_batches(engine, pending_batches, repo, prompts, all_conditions)
-        if pending_batches:
-            time.sleep(poll_interval)
+        # Wait for all to complete and show progress
+        for future in as_completed(futures):
+            try:
+                future.result()
+                completed_count += 1
+                # Show progress after each completion
+                summary = compute_summary(repo, prompts, all_conditions)
+                display_summary(summary)
+            except Exception as exc:
+                LOGGER.error("Task generated exception: %s", exc)
+                completed_count += 1
 
     LOGGER.info("Sequential rollout complete")
     sys.stdout.write("\n")

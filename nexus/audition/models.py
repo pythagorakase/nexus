@@ -15,7 +15,11 @@ class ConditionSpec:
     slug: str
     provider: str
     model: str
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    temperature: Optional[float] = None
+    reasoning_effort: Optional[str] = None
+    thinking_enabled: Optional[bool] = None
+    max_output_tokens: Optional[int] = None
+    thinking_budget_tokens: Optional[int] = None
     label: Optional[str] = None
     description: Optional[str] = None
     system_prompt: Optional[str] = None
@@ -29,7 +33,11 @@ class ConditionSpec:
             slug=self.slug,
             provider=self.provider,
             model=self.model,
-            parameters=dict(self.parameters),
+            temperature=self.temperature,
+            reasoning_effort=self.reasoning_effort,
+            thinking_enabled=self.thinking_enabled,
+            max_output_tokens=self.max_output_tokens,
+            thinking_budget_tokens=self.thinking_budget_tokens,
             label=self.label,
             description=self.description,
             system_prompt=self.system_prompt,

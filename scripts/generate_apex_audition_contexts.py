@@ -1154,16 +1154,6 @@ class ContextSeedBuilder:
                 "authorial_directives": list(config.authorial_directives),
                 "notes": config.notes,
             },
-            "storyteller_chunk": {
-                "storyteller": storyteller_text,
-                "user_input": user_input,
-                "raw_text": chunk["raw_text"],
-                "season": chunk.get("season"),
-                "episode": chunk.get("episode"),
-                "scene": chunk.get("scene"),
-                "world_time": chunk.get("world_time"),
-                "world_layer": chunk.get("world_layer"),
-            },
             "context_payload": assembled_context,
             "memory_summary": summary,
         }
