@@ -10,6 +10,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import type { Episode, NarrativeChunk, ChunkMetadata, Season } from "@shared/schema";
+import { useFonts } from "@/contexts/FontContext";
 
 interface ChunkWithMetadata extends NarrativeChunk {
   metadata?: ChunkMetadata;
@@ -277,6 +278,7 @@ export function NarrativeTab() {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
+  const { fonts } = useFonts();
 
   const {
     data: seasons = [],
@@ -375,7 +377,10 @@ export function NarrativeTab() {
                   </div>
                 )}
 
-                <div className="font-sans text-foreground text-base leading-relaxed">
+                <div
+                  className="text-foreground text-base leading-relaxed"
+                  style={{ fontFamily: fonts.narrativeFont }}
+                >
                   <ReactMarkdown components={markdownComponents}>
                     {selectedChunk.rawText || ""}
                   </ReactMarkdown>
