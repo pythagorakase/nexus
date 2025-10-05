@@ -132,9 +132,18 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return null;
   };
 
-  // Calculate bounds from place data only (zones not needed for display)
+  // Calculate bounds from place data, but ensure full world is visible
   useEffect(() => {
-    if (!places.length) return;
+    if (!places.length) {
+      // No places, show entire world
+      setMapBounds({
+        minLng: -180,
+        maxLng: 180,
+        minLat: -90,
+        maxLat: 90
+      });
+      return;
+    }
 
     let minLng = Infinity;
     let maxLng = -Infinity;
@@ -152,17 +161,17 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
       }
     });
 
-    // Add padding (10% on each side) to ensure everything fits nicely
     if (minLng !== Infinity && maxLng !== -Infinity) {
       const lngRange = Math.max(maxLng - minLng, 0.0001);
       const latRange = Math.max(maxLat - minLat, 0.0001);
       const padding = 0.1;
 
+      // Expand to show full world extent
       const bounds = {
-        minLng: minLng - lngRange * padding,
-        maxLng: maxLng + lngRange * padding,
-        minLat: minLat - latRange * padding,
-        maxLat: maxLat + latRange * padding
+        minLng: Math.min(-180, minLng - lngRange * padding),
+        maxLng: Math.max(180, maxLng + lngRange * padding),
+        minLat: Math.min(-90, minLat - latRange * padding),
+        maxLat: Math.max(90, maxLat + latRange * padding)
       };
 
       setMapBounds(bounds);
@@ -536,26 +545,6 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                 strokeWidth={1 / zoom}
               />
             ))}
-          </g>
-
-          {/* Zone boundaries */}
-          <g opacity="0.6">
-            {zones.map((zone) => {
-              const pathData = geoJsonToSvgPath(zone.boundary);
-              if (!pathData) return null;
-
-              return (
-                <path
-                  key={zone.id}
-                  d={pathData}
-                  fill="none"
-                  stroke="#00ff41"
-                  strokeWidth={2 / zoom}
-                  strokeDasharray={`${4 / zoom},${4 / zoom}`}
-                  data-zone-id={zone.id}
-                />
-              );
-            })}
           </g>
 
           {/* Places - All pins and labels rendered, visibility controlled by CSS */}
