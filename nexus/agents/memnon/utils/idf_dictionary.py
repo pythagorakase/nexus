@@ -1,10 +1,12 @@
 import math
 import logging
-import psycopg2
 import pickle
-from pathlib import Path
+import re
 import time
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Iterable, List, Tuple
+
+import psycopg2
 
 logger = logging.getLogger("nexus.memnon.idf_dictionary")
 
@@ -131,17 +133,69 @@ class IDFDictionary:
         else:              # Common terms
             return "D"     # Low weight
     
-    def generate_weighted_query(self, query_text: str) -> str:
-        """Generate a weighted tsquery string for PostgreSQL."""
-        terms = query_text.lower().split()
-        weighted_terms = []
-        
-        for term in terms:
-            weight_class = self.get_weight_class(term)
-            weighted_terms.append(f"{term}:{weight_class}")
-        
-        # Join with & operator for AND search
-        return " & ".join(weighted_terms)
+    def _tokenize(self, query_text: str) -> Iterable[str]:
+        """Tokenize text into searchable lexemes compatible with to_tsquery."""
+
+        tokens = re.findall(r"[a-z0-9]+", query_text.lower())
+        for token in tokens:
+            if len(token) < 2:
+                continue
+            yield token
+
+    def _select_terms(self, tokens: Iterable[str]) -> List[Tuple[str, str, float]]:
+        """Select unique tokens with their weight class and IDF score."""
+
+        seen = set()
+        selected: List[Tuple[str, str, float]] = []
+
+        for token in tokens:
+            if token in seen:
+                continue
+            seen.add(token)
+
+            idf = self.get_idf(token)
+            weight_class = self.get_weight_class(token)
+            selected.append((token, weight_class, idf))
+
+        # Sort by IDF descending so rare terms appear first
+        selected.sort(key=lambda item: item[2], reverse=True)
+        return selected
+
+    def generate_weighted_query(self, query_text: str, max_terms: int = 12) -> str:
+        """Generate a weighted OR tsquery string prioritizing rare keywords."""
+
+        tokens = list(self._tokenize(query_text))
+        if not tokens:
+            return ""
+
+        ranked_terms = self._select_terms(tokens)
+        if not ranked_terms:
+            return ""
+
+        high_value: List[Tuple[str, str, float]] = []
+        fallback: List[Tuple[str, str, float]] = []
+
+        for term, weight_class, idf in ranked_terms:
+            # Treat IDF >= 1.5 as meaningful enough to prioritize
+            if idf >= 1.5:
+                high_value.append((term, weight_class, idf))
+            else:
+                fallback.append((term, weight_class, idf))
+
+        ordered_terms: List[Tuple[str, str, float]] = []
+        ordered_terms.extend(high_value[:max_terms])
+
+        if len(ordered_terms) < max_terms:
+            remaining = max_terms - len(ordered_terms)
+            ordered_terms.extend(fallback[:remaining])
+
+        if not ordered_terms:
+            # As an ultimate fallback, keep the first available term
+            ordered_terms = ranked_terms[:1]
+
+        weighted_terms = [f"{term}:{weight_class}" for term, weight_class, _ in ordered_terms]
+
+        return " | ".join(weighted_terms)
         
     def get_idf(self, term: str) -> float:
         """Get IDF value for a specific term."""

@@ -801,42 +801,101 @@ def execute_multi_model_hybrid_search(
                     filter_sql = " AND " + filter_sql
                 
                 # First, run text search to get initial text scores
-                
-                # Use websearch_to_tsquery for robust text search (can be disabled by caller via weights)
-                logger.info(f"Text search using websearch_to_tsquery: '{query_text}'")
-                text_search_sql = f"""
-                SELECT 
-                    nc.id, 
+                text_search_sql_tsquery = f"""
+                SELECT
+                    nc.id,
                     nc.raw_text,
-                    cm.season, 
-                    cm.episode, 
+                    cm.season,
+                    cm.episode,
                     cm.scene as scene_number,
                     nv.world_time,
-                    ts_rank(to_tsvector('english', nc.raw_text), 
-                            websearch_to_tsquery('english', %s)) AS text_score
-                FROM 
+                    ts_rank(to_tsvector('english', nc.raw_text),
+                            to_tsquery('english', %s)) AS text_score
+                FROM
                     narrative_chunks nc
-                JOIN 
+                JOIN
                     chunk_metadata cm ON nc.id = cm.chunk_id
                 LEFT JOIN
                     narrative_view nv ON nc.id = nv.id
-                WHERE 
-                    to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
+                WHERE
+                    to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
                     {filter_sql}
-                ORDER BY 
+                ORDER BY
                     text_score DESC
                 LIMIT %s
                 """
-                cursor.execute(text_search_sql, (
-                    query_text,
-                    query_text,
-                    top_k * 3
-                ))
-                
+
+                text_search_sql_websearch = f"""
+                SELECT
+                    nc.id,
+                    nc.raw_text,
+                    cm.season,
+                    cm.episode,
+                    cm.scene as scene_number,
+                    nv.world_time,
+                    ts_rank(to_tsvector('english', nc.raw_text),
+                            websearch_to_tsquery('english', %s)) AS text_score
+                FROM
+                    narrative_chunks nc
+                JOIN
+                    chunk_metadata cm ON nc.id = cm.chunk_id
+                LEFT JOIN
+                    narrative_view nv ON nc.id = nv.id
+                WHERE
+                    to_tsvector('english', nc.raw_text) @@ websearch_to_tsquery('english', %s)
+                    {filter_sql}
+                ORDER BY
+                    text_score DESC
+                LIMIT %s
+                """
+
+                text_rows = []
+                text_query_kind = ""
+                text_query_value = ""
+
+                weighted_query = ""
+                if idf_dict and hasattr(idf_dict, 'generate_weighted_query'):
+                    weighted_query = idf_dict.generate_weighted_query(query_text)
+
+                if weighted_query:
+                    logger.info(f"Text search using weighted to_tsquery: '{weighted_query}'")
+                    cursor.execute(text_search_sql_tsquery, (
+                        weighted_query,
+                        weighted_query,
+                        top_k * 3
+                    ))
+                    text_rows = cursor.fetchall()
+                    text_query_kind = "to_tsquery"
+                    text_query_value = weighted_query
+
+                if not text_rows:
+                    prepared_query = prepare_tsquery(query_text)
+                    if prepared_query:
+                        logger.info(f"Text search using OR-based query: '{prepared_query}'")
+                        cursor.execute(text_search_sql_tsquery, (
+                            prepared_query,
+                            prepared_query,
+                            top_k * 3
+                        ))
+                        text_rows = cursor.fetchall()
+                        text_query_kind = "to_tsquery"
+                        text_query_value = prepared_query
+
+                if not text_rows:
+                    logger.info(f"Text search using websearch_to_tsquery fallback: '{query_text}'")
+                    cursor.execute(text_search_sql_websearch, (
+                        query_text,
+                        query_text,
+                        top_k * 3
+                    ))
+                    text_rows = cursor.fetchall()
+                    text_query_kind = "websearch_to_tsquery"
+                    text_query_value = query_text
+
                 all_text_scores = []
-                
+
                 # First pass: collect all text scores to find max for normalization
-                for result in cursor.fetchall():
+                for result in text_rows:
                     chunk_id, raw_text, season, episode, scene_number, world_time, text_score = result
                     text_score = float(text_score)
                     all_text_scores.append(text_score)
@@ -992,26 +1051,27 @@ def execute_multi_model_hybrid_search(
                             if details:
                                 raw_text, season, episode, scene_number = details
                                 
-                                # Calculate text score for this vector-only result
-                                if idf_dict and hasattr(idf_dict, 'generate_weighted_query'):
-                                    weighted_query = idf_dict.generate_weighted_query(query_text)
-                                    cursor.execute("""
-                                    SELECT ts_rank(to_tsvector('english', raw_text), 
-                                            to_tsquery('english', %s)) AS text_score
-                                    FROM narrative_chunks
-                                    WHERE id = %s
-                                    """, (weighted_query, chunk_id))
-                                else:
-                                    # Use our prepared ts_query
-                                    ts_query = prepare_tsquery(query_text)
-                                    cursor.execute("""
-                                    SELECT ts_rank(to_tsvector('english', raw_text), 
-                                            to_tsquery('english', %s)) AS text_score
-                                    FROM narrative_chunks
-                                    WHERE id = %s
-                                    """, (ts_query, chunk_id))
-                                
-                                calculated_text_score = cursor.fetchone()[0] or 0.0
+                                # Calculate text score for this vector-only result using the same query form
+                                calculated_text_score = 0.0
+                                if text_query_value:
+                                    if text_query_kind == "websearch_to_tsquery":
+                                        cursor.execute("""
+                                        SELECT ts_rank(to_tsvector('english', raw_text),
+                                                websearch_to_tsquery('english', %s)) AS text_score
+                                        FROM narrative_chunks
+                                        WHERE id = %s
+                                        """, (text_query_value, chunk_id))
+                                    else:
+                                        cursor.execute("""
+                                        SELECT ts_rank(to_tsvector('english', raw_text),
+                                                to_tsquery('english', %s)) AS text_score
+                                        FROM narrative_chunks
+                                        WHERE id = %s
+                                        """, (text_query_value, chunk_id))
+
+                                    fetched = cursor.fetchone()
+                                    calculated_text_score = (fetched[0] if fetched and fetched[0] is not None else 0.0)
+
                                 normalized_text_score = calculated_text_score / max_text_score if max_text_score > 0 else 0.0
                                 
                                 # Add to results with this model's score
