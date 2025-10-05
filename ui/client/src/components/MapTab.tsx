@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import type { Place, Zone } from "@shared/schema";
 import { worldOutline } from "@/lib/world-outline";
+import type { FeatureCollection } from 'geojson';
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
@@ -458,7 +459,18 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     return visibility;
   }, [visiblePlaces, placeCoordinates, zoom, selectedLocation, hoveredLocation, currentChunkLocation, shouldDisplayLabelByZoom]);
 
-  const worldPathData = useMemo(() => geoJsonToSvgPath(worldOutline), [mapBounds, mapDimensions]);
+  // Convert each country feature to SVG path data
+  const worldCountries = useMemo(() => {
+    if (!worldOutline || worldOutline.type !== 'FeatureCollection') return [];
+
+    return worldOutline.features.map((feature, index) => {
+      const pathData = geoJsonToSvgPath(feature.geometry);
+      return {
+        id: index,
+        pathData,
+      };
+    }).filter(country => country.pathData !== null);
+  }, [mapBounds, mapDimensions]);
 
   return (
     <div className="flex h-full bg-background">
@@ -511,19 +523,20 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
           </defs>
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
 
-          {/* World outline */}
-          {worldPathData && (
-            <g opacity="0.45">
+          {/* World countries */}
+          <g opacity="0.45">
+            {worldCountries.map((country) => (
               <path
-                d={worldPathData}
+                key={country.id}
+                d={country.pathData!}
                 fill="#001a00"
                 fillOpacity={0.35}
                 stroke="#00ff41"
                 strokeOpacity={0.4}
                 strokeWidth={1 / zoom}
               />
-            </g>
-          )}
+            ))}
+          </g>
 
           {/* Zone boundaries */}
           <g opacity="0.6">
