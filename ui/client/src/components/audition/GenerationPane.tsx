@@ -3,6 +3,7 @@
  */
 import { Generation } from '@/lib/audition-api';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useFonts } from '@/contexts/FontContext';
 import ReactMarkdown from 'react-markdown';
 
 interface GenerationPaneProps {
@@ -67,6 +68,7 @@ export function GenerationPane({
   highlighted = false,
 }: GenerationPaneProps) {
   const content = resolveContent(generation);
+  const { fonts } = useFonts();
 
   return (
     <div
@@ -80,7 +82,10 @@ export function GenerationPane({
         </span>
       </div>
       <ScrollArea className="flex-1 p-4">
-        <div className="font-mono text-sm leading-relaxed text-foreground">
+        <div
+          className="text-sm leading-relaxed text-foreground"
+          style={{ fontFamily: fonts.narrativeFont }}
+        >
           <ReactMarkdown
             components={{
               p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,

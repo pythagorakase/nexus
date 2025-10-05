@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useFonts } from "@/contexts/FontContext";
 import ReactMarkdown from 'react-markdown';
 
 export interface NarrativeSection {
@@ -57,6 +58,7 @@ export function NarrativePane({
   typingChunk,
 }: NarrativePaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { fonts } = useFonts();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -70,7 +72,11 @@ export function NarrativePane({
   return (
     <div className="flex-1 flex flex-col bg-background terminal-scanlines overflow-hidden">
       <ScrollArea className="flex-1" data-testid="scroll-narrative">
-        <div ref={scrollRef} className="p-3 md:p-6 space-y-4 md:space-y-8 font-mono text-xs md:text-sm">
+        <div
+          ref={scrollRef}
+          className="p-3 md:p-6 space-y-4 md:space-y-8 text-xs md:text-sm leading-relaxed"
+          style={{ fontFamily: fonts.narrativeFont }}
+        >
           {currentChunkData && (
             <div key={currentChunkData.id} className="space-y-4">
               <div className="border border-border p-3 md:p-4 rounded-md bg-card" data-testid={`chunk-header-${currentChunkData.id}`}>

@@ -15,7 +15,11 @@ class Condition(BaseModel):
     provider: str
     model: str = Field(alias="model_name")
     label: Optional[str] = None
-    parameters: Dict[str, Any]
+    temperature: Optional[float] = None
+    reasoning_effort: Optional[str] = None
+    thinking_enabled: Optional[bool] = None
+    max_output_tokens: Optional[int] = None
+    thinking_budget_tokens: Optional[int] = None
     is_active: bool
 
     class Config:
