@@ -48,11 +48,7 @@ from .utils.embedding_tables import DIMENSION_TABLES
 from sentence_transformers import SentenceTransformer
 
 # Letta framework types (for type hints)
-from letta.schemas.agent import AgentState 
-from letta.schemas.memory import Memory
-from letta.schemas.block import Block, CreateBlock
-from letta.schemas.message import Message
-from letta.embeddings import EmbeddingEndpoint
+# Letta imports removed - using custom memory system instead
 
 # Import alias search utilities
 from .utils.alias_search import load_aliases_from_db, ALIAS_LOOKUP
@@ -218,7 +214,7 @@ class MEMNON:
     
     def __init__(self,
                  interface,
-                 agent_state: Optional[AgentState] = None,
+                 agent_state: Optional[Any] = None,
                  user = None,
                  db_url: str = None,
                  model_id: str = None, # This is now only for embedding models
@@ -554,12 +550,12 @@ class MEMNON:
         for block_name in required_blocks:
             if block_name not in self.agent_state.memory.list_block_labels():
                 # Create block with default empty content
-                block = CreateBlock(
-                    label=block_name,
-                    value="",
-                    limit=50000,  # Generous limit for memory data
-                    description=f"Memory {block_name} block"
-                )
+                block = {
+                    "label": block_name,
+                    "value": "",
+                    "limit": 50000,  # Generous limit for memory data
+                    "description": f"Memory {block_name} block"
+                }
                 # Add block to memory
                 self.block_manager.create_block(block=block, agent_id=self.agent_state.id, actor=self.user)
     
@@ -1130,7 +1126,7 @@ class MEMNON:
                 
             raise
     
-    def step(self, messages: List[Message]) -> Any:
+    def step(self, messages: List[Any]) -> Any:
         """
         Process incoming messages and perform MEMNON functions.
         This is the main entry point required by Letta Agent framework.
@@ -1207,7 +1203,7 @@ class MEMNON:
             logger.error(traceback.format_exc())
             return f"Error: {str(e)}"
     
-    def _parse_command(self, message: Message) -> Dict[str, Any]:
+    def _parse_command(self, message: Any) -> Dict[str, Any]:
         """
         Parse a user message to extract commands and parameters.
         

@@ -234,6 +234,61 @@ SCENES: Dict[int, SceneConfig] = {
             "places": ["The Ghost"],
         },
     ),
+    1015: SceneConfig(
+        chunk_id=1015,
+        category="Transition",
+        label="Alex pivots suddenly from serious relationship discussion to suggesting cat adoption",
+        warm_span=6,
+        authorial_directives=[
+            "Previous conversations where Alex and Emilia discussed expressing love verbally vs non-verbally",
+            "Intimate moments between Alex and Emilia leading to the cat adoption discussion",
+        ],
+        structured_targets={
+            "characters": ["Alex", "Emilia"],
+            "places": ["The Ghost"],
+        },
+    ),
+    1018: SceneConfig(
+        chunk_id=1018,
+        category="Humor",
+        label="Alex becomes absurdly excited and enthusiastic while making case for cat adoption",
+        warm_span=6,
+        authorial_directives=[
+            "Alex's personality traits showing excitement and enthusiasm about ideas",
+        ],
+        structured_targets={
+            "characters": ["Alex", "Emilia"],
+            "places": ["The Ghost"],
+        },
+    ),
+    1187: SceneConfig(
+        chunk_id=1187,
+        category="Character & Relationship",
+        label="Alex finally asks Emilia if she would cross The Bridge with her",
+        warm_span=6,
+        authorial_directives=[
+            "Prior conversations where Alex and Emilia avoided discussing The Bridge directly",
+            "Emilia's expressed fears or concerns about Bridge transformations",
+            "Alex's relationship with The Bridge and her transformation abilities",
+        ],
+        structured_targets={
+            "characters": ["Alex", "Emilia"],
+            "places": ["The Ghost"],
+        },
+    ),
+    1229: SceneConfig(
+        chunk_id=1229,
+        category="Humor",
+        label="Alex teases Pete about remote event with innuendo",
+        warm_span=6,
+        authorial_directives=[
+            "Pete and Alex's remote viewing incident involving resurrection or running into each other",
+        ],
+        structured_targets={
+            "characters": ["Alex", "Emilia", "Pete", "Alina"],
+            "places": ["The Ghost"],
+        },
+    ),
 }
 
 
@@ -769,14 +824,49 @@ class ContextSeedBuilder:
 
         return directive
 
-    def _fetch_structured_summaries(self, season: Optional[int], episode: Optional[int]) -> List[Dict[str, Any]]:
+    def _fetch_structured_summaries(
+        self,
+        season: Optional[int],
+        episode: Optional[int],
+        warm_chunks: Optional[List[Any]] = None
+    ) -> List[Dict[str, Any]]:
         entries: List[Dict[str, Any]] = []
         if season is None:
             return entries
 
         seen_keys: Set[tuple[str, str]] = set()
 
+        # Build set of chunk IDs in warm slice for fast lookup
+        warm_chunk_ids = set()
+        if warm_chunks:
+            for chunk in warm_chunks:
+                if hasattr(chunk, 'chunk_id'):
+                    warm_chunk_ids.add(chunk.chunk_id)
+                elif isinstance(chunk, dict):
+                    warm_chunk_ids.add(chunk.get('chunk_id'))
+
         with self.engine.connect() as conn:
+            # Get episode chunk spans to check containment
+            episode_spans = {}
+            if warm_chunk_ids and episode is not None:
+                span_rows = conn.execute(
+                    sql_text(
+                        "SELECT season, episode, chunk_span FROM episodes "
+                        "WHERE season = :season AND episode < :episode"
+                    ),
+                    {"season": season, "episode": episode},
+                ).fetchall()
+                for row in span_rows:
+                    chunk_span = row.chunk_span
+                    if chunk_span and hasattr(chunk_span, 'lower') and hasattr(chunk_span, 'upper'):
+                        # PostgreSQL int4range returns range with lower/upper bounds
+                        start = chunk_span.lower
+                        end = chunk_span.upper
+                        # Check if all chunks in episode span are in warm slice
+                        episode_chunks = set(range(start, end))
+                        if episode_chunks.issubset(warm_chunk_ids):
+                            episode_spans[(row.season, row.episode)] = "fully_contained"
+
             if season > 1:
                 season_rows = conn.execute(
                     sql_text("SELECT id, summary FROM seasons WHERE id < :season ORDER BY id"),
@@ -812,6 +902,11 @@ class ContextSeedBuilder:
                 for row in episode_rows:
                     if not row.summary:
                         continue
+
+                    # Skip if episode is fully contained in warm slice
+                    if (row.season, row.episode) in episode_spans:
+                        continue
+
                     summary_text = self._normalize_summary_text(row.summary)
                     key = ("episodes", f"{int(row.season)}-{int(row.episode)}")
                     if key in seen_keys:
@@ -908,6 +1003,70 @@ class ContextSeedBuilder:
             LOGGER.warning("LORE inference retrieval failed: %s", exc)
             return []
 
+    def _fetch_authorial_directive_passages(
+        self,
+        directives: List[str],
+        target_chunk_id: int,
+        warm_chunk_ids: Set[int],
+        limit_per_directive: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Query MEMNON for each authorial directive, excluding warm slice chunks."""
+        if not directives:
+            return []
+
+        all_results: List[Dict[str, Any]] = []
+
+        for directive in directives:
+            try:
+                # Query MEMNON with the directive
+                search_response = self.memnon.query_memory(directive, k=limit_per_directive)
+                search_results = search_response.get("results", [])
+
+                for result in search_results:
+                    # Convert chunk_id to int for proper comparison
+                    try:
+                        chunk_id = int(result.get("chunk_id") or result.get("id"))
+                    except (ValueError, TypeError):
+                        LOGGER.warning(
+                            "Invalid chunk_id format from MEMNON: %s",
+                            result.get("chunk_id")
+                        )
+                        continue
+
+                    # Skip if chunk is in warm slice or is the target chunk itself
+                    if chunk_id in warm_chunk_ids or chunk_id == target_chunk_id:
+                        continue
+
+                    # Skip future chunks (contamination prevention)
+                    if chunk_id > target_chunk_id:
+                        LOGGER.debug(
+                            "Filtering out future chunk %d (target: %d)",
+                            chunk_id,
+                            target_chunk_id
+                        )
+                        continue
+
+                    # Add passage with metadata, preserving all fields from MEMNON
+                    passage = dict(result)
+                    passage.update({
+                        "query": directive,
+                        "query_source": "authorial_directive",
+                        "directive": directive,
+                    })
+                    all_results.append(passage)
+            except Exception as exc:
+                LOGGER.warning(
+                    "Failed to retrieve passages for directive '%s': %s",
+                    directive[:50],
+                    exc
+                )
+                continue
+
+        # Sort by score descending
+        all_results.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+
+        return all_results
+
     def _estimate_structured_tokens(self, entry: Dict[str, Any]) -> int:
         if "token_count" in entry and isinstance(entry["token_count"], int):
             return entry["token_count"]
@@ -990,14 +1149,36 @@ class ContextSeedBuilder:
             structured_entries = [entry for entry, _ in structured_info]
             assembled_context["structured_passages"] = structured_entries
 
+        # Filter out contaminated future chunks from retrieved passages
+        target_chunk_id = assembled_context.get("metadata", {}).get("chunk_id")
+        if target_chunk_id:
+            filtered_retrieved = []
+            for entry, tokens in retrieved_info:
+                try:
+                    chunk_id = int(entry.get("chunk_id") or entry.get("id"))
+                    if chunk_id > target_chunk_id:
+                        LOGGER.warning(
+                            "Filtering out contaminated future chunk %d from retrieved passages (target: %d)",
+                            chunk_id,
+                            target_chunk_id
+                        )
+                        continue
+                except (ValueError, TypeError):
+                    pass  # Keep entries without valid chunk_id
+                filtered_retrieved.append((entry, tokens))
+            retrieved_info = filtered_retrieved
+            retrieved_tokens = sum(tokens for _, tokens in retrieved_info)
+
         # Trim retrieved passages according to score/ token size
         if retrieved_tokens > augmentation_max and augmentation_max > 0:
             retrieved_info.sort(key=lambda pair: pair[0].get("score", 0.0))
             while retrieved_info and retrieved_tokens > augmentation_max:
                 entry, tokens = retrieved_info.pop(0)
                 retrieved_tokens -= tokens
-            retrieved_entries = [entry for entry, _ in retrieved_info]
-            assembled_context["retrieved_passages"]["results"] = retrieved_entries
+
+        # Always update retrieved_entries regardless of budget
+        retrieved_entries = [entry for entry, _ in retrieved_info]
+        assembled_context["retrieved_passages"]["results"] = retrieved_entries
 
         # Update token counts after trimming
         assembled_context["warm_slice"]["token_count"] = sum(
@@ -1027,6 +1208,15 @@ class ContextSeedBuilder:
             chunk_id=config.chunk_id,
             span=config.warm_span,
             target_tokens=warm_target_tokens if warm_target_tokens > 0 else None,
+        )
+
+        # Fetch authorial directive passages
+        warm_chunk_ids = {wc.chunk_id for wc in warm_slice if wc.chunk_id is not None}
+        authorial_passages = self._fetch_authorial_directive_passages(
+            directives=list(config.authorial_directives),
+            target_chunk_id=config.chunk_id,
+            warm_chunk_ids=warm_chunk_ids,
+            limit_per_directive=10,
         )
 
         analysis = self.memory_manager._analyze_storyteller_output(storyteller_text)
@@ -1066,6 +1256,7 @@ class ContextSeedBuilder:
         summary_entries = self._fetch_structured_summaries(
             season=chunk.get("season"),
             episode=chunk.get("episode"),
+            warm_chunks=warm_slice,
         )
         if summary_entries:
             structured_seed.extend(summary_entries)
@@ -1083,6 +1274,11 @@ class ContextSeedBuilder:
             self._fetch_lore_inference_entries(inference_directives, config.chunk_id)
         )
 
+        # Calculate token count for authorial directive passages
+        authorial_token_count = sum(
+            self._estimate_retrieval_tokens(passage) for passage in authorial_passages
+        )
+
         assembled_context: Dict[str, Any] = {
             "user_input": user_input,
             "warm_slice": {
@@ -1092,8 +1288,8 @@ class ContextSeedBuilder:
             },
             "entity_data": entity_data,
             "retrieved_passages": {
-                "results": [],
-                "token_count": 0,
+                "results": authorial_passages,
+                "token_count": authorial_token_count,
                 "allocation": token_counts.get("augmentation", 0),
             },
             "analysis": analysis,
@@ -1144,6 +1340,15 @@ class ContextSeedBuilder:
         summary = self.memory_manager.get_memory_summary()
         summary.setdefault("pass1", {})["structured_passages"] = assembled_context.get("structured_passages", [])
 
+        # Calculate estimated payload tokens after budgeting
+        warm_tokens = assembled_context.get("warm_slice", {}).get("token_count", 0)
+        structured_tokens = sum(
+            self._estimate_structured_tokens(entry)
+            for entry in assembled_context.get("structured_passages", [])
+        )
+        retrieved_tokens = assembled_context.get("retrieved_passages", {}).get("token_count", 0)
+        total_payload_tokens = warm_tokens + structured_tokens + retrieved_tokens
+
         output = {
             "metadata": {
                 "chunk_id": config.chunk_id,
@@ -1153,6 +1358,12 @@ class ContextSeedBuilder:
                 "warm_span": config.warm_span,
                 "authorial_directives": list(config.authorial_directives),
                 "notes": config.notes,
+                "estimated_payload_tokens": {
+                    "total": total_payload_tokens,
+                    "warm_slice": warm_tokens,
+                    "structured": structured_tokens,
+                    "retrieved": retrieved_tokens,
+                },
             },
             "context_payload": assembled_context,
             "memory_summary": summary,
