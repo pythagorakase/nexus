@@ -832,16 +832,17 @@ def execute_multi_model_hybrid_search(
                     query_text,
                     top_k * 3
                 ))
-                
+
+                text_search_rows = cursor.fetchall()
                 all_text_scores = []
-                
+
                 # First pass: collect all text scores to find max for normalization
-                for result in cursor.fetchall():
+                for result in text_search_rows:
                     chunk_id, raw_text, season, episode, scene_number, world_time, text_score = result
                     text_score = float(text_score)
                     all_text_scores.append(text_score)
                     chunk_id = str(chunk_id)
-                    
+
                     if chunk_id not in results:
                         results[chunk_id] = {
                             'id': chunk_id,
@@ -860,12 +861,86 @@ def execute_multi_model_hybrid_search(
                             'raw_text_score': text_score  # Keep raw score temporarily
                         }
                     else:
-                        results[chunk_id]['raw_text_score'] = text_score
-                
+                        existing = results[chunk_id].get('raw_text_score', 0.0)
+                        results[chunk_id]['raw_text_score'] = max(existing, text_score)
+
+                # Supplement with rare keyword focused search when available
+                rare_terms: List[str] = []
+                if idf_dict and hasattr(idf_dict, 'get_high_idf_terms'):
+                    rare_terms = idf_dict.get_high_idf_terms(query_text)
+
+                if rare_terms:
+                    logger.info(f"Applying rare keyword fallback for terms: {rare_terms}")
+                    rare_query = prepare_tsquery(" ".join(rare_terms))
+
+                    if rare_query:
+                        rare_text_sql = f"""
+                        SELECT
+                            nc.id,
+                            nc.raw_text,
+                            cm.season,
+                            cm.episode,
+                            cm.scene as scene_number,
+                            nv.world_time,
+                            ts_rank(to_tsvector('english', nc.raw_text),
+                                    to_tsquery('english', %s)) AS text_score
+                        FROM
+                            narrative_chunks nc
+                        JOIN
+                            chunk_metadata cm ON nc.id = cm.chunk_id
+                        LEFT JOIN
+                            narrative_view nv ON nc.id = nv.id
+                        WHERE
+                            to_tsvector('english', nc.raw_text) @@ to_tsquery('english', %s)
+                            {filter_sql}
+                        ORDER BY
+                            text_score DESC
+                        LIMIT %s
+                        """
+
+                        cursor.execute(rare_text_sql, (
+                            rare_query,
+                            rare_query,
+                            top_k * 3
+                        ))
+
+                        for rare_result in cursor.fetchall():
+                            chunk_id, raw_text, season, episode, scene_number, world_time, text_score = rare_result
+                            text_score = float(text_score)
+                            all_text_scores.append(text_score)
+                            chunk_id = str(chunk_id)
+
+                            if chunk_id in results:
+                                existing = results[chunk_id].get('raw_text_score', 0.0)
+                                results[chunk_id]['raw_text_score'] = max(existing, text_score)
+                                metadata = results[chunk_id].get('metadata', {})
+                            else:
+                                metadata = {
+                                    'season': season,
+                                    'episode': episode,
+                                    'scene_number': scene_number,
+                                    'world_time': world_time
+                                }
+                                results[chunk_id] = {
+                                    'id': chunk_id,
+                                    'chunk_id': chunk_id,
+                                    'text': raw_text,
+                                    'content_type': 'narrative',
+                                    'metadata': metadata,
+                                    'model_scores': {},
+                                    'text_score': 0.0,
+                                    'vector_score': 0.0,
+                                    'raw_text_score': text_score
+                                }
+
+                            if metadata is not None:
+                                # Track which rare keyword family matched for debugging
+                                metadata.setdefault('matched_keyword', ", ".join(rare_terms))
+
                 # Find max text score for normalization (if any results)
                 max_text_score = max(all_text_scores) if all_text_scores else 1.0
                 logger.info(f"Normalizing text scores with max value: {max_text_score}")
-                
+
                 # Normalize text scores
                 for chunk_id, result in results.items():
                     if 'raw_text_score' in result:
@@ -873,7 +948,7 @@ def execute_multi_model_hybrid_search(
                         result['text_score'] = result['raw_text_score'] / max_text_score if max_text_score > 0 else 0.0
                         # Remove temporary raw score
                         del result['raw_text_score']
-                
+
                 logger.info(f"Text search found {len(results)} results with non-zero scores")
 
                 # Fallback: if no text results and single-token query, try ILIKE

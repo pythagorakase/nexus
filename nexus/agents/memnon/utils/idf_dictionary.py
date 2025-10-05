@@ -1,12 +1,44 @@
 import math
 import logging
-import psycopg2
 import pickle
-from pathlib import Path
+import re
 import time
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+import psycopg2
 
 logger = logging.getLogger("nexus.memnon.idf_dictionary")
+
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "but",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "into",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "with",
+}
+
 
 class IDFDictionary:
     """Manages inverse document frequency calculations for text search."""
@@ -145,4 +177,32 @@ class IDFDictionary:
         
     def get_idf(self, term: str) -> float:
         """Get IDF value for a specific term."""
-        return self.idf_dict.get(term.lower(), 1.0) 
+        return self.idf_dict.get(term.lower(), 1.0)
+
+    def get_high_idf_terms(
+        self,
+        query_text: str,
+        threshold: float = 2.0,
+        stopwords: Iterable[str] = STOPWORDS,
+    ) -> List[str]:
+        """Return unique high-IDF terms present in the query text."""
+
+        if not query_text:
+            return []
+
+        tokens = re.findall(r"[A-Za-z0-9']+", query_text.lower())
+        high_idf_terms: List[str] = []
+
+        for token in tokens:
+            # Normalize possessives like "alex's" -> "alex"
+            if token.endswith("'s"):
+                token = token[:-2]
+
+            normalized = token.strip("'")
+            if not normalized or normalized in stopwords:
+                continue
+
+            if self.get_idf(normalized) >= threshold and normalized not in high_idf_terms:
+                high_idf_terms.append(normalized)
+
+        return high_idf_terms
