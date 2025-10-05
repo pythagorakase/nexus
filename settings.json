@@ -378,7 +378,28 @@
                     "use_query_type_weights": true,
                     "use_query_type_temporal_factors": true,
                     "target_model": "inf-retriever-v1-1.5b",
-                    "temporal_boost_factor": 0.6
+                    "temporal_boost_factor": 0.6,
+                    "rare_keyword_boost": {
+                        "enabled": true,
+                        "idf_threshold": 2.5,
+                        "text_weight_floor": 0.5,
+                        "min_terms": 1,
+                        "stopwords": [
+                            "and",
+                            "or",
+                            "the",
+                            "a",
+                            "an",
+                            "in",
+                            "on",
+                            "at",
+                            "to",
+                            "for",
+                            "with",
+                            "by",
+                            "of"
+                        ]
+                    }
                 },
                 "cross_encoder_reranking": {
                     "enabled": true,

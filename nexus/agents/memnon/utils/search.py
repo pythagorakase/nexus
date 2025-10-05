@@ -91,6 +91,33 @@ class SearchManager:
                 vector_weight = hybrid_config.get("vector_weight_default", 0.6)
                 text_weight = hybrid_config.get("text_weight_default", 0.4)
 
+            # Dynamically boost the text weight when the query contains high-IDF terms
+            rare_keyword_config = hybrid_config.get("rare_keyword_boost", {})
+            if rare_keyword_config.get("enabled", True) and text_weight > 0.0:
+                idf_threshold = float(rare_keyword_config.get("idf_threshold", 2.5))
+                text_weight_floor = float(rare_keyword_config.get("text_weight_floor", 0.5))
+                min_terms = int(rare_keyword_config.get("min_terms", 1))
+                stopwords: Set[str] = set(rare_keyword_config.get("stopwords", [
+                    "and", "or", "the", "a", "an", "in", "on", "at", "to", "for", "with", "by", "of"
+                ]))
+
+                high_idf_terms = self._extract_high_idf_terms(
+                    query_text=query_text,
+                    idf_threshold=idf_threshold,
+                    stopwords=stopwords
+                )
+
+                if len(high_idf_terms) >= min_terms and text_weight < text_weight_floor:
+                    text_weight = text_weight_floor
+                    vector_weight = max(0.0, 1.0 - text_weight)
+                    logger.debug(
+                        "Detected high-IDF terms %s (threshold %.2f); adjusting weights to vector=%.2f, text=%.2f",
+                        [term for term, _ in high_idf_terms],
+                        idf_threshold,
+                        vector_weight,
+                        text_weight
+                    )
+
             # Temporary toggle: allow disabling text leg entirely
             if hybrid_config.get("disable_text_search", False):
                 vector_weight = 1.0
@@ -200,6 +227,32 @@ class SearchManager:
             import traceback
             logger.error(traceback.format_exc())
             return []
+
+    def _extract_high_idf_terms(self, query_text: str, idf_threshold: float, stopwords: Set[str]) -> List[Tuple[str, float]]:
+        """Return query terms whose IDF meets or exceeds the configured threshold."""
+        if not query_text or not self.idf_dictionary:
+            return []
+
+        rare_terms: List[Tuple[str, float]] = []
+        tokens = re.findall(r"[A-Za-z0-9']+", query_text.lower())
+
+        for token in tokens:
+            normalized = token.strip("'")
+            if not normalized:
+                continue
+
+            # Remove possessive suffixes and stray apostrophes
+            normalized = re.sub(r"'s$", "", normalized)
+            normalized = normalized.replace("'", "")
+
+            if not normalized or normalized in stopwords:
+                continue
+
+            idf_value = float(self.idf_dictionary.get_idf(normalized))
+            if idf_value >= idf_threshold:
+                rare_terms.append((normalized, idf_value))
+
+        return rare_terms
     
     def query_vector_search(self, query_text: str, collections: List[str], filters: Dict[str, Any], top_k: int) -> List[Dict[str, Any]]:
         """
