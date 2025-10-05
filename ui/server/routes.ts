@@ -3,14 +3,21 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { createProxyMiddleware } from "http-proxy-middleware";
 
-export async function registerRoutes(app: Express): Promise<Server> {
+// Register proxy BEFORE body parsing middleware
+export function registerProxyRoutes(app: Express): void {
   // Proxy for Audition API (FastAPI backend)
   // Express strips /api/audition before passing to middleware, so we need to add it back
-  app.use("/api/audition", createProxyMiddleware({
+  // IMPORTANT: Must be registered BEFORE express.json() to access raw body stream
+  const auditionProxy = createProxyMiddleware({
     target: "http://localhost:8000",
     changeOrigin: true,
     pathRewrite: (path) => `/api/audition${path}`,
-  }));
+  });
+
+  app.use("/api/audition", auditionProxy);
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
 
   // Narrative routes
   

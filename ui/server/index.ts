@@ -1,8 +1,12 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes, registerProxyRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// Register proxy routes BEFORE body parsing to access raw body stream
+registerProxyRoutes(app);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
