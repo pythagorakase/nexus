@@ -12,7 +12,11 @@ export interface Condition {
   provider: string;
   model_name: string;
   label?: string;
-  parameters: Record<string, any>;
+  temperature?: number | null;
+  reasoning_effort?: string | null;
+  thinking_enabled?: boolean | null;
+  max_output_tokens?: number | null;
+  thinking_budget_tokens?: number | null;
   is_active: boolean;
 }
 

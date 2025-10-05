@@ -42,19 +42,17 @@ export function LeaderboardView() {
     );
   }
 
-  const formatTemperature = (params: Record<string, any>) => {
-    return params?.temperature !== undefined ? params.temperature.toString() : '-';
+  const formatTemperature = (temp: number | null | undefined) => {
+    return temp !== null && temp !== undefined ? temp.toString() : '-';
   };
 
-  const formatReasoning = (params: Record<string, any>) => {
-    if (!params) return '-';
-
+  const formatReasoning = (reasoningEffort: string | null | undefined, thinkingEnabled: boolean | null | undefined) => {
     // Check for reasoning_effort (OpenAI reasoning models)
-    if (params.reasoning_effort) return params.reasoning_effort;
+    if (reasoningEffort) return reasoningEffort;
 
     // Check for thinking_enabled (Anthropic extended thinking)
-    if (params.thinking_enabled === true) return 'enabled';
-    if (params.thinking_enabled === false) return 'disabled';
+    if (thinkingEnabled === true) return 'enabled';
+    if (thinkingEnabled === false) return 'disabled';
 
     return '-';
   };
@@ -109,10 +107,10 @@ export function LeaderboardView() {
                   {formatModelName(entry.condition.model_name)}
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">
-                  {formatTemperature(entry.condition.parameters)}
+                  {formatTemperature(entry.condition.temperature)}
                 </TableCell>
                 <TableCell className="text-center text-muted-foreground">
-                  {formatReasoning(entry.condition.parameters)}
+                  {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
                   {entry.games_played}

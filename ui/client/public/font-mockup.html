@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Font Mockup - Narrative Comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Spectral:ital,wght@0,300;0,400;0,500;1,400&family=Literata:ital,wght@0,300;0,400;0,500;1,400&family=Newsreader:ital,wght@0,300;0,400;0,500;1,400&family=Inter:wght@300;400;500&family=Noto+Sans:ital,wght@0,300;0,400;0,500;1,400&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;1,400&family=Open+Sans:ital,wght@0,300;0,400;0,500;1,400&family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Charter:ital,wght@0,400;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=PT+Serif:ital,wght@0,400;0,700;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      /* Dark theme colors from your actual UI */
+      --background: hsl(0, 0%, 4%);
+      --foreground: hsl(142, 100%, 85%);
+      --border: hsl(0, 0%, 14%);
+      --card: hsl(0, 0%, 8%);
+      --card-foreground: hsl(142, 100%, 85%);
+      --card-border: hsl(0, 0%, 12%);
+      --primary: hsl(142, 100%, 30%);
+      --primary-foreground: hsl(142, 100%, 95%);
+      --muted-foreground: hsl(142, 50%, 70%);
+    }
+
+    body {
+      background: var(--background);
+      color: var(--foreground);
+      font-family: 'Source Code Pro', monospace;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+      color: var(--foreground);
+    }
+
+    .instructions {
+      color: var(--muted-foreground);
+      font-size: 0.85rem;
+      font-family: 'Source Code Pro', monospace;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+      gap: 1.5rem;
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 1000px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Generation pane styling - matches your GenerationPane.tsx */
+    .generation-pane {
+      position: relative;
+      height: 500px;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid hsl(0, 0%, 14%);
+      border-radius: 8px;
+      background: hsl(0, 0%, 8%, 0.8);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      transition: box-shadow 0.2s;
+    }
+
+    .generation-pane:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Header with badge */
+    .pane-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid hsl(0, 0%, 14%);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9999px;
+      background: hsl(142, 100%, 30%, 0.2);
+      color: var(--primary);
+      font-weight: 600;
+      font-size: 0.875rem;
+      font-family: 'Source Code Pro', monospace;
+    }
+
+    .font-label {
+      font-family: 'Source Code Pro', monospace;
+      font-size: 0.75rem;
+      color: var(--muted-foreground);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Content area */
+    .pane-content {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.7;
+      color: hsl(142, 100%, 88%);
+    }
+
+    /* Scrollbar styling */
+    .pane-content::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .pane-content::-webkit-scrollbar-track {
+      background: hsl(0, 0%, 6%);
+    }
+
+    .pane-content::-webkit-scrollbar-thumb {
+      background: hsl(0, 0%, 20%);
+      border-radius: 4px;
+    }
+
+    .pane-content::-webkit-scrollbar-thumb:hover {
+      background: hsl(0, 0%, 25%);
+    }
+
+    .narrative-text p {
+      margin-bottom: 1.2rem;
+    }
+
+    .narrative-text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .narrative-text em {
+      font-style: italic;
+    }
+
+    .narrative-text strong {
+      font-weight: 600;
+    }
+
+    /* Font families */
+    .current-mono { font-family: 'Source Code Pro', monospace; }
+    .georgia { font-family: Georgia, serif; }
+    .lora { font-family: 'Lora', serif; }
+    .merriweather { font-family: 'Merriweather', serif; }
+    .crimson { font-family: 'Crimson Text', serif; }
+    .spectral { font-family: 'Spectral', serif; }
+    .literata { font-family: 'Literata', serif; }
+    .newsreader { font-family: 'Newsreader', serif; }
+    .garamond { font-family: 'EB Garamond', serif; }
+    .pt-serif { font-family: 'PT Serif', serif; }
+    .libre { font-family: 'Libre Baskerville', serif; }
+    .inter { font-family: 'Inter', sans-serif; }
+    .noto { font-family: 'Noto Sans', sans-serif; }
+    .source-sans { font-family: 'Source Sans 3', sans-serif; }
+    .open-sans { font-family: 'Open Sans', sans-serif; }
+    .lato { font-family: 'Lato', sans-serif; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Font Comparison in Context</h1>
+    <p class="instructions">
+      Each pane shows the same narrative text styled with a different font.<br>
+      Compare how each looks alongside the monospace UI elements.
+    </p>
+  </div>
+
+  <div class="grid">
+    <!-- Current (Source Code Pro) -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">1</span>
+        <span class="font-label">Current (Source Code Pro)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text current-mono">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Georgia -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">2</span>
+        <span class="font-label">Georgia (Web-Safe Serif)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text georgia">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lora -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">3</span>
+        <span class="font-label">Lora (Elegant Serif)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text lora">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Merriweather -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">4</span>
+        <span class="font-label">Merriweather (Screen-Optimized)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text merriweather">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crimson Text -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">5</span>
+        <span class="font-label">Crimson Text (Classic Book)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text crimson">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spectral -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">6</span>
+        <span class="font-label">Spectral (Modern Newsprint)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text spectral">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Literata -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">7</span>
+        <span class="font-label">Literata (Google Books)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text literata">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Newsreader -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">8</span>
+        <span class="font-label">Newsreader (Editorial)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text newsreader">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- EB Garamond -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">9</span>
+        <span class="font-label">EB Garamond (Renaissance)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text garamond">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- PT Serif -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">10</span>
+        <span class="font-label">PT Serif (Transitional)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text pt-serif">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Libre Baskerville -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">11</span>
+        <span class="font-label">Libre Baskerville (Traditional)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text libre">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inter -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">12</span>
+        <span class="font-label">Inter (Modern Sans)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text inter">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Noto Sans -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">13</span>
+        <span class="font-label">Noto Sans (Universal)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text noto">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Sans 3 -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">14</span>
+        <span class="font-label">Source Sans 3 (Adobe)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text source-sans">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open Sans -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">15</span>
+        <span class="font-label">Open Sans (Friendly)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text open-sans">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lato -->
+    <div class="generation-pane">
+      <div class="pane-header">
+        <span class="badge">16</span>
+        <span class="font-label">Lato (Warm Sans)</span>
+      </div>
+      <div class="pane-content">
+        <div class="narrative-text lato">
+          <p>The old lighthouse keeper had warned them about the fog. Not the ordinary kind that rolled in from the sea each evening, predictable as clockwork—but the <em>other</em> fog, the one that came maybe once a decade, thick and strange, carrying with it the scent of things that shouldn't be.</p>
+          <p>"When you can't see your hand in front of your face," he'd said, tapping ash from his pipe, "that's when you stay inside. Lock the doors. Don't answer if someone knocks." His eyes had gone distant then, looking at something none of them could see. "Especially if you recognize the voice."</p>
+          <p>Sarah had laughed it off at the time. Ghost stories, she'd thought. The ramblings of a man who'd spent too many years alone with the waves. But now, standing on the deck of the research vessel with visibility down to maybe three feet, she wasn't laughing anymore.</p>
+          <p>Something was moving in the fog. She couldn't quite see it—just the suggestion of movement, a darker smudge against the gray. It seemed to be keeping pace with the boat, staying just at the edge of visibility.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

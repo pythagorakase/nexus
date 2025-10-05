@@ -128,25 +128,23 @@ def get_next_comparison(
                     ca.slug AS condition_a_slug,
                     ca.provider AS condition_a_provider,
                     ca.model_name AS condition_a_model_name,
-                    jsonb_build_object(
-                        'temperature', ca.temperature,
-                        'reasoning_effort', ca.reasoning_effort,
-                        'thinking_enabled', ca.thinking_enabled,
-                        'max_output_tokens', ca.max_output_tokens,
-                        'thinking_budget_tokens', ca.thinking_budget_tokens
-                    ) AS condition_a_parameters,
+                    ca.label AS condition_a_label,
+                    ca.temperature AS condition_a_temperature,
+                    ca.reasoning_effort AS condition_a_reasoning_effort,
+                    ca.thinking_enabled AS condition_a_thinking_enabled,
+                    ca.max_output_tokens AS condition_a_max_output_tokens,
+                    ca.thinking_budget_tokens AS condition_a_thinking_budget_tokens,
                     ca.is_active AS condition_a_is_active,
                     cb.id AS condition_b_id,
                     cb.slug AS condition_b_slug,
                     cb.provider AS condition_b_provider,
                     cb.model_name AS condition_b_model_name,
-                    jsonb_build_object(
-                        'temperature', cb.temperature,
-                        'reasoning_effort', cb.reasoning_effort,
-                        'thinking_enabled', cb.thinking_enabled,
-                        'max_output_tokens', cb.max_output_tokens,
-                        'thinking_budget_tokens', cb.thinking_budget_tokens
-                    ) AS condition_b_parameters,
+                    cb.label AS condition_b_label,
+                    cb.temperature AS condition_b_temperature,
+                    cb.reasoning_effort AS condition_b_reasoning_effort,
+                    cb.thinking_enabled AS condition_b_thinking_enabled,
+                    cb.max_output_tokens AS condition_b_max_output_tokens,
+                    cb.thinking_budget_tokens AS condition_b_thinking_budget_tokens,
                     cb.is_active AS condition_b_is_active,
                     ga.id AS generation_a_id,
                     ga.condition_id AS generation_a_condition_id,
@@ -204,7 +202,12 @@ def get_next_comparison(
                 slug=row["condition_a_slug"],
                 provider=row["condition_a_provider"],
                 model=row["condition_a_model_name"],
-                parameters=row["condition_a_parameters"],
+                label=row.get("condition_a_label"),
+                temperature=row.get("condition_a_temperature"),
+                reasoning_effort=row.get("condition_a_reasoning_effort"),
+                thinking_enabled=row.get("condition_a_thinking_enabled"),
+                max_output_tokens=row.get("condition_a_max_output_tokens"),
+                thinking_budget_tokens=row.get("condition_a_thinking_budget_tokens"),
                 is_active=row["condition_a_is_active"],
             )
 
@@ -213,7 +216,12 @@ def get_next_comparison(
                 slug=row["condition_b_slug"],
                 provider=row["condition_b_provider"],
                 model=row["condition_b_model_name"],
-                parameters=row["condition_b_parameters"],
+                label=row.get("condition_b_label"),
+                temperature=row.get("condition_b_temperature"),
+                reasoning_effort=row.get("condition_b_reasoning_effort"),
+                thinking_enabled=row.get("condition_b_thinking_enabled"),
+                max_output_tokens=row.get("condition_b_max_output_tokens"),
+                thinking_budget_tokens=row.get("condition_b_thinking_budget_tokens"),
                 is_active=row["condition_b_is_active"],
             )
 
@@ -354,7 +362,9 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                     e.rating,
                     e.games_played,
                     e.last_updated,
-                    c.id, c.slug, c.provider, c.model_name, c.parameters, c.is_active
+                    c.id, c.slug, c.provider, c.model_name, c.label,
+                    c.temperature, c.reasoning_effort, c.thinking_enabled,
+                    c.max_output_tokens, c.thinking_budget_tokens, c.is_active
                 FROM apex_audition.elo_ratings e
                 JOIN apex_audition.conditions c ON c.id = e.condition_id
                 WHERE c.is_active = true
@@ -371,7 +381,12 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                         slug=row['slug'],
                         provider=row['provider'],
                         model_name=row['model_name'],
-                        parameters=row['parameters'],
+                        label=row['label'],
+                        temperature=row['temperature'],
+                        reasoning_effort=row['reasoning_effort'],
+                        thinking_enabled=row['thinking_enabled'],
+                        max_output_tokens=row['max_output_tokens'],
+                        thinking_budget_tokens=row['thinking_budget_tokens'],
                         is_active=row['is_active']
                     ),
                     rating=row['rating'],

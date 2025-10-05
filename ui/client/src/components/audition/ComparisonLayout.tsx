@@ -7,6 +7,7 @@ import { useJudgment } from '@/hooks/useJudgment';
 import { GenerationPane } from './GenerationPane';
 import { JudgmentBar } from './JudgmentBar';
 import { useToast } from '@/hooks/use-toast';
+import { useFonts } from '@/contexts/FontContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -84,6 +85,7 @@ export function ComparisonLayout({
   const precedingScrollRef = useRef<HTMLDivElement>(null);
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
+  const { fonts } = useFonts();
 
   const warmChunks = useMemo(
     () => extractWarmChunks(comparison.prompt.context),
@@ -236,7 +238,10 @@ export function ComparisonLayout({
               Previous chunk
             </div>
             <ScrollArea className="h-32" ref={precedingScrollRef}>
-              <div className="font-mono text-sm leading-relaxed text-foreground pr-4 pl-3">
+              <div
+                className="text-sm leading-relaxed text-foreground pr-4 pl-3"
+                style={{ fontFamily: fonts.narrativeFont }}
+              >
                 <ReactMarkdown
                   components={{
                     p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
