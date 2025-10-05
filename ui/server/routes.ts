@@ -1,8 +1,17 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Proxy for Audition API (FastAPI backend)
+  // Express strips /api/audition before passing to middleware, so we need to add it back
+  app.use("/api/audition", createProxyMiddleware({
+    target: "http://localhost:8000",
+    changeOrigin: true,
+    pathRewrite: (path) => `/api/audition${path}`,
+  }));
+
   // Narrative routes
   
   // GET /api/narrative/seasons - Get all seasons
