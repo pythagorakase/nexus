@@ -62,6 +62,38 @@ class AuditionEngine:
     # ------------------------------------------------------------------
     # Context ingestion
     # ------------------------------------------------------------------
+    @staticmethod
+    def _purify_context_payload(context: Dict[str, object], chunk_id: int) -> Dict[str, object]:
+        """Remove future contamination from retrieved_passages to preserve causality."""
+        purified = dict(context)
+
+        # Filter retrieved_passages to exclude chunks from the future
+        retrieved_raw = purified.get("contextual_augmentation") or purified.get("retrieved_passages")
+        if isinstance(retrieved_raw, dict):
+            results = retrieved_raw.get("results") or []
+            purified_results = []
+            for passage in results:
+                if isinstance(passage, dict):
+                    passage_chunk_id = passage.get("chunk_id")
+                    if passage_chunk_id is not None:
+                        try:
+                            if int(passage_chunk_id) <= chunk_id:
+                                purified_results.append(passage)
+                        except (TypeError, ValueError):
+                            # Keep non-integer chunk_ids for safety
+                            purified_results.append(passage)
+                    else:
+                        # Keep passages without chunk_id
+                        purified_results.append(passage)
+
+            # Update the results
+            if "retrieved_passages" in purified:
+                purified["retrieved_passages"]["results"] = purified_results
+            if "contextual_augmentation" in purified:
+                purified["contextual_augmentation"]["results"] = purified_results
+
+        return purified
+
     def ingest_context_packages(
         self,
         *,
@@ -93,18 +125,19 @@ class AuditionEngine:
                 LOGGER.warning("Skipping %s; missing chunk_id in metadata", path)
                 continue
 
-            context_hash = self._hash_payload(context_payload)
+            # Purify context to remove future contamination
+            purified_context = self._purify_context_payload(context_payload, int(chunk_id))
+            context_hash = self._hash_payload(purified_context)
             extra_metadata = {
                 "authorial_directives": meta.get("authorial_directives") or [],
                 "warm_span": meta.get("warm_span"),
                 "notes": meta.get("notes"),
-                "storyteller_chunk": payload.get("storyteller_chunk"),
             }
 
             snapshot = PromptSnapshot(
                 chunk_id=int(chunk_id),
                 context_sha=context_hash,
-                context=context_payload,
+                context=purified_context,
                 category=meta.get("category"),
                 label=meta.get("label"),
                 source_path=str(path),
@@ -364,10 +397,8 @@ class AuditionEngine:
                 prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
 
                 custom_id = f"{run.run_id}_{prompt.id}_{replicate_index}"
-                # Prefer max_output_tokens, fallback to max_tokens, default to 6000
-                max_tokens = condition.parameters.get("max_output_tokens")
-                if max_tokens is None:
-                    max_tokens = condition.parameters.get("max_tokens", 6000)
+                # Use max_output_tokens with default to 6000
+                max_tokens = condition.max_output_tokens or 6000
 
                 # Generate cache key for OpenAI prompt caching
                 cache_key = None
@@ -380,17 +411,17 @@ class AuditionEngine:
                     replicate_index=replicate_index,
                     prompt_text=prompt_text,
                     model=condition.model,
-                    temperature=condition.parameters.get("temperature"),
+                    temperature=condition.temperature,
                     max_tokens=max_tokens,
                     system_prompt=condition.system_prompt,
                     enable_cache=enable_cache,
                     # OpenAI-specific parameters
-                    reasoning_effort=condition.parameters.get("reasoning_effort"),
-                    max_output_tokens=condition.parameters.get("max_output_tokens"),
+                    reasoning_effort=condition.reasoning_effort,
+                    max_output_tokens=condition.max_output_tokens,
                     cache_key=cache_key,
                     # Anthropic-specific parameters
-                    thinking_enabled=condition.parameters.get("thinking_enabled", False),
-                    thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
+                    thinking_enabled=condition.thinking_enabled or False,
+                    thinking_budget_tokens=condition.thinking_budget_tokens,
                     # Lane tracking
                     lane_id=condition.slug
                 ))
@@ -539,10 +570,8 @@ class AuditionEngine:
                     prompt_text, request_payload = self._format_prompt(condition, prompt, replicate_index)
 
                     custom_id = f"{run.run_id}_{condition.id}_{prompt.id}_{replicate_index}"
-                    # Prefer max_output_tokens, fallback to max_tokens, default to 6000
-                    max_tokens = condition.parameters.get("max_output_tokens")
-                    if max_tokens is None:
-                        max_tokens = condition.parameters.get("max_tokens", 6000)
+                    # Use max_output_tokens with default to 6000
+                    max_tokens = condition.max_output_tokens or 6000
 
                     # Generate cache key for OpenAI prompt caching
                     cache_key = None
@@ -555,17 +584,17 @@ class AuditionEngine:
                         replicate_index=replicate_index,
                         prompt_text=prompt_text,
                         model=condition.model,
-                        temperature=condition.parameters.get("temperature"),
+                        temperature=condition.temperature,
                         max_tokens=max_tokens,
                         system_prompt=condition.system_prompt,
                         enable_cache=enable_cache,
                         # OpenAI-specific parameters
-                        reasoning_effort=condition.parameters.get("reasoning_effort"),
-                        max_output_tokens=condition.parameters.get("max_output_tokens"),
+                        reasoning_effort=condition.reasoning_effort,
+                        max_output_tokens=condition.max_output_tokens,
                         cache_key=cache_key,
                         # Anthropic-specific parameters
-                        thinking_enabled=condition.parameters.get("thinking_enabled", False),
-                        thinking_budget_tokens=condition.parameters.get("thinking_budget_tokens"),
+                        thinking_enabled=condition.thinking_enabled or False,
+                        thinking_budget_tokens=condition.thinking_budget_tokens,
                         # Lane tracking
                         lane_id=condition.slug
                     ))
@@ -724,19 +753,17 @@ class AuditionEngine:
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def _build_provider(self, condition: ConditionSpec, enable_cache: bool = False):
-        params = dict(condition.parameters)
-        temperature = params.get("temperature", 0.7)
-        max_tokens = params.get("max_output_tokens", params.get("max_tokens", 2048))
+        max_tokens = condition.max_output_tokens or 2048
 
         if condition.provider.lower() == "openai":
             if OpenAIProvider is None:
                 raise RuntimeError("OpenAI provider not available. Install dependencies or configure differently.")
             provider = OpenAIProvider(
                 model=condition.model,
-                temperature=temperature,
+                temperature=condition.temperature,  # Pass None if not set
                 max_tokens=max_tokens,
                 system_prompt=condition.system_prompt,
-                reasoning_effort=params.get("reasoning_effort"),
+                reasoning_effort=condition.reasoning_effort,
             )
             return provider
         if condition.provider.lower() == "anthropic":
@@ -744,13 +771,13 @@ class AuditionEngine:
                 raise RuntimeError("Anthropic provider not available. Install dependencies or configure differently.")
             provider = AnthropicProvider(
                 model=condition.model,
-                temperature=temperature,
+                temperature=condition.temperature,  # Pass None if not set
                 max_tokens=max_tokens,
                 system_prompt=condition.system_prompt,
-                top_p=params.get("top_p"),
-                top_k=params.get("top_k"),
-                thinking_enabled=params.get("thinking_enabled", False),
-                thinking_budget_tokens=params.get("thinking_budget_tokens"),
+                top_p=None,
+                top_k=None,
+                thinking_enabled=condition.thinking_enabled or False,
+                thinking_budget_tokens=condition.thinking_budget_tokens,
             )
             return provider
         raise ValueError(f"Unsupported provider: {condition.provider}")
@@ -779,12 +806,6 @@ class AuditionEngine:
             )
         )
 
-        meta_payload = prompt.metadata if isinstance(prompt.metadata, dict) else {}
-        storyteller_chunk = meta_payload.get("storyteller_chunk") if meta_payload else None
-        if storyteller_chunk:
-            sections.append("\n=== TARGET STORYTELLER CHUNK ===")
-            sections.append(storyteller_chunk.get("storyteller", ""))
-
         sections.append("\n=== USER INPUT ===")
         user_input = data.get("user_input") or ""
         if isinstance(user_input, str):
@@ -792,15 +813,7 @@ class AuditionEngine:
         else:
             sections.append(json.dumps(user_input, indent=2, ensure_ascii=False))
 
-        warm_slice = data.get("warm_slice") or {}
-        chunks = warm_slice.get("chunks") if isinstance(warm_slice, dict) else None
-        if chunks:
-            sections.append("\n=== RECENT STORYTELLER CONTEXT ===")
-            for chunk in chunks:
-                text = chunk.get("text") if isinstance(chunk, dict) else None
-                if text:
-                    sections.append(text)
-
+        # Present entity dossier early for context
         entity_data = data.get("entity_data") or {}
         if isinstance(entity_data, dict) and any(entity_data.values()):
             sections.append("\n=== ENTITY DOSSIER ===")
@@ -832,18 +845,62 @@ class AuditionEngine:
                 if summary:
                     sections.append(f"- {label}: {summary}")
 
-        retrieved_passages = data.get("contextual_augmentation") or data.get("retrieved_passages")
-        if isinstance(retrieved_passages, dict):
-            passages = retrieved_passages.get("results")
+        # Gather and merge all narrative chunks chronologically
+        warm_slice = data.get("warm_slice") or {}
+        warm_chunks = warm_slice.get("chunks") if isinstance(warm_slice, dict) else []
+
+        retrieved_passages_raw = data.get("contextual_augmentation") or data.get("retrieved_passages")
+        if isinstance(retrieved_passages_raw, dict):
+            retrieved_chunks = retrieved_passages_raw.get("results") or []
         else:
-            passages = retrieved_passages
-        if passages:
-            sections.append("\n=== HISTORICAL PASSAGES ===")
-            for passage in passages[:10]:
-                if isinstance(passage, dict):
-                    text_value = passage.get("text")
-                    if text_value:
-                        sections.append(text_value)
+            retrieved_chunks = retrieved_passages_raw or []
+
+        # Collect all narrative chunks and filter out future contamination
+        all_chunks: List[Dict[str, object]] = []
+        for chunk in (warm_chunks or []):
+            if isinstance(chunk, dict):
+                chunk_id = chunk.get("chunk_id")
+                text = chunk.get("text")
+                if chunk_id is not None and text:
+                    try:
+                        if int(chunk_id) <= prompt.chunk_id:
+                            all_chunks.append({
+                                "chunk_id": int(chunk_id),
+                                "text": text,
+                            })
+                    except (TypeError, ValueError):
+                        pass
+
+        for passage in (retrieved_chunks or []):
+            if isinstance(passage, dict):
+                chunk_id = passage.get("chunk_id")
+                text = passage.get("text") or passage.get("raw_text")
+                if chunk_id is not None and text:
+                    try:
+                        if int(chunk_id) <= prompt.chunk_id:
+                            all_chunks.append({
+                                "chunk_id": int(chunk_id),
+                                "text": text,
+                            })
+                    except (TypeError, ValueError):
+                        pass
+
+        # Sort chronologically and deduplicate by chunk_id
+        seen_ids: set = set()
+        purified_chunks: List[Dict[str, object]] = []
+        for chunk in sorted(all_chunks, key=lambda c: c.get("chunk_id", 0)):
+            cid = chunk.get("chunk_id")
+            if cid not in seen_ids:
+                seen_ids.add(cid)
+                purified_chunks.append(chunk)
+
+        # Present all chunks chronologically, ending at the continuation point
+        if purified_chunks:
+            sections.append("\n=== STORYTELLER CONTEXT (CHRONOLOGICAL) ===")
+            for chunk in purified_chunks:
+                text = chunk.get("text")
+                if text:
+                    sections.append(text)
 
         analysis = data.get("analysis") or {}
         keywords = [k for k in analysis.get("keywords", []) if isinstance(k, str)]

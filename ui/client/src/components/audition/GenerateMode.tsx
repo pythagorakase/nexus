@@ -23,6 +23,7 @@ export function GenerateMode() {
   const [error, setError] = useState<string | null>(null);
   const [missingCount, setMissingCount] = useState<number | null>(null);
   const [limit, setLimit] = useState<string>('');
+  const [maxWorkers, setMaxWorkers] = useState<string>('7');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fetch count of missing generations on mount and when job completes
@@ -43,7 +44,8 @@ export function GenerateMode() {
     setError(null);
     try {
       const limitValue = limit ? parseInt(limit, 10) : undefined;
-      const data = await auditionAPI.startGeneration(limitValue);
+      const maxWorkersValue = maxWorkers ? parseInt(maxWorkers, 10) : undefined;
+      const data = await auditionAPI.startGeneration(limitValue, maxWorkersValue);
       setJobId(data.job_id);
       setIsRunning(true);
       setOutput('');
@@ -113,26 +115,43 @@ export function GenerateMode() {
             <h2 className="text-lg font-semibold text-foreground">Generate Mode</h2>
             {!isRunning && missingCount !== null && (
               <p className="text-sm text-muted-foreground mt-1">
-                {missingCount} generation{missingCount !== 1 ? 's' : ''} need{missingCount === 1 ? 's' : ''} regeneration
+                {missingCount} generation{missingCount !== 1 ? 's' : ''} needed
               </p>
             )}
           </div>
           <div className="flex gap-2 items-center">
             {!isRunning && (
-              <div className="flex items-center gap-2">
-                <label htmlFor="limit-input" className="text-sm text-muted-foreground">
-                  Limit:
-                </label>
-                <input
-                  id="limit-input"
-                  type="number"
-                  min="1"
-                  placeholder="All"
-                  value={limit}
-                  onChange={(e) => setLimit(e.target.value)}
-                  className="w-20 px-2 py-1 text-sm border border-border rounded bg-background text-foreground"
-                />
-              </div>
+              <>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="limit-input" className="text-sm text-muted-foreground">
+                    Limit:
+                  </label>
+                  <input
+                    id="limit-input"
+                    type="number"
+                    min="1"
+                    placeholder="All"
+                    value={limit}
+                    onChange={(e) => setLimit(e.target.value)}
+                    className="w-20 px-2 py-1 text-sm border border-border rounded bg-background text-foreground"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="threads-input" className="text-sm text-muted-foreground">
+                    Threads:
+                  </label>
+                  <input
+                    id="threads-input"
+                    type="number"
+                    min="1"
+                    max="20"
+                    placeholder="7"
+                    value={maxWorkers}
+                    onChange={(e) => setMaxWorkers(e.target.value)}
+                    className="w-20 px-2 py-1 text-sm border border-border rounded bg-background text-foreground"
+                  />
+                </div>
+              </>
             )}
             {isRunning ? (
               <Button onClick={stopGeneration} variant="destructive">
@@ -140,7 +159,7 @@ export function GenerateMode() {
               </Button>
             ) : (
               <Button onClick={startGeneration} variant="default" disabled={missingCount === 0}>
-                Start Regeneration
+                Start Generation
               </Button>
             )}
           </div>
@@ -203,7 +222,7 @@ export function GenerateMode() {
           ref={scrollRef}
         >
           <pre className="p-4 text-xs font-mono text-foreground whitespace-pre-wrap">
-            {output || 'No output yet. Click "Start Regeneration" to begin.'}
+            {output || 'No output yet. Click "Start Generation" to begin.'}
           </pre>
         </ScrollArea>
       </div>

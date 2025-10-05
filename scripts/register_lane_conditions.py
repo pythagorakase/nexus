@@ -134,21 +134,29 @@ def main() -> None:
                 LOGGER.error(str(e))
                 sys.exit(1)
 
-            # Build parameters dict for database
-            db_params = dict(params)
+            # Extract individual parameters
+            temperature = params.get("temperature")
+            max_output_tokens = params.get("max_output_tokens") or params.get("max_tokens")
+            reasoning_effort = params.get("reasoning_effort")
 
             # For Anthropic, extract thinking config from nested structure
-            if "thinking" in db_params:
-                thinking = db_params.pop("thinking")
-                db_params["thinking_enabled"] = thinking.get("enabled", False)
-                if thinking.get("enabled"):
-                    db_params["thinking_budget_tokens"] = thinking.get("budget_tokens")
+            thinking_enabled = False
+            thinking_budget_tokens = None
+            if "thinking" in params:
+                thinking = params["thinking"]
+                thinking_enabled = thinking.get("enabled", False)
+                if thinking_enabled:
+                    thinking_budget_tokens = thinking.get("budget_tokens")
 
             condition = ConditionSpec(
                 slug=lane_id,
                 provider=provider,
                 model=model_name,
-                parameters=db_params,
+                temperature=temperature,
+                reasoning_effort=reasoning_effort,
+                thinking_enabled=thinking_enabled,
+                max_output_tokens=max_output_tokens,
+                thinking_budget_tokens=thinking_budget_tokens,
                 label=label,
                 description=description,
                 system_prompt=None,  # Using default storyteller prompt from engine
@@ -159,7 +167,7 @@ def main() -> None:
             total_lanes += 1
 
             LOGGER.info(f"    [{lane_id}] {label}")
-            LOGGER.info(f"        Params: {db_params}")
+            LOGGER.info(f"        Params: {params}")
 
     LOGGER.info(f"\n{'=' * 60}")
     LOGGER.info(f"Total lanes to register: {total_lanes}")

@@ -128,13 +128,25 @@ def get_next_comparison(
                     ca.slug AS condition_a_slug,
                     ca.provider AS condition_a_provider,
                     ca.model_name AS condition_a_model_name,
-                    ca.parameters AS condition_a_parameters,
+                    jsonb_build_object(
+                        'temperature', ca.temperature,
+                        'reasoning_effort', ca.reasoning_effort,
+                        'thinking_enabled', ca.thinking_enabled,
+                        'max_output_tokens', ca.max_output_tokens,
+                        'thinking_budget_tokens', ca.thinking_budget_tokens
+                    ) AS condition_a_parameters,
                     ca.is_active AS condition_a_is_active,
                     cb.id AS condition_b_id,
                     cb.slug AS condition_b_slug,
                     cb.provider AS condition_b_provider,
                     cb.model_name AS condition_b_model_name,
-                    cb.parameters AS condition_b_parameters,
+                    jsonb_build_object(
+                        'temperature', cb.temperature,
+                        'reasoning_effort', cb.reasoning_effort,
+                        'thinking_enabled', cb.thinking_enabled,
+                        'max_output_tokens', cb.max_output_tokens,
+                        'thinking_budget_tokens', cb.thinking_budget_tokens
+                    ) AS condition_b_parameters,
                     cb.is_active AS condition_b_is_active,
                     ga.id AS generation_a_id,
                     ga.condition_id AS generation_a_condition_id,
@@ -407,28 +419,38 @@ def export_comparison(comparison_id: int):
 
 @app.get("/api/audition/generate/count")
 def get_missing_generation_count():
-    """Get count of generations with missing content that need regeneration."""
+    """Get count of prompt×condition combinations that need generation."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                SELECT COUNT(*)
-                FROM apex_audition.generations
-                WHERE status = 'completed'
-                  AND (response_payload->>'content' IS NULL
-                       OR LENGTH(response_payload->>'content') = 0)
+                SELECT COUNT(*) as count
+                FROM apex_audition.prompts p
+                CROSS JOIN apex_audition.conditions c
+                WHERE c.is_active = TRUE
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM apex_audition.generations g
+                      WHERE g.prompt_id = p.id
+                        AND g.condition_id = c.id
+                        AND g.replicate_index = 0
+                        AND g.status = 'completed'
+                        AND g.response_payload->>'content' IS NOT NULL
+                        AND LENGTH(g.response_payload->>'content') > 0
+                  )
             """)
-            count = cur.fetchone()[0]
+            row = cur.fetchone()
+            count = row["count"] if row else 0
             return {"count": count}
 
 
 @app.post("/api/audition/generate/start")
-def start_generation(limit: Optional[int] = None):
-    """Start a generation job (runs regenerate_missing_content.py)."""
+def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = None):
+    """Start a generation job (runs run_full_sequential.py to create new generations)."""
     job_id = str(uuid.uuid4())
 
     # Get project root (parent of nexus/api/)
     project_root = Path(__file__).parent.parent.parent
-    script_path = project_root / "scripts" / "regenerate_missing_content.py"
+    script_path = project_root / "scripts" / "run_full_sequential.py"
 
     if not script_path.exists():
         raise HTTPException(status_code=500, detail=f"Script not found: {script_path}")
@@ -468,10 +490,12 @@ def start_generation(limit: Optional[int] = None):
             detail="1Password CLI (op) not found. Install from https://developer.1password.com/docs/cli/get-started/"
         )
 
-    # Build command with optional limit
+    # Build command with optional limit and max_workers
     cmd = ["python", str(script_path)]
     if limit is not None and limit > 0:
         cmd.extend(["--limit", str(limit)])
+    if max_workers is not None and max_workers > 0:
+        cmd.extend(["--max-workers", str(max_workers)])
 
     # Start subprocess with pre-fetched API keys in environment
     process = subprocess.Popen(
@@ -505,7 +529,7 @@ def start_generation(limit: Optional[int] = None):
         "thread": thread,
         "output": output_lines,
         "started_at": datetime.now(),
-        "script": "regenerate_missing_content.py"
+        "script": "run_full_sequential.py"
     }
 
     return {"job_id": job_id, "status": "started"}
