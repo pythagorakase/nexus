@@ -96,13 +96,21 @@ class SearchManager:
                 vector_weight = 1.0
                 text_weight = 0.0
             
-            # Normalize weights to ensure they sum to 1.0
-            total_weight = vector_weight + text_weight
-            if total_weight != 1.0:
-                vector_weight = vector_weight / total_weight
-                text_weight = text_weight / total_weight
-            
-            logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
+        # Normalize weights to ensure they sum to 1.0 before any additional adjustments
+        total_weight = vector_weight + text_weight
+        if total_weight != 1.0:
+            vector_weight = vector_weight / total_weight
+            text_weight = text_weight / total_weight
+
+        # Allow rare, high-IDF terms to boost the contribution of the text search leg
+        vector_weight, text_weight = self._adjust_weights_for_rare_terms(
+            query_text=query_text,
+            vector_weight=vector_weight,
+            text_weight=text_weight,
+            query_type=query_type,
+        )
+
+        logger.debug(f"Using weights: vector={vector_weight}, text={text_weight}")
             
             # Gather all active models and their weights
             active_models = {}
@@ -194,12 +202,74 @@ class SearchManager:
             
             logger.info(f"Multi-model hybrid search returned {len(results)} results")
             return results
-            
+
         except Exception as e:
             logger.error(f"Error in hybrid search: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return []
+
+    def _adjust_weights_for_rare_terms(
+        self,
+        query_text: str,
+        vector_weight: float,
+        text_weight: float,
+        query_type: str,
+    ) -> Tuple[float, float]:
+        """Rebalance hybrid weights when the query contains rare, high-IDF terms."""
+
+        hybrid_config = self.settings.get("retrieval", {}).get("hybrid_search", {})
+
+        # Skip adjustment if explicitly disabled or if the IDF dictionary is unavailable
+        if not hybrid_config.get("enable_rare_term_boost", True):
+            return vector_weight, text_weight
+
+        if not hasattr(self.idf_dictionary, "get_idf"):
+            return vector_weight, text_weight
+
+        excluded_types: Set[str] = set(
+            hybrid_config.get("rare_term_excluded_query_types", [])
+        )
+        if query_type in excluded_types:
+            return vector_weight, text_weight
+
+        # Character queries tend to emphasize names. Avoid over-boosting when the
+        # configuration already favours text heavily for the detected query type.
+        min_text_weight_current = hybrid_config.get("rare_term_min_text_weight", 0.5)
+        if text_weight >= min_text_weight_current:
+            return vector_weight, text_weight
+
+        rare_term_threshold = hybrid_config.get("rare_term_idf_threshold", 2.5)
+        min_token_length = hybrid_config.get("rare_term_min_token_length", 3)
+
+        tokens = re.findall(r"[A-Za-z0-9]+", query_text.lower())
+        rare_terms: Set[str] = set()
+
+        for token in tokens:
+            if len(token) < min_token_length:
+                continue
+
+            idf_value = self.idf_dictionary.get_idf(token)
+            if idf_value >= rare_term_threshold:
+                rare_terms.add(token)
+
+        if not rare_terms:
+            return vector_weight, text_weight
+
+        # Increase text weight to the configured floor for rare-term queries
+        adjusted_text_weight = max(text_weight, min_text_weight_current)
+        adjusted_text_weight = min(adjusted_text_weight, 1.0)
+        adjusted_vector_weight = max(0.0, 1.0 - adjusted_text_weight)
+
+        if adjusted_text_weight != text_weight:
+            logger.debug(
+                "Boosting text weight to %.2f for rare terms %s (query type: %s)",
+                adjusted_text_weight,
+                ", ".join(sorted(rare_terms)),
+                query_type,
+            )
+
+        return adjusted_vector_weight, adjusted_text_weight
     
     def query_vector_search(self, query_text: str, collections: List[str], filters: Dict[str, Any], top_k: int) -> List[Dict[str, Any]]:
         """
