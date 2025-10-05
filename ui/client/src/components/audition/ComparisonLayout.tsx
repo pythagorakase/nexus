@@ -80,7 +80,6 @@ export function ComparisonLayout({
   onExit,
 }: ComparisonLayoutProps) {
   const [highlightedPane, setHighlightedPane] = useState<'A' | 'B' | null>(null);
-  const [pendingNote, setPendingNote] = useState<string>('');
   const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
   const precedingScrollRef = useRef<HTMLDivElement>(null);
   const { recordJudgmentAsync, isRecording } = useJudgment();
@@ -137,22 +136,28 @@ export function ComparisonLayout({
         condition_b_id: comparison.condition_b.id,
         winner_condition_id: winnerConditionId ?? undefined,
         evaluator,
-        notes: pendingNote || undefined,
       });
 
-      setPendingNote('');
+      // Build description with condition slugs revealed
+      let description = '';
+      if (winnerConditionId === null) {
+        description = `Tie\nLeft: ${comparison.condition_a.slug}\nRight: ${comparison.condition_b.slug}`;
+      } else if (winnerConditionId === comparison.condition_a.id) {
+        description = `Winner: Left passage, ${comparison.condition_a.slug}\nLoser: Right passage, ${comparison.condition_b.slug}`;
+      } else {
+        description = `Winner: Right passage, ${comparison.condition_b.slug}\nLoser: Left passage, ${comparison.condition_a.slug}`;
+      }
 
       toast({
         title: 'Judgment recorded',
-        description: winnerConditionId === null
-          ? 'Recorded as tie'
-          : winnerConditionId === comparison.condition_a.id
-            ? 'Left passage wins'
-            : 'Right passage wins',
+        description,
       });
 
-      onComplete?.();
-      resetHighlightSoon();
+      // Delay loading next comparison to give user time to see the reveal
+      setTimeout(() => {
+        onComplete?.();
+        resetHighlightSoon();
+      }, 2500);
     } catch (error) {
       toast({
         title: 'Error',
@@ -164,11 +169,12 @@ export function ComparisonLayout({
   }, [
     comparison.condition_a.id,
     comparison.condition_b.id,
+    comparison.condition_a.slug,
+    comparison.condition_b.slug,
     comparison.prompt.id,
     evaluator,
     isRecording,
     onComplete,
-    pendingNote,
     recordJudgmentAsync,
     resetHighlightSoon,
     toast,
@@ -192,10 +198,76 @@ export function ComparisonLayout({
     if (isRecording) {
       return;
     }
-    setPendingNote('');
     setHighlightedPane(null);
     onExit?.();
   }, [isRecording, onExit]);
+
+  const handleNote = useCallback(async (leftNote: string, rightNote: string) => {
+    if (isRecording) return;
+
+    try {
+      const updates = [];
+
+      if (leftNote.trim()) {
+        updates.push(
+          fetch(`/api/audition/conditions/${comparison.condition_a.id}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: leftNote }),
+          })
+        );
+      }
+
+      if (rightNote.trim()) {
+        updates.push(
+          fetch(`/api/audition/conditions/${comparison.condition_b.id}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: rightNote }),
+          })
+        );
+      }
+
+      await Promise.all(updates);
+
+      toast({
+        title: 'Notes saved',
+        description: `Added note${updates.length > 1 ? 's' : ''} to condition${updates.length > 1 ? 's' : ''}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save notes',
+        variant: 'destructive',
+      });
+    }
+  }, [comparison.condition_a.id, comparison.condition_b.id, isRecording, toast]);
+
+  const handleExport = useCallback(() => {
+    if (isRecording) return;
+
+    const exportData = {
+      previous_chunk: {
+        id: precedingChunk?.chunk_id || precedingChunk?.id,
+        text: precedingText,
+      },
+      left_passage: {
+        condition_slug: comparison.condition_a.slug,
+        text: comparison.generation_a.output,
+      },
+      right_passage: {
+        condition_slug: comparison.condition_b.slug,
+        text: comparison.generation_b.output,
+      },
+    };
+
+    navigator.clipboard.writeText(JSON.stringify(exportData, null, 2));
+
+    toast({
+      title: 'Exported to clipboard',
+      description: 'Comparison data copied as JSON',
+    });
+  }, [comparison, precedingChunk, precedingText, isRecording, toast]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -294,7 +366,8 @@ export function ComparisonLayout({
         onTie={() => handleJudgment(null)}
         onExit={handleExit}
         onSkip={onSkip ? handleSkip : undefined}
-        onNote={(note) => setPendingNote(note)}
+        onNote={handleNote}
+        onExport={handleExport}
         disabled={isRecording}
       />
 

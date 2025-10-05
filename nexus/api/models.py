@@ -21,6 +21,7 @@ class Condition(BaseModel):
     max_output_tokens: Optional[int] = None
     thinking_budget_tokens: Optional[int] = None
     is_active: bool
+    notes: Optional[List[Dict[str, Any]]] = None
 
     class Config:
         populate_by_name = True

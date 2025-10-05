@@ -19,16 +19,19 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import json
+import hashlib
 
 from nexus.api.models import (
     Condition, Generation, Prompt, ComparisonCreate,
     ELORating, ComparisonQueueItem, GenerationRun
 )
 from nexus.audition.elo import calculate_elo_update, outcome_from_winner
+from nexus.audition import AuditionEngine
 
 # Database connection parameters
 DB_PARAMS = {
@@ -364,7 +367,7 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                     e.last_updated,
                     c.id, c.slug, c.provider, c.model_name, c.label,
                     c.temperature, c.reasoning_effort, c.thinking_enabled,
-                    c.max_output_tokens, c.thinking_budget_tokens, c.is_active
+                    c.max_output_tokens, c.thinking_budget_tokens, c.is_active, c.notes
                 FROM apex_audition.elo_ratings e
                 JOIN apex_audition.conditions c ON c.id = e.condition_id
                 WHERE c.is_active = true
@@ -387,7 +390,8 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                         thinking_enabled=row['thinking_enabled'],
                         max_output_tokens=row['max_output_tokens'],
                         thinking_budget_tokens=row['thinking_budget_tokens'],
-                        is_active=row['is_active']
+                        is_active=row['is_active'],
+                        notes=row['notes']
                     ),
                     rating=row['rating'],
                     games_played=row['games_played'],
@@ -628,3 +632,129 @@ def stop_generation(job_id: str = Query(...)):
         return {"status": "stopped", "job_id": job_id}
     else:
         return {"status": "already_completed", "job_id": job_id}
+
+
+@app.post("/api/audition/import/prompt")
+async def import_prompt(file: UploadFile = File(...)):
+    """
+    Import a context package JSON file and register it as a prompt.
+
+    Accepts a single JSON file upload, parses it, and creates/updates
+    the corresponding prompt in the database.
+    """
+    try:
+        # Read and parse JSON file
+        contents = await file.read()
+        try:
+            payload = json.loads(contents)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON file: {str(e)}")
+
+        # Extract metadata and context
+        meta = payload.get("metadata", {})
+        context_payload = payload.get("context_payload")
+
+        if not context_payload:
+            raise HTTPException(status_code=400, detail="Missing context_payload in JSON file")
+
+        chunk_id = meta.get("chunk_id")
+        if chunk_id is None:
+            # Try to extract chunk_id from filename as fallback
+            import re
+            match = re.search(r'chunk_(\d+)_', file.filename or "")
+            if match:
+                chunk_id = int(match.group(1))
+            else:
+                raise HTTPException(status_code=400, detail="Missing chunk_id in metadata and could not extract from filename")
+
+        chunk_id = int(chunk_id)
+
+        # Initialize engine and purify context (remove future contamination)
+        engine = AuditionEngine()
+        purified_context = engine._purify_context_payload(context_payload, chunk_id)
+
+        # Calculate context hash
+        context_hash = hashlib.sha256(
+            json.dumps(purified_context, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+
+        # Extract additional metadata
+        extra_metadata = {
+            "authorial_directives": meta.get("authorial_directives") or [],
+            "warm_span": meta.get("warm_span"),
+            "notes": meta.get("notes"),
+        }
+
+        # Create PromptSnapshot
+        from nexus.audition.models import PromptSnapshot
+        snapshot = PromptSnapshot(
+            chunk_id=chunk_id,
+            context_sha=context_hash,
+            context=purified_context,
+            category=meta.get("category"),
+            label=meta.get("label"),
+            source_path=file.filename,
+            metadata=extra_metadata,
+        )
+
+        # Upsert into database
+        stored = engine.repository.upsert_prompt(snapshot)
+
+        return {
+            "success": True,
+            "chunk_id": stored.chunk_id,
+            "prompt_id": stored.id,
+            "message": f"Successfully imported prompt for chunk {stored.chunk_id}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import prompt: {str(e)}")
+
+
+@app.post("/api/audition/conditions/{condition_id}/notes")
+def add_condition_note(condition_id: int, note: Dict[str, str]):
+    """Add a note to a condition's notes array."""
+    note_text = note.get("note", "").strip()
+
+    if not note_text:
+        raise HTTPException(status_code=400, detail="Note cannot be empty")
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Check if condition exists
+            cur.execute("""
+                SELECT id, notes FROM apex_audition.conditions WHERE id = %s
+            """, (condition_id,))
+
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Condition {condition_id} not found")
+
+            # Get current notes or initialize empty array
+            current_notes = row['notes'] or []
+
+            # Add timestamp to note
+            timestamped_note = {
+                "text": note_text,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Append new note
+            current_notes.append(timestamped_note)
+
+            # Update condition
+            cur.execute("""
+                UPDATE apex_audition.conditions
+                SET notes = %s::jsonb
+                WHERE id = %s
+            """, (json.dumps(current_notes), condition_id))
+
+            conn.commit()
+
+            return {
+                "success": True,
+                "condition_id": condition_id,
+                "note_count": len(current_notes)
+            }

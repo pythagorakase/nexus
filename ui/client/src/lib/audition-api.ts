@@ -18,6 +18,7 @@ export interface Condition {
   max_output_tokens?: number | null;
   thinking_budget_tokens?: number | null;
   is_active: boolean;
+  notes?: Array<{ text: string; timestamp: string }> | null;
 }
 
 export interface Generation {
@@ -198,6 +199,29 @@ export const auditionAPI = {
   }> {
     const response = await fetch(`${API_BASE}/generate/output?job_id=${jobId}`);
     if (!response.ok) throw new Error('Failed to fetch job output');
+    return response.json();
+  },
+
+  /**
+   * Import a context package JSON file and register it as a prompt.
+   */
+  async importPrompt(file: File): Promise<{
+    success: boolean;
+    chunk_id: number;
+    prompt_id: number;
+    message: string;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/import/prompt`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to import prompt');
+    }
     return response.json();
   },
 };

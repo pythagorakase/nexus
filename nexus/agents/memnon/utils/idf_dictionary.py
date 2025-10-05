@@ -8,7 +8,43 @@ from typing import Dict, Any, Iterable, List, Tuple
 
 import psycopg2
 
+try:
+    import snowballstemmer
+    STEMMER = snowballstemmer.stemmer('english')
+except ImportError:
+    STEMMER = None
+
 logger = logging.getLogger("nexus.memnon.idf_dictionary")
+
+STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "but",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "into",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "with",
+}
+
 
 class IDFDictionary:
     """Manages inverse document frequency calculations for text search."""
@@ -117,11 +153,13 @@ class IDFDictionary:
     
     def get_weight_class(self, term: str) -> str:
         """Get weight class (A, B, C, D) for a term based on its IDF."""
-        # Convert to stemmed term if needed
-        # TODO: Add stemming logic if needed
-        
+        # Apply English stemming to match PostgreSQL's behavior
+        lookup_term = term.lower()
+        if STEMMER:
+            lookup_term = STEMMER.stemWord(lookup_term)
+
         # Get IDF value
-        idf = self.idf_dict.get(term.lower(), 1.0)
+        idf = self.idf_dict.get(lookup_term, 1.0)
         
         # Assign weight class based on IDF
         if idf > 2.5:      # Very rare terms
@@ -140,7 +178,12 @@ class IDFDictionary:
         for token in tokens:
             if len(token) < 2:
                 continue
-            yield token
+            # Apply English stemming to match PostgreSQL's behavior
+            if STEMMER:
+                stemmed = STEMMER.stemWord(token)
+                yield stemmed
+            else:
+                yield token
 
     def _select_terms(self, tokens: Iterable[str]) -> List[Tuple[str, str, float]]:
         """Select unique tokens with their weight class and IDF score."""
@@ -172,31 +215,79 @@ class IDFDictionary:
         if not ranked_terms:
             return ""
 
-        high_value: List[Tuple[str, str, float]] = []
-        fallback: List[Tuple[str, str, float]] = []
+        # Check if we have very rare terms (IDF > 3.0)
+        very_rare_terms = [t for t in ranked_terms if t[2] > 3.0]
 
-        for term, weight_class, idf in ranked_terms:
-            # Treat IDF >= 1.5 as meaningful enough to prioritize
-            if idf >= 1.5:
-                high_value.append((term, weight_class, idf))
-            else:
-                fallback.append((term, weight_class, idf))
+        # If we have very rare terms, be more selective
+        if very_rare_terms:
+            # Only include the very rare terms plus a few high-value terms
+            high_value = [t for t in ranked_terms if t[2] >= 2.0]
+            ordered_terms = high_value[:min(5, len(high_value))]
+        else:
+            # Normal behavior: separate high-value and fallback terms
+            high_value: List[Tuple[str, str, float]] = []
+            fallback: List[Tuple[str, str, float]] = []
 
-        ordered_terms: List[Tuple[str, str, float]] = []
-        ordered_terms.extend(high_value[:max_terms])
+            for term, weight_class, idf in ranked_terms:
+                # Treat IDF >= 1.5 as meaningful enough to prioritize
+                if idf >= 1.5:
+                    high_value.append((term, weight_class, idf))
+                else:
+                    fallback.append((term, weight_class, idf))
 
-        if len(ordered_terms) < max_terms:
-            remaining = max_terms - len(ordered_terms)
-            ordered_terms.extend(fallback[:remaining])
+            ordered_terms: List[Tuple[str, str, float]] = []
+            ordered_terms.extend(high_value[:max_terms])
+
+            if len(ordered_terms) < max_terms:
+                remaining = max_terms - len(ordered_terms)
+                ordered_terms.extend(fallback[:remaining])
 
         if not ordered_terms:
             # As an ultimate fallback, keep the first available term
             ordered_terms = ranked_terms[:1]
 
-        weighted_terms = [f"{term}:{weight_class}" for term, weight_class, _ in ordered_terms]
+        # Note: PostgreSQL's to_tsquery doesn't support weight class syntax (term:A)
+        # Weights must be applied via setweight() in to_tsvector, not in the query
+        # So we just use the stemmed terms without weight modifiers
+        terms_only = [term for term, weight_class, _ in ordered_terms]
 
-        return " | ".join(weighted_terms)
+        return " | ".join(terms_only)
         
     def get_idf(self, term: str) -> float:
         """Get IDF value for a specific term."""
-        return self.idf_dict.get(term.lower(), 1.0) 
+        lookup_term = term.lower()
+        if STEMMER:
+            lookup_term = STEMMER.stemWord(lookup_term)
+        return self.idf_dict.get(lookup_term, 1.0)
+
+    def get_high_idf_terms(
+        self,
+        query_text: str,
+        threshold: float = 2.0,
+        stopwords: Iterable[str] = STOPWORDS,
+    ) -> List[str]:
+        """Return unique high-IDF terms present in the query text."""
+
+        if not query_text:
+            return []
+
+        tokens = re.findall(r"[A-Za-z0-9']+", query_text.lower())
+        high_idf_terms: List[str] = []
+
+        for token in tokens:
+            # Normalize possessives like "alex's" -> "alex"
+            if token.endswith("'s"):
+                token = token[:-2]
+
+            normalized = token.strip("'")
+            if not normalized or normalized in stopwords:
+                continue
+
+            # Apply English stemming to match PostgreSQL's behavior
+            if STEMMER:
+                normalized = STEMMER.stemWord(normalized)
+
+            if self.get_idf(normalized) >= threshold and normalized not in high_idf_terms:
+                high_idf_terms.append(normalized)
+
+        return high_idf_terms

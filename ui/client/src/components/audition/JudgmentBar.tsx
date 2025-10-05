@@ -1,12 +1,13 @@
 /**
  * Judgment control bar with keyboard shortcuts.
  *
- * Handles: 1 (left), 2 (right), 3 (tie), ESC (exit), 0 (skip), N (notes)
+ * Handles: 1 (left), 2 (right), 3 (tie), ESC (exit), 0 (skip), N (notes), E (export)
  */
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,8 @@ interface JudgmentBarProps {
   onChooseRight: () => void;
   onTie: () => void;
   onExit: () => void;
-  onNote: (note: string) => void;
+  onNote: (leftNote: string, rightNote: string) => void;
+  onExport: () => void;
   onSkip?: () => void;
   disabled?: boolean;
 }
@@ -31,20 +33,26 @@ export function JudgmentBar({
   onTie,
   onExit,
   onNote,
+  onExport,
   onSkip,
   disabled = false,
 }: JudgmentBarProps) {
   const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [noteText, setNoteText] = useState('');
+  const [leftNote, setLeftNote] = useState('');
+  const [rightNote, setRightNote] = useState('');
 
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (disabled) return;
+
+      // Block all shortcuts when note dialog is open
       if (noteDialogOpen) {
         if (event.key === 'Escape') {
           event.preventDefault();
           setNoteDialogOpen(false);
         }
+        // Stop propagation to prevent parent handlers from firing
+        event.stopPropagation();
         return;
       }
 
@@ -72,22 +80,27 @@ export function JudgmentBar({
           onExit();
           break;
         default: {
-          if (event.key.toLowerCase() === 'n') {
+          const key = event.key.toLowerCase();
+          if (key === 'n') {
             event.preventDefault();
             setNoteDialogOpen(true);
+          } else if (key === 'e') {
+            event.preventDefault();
+            onExport();
           }
         }
       }
     };
 
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [disabled, noteDialogOpen, onChooseLeft, onChooseRight, onTie, onExit, onSkip]);
+    window.addEventListener('keydown', handleKeyPress, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyPress, { capture: true });
+  }, [disabled, noteDialogOpen, onChooseLeft, onChooseRight, onTie, onExit, onExport, onSkip]);
 
   const handleSubmitNote = () => {
-    if (noteText.trim()) {
-      onNote(noteText);
-      setNoteText('');
+    if (leftNote.trim() || rightNote.trim()) {
+      onNote(leftNote, rightNote);
+      setLeftNote('');
+      setRightNote('');
     }
     setNoteDialogOpen(false);
   };
@@ -146,6 +159,15 @@ export function JudgmentBar({
           <Button
             variant="ghost"
             size="sm"
+            onClick={onExport}
+            disabled={disabled}
+            className="min-w-24 text-foreground"
+          >
+            [E] Export
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onExit}
             disabled={disabled}
             className="min-w-24 text-foreground"
@@ -156,36 +178,45 @@ export function JudgmentBar({
       </div>
 
       <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Add Note</DialogTitle>
+            <DialogTitle>Add Condition Notes</DialogTitle>
             <DialogDescription>
-              Add a note about this comparison (optional).
+              Add notes to each condition (optional). These will be attached to the condition for future reference.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="note">Note</Label>
-              <Input
-                id="note"
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                placeholder="e.g., 'Generation 2 loses coherency'"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSubmitNote();
-                  }
-                }}
-                autoFocus
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="left-note">Left Passage</Label>
+                <Textarea
+                  id="left-note"
+                  value={leftNote}
+                  onChange={(e) => setLeftNote(e.target.value)}
+                  placeholder="e.g., 'good comedic timing'"
+                  rows={3}
+                  className="resize-none"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label htmlFor="right-note">Right Passage</Label>
+                <Textarea
+                  id="right-note"
+                  value={rightNote}
+                  onChange={(e) => setRightNote(e.target.value)}
+                  placeholder="e.g., 'introduced unexpected moral dilemma'"
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setNoteDialogOpen(false)}>
                 Cancel
               </Button>
               <Button onClick={handleSubmitNote}>
-                Save Note
+                Save Notes
               </Button>
             </div>
           </div>
