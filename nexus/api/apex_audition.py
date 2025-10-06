@@ -85,17 +85,81 @@ def list_generation_runs():
             return [dict(row) for row in rows]
 
 
+@app.get("/api/audition/conditions", response_model=List[Condition])
+def list_conditions():
+    """List all active conditions."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id, slug, provider, model_name, label,
+                    temperature, reasoning_effort, thinking_enabled,
+                    max_output_tokens, thinking_budget_tokens, is_active, notes
+                FROM apex_audition.conditions
+                WHERE is_active = true
+                ORDER BY provider, model_name, temperature
+            """)
+            rows = cur.fetchall()
+            return [
+                Condition(
+                    id=row['id'],
+                    slug=row['slug'],
+                    provider=row['provider'],
+                    model=row['model_name'],
+                    label=row.get('label'),
+                    temperature=row.get('temperature'),
+                    reasoning_effort=row.get('reasoning_effort'),
+                    thinking_enabled=row.get('thinking_enabled'),
+                    max_output_tokens=row.get('max_output_tokens'),
+                    thinking_budget_tokens=row.get('thinking_budget_tokens'),
+                    is_active=row['is_active'],
+                    notes=row.get('notes'),
+                )
+                for row in rows
+            ]
+
+
+@app.get("/api/audition/prompts", response_model=List[Prompt])
+def list_prompts():
+    """List all prompts."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id, chunk_id, category, label, context, metadata
+                FROM apex_audition.prompts
+                ORDER BY chunk_id
+            """)
+            rows = cur.fetchall()
+            return [
+                Prompt(
+                    id=row['id'],
+                    chunk_id=row['chunk_id'],
+                    category=row.get('category'),
+                    label=row.get('label'),
+                    context=row['context'],
+                    metadata=row['metadata'],
+                )
+                for row in rows
+            ]
+
+
 @app.get("/api/audition/comparisons/next", response_model=Optional[ComparisonQueueItem])
 def get_next_comparison(
     run_id: Optional[str] = Query(None),
     condition_a_id: Optional[int] = Query(None),
     condition_b_id: Optional[int] = Query(None),
+    condition_ids: Optional[str] = Query(None),
+    prompt_id: Optional[int] = Query(None),
+    prompt_ids: Optional[str] = Query(None),
 ):
     """
     Get the next pending comparison.
 
     If run_id is specified, only return comparisons from that run.
     If condition IDs are specified, only return comparisons between those conditions.
+    If condition_ids is specified (comma-separated), filter to comparisons within that pool.
+    If prompt_id or prompt_ids is specified, filter to those prompts.
     """
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -116,6 +180,25 @@ def get_next_comparison(
                      (ga.condition_id = %s AND gb.condition_id = %s))
                 """)
                 params.extend([condition_a_id, condition_b_id, condition_b_id, condition_a_id])
+            elif condition_ids:
+                # Parse comma-separated condition IDs
+                cond_id_list = [int(cid.strip()) for cid in condition_ids.split(',') if cid.strip()]
+                if cond_id_list:
+                    placeholders = ','.join(['%s'] * len(cond_id_list))
+                    where_clauses.append(f"ga.condition_id IN ({placeholders})")
+                    where_clauses.append(f"gb.condition_id IN ({placeholders})")
+                    params.extend(cond_id_list * 2)
+
+            if prompt_id:
+                where_clauses.append("p.id = %s")
+                params.append(prompt_id)
+            elif prompt_ids:
+                # Parse comma-separated prompt IDs
+                prompt_id_list = [int(pid.strip()) for pid in prompt_ids.split(',') if pid.strip()]
+                if prompt_id_list:
+                    placeholders = ','.join(['%s'] * len(prompt_id_list))
+                    where_clauses.append(f"p.id IN ({placeholders})")
+                    params.extend(prompt_id_list)
 
             where_sql = " AND ".join(where_clauses)
 

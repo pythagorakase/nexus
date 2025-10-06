@@ -113,28 +113,28 @@ export function LeaderboardView() {
             <TableBody>
               {rankings.map((entry, index) => (
                 <TableRow key={entry.condition_id} className="font-mono">
-                  <TableCell className="font-semibold">
+                  <TableCell className="font-semibold py-2">
                     {index + 1}
                   </TableCell>
-                  <TableCell className="text-right font-semibold text-primary text-base">
+                  <TableCell className="text-right font-semibold text-primary text-base py-2">
                     {entry.rating.toFixed(0)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="py-2">
                     {formatProvider(entry.condition.provider)}
                   </TableCell>
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium py-2">
                     {formatModelName(entry.condition.model_name)}
                   </TableCell>
-                  <TableCell className="text-center text-muted-foreground">
+                  <TableCell className="text-center text-muted-foreground py-2">
                     {formatTemperature(entry.condition.temperature)}
                   </TableCell>
-                  <TableCell className="text-center text-muted-foreground">
+                  <TableCell className="text-center text-muted-foreground py-2">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-right text-muted-foreground py-2">
                     {entry.games_played}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center py-2">
                     {entry.condition.notes && entry.condition.notes.length > 0 ? (
                       <Button
                         variant="ghost"

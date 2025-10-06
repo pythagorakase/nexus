@@ -94,17 +94,41 @@ export const auditionAPI = {
   },
 
   /**
+   * List all active conditions.
+   */
+  async getConditions(): Promise<Condition[]> {
+    const response = await fetch(`${API_BASE}/conditions`);
+    if (!response.ok) throw new Error('Failed to fetch conditions');
+    return response.json();
+  },
+
+  /**
+   * List all prompts.
+   */
+  async getPrompts(): Promise<Prompt[]> {
+    const response = await fetch(`${API_BASE}/prompts`);
+    if (!response.ok) throw new Error('Failed to fetch prompts');
+    return response.json();
+  },
+
+  /**
    * Get the next pending comparison.
    */
   async getNextComparison(params?: {
     run_id?: string;
     condition_a_id?: number;
     condition_b_id?: number;
+    condition_ids?: number[];
+    prompt_id?: number;
+    prompt_ids?: number[];
   }): Promise<ComparisonQueueItem | null> {
     const searchParams = new URLSearchParams();
     if (params?.run_id) searchParams.append('run_id', params.run_id);
     if (params?.condition_a_id) searchParams.append('condition_a_id', params.condition_a_id.toString());
     if (params?.condition_b_id) searchParams.append('condition_b_id', params.condition_b_id.toString());
+    if (params?.condition_ids) searchParams.append('condition_ids', params.condition_ids.join(','));
+    if (params?.prompt_id) searchParams.append('prompt_id', params.prompt_id.toString());
+    if (params?.prompt_ids) searchParams.append('prompt_ids', params.prompt_ids.join(','));
 
     const response = await fetch(`${API_BASE}/comparisons/next?${searchParams}`);
     if (!response.ok) throw new Error('Failed to fetch comparison');

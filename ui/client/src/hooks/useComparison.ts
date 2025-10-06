@@ -8,6 +8,9 @@ export interface UseComparisonOptions {
   run_id?: string;
   condition_a_id?: number;
   condition_b_id?: number;
+  condition_ids?: number[];
+  prompt_id?: number;
+  prompt_ids?: number[];
   enabled?: boolean;
 }
 
