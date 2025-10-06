@@ -48,6 +48,7 @@ nexus-tui-temp/
 # Ignore UI build artifacts and dependencies
 /ui/node_modules/
 /ui/dist/
+/ui/attached_assets/
 
 # Ignore development/testing directories
 /mlx-gguf-testing/
