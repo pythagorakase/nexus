@@ -309,7 +309,7 @@ export function ComparisonLayout({
             <div className="text-[11px] uppercase text-muted-foreground tracking-wider mb-2">
               Previous chunk
             </div>
-            <ScrollArea className="h-32" ref={precedingScrollRef}>
+            <ScrollArea className="h-32" ref={precedingScrollRef} style={{ transform: 'translateZ(0)', contain: 'layout style' }}>
               <div
                 className="text-sm leading-relaxed text-foreground pr-4 pl-3"
                 style={{ fontFamily: fonts.narrativeFont }}
@@ -320,12 +320,12 @@ export function ComparisonLayout({
                     strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
                     em: ({node, ...props}) => <em className="italic" {...props} />,
                     ol: ({node, ...props}) => (
-                      <ol className="ml-5 list-decimal space-y-2" {...props} />
+                      <ol className="pl-10 list-decimal space-y-1 my-3" style={{ listStylePosition: 'outside' }} {...props} />
                     ),
                     ul: ({node, ...props}) => (
-                      <ul className="ml-5 list-disc space-y-2" {...props} />
+                      <ul className="pl-6 list-disc space-y-1 my-3" style={{ listStylePosition: 'outside' }} {...props} />
                     ),
-                    li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+                    li: ({node, ...props}) => <li className="leading-relaxed pl-1" {...props} />,
                     h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props} />,
                     h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props} />,
                     h3: ({node, ...props}) => <h3 className="font-bold mb-1 mt-2 first:mt-0" {...props} />,

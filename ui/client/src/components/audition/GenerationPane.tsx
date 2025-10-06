@@ -81,7 +81,7 @@ export function GenerationPane({
           {label}
         </span>
       </div>
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" style={{ transform: 'translateZ(0)', contain: 'layout style' }}>
         <div
           className="text-sm leading-relaxed text-foreground"
           style={{ fontFamily: fonts.narrativeFont }}
@@ -92,12 +92,12 @@ export function GenerationPane({
               strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
               em: ({node, ...props}) => <em className="italic" {...props} />,
               ol: ({node, ...props}) => (
-                <ol className="pl-4 list-decimal list-inside space-y-2" {...props} />
+                <ol className="pl-10 list-decimal space-y-1 my-3" style={{ listStylePosition: 'outside' }} {...props} />
               ),
               ul: ({node, ...props}) => (
-                <ul className="pl-4 list-disc list-inside space-y-2" {...props} />
+                <ul className="pl-6 list-disc space-y-1 my-3" style={{ listStylePosition: 'outside' }} {...props} />
               ),
-              li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+              li: ({node, ...props}) => <li className="leading-relaxed pl-1" {...props} />,
               h1: ({node, ...props}) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0" {...props} />,
               h2: ({node, ...props}) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0" {...props} />,
               h3: ({node, ...props}) => <h3 className="font-bold mb-1 mt-2 first:mt-0" {...props} />,
