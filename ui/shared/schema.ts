@@ -1,35 +1,43 @@
 import { sql } from "drizzle-orm";
-import { 
-  pgTable, 
-  text, 
-  varchar, 
-  bigint, 
+import {
+  pgTable,
+  pgSchema,
+  text,
+  varchar,
+  bigint,
   integer,
   jsonb,
   numeric,
   timestamp,
   interval,
-  primaryKey
+  primaryKey,
+  customType
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Users table (existing)
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// Custom PostGIS types for Drizzle
+const geometry = customType<{ data: string }>({
+  dataType() {
+    return "geometry";
+  },
 });
+
+const geography = customType<{ data: string }>({
+  dataType() {
+    return "geography";
+  },
+});
+
+// Assets schema for media and file references
+export const assetsSchema = pgSchema("assets");
 
 // Zones table
 export const zones = pgTable("zones", {
-  id: integer("id").primaryKey().default(sql`nextval('zones_id_seq1'::regclass)`),
-  name: text("name").notNull(),
-  summary: text("summary"),
-  boundary: jsonb("boundary"),
-  worldlayerId: integer("worldlayer_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+  id: bigint("id", { mode: "number" }).primaryKey().default(sql`nextval('zones_id_seq'::regclass)`),
+  name: varchar("name", { length: 50 }).notNull(),
+  summary: varchar("summary", { length: 500 }),
+  boundary: geometry("boundary"),
 });
 
 // Factions table
@@ -52,24 +60,20 @@ export const factions = pgTable("factions", {
 
 // Places table
 export const places = pgTable("places", {
-  id: integer("id").primaryKey().default(sql`nextval('places_id_seq1'::regclass)`),
-  name: text("name").notNull(),
-  type: text("type"),
-  description: text("description"),
+  id: bigint("id", { mode: "number" }).primaryKey().default(sql`nextval('places_id_seq'::regclass)`),
+  name: varchar("name", { length: 50 }).notNull(),
+  type: text("type").notNull(), // place_type enum, Drizzle treats as text
+  zone: bigint("zone", { mode: "number" }).notNull().references(() => zones.id),
   summary: text("summary"),
-  inhabitants: text("inhabitants"),
+  inhabitants: text("inhabitants").array(),
   history: text("history"),
   currentStatus: text("current_status"),
   secrets: text("secrets"),
-  latitude: numeric("latitude").$type<number | null>(),
-  longitude: numeric("longitude").$type<number | null>(),
-  elevation: numeric("elevation").$type<number | null>(),
-  address: text("address"),
-  district: text("district"),
-  zoneId: integer("zone_id"),
-  factionDominantId: integer("faction_dominant_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+  extraData: jsonb("extra_data"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
+  coordinates: geography("coordinates"),
+  geom: geometry("geom"), // Generated column, but include for querying
 });
 
 // Characters table
@@ -116,6 +120,26 @@ export const characterPsychology = pgTable("character_psychology", {
   validationEvidence: jsonb("validation_evidence"),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
   updatedAt: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+// Character images table (in assets schema)
+export const characterImages = assetsSchema.table("character_images", {
+  id: bigint("id", { mode: "number" }).primaryKey().default(sql`nextval('assets.character_images_id_seq'::regclass)`),
+  characterId: bigint("character_id", { mode: "number" }).notNull().references(() => characters.id),
+  filePath: text("file_path").notNull(),
+  isMain: integer("is_main").notNull().default(0), // 0 = false, 1 = true
+  displayOrder: integer("display_order").notNull().default(0),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().default(sql`now()`),
+});
+
+// Place images table (in assets schema)
+export const placeImages = assetsSchema.table("place_images", {
+  id: bigint("id", { mode: "number" }).primaryKey().default(sql`nextval('assets.place_images_id_seq'::regclass)`),
+  placeId: integer("place_id").notNull().references(() => places.id),
+  filePath: text("file_path").notNull(),
+  isMain: integer("is_main").notNull().default(0), // 0 = false, 1 = true
+  displayOrder: integer("display_order").notNull().default(0),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
 
 // Seasons table
@@ -172,22 +196,20 @@ export const chunkMetadata = pgTable("chunk_metadata", {
 });
 
 // Type exports
-export type User = typeof users.$inferSelect;
 export type Zone = typeof zones.$inferSelect;
 export type Faction = typeof factions.$inferSelect;
-export type Place = typeof places.$inferSelect;
+
+// Place type with GeoJSON geometry from PostGIS
+export type Place = typeof places.$inferSelect & {
+  geometry?: any | null; // GeoJSON geometry object from ST_AsGeoJSON
+};
+
 export type Character = typeof characters.$inferSelect;
 export type CharacterRelationship = typeof characterRelationships.$inferSelect;
 export type CharacterPsychology = typeof characterPsychology.$inferSelect;
+export type CharacterImage = typeof characterImages.$inferSelect;
+export type PlaceImage = typeof placeImages.$inferSelect;
 export type Season = typeof seasons.$inferSelect;
 export type Episode = typeof episodes.$inferSelect;
 export type NarrativeChunk = typeof narrativeChunks.$inferSelect;
 export type ChunkMetadata = typeof chunkMetadata.$inferSelect;
-
-// Insert schemas (only for the existing user table, as we're not creating new data)
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
