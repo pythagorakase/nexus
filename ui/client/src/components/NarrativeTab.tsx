@@ -364,15 +364,27 @@ export function NarrativeTab() {
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' && adjacentChunks?.previous) {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+        return;
+      }
+
+      const target = e.target;
+      if (target instanceof HTMLElement) {
+        const editableRoot = target.closest("input, textarea, [contenteditable='true'], [role='textbox']");
+        if (editableRoot) {
+          return;
+        }
+      }
+
+      if (e.key === "ArrowLeft" && adjacentChunks?.previous) {
         navigateToChunk(adjacentChunks.previous);
-      } else if (e.key === 'ArrowRight' && adjacentChunks?.next) {
+      } else if (e.key === "ArrowRight" && adjacentChunks?.next) {
         navigateToChunk(adjacentChunks.next);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [adjacentChunks, navigateToChunk]);
 
   const activeSeasonIds = useMemo(() => new Set(openSeasons), [openSeasons]);
