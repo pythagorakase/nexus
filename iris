@@ -17,6 +17,12 @@ if [ ! -d node_modules ]; then
   npm install
 fi
 
+# Kill any existing processes on our ports to prevent EADDRINUSE errors
+echo "Cleaning up any existing processes on ports 5001 and 8000..." >&2
+lsof -ti:5001 | xargs kill -9 2>/dev/null || true
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+sleep 0.5  # Brief pause to ensure ports are fully released
+
 if [ -z "${PORT:-}" ]; then
   PORT=$(python3 - <<'PY'
 import socket

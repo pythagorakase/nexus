@@ -40,11 +40,16 @@ export interface IStorage {
   getEpisodesBySeason(seasonId: number): Promise<Episode[]>;
   
   // Narrative chunk methods
-  getChunksByEpisode(episodeId: number, offset?: number, limit?: number): Promise<{
+  getChunksBySeasonAndEpisode(seasonId: number, episodeId: number, offset?: number, limit?: number): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }>;
-  
+  getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
+  getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }>;
+
   // Character methods
   getCharacters(startId?: number, endId?: number): Promise<Character[]>;
   getCharacterById(id: number): Promise<Character | undefined>;
@@ -101,15 +106,16 @@ export class PostgresStorage implements IStorage {
   }
 
   // Narrative chunk methods
-  async getChunksByEpisode(
-    episodeId: number, 
-    offset: number = 0, 
+  async getChunksBySeasonAndEpisode(
+    seasonId: number,
+    episodeId: number,
+    offset: number = 0,
     limit: number = 50
   ): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }> {
-    // Get chunks with their metadata for a specific episode
+    // Get chunks with their metadata for a specific season and episode
     const chunksWithMetadata = await this.db
       .select({
         chunk: narrativeChunks,
@@ -117,7 +123,10 @@ export class PostgresStorage implements IStorage {
       })
       .from(narrativeChunks)
       .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(eq(chunkMetadata.episode, episodeId))
+      .where(and(
+        eq(chunkMetadata.season, seasonId),
+        eq(chunkMetadata.episode, episodeId)
+      ))
       .orderBy(narrativeChunks.id)
       .limit(limit)
       .offset(offset);
@@ -127,7 +136,10 @@ export class PostgresStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(narrativeChunks)
       .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(eq(chunkMetadata.episode, episodeId));
+      .where(and(
+        eq(chunkMetadata.season, seasonId),
+        eq(chunkMetadata.episode, episodeId)
+      ));
 
     const total = Number(countResult[0]?.count || 0);
 
@@ -138,6 +150,73 @@ export class PostgresStorage implements IStorage {
     }));
 
     return { chunks, total };
+  }
+
+  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    // Get the chunk with highest ID that has metadata
+    const result = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(sql`${chunkMetadata.id} IS NOT NULL`)
+      .orderBy(sql`${narrativeChunks.id} DESC`)
+      .limit(1);
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    return {
+      ...result[0].chunk,
+      metadata: result[0].metadata || undefined
+    };
+  }
+
+  async getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }> {
+    // Get previous chunk (highest ID less than current)
+    const previousResult = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(and(
+        sql`${narrativeChunks.id} < ${chunkId}`,
+        sql`${chunkMetadata.id} IS NOT NULL`
+      ))
+      .orderBy(sql`${narrativeChunks.id} DESC`)
+      .limit(1);
+
+    // Get next chunk (lowest ID greater than current)
+    const nextResult = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(and(
+        sql`${narrativeChunks.id} > ${chunkId}`,
+        sql`${chunkMetadata.id} IS NOT NULL`
+      ))
+      .orderBy(sql`${narrativeChunks.id} ASC`)
+      .limit(1);
+
+    return {
+      previous: previousResult.length > 0
+        ? { ...previousResult[0].chunk, metadata: previousResult[0].metadata || undefined }
+        : null,
+      next: nextResult.length > 0
+        ? { ...nextResult[0].chunk, metadata: nextResult[0].metadata || undefined }
+        : null,
+    };
   }
 
   // Character methods
@@ -537,12 +616,15 @@ class MemStorage implements IStorage {
       .sort((a, b) => a.episode - b.episode);
   }
 
-  async getChunksByEpisode(
+  async getChunksBySeasonAndEpisode(
+    seasonId: number,
     episodeId: number,
     offset: number = 0,
     limit: number = 50,
   ): Promise<{ chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>; total: number }> {
-    const metadataForEpisode = this.metadata.filter((meta) => meta.episode === episodeId);
+    const metadataForEpisode = this.metadata.filter(
+      (meta) => meta.season === seasonId && meta.episode === episodeId
+    );
     const chunkIds = new Set(metadataForEpisode.map((meta) => meta.chunkId));
     const chunks = this.chunks.filter((chunk) => chunkIds.has(chunk.id));
 
@@ -557,6 +639,44 @@ class MemStorage implements IStorage {
       total: sorted.length,
       chunks: sorted.slice(offset, offset + limit),
     };
+  }
+
+  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    // Get chunk with highest ID that has metadata
+    const chunksWithMetadata = this.chunks
+      .map((chunk) => ({
+        ...chunk,
+        metadata: this.metadata.find((meta) => meta.chunkId === chunk.id),
+      }))
+      .filter((chunk) => chunk.metadata !== undefined)
+      .sort((a, b) => b.id - a.id);
+
+    return chunksWithMetadata[0] || null;
+  }
+
+  async getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }> {
+    const chunksWithMetadata = this.chunks
+      .map((chunk) => ({
+        ...chunk,
+        metadata: this.metadata.find((meta) => meta.chunkId === chunk.id),
+      }))
+      .filter((chunk) => chunk.metadata !== undefined)
+      .sort((a, b) => a.id - b.id);
+
+    // Find previous chunk (highest ID less than current)
+    const previous = chunksWithMetadata
+      .filter((chunk) => chunk.id < chunkId)
+      .sort((a, b) => b.id - a.id)[0] || null;
+
+    // Find next chunk (lowest ID greater than current)
+    const next = chunksWithMetadata
+      .filter((chunk) => chunk.id > chunkId)
+      .sort((a, b) => a.id - b.id)[0] || null;
+
+    return { previous, next };
   }
 
   async getCharacters(startId?: number, endId?: number): Promise<Character[]> {

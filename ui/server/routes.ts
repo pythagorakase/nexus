@@ -55,18 +55,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // GET /api/narrative/chunks/:episodeId - Get chunks by episode with pagination
-  app.get("/api/narrative/chunks/:episodeId", async (req, res) => {
+  // GET /api/narrative/latest-chunk - Get the newest chunk
+  app.get("/api/narrative/latest-chunk", async (req, res) => {
     try {
-      const episodeId = parseInt(req.params.episodeId);
-      if (isNaN(episodeId)) {
-        return res.status(400).json({ error: "Invalid episode ID" });
+      const chunk = await storage.getLatestChunk();
+      if (!chunk) {
+        return res.status(404).json({ error: "No chunks found" });
       }
-      
+      res.json(chunk);
+    } catch (error) {
+      console.error("Error fetching latest chunk:", error);
+      res.status(500).json({ error: "Failed to fetch latest chunk" });
+    }
+  });
+
+  // GET /api/narrative/chunks/:chunkId/adjacent - Get previous and next chunks
+  app.get("/api/narrative/chunks/:chunkId/adjacent", async (req, res) => {
+    try {
+      const chunkId = parseInt(req.params.chunkId);
+      if (isNaN(chunkId)) {
+        return res.status(400).json({ error: "Invalid chunk ID" });
+      }
+
+      const result = await storage.getAdjacentChunks(chunkId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching adjacent chunks:", error);
+      res.status(500).json({ error: "Failed to fetch adjacent chunks" });
+    }
+  });
+
+  // GET /api/narrative/chunks/:seasonId/:episodeId - Get chunks by season and episode with pagination
+  app.get("/api/narrative/chunks/:seasonId/:episodeId", async (req, res) => {
+    try {
+      const seasonId = parseInt(req.params.seasonId);
+      const episodeId = parseInt(req.params.episodeId);
+      if (isNaN(seasonId) || isNaN(episodeId)) {
+        return res.status(400).json({ error: "Invalid season or episode ID" });
+      }
+
       const offset = parseInt(req.query.offset as string) || 0;
       const limit = parseInt(req.query.limit as string) || 50;
-      
-      const result = await storage.getChunksByEpisode(episodeId, offset, limit);
+
+      const result = await storage.getChunksBySeasonAndEpisode(seasonId, episodeId, offset, limit);
       res.json(result);
     } catch (error) {
       console.error("Error fetching chunks:", error);
@@ -176,7 +207,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Multer configuration for file uploads
-  const upload = multer({ dest: "/tmp/" });
+  const upload = multer({
+    dest: "/tmp/",
+    limits: {
+      fileSize: 15 * 1024 * 1024, // 15MB max file size
+    },
+    fileFilter: (req, file, cb) => {
+      // Accept only PNG, JPEG, and JPG
+      const allowedMimeTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+      const allowedExtensions = ['.png', '.jpg', '.jpeg'];
+
+      const ext = path.extname(file.originalname).toLowerCase();
+      const mimeType = file.mimetype.toLowerCase();
+
+      if (allowedMimeTypes.includes(mimeType) && allowedExtensions.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Invalid file type. Only PNG and JPEG images are allowed. Got: ${file.mimetype}`));
+      }
+    },
+  });
 
   // Character image routes
   app.get("/api/characters/:id/images", async (req, res) => {
@@ -214,8 +264,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const uploadedImages = [];
       for (const file of req.files) {
-        const ext = path.extname(file.originalname);
-        const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
+        // Sanitize filename: only allow alphanumeric, dash, underscore, and extension
+        const ext = path.extname(file.originalname).toLowerCase();
+        const sanitized = file.originalname
+          .replace(ext, '')
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .substring(0, 50); // Limit base name length
+        const filename = `${Date.now()}_${sanitized}${ext}`;
         const destPath = path.join(characterDir, filename);
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
@@ -229,8 +284,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, images: uploadedImages });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading character images:", error);
+      // Handle multer-specific errors
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: "File too large. Maximum size is 15MB." });
+      }
+      if (error.message && error.message.includes('Invalid file type')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: "Failed to upload images" });
     }
   });
@@ -316,8 +378,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const uploadedImages = [];
       for (const file of req.files) {
-        const ext = path.extname(file.originalname);
-        const filename = `${Date.now()}_${Math.random().toString(36).substring(7)}${ext}`;
+        // Sanitize filename: only allow alphanumeric, dash, underscore, and extension
+        const ext = path.extname(file.originalname).toLowerCase();
+        const sanitized = file.originalname
+          .replace(ext, '')
+          .replace(/[^a-zA-Z0-9_-]/g, '_')
+          .substring(0, 50); // Limit base name length
+        const filename = `${Date.now()}_${sanitized}${ext}`;
         const destPath = path.join(placeDir, filename);
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
@@ -331,8 +398,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({ success: true, images: uploadedImages });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading place images:", error);
+      // Handle multer-specific errors
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: "File too large. Maximum size is 15MB." });
+      }
+      if (error.message && error.message.includes('Invalid file type')) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: "Failed to upload images" });
     }
   });
