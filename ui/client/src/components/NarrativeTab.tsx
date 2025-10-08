@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -19,6 +19,11 @@ interface ChunkWithMetadata extends NarrativeChunk {
 interface ChunkResponse {
   chunks: ChunkWithMetadata[];
   total: number;
+}
+
+interface AdjacentChunksResponse {
+  previous: ChunkWithMetadata | null;
+  next: ChunkWithMetadata | null;
 }
 
 const markdownComponents: Components = {
@@ -93,7 +98,7 @@ function EpisodeNode({
   } = useQuery<ChunkResponse>({
     queryKey: ["/api/narrative/chunks", seasonId, episode.episode],
     queryFn: async () => {
-      const response = await fetch(`/api/narrative/chunks/${episode.episode}?limit=200`);
+      const response = await fetch(`/api/narrative/chunks/${seasonId}/${episode.episode}?limit=200`);
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load chunks";
         throw new Error(message);
@@ -106,18 +111,7 @@ function EpisodeNode({
 
   const chunks = data?.chunks ?? [];
 
-  useEffect(() => {
-    if (!isOpen || chunks.length === 0) {
-      return;
-    }
-
-    const containsSelected =
-      selectedChunkId !== null && chunks.some((chunk) => chunk.id === selectedChunkId);
-
-    if (!containsSelected) {
-      onEnsureChunkSelected(chunks[0]);
-    }
-  }, [chunks, isOpen, onEnsureChunkSelected, selectedChunkId]);
+  // Removed auto-selection of first chunk - now handled by latest chunk initialization
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -211,17 +205,7 @@ function SeasonNode({
     staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => {
-    if (!isOpen || !episodes.length) {
-      return;
-    }
-
-    const hasOpenEpisode = openEpisodes.some((key) => key.startsWith(`${season.id}-`));
-    if (!hasOpenEpisode) {
-      const firstEpisode = episodes[0];
-      onEnsureEpisodeOpen(`${season.id}-${firstEpisode.episode}`);
-    }
-  }, [episodes, isOpen, onEnsureEpisodeOpen, openEpisodes, season.id]);
+  // Removed auto-expansion of first episode - now handled by latest chunk initialization
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -278,6 +262,7 @@ export function NarrativeTab() {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
+  const [initialized, setInitialized] = useState(false);
   const { fonts } = useFonts();
 
   const {
@@ -290,14 +275,54 @@ export function NarrativeTab() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch latest chunk to initialize view
+  const {
+    data: latestChunk,
+    isLoading: latestChunkLoading,
+  } = useQuery<ChunkWithMetadata>({
+    queryKey: ["/api/narrative/latest-chunk"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch adjacent chunks for navigation
+  const {
+    data: adjacentChunks,
+    isLoading: adjacentChunksLoading,
+  } = useQuery<AdjacentChunksResponse>({
+    queryKey: ["/api/narrative/chunks/adjacent", selectedChunk?.id],
+    queryFn: async () => {
+      if (!selectedChunk) {
+        return { previous: null, next: null };
+      }
+      const response = await fetch(`/api/narrative/chunks/${selectedChunk.id}/adjacent`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch adjacent chunks");
+      }
+      return response.json();
+    },
+    enabled: !!selectedChunk,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Initialize view to latest chunk
   useEffect(() => {
-    if (!seasons.length) {
+    if (initialized || !latestChunk?.metadata) {
       return;
     }
-    if (openSeasons.length === 0) {
-      setOpenSeasons([seasons[0].id]);
+
+    const season = latestChunk.metadata.season;
+    const episode = latestChunk.metadata.episode;
+
+    if (season !== null && episode !== null) {
+      console.log(`[NarrativeTab] Initializing to latest chunk: Season ${season}, Episode ${episode}, Chunk ${latestChunk.id}`);
+      setOpenSeasons([season]);
+      setOpenEpisodes([`${season}-${episode}`]);
+      setSelectedChunk(latestChunk);
+      setInitialized(true);
+    } else {
+      console.warn('[NarrativeTab] Latest chunk has null season or episode', latestChunk.metadata);
     }
-  }, [openSeasons.length, seasons]);
+  }, [latestChunk, initialized]);
 
   const toggleSeason = useCallback((seasonId: number) => {
     setOpenSeasons((prev) =>
@@ -318,6 +343,37 @@ export function NarrativeTab() {
   const ensureChunkSelected = useCallback((chunk: ChunkWithMetadata) => {
     setSelectedChunk((current) => (current ? current : chunk));
   }, []);
+
+  const navigateToChunk = useCallback((chunk: ChunkWithMetadata | null) => {
+    if (!chunk?.metadata) return;
+
+    const season = chunk.metadata.season;
+    const episode = chunk.metadata.episode;
+
+    if (season !== null && episode !== null) {
+      // Ensure season is open
+      setOpenSeasons((prev) => prev.includes(season) ? prev : [...prev, season]);
+      // Ensure episode is open
+      const episodeKey = `${season}-${episode}`;
+      setOpenEpisodes((prev) => prev.includes(episodeKey) ? prev : [...prev, episodeKey]);
+      // Select the chunk
+      setSelectedChunk(chunk);
+    }
+  }, []);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && adjacentChunks?.previous) {
+        navigateToChunk(adjacentChunks.previous);
+      } else if (e.key === 'ArrowRight' && adjacentChunks?.next) {
+        navigateToChunk(adjacentChunks.next);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [adjacentChunks, navigateToChunk]);
 
   const activeSeasonIds = useMemo(() => new Set(openSeasons), [openSeasons]);
 
@@ -384,6 +440,33 @@ export function NarrativeTab() {
                   <ReactMarkdown components={markdownComponents}>
                     {selectedChunk.rawText || ""}
                   </ReactMarkdown>
+                </div>
+
+                {/* Navigation controls */}
+                <div className="flex justify-between items-center pt-4 border-t border-border">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigateToChunk(adjacentChunks?.previous ?? null)}
+                    disabled={!adjacentChunks?.previous || adjacentChunksLoading}
+                    className="gap-2 font-mono text-xs"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    Use arrow keys or click to navigate
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigateToChunk(adjacentChunks?.next ?? null)}
+                    disabled={!adjacentChunks?.next || adjacentChunksLoading}
+                    className="gap-2 font-mono text-xs"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             ) : (

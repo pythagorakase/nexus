@@ -214,14 +214,35 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     if (!place.geometry) return null;
 
     try {
+      // Validate geometry structure
+      if (typeof place.geometry !== 'object' || !place.geometry.type) {
+        console.warn(`Place ${place.id} has invalid geometry structure`);
+        return null;
+      }
+
       switch (place.geometry.type) {
         case 'Point': {
           // GeoJSON Point format: [longitude, latitude]
-          const [lng, lat] = place.geometry.coordinates;
-          if (Number.isFinite(lng) && Number.isFinite(lat)) {
-            return { latitude: lat, longitude: lng };
+          if (!Array.isArray(place.geometry.coordinates) || place.geometry.coordinates.length < 2) {
+            console.warn(`Place ${place.id} has invalid Point coordinates`);
+            return null;
           }
-          return null;
+
+          const [lng, lat] = place.geometry.coordinates;
+
+          // Validate that coordinates are finite numbers
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+            console.warn(`Place ${place.id} has non-finite coordinates: [${lng}, ${lat}]`);
+            return null;
+          }
+
+          // Validate coordinate ranges (lat: -90 to 90, lng: -180 to 180)
+          if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            console.warn(`Place ${place.id} has out-of-range coordinates: [${lng}, ${lat}]`);
+            return null;
+          }
+
+          return { latitude: lat, longitude: lng };
         }
 
         case 'Polygon': {
@@ -236,10 +257,11 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
         }
 
         default:
+          console.warn(`Place ${place.id} has unsupported geometry type: ${place.geometry.type}`);
           return null;
       }
     } catch (error) {
-      console.error('Failed to parse place geometry:', error);
+      console.error(`Failed to parse geometry for place ${place.id}:`, error, place.geometry);
       return null;
     }
   };
@@ -1058,6 +1080,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                     </div>
                   )}
                 </div>
+              </div>
               </ScrollArea>
             );
           })()}
