@@ -20,6 +20,11 @@ try:
 except ImportError:  # pragma: no cover
     AnthropicProvider = None  # type: ignore
 
+try:
+    from scripts.api_openrouter import OpenRouterProvider
+except ImportError:  # pragma: no cover
+    OpenRouterProvider = None  # type: ignore
+
 from .models import ConditionSpec, GenerationResult, GenerationRun, PromptSnapshot
 from .repository import AuditionRepository, SETTINGS_PATH as DEFAULT_SETTINGS_PATH
 
@@ -777,6 +782,18 @@ class AuditionEngine:
                 top_p=None,
                 top_k=None,
                 thinking_enabled=condition.thinking_enabled or False,
+                thinking_budget_tokens=condition.thinking_budget_tokens,
+            )
+            return provider
+        if condition.provider.lower() == "openrouter":
+            if OpenRouterProvider is None:
+                raise RuntimeError("OpenRouter provider not available. Install dependencies or configure differently.")
+            provider = OpenRouterProvider(
+                model=condition.model,
+                temperature=condition.temperature,  # Pass None if not set
+                max_tokens=max_tokens,
+                system_prompt=condition.system_prompt,
+                reasoning_effort=condition.reasoning_effort,
                 thinking_budget_tokens=condition.thinking_budget_tokens,
             )
             return provider
