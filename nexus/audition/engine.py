@@ -49,6 +49,7 @@ class AuditionEngine:
         # Cached batch clients to avoid repeated 1Password authentication
         self._anthropic_batch_client = None
         self._openai_batch_client = None
+        self._openrouter_batch_client = None
 
     def _get_anthropic_batch_client(self):
         """Get or create cached Anthropic batch client."""
@@ -63,6 +64,14 @@ class AuditionEngine:
             from .batch_clients import OpenAIBatchClient
             self._openai_batch_client = OpenAIBatchClient()
         return self._openai_batch_client
+
+    def _get_openrouter_batch_client(self):
+        """Get or create cached OpenRouter batch client."""
+        if self._openrouter_batch_client is None:
+            from .batch_clients import OpenRouterBatchClient
+
+            self._openrouter_batch_client = OpenRouterBatchClient()
+        return self._openrouter_batch_client
 
     # ------------------------------------------------------------------
     # Context ingestion
@@ -453,6 +462,10 @@ class AuditionEngine:
             client = self._get_openai_batch_client()
             batch_dir = output_dir or Path("temp/batches")
             batch_id = client.create_batch(batch_requests, batch_dir)
+        elif condition.provider.lower() == "openrouter":
+            client = self._get_openrouter_batch_client()
+            batch_dir = output_dir or Path("temp/batches")
+            batch_id = client.create_batch(batch_requests, batch_dir)
         else:
             raise ValueError(f"Unsupported provider for batch mode: {condition.provider}")
 
@@ -492,7 +505,7 @@ class AuditionEngine:
         Combines multiple lanes (conditions) into a single batch submission,
         enabling cross-lane caching and simplified batch management.
 
-        All lanes must use the same provider (OpenAI or Anthropic).
+        All lanes must use the same provider (OpenAI, Anthropic, or OpenRouter).
 
         Args:
             condition_slugs: List of condition identifiers to include
@@ -511,7 +524,12 @@ class AuditionEngine:
         Raises:
             ValueError: If lanes use different providers or no lanes provided
         """
-        from .batch_clients import AnthropicBatchClient, BatchRequest, OpenAIBatchClient
+        from .batch_clients import (
+            AnthropicBatchClient,
+            BatchRequest,
+            OpenAIBatchClient,
+            OpenRouterBatchClient,
+        )
 
         if not condition_slugs:
             raise ValueError("At least one condition_slug must be provided")
@@ -626,6 +644,10 @@ class AuditionEngine:
             client = self._get_openai_batch_client()
             batch_dir = output_dir or Path("temp/batches")
             batch_id = client.create_batch(batch_requests, batch_dir)
+        elif provider == "openrouter":
+            client = self._get_openrouter_batch_client()
+            batch_dir = output_dir or Path("temp/batches")
+            batch_id = client.create_batch(batch_requests, batch_dir)
         else:
             raise ValueError(f"Unsupported provider for batch mode: {provider}")
 
@@ -654,7 +676,7 @@ class AuditionEngine:
 
         Args:
             batch_id: Batch job ID
-            provider: Provider name ("openai" or "anthropic")
+            provider: Provider name ("openai", "anthropic", or "openrouter")
 
         Returns:
             List of processed GenerationResult objects
@@ -664,6 +686,8 @@ class AuditionEngine:
             client = self._get_anthropic_batch_client()
         elif provider.lower() == "openai":
             client = self._get_openai_batch_client()
+        elif provider.lower() == "openrouter":
+            client = self._get_openrouter_batch_client()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -734,6 +758,27 @@ class AuditionEngine:
                     gen.input_tokens = response_data.get("usage", {}).get("prompt_tokens", 0)
                     gen.output_tokens = response_data.get("usage", {}).get("completion_tokens", 0)
                     # OpenAI doesn't expose cache hits in batch results currently
+                    gen.cache_hit = False
+                elif provider.lower() == "openrouter":
+                    response_data = batch_result.response or {}
+                    choice = response_data.get("choices", [{}])[0]
+                    gen.status = "completed"
+                    gen.response_payload = {
+                        "content": choice.get("message", {}).get("content", ""),
+                        "model": response_data.get("model"),
+                        "raw": response_data,
+                    }
+                    usage = response_data.get("usage", {})
+                    gen.input_tokens = (
+                        usage.get("prompt_tokens")
+                        or usage.get("input_tokens")
+                        or 0
+                    )
+                    gen.output_tokens = (
+                        usage.get("completion_tokens")
+                        or usage.get("output_tokens")
+                        or 0
+                    )
                     gen.cache_hit = False
 
                 gen.completed_at = datetime.now(timezone.utc)
