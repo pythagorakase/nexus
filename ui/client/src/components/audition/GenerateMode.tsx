@@ -24,6 +24,14 @@ export function GenerateMode() {
   const [missingCount, setMissingCount] = useState<number | null>(null);
   const [limit, setLimit] = useState<string>('');
   const [maxWorkers, setMaxWorkers] = useState<string>('7');
+  const [asyncOpenAI, setAsyncOpenAI] = useState<boolean>(() => {
+    const saved = localStorage.getItem('audition_async_openai');
+    return saved === 'true';
+  });
+  const [asyncAnthropic, setAsyncAnthropic] = useState<boolean>(() => {
+    const saved = localStorage.getItem('audition_async_anthropic');
+    return saved === 'true';
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fetch count of missing generations on mount and when job completes
@@ -39,13 +47,28 @@ export function GenerateMode() {
     fetchCount();
   }, [isRunning]); // Refetch when job starts/stops
 
+  // Save async preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem('audition_async_openai', asyncOpenAI.toString());
+  }, [asyncOpenAI]);
+
+  useEffect(() => {
+    localStorage.setItem('audition_async_anthropic', asyncAnthropic.toString());
+  }, [asyncAnthropic]);
+
   // Start generation job
   const startGeneration = async () => {
     setError(null);
     try {
       const limitValue = limit ? parseInt(limit, 10) : undefined;
       const maxWorkersValue = maxWorkers ? parseInt(maxWorkers, 10) : undefined;
-      const data = await auditionAPI.startGeneration(limitValue, maxWorkersValue);
+
+      // Build async providers array
+      const asyncProviders: string[] = [];
+      if (asyncOpenAI) asyncProviders.push('openai');
+      if (asyncAnthropic) asyncProviders.push('anthropic');
+
+      const data = await auditionAPI.startGeneration(limitValue, maxWorkersValue, asyncProviders);
       setJobId(data.job_id);
       setIsRunning(true);
       setOutput('');
@@ -150,6 +173,31 @@ export function GenerateMode() {
                     onChange={(e) => setMaxWorkers(e.target.value)}
                     className="w-20 px-2 py-1 text-sm border border-border rounded bg-background text-foreground"
                   />
+                </div>
+                <div className="h-4 w-px bg-border" />
+                <div className="flex items-center gap-2">
+                  <label htmlFor="async-openai" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
+                    <input
+                      id="async-openai"
+                      type="checkbox"
+                      checked={asyncOpenAI}
+                      onChange={(e) => setAsyncOpenAI(e.target.checked)}
+                      className="cursor-pointer"
+                    />
+                    Async OpenAI
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="async-anthropic" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
+                    <input
+                      id="async-anthropic"
+                      type="checkbox"
+                      checked={asyncAnthropic}
+                      onChange={(e) => setAsyncAnthropic(e.target.checked)}
+                      className="cursor-pointer"
+                    />
+                    Async Anthropic
+                  </label>
                 </div>
               </>
             )}

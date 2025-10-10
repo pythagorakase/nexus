@@ -4,8 +4,6 @@ import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
 
 import {
-  type User,
-  type InsertUser,
   type Season,
   type Episode,
   type NarrativeChunk,
@@ -13,10 +11,11 @@ import {
   type Character,
   type CharacterRelationship,
   type CharacterPsychology,
+  type CharacterImage,
+  type PlaceImage,
   type Place,
   type Zone,
   type Faction,
-  users,
   seasons,
   episodes,
   narrativeChunks,
@@ -24,6 +23,8 @@ import {
   characters,
   characterRelationships,
   characterPsychology,
+  characterImages,
+  placeImages,
   places,
   zones,
   factions
@@ -32,11 +33,6 @@ import { db } from "./db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // User methods
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-
   // Season methods
   getAllSeasons(): Promise<Season[]>;
   
@@ -44,11 +40,16 @@ export interface IStorage {
   getEpisodesBySeason(seasonId: number): Promise<Episode[]>;
   
   // Narrative chunk methods
-  getChunksByEpisode(episodeId: number, offset?: number, limit?: number): Promise<{
+  getChunksBySeasonAndEpisode(seasonId: number, episodeId: number, offset?: number, limit?: number): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }>;
-  
+  getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
+  getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }>;
+
   // Character methods
   getCharacters(startId?: number, endId?: number): Promise<Character[]>;
   getCharacterById(id: number): Promise<Character | undefined>;
@@ -58,9 +59,21 @@ export interface IStorage {
   
   // Character psychology methods
   getCharacterPsychology(characterId: number): Promise<CharacterPsychology | undefined>;
-  
+
+  // Character image methods
+  getCharacterImages(characterId: number): Promise<CharacterImage[]>;
+  addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number): Promise<CharacterImage>;
+  setMainCharacterImage(characterId: number, imageId: number): Promise<void>;
+  deleteCharacterImage(imageId: number): Promise<void>;
+
   // Place methods
   getAllPlaces(): Promise<Place[]>;
+
+  // Place image methods
+  getPlaceImages(placeId: number): Promise<PlaceImage[]>;
+  addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number): Promise<PlaceImage>;
+  setMainPlaceImage(placeId: number, imageId: number): Promise<void>;
+  deletePlaceImage(imageId: number): Promise<void>;
   
   // Zone methods
   getAllZones(): Promise<Zone[]>;
@@ -78,21 +91,6 @@ export class PostgresStorage implements IStorage {
     }
     this.db = db;
   }
-  // User methods
-  async getUser(id: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await this.db.select().from(users).where(eq(users.username, username)).limit(1);
-    return result[0];
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await this.db.insert(users).values(insertUser).returning();
-    return result[0];
-  }
 
   // Season methods
   async getAllSeasons(): Promise<Season[]> {
@@ -108,15 +106,16 @@ export class PostgresStorage implements IStorage {
   }
 
   // Narrative chunk methods
-  async getChunksByEpisode(
-    episodeId: number, 
-    offset: number = 0, 
+  async getChunksBySeasonAndEpisode(
+    seasonId: number,
+    episodeId: number,
+    offset: number = 0,
     limit: number = 50
   ): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }> {
-    // Get chunks with their metadata for a specific episode
+    // Get chunks with their metadata for a specific season and episode
     const chunksWithMetadata = await this.db
       .select({
         chunk: narrativeChunks,
@@ -124,7 +123,10 @@ export class PostgresStorage implements IStorage {
       })
       .from(narrativeChunks)
       .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(eq(chunkMetadata.episode, episodeId))
+      .where(and(
+        eq(chunkMetadata.season, seasonId),
+        eq(chunkMetadata.episode, episodeId)
+      ))
       .orderBy(narrativeChunks.id)
       .limit(limit)
       .offset(offset);
@@ -134,7 +136,10 @@ export class PostgresStorage implements IStorage {
       .select({ count: sql<number>`count(*)` })
       .from(narrativeChunks)
       .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(eq(chunkMetadata.episode, episodeId));
+      .where(and(
+        eq(chunkMetadata.season, seasonId),
+        eq(chunkMetadata.episode, episodeId)
+      ));
 
     const total = Number(countResult[0]?.count || 0);
 
@@ -145,6 +150,73 @@ export class PostgresStorage implements IStorage {
     }));
 
     return { chunks, total };
+  }
+
+  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    // Get the chunk with highest ID that has metadata
+    const result = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(sql`${chunkMetadata.id} IS NOT NULL`)
+      .orderBy(sql`${narrativeChunks.id} DESC`)
+      .limit(1);
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    return {
+      ...result[0].chunk,
+      metadata: result[0].metadata || undefined
+    };
+  }
+
+  async getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }> {
+    // Get previous chunk (highest ID less than current)
+    const previousResult = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(and(
+        sql`${narrativeChunks.id} < ${chunkId}`,
+        sql`${chunkMetadata.id} IS NOT NULL`
+      ))
+      .orderBy(sql`${narrativeChunks.id} DESC`)
+      .limit(1);
+
+    // Get next chunk (lowest ID greater than current)
+    const nextResult = await this.db
+      .select({
+        chunk: narrativeChunks,
+        metadata: chunkMetadata
+      })
+      .from(narrativeChunks)
+      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
+      .where(and(
+        sql`${narrativeChunks.id} > ${chunkId}`,
+        sql`${chunkMetadata.id} IS NOT NULL`
+      ))
+      .orderBy(sql`${narrativeChunks.id} ASC`)
+      .limit(1);
+
+    return {
+      previous: previousResult.length > 0
+        ? { ...previousResult[0].chunk, metadata: previousResult[0].metadata || undefined }
+        : null,
+      next: nextResult.length > 0
+        ? { ...nextResult[0].chunk, metadata: nextResult[0].metadata || undefined }
+        : null,
+    };
   }
 
   // Character methods
@@ -197,14 +269,46 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  // Character image methods
+  async getCharacterImages(characterId: number): Promise<CharacterImage[]> {
+    return await this.db.select()
+      .from(characterImages)
+      .where(eq(characterImages.characterId, characterId))
+      .orderBy(characterImages.displayOrder);
+  }
+
+  async addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number): Promise<CharacterImage> {
+    const result = await this.db.insert(characterImages)
+      .values({ characterId, filePath, isMain, displayOrder })
+      .returning();
+    return result[0];
+  }
+
+  async setMainCharacterImage(characterId: number, imageId: number): Promise<void> {
+    // First, unset all images for this character
+    await this.db.update(characterImages)
+      .set({ isMain: 0 })
+      .where(eq(characterImages.characterId, characterId));
+
+    // Then set the specified image as main
+    await this.db.update(characterImages)
+      .set({ isMain: 1 })
+      .where(eq(characterImages.id, imageId));
+  }
+
+  async deleteCharacterImage(imageId: number): Promise<void> {
+    await this.db.delete(characterImages)
+      .where(eq(characterImages.id, imageId));
+  }
+
   // Place methods
   async getAllPlaces(): Promise<Place[]> {
-    // Use raw SQL to extract coordinates properly from PostGIS geography
+    // Use raw SQL to extract coordinates as GeoJSON from PostGIS geography
     const result = await this.db.execute(sql`
       SELECT
         id,
         name,
-        type,
+        type::text,
         zone,
         summary,
         inhabitants,
@@ -214,8 +318,7 @@ export class PostgresStorage implements IStorage {
         extra_data,
         created_at,
         updated_at,
-        ST_X(coordinates::geometry) as longitude,
-        ST_Y(coordinates::geometry) as latitude
+        ST_AsGeoJSON(coordinates)::json as geometry
       FROM places
       ORDER BY id
     `);
@@ -224,7 +327,7 @@ export class PostgresStorage implements IStorage {
       id: Number(row.id),
       name: row.name as string,
       type: row.type ?? null,
-      zoneId: row.zone ?? null,
+      zone: row.zone ? Number(row.zone) : null,
       summary: row.summary ?? null,
       inhabitants: row.inhabitants ?? null,
       history: row.history ?? null,
@@ -233,32 +336,60 @@ export class PostgresStorage implements IStorage {
       extraData: row.extra_data ?? null,
       createdAt: row.created_at ? new Date(row.created_at) : null,
       updatedAt: row.updated_at ? new Date(row.updated_at) : null,
-      longitude: row.longitude !== null && row.longitude !== undefined ? Number(row.longitude) : null,
-      latitude: row.latitude !== null && row.latitude !== undefined ? Number(row.latitude) : null,
+      geometry: row.geometry ?? null,
     })) as Place[];
+  }
+
+  // Place image methods
+  async getPlaceImages(placeId: number): Promise<PlaceImage[]> {
+    return await this.db.select()
+      .from(placeImages)
+      .where(eq(placeImages.placeId, placeId))
+      .orderBy(placeImages.displayOrder);
+  }
+
+  async addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number): Promise<PlaceImage> {
+    const result = await this.db.insert(placeImages)
+      .values({ placeId, filePath, isMain, displayOrder })
+      .returning();
+    return result[0];
+  }
+
+  async setMainPlaceImage(placeId: number, imageId: number): Promise<void> {
+    // First, unset all images for this place
+    await this.db.update(placeImages)
+      .set({ isMain: 0 })
+      .where(eq(placeImages.placeId, placeId));
+
+    // Then set the specified image as main
+    await this.db.update(placeImages)
+      .set({ isMain: 1 })
+      .where(eq(placeImages.id, imageId));
+  }
+
+  async deletePlaceImage(imageId: number): Promise<void> {
+    await this.db.delete(placeImages)
+      .where(eq(placeImages.id, imageId));
   }
 
   // Zone methods
   async getAllZones(): Promise<Zone[]> {
-    // Use raw SQL to extract boundary as GeoJSON from PostGIS geometry
+    // Use raw SQL to extract boundary as text from PostGIS geometry
     const result = await this.db.execute(sql`
       SELECT
         id,
         name,
         summary,
-        ST_AsGeoJSON(boundary)::text as boundary_geojson
+        boundary::text
       FROM zones
       ORDER BY id
     `);
 
     return (result.rows as any[]).map(row => ({
-      id: row.id,
+      id: Number(row.id),
       name: row.name,
       summary: row.summary,
-      boundary: row.boundary_geojson ? JSON.parse(row.boundary_geojson) : null,
-      worldlayerId: null,
-      createdAt: null,
-      updatedAt: null,
+      boundary: row.boundary ?? null,
     })) as Zone[];
   }
 
@@ -292,10 +423,13 @@ class MemStorage implements IStorage {
   private characters: Character[] = [];
   private characterRelationships: CharacterRelationship[] = [];
   private characterPsychology: CharacterPsychology[] = [];
+  private characterImages: CharacterImage[] = [];
+  private placeImages: PlaceImage[] = [];
   private places: Place[] = [];
   private zones: Zone[] = [];
   private factions: Faction[] = [];
-  private users = new Map<string, User>();
+  private nextCharacterImageId = 1;
+  private nextPlaceImageId = 1;
 
   constructor() {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -428,43 +562,30 @@ class MemStorage implements IStorage {
       createdAt: entry.createdAt ?? entry.created_at ?? null,
       updatedAt: entry.updatedAt ?? entry.updated_at ?? null,
     })) as CharacterPsychology[];
-    this.places = load<any[]>("places_", []).map((place) => {
-      const parsedCoords = parsePoint(place.coordinates ?? place.geom ?? null);
-      const placeRecord = {
-        id: Number(place.id),
-        name: place.name,
-        type: place.type ?? null,
-        description: place.description ?? null,
-        summary: place.summary ?? null,
-        inhabitants: Array.isArray(place.inhabitants)
-          ? place.inhabitants.map(String).join(", ")
-          : place.inhabitants ?? null,
-        history: place.history ?? null,
-        currentStatus: place.current_status ?? null,
-        secrets: place.secrets ?? null,
-        latitude: toNumber(place.latitude) ?? parsedCoords?.latitude ?? null,
-        longitude: toNumber(place.longitude) ?? parsedCoords?.longitude ?? null,
-        elevation: toNumber(place.elevation) ?? null,
-        address: place.address ?? null,
-        district: place.district ?? null,
-        zoneId: toNumber(place.zone_id ?? place.zone) ?? null,
-        factionDominantId: toNumber(place.faction_dominant_id) ?? null,
-        createdAt: place.created_at ? new Date(place.created_at) : null,
-        updatedAt: place.updated_at ? new Date(place.updated_at) : null,
-        extraData: coerceJson<Record<string, unknown>>(place.extra_data) ?? place.extra_data ?? null,
-      };
-
-      return placeRecord as unknown as Place;
-    }) as Place[];
+    this.places = load<any[]>("places_", []).map((place) => ({
+      id: Number(place.id),
+      name: place.name,
+      type: place.type ?? null,
+      zone: toNumber(place.zone_id ?? place.zone) ?? null,
+      summary: place.summary ?? null,
+      inhabitants: Array.isArray(place.inhabitants)
+        ? place.inhabitants
+        : place.inhabitants ?? null,
+      history: place.history ?? null,
+      currentStatus: place.current_status ?? null,
+      secrets: place.secrets ?? null,
+      extraData: coerceJson<Record<string, unknown>>(place.extra_data) ?? place.extra_data ?? null,
+      createdAt: place.created_at ? new Date(place.created_at) : null,
+      updatedAt: place.updated_at ? new Date(place.updated_at) : null,
+      coordinates: place.coordinates ?? place.geom ?? null,
+      geom: place.geom ?? null,
+    })) as Place[];
 
     this.zones = load<any[]>("zones_", []).map((zone) => ({
       id: Number(zone.id),
       name: zone.name,
       summary: zone.summary ?? null,
-      boundary: coerceJson<Record<string, unknown>>(zone.boundary) ?? zone.boundary ?? null,
-      worldlayerId: toNumber(zone.worldlayer_id) ?? null,
-      createdAt: zone.created_at ?? null,
-      updatedAt: zone.updated_at ?? null,
+      boundary: zone.boundary ?? null,
     })) as Zone[];
 
     this.factions = load<any[]>("factions_", []).map((faction) => ({
@@ -485,25 +606,6 @@ class MemStorage implements IStorage {
     })) as Faction[];
   }
 
-  // User methods (minimal in-memory implementation)
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find((user) => user.username === username);
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const user: User = {
-      id: randomUUID(),
-      username: insertUser.username,
-      password: insertUser.password,
-    };
-    this.users.set(user.id, user);
-    return user;
-  }
-
   async getAllSeasons(): Promise<Season[]> {
     return this.seasons;
   }
@@ -514,12 +616,15 @@ class MemStorage implements IStorage {
       .sort((a, b) => a.episode - b.episode);
   }
 
-  async getChunksByEpisode(
+  async getChunksBySeasonAndEpisode(
+    seasonId: number,
     episodeId: number,
     offset: number = 0,
     limit: number = 50,
   ): Promise<{ chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>; total: number }> {
-    const metadataForEpisode = this.metadata.filter((meta) => meta.episode === episodeId);
+    const metadataForEpisode = this.metadata.filter(
+      (meta) => meta.season === seasonId && meta.episode === episodeId
+    );
     const chunkIds = new Set(metadataForEpisode.map((meta) => meta.chunkId));
     const chunks = this.chunks.filter((chunk) => chunkIds.has(chunk.id));
 
@@ -534,6 +639,44 @@ class MemStorage implements IStorage {
       total: sorted.length,
       chunks: sorted.slice(offset, offset + limit),
     };
+  }
+
+  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    // Get chunk with highest ID that has metadata
+    const chunksWithMetadata = this.chunks
+      .map((chunk) => ({
+        ...chunk,
+        metadata: this.metadata.find((meta) => meta.chunkId === chunk.id),
+      }))
+      .filter((chunk) => chunk.metadata !== undefined)
+      .sort((a, b) => b.id - a.id);
+
+    return chunksWithMetadata[0] || null;
+  }
+
+  async getAdjacentChunks(chunkId: number): Promise<{
+    previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+    next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
+  }> {
+    const chunksWithMetadata = this.chunks
+      .map((chunk) => ({
+        ...chunk,
+        metadata: this.metadata.find((meta) => meta.chunkId === chunk.id),
+      }))
+      .filter((chunk) => chunk.metadata !== undefined)
+      .sort((a, b) => a.id - b.id);
+
+    // Find previous chunk (highest ID less than current)
+    const previous = chunksWithMetadata
+      .filter((chunk) => chunk.id < chunkId)
+      .sort((a, b) => b.id - a.id)[0] || null;
+
+    // Find next chunk (lowest ID greater than current)
+    const next = chunksWithMetadata
+      .filter((chunk) => chunk.id > chunkId)
+      .sort((a, b) => a.id - b.id)[0] || null;
+
+    return { previous, next };
   }
 
   async getCharacters(startId?: number, endId?: number): Promise<Character[]> {
@@ -562,8 +705,70 @@ class MemStorage implements IStorage {
     return this.characterPsychology.find((entry) => entry.characterId === characterId);
   }
 
+  async getCharacterImages(characterId: number): Promise<CharacterImage[]> {
+    return this.characterImages
+      .filter((img) => img.characterId === characterId)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  async addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number): Promise<CharacterImage> {
+    const image: CharacterImage = {
+      id: this.nextCharacterImageId++,
+      characterId,
+      filePath,
+      isMain,
+      displayOrder,
+      uploadedAt: new Date(),
+    };
+    this.characterImages.push(image);
+    return image;
+  }
+
+  async setMainCharacterImage(characterId: number, imageId: number): Promise<void> {
+    this.characterImages.forEach((img) => {
+      if (img.characterId === characterId) {
+        img.isMain = img.id === imageId ? 1 : 0;
+      }
+    });
+  }
+
+  async deleteCharacterImage(imageId: number): Promise<void> {
+    this.characterImages = this.characterImages.filter((img) => img.id !== imageId);
+  }
+
   async getAllPlaces(): Promise<Place[]> {
     return this.places;
+  }
+
+  async getPlaceImages(placeId: number): Promise<PlaceImage[]> {
+    return this.placeImages
+      .filter((img) => img.placeId === placeId)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  async addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number): Promise<PlaceImage> {
+    const image: PlaceImage = {
+      id: this.nextPlaceImageId++,
+      placeId,
+      filePath,
+      isMain,
+      displayOrder,
+      uploadedAt: new Date(),
+    };
+    this.placeImages.push(image);
+    return image;
+  }
+
+  async setMainPlaceImage(placeId: number, imageId: number): Promise<void> {
+    this.placeImages.forEach((img) => {
+      if (img.placeId === placeId) {
+        img.isMain = img.id === imageId ? 1 : 0;
+      }
+    });
+  }
+
+  async deletePlaceImage(imageId: number): Promise<void> {
+    this.placeImages = this.placeImages.filter((img) => img.id !== imageId);
   }
 
   async getAllZones(): Promise<Zone[]> {

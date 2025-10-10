@@ -104,6 +104,11 @@ def parse_args() -> argparse.Namespace:
         default=7,
         help="Maximum number of concurrent workers (default: 7)",
     )
+    parser.add_argument(
+        "--async-providers",
+        type=str,
+        help="Comma-separated list of providers to route via batch API (e.g., 'openai,anthropic')",
+    )
     return parser.parse_args()
 
 
@@ -371,7 +376,13 @@ def main() -> None:
 
     patch_provider_keys()
 
-    engine = AuditionEngine()
+    # Parse async_providers list
+    async_providers = []
+    if args.async_providers:
+        async_providers = [p.strip().lower() for p in args.async_providers.split(',') if p.strip()]
+        LOGGER.info("Async providers (batch mode): %s", async_providers)
+
+    engine = AuditionEngine(async_providers=async_providers)
     repo = engine.repository
 
     openai_conditions = load_conditions(repo, OPENAI_LANES)

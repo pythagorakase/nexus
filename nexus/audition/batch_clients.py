@@ -1,4 +1,4 @@
-"""Batch API clients for OpenAI and Anthropic."""
+"""Batch API clients for OpenAI, Anthropic, and OpenRouter."""
 
 from __future__ import annotations
 
@@ -94,7 +94,13 @@ class AnthropicBatchClient:
             raise ImportError("anthropic package not installed")
 
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from 1Password CLI."""
+        """Get Anthropic API key from environment or 1Password CLI."""
+        # First, check if API key is already in environment
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            return api_key
+
+        # Otherwise, fetch from 1Password
         try:
             result = subprocess.run(
                 ["op", "read", "op://API/Anthropic/api key"],
@@ -500,11 +506,215 @@ class OpenAIBatchClient:
         LOGGER.info(f"Cancelled batch {batch_id}")
 
 
+class OpenRouterBatchClient:
+    """Client for OpenRouter batch execution via OpenAI-compatible API."""
+
+    API_BASE = "https://openrouter.ai/api/v1"
+
+    def __init__(self, api_key: Optional[str] = None):
+        """Initialize client with API key from 1Password if not provided."""
+        self.api_key = api_key or self._get_api_key()
+        if openai:
+            self.client = openai.OpenAI(
+                api_key=self.api_key,
+                base_url=self.API_BASE,
+            )
+        else:
+            raise ImportError("openai package not installed")
+
+    def _get_api_key(self) -> str:
+        """Get OpenRouter API key from 1Password CLI."""
+        try:
+            result = subprocess.run(
+                ["op", "read", "op://API/OpenRouter/api key"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            api_key = result.stdout.strip()
+            if not api_key:
+                raise ValueError("Empty API key returned from 1Password")
+            return api_key
+        except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+            raise ValueError(
+                "Failed to retrieve OpenRouter API key from 1Password. "
+                "Ensure 1Password CLI is installed and signed in."
+            ) from exc
+
+    def create_batch(self, requests: List[BatchRequest], output_dir: Path) -> str:
+        """Create a batch."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        input_file = output_dir / f"batch_input_{int(time.time())}.jsonl"
+
+        with open(input_file, "w", encoding="utf-8") as handle:
+            for req in requests:
+                messages: List[Dict[str, Any]] = []
+                if req.system_prompt:
+                    messages.append({"role": "system", "content": req.system_prompt})
+                messages.append({"role": "user", "content": req.prompt_text})
+
+                body: Dict[str, Any] = {
+                    "model": req.model,
+                    "messages": messages,
+                    "max_tokens": req.max_tokens,
+                }
+
+                if req.temperature is not None:
+                    body["temperature"] = req.temperature
+
+                if req.reasoning_effort or req.thinking_budget_tokens:
+                    reasoning: Dict[str, Any] = {}
+                    if req.reasoning_effort:
+                        reasoning["effort"] = req.reasoning_effort
+                    if req.thinking_budget_tokens:
+                        reasoning["max_tokens"] = req.thinking_budget_tokens
+                    body["reasoning"] = reasoning
+
+                batch_request = {
+                    "custom_id": req.custom_id,
+                    "method": "POST",
+                    "url": "/v1/chat/completions",
+                    "body": body,
+                }
+                handle.write(json.dumps(batch_request) + "\n")
+
+        LOGGER.info(
+            "Created OpenRouter batch input file: %s (%s requests)",
+            input_file,
+            len(requests),
+        )
+
+        with open(input_file, "rb") as handle:
+            upload_response = self.client.files.create(file=handle, purpose="batch")
+
+        LOGGER.info("Uploaded OpenRouter batch file: %s", upload_response.id)
+
+        batch_response = self.client.batches.create(
+            input_file_id=upload_response.id,
+            endpoint="/v1/chat/completions",
+            completion_window="24h",
+        )
+
+        LOGGER.info(
+            "OpenRouter batch created: %s (status: %s)",
+            batch_response.id,
+            batch_response.status,
+        )
+        return batch_response.id
+
+    def get_status(self, batch_id: str) -> BatchJob:
+        """Get batch status."""
+        response = self.client.batches.retrieve(batch_id)
+
+        status_map = {
+            "validating": BatchStatus.PENDING,
+            "in_progress": BatchStatus.IN_PROGRESS,
+            "finalizing": BatchStatus.IN_PROGRESS,
+            "completed": BatchStatus.COMPLETED,
+            "failed": BatchStatus.FAILED,
+            "expired": BatchStatus.EXPIRED,
+            "cancelling": BatchStatus.IN_PROGRESS,
+            "cancelled": BatchStatus.CANCELLED,
+        }
+        status = status_map.get(response.status, BatchStatus.PENDING)
+
+        return BatchJob(
+            batch_id=batch_id,
+            provider="openrouter",
+            status=status,
+            total_requests=response.request_counts.total,
+            created_at=datetime.fromtimestamp(response.created_at, tz=timezone.utc),
+            completed_at=
+            datetime.fromtimestamp(response.completed_at, tz=timezone.utc)
+            if response.completed_at
+            else None,
+            results_url=response.output_file_id,
+            request_counts={
+                "completed": response.request_counts.completed,
+                "failed": response.request_counts.failed,
+            },
+        )
+
+    def retrieve_results(self, batch_job: BatchJob) -> List[BatchResult]:
+        """Retrieve results from a completed batch."""
+        if not batch_job.results_url:
+            raise ValueError(f"Batch {batch_job.batch_id} has no output_file_id")
+
+        LOGGER.info(
+            "Retrieving OpenRouter batch results from file %s",
+            batch_job.results_url,
+        )
+
+        file_response = self.client.files.content(batch_job.results_url)
+        content = file_response.read().decode("utf-8")
+
+        results: List[BatchResult] = []
+        for line in content.strip().split("\n"):
+            if not line:
+                continue
+            result_data = json.loads(line)
+            response_payload = result_data.get("response")
+
+            if response_payload and response_payload.get("status_code") == 200:
+                body = response_payload.get("body")
+                if isinstance(body, str):
+                    try:
+                        body = json.loads(body)
+                    except json.JSONDecodeError:
+                        LOGGER.warning(
+                            "Failed to decode OpenRouter batch response body for %s; leaving as raw string",
+                            result_data.get("custom_id"),
+                        )
+
+                results.append(
+                    BatchResult(
+                        custom_id=result_data["custom_id"],
+                        status="succeeded",
+                        response=body,
+                    )
+                )
+                continue
+
+            error_msg = result_data.get("error", {}).get("message", "Unknown error")
+            if response_payload:
+                error_body = response_payload.get("body")
+                if isinstance(error_body, str):
+                    try:
+                        error_body = json.loads(error_body)
+                    except json.JSONDecodeError:
+                        error_body = None
+                if isinstance(error_body, dict):
+                    error_field = error_body.get("error")
+                    if isinstance(error_field, dict):
+                        error_msg = error_field.get("message", error_msg)
+
+            results.append(
+                BatchResult(
+                    custom_id=result_data["custom_id"],
+                    status="failed",
+                    error=error_msg,
+                )
+            )
+
+        LOGGER.info(
+            "Retrieved %s results from OpenRouter batch %s",
+            len(results),
+            batch_job.batch_id,
+        )
+        return results
+
+    def cancel_batch(self, batch_id: str) -> None:
+        """Cancel a batch."""
+        self.client.batches.cancel(batch_id)
+        LOGGER.info("Cancelled OpenRouter batch %s", batch_id)
+
+
 __all__ = [
     "BatchStatus",
     "BatchRequest",
     "BatchResult",
     "BatchJob",
     "AnthropicBatchClient",
-    "OpenAIBatchClient"
+    "OpenAIBatchClient",
+    "OpenRouterBatchClient",
 ]
