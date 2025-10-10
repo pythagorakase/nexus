@@ -46,7 +46,8 @@ class AuditionEngine:
         self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.repository = repository or AuditionRepository(settings_path=self.settings_path)
         self.context_dir = Path(context_dir) if context_dir else DEFAULT_CONTEXT_DIR
-        self.async_providers = set(async_providers or [])  # Providers to route via batch API
+        # Normalize async providers for case-insensitive matching when selecting batch routing
+        self.async_providers = {provider.lower() for provider in (async_providers or [])}
 
         # Cached batch clients to avoid repeated 1Password authentication
         self._anthropic_batch_client = None
@@ -201,6 +202,31 @@ class AuditionEngine:
         if not condition or condition.id is None:
             raise ValueError(f"Unknown condition slug: {condition_slug}")
 
+        provider_name = condition.provider.lower()
+
+        if provider_name in self.async_providers and not dry_run:
+            LOGGER.info(
+                "Provider %s configured for async execution; deferring to batch submission",
+                condition.provider,
+            )
+            run, batch_id = self.submit_batch_generation(
+                condition_slug=condition_slug,
+                prompt_ids=prompt_ids,
+                limit=limit,
+                replicate_count=replicate_count,
+                run_label=run_label,
+                created_by=created_by,
+                notes=notes,
+                enable_cache=enable_cache,
+            )
+            LOGGER.info(
+                "Async batch %s submitted for run %s (provider=%s)",
+                batch_id,
+                run.run_id,
+                condition.provider,
+            )
+            return run
+
         prompts = self.repository.list_prompts()
         if prompt_ids is not None:
             prompt_filter = set(prompt_ids)
@@ -288,9 +314,8 @@ class AuditionEngine:
                                     orchestrator.mark_cache_warm(condition.provider, prompt.id)  # type: ignore[arg-type]
                                     first_request_sent = True
                             elif enable_cache and condition.provider.lower() == "openai":
-                                # OpenAI prompt caching with chunk-based cache key
-                                cache_key = f"storyteller-chunk-{prompt.chunk_id}"
-                                llm_response = provider.get_completion(prompt_text, cache_key=cache_key)  # type: ignore[union-attr]
+                                # OpenAI prompt caching routed through OpenRouter
+                                llm_response = provider.get_completion(prompt_text, enable_cache=True)  # type: ignore[union-attr]
                             else:
                                 llm_response = provider.get_completion(prompt_text)  # type: ignore[union-attr]
 
