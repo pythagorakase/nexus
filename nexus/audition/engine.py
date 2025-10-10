@@ -41,10 +41,12 @@ class AuditionEngine:
         repository: Optional[AuditionRepository] = None,
         settings_path: Optional[Path] = None,
         context_dir: Optional[Path] = None,
+        async_providers: Optional[List[str]] = None,
     ) -> None:
         self.settings_path = settings_path or DEFAULT_SETTINGS_PATH
         self.repository = repository or AuditionRepository(settings_path=self.settings_path)
         self.context_dir = Path(context_dir) if context_dir else DEFAULT_CONTEXT_DIR
+        self.async_providers = set(async_providers or [])  # Providers to route via batch API
 
         # Cached batch clients to avoid repeated 1Password authentication
         self._anthropic_batch_client = None
@@ -403,6 +405,16 @@ class AuditionEngine:
 
         # Prepare all batch requests
         batch_requests = []
+
+        # Map provider to OpenRouter model name format
+        provider_lower = condition.provider.lower()
+        if provider_lower in ("openai", "anthropic", "google", "deepseek"):
+            openrouter_model = f"{provider_lower}/{condition.model}"
+        elif provider_lower == "openrouter":
+            openrouter_model = condition.model
+        else:
+            openrouter_model = f"{provider_lower}/{condition.model}"
+
         for prompt in prompts:
             if prompt.id is None:
                 raise ValueError(f"Prompt {prompt.chunk_id} has no database identifier")
@@ -424,7 +436,7 @@ class AuditionEngine:
                     prompt_id=prompt.id,
                     replicate_index=replicate_index,
                     prompt_text=prompt_text,
-                    model=condition.model,
+                    model=openrouter_model,
                     temperature=condition.temperature,
                     max_tokens=max_tokens,
                     system_prompt=condition.system_prompt,
@@ -454,20 +466,11 @@ class AuditionEngine:
                 )
                 self.repository.record_generation(result)
 
-        # Submit batch to appropriate provider
-        if condition.provider.lower() == "anthropic":
-            client = self._get_anthropic_batch_client()
-            batch_id = client.create_batch(batch_requests)
-        elif condition.provider.lower() == "openai":
-            client = self._get_openai_batch_client()
-            batch_dir = output_dir or Path("temp/batches")
-            batch_id = client.create_batch(batch_requests, batch_dir)
-        elif condition.provider.lower() == "openrouter":
-            client = self._get_openrouter_batch_client()
-            batch_dir = output_dir or Path("temp/batches")
-            batch_id = client.create_batch(batch_requests, batch_dir)
-        else:
-            raise ValueError(f"Unsupported provider for batch mode: {condition.provider}")
+        # Submit batch through OpenRouter for all providers
+        # This provides unified API access and batch support across providers
+        client = self._get_openrouter_batch_client()
+        batch_dir = output_dir or Path("temp/batches")
+        batch_id = client.create_batch(batch_requests, batch_dir)
 
         # Update all results with batch_job_id
         for req in batch_requests:
@@ -803,46 +806,40 @@ class AuditionEngine:
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def _build_provider(self, condition: ConditionSpec, enable_cache: bool = False):
+        """Build provider for sync generation.
+
+        All providers route through OpenRouter for consistent API and batch support.
+        Provider field determines model namespace (openai/, anthropic/, etc).
+        """
         max_tokens = condition.max_output_tokens or 2048
 
-        if condition.provider.lower() == "openai":
-            if OpenAIProvider is None:
-                raise RuntimeError("OpenAI provider not available. Install dependencies or configure differently.")
-            provider = OpenAIProvider(
-                model=condition.model,
-                temperature=condition.temperature,  # Pass None if not set
-                max_tokens=max_tokens,
-                system_prompt=condition.system_prompt,
-                reasoning_effort=condition.reasoning_effort,
-            )
-            return provider
-        if condition.provider.lower() == "anthropic":
-            if AnthropicProvider is None:
-                raise RuntimeError("Anthropic provider not available. Install dependencies or configure differently.")
-            provider = AnthropicProvider(
-                model=condition.model,
-                temperature=condition.temperature,  # Pass None if not set
-                max_tokens=max_tokens,
-                system_prompt=condition.system_prompt,
-                top_p=None,
-                top_k=None,
-                thinking_enabled=condition.thinking_enabled or False,
-                thinking_budget_tokens=condition.thinking_budget_tokens,
-            )
-            return provider
-        if condition.provider.lower() == "openrouter":
-            if OpenRouterProvider is None:
-                raise RuntimeError("OpenRouter provider not available. Install dependencies or configure differently.")
-            provider = OpenRouterProvider(
-                model=condition.model,
-                temperature=condition.temperature,  # Pass None if not set
-                max_tokens=max_tokens,
-                system_prompt=condition.system_prompt,
-                reasoning_effort=condition.reasoning_effort,
-                thinking_budget_tokens=condition.thinking_budget_tokens,
-            )
-            return provider
-        raise ValueError(f"Unsupported provider: {condition.provider}")
+        # Map provider names to OpenRouter model prefixes
+        provider_lower = condition.provider.lower()
+
+        # Determine OpenRouter model name based on provider
+        if provider_lower in ("openai", "anthropic", "google", "deepseek"):
+            # For known providers, prepend provider name to model
+            # e.g., "gpt-4o" -> "openai/gpt-4o", "claude-sonnet-4-5" -> "anthropic/claude-sonnet-4-5"
+            openrouter_model = f"{provider_lower}/{condition.model}"
+        elif provider_lower == "openrouter":
+            # Already in OpenRouter format (e.g., "deepseek-v3.2-exp")
+            openrouter_model = condition.model
+        else:
+            # Unknown provider, try using as-is
+            openrouter_model = f"{provider_lower}/{condition.model}"
+
+        if OpenRouterProvider is None:
+            raise RuntimeError("OpenRouter provider not available. Install dependencies or configure differently.")
+
+        provider = OpenRouterProvider(
+            model=openrouter_model,
+            temperature=condition.temperature,  # Pass None if not set
+            max_tokens=max_tokens,
+            system_prompt=condition.system_prompt,
+            reasoning_effort=condition.reasoning_effort,
+            thinking_budget_tokens=condition.thinking_budget_tokens,
+        )
+        return provider
 
     def _format_prompt(
         self,

@@ -185,10 +185,13 @@ export const auditionAPI = {
   /**
    * Start a generation job.
    */
-  async startGeneration(limit?: number, max_workers?: number): Promise<{ job_id: string; status: string }> {
+  async startGeneration(limit?: number, max_workers?: number, async_providers?: string[]): Promise<{ job_id: string; status: string }> {
     const params = new URLSearchParams();
     if (limit && limit > 0) params.append('limit', limit.toString());
     if (max_workers && max_workers > 0) params.append('max_workers', max_workers.toString());
+    if (async_providers && async_providers.length > 0) {
+      params.append('async_providers', async_providers.join(','));
+    }
 
     const url = params.toString()
       ? `${API_BASE}/generate/start?${params}`

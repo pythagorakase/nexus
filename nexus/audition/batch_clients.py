@@ -94,7 +94,13 @@ class AnthropicBatchClient:
             raise ImportError("anthropic package not installed")
 
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from 1Password CLI."""
+        """Get Anthropic API key from environment or 1Password CLI."""
+        # First, check if API key is already in environment
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            return api_key
+
+        # Otherwise, fetch from 1Password
         try:
             result = subprocess.run(
                 ["op", "read", "op://API/Anthropic/api key"],

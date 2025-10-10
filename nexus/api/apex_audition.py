@@ -546,8 +546,12 @@ def get_missing_generation_count():
 
 
 @app.post("/api/audition/generate/start")
-def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = None):
-    """Start a generation job (runs run_full_sequential.py to create new generations)."""
+def start_generation(
+    limit: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    async_providers: Optional[str] = None
+):
+    """Start a generation job with optional async provider routing."""
     job_id = str(uuid.uuid4())
 
     # Get project root (parent of nexus/api/)
@@ -581,6 +585,15 @@ def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = N
         )
         env["OPENAI_API_KEY"] = openai_result.stdout.strip()
 
+        # Fetch OpenRouter API key
+        openrouter_result = subprocess.run(
+            ["op", "read", "op://API/OpenRouter/api key"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        env["OPENROUTER_API_KEY"] = openrouter_result.stdout.strip()
+
     except subprocess.CalledProcessError as e:
         raise HTTPException(
             status_code=500,
@@ -598,6 +611,8 @@ def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = N
         cmd.extend(["--limit", str(limit)])
     if max_workers is not None and max_workers > 0:
         cmd.extend(["--max-workers", str(max_workers)])
+    if async_providers:
+        cmd.extend(["--async-providers", async_providers])
 
     # Start subprocess with pre-fetched API keys in environment
     process = subprocess.Popen(
