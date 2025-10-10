@@ -524,25 +524,152 @@ def get_missing_generation_count():
     """Get count of prompt×condition combinations that need generation."""
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
             cur.execute("""
                 SELECT COUNT(*) as count
                 FROM apex_audition.prompts p
                 CROSS JOIN apex_audition.conditions c
                 WHERE c.is_active = TRUE
-                  AND NOT EXISTS (
-                      SELECT 1
+                  AND (
+                      SELECT COUNT(*)
                       FROM apex_audition.generations g
                       WHERE g.prompt_id = p.id
                         AND g.condition_id = c.id
-                        AND g.replicate_index = 0
                         AND g.status = 'completed'
                         AND g.response_payload->>'content' IS NOT NULL
                         AND LENGTH(g.response_payload->>'content') > 0
-                  )
-            """)
+                  ) < %s
+            """, (replicate_count,))
             row = cur.fetchone()
             count = row["count"] if row else 0
             return {"count": count}
+
+
+@app.get("/api/audition/generate/missing")
+def get_missing_generations():
+    """Get detailed list of prompt×condition combinations that need generation."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
+            cur.execute("""
+                SELECT
+                    p.id as prompt_id,
+                    p.chunk_id,
+                    p.label as prompt_label,
+                    p.category as prompt_category,
+                    c.id as condition_id,
+                    c.slug as condition_slug,
+                    c.label as condition_label,
+                    c.provider,
+                    c.model_name
+                FROM apex_audition.prompts p
+                CROSS JOIN apex_audition.conditions c
+                WHERE c.is_active = TRUE
+                  AND (
+                      SELECT COUNT(*)
+                      FROM apex_audition.generations g
+                      WHERE g.prompt_id = p.id
+                        AND g.condition_id = c.id
+                        AND g.status = 'completed'
+                        AND g.response_payload->>'content' IS NOT NULL
+                        AND LENGTH(g.response_payload->>'content') > 0
+                  ) < %s
+                ORDER BY c.slug, p.chunk_id
+            """, (replicate_count,))
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+
+
+@app.get("/api/audition/generate/task-count")
+def get_generation_task_count(
+    limit: Optional[int] = None,
+    async_providers: Optional[str] = None
+):
+    """
+    Calculate how many tasks will be executed with the given parameters.
+
+    This pre-flight calculation matches the logic in run_full_sequential.py
+    to show exactly how many tasks will run when Start Generation is clicked.
+    """
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
+            # Get all active conditions
+            cur.execute("""
+                SELECT id, slug, provider
+                FROM apex_audition.conditions
+                WHERE is_active = TRUE
+                ORDER BY provider, slug
+            """)
+            conditions = cur.fetchall()
+
+            # Get all prompts (excluding test fixtures)
+            TEST_CHUNK_IDS = {4242}
+            cur.execute("""
+                SELECT id, chunk_id
+                FROM apex_audition.prompts
+                WHERE chunk_id NOT IN %s
+                ORDER BY chunk_id, id
+            """, (tuple(TEST_CHUNK_IDS),))
+            prompts = cur.fetchall()
+
+            # Build task list using same logic as run_full_sequential.py
+            tasks = []
+
+            if limit is not None and limit > 0:
+                # Limit mode: sample one incomplete task per condition (up to limit)
+                conditions_sampled = 0
+                for condition in conditions:
+                    if conditions_sampled >= limit:
+                        break
+                    # Find first incomplete task for this condition
+                    for prompt in prompts:
+                        # Check if all replicates are completed
+                        cur.execute("""
+                            SELECT COUNT(*) as completed_count
+                            FROM apex_audition.generations
+                            WHERE condition_id = %s
+                              AND prompt_id = %s
+                              AND status = 'completed'
+                        """, (condition['id'], prompt['id']))
+                        result = cur.fetchone()
+                        completed_count = result['completed_count'] if result else 0
+
+                        if completed_count < replicate_count:
+                            tasks.append((condition['id'], prompt['id']))
+                            conditions_sampled += 1
+                            break  # Move to next condition
+            else:
+                # No limit: execute all incomplete tasks
+                for prompt in prompts:
+                    for condition in conditions:
+                        # Check if all replicates are completed
+                        cur.execute("""
+                            SELECT COUNT(*) as completed_count
+                            FROM apex_audition.generations
+                            WHERE condition_id = %s
+                              AND prompt_id = %s
+                              AND status = 'completed'
+                        """, (condition['id'], prompt['id']))
+                        result = cur.fetchone()
+                        completed_count = result['completed_count'] if result else 0
+
+                        if completed_count < replicate_count:
+                            tasks.append((condition['id'], prompt['id']))
+
+            return {"task_count": len(tasks)}
 
 
 @app.post("/api/audition/generate/start")

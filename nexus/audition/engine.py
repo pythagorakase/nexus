@@ -844,8 +844,14 @@ class AuditionEngine:
         # Determine OpenRouter model name based on provider
         if provider_lower in ("openai", "anthropic", "google", "deepseek"):
             # For known providers, prepend provider name to model
-            # e.g., "gpt-4o" -> "openai/gpt-4o", "claude-sonnet-4-5" -> "anthropic/claude-sonnet-4-5"
-            openrouter_model = f"{provider_lower}/{condition.model}"
+            # OpenRouter uses dots in version numbers (e.g., "4.5") while database uses dashes ("4-5")
+            # Convert version patterns: "claude-sonnet-4-5" -> "claude-sonnet-4.5"
+            # But keep single-digit models unchanged: "gpt-5" stays "gpt-5"
+            model_name = condition.model
+            import re
+            # Only convert if there's a two-part version number at the end (digit-dash-digit)
+            model_name = re.sub(r'(\d+)-(\d+)$', r'\1.\2', model_name)
+            openrouter_model = f"{provider_lower}/{model_name}"
         elif provider_lower == "openrouter":
             # Already in OpenRouter format (e.g., "deepseek-v3.2-exp")
             openrouter_model = condition.model

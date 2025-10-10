@@ -66,7 +66,7 @@ class AuditionRepository:
             Column("slug", String(128), nullable=False, unique=True, index=True),
             Column(
                 "provider",
-                Enum("openai", "anthropic", name="provider_enum", schema="apex_audition"),
+                Enum("openai", "anthropic", "openrouter", name="provider_enum", schema="apex_audition"),
                 nullable=False,
             ),
             Column(
@@ -74,6 +74,7 @@ class AuditionRepository:
                 Enum(
                     "gpt-5", "gpt-4o", "o3",
                     "claude-sonnet-4-5", "claude-opus-4-1",
+                    "deepseek-v3.2-exp",
                     name="model_name_enum",
                     schema="apex_audition",
                 ),
@@ -227,6 +228,15 @@ class AuditionRepository:
             Column("rating", Float, nullable=False),
             Column("rating_delta", Float, nullable=False),
             Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+        )
+
+        self.global_settings = Table(
+            "global_settings",
+            self.metadata,
+            Column("id", Boolean, primary_key=True, server_default=text("true")),
+            Column("replicate_count", Integer, nullable=False, server_default=text("1")),
+            Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
+            Column("updated_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
         )
 
     def _ensure_schema(self) -> None:
@@ -523,6 +533,25 @@ class AuditionRepository:
             return database.get("url", DEFAULT_DB_URL)
         except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - defensive
             raise RuntimeError(f"Failed to load database URL from {settings_path}: {exc}") from exc
+
+    # Global settings -------------------------------------------------------
+    def get_replicate_count(self) -> int:
+        """Get the configured replicate count from global settings."""
+        query = self.global_settings.select()
+        with self.engine.connect() as connection:
+            row = connection.execute(query).mappings().first()
+        if not row:
+            # If no settings row exists, return default
+            return 1
+        return row["replicate_count"]
+
+    def set_replicate_count(self, count: int) -> None:
+        """Update the replicate count in global settings."""
+        if count < 1:
+            raise ValueError("replicate_count must be >= 1")
+        stmt = self.global_settings.update().values(replicate_count=count)
+        with self.engine.begin() as connection:
+            connection.execute(stmt)
 
     # Debugging convenience -------------------------------------------------
     def truncate_all(self) -> None:

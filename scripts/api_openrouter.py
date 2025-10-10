@@ -296,21 +296,13 @@ class OpenRouterProvider(LLMProvider):
         if self.temperature is not None:
             params["temperature"] = self.temperature
 
-        # Add reasoning parameters if provided
-        # OpenRouter supports a unified "reasoning" parameter
+        # OpenRouter's REST API supports reasoning parameters but the OpenAI SDK doesn't
+        # Route to HTTP if reasoning is enabled, otherwise use SDK for efficiency
         if self.reasoning_effort or self.thinking_budget_tokens:
-            reasoning_config: Dict[str, Any] = {}
-
-            if self.reasoning_effort:
-                reasoning_config["effort"] = self.reasoning_effort
-
-            if self.thinking_budget_tokens:
-                reasoning_config["max_tokens"] = self.thinking_budget_tokens
-
-            params["reasoning"] = reasoning_config
+            return self._get_completion_http(prompt, messages, enable_cache)
 
         try:
-            # Call the API
+            # Call the API via SDK
             response = self.client.chat.completions.create(**params)
 
             # Extract the content from the response
@@ -346,6 +338,84 @@ class OpenRouterProvider(LLMProvider):
                 return self.get_completion(prompt, enable_cache=enable_cache)
 
             # Re-raise other exceptions
+            raise
+
+    def _get_completion_http(self, prompt: str, messages: List[Dict[str, str]], enable_cache: bool) -> LLMResponse:
+        """
+        Get completion via HTTP REST API (required for reasoning parameters).
+
+        The OpenAI SDK doesn't support OpenRouter's reasoning parameters, so we use
+        direct HTTP requests when reasoning is enabled.
+        """
+        import requests
+
+        # Build request payload
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+        }
+
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
+
+        # Add reasoning configuration per OpenRouter docs
+        if self.reasoning_effort or self.thinking_budget_tokens:
+            reasoning_config: Dict[str, Any] = {}
+
+            if self.reasoning_effort:
+                # OpenAI models use effort levels
+                reasoning_config["effort"] = self.reasoning_effort
+
+            if self.thinking_budget_tokens:
+                # Anthropic models use max_tokens
+                reasoning_config["max_tokens"] = self.thinking_budget_tokens
+
+            payload["reasoning"] = reasoning_config
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = requests.post(
+                f"{self.API_BASE}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=300,  # 5 minutes
+            )
+            response.raise_for_status()
+
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response from OpenRouter. Raw response: {response.text[:500]}")
+                raise
+
+            content = data["choices"][0]["message"]["content"] or ""
+
+            return LLMResponse(
+                content=content,
+                input_tokens=data.get("usage", {}).get("prompt_tokens", 0),
+                output_tokens=data.get("usage", {}).get("completion_tokens", 0),
+                model=self.model,
+            )
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                retry_after = e.response.headers.get("retry-after", COOLDOWNS["rate_limit"])
+                logger.warning(f"Rate limit exceeded. Waiting {retry_after} seconds...")
+                time.sleep(int(retry_after))
+                return self._get_completion_http(prompt, messages, enable_cache)
+
+            logger.error(f"OpenRouter HTTP error: {e.response.status_code} - {e.response.text[:500]}")
+            raise
+        except json.JSONDecodeError:
+            # Already logged above with raw response
+            raise
+        except Exception as e:
+            logger.error(f"Error calling OpenRouter HTTP API: {str(e)}")
             raise
 
     def _get_api_key(self) -> str:

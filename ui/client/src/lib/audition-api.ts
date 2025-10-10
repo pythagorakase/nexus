@@ -83,6 +83,18 @@ export interface GenerationRun {
   failed_generations: number;
 }
 
+export interface MissingGeneration {
+  prompt_id: number;
+  chunk_id: number;
+  prompt_label: string | null;
+  prompt_category: string | null;
+  condition_id: number;
+  condition_slug: string;
+  condition_label: string | null;
+  provider: string;
+  model_name: string;
+}
+
 export const auditionAPI = {
   /**
    * List all generation runs.
@@ -179,6 +191,34 @@ export const auditionAPI = {
   async getMissingGenerationCount(): Promise<{ count: number }> {
     const response = await fetch(`${API_BASE}/generate/count`);
     if (!response.ok) throw new Error('Failed to fetch missing generation count');
+    return response.json();
+  },
+
+  /**
+   * Get detailed list of missing generations.
+   */
+  async getMissingGenerations(): Promise<MissingGeneration[]> {
+    const response = await fetch(`${API_BASE}/generate/missing`);
+    if (!response.ok) throw new Error('Failed to fetch missing generations');
+    return response.json();
+  },
+
+  /**
+   * Calculate how many tasks will be executed with the given parameters.
+   */
+  async getTaskCount(limit?: number, async_providers?: string[]): Promise<{ task_count: number }> {
+    const params = new URLSearchParams();
+    if (limit && limit > 0) params.append('limit', limit.toString());
+    if (async_providers && async_providers.length > 0) {
+      params.append('async_providers', async_providers.join(','));
+    }
+
+    const url = params.toString()
+      ? `${API_BASE}/generate/task-count?${params}`
+      : `${API_BASE}/generate/task-count`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch task count');
     return response.json();
   },
 

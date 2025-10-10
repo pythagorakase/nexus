@@ -269,6 +269,13 @@
     @apply hidden;
   }
 
+  /* Make number input spinners visible in dark mode */
+  .dark input[type="number"]::-webkit-inner-spin-button,
+  .dark input[type="number"]::-webkit-outer-spin-button {
+    opacity: 1 !important;
+    filter: invert(1) !important;
+  }
+
   /* Placeholder styling for contentEditable div */
   [contenteditable][data-placeholder]:empty::before {
     content: attr(data-placeholder);

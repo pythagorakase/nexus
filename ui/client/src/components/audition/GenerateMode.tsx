@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
-import {ScrollArea} from '@/components/ui/scroll-area';
-import {auditionAPI} from '@/lib/audition-api';
+import {auditionAPI, MissingGeneration} from '@/lib/audition-api';
+import {MissingGenerationsDialog} from './MissingGenerationsDialog';
 
 interface GenerationStats {
   total: number;
@@ -32,6 +32,12 @@ export function GenerateMode() {
     const saved = localStorage.getItem('audition_async_anthropic');
     return saved === 'true';
   });
+  const [showMissingDialog, setShowMissingDialog] = useState(false);
+  const [missingGenerations, setMissingGenerations] = useState<MissingGeneration[]>([]);
+  const [initialRemaining, setInitialRemaining] = useState<number>(0);
+  const [initialCompleted, setInitialCompleted] = useState<number>(0);
+  const [initialFailed, setInitialFailed] = useState<number>(0);
+  const [taskCount, setTaskCount] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fetch count of missing generations on mount and when job completes
@@ -56,6 +62,28 @@ export function GenerateMode() {
     localStorage.setItem('audition_async_anthropic', asyncAnthropic.toString());
   }, [asyncAnthropic]);
 
+  // Fetch task count when limit or async settings change
+  useEffect(() => {
+    const fetchTaskCount = async () => {
+      try {
+        const limitValue = limit ? parseInt(limit, 10) : undefined;
+        const asyncProviders: string[] = [];
+        if (asyncOpenAI) asyncProviders.push('openai');
+        if (asyncAnthropic) asyncProviders.push('anthropic');
+
+        const data = await auditionAPI.getTaskCount(limitValue, asyncProviders);
+        setTaskCount(data.task_count);
+      } catch (err) {
+        console.error('Error fetching task count:', err);
+        setTaskCount(null);
+      }
+    };
+
+    if (!isRunning) {
+      fetchTaskCount();
+    }
+  }, [limit, asyncOpenAI, asyncAnthropic, isRunning]);
+
   // Start generation job
   const startGeneration = async () => {
     setError(null);
@@ -73,6 +101,7 @@ export function GenerateMode() {
       setIsRunning(true);
       setOutput('');
       setStats({total: 0, remaining: 0, completed: 0, failed: 0});
+      setInitialRemaining(missingCount || 0); // Capture the queue size at start
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
@@ -90,9 +119,23 @@ export function GenerateMode() {
     }
   };
 
+  // Show missing generations breakdown
+  const showMissingBreakdown = async () => {
+    try {
+      const data = await auditionAPI.getMissingGenerations();
+      setMissingGenerations(data);
+      setShowMissingDialog(true);
+    } catch (err) {
+      console.error('Error fetching missing generations:', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    }
+  };
+
   // Poll for output and stats
   useEffect(() => {
     if (!jobId || !isRunning) return;
+
+    let isFirstPoll = true;
 
     const interval = setInterval(async () => {
       try {
@@ -100,6 +143,12 @@ export function GenerateMode() {
 
         setOutput(data.output || '');
         if (data.stats) {
+          // Capture initial stats on first poll
+          if (isFirstPoll) {
+            setInitialCompleted(data.stats.completed || 0);
+            setInitialFailed(data.stats.failed || 0);
+            isFirstPoll = false;
+          }
           setStats(data.stats);
         }
         if (data.status === 'completed') {
@@ -122,12 +171,12 @@ export function GenerateMode() {
     }
   }, [output]);
 
-  // Calculate progress percentages
-  const total = stats.total || 0;
-  const completed = stats.completed || 0;
-  const failed = stats.failed || 0;
-  const completedPercent = total > 0 ? (completed / total) * 100 : 0;
-  const failedPercent = total > 0 ? (failed / total) * 100 : 0;
+  // Calculate progress percentages for current queue
+  const queueTotal = isRunning && initialRemaining > 0 ? initialRemaining : (stats.total || 0);
+  const completedInQueue = isRunning ? Math.max(0, (stats.completed || 0) - initialCompleted) : 0;
+  const failedInQueue = isRunning ? Math.max(0, (stats.failed || 0) - initialFailed) : 0;
+  const completedPercent = queueTotal > 0 ? (completedInQueue / queueTotal) * 100 : 0;
+  const failedPercent = queueTotal > 0 ? (failedInQueue / queueTotal) * 100 : 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -137,7 +186,10 @@ export function GenerateMode() {
           <div>
             <h2 className="text-lg font-semibold text-foreground">Generate Mode</h2>
             {!isRunning && missingCount !== null && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p
+                className="text-sm text-muted-foreground mt-1 cursor-pointer hover:text-foreground underline decoration-dotted"
+                onClick={showMissingBreakdown}
+              >
                 {missingCount} generation{missingCount !== 1 ? 's' : ''} needed
               </p>
             )}
@@ -175,41 +227,51 @@ export function GenerateMode() {
                   />
                 </div>
                 <div className="h-4 w-px bg-border" />
-                <div className="flex items-center gap-2">
-                  <label htmlFor="async-openai" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
-                    <input
-                      id="async-openai"
-                      type="checkbox"
-                      checked={asyncOpenAI}
-                      onChange={(e) => setAsyncOpenAI(e.target.checked)}
-                      className="cursor-pointer"
-                    />
-                    Async OpenAI
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="async-anthropic" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
-                    <input
-                      id="async-anthropic"
-                      type="checkbox"
-                      checked={asyncAnthropic}
-                      onChange={(e) => setAsyncAnthropic(e.target.checked)}
-                      className="cursor-pointer"
-                    />
-                    Async Anthropic
-                  </label>
+                <div className="flex flex-col gap-1">
+                  <div className="text-sm text-muted-foreground">Asynchronous:</div>
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="async-openai" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
+                      <input
+                        id="async-openai"
+                        type="checkbox"
+                        checked={asyncOpenAI}
+                        onChange={(e) => setAsyncOpenAI(e.target.checked)}
+                        className="cursor-pointer"
+                      />
+                      OpenAI
+                    </label>
+                    <label htmlFor="async-anthropic" className="text-sm text-muted-foreground flex items-center gap-1 cursor-pointer">
+                      <input
+                        id="async-anthropic"
+                        type="checkbox"
+                        checked={asyncAnthropic}
+                        onChange={(e) => setAsyncAnthropic(e.target.checked)}
+                        className="cursor-pointer"
+                      />
+                      Anthropic
+                    </label>
+                  </div>
                 </div>
               </>
             )}
-            {isRunning ? (
-              <Button onClick={stopGeneration} variant="destructive">
-                Stop
-              </Button>
-            ) : (
-              <Button onClick={startGeneration} variant="default" disabled={missingCount === 0}>
-                Start Generation
-              </Button>
-            )}
+            <div className="flex flex-col items-end gap-1">
+              {isRunning ? (
+                <Button onClick={stopGeneration} variant="destructive">
+                  Stop
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={startGeneration} variant="default" disabled={missingCount === 0}>
+                    Start Generation
+                  </Button>
+                  {taskCount !== null && taskCount > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      tasks: {taskCount}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -265,15 +327,22 @@ export function GenerateMode() {
         <div className="text-sm text-muted-foreground mb-2">
           Terminal Output:
         </div>
-        <ScrollArea
-          className="flex-1 rounded border border-border bg-muted/30"
+        <div
           ref={scrollRef}
+          className="flex-1 rounded border border-border bg-muted/30 overflow-auto"
         >
           <pre className="p-4 text-xs font-mono text-foreground whitespace-pre-wrap">
             {output || 'No output yet. Click "Start Generation" to begin.'}
           </pre>
-        </ScrollArea>
+        </div>
       </div>
+
+      {/* Missing Generations Dialog */}
+      <MissingGenerationsDialog
+        open={showMissingDialog}
+        onOpenChange={setShowMissingDialog}
+        missing={missingGenerations}
+      />
     </div>
   );
 }
