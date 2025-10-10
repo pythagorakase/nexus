@@ -10,6 +10,7 @@ Provides REST API endpoints for:
 - Generation job management
 """
 from datetime import datetime
+import logging
 import random
 import re
 import subprocess
@@ -42,6 +43,8 @@ DB_PARAMS = {
 }
 
 app = FastAPI(title="Apex Audition API", version="1.0.0")
+
+LOGGER = logging.getLogger(__name__)
 
 # Configure CORS for local development
 # Allow all localhost origins since UI uses dynamic port selection
@@ -693,44 +696,77 @@ def start_generation(
     import os
     env = os.environ.copy()
 
-    try:
-        # Fetch Anthropic API key
-        anthropic_result = subprocess.run(
-            ["op", "read", "op://API/Anthropic/api key"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        env["ANTHROPIC_API_KEY"] = anthropic_result.stdout.strip()
+    def _prefetch_required_secret(command: List[str], env_key: str) -> None:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "1Password CLI (op) not found. Install from "
+                    "https://developer.1password.com/docs/cli/get-started/"
+                ),
+            )
+        except subprocess.CalledProcessError:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve API keys from 1Password. Ensure you're signed in with 'op signin'.",
+            )
 
-        # Fetch OpenAI API key
-        openai_result = subprocess.run(
-            ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        env["OPENAI_API_KEY"] = openai_result.stdout.strip()
+        env[env_key] = result.stdout.strip()
 
-        # Fetch OpenRouter API key
-        openrouter_result = subprocess.run(
-            ["op", "read", "op://API/OpenRouter/api key"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        env["OPENROUTER_API_KEY"] = openrouter_result.stdout.strip()
+    def _prefetch_optional_secret(command: List[str], env_key: str, label: str) -> None:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError:
+            LOGGER.warning("1Password CLI not found; unable to prefetch %s", label)
+            return
+        except subprocess.CalledProcessError as exc:
+            LOGGER.warning(
+                "Failed to prefetch %s (exit %s). Continuing without cached key.",
+                label,
+                exc.returncode,
+            )
+            return
 
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve API keys from 1Password. Ensure you're signed in with 'op signin'."
-        )
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="1Password CLI (op) not found. Install from https://developer.1password.com/docs/cli/get-started/"
-        )
+        value = result.stdout.strip()
+        if not value:
+            LOGGER.warning("Prefetched empty %s; continuing without cached key", label)
+            return
+
+        env[env_key] = value
+
+    # Fetch required provider keys
+    _prefetch_required_secret(["op", "read", "op://API/Anthropic/api key"], "ANTHROPIC_API_KEY")
+    _prefetch_required_secret(
+        [
+            "op",
+            "item",
+            "get",
+            "tyrupcepa4wluec7sou4e7mkza",
+            "--fields",
+            "api key",
+            "--reveal",
+        ],
+        "OPENAI_API_KEY",
+    )
+
+    # OpenRouter is optional—only cache the key when available
+    _prefetch_optional_secret(
+        ["op", "read", "op://API/OpenRouter/api key"],
+        "OPENROUTER_API_KEY",
+        "OpenRouter API key",
+    )
 
     # Build command with optional limit and max_workers
     cmd = ["python", str(script_path)]
