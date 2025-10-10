@@ -25,8 +25,8 @@ git revert <commit-hash>
 # Link GitHub
 git remote add origin https://github.com/pythagorakase/nexus.git
 
-# Add Letta as Submodule
-git submodule add https://github.com/pythagorakase/letta.git letta
+# Install Dependencies with Poetry
+poetry install
 
 # Stage Changes for Commit
 git add . # Add all changes in the current directory

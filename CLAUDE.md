@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Documentation: docstrings for all public functions and classes
 - Prefer composition over inheritance where possible
 - Use SQLAlchemy for database interactions
-- When working with agents, follow Letta framework conventions
+- When working with agents, follow NEXUS runtime conventions
 
 ## Database Connection
 - Database Name: NEXUS

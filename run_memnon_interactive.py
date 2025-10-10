@@ -96,14 +96,14 @@ class SimpleInterface:
         return text
 
 class Message:
-    """Simple message class to mimic Letta's Message structure"""
+    """Simple message class to mimic the legacy Letta Message structure"""
     
     def __init__(self, role, content):
         self.role = role
         self.content = [SimpleContent(content)]
         
 class SimpleContent:
-    """Simple content class to mimic Letta's content structure"""
+    """Simple content class to mimic the legacy Letta content structure"""
     
     def __init__(self, text):
         self.text = text
@@ -179,7 +179,7 @@ def main():
         # Process the query
         interface.user_message(user_input)
         
-        # Create a Message object that mimics what Letta would provide
+        # Create a Message object that mimics what legacy Letta would provide
         message = Message("user", user_input)
         
         # Process the message with MEMNON

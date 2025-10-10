@@ -3,7 +3,7 @@
 Interactive MEMNON Agent Runner (Direct Mode)
 
 This script provides a simple interactive interface for directly querying the MEMNON agent,
-bypassing the Letta framework's agent loading mechanism.
+bypassing the legacy Letta framework's agent loading mechanism.
 """
 
 import sys
@@ -94,8 +94,8 @@ def initialize_memnon(db_url, model_id, debug):
         
         memnon = MEMNON(
             interface=SimpleInterface(),
-            agent_state=None,  # Pass None since we'll bypass Letta's agent handling
-            user=None,  # Pass None since we'll bypass Letta's user handling
+            agent_state=None,  # Pass None since we'll bypass the legacy Letta agent handling
+            user=None,  # Pass None since we'll bypass the legacy Letta user handling
             db_url=db_url,
             model_id=model_id,
             debug=debug
