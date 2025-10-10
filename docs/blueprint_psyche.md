@@ -46,14 +46,9 @@ PSYCHE is a utility module called by LORE to analyze character psychology, emoti
 ## Pseudocode Implementation
 
 ```python
-from letta.agent import Agent
-from letta.schemas.agent import AgentState
-from letta.schemas.memory import Memory
-from letta.schemas.block import Block, CreateBlock
-from letta.schemas.message import Message
 from typing import List, Dict, Any, Optional, Tuple
 
-class PSYCHE(Agent):
+class PSYCHE:
     """
     PSYCHE (Character Psychologist) agent responsible for tracking character
     psychology, emotional states, and interpersonal dynamics.
@@ -61,7 +56,7 @@ class PSYCHE(Agent):
     
     def __init__(self, 
                  interface, 
-                 agent_state: AgentState,
+                 agent_state,
                  user,
                  **kwargs):
         """
@@ -69,13 +64,10 @@ class PSYCHE(Agent):
         
         Args:
             interface: Interface for agent communication
-            agent_state: Agent state from Letta framework
+            agent_state: Agent state provided by the NEXUS runtime
             user: User information
             **kwargs: Additional arguments
         """
-        # Initialize parent Agent class
-        super().__init__(interface, agent_state, user, **kwargs)
-        
         # Initialize specialized character memory blocks if not present
         self._initialize_character_memory_blocks()
         
@@ -97,14 +89,14 @@ class PSYCHE(Agent):
         for block_name in required_blocks:
             if block_name not in self.agent_state.memory.list_block_labels():
                 # Create block with default empty content
-                block = CreateBlock(
-                    label=block_name,
-                    value="",
-                    limit=100000,  # Generous limit for character data
-                    description=f"Character {block_name} tracking"
-                )
+                block = {
+                    "label": block_name,
+                    "value": "",
+                    "limit": 100000,  # Generous limit for character data
+                    "description": f"Character {block_name} tracking"
+                }
                 # Add block to memory
-                # Implementation will use Letta API to create block
+                # Implementation should use the NEXUS runtime's block manager
     
     def analyze_character_mentions(self, text: str) -> Dict[str, Any]:
         """
@@ -308,10 +300,10 @@ class PSYCHE(Agent):
         # Implementation will use LLM inference with character data
         pass
     
-    def step(self, messages: List[Message]) -> Any:
+    def step(self, messages: List[Dict[str, Any]]) -> Any:
         """
         Process incoming messages and perform PSYCHE functions.
-        This is the main entry point required by Letta Agent framework.
+        This is the main entry point required by the NEXUS agent runtime.
         
         Args:
             messages: Incoming messages to process

@@ -35,7 +35,7 @@ MEMNON focuses on:
 
 ### Initialization
 
-MEMNON can be initialized like other Letta agents or directly:
+MEMNON can be initialized directly, and it retains compatibility with the legacy Letta integration if needed:
 
 ```python
 from nexus.agents.memnon.memnon import MEMNON
@@ -43,8 +43,8 @@ from nexus.agents.memnon.memnon import MEMNON
 # Direct Mode (e.g., for scripting or testing)
 memnon_agent = MEMNON(interface=interface, direct_mode=True) 
 
-# Letta Framework Mode (agent_state provided)
-# memnon_agent = MEMNON(interface=interface, agent_state=agent_state_object) 
+# Legacy Letta Framework Mode (agent_state provided)
+# memnon_agent = MEMNON(interface=interface, agent_state=agent_state_object)
 ```
 
 ### Processing Narrative Files
@@ -56,7 +56,7 @@ Use the `process_all_narrative_files()` method or the `process files` command vi
 total_chunks = memnon_agent.process_all_narrative_files(glob_pattern="path/to/your/narrative/*.md", limit=10)
 print(f"Processed {total_chunks} chunks.")
 
-# Command via step() (Letta mode example, assuming 'messages' list)
+# Command via step() (legacy Letta mode example, assuming 'messages' list)
 messages.append(Message(role="user", content="process files pattern **/scripts/*.md"))
 response = memnon_agent.step(messages) 
 print(response) # Output: {'status': 'Processing initiated...'} 
@@ -72,7 +72,7 @@ query = "What happened to Alex in the old warehouse?"
 results_dict = memnon_agent.query_memory(query=query, k=5)
 print(json.dumps(results_dict, indent=2))
 
-# Query via step() (Letta mode example)
+# Query via step() (legacy Letta mode example)
 messages.append(Message(role="user", content="Tell me about the character named Silas."))
 response = memnon_agent.step(messages)
 print(json.dumps(response, indent=2)) # Returns results dictionary
@@ -87,7 +87,7 @@ Use the `_get_status()` method or the `status` command via the `step()` method:
 status_string = memnon_agent._get_status()
 print(status_string)
 
-# Command via step() (Letta mode example)
+# Command via step() (legacy Letta mode example)
 messages.append(Message(role="user", content="status"))
 response = memnon_agent.step(messages)
 print(response) # Output: {'status': 'MEMNON Status:\n...'}

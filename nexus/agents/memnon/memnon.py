@@ -47,7 +47,7 @@ from .utils.embedding_tables import DIMENSION_TABLES
 # Sentence transformers for embedding
 from sentence_transformers import SentenceTransformer
 
-# Letta framework types (for type hints)
+# Legacy Letta framework references (for historical context)
 # Letta imports removed - using custom memory system instead
 
 # Import alias search utilities
@@ -226,7 +226,7 @@ class MEMNON:
         
         Args:
             interface: The interface to use for communication
-            agent_state: Agent state from Letta framework (optional in direct mode)
+            agent_state: Agent state from the legacy Letta runtime (optional in direct mode)
             user: User information (optional in direct mode)
             db_url: PostgreSQL database URL
             model_id: DEPRECATED - LLM model ID is no longer used
@@ -1129,7 +1129,7 @@ class MEMNON:
     def step(self, messages: List[Any]) -> Any:
         """
         Process incoming messages and perform MEMNON functions.
-        This is the main entry point required by Letta Agent framework.
+        This is the main entry point maintained for compatibility with the legacy Letta agent framework.
         Returns raw search results without LLM synthesis.
         
         Args:

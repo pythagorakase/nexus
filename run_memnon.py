@@ -54,7 +54,7 @@ def main():
         print("Initializing MEMNON (this might take a moment)...")
         memnon = MEMNON(
             interface=SimpleInterface(),
-            agent_state=None,  # Direct mode - no Letta framework
+            agent_state=None,  # Direct mode - no legacy Letta framework needed
             user=None,
             db_url=db_url,
             model_id=model_id,

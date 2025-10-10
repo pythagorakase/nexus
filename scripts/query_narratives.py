@@ -11,12 +11,12 @@ Example:
     python query_narratives.py "What happened with Alex in Night City?" --season 1 --top-k 5
 """
 
-import os
-import sys
-from pathlib import Path
 import argparse
 import logging
 import json
+import os
+import sys
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -34,10 +34,15 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 # Import MEMNON agent
 from nexus.agents.memnon import MEMNON
-from letta.agent import Agent
-from letta.schemas.agent import AgentState
-from letta.schemas.memory import Memory
-from letta.interfaces.utils import create_cli_interface
+
+
+class ConsoleInterface:
+    """Minimal interface that mimics the subset of legacy CLI methods used by MEMNON."""
+
+    def assistant_message(self, message: str) -> None:
+        """Log assistant-style messages to stdout for compatibility."""
+
+        logger.info(message)
 
 def main():
     """
@@ -53,21 +58,10 @@ def main():
                         help="Output format (default: text)")
     args = parser.parse_args()
     
-    # Create a simplified agent state for MEMNON
-    agent_state = AgentState(
-        id="memnon-query",
-        name="MEMNON",
-        memory=Memory(blocks=[]),
-        system="MEMNON is a unified memory access system for the NEXUS narrative intelligence system.",
-        tools=[],
-        llm_config=None
-    )
-    
-    # Initialize MEMNON agent
-    # Using None for interface since we're using it directly, not through Letta's messaging
+    # Initialize MEMNON agent in standalone mode
     memnon = MEMNON(
-        interface=create_cli_interface(),
-        agent_state=agent_state,
+        interface=ConsoleInterface(),
+        agent_state=None,
         user=None,
         db_url=args.db_url
     )
@@ -81,11 +75,12 @@ def main():
     
     # Query the database
     logger.info(f"Querying with: {args.query}, filters: {filters}, top_k: {args.top_k}")
-    results = memnon.query_by_text(args.query, filters, args.top_k)
+    response = memnon.query_memory(args.query, filters=filters or None, k=args.top_k)
+    results = response.get("results", [])
     
     # Output results
     if args.format == "json":
-        print(json.dumps(results, indent=2))
+        print(json.dumps(response, indent=2))
     else:
         if not results:
             print("No results found.")
@@ -94,14 +89,17 @@ def main():
         print(f"Found {len(results)} results:\n")
         
         for i, result in enumerate(results):
-            print(f"Result {i+1} (Score: {result['score']:.4f}):")
-            print(f"Chunk ID: {result['chunk_id']}")
-            print(f"Season: {result['metadata']['season']}, Episode: {result['metadata']['episode']}")
-            print(f"Scene: {result['metadata'].get('scene_number', 'Unknown')}")
-            print(f"Model scores: {result['model_scores']}")
+            metadata = result.get('metadata', {})
+            print(f"Result {i+1} (Score: {result.get('score', 0):.4f}):")
+            print(f"Chunk ID: {result.get('chunk_id', 'unknown')}")
+            print(f"Season: {metadata.get('season', 'Unknown')}, Episode: {metadata.get('episode', 'Unknown')}")
+            print(f"Scene: {metadata.get('scene_number', 'Unknown')}")
+            model_scores = result.get('model_scores') or result.get('model_weights')
+            if model_scores:
+                print(f"Model scores: {model_scores}")
             print("\nContent:")
             print("=" * 80)
-            print(result['text'])
+            print(result.get('text', ''))
             print("=" * 80)
             print("\n")
 

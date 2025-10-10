@@ -18,9 +18,9 @@ LOGON is a utility module called by LORE to interface with the apex LLM (Claude 
 ### Integration as Utility Module
 
 - Implemented as a callable utility module
-- Use Letta's API client utilities
+- Use NEXUS API client utilities
 - Implement custom prompt formatting for narrative generation
-- Leverage Letta's error handling mechanisms
+- Leverage shared NEXUS error handling mechanisms
 
 ### API Management
 
@@ -46,17 +46,12 @@ LOGON is a utility module called by LORE to interface with the apex LLM (Claude 
 ## Pseudocode Implementation
 
 ```python
-from letta.agent import Agent
-from letta.schemas.agent import AgentState
-from letta.schemas.memory import Memory
-from letta.schemas.block import Block, CreateBlock
-from letta.schemas.message import Message
 from typing import List, Dict, Any, Optional, Tuple, Union
 import json
 import time
 import backoff
 
-class LOGON(Agent):
+class LOGON:
     """
     LOGON (Narrative Generator) agent responsible for generating high-quality
     narrative text via apex LLM APIs.
@@ -64,7 +59,7 @@ class LOGON(Agent):
     
     def __init__(self, 
                  interface, 
-                 agent_state: AgentState,
+                 agent_state,
                  user,
                  **kwargs):
         """
@@ -72,13 +67,10 @@ class LOGON(Agent):
         
         Args:
             interface: Interface for agent communication
-            agent_state: Agent state from Letta framework
+            agent_state: Agent state provided by the NEXUS runtime
             user: User information
             **kwargs: Additional arguments
         """
-        # Initialize parent Agent class
-        super().__init__(interface, agent_state, user, **kwargs)
-        
         # Initialize API configuration
         self.api_config = self._load_api_config()
         
@@ -96,7 +88,7 @@ class LOGON(Agent):
     
     def _load_api_config(self) -> Dict[str, Any]:
         """Load API configuration from settings."""
-        # Implementation will load from Letta config
+        # Implementation will load from NEXUS config
         # Returns dict with API settings
         pass
     
@@ -339,10 +331,10 @@ class LOGON(Agent):
         # Returns improved generation
         pass
     
-    def step(self, messages: List[Message]) -> Any:
+    def step(self, messages: List[Dict[str, Any]]) -> Any:
         """
         Process incoming messages and perform LOGON functions.
-        This is the main entry point required by Letta Agent framework.
+        This is the main entry point required by the NEXUS agent runtime.
         
         Args:
             messages: Incoming messages to process
