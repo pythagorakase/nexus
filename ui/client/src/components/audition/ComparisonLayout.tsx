@@ -2,7 +2,7 @@
  * Main comparison layout with side-by-side generations.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ComparisonQueueItem } from '@/lib/audition-api';
+import { ComparisonQueueItem, auditionAPI } from '@/lib/audition-api';
 import { useJudgment } from '@/hooks/useJudgment';
 import { GenerationPane } from './GenerationPane';
 import { JudgmentBar } from './JudgmentBar';
@@ -81,6 +81,8 @@ export function ComparisonLayout({
 }: ComparisonLayoutProps) {
   const [highlightedPane, setHighlightedPane] = useState<'A' | 'B' | null>(null);
   const [isContextDialogOpen, setIsContextDialogOpen] = useState(false);
+  const [isDebugDialogOpen, setIsDebugDialogOpen] = useState(false);
+  const [debugBusy, setDebugBusy] = useState<'A' | 'B' | null>(null);
   const precedingScrollRef = useRef<HTMLDivElement>(null);
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
@@ -202,6 +204,60 @@ export function ComparisonLayout({
     onExit?.();
   }, [isRecording, onExit]);
 
+  const getAsyncProviderPrefs = useCallback((): string[] => {
+    const providers: string[] = [];
+    if (localStorage.getItem('audition_async_openai') === 'true') {
+      providers.push('openai');
+    }
+    if (localStorage.getItem('audition_async_anthropic') === 'true') {
+      providers.push('anthropic');
+    }
+    return providers;
+  }, []);
+
+  const handleRegenerate = useCallback(
+    async (side: 'A' | 'B') => {
+      const target = side === 'A' ? comparison.generation_a : comparison.generation_b;
+      if (!target?.id) {
+        toast({
+          title: 'Unavailable',
+          description: 'Generation record is missing an identifier.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      try {
+        setDebugBusy(side);
+        const response = await auditionAPI.regenerateGeneration(
+          target.id,
+          getAsyncProviderPrefs(),
+        );
+
+        toast({
+          title: 'Regeneration queued',
+          description:
+            response.mode === 'async'
+              ? `Async batch submitted${response.batch_id ? ` (${response.batch_id})` : ''}; removed ${response.comparisons_deleted} comparison(s).`
+              : `Completed immediately; removed ${response.comparisons_deleted} comparison(s).`,
+        });
+        setIsDebugDialogOpen(false);
+        setHighlightedPane(null);
+        onSkip?.();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to regenerate passage';
+        toast({
+          title: 'Regeneration failed',
+          description: message,
+          variant: 'destructive',
+        });
+      } finally {
+        setDebugBusy(null);
+      }
+    },
+    [comparison.generation_a, comparison.generation_b, getAsyncProviderPrefs, onSkip, toast],
+  );
+
   const handleNote = useCallback(async (leftNote: string, rightNote: string) => {
     if (isRecording) return;
 
@@ -303,6 +359,15 @@ export function ComparisonLayout({
           <span>Chunk {comparison.prompt.chunk_id}</span>
           {comparison.prompt.label && <span>{comparison.prompt.label}</span>}
         </div>
+        <div className="flex items-center justify-end">
+          <Button
+            variant="outline"
+            size="xs"
+            onClick={() => setIsDebugDialogOpen(true)}
+          >
+            [D] Debug
+          </Button>
+        </div>
 
         {hasPrecedingChunk ? (
           <div className="border border-border/70 rounded-md bg-background/70 p-3">
@@ -370,6 +435,61 @@ export function ComparisonLayout({
         onExport={handleExport}
         disabled={isRecording}
       />
+
+      <Dialog open={isDebugDialogOpen} onOpenChange={setIsDebugDialogOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Arena Debug</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              Use this tool to inspect the current passages and force a regeneration. This will delete the selected generation,
+              remove any associated comparisons (and unwind their ELO impact), then queue a fresh run using your current Commission async settings.
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded border border-border/70 bg-muted/10 p-4 space-y-3">
+                <h3 className="font-semibold text-foreground">Passage 1 (Left)</h3>
+                <div className="space-y-1 font-mono text-xs">
+                  <div>Condition: {comparison.condition_a.slug}</div>
+                  <div>Generation ID: {comparison.generation_a.id ?? '—'}</div>
+                  <div>Status: {comparison.generation_a.status}</div>
+                  <div>Replicate: {comparison.generation_a.replicate_index}</div>
+                  <div>Completed: {comparison.generation_a.completed_at ?? '—'}</div>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={debugBusy !== null}
+                  onClick={() => handleRegenerate('A')}
+                >
+                  {debugBusy === 'A' ? 'Regenerating…' : 'Regenerate Passage'}
+                </Button>
+              </div>
+              <div className="rounded border border-border/70 bg-muted/10 p-4 space-y-3">
+                <h3 className="font-semibold text-foreground">Passage 2 (Right)</h3>
+                <div className="space-y-1 font-mono text-xs">
+                  <div>Condition: {comparison.condition_b.slug}</div>
+                  <div>Generation ID: {comparison.generation_b.id ?? '—'}</div>
+                  <div>Status: {comparison.generation_b.status}</div>
+                  <div>Replicate: {comparison.generation_b.replicate_index}</div>
+                  <div>Completed: {comparison.generation_b.completed_at ?? '—'}</div>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={debugBusy !== null}
+                  onClick={() => handleRegenerate('B')}
+                >
+                  {debugBusy === 'B' ? 'Regenerating…' : 'Regenerate Passage'}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Tip: regenerate only when the output is malformed or blank. Async regenerations will appear once the batch poller completes the run.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isContextDialogOpen} onOpenChange={setIsContextDialogOpen}>
         <DialogContent className="sm:max-w-2xl">

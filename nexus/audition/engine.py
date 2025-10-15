@@ -52,7 +52,6 @@ class AuditionEngine:
         # Cached batch clients to avoid repeated 1Password authentication
         self._anthropic_batch_client = None
         self._openai_batch_client = None
-        self._openrouter_batch_client = None
 
     def _get_anthropic_batch_client(self):
         """Get or create cached Anthropic batch client."""
@@ -67,14 +66,6 @@ class AuditionEngine:
             from .batch_clients import OpenAIBatchClient
             self._openai_batch_client = OpenAIBatchClient()
         return self._openai_batch_client
-
-    def _get_openrouter_batch_client(self):
-        """Get or create cached OpenRouter batch client."""
-        if self._openrouter_batch_client is None:
-            from .batch_clients import OpenRouterBatchClient
-
-            self._openrouter_batch_client = OpenRouterBatchClient()
-        return self._openrouter_batch_client
 
     # ------------------------------------------------------------------
     # Context ingestion
@@ -431,15 +422,6 @@ class AuditionEngine:
         # Prepare all batch requests
         batch_requests = []
 
-        # Map provider to OpenRouter model name format
-        provider_lower = condition.provider.lower()
-        if provider_lower in ("openai", "anthropic", "google", "deepseek"):
-            openrouter_model = f"{provider_lower}/{condition.model}"
-        elif provider_lower == "openrouter":
-            openrouter_model = condition.model
-        else:
-            openrouter_model = f"{provider_lower}/{condition.model}"
-
         for prompt in prompts:
             if prompt.id is None:
                 raise ValueError(f"Prompt {prompt.chunk_id} has no database identifier")
@@ -461,7 +443,7 @@ class AuditionEngine:
                     prompt_id=prompt.id,
                     replicate_index=replicate_index,
                     prompt_text=prompt_text,
-                    model=openrouter_model,
+                    model=condition.model,
                     temperature=condition.temperature,
                     max_tokens=max_tokens,
                     system_prompt=condition.system_prompt,
@@ -491,11 +473,20 @@ class AuditionEngine:
                 )
                 self.repository.record_generation(result)
 
-        # Submit batch through OpenRouter for all providers
-        # This provides unified API access and batch support across providers
-        client = self._get_openrouter_batch_client()
-        batch_dir = output_dir or Path("temp/batches")
-        batch_id = client.create_batch(batch_requests, batch_dir)
+        # Submit batch through native provider API
+        provider_name = condition.provider.lower()
+        if provider_name == "anthropic":
+            client = self._get_anthropic_batch_client()
+            batch_id = client.create_batch(batch_requests)
+        elif provider_name == "openai":
+            client = self._get_openai_batch_client()
+            batch_dir = output_dir or Path("temp/batches")
+            batch_id = client.create_batch(batch_requests, batch_dir)
+        else:
+            raise ValueError(
+                f"Provider {condition.provider} does not support batch API. "
+                "Only 'openai' and 'anthropic' support async batch processing."
+            )
 
         # Update all results with batch_job_id
         for req in batch_requests:
@@ -556,7 +547,6 @@ class AuditionEngine:
             AnthropicBatchClient,
             BatchRequest,
             OpenAIBatchClient,
-            OpenRouterBatchClient,
         )
 
         if not condition_slugs:
@@ -672,12 +662,11 @@ class AuditionEngine:
             client = self._get_openai_batch_client()
             batch_dir = output_dir or Path("temp/batches")
             batch_id = client.create_batch(batch_requests, batch_dir)
-        elif provider == "openrouter":
-            client = self._get_openrouter_batch_client()
-            batch_dir = output_dir or Path("temp/batches")
-            batch_id = client.create_batch(batch_requests, batch_dir)
         else:
-            raise ValueError(f"Unsupported provider for batch mode: {provider}")
+            raise ValueError(
+                f"Provider {provider} does not support batch API. "
+                "Only 'openai' and 'anthropic' support async batch processing."
+            )
 
         # Update all results with batch_job_id
         for req in batch_requests:
@@ -704,7 +693,7 @@ class AuditionEngine:
 
         Args:
             batch_id: Batch job ID
-            provider: Provider name ("openai", "anthropic", or "openrouter")
+            provider: Provider name ("openai" or "anthropic")
 
         Returns:
             List of processed GenerationResult objects
@@ -714,10 +703,11 @@ class AuditionEngine:
             client = self._get_anthropic_batch_client()
         elif provider.lower() == "openai":
             client = self._get_openai_batch_client()
-        elif provider.lower() == "openrouter":
-            client = self._get_openrouter_batch_client()
         else:
-            raise ValueError(f"Unsupported provider: {provider}")
+            raise ValueError(
+                f"Provider {provider} does not support batch API. "
+                "Only 'openai' and 'anthropic' support async batch processing."
+            )
 
         # Get batch status
         batch_job = client.get_status(batch_id)
@@ -766,25 +756,82 @@ class AuditionEngine:
             if batch_result.status == "succeeded":
                 # Parse response based on provider
                 if provider.lower() == "anthropic":
-                    response_data = batch_result.response
+                    response_data = batch_result.response or {}
+                    content_blocks = response_data.get("content") or []
+                    text_segments: List[str] = []
+                    for block in content_blocks:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            text_segments.append(block.get("text", ""))
+                    text_value = "\n".join(seg for seg in text_segments if seg).strip()
                     gen.status = "completed"
-                    gen.response_payload = {"content": response_data.get("content", [{}])[0].get("text", ""),
-                                           "model": response_data.get("model"),
-                                           "raw": response_data}
-                    gen.input_tokens = response_data.get("usage", {}).get("input_tokens", 0)
-                    gen.output_tokens = response_data.get("usage", {}).get("output_tokens", 0)
+                    gen.response_payload = {
+                        "content": text_value,
+                        "model": response_data.get("model"),
+                        "raw": response_data,
+                    }
+                    usage = response_data.get("usage", {}) or {}
+                    gen.input_tokens = usage.get("input_tokens", 0)
+                    gen.output_tokens = usage.get("output_tokens", 0)
                     # Check for cache hit
-                    cache_read = response_data.get("usage", {}).get("cache_read_input_tokens", 0)
+                    cache_read = usage.get("cache_read_input_tokens", 0)
                     gen.cache_hit = cache_read > 0
                 elif provider.lower() == "openai":
-                    response_data = batch_result.response
-                    choice = response_data.get("choices", [{}])[0]
+                    response_data = batch_result.response or {}
+
+                    def _extract_openai_text(payload: Dict[str, Any]) -> str:
+                        # Responses API: output array of content blocks
+                        outputs = payload.get("output")
+                        segments: List[str] = []
+                        if isinstance(outputs, list) and outputs:
+                            for block in outputs:
+                                block_content = block.get("content")
+                                if isinstance(block_content, list):
+                                    for item in block_content:
+                                        if isinstance(item, dict) and item.get("type") in {"text", "output_text"}:
+                                            segments.append(item.get("text", ""))
+                                elif isinstance(block_content, str):
+                                    segments.append(block_content)
+                            if segments:
+                                return "".join(segments).strip()
+
+                        # Legacy choices[]
+                        choices = payload.get("choices")
+                        if isinstance(choices, list) and choices:
+                            message = choices[0].get("message", {})
+                            content = message.get("content")
+                            if isinstance(content, list):
+                                local_segments: List[str] = []
+                                for item in content:
+                                    if isinstance(item, dict) and item.get("type") in {"text", "output_text"}:
+                                        local_segments.append(item.get("text", ""))
+                                if local_segments:
+                                    return "".join(local_segments).strip()
+                            if isinstance(content, str):
+                                return content
+                        # Fallback to output_text field if provided
+                        output_text = payload.get("output_text")
+                        if isinstance(output_text, str):
+                            return output_text
+                        return ""
+
+                    text_value = _extract_openai_text(response_data)
                     gen.status = "completed"
-                    gen.response_payload = {"content": choice.get("message", {}).get("content", ""),
-                                           "model": response_data.get("model"),
-                                           "raw": response_data}
-                    gen.input_tokens = response_data.get("usage", {}).get("prompt_tokens", 0)
-                    gen.output_tokens = response_data.get("usage", {}).get("completion_tokens", 0)
+                    gen.response_payload = {
+                        "content": text_value,
+                        "model": response_data.get("model"),
+                        "raw": response_data,
+                    }
+                    usage = response_data.get("usage", {}) or {}
+                    gen.input_tokens = (
+                        usage.get("prompt_tokens")
+                        or usage.get("input_tokens")
+                        or 0
+                    )
+                    gen.output_tokens = (
+                        usage.get("completion_tokens")
+                        or usage.get("output_tokens")
+                        or 0
+                    )
                     # OpenAI doesn't expose cache hits in batch results currently
                     gen.cache_hit = False
                 elif provider.lower() == "openrouter":
