@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button} from '@/components/ui/button';
-import {auditionAPI, MissingGeneration} from '@/lib/audition-api';
+import {auditionAPI, MissingGeneration, AsyncStatus} from '@/lib/audition-api';
 import {MissingGenerationsDialog} from './MissingGenerationsDialog';
 
 interface GenerationStats {
@@ -38,6 +38,8 @@ export function GenerateMode() {
   const [initialCompleted, setInitialCompleted] = useState<number>(0);
   const [initialFailed, setInitialFailed] = useState<number>(0);
   const [taskCount, setTaskCount] = useState<number | null>(null);
+  const [asyncStatus, setAsyncStatus] = useState<AsyncStatus | null>(null);
+  const [pollCountdown, setPollCountdown] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Fetch count of missing generations on mount and when job completes
@@ -46,6 +48,9 @@ export function GenerateMode() {
       try {
         const data = await auditionAPI.getMissingGenerationCount();
         setMissingCount(data.count);
+        if (!isRunning) {
+          setInitialRemaining(data.count || 0);
+        }
       } catch (err) {
         console.error('Error fetching missing generation count:', err);
       }
@@ -82,7 +87,54 @@ export function GenerateMode() {
     if (!isRunning) {
       fetchTaskCount();
     }
-  }, [limit, asyncOpenAI, asyncAnthropic, isRunning]);
+  }, [limit, asyncOpenAI, asyncAnthropic, isRunning, missingCount]);
+
+  // Poll async status telemetry for pending batches.
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchAsyncStatus = async () => {
+      try {
+        const data = await auditionAPI.getAsyncStatus();
+        if (!isActive) return;
+        setAsyncStatus(data);
+      } catch (err) {
+        console.error('Error fetching async status:', err);
+      }
+    };
+
+    fetchAsyncStatus();
+    const intervalId = window.setInterval(fetchAsyncStatus, 5000);
+
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  // Keep countdown synced with next poll heartbeat.
+  useEffect(() => {
+    const nextPollIso = asyncStatus?.next_poll_at;
+    if (!nextPollIso) {
+      setPollCountdown(null);
+      return;
+    }
+
+    const targetTs = new Date(nextPollIso).getTime();
+    if (Number.isNaN(targetTs)) {
+      setPollCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remainingMs = targetTs - Date.now();
+      setPollCountdown(Math.max(0, Math.round(remainingMs / 1000)));
+    };
+
+    updateCountdown();
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [asyncStatus?.next_poll_at]);
 
   // Start generation job
   const startGeneration = async () => {
@@ -101,6 +153,7 @@ export function GenerateMode() {
       setIsRunning(true);
       setOutput('');
       setStats({total: 0, remaining: 0, completed: 0, failed: 0});
+      localStorage.setItem('audition_current_job_id', data.job_id);
       setInitialRemaining(missingCount || 0); // Capture the queue size at start
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -114,6 +167,7 @@ export function GenerateMode() {
     try {
       await auditionAPI.stopGeneration(jobId);
       setIsRunning(false);
+      localStorage.removeItem('audition_current_job_id');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
@@ -131,6 +185,54 @@ export function GenerateMode() {
     }
   };
 
+  // Resume any in-flight job when remounting the page.
+  useEffect(() => {
+    const savedJobId = localStorage.getItem('audition_current_job_id');
+    if (!savedJobId) return;
+
+    const resumeJob = async () => {
+      try {
+        const data = await auditionAPI.getGenerationOutput(savedJobId);
+        setJobId(savedJobId);
+        setOutput(data.output || '');
+
+        if (data.stats) {
+          const {
+            total = 0,
+            remaining = 0,
+            completed = 0,
+            failed = 0,
+          } = data.stats;
+          const baselineTotal = total || Math.max(0, remaining + completed + failed);
+          setStats({
+            total: total || baselineTotal,
+            remaining,
+            completed,
+            failed,
+          });
+          setInitialRemaining(baselineTotal);
+          setInitialCompleted(completed);
+          setInitialFailed(failed);
+        } else {
+          const countData = await auditionAPI.getMissingGenerationCount();
+          setInitialRemaining(countData.count || 0);
+        }
+
+        if (data.status === 'completed') {
+          setIsRunning(false);
+          localStorage.removeItem('audition_current_job_id');
+        } else {
+          setIsRunning(true);
+        }
+      } catch (err) {
+        console.error('Error resuming generation job:', err);
+        localStorage.removeItem('audition_current_job_id');
+      }
+    };
+
+    resumeJob();
+  }, []);
+
   // Poll for output and stats
   useEffect(() => {
     if (!jobId || !isRunning) return;
@@ -145,19 +247,29 @@ export function GenerateMode() {
         if (data.stats) {
           // Capture initial stats on first poll
           if (isFirstPoll) {
-            setInitialCompleted(data.stats.completed || 0);
-            setInitialFailed(data.stats.failed || 0);
+            const {
+              total = 0,
+              remaining = 0,
+              completed = 0,
+              failed = 0,
+            } = data.stats;
+            const baselineTotal = total || Math.max(0, remaining + completed + failed);
+            setInitialRemaining(baselineTotal);
+            setInitialCompleted(completed);
+            setInitialFailed(failed);
             isFirstPoll = false;
           }
           setStats(data.stats);
         }
         if (data.status === 'completed') {
           setIsRunning(false);
+          localStorage.removeItem('audition_current_job_id');
         }
       } catch (err) {
         console.error('Error fetching job output:', err);
         setError(err instanceof Error ? err.message : 'Unknown error');
         setIsRunning(false);
+        localStorage.removeItem('audition_current_job_id');
       }
     }, 1000);
 
@@ -171,12 +283,50 @@ export function GenerateMode() {
     }
   }, [output]);
 
-  // Calculate progress percentages for current queue
+  useEffect(() => {
+    if (!asyncStatus || typeof asyncStatus.remaining_generations !== 'number') {
+      return;
+    }
+    setMissingCount((prev) => (prev === asyncStatus.remaining_generations ? prev : asyncStatus.remaining_generations));
+    if (!isRunning) {
+      setInitialRemaining(asyncStatus.remaining_generations || 0);
+    }
+  }, [asyncStatus, isRunning]);
+
+  // Calculate progress metrics for current queue and pending async work
   const queueTotal = isRunning && initialRemaining > 0 ? initialRemaining : (stats.total || 0);
   const completedInQueue = isRunning ? Math.max(0, (stats.completed || 0) - initialCompleted) : 0;
   const failedInQueue = isRunning ? Math.max(0, (stats.failed || 0) - initialFailed) : 0;
-  const completedPercent = queueTotal > 0 ? (completedInQueue / queueTotal) * 100 : 0;
-  const failedPercent = queueTotal > 0 ? (failedInQueue / queueTotal) * 100 : 0;
+  const pendingRequests = asyncStatus?.pending_requests ?? 0;
+  const asyncRemaining = asyncStatus?.remaining_generations;
+
+  const remainingWhileRunning = isRunning
+    ? Math.max(0, queueTotal - completedInQueue - failedInQueue)
+    : 0;
+
+  const displayRemaining = isRunning
+    ? remainingWhileRunning
+    : (asyncRemaining ?? stats.remaining ?? missingCount ?? 0);
+
+  const displayTotalBase = isRunning
+    ? queueTotal
+    : (asyncRemaining ?? stats.total ?? missingCount ?? 0);
+  const displayTotal = displayTotalBase > 0 ? displayTotalBase : queueTotal;
+
+  const totalCompleted = stats.completed || 0;
+  const totalFailed = stats.failed || 0;
+  const displayCompleted = isRunning ? totalCompleted : Math.max(0, displayTotal - displayRemaining);
+
+  const progressBase = displayTotal > 0 ? displayTotal : queueTotal;
+  const completedPercent = progressBase > 0 ? (displayCompleted / progressBase) * 100 : 0;
+  const failedPercent = progressBase > 0 ? (totalFailed / progressBase) * 100 : 0;
+
+  const formatTime = (iso?: string | null) => {
+    if (!iso) return '—';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString();
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -279,25 +429,56 @@ export function GenerateMode() {
         <div className="flex gap-6 text-sm">
           <div>
             <span className="text-muted-foreground">Total:</span>{' '}
-            <span className="font-mono font-semibold text-foreground">{stats.total}</span>
+            <span className="font-mono font-semibold text-foreground">{displayTotal}</span>
           </div>
           <div>
             <span className="text-muted-foreground">Remaining:</span>{' '}
-            <span className="font-mono font-semibold text-foreground">{stats.remaining}</span>
+            <span className="font-mono font-semibold text-foreground">{displayRemaining}</span>
           </div>
           <div>
             <span className="text-muted-foreground">Completed:</span>{' '}
             <span className="font-mono font-semibold text-blue-600">
-              {stats.completed}
+              {displayCompleted}
             </span>
           </div>
           <div>
             <span className="text-muted-foreground">Failed:</span>{' '}
             <span className="font-mono font-semibold text-red-600">
-              {stats.failed}
+              {totalFailed}
             </span>
           </div>
         </div>
+
+        {asyncStatus && (
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+            <div>
+              Pending async:{' '}
+              <span className="font-mono text-foreground">{pendingRequests}</span>
+            </div>
+            <div>
+              Active batches:{' '}
+              <span className="font-mono text-foreground">{asyncStatus.pending_batches}</span>
+            </div>
+            <div>
+              Last poll:{' '}
+              <span className="font-mono text-foreground">{formatTime(asyncStatus.last_poll_at ?? null)}</span>
+            </div>
+            <div>
+              Next poll in:{' '}
+              <span className="font-mono text-foreground">
+                {pollCountdown !== null ? `${pollCountdown}s` : '—'}
+              </span>
+            </div>
+            {typeof asyncStatus.last_duration_seconds === 'number' && (
+              <div>
+                Last cycle:{' '}
+                <span className="font-mono text-foreground">
+                  {asyncStatus.last_duration_seconds.toFixed(2)}s
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Progress Bar */}
         <div className="h-6 bg-secondary rounded-md overflow-hidden">

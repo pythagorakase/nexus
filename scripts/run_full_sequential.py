@@ -21,7 +21,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 
@@ -171,6 +171,7 @@ def compute_summary(
     prompts: List[PromptSnapshot],
     conditions: List[ConditionSpec],
     task_pairs: Optional[List[Tuple[int, int]]] = None,
+    failed_pairs: Optional[Set[Tuple[int, int]]] = None,
 ) -> Dict[str, int]:
     prompt_ids = [p.id for p in prompts if p.id is not None]
     condition_ids = [c.id for c in conditions if c.id is not None]
@@ -235,7 +236,12 @@ def compute_summary(
         "failed": 0,
     }
 
-    for entry in combos.values():
+    for key, entry in combos.items():
+        # Check if this task pair failed during submission
+        if failed_pairs and key in failed_pairs:
+            summary["failed"] += 1
+            continue
+
         if not entry["seen"]:
             summary["unsent"] += 1
             continue
@@ -456,8 +462,9 @@ def main() -> None:
 
     # Execute tasks with configured number of workers
     completed_count = 0
+    failed_pairs: Set[Tuple[int, int]] = set()
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        futures = []
+        future_to_task: Dict[Any, Tuple[ConditionSpec, PromptSnapshot]] = {}
         for condition, prompt in tasks:
             # Disable caching for all providers since parallel execution prevents cache reuse
             # (Anthropic charges +25% to write cache, OpenAI provides no cross-parameter cache hits)
@@ -477,19 +484,25 @@ def main() -> None:
                 prompts=prompts,
                 all_conditions=all_conditions,
             )
-            futures.append(future)
+            future_to_task[future] = (condition, prompt)
 
         # Wait for all to complete and show progress
-        for future in as_completed(futures):
+        for future in as_completed(future_to_task.keys()):
             try:
                 future.result()
                 completed_count += 1
                 # Show progress after each completion
-                summary = compute_summary(repo, prompts, all_conditions, task_pairs)
+                summary = compute_summary(repo, prompts, all_conditions, task_pairs, failed_pairs)
                 display_summary(summary)
             except Exception as exc:
+                condition, prompt = future_to_task[future]
+                if condition.id is not None and prompt.id is not None:
+                    failed_pairs.add((condition.id, prompt.id))
                 LOGGER.error("Task generated exception: %s", exc)
                 completed_count += 1
+                # Update summary to reflect failure
+                summary = compute_summary(repo, prompts, all_conditions, task_pairs, failed_pairs)
+                display_summary(summary)
 
     LOGGER.info("Sequential rollout complete")
     sys.stdout.write("\n")
