@@ -282,9 +282,13 @@ class AnthropicBatchClient:
         )
         response.raise_for_status()
 
+        # Explicitly decode as UTF-8 to avoid encoding issues
+        # (response.text can misdetect encoding, causing mojibake with emojis and special chars)
+        content = response.content.decode('utf-8')
+
         # Parse JSONL
         results = []
-        for line in response.text.strip().split('\n'):
+        for line in content.strip().split('\n'):
             if not line:
                 continue
             result_data = json.loads(line)
