@@ -336,16 +336,18 @@ class AuditionEngine:
                                 )
                                 time.sleep(wait_time)
                             else:
-                                # Final attempt failed
+                                # Final attempt failed - don't record error, let it be regenerated
                                 LOGGER.error(
                                     f"Generation failed for prompt {prompt.id} replicate {replicate_index} "
-                                    f"after {max_retries} attempts: {exc}"
+                                    f"after {max_retries} attempts: {exc}. Skipping record (will regenerate later)."
                                 )
                                 result.status = "error"
                                 result.error_message = str(exc)
                                 result.completed_at = datetime.now(timezone.utc)
 
-                self.repository.record_generation(result)
+                # Only record successful generations (skip errors)
+                if result.status != "error":
+                    self.repository.record_generation(result)
 
         return run
 
@@ -753,6 +755,8 @@ class AuditionEngine:
                 LOGGER.warning(f"No generation record found for {batch_result.custom_id}")
                 continue
 
+            LOGGER.debug(f"Found generation {gen.id} for custom_id={batch_result.custom_id}")
+
             if batch_result.status == "succeeded":
                 # Parse response based on provider
                 if provider.lower() == "anthropic":
@@ -760,8 +764,13 @@ class AuditionEngine:
                     content_blocks = response_data.get("content") or []
                     text_segments: List[str] = []
                     for block in content_blocks:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            text_segments.append(block.get("text", ""))
+                        if isinstance(block, dict):
+                            block_type = block.get("type")
+                            if block_type == "text":
+                                text_segments.append(block.get("text", ""))
+                            elif block_type == "thinking":
+                                # Claude Opus 4+ includes thinking blocks
+                                text_segments.append(block.get("thinking", ""))
                     text_value = "\n".join(seg for seg in text_segments if seg).strip()
                     gen.status = "completed"
                     gen.response_payload = {
@@ -857,14 +866,20 @@ class AuditionEngine:
                     gen.cache_hit = False
 
                 gen.completed_at = datetime.now(timezone.utc)
-            else:
-                gen.status = "error"
-                gen.error_message = batch_result.error
-                gen.completed_at = datetime.now(timezone.utc)
 
-            # Update in database
-            self.repository.update_generation_result(gen)
-            processed_results.append(gen)
+                # Update in database
+                LOGGER.debug(f"Updating generation {gen.id} (run={gen.run_id}, prompt={gen.prompt_id}, repl={gen.replicate_index}) to status={gen.status}")
+                self.repository.update_generation_result(gen)
+                LOGGER.debug(f"Successfully updated generation {gen.id}")
+                processed_results.append(gen)
+            else:
+                # Delete failed batch generations instead of marking as error
+                LOGGER.error(
+                    f"Batch generation failed for {batch_result.custom_id}: {batch_result.error}. "
+                    f"Deleting generation {gen.id} (will regenerate later)."
+                )
+                self.repository.delete_generation(gen.id)
+                LOGGER.debug(f"Successfully deleted failed generation {gen.id}")
 
         LOGGER.info(f"Processed {len(processed_results)} results from batch {batch_id}")
         return processed_results

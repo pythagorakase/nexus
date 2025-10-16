@@ -925,13 +925,14 @@ def get_async_generation_status():
             remaining_row = cur.fetchone()
             remaining_generations = remaining_row["count"] if remaining_row else 0
 
+            # Count only actual async batch requests (not orphaned records)
             cur.execute(
                 """
                 SELECT COUNT(*) AS pending
                 FROM apex_audition.generations
-                WHERE status = ANY(%s)
-                """,
-                (statuses,),
+                WHERE status = 'batch_pending'
+                  AND batch_job_id IS NOT NULL
+                """
             )
             pending_row = cur.fetchone()
             pending_requests = pending_row["pending"] if pending_row else 0
