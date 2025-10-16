@@ -102,18 +102,27 @@ def _extract_run_id(custom_id: str) -> str | None:
     """Extract the original run_id from a batch custom_id.
 
     Works for both OpenAI and Anthropic batch formats, which use the same convention.
+    Handles single-lane IDs (3 parts) and multi-lane IDs (4 parts where the second
+    component is the numeric condition id).
     """
 
-    # Multi-lane batches include the condition id before prompt_id/replicate,
-    # resulting in "{run_id}_{condition_id}_{prompt_id}_{replicate}". Single-lane
-    # batches omit the condition segment and use three parts. rsplit(..., 3)
-    # preserves any underscores in the run id while peeling off the tail
-    # segments.
+    # Preserve any underscores that appear inside the run_id by removing the
+    # trailing prompt/replicate (and optional condition) segments from the right.
     parts = custom_id.rsplit("_", 3)
 
     if len(parts) == 4:
-        run_id, _condition_id, _prompt_id, _replicate = parts
-        return run_id
+        run_id, candidate_condition_id, _prompt_id, _replicate = parts
+
+        # Multi-lane custom_ids include a numeric condition id. If the
+        # "condition" token isn't numeric we fall back to treating the ID as a
+        # three-part format to avoid accidentally truncating the run identifier.
+        if candidate_condition_id.isdigit():
+            return run_id
+
+        # Otherwise, fold the segment back into the run_id and continue the
+        # parsing using the three-part logic below. This covers unexpected
+        # provider formats without breaking known cases.
+        parts = [f"{run_id}_{candidate_condition_id}", parts[2], parts[3]]
 
     if len(parts) == 3:
         run_id, _prompt_id, _replicate = parts
