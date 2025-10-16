@@ -520,6 +520,12 @@ class AuditionRepository:
         with self.engine.begin() as connection:
             connection.execute(stmt)
 
+    def delete_generation(self, generation_id: int) -> None:
+        """Delete a generation record by ID."""
+        stmt = self.generations.delete().where(self.generations.c.id == generation_id)
+        with self.engine.begin() as connection:
+            connection.execute(stmt)
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------

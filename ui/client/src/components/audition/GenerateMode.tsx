@@ -415,8 +415,8 @@ export function GenerateMode() {
                     Start Generation
                   </Button>
                   {taskCount !== null && taskCount > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                      tasks: {taskCount}
+                    <div className="text-xs text-muted-foreground" title={limit ? "With limit: samples one task per condition" : "Processes all incomplete work"}>
+                      {taskCount} task{taskCount !== 1 ? 's' : ''} will run
                     </div>
                   )}
                 </>
@@ -425,58 +425,76 @@ export function GenerateMode() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="flex gap-6 text-sm">
-          <div>
-            <span className="text-muted-foreground">Total:</span>{' '}
-            <span className="font-mono font-semibold text-foreground">{displayTotal}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Remaining:</span>{' '}
-            <span className="font-mono font-semibold text-foreground">{displayRemaining}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Completed:</span>{' '}
-            <span className="font-mono font-semibold text-blue-600">
-              {displayCompleted}
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Failed:</span>{' '}
-            <span className="font-mono font-semibold text-red-600">
-              {totalFailed}
-            </span>
-          </div>
-        </div>
+        {/* Work Queue Stats */}
+        {isRunning ? (
+          <>
+            <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+              Current Job Progress
+            </div>
+            <div className="flex gap-6 text-sm">
+              <div>
+                <span className="text-muted-foreground">Total:</span>{' '}
+                <span className="font-mono font-semibold text-foreground">{displayTotal}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Remaining:</span>{' '}
+                <span className="font-mono font-semibold text-foreground">{displayRemaining}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Completed:</span>{' '}
+                <span className="font-mono font-semibold text-blue-600">
+                  {displayCompleted}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Failed:</span>{' '}
+                <span className="font-mono font-semibold text-red-600">
+                  {totalFailed}
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          asyncStatus && missingCount !== null && missingCount > 0 && (
+            <>
+              <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                Work Queue
+              </div>
+              <div className="flex gap-6 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Needed:</span>{' '}
+                  <span className="font-mono font-semibold text-foreground">{missingCount}</span>
+                  <span className="text-xs text-muted-foreground ml-1">prompt×condition pairs</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Completed:</span>{' '}
+                  <span className="font-mono font-semibold text-blue-600">
+                    {stats.completed || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Failed:</span>{' '}
+                  <span className="font-mono font-semibold text-red-600">
+                    {stats.failed || 0}
+                  </span>
+                </div>
+              </div>
+            </>
+          )
+        )}
 
-        {asyncStatus && (
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+        {asyncStatus && pendingRequests > 0 && (
+          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground border-t border-border pt-3 mt-1">
             <div>
-              Pending async:{' '}
+              <span className="text-foreground font-semibold">Async generations pending:</span>{' '}
               <span className="font-mono text-foreground">{pendingRequests}</span>
             </div>
             <div>
-              Active batches:{' '}
-              <span className="font-mono text-foreground">{asyncStatus.pending_batches}</span>
+              Poller: last {formatTime(asyncStatus.last_poll_at ?? null)}, next in{' '}
+              {pollCountdown !== null ? `${pollCountdown}s` : '—'}
+              {typeof asyncStatus.last_duration_seconds === 'number' &&
+                ` (cycle ${asyncStatus.last_duration_seconds.toFixed(1)}s)`}
             </div>
-            <div>
-              Last poll:{' '}
-              <span className="font-mono text-foreground">{formatTime(asyncStatus.last_poll_at ?? null)}</span>
-            </div>
-            <div>
-              Next poll in:{' '}
-              <span className="font-mono text-foreground">
-                {pollCountdown !== null ? `${pollCountdown}s` : '—'}
-              </span>
-            </div>
-            {typeof asyncStatus.last_duration_seconds === 'number' && (
-              <div>
-                Last cycle:{' '}
-                <span className="font-mono text-foreground">
-                  {asyncStatus.last_duration_seconds.toFixed(2)}s
-                </span>
-              </div>
-            )}
           </div>
         )}
 

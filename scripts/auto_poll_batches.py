@@ -49,7 +49,7 @@ def get_active_batches(repository: AuditionRepository) -> List[Tuple[str, str]]:
     Returns list of (batch_job_id, provider) tuples for batches that are:
     - status = 'batch_pending'
     - batch_job_id IS NOT NULL
-    - started_at within last 24 hours
+    - started_at within last 7 days (extended from 24h to handle slow batches)
     """
     query = """
         SELECT DISTINCT g.batch_job_id, c.provider
@@ -57,7 +57,7 @@ def get_active_batches(repository: AuditionRepository) -> List[Tuple[str, str]]:
         JOIN apex_audition.conditions c ON g.condition_id = c.id
         WHERE g.status = 'batch_pending'
           AND g.batch_job_id IS NOT NULL
-          AND g.started_at > NOW() - INTERVAL '24 hours'
+          AND g.started_at > NOW() - INTERVAL '7 days'
         ORDER BY g.batch_job_id
     """
 
@@ -67,9 +67,16 @@ def get_active_batches(repository: AuditionRepository) -> List[Tuple[str, str]]:
 
 
 def poll_and_retrieve_batch(
-    batch_id: str, provider: str, engine: AuditionEngine, client_cache: Dict[str, Any]
+    batch_id: str, provider: str, engine: AuditionEngine, client_cache: Dict[str, Any], batch_age: timedelta | None = None
 ) -> bool:
     """Poll a single batch and retrieve results if completed.
+
+    Args:
+        batch_id: Batch job ID
+        provider: Provider name (openai or anthropic)
+        engine: AuditionEngine instance
+        client_cache: Cached batch clients
+        batch_age: Age of batch (for logging warnings)
 
     Returns True if batch is still in progress, False if terminal state reached.
     """
@@ -94,7 +101,14 @@ def poll_and_retrieve_batch(
         LOGGER.error(f"Failed to get status for batch {batch_id} ({provider}): {e}")
         return False
 
-    LOGGER.info(f"Batch {batch_id} ({provider}): {batch_job.status.value}")
+    # Warn if batch is old
+    age_warning = ""
+    if batch_age and batch_age.total_seconds() > 86400:  # > 24 hours
+        days = batch_age.days
+        hours = batch_age.seconds // 3600
+        age_warning = f" [AGE WARNING: {days}d {hours}h old]"
+
+    LOGGER.info(f"Batch {batch_id} ({provider}): {batch_job.status.value}{age_warning}")
 
     if batch_job.request_counts:
         LOGGER.info(f"  Request counts: {batch_job.request_counts}")
@@ -134,9 +148,27 @@ def process_batches(
 
     LOGGER.info("Found %d active batch(es)", len(active_batches))
 
+    # Get batch ages for age warnings
+    batch_ages = {}
+    query = """
+        SELECT batch_job_id, MIN(started_at) as oldest_start
+        FROM apex_audition.generations
+        WHERE status = 'batch_pending'
+          AND batch_job_id IS NOT NULL
+        GROUP BY batch_job_id
+    """
+    with repository.engine.connect() as conn:
+        result = conn.execute(text(query))
+        for row in result:
+            batch_id_val = row[0]
+            oldest_start = row[1]
+            if oldest_start:
+                batch_ages[batch_id_val] = datetime.now(timezone.utc) - oldest_start.replace(tzinfo=timezone.utc)
+
     still_pending = 0
     for batch_id, provider in active_batches:
-        if poll_and_retrieve_batch(batch_id, provider, engine, client_cache):
+        batch_age = batch_ages.get(batch_id)
+        if poll_and_retrieve_batch(batch_id, provider, engine, client_cache, batch_age):
             still_pending += 1
 
     return still_pending, len(active_batches)

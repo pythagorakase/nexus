@@ -209,9 +209,10 @@ done
 
 ### Batch API Processing
 - **Submission**: Immediate (< 1 second)
-- **Processing**: Async (up to 24 hours)
+- **Processing**: Async (typically 24 hours, may extend to 7 days during high load)
 - **Cost**: 50% discount on all token usage
 - **Caching**: Supported (additional savings on cached tokens)
+- **Polling Window**: Auto-poll checks batches up to 7 days old to ensure no batches are missed
 
 ### Prompt Caching
 - **Anthropic Batch API**: Automatic caching across batch requests
