@@ -119,6 +119,8 @@ class AsyncGenerationStatus(BaseModel):
     next_poll_at: Optional[datetime] = None
     polling_interval_seconds: Optional[int] = None
     last_duration_seconds: Optional[float] = None
+    oldest_batch_age_hours: Optional[float] = None  # Age of oldest pending batch in hours
+    has_aging_batches: bool = False  # True if any batch is > 24 hours old
 
 
 class RegenerateGenerationRequest(BaseModel):

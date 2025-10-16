@@ -895,6 +895,8 @@ def get_async_generation_status():
     remaining_generations = 0
     pending_requests = 0
     pending_batches = 0
+    oldest_batch_age_hours = None
+    has_aging_batches = False
 
     statuses = ['batch_pending', 'pending', 'queued', 'submitted', 'in_progress', 'processing']
 
@@ -948,6 +950,26 @@ def get_async_generation_status():
             batch_row = cur.fetchone()
             pending_batches = batch_row["batch_count"] if batch_row else 0
 
+            # Get age of oldest pending batch
+            if pending_batches > 0:
+                cur.execute(
+                    """
+                    SELECT MIN(started_at) AS oldest_start
+                    FROM apex_audition.generations
+                    WHERE status = 'batch_pending'
+                      AND batch_job_id IS NOT NULL
+                    """
+                )
+                age_row = cur.fetchone()
+                if age_row and age_row["oldest_start"]:
+                    from datetime import timezone
+                    oldest_start = age_row["oldest_start"]
+                    if oldest_start.tzinfo is None:
+                        oldest_start = oldest_start.replace(tzinfo=timezone.utc)
+                    age_delta = datetime.now(timezone.utc) - oldest_start
+                    oldest_batch_age_hours = age_delta.total_seconds() / 3600
+                    has_aging_batches = oldest_batch_age_hours > 24
+
     last_poll_at = None
     next_poll_at = None
     polling_interval_seconds = None
@@ -982,6 +1004,8 @@ def get_async_generation_status():
         next_poll_at=next_poll_at,
         polling_interval_seconds=polling_interval_seconds,
         last_duration_seconds=last_duration_seconds,
+        oldest_batch_age_hours=oldest_batch_age_hours,
+        has_aging_batches=has_aging_batches,
     )
 
 

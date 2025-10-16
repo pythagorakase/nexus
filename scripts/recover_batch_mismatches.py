@@ -6,9 +6,11 @@ During bulk batch submissions, batch_job_ids can sometimes be assigned to the
 wrong runs in the database due to concurrent updates. This script:
 
 1. Identifies all stuck batch_pending generations
-2. Queries OpenAI to get actual run_ids from batch results
+2. Queries provider APIs (OpenAI or Anthropic) to get actual run_ids from batch results
 3. Builds a mapping to find correct batch_job_ids
 4. Updates the database with correct assignments
+
+Supports both OpenAI and Anthropic batch APIs.
 """
 
 from __future__ import annotations
@@ -22,14 +24,15 @@ from typing import Dict, List, Tuple, NamedTuple
 from sqlalchemy import text
 
 from nexus.audition import AuditionRepository
-from nexus.audition.batch_clients import OpenAIBatchClient
+from nexus.audition.batch_clients import OpenAIBatchClient, AnthropicBatchClient
 
 LOGGER = logging.getLogger(__name__)
 
 
 class BatchInfo(NamedTuple):
-    """Information about a batch from OpenAI."""
+    """Information about a batch from a provider."""
     batch_id: str
+    provider: str  # "openai" or "anthropic"
     status: str
     run_id: str | None  # None if status != completed or results unavailable
 
@@ -54,15 +57,26 @@ def get_stuck_generations(repository: AuditionRepository) -> List[Tuple[str, str
         return [(row[0], row[1], row[2], row[3]) for row in result]
 
 
-def get_all_batches_from_stuck_runs(repository: AuditionRepository) -> List[str]:
+def get_all_batches_from_stuck_runs(repository: AuditionRepository, provider: str | None = None) -> List[Tuple[str, str]]:
     """
-    Get all batch_job_ids associated with currently stuck runs.
+    Get all batch_job_ids with their providers associated with currently stuck runs.
 
     This gets batch_job_ids for ALL generations that share a run_id with any
     stuck generation, not just the stuck ones. This ensures we find the correct
     batches even if they're assigned to different runs.
+
+    Args:
+        repository: Database repository
+        provider: Optional provider filter ("openai" or "anthropic")
+
+    Returns:
+        List of (batch_job_id, provider) tuples
     """
-    query = """
+    provider_filter = ""
+    if provider:
+        provider_filter = f"AND c.provider = '{provider.lower()}'"
+
+    query = f"""
         WITH stuck_run_ids AS (
             SELECT DISTINCT run_id
             FROM apex_audition.generations
@@ -70,20 +84,25 @@ def get_all_batches_from_stuck_runs(repository: AuditionRepository) -> List[str]
               AND batch_job_id IS NOT NULL
               AND started_at > NOW() - INTERVAL '7 days'
         )
-        SELECT DISTINCT g.batch_job_id
+        SELECT DISTINCT g.batch_job_id, c.provider
         FROM apex_audition.generations g
+        JOIN apex_audition.conditions c ON g.condition_id = c.id
         WHERE g.batch_job_id IS NOT NULL
           AND g.started_at > NOW() - INTERVAL '7 days'
+          {provider_filter}
         ORDER BY g.batch_job_id
     """
 
     with repository.engine.connect() as conn:
         result = conn.execute(text(query))
-        return [row[0] for row in result]
+        return [(row[0], row[1].lower()) for row in result]
 
 
 def _extract_run_id(custom_id: str) -> str | None:
-    """Extract the original run_id from an OpenAI batch custom_id."""
+    """Extract the original run_id from a batch custom_id.
+
+    Works for both OpenAI and Anthropic batch formats, which use the same convention.
+    """
 
     # Multi-lane batches include the condition id before prompt_id/replicate,
     # resulting in "{run_id}_{condition_id}_{prompt_id}_{replicate}". Single-lane
@@ -105,11 +124,17 @@ def _extract_run_id(custom_id: str) -> str | None:
 
 
 def build_batch_to_run_mapping(
-    client: OpenAIBatchClient,
-    batch_ids: List[str]
+    batches_with_providers: List[Tuple[str, str]],
+    openai_client: OpenAIBatchClient | None = None,
+    anthropic_client: AnthropicBatchClient | None = None,
 ) -> Tuple[Dict[str, str], Dict[str, List[BatchInfo]]]:
     """
-    Query OpenAI for each batch and extract run_id from custom_ids.
+    Query provider APIs for each batch and extract run_id from custom_ids.
+
+    Args:
+        batches_with_providers: List of (batch_id, provider) tuples
+        openai_client: OpenAI batch client (created if needed)
+        anthropic_client: Anthropic batch client (created if needed)
 
     Returns:
         - completed_mapping: {batch_id: run_id} for completed batches only
@@ -118,47 +143,97 @@ def build_batch_to_run_mapping(
     completed_mapping = {}
     status_groups = defaultdict(list)
 
-    for i, batch_id in enumerate(batch_ids, 1):
-        try:
-            if i % 10 == 0:
-                LOGGER.info(f"Processed {i}/{len(batch_ids)} batches...")
+    # Group batches by provider for efficient processing
+    openai_batches = [batch_id for batch_id, provider in batches_with_providers if provider == "openai"]
+    anthropic_batches = [batch_id for batch_id, provider in batches_with_providers if provider == "anthropic"]
 
-            batch_job = client.get_status(batch_id)
-            status = batch_job.status.value
+    # Process OpenAI batches
+    if openai_batches:
+        if openai_client is None:
+            openai_client = OpenAIBatchClient()
+        LOGGER.info(f"Processing {len(openai_batches)} OpenAI batches...")
 
-            # Try to extract run_id for completed batches
-            run_id = None
-            if status == "completed":
-                try:
-                    results = client.retrieve_results(batch_job)
-                    if results:
-                        # Parse first result's custom_id to get run_id
-                        # Formats:
-                        #   - "{run_id}_{prompt_id}_{replicate_index}"
-                        #   - "{run_id}_{condition_id}_{prompt_id}_{replicate_index}"
-                        custom_id = results[0].custom_id
-                        run_id = _extract_run_id(custom_id)
-                        if run_id is None:
-                            LOGGER.warning(
-                                "Batch %s completed but run_id could not be parsed from %s",
-                                batch_id,
-                                custom_id,
-                            )
+        for i, batch_id in enumerate(openai_batches, 1):
+            try:
+                if i % 10 == 0:
+                    LOGGER.info(f"  Processed {i}/{len(openai_batches)} OpenAI batches...")
+
+                batch_job = openai_client.get_status(batch_id)
+                status = batch_job.status.value
+
+                # Try to extract run_id for completed batches
+                run_id = None
+                if status == "completed":
+                    try:
+                        results = openai_client.retrieve_results(batch_job)
+                        if results:
+                            custom_id = results[0].custom_id
+                            run_id = _extract_run_id(custom_id)
+                            if run_id is None:
+                                LOGGER.warning(
+                                    "OpenAI batch %s completed but run_id could not be parsed from %s",
+                                    batch_id,
+                                    custom_id,
+                                )
+                            else:
+                                completed_mapping[batch_id] = run_id
+                                LOGGER.debug(f"Batch {batch_id} (OpenAI) → run {run_id}")
                         else:
-                            completed_mapping[batch_id] = run_id
-                            LOGGER.debug(f"Batch {batch_id} → run {run_id} (completed)")
-                    else:
-                        LOGGER.warning(f"Batch {batch_id} completed but has no results")
-                except Exception as e:
-                    LOGGER.error(f"Failed to retrieve results for batch {batch_id}: {e}")
+                            LOGGER.warning(f"OpenAI batch {batch_id} completed but has no results")
+                    except Exception as e:
+                        LOGGER.error(f"Failed to retrieve OpenAI results for batch {batch_id}: {e}")
 
-            # Track all batches by status
-            batch_info = BatchInfo(batch_id=batch_id, status=status, run_id=run_id)
-            status_groups[status].append(batch_info)
+                # Track all batches by status
+                batch_info = BatchInfo(batch_id=batch_id, provider="openai", status=status, run_id=run_id)
+                status_groups[status].append(batch_info)
 
-        except Exception as e:
-            LOGGER.error(f"Failed to get status for batch {batch_id}: {e}")
-            continue
+            except Exception as e:
+                LOGGER.error(f"Failed to get OpenAI status for batch {batch_id}: {e}")
+                continue
+
+    # Process Anthropic batches
+    if anthropic_batches:
+        if anthropic_client is None:
+            anthropic_client = AnthropicBatchClient()
+        LOGGER.info(f"Processing {len(anthropic_batches)} Anthropic batches...")
+
+        for i, batch_id in enumerate(anthropic_batches, 1):
+            try:
+                if i % 10 == 0:
+                    LOGGER.info(f"  Processed {i}/{len(anthropic_batches)} Anthropic batches...")
+
+                batch_job = anthropic_client.get_status(batch_id)
+                status = batch_job.status.value
+
+                # Try to extract run_id for completed batches
+                run_id = None
+                if status == "completed":
+                    try:
+                        results = anthropic_client.retrieve_results(batch_job)
+                        if results:
+                            custom_id = results[0].custom_id
+                            run_id = _extract_run_id(custom_id)
+                            if run_id is None:
+                                LOGGER.warning(
+                                    "Anthropic batch %s completed but run_id could not be parsed from %s",
+                                    batch_id,
+                                    custom_id,
+                                )
+                            else:
+                                completed_mapping[batch_id] = run_id
+                                LOGGER.debug(f"Batch {batch_id} (Anthropic) → run {run_id}")
+                        else:
+                            LOGGER.warning(f"Anthropic batch {batch_id} completed but has no results")
+                    except Exception as e:
+                        LOGGER.error(f"Failed to retrieve Anthropic results for batch {batch_id}: {e}")
+
+                # Track all batches by status
+                batch_info = BatchInfo(batch_id=batch_id, provider="anthropic", status=status, run_id=run_id)
+                status_groups[status].append(batch_info)
+
+            except Exception as e:
+                LOGGER.error(f"Failed to get Anthropic status for batch {batch_id}: {e}")
+                continue
 
     return completed_mapping, dict(status_groups)
 
@@ -311,7 +386,7 @@ def mark_unfixable_as_errors(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Recover batch_job_id mismatches")
+    parser = argparse.ArgumentParser(description="Recover batch_job_id mismatches for OpenAI and/or Anthropic batches")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -327,6 +402,12 @@ def main():
         action="store_true",
         help="Mark unfixable runs as errors (batches that failed/expired)"
     )
+    parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic", "both"],
+        default="both",
+        help="Provider to check (default: both)"
+    )
     args = parser.parse_args()
 
     # Setup logging
@@ -336,9 +417,8 @@ def main():
         format="%(asctime)s %(levelname)s %(message)s"
     )
 
-    # Initialize clients
+    # Initialize repository
     repository = AuditionRepository()
-    client = OpenAIBatchClient()
 
     # Step 1: Get all stuck generations
     LOGGER.info("Step 1: Fetching stuck generations from database...")
@@ -353,14 +433,22 @@ def main():
 
     # Step 2: Get ALL batch_job_ids from recent submissions (last 7 days)
     LOGGER.info("\nStep 2: Fetching all batches from recent submissions...")
-    all_batch_ids = get_all_batches_from_stuck_runs(repository)
-    LOGGER.info(f"Found {len(all_batch_ids)} total batches from last 7 days")
+    provider_filter = None if args.provider == "both" else args.provider
+    all_batches_with_providers = get_all_batches_from_stuck_runs(repository, provider=provider_filter)
 
-    # Step 3: Query OpenAI for actual run_ids and batch statuses
-    LOGGER.info("\nStep 3: Querying OpenAI for all batches (this will take a few minutes)...")
-    batch_to_run, status_groups = build_batch_to_run_mapping(client, all_batch_ids)
+    if provider_filter:
+        LOGGER.info(f"Found {len(all_batches_with_providers)} {args.provider.upper()} batches from last 7 days")
+    else:
+        openai_count = sum(1 for _, p in all_batches_with_providers if p == "openai")
+        anthropic_count = sum(1 for _, p in all_batches_with_providers if p == "anthropic")
+        LOGGER.info(f"Found {len(all_batches_with_providers)} total batches from last 7 days")
+        LOGGER.info(f"  OpenAI: {openai_count}, Anthropic: {anthropic_count}")
 
-    LOGGER.info(f"Retrieved {len(batch_to_run)} completed batch mappings from OpenAI")
+    # Step 3: Query providers for actual run_ids and batch statuses
+    LOGGER.info("\nStep 3: Querying provider APIs for all batches (this may take a few minutes)...")
+    batch_to_run, status_groups = build_batch_to_run_mapping(all_batches_with_providers)
+
+    LOGGER.info(f"Retrieved {len(batch_to_run)} completed batch mappings from providers")
 
     # Step 4: Find correct batch_ids for stuck runs
     LOGGER.info("\nStep 4: Finding correct batch_job_ids for stuck runs...")
