@@ -82,6 +82,28 @@ def get_all_batches_from_stuck_runs(repository: AuditionRepository) -> List[str]
         return [row[0] for row in result]
 
 
+def _extract_run_id(custom_id: str) -> str | None:
+    """Extract the original run_id from an OpenAI batch custom_id."""
+
+    # Multi-lane batches include the condition id before prompt_id/replicate,
+    # resulting in "{run_id}_{condition_id}_{prompt_id}_{replicate}". Single-lane
+    # batches omit the condition segment and use three parts. rsplit(..., 3)
+    # preserves any underscores in the run id while peeling off the tail
+    # segments.
+    parts = custom_id.rsplit("_", 3)
+
+    if len(parts) == 4:
+        run_id, _condition_id, _prompt_id, _replicate = parts
+        return run_id
+
+    if len(parts) == 3:
+        run_id, _prompt_id, _replicate = parts
+        return run_id
+
+    LOGGER.warning("Unexpected custom_id format: %s", custom_id)
+    return None
+
+
 def build_batch_to_run_mapping(
     client: OpenAIBatchClient,
     batch_ids: List[str]
@@ -111,11 +133,20 @@ def build_batch_to_run_mapping(
                     results = client.retrieve_results(batch_job)
                     if results:
                         # Parse first result's custom_id to get run_id
-                        # Format: "{run_id}_{prompt_id}_{replicate_index}"
+                        # Formats:
+                        #   - "{run_id}_{prompt_id}_{replicate_index}"
+                        #   - "{run_id}_{condition_id}_{prompt_id}_{replicate_index}"
                         custom_id = results[0].custom_id
-                        run_id = custom_id.rsplit('_', 2)[0]
-                        completed_mapping[batch_id] = run_id
-                        LOGGER.debug(f"Batch {batch_id} → run {run_id} (completed)")
+                        run_id = _extract_run_id(custom_id)
+                        if run_id is None:
+                            LOGGER.warning(
+                                "Batch %s completed but run_id could not be parsed from %s",
+                                batch_id,
+                                custom_id,
+                            )
+                        else:
+                            completed_mapping[batch_id] = run_id
+                            LOGGER.debug(f"Batch {batch_id} → run {run_id} (completed)")
                     else:
                         LOGGER.warning(f"Batch {batch_id} completed but has no results")
                 except Exception as e:
