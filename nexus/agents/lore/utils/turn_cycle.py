@@ -9,6 +9,8 @@ import time
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+logger = logging.getLogger("nexus.lore.turn_cycle")
+
 try:
     from .turn_context import TurnContext, TurnPhase
 except ImportError:
@@ -21,8 +23,6 @@ try:
 except ImportError:
     MEMNON_ANALYZER_AVAILABLE = False
     logger.warning("MEMNON QueryAnalyzer not available - using fallback query generation")
-
-logger = logging.getLogger("nexus.lore.turn_cycle")
 
 
 class TurnCycleManager:
