@@ -66,7 +66,7 @@ class AuditionRepository:
             Column("slug", String(128), nullable=False, unique=True, index=True),
             Column(
                 "provider",
-                Enum("openai", "anthropic", "openrouter", name="provider_enum", schema="apex_audition"),
+                Enum("OpenAI", "Anthropic", "DeepSeek", name="provider_enum", schema="apex_audition"),
                 nullable=False,
             ),
             Column(

@@ -87,7 +87,7 @@ export function LeaderboardView() {
   };
 
   const formatProvider = (provider: string) => {
-    return provider.charAt(0).toUpperCase() + provider.slice(1);
+    return provider;
   };
 
   return (
@@ -113,28 +113,28 @@ export function LeaderboardView() {
             <TableBody>
               {rankings.map((entry, index) => (
                 <TableRow key={entry.condition_id} className="font-mono">
-                  <TableCell className="font-semibold py-2">
+                  <TableCell className="font-semibold py-1">
                     {index + 1}
                   </TableCell>
-                  <TableCell className="text-right font-semibold text-primary text-base py-2">
+                  <TableCell className="text-right font-semibold text-primary text-base py-1">
                     {entry.rating.toFixed(0)}
                   </TableCell>
-                  <TableCell className="py-2">
+                  <TableCell className="py-1">
                     {formatProvider(entry.condition.provider)}
                   </TableCell>
-                  <TableCell className="font-medium py-2">
+                  <TableCell className="font-medium py-1">
                     {formatModelName(entry.condition.model_name)}
                   </TableCell>
-                  <TableCell className="text-center text-muted-foreground py-2">
+                  <TableCell className="text-center text-muted-foreground py-1">
                     {formatTemperature(entry.condition.temperature)}
                   </TableCell>
-                  <TableCell className="text-center text-muted-foreground py-2">
+                  <TableCell className="text-center text-muted-foreground py-1">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground py-2">
+                  <TableCell className="text-right text-muted-foreground py-1">
                     {entry.games_played}
                   </TableCell>
-                  <TableCell className="text-center py-2">
+                  <TableCell className="text-center py-1">
                     {entry.condition.notes && entry.condition.notes.length > 0 ? (
                       <Button
                         variant="ghost"

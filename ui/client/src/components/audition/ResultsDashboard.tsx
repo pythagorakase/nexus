@@ -25,13 +25,7 @@ export function ResultsDashboard({ onResumeJudge }: ResultsDashboardProps) {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="border-b border-border/60 bg-card/60 px-4 py-3 flex items-center justify-end">
-        <Button size="sm" onClick={onResumeJudge}>
-          Resume judging [J]
-        </Button>
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         <LeaderboardView />
       </div>
     </div>
