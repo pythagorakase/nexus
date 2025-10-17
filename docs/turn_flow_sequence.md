@@ -3,44 +3,43 @@
 2. User inputs next passage.
 
 # 02 Warm Analysis
-1. `LORE` cross-references "warm slice" against high-level summary information from SQLite database along two axes:
-	   - characters
-	   - events
-2. For characters and events, `LORE` determines if they are known (i.e., if they already have database entries) or novel entities.
-3. For relationships, `LORE` identifies
-	   - which characters are directly interacting with each other
-	   - any relationships that are off-screen but being referred to in dialog, etc.
-4. Salience is determined along three axes, flagging entities for additional retrieval of structured information:
-	   - characters: `PSYCHE` 
-	   - relationships: `PSYCHE`
-	   - events: `LORE`
+1. `LORE` retrieves recent narrative chunks (warm slice) from the database.
+2. Local LLM analyzes the warm slice to identify:
+	   - characters present or mentioned
+	   - locations mentioned
+	   - context type (dialogue/action/exploration/transition)
+	   - entities requiring deeper retrieval
+3. Salience is determined through LLM semantic analysis of what entities are contextually important.
 
-# 03 World State Report
-1. `LORE` sends queries to `GAIA` for more detailed information:
-	   - characters: detailed stored profiles for salient characters
-	   - relationships: status and dynamics of salient relationships
-	   - events: historical summary of already-known plot elements
-2. `GAIA` answers queries, but also always appends a certain level of unsolicited information about "hidden"/off-screen variables, since this type of information is otherwise prone to being ignored or "forgotten" by LLMs.
-	   - last known location & activity of off-screen characters
-	   - last known status of significant locations
-	   - last known status & activity of factions
+# 03 World State Report - Programmatic Entity Queries
+1. `LORE` executes programmatic database queries to retrieve entity states based on `entity_inclusion` settings in settings.json.
+2. Queries characters referenced in warm slice chunks via `chunk_character_references` table.
+3. Queries relationships between identified characters via `character_relationships` table.
+4. Queries active events and threats using configurable status filters (e.g., "active", "ongoing", "escalating").
+5. Queries locations from character current_location fields.
+6. All limits are configurable:
+	   - `max_characters_from_warm_slice`: Maximum characters to include (default: 25)
+	   - `max_locations_from_warm_slice`: Maximum locations (default: 10)
+	   - `include_all_relationships`: Include all relationships between identified characters
+	   - `include_all_active_events`: Include all events matching active_event_statuses
+	   - `include_all_active_threats`: Include all threats matching active_threat_statuses
+	   - `active_event_statuses`: Status values to consider active (default: ["active", "ongoing", "escalating"])
+	   - `active_threat_statuses`: Threat status values to consider active (default: ["active", "imminent"])
 
 # 04 Deep Queries
-1. Characters: `PSYCHE` selects one character for whom additional context/history would most benefit the Apex AI and formulates a query.
-	   - "What is Alex's leadership style like?"
-	   - "How has Emilia acted in similar situations before?"
-2. Relationships: `PSYCHE` formulates a query for the most contextually important relationship.
-	   - "How has Alex and Emilia's communication style changed over time?"
-	   - "When did Alex and Emilia's relationship become romantic?"
-	   - "How did Alina and Lansky interact during their first encounter?"
-3. Events: `LORE`
-	   - "When was the first time Alex entered The Bridge?"
-	   - "What occurred immediately after the sabotage mission at the Dynacorp facility in season 1?"
-4. Queries are sent to `MEMNON`
+1. Local LLM generates 3-5 targeted retrieval queries based on narrative context analysis.
+2. Queries are designed to retrieve relevant past events, character history, and world information.
+3. Examples:
+	   - "What is Alex's history with The Bridge?"
+	   - "How has Emilia acted in similar high-stakes situations?"
+	   - "When did Alina and Lansky first interact?"
+4. Queries are classified by `MEMNON`'s QueryAnalyzer for optimal search strategy.
+5. Queries are sent to `MEMNON` for retrieval.
 
 # 05 Cold Distillation
-1. For each query, `MEMNON` returns a broad pool of candidate chunks with permissive matching for keywords, semantic embedding, and deep metadata
-2. Cross-encoder reranking rapidly narrows the candidate chunk pool for each query to a "short list" suitable for inclusion in the context
+1. For each query, `MEMNON` performs hybrid search combining vector similarity and text search.
+2. Results are reranked using cross-encoder models to narrow candidate pool.
+3. Top results suitable for context payload are selected.
 
 # 06 Payload Assembly
 1. `LORE` calculates the API payload budget from the current Apex AI model's TPM limit, and subtracting variables it cannot control and must include regardless:
@@ -59,11 +58,13 @@
 # 07 Apex AI Generation
 1. `LOGON` receives API payload from `LORE` and attempts to establish connection with Apex AI.
 2. Checkpoint = Connectivity: If Apex API cannot be reached or fails to return valid response after a fixed amount of time, system enters offline mode. In this state, the narrative is frozen, but existing narrative history and character profiles may be browsed. `LOGON` continues to check for connectivity and retry API calls until a valid response is received.
-3. Apex AI returns a JSON object with the following components:
-	- new narrative passage
-	- how far to advance the in-game clock
-	- whether to propose a new episode/season division if appropriate (primary considerations: narrative rhythm, current episode/season length)
-	- updates to hidden/off-screen information
+3. Apex AI returns a structured response (`StoryTurnResponse`) with the following components:
+	- narrative: new narrative passage
+	- metadata: chronology updates, arc position, narrative vector updates
+	- referenced_entities: entities present or mentioned in the narrative
+	- state_updates: character state updates and relationship changes
+	- operations: requests for summaries, regeneration, or side tasks
+	- reasoning: AI's reasoning about narrative choices (for debugging)
 4. Checkpoint = Quality Control: Present user with new narrative passage and prompt user to (A) accept or (B) reject new content.
 	- If user rejects new content, provide option to (A) resend same API payload for regeneration, or (B) revise last user input and roll back to phase 02.
 	- If user accepts new content, proceed to next phase

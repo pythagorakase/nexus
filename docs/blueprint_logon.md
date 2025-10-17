@@ -4,14 +4,76 @@
 
 LOGON is a utility module called by LORE to interface with the apex LLM (Claude 3.5 or GPT-4o) to generate high-quality narrative text. It manages API communication, formats payloads for optimal narrative generation, handles errors and fallbacks, and processes responses back into the narrative system.
 
+LOGON now uses structured output schemas to ensure consistent, parseable responses that include not just narrative prose, but also metadata, entity references, state updates, and special operations.
+
 ## Key Responsibilities
 
 1. **API Communication** - Manage communication with external LLM APIs
 2. **Prompt Engineering** - Format context and instructions for optimal narrative generation
-3. **Error Handling** - Implement robust error handling and fallback mechanisms
-4. **Response Processing** - Validate and process API responses
-5. **Offline Mode** - Provide functionality during API outages
-6. **Quality Control** - Apply validation and improvement to generated text
+3. **Structured Output** - Use Pydantic models to enforce structured responses from Apex AI
+4. **Error Handling** - Implement robust error handling and fallback mechanisms
+5. **Response Processing** - Validate and parse structured API responses
+6. **Offline Mode** - Provide functionality during API outages
+7. **Quality Control** - Apply validation and improvement to generated text
+
+## Structured Output Schemas
+
+LOGON uses comprehensive Pydantic v2 schemas for all Apex AI responses. The main schema is `StoryTurnResponse`, which combines:
+
+### StoryTurnResponse (Main Schema)
+Top-level response containing all components of a narrative turn:
+- `narrative`: The prose narrative (NarrativeChunk)
+- `metadata`: Updates to chronology, arc position, narrative vector
+- `referenced_entities`: Entities present or mentioned in the narrative
+- `state_updates`: Character state changes and relationship updates
+- `operations`: Special requests (summaries, regeneration, side tasks)
+- `reasoning`: AI's reasoning about narrative choices (for debugging)
+
+### Supporting Schemas
+
+**NarrativeChunk**:
+- `text`: The narrative prose
+- `suggested_slug`: Optional title/slug for the chunk
+- `estimated_tokens`: Optional token count estimate
+
+**ChunkMetadataUpdate**:
+- `chronology`: Episode/season markers, in-world date/time
+- `narrative_vector`: Arc position (exposition/rising_action/climax/etc.), tension level (1-10), pacing
+- `perspective`: POV perspective (e.g., "Alex - 2nd person")
+- `continuity_markers`: Links to past events (callbacks, setups, payoffs)
+- `thematic_elements`: Themes present in this chunk
+- `tone`: Dominant tone (action/dialogue/introspection/suspense/revelation/transition)
+
+**ReferencedEntities**:
+- `characters`: Characters present or mentioned
+- `locations`: Locations mentioned
+- `events`: Events referenced or occurring
+- `threats`: Threats present or mentioned
+- `other`: Other entities (factions, items, etc.)
+
+**StateUpdates**:
+- `characters`: List of CharacterStateUpdate (location, emotional state, physical condition, goals, knowledge)
+- `relationships`: List of RelationshipUpdate (trust level, type, notes)
+- `world_state_notes`: General notes about world state changes
+
+**Operations**:
+- `request_summary`: Request for episode/season summary
+- `request_regeneration`: Request to regenerate this chunk
+- `spawn_side_task`: Description of side task to spawn
+
+### Key Features
+- All models use `extra = "forbid"` for strict validation (OpenAI Structured Output compatible)
+- Optional fields default to None, allowing flexible responses
+- Enums enforce valid values for categorical fields
+- Type hints on all fields
+- Comprehensive field descriptions for API clarity
+
+Location: `nexus/agents/lore/logon_schemas.py`
+
+Helper functions:
+- `validate_story_turn_response()`: Validate raw dict against schema
+- `create_minimal_response()`: Create minimal response with just narrative
+- `extract_narrative_text()`: Extract just the prose from a response
 
 ## Technical Requirements
 

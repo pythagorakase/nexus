@@ -134,22 +134,73 @@ def analyze_context_needs(self, user_input, recent_narrative):
   - `parse_response()` - Extract narrative and directives
   - `handle_api_errors()` - Fallback management
 
-## Implementation Priority
+## Implementation Status
 
-1. **Phase 1**: Convert LORE to central orchestrator
-   - Implement local LLM integration
-   - Create utility interfaces
-   - Build basic turn cycle
+### Phase 1: Central Orchestrator (COMPLETE)
+- Local LLM integration via LM Studio SDK
+- Turn cycle manager (`TurnCycleManager`) implements all phases
+- Utility interfaces established
 
-2. **Phase 2**: Integrate existing utilities
-   - Wire up MEMNON (already complete)
-   - Create simple PSYCHE utility from character tables
-   - Build minimal LOGON wrapper
+### Phase 2: Integrated Utilities (IN PROGRESS)
+- MEMNON integration complete with hybrid search
+- LOGON updated with structured output schemas
+- Programmatic entity queries replace LLM-inference-driven approach
 
-3. **Phase 3**: Advanced features
-   - Implement NEMESIS when ready
-   - Define GAIA's role if needed
-   - Add sophisticated reasoning chains
+### Phase 3: Advanced Features (ACTIVE)
+- Retrieval query generation by local LLM (now implemented in `local_llm.py`)
+- LOGON structured output schemas defined in `logon_schemas.py`
+- Entity inclusion now fully configurable via `settings.json`
+
+## Recent Enhancements
+
+### Query Generation (Phase 4: Deep Queries)
+The local LLM now generates targeted retrieval queries dynamically:
+- Analyzes narrative context to determine what information would help continuation
+- Generates 3-5 focused queries based on context analysis
+- Provides intelligent fallbacks if query generation fails
+- Integrates with MEMNON's QueryAnalyzer for semantic classification
+
+Implementation: `nexus/agents/lore/utils/local_llm.py::generate_retrieval_queries()`
+
+### Entity State Queries (Phase 3: World State Report)
+Replaced LLM-inference-driven entity querying with programmatic database queries:
+- Queries characters referenced in warm slice via `chunk_character_references` table
+- Queries relationships between identified characters
+- Queries active events and threats using status filters
+- Queries locations from character current_location fields
+- All limits and filters configurable in `settings.json` under `Agent Settings.LORE.entity_inclusion`
+
+Implementation: `nexus/agents/lore/utils/turn_cycle.py::query_entity_states()`
+
+### Structured Output Schemas (LOGON)
+New Pydantic v2 models for structured responses from Apex AI:
+- `StoryTurnResponse`: Top-level response schema with narrative, metadata, entities, state updates, operations
+- `NarrativeChunk`: The prose narrative with optional metadata
+- `ChunkMetadataUpdate`: Chronology, narrative vector, continuity markers, thematic elements
+- `ReferencedEntities`: Collection of characters, locations, events, threats referenced in narrative
+- `StateUpdates`: Character state changes and relationship updates
+- `Operations`: Requests for summaries, regeneration, or side tasks
+
+Implementation: `nexus/agents/lore/logon_schemas.py`
+
+### Configuration Management
+Entity inclusion now fully configurable via settings.json:
+```json
+"entity_inclusion": {
+    "warm_slice_lookback_chunks": 20,
+    "max_characters_from_warm_slice": 25,
+    "max_locations_from_warm_slice": 10,
+    "include_all_relationships": true,
+    "include_all_active_events": true,
+    "include_all_active_threats": true,
+    "active_event_statuses": ["active", "ongoing", "escalating"],
+    "active_threat_statuses": ["active", "imminent"],
+    "max_total_characters": 30,
+    "max_total_relationships": 100,
+    "max_total_events": 15,
+    "max_total_threats": 10
+}
+```
 
 ## Local LLM Selection
 
