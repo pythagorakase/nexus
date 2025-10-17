@@ -336,8 +336,9 @@ Details:
 
 ## 4.2 Context Assembly Process
 1. `LORE` dynamically calculates a context budget based on Apex AI TPM limits, assigning percentage shares for warm slice, historical passage quotes, and structured information.
-2. `LORE` calls `PSYCHE` utility to formulate queries for most pertinent characters, relationships, and events.
-3. `LORE` uses `MEMNON` utility to retrieve broad pool of candidate chunks using multi-model embeddings, with intermediate filtering and cross-encoder reranking for final selections.
+2. Local LLM generates 3-5 targeted retrieval queries based on narrative context analysis (replacing PSYCHE query formulation).
+3. Programmatic entity queries retrieve characters, locations, relationships, active events, and threats from the database based on `entity_inclusion` settings (warm slice chunk references, status filters, configurable limits).
+4. `LORE` uses `MEMNON` utility to retrieve broad pool of candidate chunks using multi-model embeddings, with intermediate filtering and cross-encoder reranking for final selections.
 
 ## 4.3 Query Framework
 The Query Framework serves as the communication backbone of NEXUS, enabling structured information exchange between LORE and its utility modules. It expands the native MEMNON query stack with narrative-specific enhancements tailored to our schema and retrieval strategies.

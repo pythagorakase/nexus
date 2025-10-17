@@ -335,23 +335,107 @@ Response format - use exact headers:"""
         
         return result
     
-    def generate_retrieval_queries(self, 
+    def generate_retrieval_queries(self,
                                    context_analysis: Dict[str, Any],
                                    user_input: str) -> List[str]:
         """
         Generate targeted retrieval queries based on context analysis.
-        
+
+        This method asks the LLM to generate 3-5 retrieval queries that would help
+        retrieve relevant past narrative to inform the story continuation.
+
         Args:
             context_analysis: Results from analyze_narrative_context
             user_input: User's input
-            
+
         Returns:
-            List of retrieval queries
+            List of retrieval queries (3-5 strings)
         """
-        # For Q&A mode, just return the user's exact question
-        # The analyze_narrative_context is pulling entities from warm_slice 
-        # that aren't relevant to the question
-        return [user_input] if user_input else []
+        # Extract entities from context analysis
+        characters = context_analysis.get("characters", [])
+        locations = context_analysis.get("locations", [])
+        entities_for_retrieval = context_analysis.get("entities_for_retrieval", [])
+        context_type = context_analysis.get("context_type", "unknown")
+
+        # Build a prompt for query generation
+        system_prompt = """You are LORE's retrieval query generator. Generate 3-5 targeted search queries that would help retrieve relevant past narrative information to inform the story continuation. Queries should be specific and focused."""
+
+        prompt = f"""Based on the current narrative context, generate 3-5 retrieval queries to search for relevant past events, character history, or world information.
+
+User input: {user_input}
+
+Context analysis:
+- Characters present: {', '.join(characters) if characters else 'None'}
+- Locations: {', '.join(locations) if locations else 'None'}
+- Context type: {context_type}
+- Key entities: {', '.join(entities_for_retrieval) if entities_for_retrieval else 'None'}
+
+Generate queries that would retrieve:
+1. Relevant past events involving these characters
+2. History of these locations
+3. Character relationships and interactions
+4. Background information on key entities
+
+Format: Output exactly 3-5 queries, one per line, no numbering or bullets.
+Each query should be a complete question or search phrase."""
+
+        try:
+            response = self.query(
+                prompt=prompt,
+                temperature=0.5,  # Moderate creativity
+                max_tokens=300,   # Keep it concise
+                system_prompt=system_prompt
+            )
+
+            # Parse the response into individual queries
+            queries = []
+            for line in response.split('\n'):
+                line = line.strip()
+                # Skip empty lines, numbering, and bullets
+                if not line:
+                    continue
+                # Remove common numbering/bullet formats
+                if line and line[0].isdigit() and (line[1] == '.' or line[1] == ')'):
+                    line = line[2:].strip()
+                elif line.startswith('-') or line.startswith('*'):
+                    line = line[1:].strip()
+
+                if line and len(line) > 10:  # Minimum meaningful query length
+                    queries.append(line)
+
+            # Ensure we have between 3-5 queries
+            if len(queries) < 3:
+                # Fallback: add generic queries based on user input
+                logger.warning(f"Only generated {len(queries)} queries, adding fallbacks")
+                if user_input:
+                    queries.append(user_input)
+                if characters:
+                    queries.append(f"What happened with {characters[0]}?")
+                if locations:
+                    queries.append(f"Past events at {locations[0]}")
+
+            # Limit to 5 queries
+            queries = queries[:5]
+
+            logger.info(f"Generated {len(queries)} retrieval queries")
+            return queries
+
+        except Exception as e:
+            logger.error(f"Failed to generate retrieval queries: {e}")
+            # Fallback: return basic queries
+            fallback_queries = []
+            if user_input:
+                fallback_queries.append(user_input)
+            if characters:
+                fallback_queries.append(f"Past events involving {characters[0]}")
+            if locations:
+                fallback_queries.append(f"History of {locations[0]}")
+
+            # Ensure at least one query
+            if not fallback_queries:
+                fallback_queries = ["Recent narrative events"]
+
+            return fallback_queries
     
     def is_available(self) -> bool:
         """Check if local LLM is available via LM Studio"""

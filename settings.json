@@ -191,7 +191,21 @@
                 }
             },
             "query_budget": 5,
-            "use_narrative_learner": true
+            "use_narrative_learner": true,
+            "entity_inclusion": {
+                "warm_slice_lookback_chunks": 20,
+                "max_characters_from_warm_slice": 25,
+                "max_locations_from_warm_slice": 10,
+                "include_all_relationships": true,
+                "include_all_active_events": true,
+                "include_all_active_threats": true,
+                "active_event_statuses": ["active", "ongoing", "escalating"],
+                "active_threat_statuses": ["active", "imminent"],
+                "max_total_characters": 30,
+                "max_total_relationships": 100,
+                "max_total_events": 15,
+                "max_total_threats": 10
+            }
         },
         "LOGON": {
             "debug": true,
