@@ -83,6 +83,36 @@ export interface GenerationRun {
   failed_generations: number;
 }
 
+export interface MissingGeneration {
+  prompt_id: number;
+  chunk_id: number;
+  prompt_label: string | null;
+  prompt_category: string | null;
+  condition_id: number;
+  condition_slug: string;
+  condition_label: string | null;
+  provider: string;
+  model_name: string;
+}
+
+export interface AsyncStatus {
+  pending_requests: number;
+  pending_batches: number;
+  remaining_generations: number;
+  last_poll_at?: string | null;
+  next_poll_at?: string | null;
+  polling_interval_seconds?: number | null;
+  last_duration_seconds?: number | null;
+}
+
+export interface RegenerateResponse {
+  mode: 'sync' | 'async';
+  run_id: string;
+  generation_id?: number | null;
+  batch_id?: string | null;
+  comparisons_deleted: number;
+}
+
 export const auditionAPI = {
   /**
    * List all generation runs.
@@ -183,12 +213,71 @@ export const auditionAPI = {
   },
 
   /**
+   * Get detailed list of missing generations.
+   */
+  async getMissingGenerations(): Promise<MissingGeneration[]> {
+    const response = await fetch(`${API_BASE}/generate/missing`);
+    if (!response.ok) throw new Error('Failed to fetch missing generations');
+    return response.json();
+  },
+
+  /**
+   * Retrieve async batch polling telemetry.
+   */
+  async getAsyncStatus(): Promise<AsyncStatus> {
+    const response = await fetch(`${API_BASE}/generate/async-status`);
+    if (!response.ok) throw new Error('Failed to fetch async generation status');
+    return response.json();
+  },
+
+  /**
+   * Delete a malformed generation and requeue it.
+   */
+  async regenerateGeneration(generationId: number, asyncProviders: string[]): Promise<RegenerateResponse> {
+    const response = await fetch(`${API_BASE}/generate/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        generation_id: generationId,
+        async_providers: asyncProviders,
+      }),
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || 'Failed to regenerate generation');
+    }
+    return response.json();
+  },
+
+  /**
+   * Calculate how many tasks will be executed with the given parameters.
+   */
+  async getTaskCount(limit?: number, async_providers?: string[]): Promise<{ task_count: number }> {
+    const params = new URLSearchParams();
+    if (limit && limit > 0) params.append('limit', limit.toString());
+    if (async_providers && async_providers.length > 0) {
+      params.append('async_providers', async_providers.join(','));
+    }
+
+    const url = params.toString()
+      ? `${API_BASE}/generate/task-count?${params}`
+      : `${API_BASE}/generate/task-count`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch task count');
+    return response.json();
+  },
+
+  /**
    * Start a generation job.
    */
-  async startGeneration(limit?: number, max_workers?: number): Promise<{ job_id: string; status: string }> {
+  async startGeneration(limit?: number, max_workers?: number, async_providers?: string[]): Promise<{ job_id: string; status: string }> {
     const params = new URLSearchParams();
     if (limit && limit > 0) params.append('limit', limit.toString());
     if (max_workers && max_workers > 0) params.append('max_workers', max_workers.toString());
+    if (async_providers && async_providers.length > 0) {
+      params.append('async_providers', async_providers.join(','));
+    }
 
     const url = params.toString()
       ? `${API_BASE}/generate/start?${params}`

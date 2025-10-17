@@ -292,7 +292,7 @@ def run_golden_queries():
         logger.info("Initializing MEMNON...")
         memnon = MEMNON(
             interface=SilentInterface(),
-            agent_state=None,  # Direct mode - no Letta framework
+            agent_state=None,  # Direct mode - no legacy Letta framework needed
             user=None,
             db_url=db_url,
             model_id=model_id,

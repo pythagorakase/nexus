@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { MapPin, Loader2, ChevronRight, ChevronDown } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MapPin, Loader2, ChevronRight, ChevronDown, Upload, Image as ImageIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Place, Zone } from "@shared/schema";
+import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 import { worldOutline } from "@/lib/world-outline";
 import type { FeatureCollection } from 'geojson';
 
@@ -50,6 +51,10 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
   
@@ -100,7 +105,91 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   } = useQuery<Zone[]>({
     queryKey: ["/api/zones"],
   });
-  
+
+  // Fetch place images
+  const {
+    data: placeImages = [],
+  } = useQuery<ImageData[]>({
+    queryKey: ["/api/places", selectedLocation, "images"],
+    queryFn: async () => {
+      if (!selectedLocation) return [];
+      const response = await fetch(`/api/places/${selectedLocation}/images`);
+      if (!response.ok) {
+        throw new Error("Failed to load images");
+      }
+      return response.json();
+    },
+    enabled: !!selectedLocation,
+  });
+
+  const uploadImagesMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      if (!selectedLocation) throw new Error("No place selected");
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("images", file));
+
+      const response = await fetch(`/api/places/${selectedLocation}/images`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upload images");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/places", selectedLocation, "images"] });
+    },
+  });
+
+  const setMainImageMutation = useMutation({
+    mutationFn: async (imageId: number) => {
+      if (!selectedLocation) throw new Error("No place selected");
+      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}/main`, {
+        method: "PUT",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to set main image");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/places", selectedLocation, "images"] });
+    },
+  });
+
+  const deleteImageMutation = useMutation({
+    mutationFn: async (imageId: number) => {
+      if (!selectedLocation) throw new Error("No place selected");
+      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to delete image");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/places", selectedLocation, "images"] });
+    },
+  });
+
+  const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      await uploadImagesMutation.mutateAsync(files);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
   useEffect(() => {
     const handleResize = () => {
       if (svgRef.current?.parentElement) {
@@ -121,15 +210,60 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   }, []);
 
   const extractCoordinates = (place: Place): { latitude: number; longitude: number } | null => {
-    // API now returns clean lat/lng extracted from PostGIS
-    const lat = place.latitude !== null && place.latitude !== undefined ? Number(place.latitude) : null;
-    const lng = place.longitude !== null && place.longitude !== undefined ? Number(place.longitude) : null;
+    // Parse GeoJSON geometry from PostGIS
+    if (!place.geometry) return null;
 
-    if (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng)) {
-      return { latitude: lat, longitude: lng };
+    try {
+      // Validate geometry structure
+      if (typeof place.geometry !== 'object' || !place.geometry.type) {
+        console.warn(`Place ${place.id} has invalid geometry structure`);
+        return null;
+      }
+
+      switch (place.geometry.type) {
+        case 'Point': {
+          // GeoJSON Point format: [longitude, latitude]
+          if (!Array.isArray(place.geometry.coordinates) || place.geometry.coordinates.length < 2) {
+            console.warn(`Place ${place.id} has invalid Point coordinates`);
+            return null;
+          }
+
+          const [lng, lat] = place.geometry.coordinates;
+
+          // Validate that coordinates are finite numbers
+          if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+            console.warn(`Place ${place.id} has non-finite coordinates: [${lng}, ${lat}]`);
+            return null;
+          }
+
+          // Validate coordinate ranges (lat: -90 to 90, lng: -180 to 180)
+          if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            console.warn(`Place ${place.id} has out-of-range coordinates: [${lng}, ${lat}]`);
+            return null;
+          }
+
+          return { latitude: lat, longitude: lng };
+        }
+
+        case 'Polygon': {
+          // Future: calculate centroid for polygon boundaries
+          // For now, return null to not display pin
+          return null;
+        }
+
+        case 'LineString': {
+          // Future: use midpoint or start point for routes/paths
+          return null;
+        }
+
+        default:
+          console.warn(`Place ${place.id} has unsupported geometry type: ${place.geometry.type}`);
+          return null;
+      }
+    } catch (error) {
+      console.error(`Failed to parse geometry for place ${place.id}:`, error, place.geometry);
+      return null;
     }
-
-    return null;
   };
 
   // Calculate bounds from place data, but ensure full world is visible
@@ -709,15 +843,15 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
         </div>
         
         <ScrollArea className="flex-1">
-          <div className="p-4 space-y-2">
+          <div className="p-4 pr-2 space-y-2">
             {Object.entries(placesByZone)
               .sort(([a], [b]) => Number(a) - Number(b))
               .map(([zoneId, zonePlaces]) => {
                 const zone = zones.find(z => z.id === Number(zoneId));
                 const isExpanded = expandedZones.has(Number(zoneId));
-                
+
                 return (
-                  <div key={zoneId} className="border border-border rounded-md overflow-hidden">
+                  <div key={zoneId} className="border border-border rounded-md overflow-hidden mr-2">
                     <Button
                       variant="ghost"
                       className="w-full justify-start p-3 hover-elevate text-foreground"
@@ -768,19 +902,19 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                               onMouseLeave={() => setHoveredLocation(null)}
                               data-testid={`button-location-${place.id}`}
                             >
-                              <div className="flex items-center gap-2 w-full">
-                                <div 
-                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                                  style={{ 
+                              <div className="flex items-start gap-2 w-full">
+                                <div
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
+                                  style={{
                                     background: isCurrent ? "#ffff00" : (isSelected ? "#00ffff" : "#00ff41"),
                                     boxShadow: `0 0 4px ${isCurrent ? "#ffff00" : (isSelected ? "#00ffff" : "#00ff41")}`
                                   }}
                                 />
-                                <span className="truncate text-left">
+                                <span className="text-left flex-1 break-words">
                                   {place.name}
                                 </span>
-                                {place.type && (
-                                  <span className="text-[10px] text-foreground/70 ml-auto">
+                                {place.type === 'vehicle' && (
+                                  <span className="text-[10px] text-foreground/70 ml-auto flex-shrink-0">
                                     {place.type}
                                   </span>
                                 )}
@@ -799,12 +933,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
       {/* Place Details Dialog */}
       <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="font-mono text-primary">
-              {selectedLocation ? places.find(p => p.id === selectedLocation)?.name : 'Location Details'}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] p-0">
           {selectedLocation && (() => {
             const place = places.find(p => p.id === selectedLocation);
             if (!place) return null;
@@ -815,10 +944,68 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             const statusParagraphs = toParagraphs(place.currentStatus);
             const secretsParagraphs = toParagraphs(place.secrets);
             const inhabitantsList = parseInhabitants(place.inhabitants);
+            const mainImage = placeImages.find((img) => img.isMain === 1);
 
             return (
-              <ScrollArea className="max-h-[60vh]">
-                <div className="space-y-4 font-mono text-sm pr-4">
+              <ScrollArea className="max-h-[85vh]">
+                <div className="p-6">
+                  {/* Header with thumbnail */}
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="flex-shrink-0">
+                      <button
+                        onClick={() => setGalleryOpen(true)}
+                        className="w-32 max-h-40 rounded-md overflow-hidden border border-border bg-muted/40 flex items-center justify-center hover:border-primary/50 transition-colors cursor-pointer group"
+                      >
+                        {mainImage ? (
+                          <img
+                            src={mainImage.filePath}
+                            alt={place.name}
+                            className="max-w-full max-h-40 object-contain group-hover:opacity-80 transition-opacity"
+                          />
+                        ) : (
+                          <div className="w-32 h-32 flex items-center justify-center text-muted-foreground/60 group-hover:text-muted-foreground">
+                            <MapPin className="h-8 w-8" />
+                          </div>
+                        )}
+                      </button>
+                      <div className="mt-2 flex gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                          className="font-mono text-xs px-2 py-1 h-auto"
+                        >
+                          {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setGalleryOpen(true)}
+                          className="font-mono text-xs px-2 py-1 h-auto"
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg"
+                        multiple
+                        onChange={handleQuickUpload}
+                        className="hidden"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-lg font-mono text-primary terminal-glow">
+                        {place.name}
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-1">ID: {place.id}</p>
+                    </div>
+                  </div>
+
+                  {/* Details section */}
+                  <div className="space-y-4 font-mono text-sm">
                   {place.type && (
                     <div>
                       <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Type</div>
@@ -893,11 +1080,32 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                     </div>
                   )}
                 </div>
+              </div>
               </ScrollArea>
             );
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Place Image Gallery */}
+      {selectedLocation && (
+        <ImageGalleryModal
+          open={galleryOpen}
+          onOpenChange={setGalleryOpen}
+          images={placeImages}
+          entityId={selectedLocation}
+          entityType="place"
+          onUpload={async (files) => {
+            await uploadImagesMutation.mutateAsync(files);
+          }}
+          onSetMain={async (imageId) => {
+            await setMainImageMutation.mutateAsync(imageId);
+          }}
+          onDelete={async (imageId) => {
+            await deleteImageMutation.mutateAsync(imageId);
+          }}
+        />
+      )}
     </div>
   );
 }

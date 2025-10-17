@@ -1,8 +1,8 @@
-The Query Framework in NEXUS builds upon Letta's existing database abstraction and search capabilities while implementing significant extensions to support narrative intelligence needs. This system serves as the communication backbone between agents and enables sophisticated information retrieval across memory types.
+The Query Framework in NEXUS builds upon the native MEMNON retrieval stack and our SQLAlchemy data layer while implementing significant extensions to support narrative intelligence needs. This system serves as the communication backbone between agents and enables sophisticated information retrieval across memory types.
 
-# Letta Foundation and NEXUS Extensions
+# Runtime Foundation and NEXUS Extensions
 
-**Letta's Existing Capabilities:**
+**Existing Capabilities:**
 
 - SQLAlchemy-based ORM with unified interface for text and vector search
 - Conversation history retrieval with direct text matching
@@ -91,22 +91,22 @@ A core innovation in NEXUS is the cross-reference system implemented by MEMNON:
 The Query Framework is implemented as follows:
 
 1. **Query Interface Layer**:
-    - Extends Letta's `Agent.step()` method for specialized query handling
+    - Provides NEXUS-specific request handling for specialized query workflows
     - Implements standardized query message format
     - Routes queries to appropriate handler agents
 2. **Semantic Layer**:
-    - Enhances Letta's embedding system with multi-model approach
+    - Enhances MEMNON's embedding system with multi-model approach
     - Implements domain-specific embedding fine-tuning
     - Provides weighted combination of different embedding models
 3. **Storage Access Layer**:
-    - Extends Letta's SQLAlchemy implementation
+    - Builds on the shared SQLAlchemy implementation maintained in-repo
     - Adds specialized joins between entity and narrative tables
     - Implements temporal retrieval patterns
     - Manages hybrid SQL/vector queries
 4. **Synthesis Layer**:
-    - New component not present in Letta
+    - New component layered atop the MEMNON runtime
     - Uses local LLMs to combine and process query results
     - Implements result formatting based on requesting agent's needs
     - Resolves conflicts and contradictions in retrieved data
 
-By extending Letta's foundation with these specialized capabilities, NEXUS achieves a significantly more sophisticated query system optimized for narrative intelligence, enabling the creation of coherent, contextually-aware interactive storytelling.
+By extending the in-house MEMNON foundation with these specialized capabilities, NEXUS achieves a significantly more sophisticated query system optimized for narrative intelligence, enabling the creation of coherent, contextually-aware interactive storytelling.

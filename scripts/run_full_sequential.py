@@ -21,7 +21,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import text
 
@@ -30,6 +30,7 @@ from nexus.audition.models import ConditionSpec, PromptSnapshot
 from nexus.audition.repository import AuditionRepository
 from scripts.api_openai import OpenAIProvider
 from scripts.api_anthropic import AnthropicProvider
+from scripts.api_openrouter import OpenRouterProvider
 from nexus.audition.batch_clients import BatchStatus
 
 
@@ -39,29 +40,19 @@ LOGGER = logging.getLogger("nexus.apex_audition.run_full_sequential")
 _output_lock = threading.Lock()
 
 
-# Lane ordering chosen to favour cache reuse for Anthropic.
-OPENAI_LANES = [
-    "gpt5.reason-min",
-    "gpt5.reason-med",
-    "gpt5.reason-high",
-    "o3.reason-low",
-    "o3.reason-med",
-    "o3.reason-high",
-    "4o.t0-7",
-    "4o.t1-0",
-    "4o.t1-3",
-]
-
-ANTHROPIC_LANES = [
-    "sonnet.t0-7.std",
-    "sonnet.t1-0.std",
-    "sonnet.t1-0.ext",
-    "opus.t0-7.std",
-    "opus.t1-0.std",
-    "opus.t1-0.ext",
-]
-
 TEST_CHUNK_IDS = {4242}  # skip pytest harness fixtures
+
+
+def get_active_conditions_by_provider(repo: AuditionRepository) -> Dict[str, List[ConditionSpec]]:
+    """Load all active conditions from database, grouped by provider."""
+    all_conditions = repo.list_conditions(active_only=True)
+    by_provider: Dict[str, List[ConditionSpec]] = {}
+    for condition in all_conditions:
+        provider = condition.provider.lower()
+        if provider not in by_provider:
+            by_provider[provider] = []
+        by_provider[provider].append(condition)
+    return by_provider
 
 
 @dataclass
@@ -96,13 +87,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        help="Limit number of prompts to process",
+        help="Sample mode: test up to N conditions (one incomplete task per condition)",
     )
     parser.add_argument(
         "--max-workers",
         type=int,
         default=7,
         help="Maximum number of concurrent workers (default: 7)",
+    )
+    parser.add_argument(
+        "--async-providers",
+        type=str,
+        help="Comma-separated list of providers to route via batch API (e.g., 'openai,anthropic')",
     )
     return parser.parse_args()
 
@@ -157,50 +153,70 @@ def patch_provider_keys() -> None:
 
         AnthropicProvider._get_api_key = _cached_anthropic_key  # type: ignore[attr-defined]
 
+    openrouter_key = _fetch_secret(
+        ["op", "read", "op://API/OpenRouter/api key"],
+        "OpenRouter API key",
+    )
+    if openrouter_key:
+        LOGGER.info("Prefetched OpenRouter API key via 1Password")
 
-def load_conditions(repo: AuditionRepository, slugs: Iterable[str]) -> List[ConditionSpec]:
-    conditions: List[ConditionSpec] = []
-    for slug in slugs:
-        condition = repo.get_condition_by_slug(slug)
-        if not condition or condition.id is None:
-            raise ValueError(f"Unknown or unpersisted condition slug: {slug}")
-        conditions.append(condition)
-    return conditions
+        def _cached_openrouter_key(self) -> str:  # type: ignore[override]
+            return openrouter_key
+
+        OpenRouterProvider._get_api_key = _cached_openrouter_key  # type: ignore[attr-defined]
 
 
 def compute_summary(
     repo: AuditionRepository,
     prompts: List[PromptSnapshot],
     conditions: List[ConditionSpec],
+    task_pairs: Optional[List[Tuple[int, int]]] = None,
+    failed_pairs: Optional[Set[Tuple[int, int]]] = None,
 ) -> Dict[str, int]:
     prompt_ids = [p.id for p in prompts if p.id is not None]
     condition_ids = [c.id for c in conditions if c.id is not None]
+    replicate_count = repo.get_replicate_count()
 
-    combos: Dict[Tuple[int, int], Dict[str, Optional[str]]] = {}
-    for cond_id in condition_ids:
-        for prompt_id in prompt_ids:
+    combos: Dict[Tuple[int, int], Dict[str, Any]] = {}
+
+    # If specific task pairs are provided, only track those combinations
+    if task_pairs:
+        for cond_id, prompt_id in task_pairs:
             combos[(cond_id, prompt_id)] = {
                 "seen": False,
-                "has_completed": False,
+                "completed_count": 0,
+                "has_all_replicates": False,
                 "last_status": None,
             }
+    else:
+        # Otherwise track all condition × prompt combinations
+        for cond_id in condition_ids:
+            for prompt_id in prompt_ids:
+                combos[(cond_id, prompt_id)] = {
+                    "seen": False,
+                    "completed_count": 0,
+                    "has_all_replicates": False,
+                    "last_status": None,
+                }
 
     if combos:
         cond_csv = ",".join(str(i) for i in condition_ids)
         prompt_csv = ",".join(str(i) for i in prompt_ids)
+        # Count completed replicates per prompt×condition combination
         query = text(
             f"""
-            SELECT condition_id, prompt_id, status
+            SELECT condition_id, prompt_id, status, COUNT(*) as count
             FROM apex_audition.generations
             WHERE condition_id IN ({cond_csv})
               AND prompt_id IN ({prompt_csv})
-            ORDER BY created_at
+            GROUP BY condition_id, prompt_id, status
+            ORDER BY condition_id, prompt_id
             """
         )
         with repo.engine.connect() as connection:
             rows = connection.execute(query).fetchall()
 
-        for condition_id, prompt_id, status in rows:
+        for condition_id, prompt_id, status, count in rows:
             key = (condition_id, prompt_id)
             if key not in combos:
                 continue
@@ -208,7 +224,9 @@ def compute_summary(
             entry["seen"] = True
             entry["last_status"] = status
             if status == "completed":
-                entry["has_completed"] = True
+                entry["completed_count"] += count
+                if entry["completed_count"] >= replicate_count:
+                    entry["has_all_replicates"] = True
 
     summary = {
         "total": len(combos),
@@ -218,11 +236,16 @@ def compute_summary(
         "failed": 0,
     }
 
-    for entry in combos.values():
+    for key, entry in combos.items():
+        # Check if this task pair failed during submission
+        if failed_pairs and key in failed_pairs:
+            summary["failed"] += 1
+            continue
+
         if not entry["seen"]:
             summary["unsent"] += 1
             continue
-        if entry["has_completed"]:
+        if entry["has_all_replicates"]:
             summary["completed"] += 1
             continue
 
@@ -240,7 +263,8 @@ def compute_summary(
 
 def display_summary(summary: Dict[str, int]) -> None:
     with _output_lock:
-        remaining = summary['total'] - summary['completed'] - summary['failed']
+        # Failed tasks still need work (retries or investigation), so don't subtract from remaining
+        remaining = summary['total'] - summary['completed']
         line = (
             f"Total: {summary['total']} | "
             f"Remaining: {remaining} | "
@@ -251,21 +275,20 @@ def display_summary(summary: Dict[str, int]) -> None:
         sys.stdout.flush()
 
 
-def has_completed_generation(repo: AuditionRepository, condition_id: int, prompt_id: int) -> bool:
+def has_completed_generation(repo: AuditionRepository, condition_id: int, prompt_id: int, replicate_count: int) -> bool:
+    """Check if all required replicates are completed for this prompt×condition combination."""
     query = text(
         """
-        SELECT 1
+        SELECT COUNT(*) as completed_count
         FROM apex_audition.generations
         WHERE condition_id = :condition_id
           AND prompt_id = :prompt_id
-          AND replicate_index = 0
           AND status = 'completed'
-        LIMIT 1
         """
     )
     with repo.engine.connect() as connection:
-        row = connection.execute(query, {"condition_id": condition_id, "prompt_id": prompt_id}).scalar()
-    return row is not None
+        result = connection.execute(query, {"condition_id": condition_id, "prompt_id": prompt_id}).scalar()
+    return result >= replicate_count
 
 
 def run_lane(
@@ -277,6 +300,7 @@ def run_lane(
     dry_run: bool,
     created_by: str,
     notes: str,
+    replicate_count: int,
     repo: AuditionRepository,
     prompts: List[PromptSnapshot],
     all_conditions: List[ConditionSpec],
@@ -295,7 +319,7 @@ def run_lane(
     run = engine.run_generation_batch(
         condition_slug=condition.slug,
         prompt_ids=[prompt.id],
-        replicate_count=1,
+        replicate_count=replicate_count,
         dry_run=False,
         enable_cache=enable_cache,
         use_rate_limiting=True,
@@ -371,12 +395,25 @@ def main() -> None:
 
     patch_provider_keys()
 
-    engine = AuditionEngine()
+    # Parse async_providers list
+    async_providers = []
+    if args.async_providers:
+        async_providers = [p.strip().lower() for p in args.async_providers.split(',') if p.strip()]
+        LOGGER.info("Async providers (batch mode): %s", async_providers)
+
+    engine = AuditionEngine(async_providers=async_providers)
     repo = engine.repository
 
-    openai_conditions = load_conditions(repo, OPENAI_LANES)
-    anthropic_conditions = load_conditions(repo, ANTHROPIC_LANES)
-    all_conditions = openai_conditions + anthropic_conditions
+    # Get replicate count from global settings
+    replicate_count = repo.get_replicate_count()
+    LOGGER.info("Replicate count: %s", replicate_count)
+
+    # Load active conditions dynamically from database
+    conditions_by_provider = get_active_conditions_by_provider(repo)
+    all_conditions = []
+    for provider, conditions in sorted(conditions_by_provider.items()):
+        all_conditions.extend(conditions)
+        LOGGER.info("Loaded %s %s conditions", len(conditions), provider)
 
     prompts = [
         prompt
@@ -384,35 +421,50 @@ def main() -> None:
         if prompt.id is not None and prompt.chunk_id not in TEST_CHUNK_IDS
     ]
 
-    if args.limit is not None and args.limit > 0:
-        prompts = prompts[:args.limit]
-        LOGGER.info("Limiting to first %s prompts", args.limit)
-
     LOGGER.info(
-        "Starting rollout across %s prompts (%s OpenAI lanes, %s Anthropic lanes)",
+        "Starting rollout across %s prompts and %s total conditions",
         len(prompts),
-        len(openai_conditions),
-        len(anthropic_conditions),
+        len(all_conditions),
     )
 
-    display_summary(compute_summary(repo, prompts, all_conditions))
+    # Build list of tasks to execute
+    # If limit is specified, sample one incomplete task per condition (up to limit)
+    # This ensures we test diverse endpoints rather than hammering one prompt
+    tasks = []
+    if args.limit is not None and args.limit > 0:
+        LOGGER.info("Limit mode: sampling up to %s incomplete tasks (one per condition)", args.limit)
+        conditions_sampled = 0
+        for condition in all_conditions:
+            if conditions_sampled >= args.limit:
+                break
+            # Find first incomplete task for this condition
+            for prompt in prompts:
+                if not has_completed_generation(repo, condition.id, prompt.id, replicate_count):
+                    tasks.append((condition, prompt))
+                    conditions_sampled += 1
+                    break  # Move to next condition
+    else:
+        # No limit: execute all incomplete tasks
+        for prompt in prompts:
+            for condition in all_conditions:
+                if has_completed_generation(repo, condition.id, prompt.id, replicate_count):
+                    continue
+                tasks.append((condition, prompt))
+
+    # Extract exact task pairs for accurate stats tracking
+    task_pairs = [(c.id, p.id) for c, p in tasks] if tasks else None
+
+    display_summary(compute_summary(repo, prompts, all_conditions, task_pairs))
 
     LOGGER.info("=== Processing all prompts across all lanes (max %d concurrent) ===", args.max_workers)
-
-    # Build list of tasks to execute
-    tasks = []
-    for prompt in prompts:
-        for condition in all_conditions:
-            if has_completed_generation(repo, condition.id, prompt.id):
-                continue
-            tasks.append((condition, prompt))
 
     LOGGER.info("Total tasks to execute: %s", len(tasks))
 
     # Execute tasks with configured number of workers
     completed_count = 0
+    failed_pairs: Set[Tuple[int, int]] = set()
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        futures = []
+        future_to_task: Dict[Any, Tuple[ConditionSpec, PromptSnapshot]] = {}
         for condition, prompt in tasks:
             # Disable caching for all providers since parallel execution prevents cache reuse
             # (Anthropic charges +25% to write cache, OpenAI provides no cross-parameter cache hits)
@@ -427,23 +479,30 @@ def main() -> None:
                 dry_run=args.dry_run,
                 created_by=args.created_by,
                 notes=args.notes,
+                replicate_count=replicate_count,
                 repo=repo,
                 prompts=prompts,
                 all_conditions=all_conditions,
             )
-            futures.append(future)
+            future_to_task[future] = (condition, prompt)
 
         # Wait for all to complete and show progress
-        for future in as_completed(futures):
+        for future in as_completed(future_to_task.keys()):
             try:
                 future.result()
                 completed_count += 1
                 # Show progress after each completion
-                summary = compute_summary(repo, prompts, all_conditions)
+                summary = compute_summary(repo, prompts, all_conditions, task_pairs, failed_pairs)
                 display_summary(summary)
             except Exception as exc:
+                condition, prompt = future_to_task[future]
+                if condition.id is not None and prompt.id is not None:
+                    failed_pairs.add((condition.id, prompt.id))
                 LOGGER.error("Task generated exception: %s", exc)
                 completed_count += 1
+                # Update summary to reflect failure
+                summary = compute_summary(repo, prompts, all_conditions, task_pairs, failed_pairs)
+                display_summary(summary)
 
     LOGGER.info("Sequential rollout complete")
     sys.stdout.write("\n")

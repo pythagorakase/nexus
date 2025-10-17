@@ -15,12 +15,12 @@ NEMESIS is a utility module called by LORE for managing narrative tension and en
 
 ## Technical Requirements
 
-### Integration with Letta Framework
+### Integration with NEXUS Runtime
 
 - Implemented as a callable utility module
-- Utilize Letta's memory system for threat tracking
+- Integrate with NEXUS memory services for threat tracking
 - Implement database schema extensions for threat profiles and evolution
-- Leverage Letta's query system for retrieving character and world state information
+- Leverage MEMNON and shared query services for retrieving character and world state information
 
 ### Memory Management
 
@@ -46,16 +46,11 @@ NEMESIS is a utility module called by LORE for managing narrative tension and en
 ## Pseudocode Implementation
 
 ```python
-from letta.agent import Agent
-from letta.schemas.agent import AgentState
-from letta.schemas.memory import Memory
-from letta.schemas.block import Block, CreateBlock
-from letta.schemas.message import Message
 from typing import List, Dict, Any, Optional, Tuple, Union
 import datetime
 import json
 
-class NEMESIS(Agent):
+class NEMESIS:
     """
     NEMESIS (Threat Director) agent responsible for managing narrative tension
     through threat modeling, risk assessment, and consequence management.
@@ -63,7 +58,7 @@ class NEMESIS(Agent):
     
     def __init__(self, 
                  interface, 
-                 agent_state: AgentState,
+                 agent_state,
                  user,
                  **kwargs):
         """
@@ -71,13 +66,10 @@ class NEMESIS(Agent):
         
         Args:
             interface: Interface for agent communication
-            agent_state: Agent state from Letta framework
+            agent_state: Agent state provided by the NEXUS runtime
             user: User information
             **kwargs: Additional arguments
         """
-        # Initialize parent Agent class
-        super().__init__(interface, agent_state, user, **kwargs)
-        
         # Initialize specialized threat memory blocks if not present
         self._initialize_threat_memory_blocks()
         
@@ -118,14 +110,14 @@ class NEMESIS(Agent):
         for block_name in required_blocks:
             if block_name not in self.agent_state.memory.list_block_labels():
                 # Create block with default empty content
-                block = CreateBlock(
-                    label=block_name,
-                    value="",
-                    limit=50000,  # Generous limit for threat data
-                    description=f"Threat {block_name} tracking"
-                )
+                block = {
+                    "label": block_name,
+                    "value": "",
+                    "limit": 50000,  # Generous limit for threat data
+                    "description": f"Threat {block_name} tracking"
+                }
                 # Add block to memory
-                # Implementation will use Letta API to create block
+                # Implementation should call the NEXUS runtime's block manager
     
     def _load_settings(self) -> None:
         """Load tension settings from settings.json."""
@@ -702,10 +694,10 @@ class NEMESIS(Agent):
         # Returns mapping of threat IDs to their potential paths
         pass
     
-    def step(self, messages: List[Message]) -> Any:
+    def step(self, messages: List[Dict[str, Any]]) -> Any:
         """
         Process incoming messages and perform NEMESIS functions.
-        This is the main entry point required by Letta Agent framework.
+        This is the main entry point required by the NEXUS agent runtime.
         
         Args:
             messages: Incoming messages to process

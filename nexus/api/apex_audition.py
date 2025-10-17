@@ -10,6 +10,7 @@ Provides REST API endpoints for:
 - Generation job management
 """
 from datetime import datetime
+import logging
 import random
 import re
 import subprocess
@@ -27,8 +28,16 @@ import json
 import hashlib
 
 from nexus.api.models import (
-    Condition, Generation, Prompt, ComparisonCreate,
-    ELORating, ComparisonQueueItem, GenerationRun
+    Condition,
+    Generation,
+    Prompt,
+    ComparisonCreate,
+    ELORating,
+    ComparisonQueueItem,
+    GenerationRun,
+    AsyncGenerationStatus,
+    RegenerateGenerationRequest,
+    RegenerateGenerationResponse,
 )
 from nexus.audition.elo import calculate_elo_update, outcome_from_winner
 from nexus.audition import AuditionEngine
@@ -43,6 +52,8 @@ DB_PARAMS = {
 
 app = FastAPI(title="Apex Audition API", version="1.0.0")
 
+LOGGER = logging.getLogger(__name__)
+
 # Configure CORS for local development
 # Allow all localhost origins since UI uses dynamic port selection
 app.add_middleware(
@@ -55,6 +66,8 @@ app.add_middleware(
 
 # Global state for generation jobs
 generation_jobs: Dict[str, Dict] = {}
+ROOT_DIR = Path(__file__).resolve().parents[2]
+AUTO_POLL_STATUS_FILE = ROOT_DIR / "logs" / "auto_poll_status.json"
 
 
 def get_db():
@@ -249,7 +262,11 @@ def get_next_comparison(
                     gb.response_payload AS generation_b_response_payload,
                     gb.input_tokens AS generation_b_input_tokens,
                     gb.output_tokens AS generation_b_output_tokens,
-                    gb.completed_at AS generation_b_completed_at
+                    gb.completed_at AS generation_b_completed_at,
+                    LEAST(
+                        COALESCE(elo_a.games_played, 0),
+                        COALESCE(elo_b.games_played, 0)
+                    ) AS min_exposure
                 FROM apex_audition.prompts p
                 JOIN apex_audition.generations ga ON ga.prompt_id = p.id
                     AND ga.status = 'completed'
@@ -259,11 +276,13 @@ def get_next_comparison(
                     AND ga.replicate_index = gb.replicate_index
                 JOIN apex_audition.conditions ca ON ca.id = ga.condition_id
                 JOIN apex_audition.conditions cb ON cb.id = gb.condition_id
+                LEFT JOIN apex_audition.elo_ratings elo_a ON elo_a.condition_id = ca.id
+                LEFT JOIN apex_audition.elo_ratings elo_b ON elo_b.condition_id = cb.id
                 LEFT JOIN apex_audition.comparisons c ON c.prompt_id = p.id
                     AND ((c.condition_a_id = ga.condition_id AND c.condition_b_id = gb.condition_id)
                          OR (c.condition_a_id = gb.condition_id AND c.condition_b_id = ga.condition_id))
                 WHERE {where_sql}
-                ORDER BY RANDOM()
+                ORDER BY min_exposure ASC, RANDOM()
                 LIMIT 1
             """
 
@@ -524,30 +543,161 @@ def get_missing_generation_count():
     """Get count of prompt×condition combinations that need generation."""
     with get_db() as conn:
         with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
             cur.execute("""
                 SELECT COUNT(*) as count
                 FROM apex_audition.prompts p
                 CROSS JOIN apex_audition.conditions c
                 WHERE c.is_active = TRUE
-                  AND NOT EXISTS (
-                      SELECT 1
+                  AND (
+                      SELECT COUNT(*)
                       FROM apex_audition.generations g
                       WHERE g.prompt_id = p.id
                         AND g.condition_id = c.id
-                        AND g.replicate_index = 0
                         AND g.status = 'completed'
                         AND g.response_payload->>'content' IS NOT NULL
                         AND LENGTH(g.response_payload->>'content') > 0
-                  )
-            """)
+                  ) < %s
+            """, (replicate_count,))
             row = cur.fetchone()
             count = row["count"] if row else 0
             return {"count": count}
 
 
+@app.get("/api/audition/generate/missing")
+def get_missing_generations():
+    """Get detailed list of prompt×condition combinations that need generation."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
+            cur.execute("""
+                SELECT
+                    p.id as prompt_id,
+                    p.chunk_id,
+                    p.label as prompt_label,
+                    p.category as prompt_category,
+                    c.id as condition_id,
+                    c.slug as condition_slug,
+                    c.label as condition_label,
+                    c.provider,
+                    c.model_name
+                FROM apex_audition.prompts p
+                CROSS JOIN apex_audition.conditions c
+                WHERE c.is_active = TRUE
+                  AND (
+                      SELECT COUNT(*)
+                      FROM apex_audition.generations g
+                      WHERE g.prompt_id = p.id
+                        AND g.condition_id = c.id
+                        AND g.status = 'completed'
+                        AND g.response_payload->>'content' IS NOT NULL
+                        AND LENGTH(g.response_payload->>'content') > 0
+                  ) < %s
+                ORDER BY c.slug, p.chunk_id
+            """, (replicate_count,))
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+
+
+@app.get("/api/audition/generate/task-count")
+def get_generation_task_count(
+    limit: Optional[int] = None,
+    async_providers: Optional[str] = None
+):
+    """
+    Calculate how many tasks will be executed with the given parameters.
+
+    This pre-flight calculation matches the logic in run_full_sequential.py
+    to show exactly how many tasks will run when Start Generation is clicked.
+    """
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Get replicate count from global settings
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
+            # Get all active conditions
+            cur.execute("""
+                SELECT id, slug, provider
+                FROM apex_audition.conditions
+                WHERE is_active = TRUE
+                ORDER BY provider, slug
+            """)
+            conditions = cur.fetchall()
+
+            # Get all prompts (excluding test fixtures)
+            TEST_CHUNK_IDS = {4242}
+            cur.execute("""
+                SELECT id, chunk_id
+                FROM apex_audition.prompts
+                WHERE chunk_id NOT IN %s
+                ORDER BY chunk_id, id
+            """, (tuple(TEST_CHUNK_IDS),))
+            prompts = cur.fetchall()
+
+            # Build task list using same logic as run_full_sequential.py
+            tasks = []
+
+            if limit is not None and limit > 0:
+                # Limit mode: sample one incomplete task per condition (up to limit)
+                conditions_sampled = 0
+                for condition in conditions:
+                    if conditions_sampled >= limit:
+                        break
+                    # Find first incomplete task for this condition
+                    for prompt in prompts:
+                        # Check if all replicates are completed
+                        cur.execute("""
+                            SELECT COUNT(*) as completed_count
+                            FROM apex_audition.generations
+                            WHERE condition_id = %s
+                              AND prompt_id = %s
+                              AND status = 'completed'
+                        """, (condition['id'], prompt['id']))
+                        result = cur.fetchone()
+                        completed_count = result['completed_count'] if result else 0
+
+                        if completed_count < replicate_count:
+                            tasks.append((condition['id'], prompt['id']))
+                            conditions_sampled += 1
+                            break  # Move to next condition
+            else:
+                # No limit: execute all incomplete tasks
+                for prompt in prompts:
+                    for condition in conditions:
+                        # Check if all replicates are completed
+                        cur.execute("""
+                            SELECT COUNT(*) as completed_count
+                            FROM apex_audition.generations
+                            WHERE condition_id = %s
+                              AND prompt_id = %s
+                              AND status = 'completed'
+                        """, (condition['id'], prompt['id']))
+                        result = cur.fetchone()
+                        completed_count = result['completed_count'] if result else 0
+
+                        if completed_count < replicate_count:
+                            tasks.append((condition['id'], prompt['id']))
+
+            return {"task_count": len(tasks)}
+
+
 @app.post("/api/audition/generate/start")
-def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = None):
-    """Start a generation job (runs run_full_sequential.py to create new generations)."""
+def start_generation(
+    limit: Optional[int] = None,
+    max_workers: Optional[int] = None,
+    async_providers: Optional[str] = None
+):
+    """Start a generation job with optional async provider routing."""
     job_id = str(uuid.uuid4())
 
     # Get project root (parent of nexus/api/)
@@ -562,35 +712,80 @@ def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = N
     import os
     env = os.environ.copy()
 
-    try:
-        # Fetch Anthropic API key
-        anthropic_result = subprocess.run(
-            ["op", "read", "op://API/Anthropic/api key"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        env["ANTHROPIC_API_KEY"] = anthropic_result.stdout.strip()
+    def _prefetch_required_secret(command: List[str], env_key: str) -> None:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "1Password CLI (op) not found. Install from "
+                    "https://developer.1password.com/docs/cli/get-started/"
+                ),
+            )
+        except subprocess.CalledProcessError:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve API keys from 1Password. Ensure you're signed in with 'op signin'.",
+            )
 
-        # Fetch OpenAI API key
-        openai_result = subprocess.run(
-            ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        env["OPENAI_API_KEY"] = openai_result.stdout.strip()
+        env[env_key] = result.stdout.strip()
 
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve API keys from 1Password. Ensure you're signed in with 'op signin'."
-        )
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="1Password CLI (op) not found. Install from https://developer.1password.com/docs/cli/get-started/"
-        )
+    def _prefetch_optional_secret(command: List[str], env_key: str, label: str) -> None:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except FileNotFoundError:
+            LOGGER.warning("1Password CLI not found; unable to prefetch %s", label)
+            return
+        except subprocess.CalledProcessError as exc:
+            LOGGER.warning(
+                "Failed to prefetch %s (exit %s). Continuing without cached key.",
+                label,
+                exc.returncode,
+            )
+            return
+
+        value = result.stdout.strip()
+        if not value:
+            LOGGER.warning("Prefetched empty %s; continuing without cached key", label)
+            return
+
+        env[env_key] = value
+
+    # Fetch native provider API keys only for async providers (batch mode)
+    # Parse async_providers to determine which keys to fetch
+    if async_providers:
+        providers_list = [p.strip().lower() for p in async_providers.split(',') if p.strip()]
+
+        if "anthropic" in providers_list:
+            _prefetch_required_secret(
+                ["op", "read", "op://API/Anthropic/api key"],
+                "ANTHROPIC_API_KEY"
+            )
+
+        if "openai" in providers_list:
+            _prefetch_required_secret(
+                [
+                    "op",
+                    "item",
+                    "get",
+                    "tyrupcepa4wluec7sou4e7mkza",
+                    "--fields",
+                    "api key",
+                    "--reveal",
+                ],
+                "OPENAI_API_KEY",
+            )
 
     # Build command with optional limit and max_workers
     cmd = ["python", str(script_path)]
@@ -598,6 +793,8 @@ def start_generation(limit: Optional[int] = None, max_workers: Optional[int] = N
         cmd.extend(["--limit", str(limit)])
     if max_workers is not None and max_workers > 0:
         cmd.extend(["--max-workers", str(max_workers)])
+    if async_providers:
+        cmd.extend(["--async-providers", async_providers])
 
     # Start subprocess with pre-fetched API keys in environment
     process = subprocess.Popen(
@@ -696,6 +893,288 @@ def get_generation_output(job_id: str = Query(...)):
         "status": status,
         "job_id": job_id
     }
+
+
+@app.get("/api/audition/generate/async-status", response_model=AsyncGenerationStatus)
+def get_async_generation_status():
+    """Expose pending async workload and last poll heartbeat."""
+    remaining_generations = 0
+    pending_requests = 0
+    pending_batches = 0
+    oldest_batch_age_hours = None
+    has_aging_batches = False
+
+    statuses = ['batch_pending', 'pending', 'queued', 'submitted', 'in_progress', 'processing']
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT replicate_count FROM apex_audition.global_settings WHERE id = TRUE")
+            settings_row = cur.fetchone()
+            replicate_count = settings_row["replicate_count"] if settings_row else 1
+
+            cur.execute(
+                """
+                SELECT COUNT(*) as count
+                FROM apex_audition.prompts p
+                CROSS JOIN apex_audition.conditions c
+                WHERE c.is_active = TRUE
+                  AND (
+                      SELECT COUNT(*)
+                      FROM apex_audition.generations g
+                      WHERE g.prompt_id = p.id
+                        AND g.condition_id = c.id
+                        AND g.status = 'completed'
+                        AND g.response_payload->>'content' IS NOT NULL
+                        AND LENGTH(g.response_payload->>'content') > 0
+                  ) < %s
+                """,
+                (replicate_count,),
+            )
+            remaining_row = cur.fetchone()
+            remaining_generations = remaining_row["count"] if remaining_row else 0
+
+            # Count only actual async batch requests (not orphaned records)
+            cur.execute(
+                """
+                SELECT COUNT(*) AS pending
+                FROM apex_audition.generations
+                WHERE status = 'batch_pending'
+                  AND batch_job_id IS NOT NULL
+                """
+            )
+            pending_row = cur.fetchone()
+            pending_requests = pending_row["pending"] if pending_row else 0
+
+            cur.execute(
+                """
+                SELECT COUNT(DISTINCT batch_job_id) AS batch_count
+                FROM apex_audition.generations
+                WHERE status = 'batch_pending'
+                  AND batch_job_id IS NOT NULL
+                """
+            )
+            batch_row = cur.fetchone()
+            pending_batches = batch_row["batch_count"] if batch_row else 0
+
+            # Get age of oldest pending batch
+            if pending_batches > 0:
+                cur.execute(
+                    """
+                    SELECT MIN(started_at) AS oldest_start
+                    FROM apex_audition.generations
+                    WHERE status = 'batch_pending'
+                      AND batch_job_id IS NOT NULL
+                    """
+                )
+                age_row = cur.fetchone()
+                if age_row and age_row["oldest_start"]:
+                    from datetime import timezone
+                    oldest_start = age_row["oldest_start"]
+                    if oldest_start.tzinfo is None:
+                        oldest_start = oldest_start.replace(tzinfo=timezone.utc)
+                    age_delta = datetime.now(timezone.utc) - oldest_start
+                    oldest_batch_age_hours = age_delta.total_seconds() / 3600
+                    has_aging_batches = oldest_batch_age_hours > 24
+
+    last_poll_at = None
+    next_poll_at = None
+    polling_interval_seconds = None
+    last_duration_seconds = None
+
+    if AUTO_POLL_STATUS_FILE.exists():
+        try:
+            payload = json.loads(AUTO_POLL_STATUS_FILE.read_text())
+            last_raw = payload.get("last_poll_at")
+            if last_raw:
+                try:
+                    last_poll_at = datetime.fromisoformat(last_raw)
+                except ValueError:
+                    LOGGER.warning("Unable to parse last_poll_at from status file: %s", last_raw)
+            next_raw = payload.get("next_poll_at")
+            if next_raw:
+                try:
+                    next_poll_at = datetime.fromisoformat(next_raw)
+                except ValueError:
+                    LOGGER.warning("Unable to parse next_poll_at from status file: %s", next_raw)
+
+            polling_interval_seconds = payload.get("polling_interval_seconds")
+            last_duration_seconds = payload.get("last_duration_seconds")
+        except (json.JSONDecodeError, OSError) as exc:
+            LOGGER.warning("Failed to read auto poll status heartbeat: %s", exc)
+
+    return AsyncGenerationStatus(
+        pending_requests=pending_requests,
+        pending_batches=pending_batches,
+        remaining_generations=remaining_generations,
+        last_poll_at=last_poll_at,
+        next_poll_at=next_poll_at,
+        polling_interval_seconds=polling_interval_seconds,
+        last_duration_seconds=last_duration_seconds,
+        oldest_batch_age_hours=oldest_batch_age_hours,
+        has_aging_batches=has_aging_batches,
+    )
+
+
+@app.post("/api/audition/generate/regenerate", response_model=RegenerateGenerationResponse)
+def regenerate_generation(request: RegenerateGenerationRequest):
+    """Delete a malformed generation, remove dependent comparisons, and requeue it."""
+    async_providers = sorted({provider.lower() for provider in (request.async_providers or [])})
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    g.id,
+                    g.prompt_id,
+                    g.condition_id,
+                    g.run_id,
+                    g.replicate_index,
+                    c.slug AS condition_slug,
+                    c.provider,
+                    c.model_name,
+                    c.temperature,
+                    c.reasoning_effort,
+                    c.thinking_enabled,
+                    c.max_output_tokens,
+                    c.thinking_budget_tokens
+                FROM apex_audition.generations g
+                JOIN apex_audition.conditions c ON c.id = g.condition_id
+                WHERE g.id = %s
+                """,
+                (request.generation_id,),
+            )
+            generation_row = cur.fetchone()
+
+            if not generation_row:
+                raise HTTPException(status_code=404, detail="Generation not found")
+
+            prompt_id = generation_row["prompt_id"]
+            condition_id = generation_row["condition_id"]
+            run_id = generation_row["run_id"]
+            condition_slug = generation_row["condition_slug"]
+            provider = generation_row["provider"].lower()
+
+            # Locate impacted comparisons for this prompt/condition lane
+            cur.execute(
+                """
+                SELECT id
+                FROM apex_audition.comparisons
+                WHERE prompt_id = %s
+                  AND (%s = condition_a_id OR %s = condition_b_id)
+                """,
+                (prompt_id, condition_id, condition_id),
+            )
+            comparison_ids = [row["id"] for row in cur.fetchall()]
+            comparisons_deleted = 0
+
+            if comparison_ids:
+                # Roll back ELO adjustments tied to those comparisons
+                cur.execute(
+                    """
+                    SELECT condition_id, rating_delta, comparison_id
+                    FROM apex_audition.elo_history
+                    WHERE comparison_id = ANY(%s)
+                    """,
+                    (comparison_ids,),
+                )
+                elo_rows = cur.fetchall()
+
+                for elo_row in elo_rows:
+                    cur.execute(
+                        """
+                        UPDATE apex_audition.elo_ratings
+                        SET rating = rating - %s,
+                            games_played = GREATEST(games_played - 1, 0),
+                            last_updated = NOW()
+                        WHERE condition_id = %s
+                        """,
+                        (elo_row["rating_delta"], elo_row["condition_id"]),
+                    )
+
+                if elo_rows:
+                    cur.execute(
+                        """
+                        DELETE FROM apex_audition.elo_history
+                        WHERE comparison_id = ANY(%s)
+                        """,
+                        (comparison_ids,),
+                    )
+
+                cur.execute(
+                    """
+                    DELETE FROM apex_audition.comparisons
+                    WHERE id = ANY(%s)
+                    RETURNING id
+                    """,
+                    (comparison_ids,),
+                )
+                comparisons_deleted = len(cur.fetchall())
+
+            # Delete the generation row itself
+            cur.execute(
+                "DELETE FROM apex_audition.generations WHERE id = %s",
+                (request.generation_id,),
+            )
+
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Generation was already removed")
+
+            # Optionally delete empty runs to avoid residue
+            cur.execute(
+                "SELECT COUNT(*) AS remaining FROM apex_audition.generations WHERE run_id = %s",
+                (run_id,),
+            )
+            remaining = cur.fetchone()["remaining"]
+            if remaining == 0:
+                cur.execute(
+                    "DELETE FROM apex_audition.generation_runs WHERE id = %s",
+                    (run_id,),
+                )
+
+        # Commit transactional cleanup before triggering new work
+        conn.commit()
+
+    engine = AuditionEngine(async_providers=async_providers)
+
+    if provider in async_providers:
+        run, batch_id = engine.submit_batch_generation(
+            condition_slug=condition_slug,
+            prompt_ids=[prompt_id],
+            replicate_count=1,
+            run_label="Arena regeneration (async)",
+            created_by="arena-debugger",
+            notes=f"Regenerated generation {request.generation_id}",
+        )
+        new_generations = engine.repository.list_generations_for_run(run.run_id)
+        new_generation_id = new_generations[0].id if new_generations else None
+        return RegenerateGenerationResponse(
+            mode="async",
+            run_id=str(run.run_id),
+            generation_id=new_generation_id,
+            batch_id=batch_id,
+            comparisons_deleted=comparisons_deleted,
+        )
+
+    # Synchronous regeneration
+    run = engine.run_generation_batch(
+        condition_slug=condition_slug,
+        prompt_ids=[prompt_id],
+        replicate_count=1,
+        run_label="Arena regeneration (sync)",
+        created_by="arena-debugger",
+        notes=f"Regenerated generation {request.generation_id}",
+    )
+    new_generations = engine.repository.list_generations_for_run(run.run_id)
+    new_generation_id = new_generations[0].id if new_generations else None
+
+    return RegenerateGenerationResponse(
+        mode="sync",
+        run_id=str(run.run_id),
+        generation_id=new_generation_id,
+        batch_id=None,
+        comparisons_deleted=comparisons_deleted,
+    )
 
 
 @app.post("/api/audition/generate/stop")

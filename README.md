@@ -43,7 +43,7 @@ Real-time functionality is neither needed nor desired. The system is intentional
 # 2. System Architecture
 
 ## 2.1 Architectural Overview
-NEXUS is built on a single-agent orchestration architecture that extends the Letta framework. At its core, the system uses LORE as the primary intelligent agent that coordinates specialized utility modules in a turn-based cycle.
+NEXUS is built on a single-agent orchestration architecture implemented entirely within this repository. At its core, the system uses LORE as the primary intelligent agent that coordinates specialized utility modules in a turn-based cycle.
 
 ```
 ┌─────────┐                                   ┌─────────┐
@@ -186,16 +186,14 @@ Implementation: `nexus/agents/memnon/`
 
 ### Auxiliary Modules
 
-#### `letta/agent.py` = `BaseAgent`
-Base class defining the agent protocol, standard message format, and common utilities for the LORE agent.
+#### Agent Runtime Helpers
+Lightweight utilities inside `nexus/agents/` provide agent lifecycle hooks, message formatting, and shared services without relying on external frameworks.
 
 #### `narrative_learner.py` Learning Engine
 For future implementation. Would allow for user feedback to train LLMs for better contextual retrievals.
 
-## 2.3 Letta Framework Integration
-This system uses as a foundation the open-source Letta project (formerly known as MemGPT), a framework for building "stateful" agents with long-term memory. Letta is maintained as a **submodule** to preserve the distinction between the open source foundation and our custom code. This conserves the option of someday commercializing the project.
-
-The framework is extended with LORE as the primary agent and a series of utility modules responsible for different aspects of the narrative preparation, generation, and processing pipeline.
+## 2.3 Agent Runtime Evolution
+NEXUS originally launched on top of the open-source Letta project (formerly MemGPT), but the dependency created coordination overhead and brittle local paths. The current architecture ships with a custom, embedded agent runtime that preserves the same high-level abstractions—turn cycles, tool execution, and structured memory—but is purpose-built for the narrative intelligence stack. This eliminates submodules, stabilizes packaging, and keeps all execution-critical code under first-party control.
 
 
 ## 2.4 Technical Dependencies
@@ -214,7 +212,6 @@ The framework is extended with LORE as the primary agent and a series of utility
 - **NumPy**: Scientific computing library for array operations and embedding manipulation
 - **Tiktoken**: Token counting library for managing context window constraints
 - **Requests**: HTTP library for API interactions
-- **Letta**: Framework for building stateful agents with long-term memory (maintained as a submodule)
 
 ### Hardware
 Performance quality and latency will depend on the user's ability to run a capable local LLM.
@@ -343,7 +340,7 @@ Details:
 3. `LORE` uses `MEMNON` utility to retrieve broad pool of candidate chunks using multi-model embeddings, with intermediate filtering and cross-encoder reranking for final selections.
 
 ## 4.3 Query Framework
-The Query Framework serves as the communication backbone of NEXUS, enabling structured information exchange between LORE and its utility modules. It extends Letta's existing query capabilities with narrative-specific enhancements.
+The Query Framework serves as the communication backbone of NEXUS, enabling structured information exchange between LORE and its utility modules. It expands the native MEMNON query stack with narrative-specific enhancements tailored to our schema and retrieval strategies.
 
 - **Specialized Query Types**: Purpose-built queries for different narrative needs:
     - Character queries (psychology, relationships, development)

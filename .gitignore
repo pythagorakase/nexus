@@ -23,7 +23,8 @@
 /sessions/
 /.git/objects/pack/
 
-/.claude/
+/.claude/*
+!/.claude/commands/
 
 # Ignore logs and temporary files
 temp*.*
@@ -36,6 +37,7 @@ log.md
 /time_delta_processor.log
 /lm_studio_log.txt
 /temp/
+logs/
 
 # Ignore binaries and database files
 *.sqlite3

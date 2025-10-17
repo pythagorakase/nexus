@@ -18,9 +18,9 @@ GAIA is a utility module called by LORE to monitor and maintain the state of the
 ### Integration as Utility Module
 
 - Implemented as a callable utility module
-- Utilize Letta's memory system for world state storage
+- Integrate with NEXUS memory services for world state storage
 - Implement database schema extensions for world entities and states
-- Leverage Letta's query system for world state retrieval
+- Leverage MEMNON and shared query utilities for world state retrieval
 
 ### Memory Management
 
@@ -46,15 +46,10 @@ GAIA is a utility module called by LORE to monitor and maintain the state of the
 ## Pseudocode Implementation
 
 ```python
-from letta.agent import Agent
-from letta.schemas.agent import AgentState
-from letta.schemas.memory import Memory
-from letta.schemas.block import Block, CreateBlock
-from letta.schemas.message import Message
 from typing import List, Dict, Any, Optional, Tuple, Union
 import datetime
 
-class GAIA(Agent):
+class GAIA:
     """
     GAIA (World Tracker) agent responsible for monitoring world state,
     including locations, factions, and objects.
@@ -62,7 +57,7 @@ class GAIA(Agent):
     
     def __init__(self, 
                  interface, 
-                 agent_state: AgentState,
+                 agent_state,
                  user,
                  **kwargs):
         """
@@ -70,13 +65,10 @@ class GAIA(Agent):
         
         Args:
             interface: Interface for agent communication
-            agent_state: Agent state from Letta framework
+            agent_state: Agent state provided by the NEXUS runtime
             user: User information
             **kwargs: Additional arguments
         """
-        # Initialize parent Agent class
-        super().__init__(interface, agent_state, user, **kwargs)
-        
         # Initialize specialized world memory blocks if not present
         self._initialize_world_memory_blocks()
         
@@ -102,14 +94,14 @@ class GAIA(Agent):
         for block_name in required_blocks:
             if block_name not in self.agent_state.memory.list_block_labels():
                 # Create block with default empty content
-                block = CreateBlock(
-                    label=block_name,
-                    value="",
-                    limit=100000,  # Generous limit for world data
-                    description=f"World {block_name} tracking"
-                )
+                block = {
+                    "label": block_name,
+                    "value": "",
+                    "limit": 100000,  # Generous limit for world data
+                    "description": f"World {block_name} tracking"
+                }
                 # Add block to memory
-                # Implementation will use Letta API to create block
+                # Implementation should use the NEXUS runtime's block manager
     
     def analyze_world_mentions(self, text: str) -> Dict[str, Any]:
         """
@@ -436,10 +428,10 @@ class GAIA(Agent):
         # Implementation will simulate state change impacts
         pass
     
-    def step(self, messages: List[Message]) -> Any:
+    def step(self, messages: List[Dict[str, Any]]) -> Any:
         """
         Process incoming messages and perform GAIA functions.
-        This is the main entry point required by Letta Agent framework.
+        This is the main entry point required by the NEXUS agent runtime.
         
         Args:
             messages: Incoming messages to process

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -22,7 +23,10 @@ try:
 except ImportError:
     openai = None
 
-import requests
+try:
+    import requests
+except ImportError:
+    requests = None
 
 LOGGER = logging.getLogger("nexus.apex_audition.batch_clients")
 
@@ -94,7 +98,13 @@ class AnthropicBatchClient:
             raise ImportError("anthropic package not installed")
 
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from 1Password CLI."""
+        """Get Anthropic API key from environment or 1Password CLI."""
+        # First, check if API key is already in environment
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if api_key:
+            return api_key
+
+        # Otherwise, fetch from 1Password
         try:
             result = subprocess.run(
                 ["op", "read", "op://API/Anthropic/api key"],
@@ -272,9 +282,13 @@ class AnthropicBatchClient:
         )
         response.raise_for_status()
 
+        # Explicitly decode as UTF-8 to avoid encoding issues
+        # (response.text can misdetect encoding, causing mojibake with emojis and special chars)
+        content = response.content.decode('utf-8')
+
         # Parse JSONL
         results = []
-        for line in response.text.strip().split('\n'):
+        for line in content.strip().split('\n'):
             if not line:
                 continue
             result_data = json.loads(line)
@@ -506,5 +520,5 @@ __all__ = [
     "BatchResult",
     "BatchJob",
     "AnthropicBatchClient",
-    "OpenAIBatchClient"
+    "OpenAIBatchClient",
 ]

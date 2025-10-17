@@ -4,7 +4,7 @@ Pydantic models for FastAPI endpoints.
 These match the TypeScript interfaces expected by the iris2 frontend.
 """
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
 
 
@@ -108,3 +108,31 @@ class GenerationRun(BaseModel):
     total_generations: int
     completed_generations: int
     failed_generations: int
+
+
+class AsyncGenerationStatus(BaseModel):
+    """Telemetry for asynchronous batch polling."""
+    pending_requests: int
+    pending_batches: int
+    remaining_generations: int
+    last_poll_at: Optional[datetime] = None
+    next_poll_at: Optional[datetime] = None
+    polling_interval_seconds: Optional[int] = None
+    last_duration_seconds: Optional[float] = None
+    oldest_batch_age_hours: Optional[float] = None  # Age of oldest pending batch in hours
+    has_aging_batches: bool = False  # True if any batch is > 24 hours old
+
+
+class RegenerateGenerationRequest(BaseModel):
+    """Request payload to delete and rerun a specific generation."""
+    generation_id: int
+    async_providers: Optional[List[str]] = None
+
+
+class RegenerateGenerationResponse(BaseModel):
+    """Response describing the regeneration outcome."""
+    mode: Literal["sync", "async"]
+    run_id: str
+    generation_id: Optional[int] = None
+    batch_id: Optional[str] = None
+    comparisons_deleted: int

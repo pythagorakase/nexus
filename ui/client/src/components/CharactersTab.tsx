@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Users, Brain, Loader2, ChevronRight, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Users, Brain, Loader2, ChevronRight, ChevronDown, Upload, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Character, CharacterRelationship, CharacterPsychology } from "@shared/schema";
-import alexPortrait from "@assets/Alex - Art Nouveau Choker Frame - Portrait_1759207751777.png";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 
 interface NormalizedRelationship {
   character1Id: number;
@@ -78,6 +78,10 @@ const renderPsychologyField = (label: string, field: unknown) => {
 export function CharactersTab() {
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [relationshipsOpen, setRelationshipsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
   const {
     data: characters = [],
@@ -170,8 +174,93 @@ export function CharactersTab() {
     enabled: !!selectedCharacter,
   });
 
-  const getPortrait = (character: Character) => {
-    return character.id === 1 ? alexPortrait : null;
+  const {
+    data: characterImages = [],
+    isLoading: imagesLoading,
+  } = useQuery<ImageData[]>({
+    queryKey: ["/api/characters", selectedCharacter?.id, "images"],
+    queryFn: async () => {
+      if (!selectedCharacter) return [];
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images`);
+      if (!response.ok) {
+        throw new Error("Failed to load images");
+      }
+      return response.json();
+    },
+    enabled: !!selectedCharacter,
+  });
+
+  const uploadImagesMutation = useMutation({
+    mutationFn: async (files: FileList) => {
+      if (!selectedCharacter) throw new Error("No character selected");
+      const formData = new FormData();
+      Array.from(files).forEach((file) => formData.append("images", file));
+
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upload images");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+    },
+  });
+
+  const setMainImageMutation = useMutation({
+    mutationFn: async (imageId: number) => {
+      if (!selectedCharacter) throw new Error("No character selected");
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}/main`, {
+        method: "PUT",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to set main image");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+    },
+  });
+
+  const deleteImageMutation = useMutation({
+    mutationFn: async (imageId: number) => {
+      if (!selectedCharacter) throw new Error("No character selected");
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to delete image");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+    },
+  });
+
+  const getPortrait = (_character: Character) => {
+    const mainImage = characterImages.find((img) => img.isMain === 1);
+    return mainImage?.filePath || null;
+  };
+
+  const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      await uploadImagesMutation.mutateAsync(files);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } finally {
+      setUploading(false);
+    }
   };
 
   const characterNameById = (id: number) => {
@@ -275,18 +364,50 @@ export function CharactersTab() {
           <div className="h-full overflow-auto p-6 space-y-6">
             <Card className="bg-card/70 border-border">
               <CardHeader className="flex flex-row items-start gap-4">
-                <div className="w-20 h-20 rounded-md overflow-hidden border border-border bg-muted/40 flex-shrink-0">
-                  {getPortrait(selectedCharacter) ? (
-                    <img
-                      src={getPortrait(selectedCharacter)!}
-                      alt={selectedCharacter.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground/60">
-                      <Users className="h-6 w-6" />
-                    </div>
-                  )}
+                <div className="flex-shrink-0">
+                  <button
+                    onClick={() => setGalleryOpen(true)}
+                    className="w-32 max-h-40 rounded-md overflow-hidden border border-border bg-muted/40 flex items-center justify-center hover:border-primary/50 transition-colors cursor-pointer group"
+                  >
+                    {getPortrait(selectedCharacter) ? (
+                      <img
+                        src={getPortrait(selectedCharacter)!}
+                        alt={selectedCharacter.name}
+                        className="max-w-full max-h-40 object-contain group-hover:opacity-80 transition-opacity"
+                      />
+                    ) : (
+                      <div className="w-32 h-32 flex items-center justify-center text-muted-foreground/60 group-hover:text-muted-foreground">
+                        <Users className="h-8 w-8" />
+                      </div>
+                    )}
+                  </button>
+                  <div className="mt-2 flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="font-mono text-xs px-2 py-1 h-auto"
+                    >
+                      {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setGalleryOpen(true)}
+                      className="font-mono text-xs px-2 py-1 h-auto"
+                    >
+                      <ImageIcon className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    multiple
+                    onChange={handleQuickUpload}
+                    className="hidden"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <CardTitle className="text-lg font-mono text-primary terminal-glow">
@@ -444,6 +565,25 @@ export function CharactersTab() {
           </div>
         )}
       </main>
+
+      {selectedCharacter && (
+        <ImageGalleryModal
+          open={galleryOpen}
+          onOpenChange={setGalleryOpen}
+          images={characterImages}
+          entityId={selectedCharacter.id}
+          entityType="character"
+          onUpload={async (files) => {
+            await uploadImagesMutation.mutateAsync(files);
+          }}
+          onSetMain={async (imageId) => {
+            await setMainImageMutation.mutateAsync(imageId);
+          }}
+          onDelete={async (imageId) => {
+            await deleteImageMutation.mutateAsync(imageId);
+          }}
+        />
+      )}
     </div>
   );
 }
