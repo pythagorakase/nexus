@@ -262,7 +262,11 @@ def get_next_comparison(
                     gb.response_payload AS generation_b_response_payload,
                     gb.input_tokens AS generation_b_input_tokens,
                     gb.output_tokens AS generation_b_output_tokens,
-                    gb.completed_at AS generation_b_completed_at
+                    gb.completed_at AS generation_b_completed_at,
+                    LEAST(
+                        COALESCE(elo_a.games_played, 0),
+                        COALESCE(elo_b.games_played, 0)
+                    ) AS min_exposure
                 FROM apex_audition.prompts p
                 JOIN apex_audition.generations ga ON ga.prompt_id = p.id
                     AND ga.status = 'completed'
@@ -272,11 +276,13 @@ def get_next_comparison(
                     AND ga.replicate_index = gb.replicate_index
                 JOIN apex_audition.conditions ca ON ca.id = ga.condition_id
                 JOIN apex_audition.conditions cb ON cb.id = gb.condition_id
+                LEFT JOIN apex_audition.elo_ratings elo_a ON elo_a.condition_id = ca.id
+                LEFT JOIN apex_audition.elo_ratings elo_b ON elo_b.condition_id = cb.id
                 LEFT JOIN apex_audition.comparisons c ON c.prompt_id = p.id
                     AND ((c.condition_a_id = ga.condition_id AND c.condition_b_id = gb.condition_id)
                          OR (c.condition_a_id = gb.condition_id AND c.condition_b_id = ga.condition_id))
                 WHERE {where_sql}
-                ORDER BY RANDOM()
+                ORDER BY min_exposure ASC, RANDOM()
                 LIMIT 1
             """
 
