@@ -1432,6 +1432,8 @@ class ContextSeedBuilder:
             self._fetch_lore_inference_entries(inference_directives, config.chunk_id)
         )
 
+        structured_passages = [dict(item) for item in structured_seed]
+
         # Calculate token count for authorial directive passages
         authorial_token_count = sum(
             self._estimate_retrieval_tokens(passage) for passage in authorial_passages
@@ -1456,6 +1458,8 @@ class ContextSeedBuilder:
             "retrieved_passages": {
                 "results": authorial_passages,
             },
+            "entity_data": entity_data,
+            "structured_passages": structured_passages,
             "structured": structured_object,
             "analysis": analysis,
         }
@@ -1463,14 +1467,11 @@ class ContextSeedBuilder:
         baseline = self.memory_manager.handle_storyteller_response(
             narrative=storyteller_text,
             warm_slice=[wc.to_dict() for wc in warm_slice],
-            retrieved_passages=[dict(item) for item in structured_seed],
+            retrieved_passages=structured_passages,
             token_usage=token_counts,
             assembled_context=assembled_context,
             authorial_directives=config.authorial_directives,
         )
-
-        # Memory manager may have added structured_passages - remove it as we now use 'structured'
-        assembled_context.pop("structured_passages", None)
 
         transition = self.memory_manager.context_state.transition
         self._apply_payload_budgets(assembled_context, token_counts, config.chunk_id)
