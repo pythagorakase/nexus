@@ -253,11 +253,12 @@ def get_next_comparison(
             # - Has the same replicate_index
             # - Is a different condition
             # - Has no existing comparison with the biased condition
-            query_random = """
+            query_random = f"""
                 SELECT g.id as generation_id
                 FROM apex_audition.generations g
                 JOIN apex_audition.conditions c ON c.id = g.condition_id
                 WHERE g.status = 'completed'
+                  AND {base_where}
                   AND g.prompt_id = %s
                   AND g.replicate_index = %s
                   AND g.condition_id != %s
@@ -272,13 +273,14 @@ def get_next_comparison(
                 LIMIT 1
             """
 
-            cur.execute(query_random, [
+            random_params = params + [
                 biased_prompt_id,
                 biased_replicate_index,
                 biased_condition_id,
                 biased_condition_id,
                 biased_condition_id,
-            ])
+            ]
+            cur.execute(query_random, random_params)
             random_row = cur.fetchone()
 
             if not random_row:
