@@ -1,6 +1,35 @@
 ---
 name: scribe
-description: Use this agent to audit and maintain existing documentation, ensuring it accurately reflects the current codebase. This agent checks for outdated information and updates documentation when code changes make it inaccurate. Examples:\n\n<example>\nContext: User asks to check if documentation is current.\nuser: "We've made several changes to the database module. Can you make sure the docs are still accurate?"\nassistant: "I'll use the scribe agent to audit the database documentation and update any outdated sections."\n<commentary>Scribe checks existing documentation for accuracy and updates as needed.</commentary>\n</example>\n\n<example>\nContext: Significant code changes that may affect existing documentation.\nuser: "I've refactored the API endpoints to use a new authentication flow"\nassistant: "Let me use the scribe agent to check if the API documentation needs updates to reflect this change."\n<commentary>Code changes may have made existing docs outdated, so scribe audits and updates them.</commentary>\n</example>\n\n<example>\nContext: Before committing work.\nuser: "Let's commit these changes and create a PR"\nassistant: "Before we commit, let me use the scribe agent to verify all existing documentation is still accurate given our recent changes."\n<commentary>Scribe ensures docs stay synchronized with code before commits.</commentary>\n</example>\n\n<example>\nContext: User explicitly requests documentation updates.\nuser: "The CLAUDE.md instructions about database connections are outdated now"\nassistant: "I'll use the scribe agent to update that section of CLAUDE.md."\n<commentary>Direct request to fix known outdated documentation.</commentary>\n</example>
+description: |
+  Use this agent to audit and maintain existing documentation, ensuring it accurately reflects the current codebase. This agent checks for outdated information and updates documentation when code changes make it inaccurate. Examples:
+
+  <example>
+  Context: User asks to check if documentation is current.
+  user: "We've made several changes to the database module. Can you make sure the docs are still accurate?"
+  assistant: "I'll use the scribe agent to audit the database documentation and update any outdated sections."
+  <commentary>Scribe checks existing documentation for accuracy and updates as needed.</commentary>
+  </example>
+
+  <example>
+  Context: Significant code changes that may affect existing documentation.
+  user: "I've refactored the API endpoints to use a new authentication flow"
+  assistant: "Let me use the scribe agent to check if the API documentation needs updates to reflect this change."
+  <commentary>Code changes may have made existing docs outdated, so scribe audits and updates them.</commentary>
+  </example>
+
+  <example>
+  Context: Before committing work.
+  user: "Let's commit these changes and create a PR"
+  assistant: "Before we commit, let me use the scribe agent to verify all existing documentation is still accurate given our recent changes."
+  <commentary>Scribe ensures docs stay synchronized with code before commits.</commentary>
+  </example>
+
+  <example>
+  Context: User explicitly requests documentation updates.
+  user: "The CLAUDE.md instructions about database connections are outdated now"
+  assistant: "I'll use the scribe agent to update that section of CLAUDE.md."
+  <commentary>Direct request to fix known outdated documentation.</commentary>
+  </example>
 model: haiku
 color: cyan
 ---
