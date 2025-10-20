@@ -9,9 +9,24 @@ import json
 import logging
 import textwrap
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime, date, and timedelta objects."""
+
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, timedelta):
+            total_seconds = int(obj.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            return {"hours": hours, "minutes": minutes, "seconds": seconds}
+        return super().default(obj)
 
 from sqlalchemy import bindparam, create_engine, text as sql_text
 from sqlalchemy.engine import Engine
@@ -312,16 +327,20 @@ class WarmChunk:
     world_time: Optional[str] = None
     world_layer: Optional[str] = None
     token_count: Optional[int] = None
+    place: Optional[str] = None
+    time_delta: Optional[Dict[str, int]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "chunk_id": self.chunk_id,
-            "text": self.text,
+            "world_layer": self.world_layer,
             "season": self.season,
             "episode": self.episode,
             "scene": self.scene,
+            "place": self.place,
             "world_time": self.world_time,
-            "world_layer": self.world_layer,
+            "time_delta": self.time_delta,
+            "text": self.text,
             "token_count": self.token_count,
         }
 
@@ -402,10 +421,16 @@ class ContextSeedBuilder:
     ) -> List[WarmChunk]:
         query = sql_text(
             """
-            SELECT id, season, episode, scene, world_time, world_layer, raw_text
-            FROM narrative_view
-            WHERE id BETWEEN :start AND :end
-            ORDER BY id
+            SELECT
+                nv.id, nv.season, nv.episode, nv.scene,
+                nv.world_time, nv.world_layer, nv.raw_text,
+                cm.time_delta,
+                p.name as place_name
+            FROM narrative_view nv
+            LEFT JOIN chunk_metadata cm ON nv.id = cm.chunk_id
+            LEFT JOIN places p ON cm.place = p.id
+            WHERE nv.id BETWEEN :start AND :end
+            ORDER BY nv.id
             """
         )
 
@@ -421,6 +446,14 @@ class ContextSeedBuilder:
                     mapping = row._mapping
                     token_count = calculate_chunk_tokens(mapping["raw_text"])
                     total_tokens += token_count
+
+                    # Format place with annotation
+                    place_name = mapping.get("place_name")
+                    place_str = f"{place_name} (extract from `chunk_metadata.place`)" if place_name else None
+
+                    # Format time_delta
+                    time_delta_obj = self._format_time_delta(mapping.get("time_delta"))
+
                     warm_chunks.append(
                         WarmChunk(
                             chunk_id=mapping["id"],
@@ -431,6 +464,8 @@ class ContextSeedBuilder:
                             world_time=self._fmt_time(mapping.get("world_time")),
                             world_layer=mapping.get("world_layer"),
                             token_count=token_count,
+                            place=place_str,
+                            time_delta=time_delta_obj,
                         )
                     )
 
@@ -455,6 +490,25 @@ class ContextSeedBuilder:
         if hasattr(value, "isoformat"):
             return value.isoformat()
         return str(value)
+
+    @staticmethod
+    def _format_time_delta(interval: Any) -> Optional[Dict[str, int]]:
+        """Convert PostgreSQL interval to {hours, minutes, seconds} dict."""
+        if interval is None:
+            return None
+
+        # Handle datetime.timedelta objects
+        if hasattr(interval, "total_seconds"):
+            try:
+                total_seconds = int(interval.total_seconds())
+                hours = total_seconds // 3600
+                minutes = (total_seconds % 3600) // 60
+                seconds = total_seconds % 60
+                return {"hours": hours, "minutes": minutes, "seconds": seconds}
+            except (TypeError, ValueError, AttributeError):
+                return None
+
+        return None
 
     @staticmethod
     def _split_storyteller_user(raw_text: str) -> tuple[str, str]:
@@ -1093,13 +1147,20 @@ class ContextSeedBuilder:
         self,
         assembled_context: Dict[str, Any],
         token_counts: Dict[str, int],
+        target_chunk_id: int,
     ) -> None:
         total_available = token_counts.get("total_available", 0)
         if total_available <= 0:
             return
 
         warm_chunks = assembled_context.get("warm_slice", {}).get("chunks", [])
-        structured_entries = assembled_context.get("structured_passages", []) or []
+        # Extract all structured entries from the new structure
+        structured_obj = assembled_context.get("structured", {})
+        structured_entries = (
+            structured_obj.get("characters", []) +
+            structured_obj.get("places", []) +
+            structured_obj.get("narrative_summaries", [])
+        )
         retrieved_entries = assembled_context.get("retrieved_passages", {}).get("results", []) or []
 
         warm_tokens = sum(max(0, chunk.get("token_count") or 0) for chunk in warm_chunks)
@@ -1147,10 +1208,31 @@ class ContextSeedBuilder:
                 entry, tokens = structured_info.pop()
                 structured_tokens -= tokens
             structured_entries = [entry for entry, _ in structured_info]
-            assembled_context["structured_passages"] = structured_entries
+
+            # Redistribute trimmed entries back into categories
+            characters = []
+            places = []
+            narrative_summaries = []
+            for entry in structured_entries:
+                table = entry.get("structured_table")
+                if table in ("seasons", "episodes"):
+                    narrative_summaries.append(entry)
+                elif table in ("characters", "character_relationships"):
+                    characters.append(entry)
+                elif table == "places":
+                    places.append(entry)
+                elif entry.get("content_type") == "character":
+                    characters.append(entry)
+                else:
+                    narrative_summaries.append(entry)
+
+            assembled_context["structured"] = {
+                "characters": characters,
+                "places": places,
+                "narrative_summaries": narrative_summaries,
+            }
 
         # Filter out contaminated future chunks from retrieved passages
-        target_chunk_id = assembled_context.get("metadata", {}).get("chunk_id")
         if target_chunk_id:
             filtered_retrieved = []
             for entry, tokens in retrieved_info:
@@ -1180,17 +1262,93 @@ class ContextSeedBuilder:
         retrieved_entries = [entry for entry, _ in retrieved_info]
         assembled_context["retrieved_passages"]["results"] = retrieved_entries
 
-        # Update token counts after trimming
-        assembled_context["warm_slice"]["token_count"] = sum(
-            max(0, chunk.get("token_count") or 0) for chunk in assembled_context["warm_slice"]["chunks"]
-        )
-        structured_tokens = sum(self._estimate_structured_tokens(entry) for entry in structured_entries)
-        assembled_context.setdefault("structured_passages", [])
-        assembled_context["retrieved_passages"]["token_count"] = sum(
-            self._estimate_retrieval_tokens(entry) for entry in retrieved_entries
-        )
+        # Note: Token counts are now managed separately in metadata.token_budget
+        # No need to store them in assembled_context
 
 
+
+    def _build_structured_object(
+        self,
+        entity_data: Dict[str, Any],
+        structured_seed: List[Dict[str, Any]],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Consolidate entity data and structured passages into organized categories."""
+        characters: List[Dict[str, Any]] = []
+        places: List[Dict[str, Any]] = []
+        narrative_summaries: List[Dict[str, Any]] = []
+
+        # Add character data from entity_data
+        for char in entity_data.get("characters", []):
+            characters.append(char)
+
+        # Add location data from entity_data (rename to places)
+        for loc in entity_data.get("locations", []):
+            places.append(loc)
+
+        # Process structured_seed entries
+        for entry in structured_seed:
+            table = entry.get("structured_table")
+            if table == "characters":
+                characters.append(entry)
+            elif table == "places":
+                places.append(entry)
+            elif table in ("seasons", "episodes"):
+                narrative_summaries.append(entry)
+            elif table == "character_relationships":
+                # Keep relationships with characters
+                characters.append(entry)
+            elif table == "lore_inference":
+                # LORE inference entries could go in various places based on content
+                # For now, keep them in narrative_summaries
+                narrative_summaries.append(entry)
+
+        return {
+            "characters": characters,
+            "places": places,
+            "narrative_summaries": narrative_summaries,
+        }
+
+    def _build_token_budget_hierarchy(
+        self,
+        token_counts: Dict[str, Any],
+        warm_tokens: int,
+        structured_tokens: int,
+        retrieved_tokens: int,
+    ) -> Dict[str, Any]:
+        """Build hierarchical token budget structure for metadata."""
+        total_available = token_counts.get("total_available", 0)
+
+        # Calculate maximums from payload budget percentages
+        warm_max = int(total_available * self.payload_budget["warm_slice"]["max"] / 100.0)
+        structured_max = int(total_available * self.payload_budget["structured_summaries"]["max"] / 100.0)
+        retrieved_max = int(total_available * self.payload_budget["contextual_augmentation"]["max"] / 100.0)
+
+        return {
+            "total": {
+                "maximum": total_available,
+                "allocated": warm_tokens + structured_tokens + retrieved_tokens,
+            },
+            "structured": {
+                "maximum": structured_max,
+                "allocated": structured_tokens,
+            },
+            "retrieved_passages": {
+                "maximum": retrieved_max,
+                "allocated": retrieved_tokens,
+            },
+            "warm_slice": {
+                "maximum": warm_max,
+                "allocated": warm_tokens,
+            },
+            "user_input": token_counts.get("user_input", 0),
+            "endpoint": {
+                "apex_window": token_counts.get("apex_window", 200000),
+                "system_prompt": token_counts.get("system_prompt", 5000),
+                "reasoning_reserve": token_counts.get("reasoning_reserve", 0),
+                "response_reserve": token_counts.get("response_reserve", 4000),
+                "using_reasoning_model": token_counts.get("using_reasoning_model", False),
+            },
+        }
 
     # ------------------------------------------------------------------
     # Package assembly
@@ -1279,28 +1437,27 @@ class ContextSeedBuilder:
             self._estimate_retrieval_tokens(passage) for passage in authorial_passages
         )
 
+        # Build consolidated structured object
+        structured_object = self._build_structured_object(entity_data, structured_seed)
+
+        # Build warm_slice with warm_span object
+        warm_first = warm_slice[0].chunk_id if warm_slice else config.chunk_id
+        warm_last = warm_slice[-1].chunk_id if warm_slice else config.chunk_id
+
         assembled_context: Dict[str, Any] = {
             "user_input": user_input,
             "warm_slice": {
                 "chunks": [wc.to_dict() for wc in warm_slice],
-                "token_count": sum((wc.token_count or 0) for wc in warm_slice),
-                "allocation": token_counts.get("warm_slice", 0),
+                "warm_span": {
+                    "warm_first": warm_first,
+                    "warm_last": warm_last,
+                },
             },
-            "entity_data": entity_data,
             "retrieved_passages": {
                 "results": authorial_passages,
-                "token_count": authorial_token_count,
-                "allocation": token_counts.get("augmentation", 0),
             },
+            "structured": structured_object,
             "analysis": analysis,
-            "metadata": {
-                "chunk_id": config.chunk_id,
-                "category": config.category,
-                "label": config.label,
-                "authorial_directives": list(config.authorial_directives),
-            },
-            "memory_state": {},
-            "token_budget": token_counts,
         }
 
         baseline = self.memory_manager.handle_storyteller_response(
@@ -1312,8 +1469,11 @@ class ContextSeedBuilder:
             authorial_directives=config.authorial_directives,
         )
 
+        # Memory manager may have added structured_passages - remove it as we now use 'structured'
+        assembled_context.pop("structured_passages", None)
+
         transition = self.memory_manager.context_state.transition
-        self._apply_payload_budgets(assembled_context, token_counts)
+        self._apply_payload_budgets(assembled_context, token_counts, config.chunk_id)
 
         def _intify(values: Iterable[Any]) -> List[int]:
             cleaned: List[int] = []
@@ -1333,37 +1493,32 @@ class ContextSeedBuilder:
             "structured_passages": baseline.structured_passages,
         }
 
-        memory_state_snapshot = dict(baseline_snapshot)
-        memory_state_snapshot.pop("authorial_directives", None)
-        assembled_context.setdefault("memory_state", {})["pass1"] = memory_state_snapshot
+        # Note: memory_state is no longer stored in context_payload in refactored structure
 
         summary = self.memory_manager.get_memory_summary()
-        summary.setdefault("pass1", {})["structured_passages"] = assembled_context.get("structured_passages", [])
+        # Note: structured_passages stays in memory_summary for continuity
+        summary.setdefault("pass1", {})["structured_passages"] = baseline.structured_passages
 
-        # Calculate estimated payload tokens after budgeting
-        warm_tokens = assembled_context.get("warm_slice", {}).get("token_count", 0)
+        # Calculate token counts after budgeting
+        warm_tokens = sum((wc.token_count or 0) for wc in warm_slice)
         structured_tokens = sum(
             self._estimate_structured_tokens(entry)
-            for entry in assembled_context.get("structured_passages", [])
+            for entry in structured_seed
         )
-        retrieved_tokens = assembled_context.get("retrieved_passages", {}).get("token_count", 0)
-        total_payload_tokens = warm_tokens + structured_tokens + retrieved_tokens
+        retrieved_tokens = authorial_token_count
+
+        # Build hierarchical token budget for metadata
+        token_budget = self._build_token_budget_hierarchy(
+            token_counts, warm_tokens, structured_tokens, retrieved_tokens
+        )
 
         output = {
             "metadata": {
                 "chunk_id": config.chunk_id,
-                "category": config.category,
-                "label": config.label,
                 "timestamp": datetime.utcnow().isoformat(),
-                "warm_span": config.warm_span,
                 "authorial_directives": list(config.authorial_directives),
                 "notes": config.notes,
-                "estimated_payload_tokens": {
-                    "total": total_payload_tokens,
-                    "warm_slice": warm_tokens,
-                    "structured": structured_tokens,
-                    "retrieved": retrieved_tokens,
-                },
+                "token_budget": token_budget,
             },
             "context_payload": assembled_context,
             "memory_summary": summary,
@@ -1376,7 +1531,7 @@ class ContextSeedBuilder:
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         output_path = self.output_dir / f"chunk_{chunk_id}_{timestamp}.json"
         with output_path.open("w", encoding="utf-8") as handle:
-            json.dump(package, handle, indent=2, ensure_ascii=False)
+            json.dump(package, handle, indent=2, ensure_ascii=False, cls=DateTimeEncoder)
             handle.write("\n")
         LOGGER.info("Saved package for chunk %s -> %s", chunk_id, output_path)
         return output_path
@@ -1433,7 +1588,7 @@ def main() -> None:
             generated.append(package["metadata"])
 
         summary_table = "\n".join(
-            f"- Chunk {meta['chunk_id']}: {meta['label']} ({meta['category']})" for meta in generated
+            f"- Chunk {meta['chunk_id']}" for meta in generated
         )
         LOGGER.info("Generated %s packages:\n%s", len(generated), summary_table)
     finally:
