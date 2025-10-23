@@ -52,6 +52,10 @@ nexus-tui-temp/
 /ui/dist/
 /ui/attached_assets/
 
+# Ignore user-customizable PWA icons
+/ui/client/public/icons/*.png
+/ui/client/public/favicon.ico
+
 # Ignore development/testing directories
 /mlx-gguf-testing/
 /echo_deprecated/
