@@ -492,6 +492,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clean up temp file
       await fs.unlink(tempPath);
 
+      // Update manifest.json with cache-busting timestamp
+      const manifestPath = path.join(import.meta.dirname, "..", "client", "public", "manifest.json");
+      const manifestData = await fs.readFile(manifestPath, "utf-8");
+      const manifest = JSON.parse(manifestData);
+      const timestamp = Date.now();
+
+      // Add timestamp query parameter to all icon URLs
+      manifest.icons = manifest.icons.map((icon: any) => ({
+        ...icon,
+        src: icon.src.split('?')[0] + `?v=${timestamp}` // Remove old timestamp if exists, add new one
+      }));
+
+      await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
+
       res.json({ success: true, message: "PWA icon updated successfully" });
     } catch (error) {
       console.error("Error uploading PWA icon:", error);
