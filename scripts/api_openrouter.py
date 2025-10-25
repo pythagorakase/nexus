@@ -211,7 +211,12 @@ class OpenRouterProvider(LLMProvider):
                 max_tokens: int = 4000,
                 system_prompt: Optional[str] = None,
                 reasoning_effort: Optional[str] = None,
-                thinking_budget_tokens: Optional[int] = None):
+                thinking_budget_tokens: Optional[int] = None,
+                top_p: Optional[float] = None,
+                min_p: Optional[float] = None,
+                frequency_penalty: Optional[float] = None,
+                presence_penalty: Optional[float] = None,
+                repetition_penalty: Optional[float] = None):
         """
         Initialize OpenRouter provider.
 
@@ -223,9 +228,19 @@ class OpenRouterProvider(LLMProvider):
             system_prompt: Optional system prompt
             reasoning_effort: Optional reasoning effort level ("minimal", "low", "medium", "high")
             thinking_budget_tokens: Optional thinking token budget for Anthropic extended thinking
+            top_p: Nucleus sampling parameter
+            min_p: Minimum probability threshold
+            frequency_penalty: Penalty for token frequency
+            presence_penalty: Penalty for token presence
+            repetition_penalty: Penalty for repetition
         """
         self.reasoning_effort = reasoning_effort
         self.thinking_budget_tokens = thinking_budget_tokens
+        self.top_p = top_p
+        self.min_p = min_p
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        self.repetition_penalty = repetition_penalty
 
         # Call parent init
         super().__init__(
@@ -296,9 +311,17 @@ class OpenRouterProvider(LLMProvider):
         if self.temperature is not None:
             params["temperature"] = self.temperature
 
-        # OpenRouter's REST API supports reasoning parameters but the OpenAI SDK doesn't
-        # Route to HTTP if reasoning is enabled, otherwise use SDK for efficiency
-        if self.reasoning_effort or self.thinking_budget_tokens:
+        # Add sampling parameters if provided
+        if self.top_p is not None:
+            params["top_p"] = self.top_p
+        if self.frequency_penalty is not None:
+            params["frequency_penalty"] = self.frequency_penalty
+        if self.presence_penalty is not None:
+            params["presence_penalty"] = self.presence_penalty
+
+        # OpenRouter's REST API supports reasoning parameters and additional sampling parameters
+        # Route to HTTP if reasoning, min_p, or repetition_penalty is enabled (not supported by OpenAI SDK)
+        if self.reasoning_effort or self.thinking_budget_tokens or self.min_p is not None or self.repetition_penalty is not None:
             return self._get_completion_http(prompt, messages, enable_cache)
 
         try:
@@ -358,6 +381,18 @@ class OpenRouterProvider(LLMProvider):
 
         if self.temperature is not None:
             payload["temperature"] = self.temperature
+
+        # Add sampling parameters if provided
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
+        if self.min_p is not None:
+            payload["min_p"] = self.min_p
+        if self.frequency_penalty is not None:
+            payload["frequency_penalty"] = self.frequency_penalty
+        if self.presence_penalty is not None:
+            payload["presence_penalty"] = self.presence_penalty
+        if self.repetition_penalty is not None:
+            payload["repetition_penalty"] = self.repetition_penalty
 
         # Add reasoning configuration per OpenRouter docs
         if self.reasoning_effort or self.thinking_budget_tokens:
