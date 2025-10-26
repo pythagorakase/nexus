@@ -190,7 +190,7 @@ class BatchOrchestrator:
 
                     tpm = self._parse_number(parts[2])
                     rpm = self._parse_number(parts[3])
-                    batch_tpd = self._parse_number(parts[4]) if len(parts) > 4 else None
+                    batch_tpd = self._parse_number(parts[4]) if len(parts) > 4 and parts[4].strip() else None
 
                     key = f"{current_provider}:{model}"
                     limits[key] = RateLimits(
@@ -235,8 +235,10 @@ class BatchOrchestrator:
         model_key = model.lower()
 
         # OpenRouter handles its own rate limiting and load balancing
-        if provider_key == "openrouter":
-            LOGGER.debug(f"Using OpenRouter's built-in rate limiting for {model}")
+        # These providers are routed through OpenRouter (see engine.py:930-932)
+        openrouter_providers = {"openrouter", "moonshot", "nousresearch", "deepseek"}
+        if provider_key in openrouter_providers:
+            LOGGER.debug(f"Using OpenRouter's built-in rate limiting for {provider}:{model}")
             return RateLimits(100_000_000, 100_000)  # Effectively unlimited
 
         key = f"{provider_key}:{model_key}"
