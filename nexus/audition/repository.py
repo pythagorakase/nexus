@@ -86,6 +86,8 @@ class AuditionRepository:
                     "o3",
                     "claude-sonnet-4-5",
                     "claude-opus-4-1",
+                    "claude-sonnet-4-5-20250929",
+                    "claude-opus-4-1-20250514",
                     "deepseek-v3.2-exp",
                     "kimi-k2-0905-preview",
                     "hermes-4-405b",
