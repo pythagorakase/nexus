@@ -222,6 +222,14 @@ def get_next_comparison(
                     where_clauses.append(f"p.id IN ({placeholders})")
                     params.extend(prompt_id_list)
 
+            # Ensure only active and visible conditions are included
+            where_clauses.extend([
+                "ca.is_active = TRUE",
+                "cb.is_active = TRUE",
+                "ca.is_visible = TRUE",
+                "cb.is_visible = TRUE",
+            ])
+
             where_sql = " AND ".join(where_clauses)
 
             query = f"""
