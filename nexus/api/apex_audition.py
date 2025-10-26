@@ -814,13 +814,15 @@ def get_generation_task_count(
                         break
                     # Find first incomplete task for this condition
                     for prompt in prompts:
-                        # Check if all replicates are completed
+                        # Check if all replicates are completed with non-empty content
                         cur.execute("""
                             SELECT COUNT(*) as completed_count
                             FROM apex_audition.generations
                             WHERE condition_id = %s
                               AND prompt_id = %s
                               AND status = 'completed'
+                              AND response_payload->>'content' IS NOT NULL
+                              AND LENGTH(response_payload->>'content') > 0
                         """, (condition['id'], prompt['id']))
                         result = cur.fetchone()
                         completed_count = result['completed_count'] if result else 0
@@ -833,13 +835,15 @@ def get_generation_task_count(
                 # No limit: execute all incomplete tasks
                 for prompt in prompts:
                     for condition in conditions:
-                        # Check if all replicates are completed
+                        # Check if all replicates are completed with non-empty content
                         cur.execute("""
                             SELECT COUNT(*) as completed_count
                             FROM apex_audition.generations
                             WHERE condition_id = %s
                               AND prompt_id = %s
                               AND status = 'completed'
+                              AND response_payload->>'content' IS NOT NULL
+                              AND LENGTH(response_payload->>'content') > 0
                         """, (condition['id'], prompt['id']))
                         result = cur.fetchone()
                         completed_count = result['completed_count'] if result else 0
