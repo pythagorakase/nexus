@@ -17,7 +17,7 @@
 ALTER TABLE apex_audition.conditions
 ADD CONSTRAINT check_anthropic_temperature
 CHECK (
-    provider != 'anthropic'
+    provider != 'anthropic'::apex_audition.provider_enum
     OR temperature IS NULL
     OR (temperature >= 0.0 AND temperature <= 1.0)
 );
