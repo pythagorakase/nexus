@@ -130,11 +130,45 @@ export const auditionAPI = {
   },
 
   /**
-   * List all active conditions.
+   * List all active and visible conditions.
    */
   async getConditions(): Promise<Condition[]> {
     const response = await fetch(`${API_BASE}/conditions`);
     if (!response.ok) throw new Error('Failed to fetch conditions');
+    return response.json();
+  },
+
+  /**
+   * List ALL conditions regardless of active/visible status (for management UI).
+   */
+  async getAllConditions(): Promise<Condition[]> {
+    const response = await fetch(`${API_BASE}/conditions/all`);
+    if (!response.ok) throw new Error('Failed to fetch all conditions');
+    return response.json();
+  },
+
+  /**
+   * Update condition flags (is_active and/or is_visible).
+   */
+  async updateCondition(
+    conditionId: number,
+    updates: { is_active?: boolean; is_visible?: boolean }
+  ): Promise<Condition> {
+    const params = new URLSearchParams();
+    if (updates.is_active !== undefined) {
+      params.append('is_active', updates.is_active.toString());
+    }
+    if (updates.is_visible !== undefined) {
+      params.append('is_visible', updates.is_visible.toString());
+    }
+
+    const response = await fetch(
+      `${API_BASE}/conditions/${conditionId}?${params}`,
+      {
+        method: 'PATCH',
+      }
+    );
+    if (!response.ok) throw new Error('Failed to update condition');
     return response.json();
   },
 

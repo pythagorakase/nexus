@@ -100,7 +100,7 @@ def list_generation_runs():
 
 @app.get("/api/audition/conditions", response_model=List[Condition])
 def list_conditions():
-    """List all active conditions."""
+    """List all active and visible conditions."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -112,7 +112,7 @@ def list_conditions():
                     max_output_tokens, thinking_budget_tokens,
                     is_active, is_visible, notes
                 FROM apex_audition.conditions
-                WHERE is_active = true
+                WHERE is_active = true AND is_visible = true
                 ORDER BY provider, model_name, temperature
             """)
             rows = cur.fetchall()
@@ -139,6 +139,114 @@ def list_conditions():
                 )
                 for row in rows
             ]
+
+
+@app.get("/api/audition/conditions/all", response_model=List[Condition])
+def list_all_conditions():
+    """List ALL conditions regardless of active/visible status (for management UI)."""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id, slug, provider, model_name, label,
+                    temperature, top_p, min_p,
+                    frequency_penalty, presence_penalty, repetition_penalty,
+                    reasoning_effort, thinking_enabled,
+                    max_output_tokens, thinking_budget_tokens,
+                    is_active, is_visible, notes
+                FROM apex_audition.conditions
+                ORDER BY provider, model_name, slug
+            """)
+            rows = cur.fetchall()
+            return [
+                Condition(
+                    id=row['id'],
+                    slug=row['slug'],
+                    provider=row['provider'],
+                    model=row['model_name'],
+                    label=row.get('label'),
+                    temperature=row.get('temperature'),
+                    reasoning_effort=row.get('reasoning_effort'),
+                    thinking_enabled=row.get('thinking_enabled'),
+                    max_output_tokens=row.get('max_output_tokens'),
+                    thinking_budget_tokens=row.get('thinking_budget_tokens'),
+                    top_p=row.get('top_p'),
+                    min_p=row.get('min_p'),
+                    frequency_penalty=row.get('frequency_penalty'),
+                    presence_penalty=row.get('presence_penalty'),
+                    repetition_penalty=row.get('repetition_penalty'),
+                    is_active=row['is_active'],
+                    is_visible=row['is_visible'],
+                    notes=row.get('notes'),
+                )
+                for row in rows
+            ]
+
+
+@app.patch("/api/audition/conditions/{condition_id}")
+def update_condition(
+    condition_id: int,
+    is_active: Optional[bool] = None,
+    is_visible: Optional[bool] = None
+):
+    """Update condition flags (is_active and/or is_visible)."""
+    if is_active is None and is_visible is None:
+        raise HTTPException(status_code=400, detail="At least one of is_active or is_visible must be provided")
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # Build dynamic UPDATE statement
+            updates = []
+            params = []
+
+            if is_active is not None:
+                updates.append("is_active = %s")
+                params.append(is_active)
+
+            if is_visible is not None:
+                updates.append("is_visible = %s")
+                params.append(is_visible)
+
+            params.append(condition_id)
+
+            cur.execute(f"""
+                UPDATE apex_audition.conditions
+                SET {", ".join(updates)}
+                WHERE id = %s
+                RETURNING id, slug, provider, model_name, label,
+                    temperature, top_p, min_p,
+                    frequency_penalty, presence_penalty, repetition_penalty,
+                    reasoning_effort, thinking_enabled,
+                    max_output_tokens, thinking_budget_tokens,
+                    is_active, is_visible, notes
+            """, params)
+
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail=f"Condition {condition_id} not found")
+
+            conn.commit()
+
+            return Condition(
+                id=row['id'],
+                slug=row['slug'],
+                provider=row['provider'],
+                model=row['model_name'],
+                label=row.get('label'),
+                temperature=row.get('temperature'),
+                reasoning_effort=row.get('reasoning_effort'),
+                thinking_enabled=row.get('thinking_enabled'),
+                max_output_tokens=row.get('max_output_tokens'),
+                thinking_budget_tokens=row.get('thinking_budget_tokens'),
+                top_p=row.get('top_p'),
+                min_p=row.get('min_p'),
+                frequency_penalty=row.get('frequency_penalty'),
+                presence_penalty=row.get('presence_penalty'),
+                repetition_penalty=row.get('repetition_penalty'),
+                is_active=row['is_active'],
+                is_visible=row['is_visible'],
+                notes=row.get('notes'),
+            )
 
 
 @app.get("/api/audition/prompts", response_model=List[Prompt])
