@@ -4,6 +4,38 @@
 
 BEGIN;
 
+-- Normalize existing provider enum values to lowercase to match application expectations
+DO $$
+BEGIN
+    -- Guard against repeated runs by checking for the original capitalized values
+    IF EXISTS (
+        SELECT 1
+        FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'OpenAI'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'OpenAI' TO 'openai';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'Anthropic'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'Anthropic' TO 'anthropic';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'DeepSeek'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'DeepSeek' TO 'deepseek';
+    END IF;
+END $$;
+
 -- Extend provider enum with additional OpenRouter vendors
 ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'deepseek';
 ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'openrouter';
