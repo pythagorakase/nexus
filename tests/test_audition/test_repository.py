@@ -27,9 +27,12 @@ def test_upsert_condition_round_trip(audition_repo):
     spec = ConditionSpec(
         slug=slug,
         provider="openai",
-        model="gpt-test",
-        parameters={"temperature": 0.5, "max_output_tokens": 512},
+        model="gpt-4o",
+        temperature=0.5,
+        top_p=0.9,
+        max_output_tokens=512,
         description="pytest condition",
+        is_visible=True,
     )
     stored = audition_repo.upsert_condition(spec)
     assert stored.id is not None
@@ -37,7 +40,8 @@ def test_upsert_condition_round_trip(audition_repo):
     fetched = audition_repo.get_condition_by_slug(slug)
     assert fetched is not None
     assert fetched.id == stored.id
-    assert fetched.parameters["temperature"] == 0.5
+    assert fetched.temperature == 0.5
+    assert fetched.top_p == 0.9
 
 
 def test_ingest_and_dry_run_batch(tmp_path: Path, audition_repo):
@@ -48,8 +52,9 @@ def test_ingest_and_dry_run_batch(tmp_path: Path, audition_repo):
     condition = ConditionSpec(
         slug=condition_slug,
         provider="anthropic",
-        model="claude-test",
-        parameters={"temperature": 0.2, "max_output_tokens": 300},
+        model="claude-opus-4-1",
+        temperature=0.2,
+        max_output_tokens=300,
     )
     engine.register_conditions([condition])
 

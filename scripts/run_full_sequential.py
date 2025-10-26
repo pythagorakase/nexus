@@ -45,7 +45,7 @@ TEST_CHUNK_IDS = {4242}  # skip pytest harness fixtures
 
 def get_active_conditions_by_provider(repo: AuditionRepository) -> Dict[str, List[ConditionSpec]]:
     """Load all active conditions from database, grouped by provider."""
-    all_conditions = repo.list_conditions(active_only=True)
+    all_conditions = repo.list_conditions(active_only=True, visible_only=True)
     by_provider: Dict[str, List[ConditionSpec]] = {}
     for condition in all_conditions:
         provider = condition.provider.lower()

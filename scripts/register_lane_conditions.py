@@ -136,6 +136,11 @@ def main() -> None:
 
             # Extract individual parameters
             temperature = params.get("temperature")
+            top_p = params.get("top_p")
+            min_p = params.get("min_p")
+            frequency_penalty = params.get("frequency_penalty")
+            presence_penalty = params.get("presence_penalty")
+            repetition_penalty = params.get("repetition_penalty")
             max_output_tokens = params.get("max_output_tokens") or params.get("max_tokens")
             reasoning_effort = params.get("reasoning_effort")
 
@@ -148,11 +153,18 @@ def main() -> None:
                 if thinking_enabled:
                     thinking_budget_tokens = thinking.get("budget_tokens")
 
+            is_visible = lane.get("is_visible", True)
+
             condition = ConditionSpec(
                 slug=lane_id,
                 provider=provider,
                 model=model_name,
                 temperature=temperature,
+                top_p=top_p,
+                min_p=min_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                repetition_penalty=repetition_penalty,
                 reasoning_effort=reasoning_effort,
                 thinking_enabled=thinking_enabled,
                 max_output_tokens=max_output_tokens,
@@ -160,7 +172,8 @@ def main() -> None:
                 label=label,
                 description=description,
                 system_prompt=None,  # Using default storyteller prompt from engine
-                is_active=True
+                is_active=True,
+                is_visible=is_visible
             )
 
             conditions.append(condition)

@@ -105,11 +105,26 @@ def list_conditions():
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
-                    id, slug, provider, model_name, label,
-                    temperature, reasoning_effort, thinking_enabled,
-                    max_output_tokens, thinking_budget_tokens, is_active, notes
+                    id,
+                    slug,
+                    provider,
+                    model_name,
+                    label,
+                    temperature,
+                    top_p,
+                    min_p,
+                    frequency_penalty,
+                    presence_penalty,
+                    repetition_penalty,
+                    reasoning_effort,
+                    thinking_enabled,
+                    max_output_tokens,
+                    thinking_budget_tokens,
+                    is_active,
+                    is_visible,
+                    notes
                 FROM apex_audition.conditions
-                WHERE is_active = true
+                WHERE is_active = true AND is_visible = true
                 ORDER BY provider, model_name, temperature
             """)
             rows = cur.fetchall()
@@ -121,11 +136,17 @@ def list_conditions():
                     model=row['model_name'],
                     label=row.get('label'),
                     temperature=row.get('temperature'),
+                    top_p=row.get('top_p'),
+                    min_p=row.get('min_p'),
+                    frequency_penalty=row.get('frequency_penalty'),
+                    presence_penalty=row.get('presence_penalty'),
+                    repetition_penalty=row.get('repetition_penalty'),
                     reasoning_effort=row.get('reasoning_effort'),
                     thinking_enabled=row.get('thinking_enabled'),
                     max_output_tokens=row.get('max_output_tokens'),
                     thinking_budget_tokens=row.get('thinking_budget_tokens'),
                     is_active=row['is_active'],
+                    is_visible=row['is_visible'],
                     notes=row.get('notes'),
                 )
                 for row in rows
@@ -213,6 +234,13 @@ def get_next_comparison(
                     where_clauses.append(f"p.id IN ({placeholders})")
                     params.extend(prompt_id_list)
 
+            where_clauses.extend([
+                "ca.is_active = TRUE",
+                "cb.is_active = TRUE",
+                "ca.is_visible = TRUE",
+                "cb.is_visible = TRUE",
+            ])
+
             where_sql = " AND ".join(where_clauses)
 
             query = f"""
@@ -229,22 +257,34 @@ def get_next_comparison(
                     ca.model_name AS condition_a_model_name,
                     ca.label AS condition_a_label,
                     ca.temperature AS condition_a_temperature,
+                    ca.top_p AS condition_a_top_p,
+                    ca.min_p AS condition_a_min_p,
+                    ca.frequency_penalty AS condition_a_frequency_penalty,
+                    ca.presence_penalty AS condition_a_presence_penalty,
+                    ca.repetition_penalty AS condition_a_repetition_penalty,
                     ca.reasoning_effort AS condition_a_reasoning_effort,
                     ca.thinking_enabled AS condition_a_thinking_enabled,
                     ca.max_output_tokens AS condition_a_max_output_tokens,
                     ca.thinking_budget_tokens AS condition_a_thinking_budget_tokens,
                     ca.is_active AS condition_a_is_active,
+                    ca.is_visible AS condition_a_is_visible,
                     cb.id AS condition_b_id,
                     cb.slug AS condition_b_slug,
                     cb.provider AS condition_b_provider,
                     cb.model_name AS condition_b_model_name,
                     cb.label AS condition_b_label,
                     cb.temperature AS condition_b_temperature,
+                    cb.top_p AS condition_b_top_p,
+                    cb.min_p AS condition_b_min_p,
+                    cb.frequency_penalty AS condition_b_frequency_penalty,
+                    cb.presence_penalty AS condition_b_presence_penalty,
+                    cb.repetition_penalty AS condition_b_repetition_penalty,
                     cb.reasoning_effort AS condition_b_reasoning_effort,
                     cb.thinking_enabled AS condition_b_thinking_enabled,
                     cb.max_output_tokens AS condition_b_max_output_tokens,
                     cb.thinking_budget_tokens AS condition_b_thinking_budget_tokens,
                     cb.is_active AS condition_b_is_active,
+                    cb.is_visible AS condition_b_is_visible,
                     ga.id AS generation_a_id,
                     ga.condition_id AS generation_a_condition_id,
                     ga.prompt_id AS generation_a_prompt_id,
@@ -309,11 +349,17 @@ def get_next_comparison(
                 model=row["condition_a_model_name"],
                 label=row.get("condition_a_label"),
                 temperature=row.get("condition_a_temperature"),
+                top_p=row.get("condition_a_top_p"),
+                min_p=row.get("condition_a_min_p"),
+                frequency_penalty=row.get("condition_a_frequency_penalty"),
+                presence_penalty=row.get("condition_a_presence_penalty"),
+                repetition_penalty=row.get("condition_a_repetition_penalty"),
                 reasoning_effort=row.get("condition_a_reasoning_effort"),
                 thinking_enabled=row.get("condition_a_thinking_enabled"),
                 max_output_tokens=row.get("condition_a_max_output_tokens"),
                 thinking_budget_tokens=row.get("condition_a_thinking_budget_tokens"),
                 is_active=row["condition_a_is_active"],
+                is_visible=row["condition_a_is_visible"],
             )
 
             condition_b = Condition(
@@ -323,11 +369,17 @@ def get_next_comparison(
                 model=row["condition_b_model_name"],
                 label=row.get("condition_b_label"),
                 temperature=row.get("condition_b_temperature"),
+                top_p=row.get("condition_b_top_p"),
+                min_p=row.get("condition_b_min_p"),
+                frequency_penalty=row.get("condition_b_frequency_penalty"),
+                presence_penalty=row.get("condition_b_presence_penalty"),
+                repetition_penalty=row.get("condition_b_repetition_penalty"),
                 reasoning_effort=row.get("condition_b_reasoning_effort"),
                 thinking_enabled=row.get("condition_b_thinking_enabled"),
                 max_output_tokens=row.get("condition_b_max_output_tokens"),
                 thinking_budget_tokens=row.get("condition_b_thinking_budget_tokens"),
                 is_active=row["condition_b_is_active"],
+                is_visible=row["condition_b_is_visible"],
             )
 
             generation_a = Generation(
@@ -467,12 +519,27 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                     e.rating,
                     e.games_played,
                     e.last_updated,
-                    c.id, c.slug, c.provider, c.model_name, c.label,
-                    c.temperature, c.reasoning_effort, c.thinking_enabled,
-                    c.max_output_tokens, c.thinking_budget_tokens, c.is_active, c.notes
+                    c.id,
+                    c.slug,
+                    c.provider,
+                    c.model_name,
+                    c.label,
+                    c.temperature,
+                    c.top_p,
+                    c.min_p,
+                    c.frequency_penalty,
+                    c.presence_penalty,
+                    c.repetition_penalty,
+                    c.reasoning_effort,
+                    c.thinking_enabled,
+                    c.max_output_tokens,
+                    c.thinking_budget_tokens,
+                    c.is_active,
+                    c.is_visible,
+                    c.notes
                 FROM apex_audition.elo_ratings e
                 JOIN apex_audition.conditions c ON c.id = e.condition_id
-                WHERE c.is_active = true
+                WHERE c.is_active = true AND c.is_visible = true
                 ORDER BY e.rating DESC
                 LIMIT %s
             """, (limit,))
@@ -488,11 +555,17 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                         model_name=row['model_name'],
                         label=row['label'],
                         temperature=row['temperature'],
+                        top_p=row['top_p'],
+                        min_p=row['min_p'],
+                        frequency_penalty=row['frequency_penalty'],
+                        presence_penalty=row['presence_penalty'],
+                        repetition_penalty=row['repetition_penalty'],
                         reasoning_effort=row['reasoning_effort'],
                         thinking_enabled=row['thinking_enabled'],
                         max_output_tokens=row['max_output_tokens'],
                         thinking_budget_tokens=row['thinking_budget_tokens'],
                         is_active=row['is_active'],
+                        is_visible=row['is_visible'],
                         notes=row['notes']
                     ),
                     rating=row['rating'],
@@ -553,6 +626,8 @@ def get_missing_generation_count():
                 FROM apex_audition.prompts p
                 CROSS JOIN apex_audition.conditions c
                 WHERE c.is_active = TRUE
+                  AND c.is_visible = TRUE
+                  AND c.is_visible = TRUE
                   AND (
                       SELECT COUNT(*)
                       FROM apex_audition.generations g
@@ -592,6 +667,7 @@ def get_missing_generations():
                 FROM apex_audition.prompts p
                 CROSS JOIN apex_audition.conditions c
                 WHERE c.is_active = TRUE
+                  AND c.is_visible = TRUE
                   AND (
                       SELECT COUNT(*)
                       FROM apex_audition.generations g
@@ -629,7 +705,7 @@ def get_generation_task_count(
             cur.execute("""
                 SELECT id, slug, provider
                 FROM apex_audition.conditions
-                WHERE is_active = TRUE
+                WHERE is_active = TRUE AND is_visible = TRUE
                 ORDER BY provider, slug
             """)
             conditions = cur.fetchall()
@@ -918,6 +994,7 @@ def get_async_generation_status():
                 FROM apex_audition.prompts p
                 CROSS JOIN apex_audition.conditions c
                 WHERE c.is_active = TRUE
+                  AND c.is_visible = TRUE
                   AND (
                       SELECT COUNT(*)
                       FROM apex_audition.generations g

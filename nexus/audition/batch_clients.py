@@ -53,6 +53,11 @@ class BatchRequest:
     max_tokens: int
     system_prompt: Optional[str] = None
     enable_cache: bool = True
+    top_p: Optional[float] = None
+    min_p: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    repetition_penalty: Optional[float] = None
     # OpenAI-specific parameters
     reasoning_effort: Optional[str] = None
     max_output_tokens: Optional[int] = None

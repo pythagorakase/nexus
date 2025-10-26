@@ -59,8 +59,8 @@ export function LeaderboardView() {
     );
   }
 
-  const formatTemperature = (temp: number | null | undefined) => {
-    return temp !== null && temp !== undefined ? temp.toString() : '-';
+  const formatOptionalNumber = (value: number | null | undefined) => {
+    return value !== null && value !== undefined ? value.toString() : '-';
   };
 
   const formatReasoning = (reasoningEffort: string | null | undefined, thinkingEnabled: boolean | null | undefined) => {
@@ -97,7 +97,8 @@ export function LeaderboardView() {
           <CardTitle className="font-mono text-lg">ELO Leaderboard</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow className="font-mono text-xs">
                 <TableHead className="w-12">Rank</TableHead>
@@ -105,6 +106,11 @@ export function LeaderboardView() {
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead className="text-center">Temperature</TableHead>
+                <TableHead className="text-center">Top P</TableHead>
+                <TableHead className="text-center">Min P</TableHead>
+                <TableHead className="text-center">Freq Pen</TableHead>
+                <TableHead className="text-center">Pres Pen</TableHead>
+                <TableHead className="text-center">Repeat Pen</TableHead>
                 <TableHead className="text-center">Reasoning</TableHead>
                 <TableHead className="text-right">Ratings</TableHead>
                 <TableHead className="text-center w-16">Notes</TableHead>
@@ -126,7 +132,22 @@ export function LeaderboardView() {
                     {formatModelName(entry.condition.model_name)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
-                    {formatTemperature(entry.condition.temperature)}
+                    {formatOptionalNumber(entry.condition.temperature)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.top_p)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.min_p)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.frequency_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.presence_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.repetition_penalty)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}
@@ -149,7 +170,8 @@ export function LeaderboardView() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

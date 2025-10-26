@@ -450,6 +450,11 @@ class AuditionEngine:
                     max_tokens=max_tokens,
                     system_prompt=condition.system_prompt,
                     enable_cache=enable_cache,
+                    top_p=condition.top_p,
+                    min_p=condition.min_p,
+                    frequency_penalty=condition.frequency_penalty,
+                    presence_penalty=condition.presence_penalty,
+                    repetition_penalty=condition.repetition_penalty,
                     # OpenAI-specific parameters
                     reasoning_effort=condition.reasoning_effort,
                     max_output_tokens=condition.max_output_tokens,
@@ -631,6 +636,11 @@ class AuditionEngine:
                         max_tokens=max_tokens,
                         system_prompt=condition.system_prompt,
                         enable_cache=enable_cache,
+                        top_p=condition.top_p,
+                        min_p=condition.min_p,
+                        frequency_penalty=condition.frequency_penalty,
+                        presence_penalty=condition.presence_penalty,
+                        repetition_penalty=condition.repetition_penalty,
                         # OpenAI-specific parameters
                         reasoning_effort=condition.reasoning_effort,
                         max_output_tokens=condition.max_output_tokens,
@@ -931,6 +941,11 @@ class AuditionEngine:
             system_prompt=condition.system_prompt,
             reasoning_effort=condition.reasoning_effort,
             thinking_budget_tokens=condition.thinking_budget_tokens,
+            top_p=condition.top_p,
+            min_p=condition.min_p,
+            frequency_penalty=condition.frequency_penalty,
+            presence_penalty=condition.presence_penalty,
+            repetition_penalty=condition.repetition_penalty,
         )
         return provider
 
