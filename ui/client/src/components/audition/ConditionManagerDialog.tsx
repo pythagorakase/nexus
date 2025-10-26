@@ -1,7 +1,7 @@
 /**
  * Condition Manager Dialog - manage condition active/visible state
  */
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
@@ -21,7 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Search } from 'lucide-react';
 import { auditionAPI, Condition } from '@/lib/audition-api';
 
 interface ConditionManagerDialogProps {
@@ -33,11 +31,10 @@ export function ConditionManagerDialog({
   open,
   onOpenChange,
 }: ConditionManagerDialogProps) {
-  const [searchQuery, setSearchQuery] = useState('');
   const queryClient = useQueryClient();
 
   // Fetch all conditions
-  const { data: conditions = [], isLoading } = useQuery({
+  const { data: conditions = [], isLoading, error } = useQuery({
     queryKey: ['conditions', 'all'],
     queryFn: () => auditionAPI.getAllConditions(),
     enabled: open,
@@ -58,25 +55,11 @@ export function ConditionManagerDialog({
     },
   });
 
-  // Filter conditions by search query
-  const filteredConditions = useMemo(() => {
-    if (!searchQuery) return conditions;
-
-    const query = searchQuery.toLowerCase();
-    return conditions.filter((condition) => {
-      return (
-        condition.slug.toLowerCase().includes(query) ||
-        condition.provider.toLowerCase().includes(query) ||
-        (condition.label && condition.label.toLowerCase().includes(query))
-      );
-    });
-  }, [conditions, searchQuery]);
-
   // Group by provider for better organization
   const groupedConditions = useMemo(() => {
     const groups: { [provider: string]: Condition[] } = {};
 
-    filteredConditions.forEach((condition) => {
+    conditions.forEach((condition) => {
       if (!groups[condition.provider]) {
         groups[condition.provider] = [];
       }
@@ -84,7 +67,7 @@ export function ConditionManagerDialog({
     });
 
     return groups;
-  }, [filteredConditions]);
+  }, [conditions]);
 
   const handleToggleActive = (conditionId: number, currentValue: boolean) => {
     updateConditionMutation.mutate({
@@ -111,17 +94,6 @@ export function ConditionManagerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Search bar */}
-        <div className="relative">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by slug, provider, or label..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-
         {/* Conditions table */}
         <ScrollArea className="flex-1 -mx-6">
           <div className="px-6">
@@ -129,9 +101,13 @@ export function ConditionManagerDialog({
               <div className="text-center py-8 text-muted-foreground">
                 Loading conditions...
               </div>
-            ) : filteredConditions.length === 0 ? (
+            ) : error ? (
+              <div className="text-center py-8 text-destructive">
+                Error loading conditions. Please make sure the API server is running.
+              </div>
+            ) : conditions.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                {searchQuery ? 'No conditions match your search' : 'No conditions found'}
+                No conditions found
               </div>
             ) : (
               Object.entries(groupedConditions).map(([provider, providerConditions]) => (
@@ -186,11 +162,13 @@ export function ConditionManagerDialog({
         </ScrollArea>
 
         {/* Summary footer */}
-        <div className="text-sm text-muted-foreground border-t pt-4">
-          {filteredConditions.length} condition(s) •{' '}
-          {filteredConditions.filter((c) => c.is_active).length} active •{' '}
-          {filteredConditions.filter((c) => c.is_visible).length} visible
-        </div>
+        {conditions.length > 0 && (
+          <div className="text-sm text-muted-foreground border-t pt-4">
+            {conditions.length} condition(s) •{' '}
+            {conditions.filter((c) => c.is_active).length} active •{' '}
+            {conditions.filter((c) => c.is_visible).length} visible
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
