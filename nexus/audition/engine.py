@@ -914,6 +914,11 @@ class AuditionEngine:
             # Only convert if there's a two-part version number at the end (digit-dash-digit)
             model_name = re.sub(r'(\d+)-(\d+)$', r'\1.\2', model_name)
             openrouter_model = f"{provider_lower}/{model_name}"
+        elif provider_lower == "moonshotai":
+            model_name = condition.model
+            if ":" not in model_name:
+                model_name = f"{model_name}:exacto"
+            openrouter_model = f"{provider_lower}/{model_name}"
         elif provider_lower == "openrouter":
             # Already in OpenRouter format (e.g., "deepseek-v3.2-exp")
             openrouter_model = condition.model
@@ -931,6 +936,11 @@ class AuditionEngine:
             system_prompt=condition.system_prompt,
             reasoning_effort=condition.reasoning_effort,
             thinking_budget_tokens=condition.thinking_budget_tokens,
+            top_p=condition.top_p,
+            min_p=condition.min_p,
+            frequency_penalty=condition.frequency_penalty,
+            presence_penalty=condition.presence_penalty,
+            repetition_penalty=condition.repetition_penalty,
         )
         return provider
 

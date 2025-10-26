@@ -211,7 +211,12 @@ class OpenRouterProvider(LLMProvider):
                 max_tokens: int = 4000,
                 system_prompt: Optional[str] = None,
                 reasoning_effort: Optional[str] = None,
-                thinking_budget_tokens: Optional[int] = None):
+                thinking_budget_tokens: Optional[int] = None,
+                top_p: Optional[float] = None,
+                min_p: Optional[float] = None,
+                frequency_penalty: Optional[float] = None,
+                presence_penalty: Optional[float] = None,
+                repetition_penalty: Optional[float] = None):
         """
         Initialize OpenRouter provider.
 
@@ -226,6 +231,11 @@ class OpenRouterProvider(LLMProvider):
         """
         self.reasoning_effort = reasoning_effort
         self.thinking_budget_tokens = thinking_budget_tokens
+        self.top_p = top_p
+        self.min_p = min_p
+        self.frequency_penalty = frequency_penalty
+        self.presence_penalty = presence_penalty
+        self.repetition_penalty = repetition_penalty
 
         # Call parent init
         super().__init__(
@@ -263,6 +273,16 @@ class OpenRouterProvider(LLMProvider):
             logger.info(f"Reasoning effort: {self.reasoning_effort}")
         if self.thinking_budget_tokens:
             logger.info(f"Thinking budget: {self.thinking_budget_tokens} tokens")
+        if self.top_p is not None:
+            logger.info(f"top_p: {self.top_p}")
+        if self.min_p is not None:
+            logger.info(f"min_p: {self.min_p}")
+        if self.frequency_penalty is not None:
+            logger.info(f"frequency_penalty: {self.frequency_penalty}")
+        if self.presence_penalty is not None:
+            logger.info(f"presence_penalty: {self.presence_penalty}")
+        if self.repetition_penalty is not None:
+            logger.info(f"repetition_penalty: {self.repetition_penalty}")
 
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """
@@ -295,6 +315,17 @@ class OpenRouterProvider(LLMProvider):
         # Add temperature if provided
         if self.temperature is not None:
             params["temperature"] = self.temperature
+
+        if self.top_p is not None:
+            params["top_p"] = self.top_p
+        if self.min_p is not None:
+            params["min_p"] = self.min_p
+        if self.frequency_penalty is not None:
+            params["frequency_penalty"] = self.frequency_penalty
+        if self.presence_penalty is not None:
+            params["presence_penalty"] = self.presence_penalty
+        if self.repetition_penalty is not None:
+            params["repetition_penalty"] = self.repetition_penalty
 
         # OpenRouter's REST API supports reasoning parameters but the OpenAI SDK doesn't
         # Route to HTTP if reasoning is enabled, otherwise use SDK for efficiency
@@ -358,6 +389,17 @@ class OpenRouterProvider(LLMProvider):
 
         if self.temperature is not None:
             payload["temperature"] = self.temperature
+
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
+        if self.min_p is not None:
+            payload["min_p"] = self.min_p
+        if self.frequency_penalty is not None:
+            payload["frequency_penalty"] = self.frequency_penalty
+        if self.presence_penalty is not None:
+            payload["presence_penalty"] = self.presence_penalty
+        if self.repetition_penalty is not None:
+            payload["repetition_penalty"] = self.repetition_penalty
 
         # Add reasoning configuration per OpenRouter docs
         if self.reasoning_effort or self.thinking_budget_tokens:

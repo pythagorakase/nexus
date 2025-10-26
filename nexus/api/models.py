@@ -16,11 +16,17 @@ class Condition(BaseModel):
     model: str = Field(alias="model_name")
     label: Optional[str] = None
     temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    min_p: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    repetition_penalty: Optional[float] = None
     reasoning_effort: Optional[str] = None
     thinking_enabled: Optional[bool] = None
     max_output_tokens: Optional[int] = None
     thinking_budget_tokens: Optional[int] = None
     is_active: bool
+    is_visible: bool
     notes: Optional[List[Dict[str, Any]]] = None
 
     class Config:

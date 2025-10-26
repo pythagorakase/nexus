@@ -176,6 +176,102 @@ experiment:
               budget_tokens: 32000
             max_tokens: 38000
 
+    # ============================================================
+    # Kimi K2 0905 Preview (Moonshot via OpenRouter)
+    # ============================================================
+    - id: kimi-k2-0905-preview
+      provider: moonshotai
+      model_name: kimi-k2-0905-preview
+      description: "Kimi K2 0905 preview lanes for creative generation"
+
+      lanes:
+        - lane_id: kimi0905.t0-6
+          label: "Kimi K2 T=0.60"
+          description: "Conservative baseline for stability"
+          params:
+            temperature: 0.60
+
+        - lane_id: kimi0905.t0-75
+          label: "Kimi K2 T=0.75"
+          description: "Slightly hotter with nucleus sampling"
+          params:
+            temperature: 0.75
+            top_p: 0.95
+            frequency_penalty: 0.2
+
+        - lane_id: kimi0905.t0-80
+          label: "Kimi K2 T=0.80"
+          description: "Creative leaning with mild repetition guard"
+          params:
+            temperature: 0.80
+            top_p: 0.95
+            frequency_penalty: 0.3
+
+        - lane_id: kimi0905.t0-90
+          label: "Kimi K2 T=0.90 Hot"
+          description: "High creativity with repetition guardrails"
+          params:
+            temperature: 0.90
+            top_p: 0.90
+            frequency_penalty: 0.5
+            presence_penalty: 0.3
+            repetition_penalty: 1.1
+
+    # ============================================================
+    # Hermes 4 405B (Nous Research via OpenRouter)
+    # ============================================================
+    - id: hermes-4-405b
+      provider: nousresearch
+      model_name: hermes-4-405b
+      description: "Hermes 4 405B sampling sweep"
+
+      lanes:
+        - lane_id: hermes405.t0-9
+          label: "Hermes 4 T=0.9"
+          description: "Cooler sampling with minimum probability guard"
+          params:
+            temperature: 0.9
+            min_p: 0.05
+            repetition_penalty: 1.10
+
+        - lane_id: hermes405.t1-1
+          label: "Hermes 4 T=1.1"
+          description: "Creative baseline with nucleus sampling"
+          params:
+            temperature: 1.1
+            min_p: 0.08
+            top_p: 0.92
+            repetition_penalty: 1.15
+
+        - lane_id: hermes405.t1-3
+          label: "Hermes 4 T=1.3"
+          description: "Hotter sampling with repetition guard"
+          params:
+            temperature: 1.3
+            min_p: 0.10
+            top_p: 0.88
+            repetition_penalty: 1.20
+
+        - lane_id: hermes405.t1-5
+          label: "Hermes 4 T=1.5"
+          description: "High creativity with light presence penalty"
+          params:
+            temperature: 1.5
+            min_p: 0.12
+            top_p: 0.85
+            repetition_penalty: 1.25
+            presence_penalty: 0.2
+
+        - lane_id: hermes405.t1-7
+          label: "Hermes 4 T=1.7"
+          description: "Maximum heat with stronger repetition guard"
+          params:
+            temperature: 1.7
+            min_p: 0.15
+            top_p: 0.82
+            repetition_penalty: 1.30
+            presence_penalty: 0.3
+
         - lane_id: opus.t1-2.ext
           label: "Opus T=1.2 Extended"
           description: "Hot temperature + extended thinking for maximum creativity"

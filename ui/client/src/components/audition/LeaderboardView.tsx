@@ -13,7 +13,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, Mail } from 'lucide-react';
 import {
   Dialog,
@@ -59,8 +58,11 @@ export function LeaderboardView() {
     );
   }
 
-  const formatTemperature = (temp: number | null | undefined) => {
-    return temp !== null && temp !== undefined ? temp.toString() : '-';
+  const formatNumber = (value: number | null | undefined, precision = 2) => {
+    if (value === null || value === undefined) {
+      return '-';
+    }
+    return Number.isInteger(value) ? value.toString() : value.toFixed(precision).replace(/\.0+$/, '.0');
   };
 
   const formatReasoning = (reasoningEffort: string | null | undefined, thinkingEnabled: boolean | null | undefined) => {
@@ -105,6 +107,11 @@ export function LeaderboardView() {
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead className="text-center">Temperature</TableHead>
+                <TableHead className="text-center">top_p</TableHead>
+                <TableHead className="text-center">min_p</TableHead>
+                <TableHead className="text-center">freq_pen</TableHead>
+                <TableHead className="text-center">presence</TableHead>
+                <TableHead className="text-center">repetition</TableHead>
                 <TableHead className="text-center">Reasoning</TableHead>
                 <TableHead className="text-right">Ratings</TableHead>
                 <TableHead className="text-center w-16">Notes</TableHead>
@@ -126,7 +133,22 @@ export function LeaderboardView() {
                     {formatModelName(entry.condition.model_name)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
-                    {formatTemperature(entry.condition.temperature)}
+                    {formatNumber(entry.condition.temperature, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatNumber(entry.condition.top_p, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatNumber(entry.condition.min_p, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatNumber(entry.condition.frequency_penalty, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatNumber(entry.condition.presence_penalty, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatNumber(entry.condition.repetition_penalty, 2)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}
