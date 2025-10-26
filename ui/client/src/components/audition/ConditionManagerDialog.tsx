@@ -85,17 +85,17 @@ export function ConditionManagerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-4xl">
+        <DialogHeader className="pb-2">
           <DialogTitle>Manage Contenders</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Control which conditions are active and visible. Active conditions can run
             generations, visible conditions appear in leaderboards and comparisons.
           </DialogDescription>
         </DialogHeader>
 
         {/* Conditions table */}
-        <ScrollArea className="flex-1 -mx-6">
+        <ScrollArea className="h-[500px] -mx-6">
           <div className="px-6">
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">
@@ -111,45 +111,51 @@ export function ConditionManagerDialog({
               </div>
             ) : (
               Object.entries(groupedConditions).map(([provider, providerConditions]) => (
-                <div key={provider} className="mb-6">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase mb-2">
+                <div key={provider} className="mb-3">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase mb-1 px-1">
                     {provider}
                   </h3>
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Slug</TableHead>
-                        <TableHead>Label</TableHead>
-                        <TableHead className="w-24 text-center">Active</TableHead>
-                        <TableHead className="w-24 text-center">Visible</TableHead>
+                      <TableRow className="hover:bg-transparent border-b">
+                        <TableHead className="h-8 text-xs">Slug</TableHead>
+                        <TableHead className="h-8 text-xs">Label</TableHead>
+                        <TableHead className="h-8 w-20 text-center text-xs">Active</TableHead>
+                        <TableHead className="h-8 w-20 text-center text-xs">Visible</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {providerConditions.map((condition) => (
-                        <TableRow key={condition.id}>
-                          <TableCell className="font-mono text-sm">
+                        <TableRow key={condition.id} className="border-b hover:bg-muted/50">
+                          <TableCell className="font-mono text-xs py-1.5">
                             {condition.slug}
                           </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
+                          <TableCell className="text-xs text-muted-foreground py-1.5">
                             {condition.label || '—'}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={condition.is_active}
-                              onCheckedChange={() =>
-                                handleToggleActive(condition.id, condition.is_active)
-                              }
-                              disabled={updateConditionMutation.isPending}
-                            />
+                          <TableCell className="text-center py-1.5">
+                            <div className="flex justify-center">
+                              <Checkbox
+                                checked={condition.is_active}
+                                onCheckedChange={() =>
+                                  handleToggleActive(condition.id, condition.is_active)
+                                }
+                                disabled={updateConditionMutation.isPending}
+                                className="h-4 w-4"
+                              />
+                            </div>
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Checkbox
-                              checked={condition.is_visible}
-                              onCheckedChange={() =>
-                                handleToggleVisible(condition.id, condition.is_visible)
-                              }
-                              disabled={updateConditionMutation.isPending}
-                            />
+                          <TableCell className="text-center py-1.5">
+                            <div className="flex justify-center">
+                              <Checkbox
+                                checked={condition.is_visible}
+                                onCheckedChange={() =>
+                                  handleToggleVisible(condition.id, condition.is_visible)
+                                }
+                                disabled={updateConditionMutation.isPending}
+                                className="h-4 w-4"
+                              />
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -163,7 +169,7 @@ export function ConditionManagerDialog({
 
         {/* Summary footer */}
         {conditions.length > 0 && (
-          <div className="text-sm text-muted-foreground border-t pt-4">
+          <div className="text-xs text-muted-foreground border-t pt-2">
             {conditions.length} condition(s) •{' '}
             {conditions.filter((c) => c.is_active).length} active •{' '}
             {conditions.filter((c) => c.is_visible).length} visible
