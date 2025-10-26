@@ -331,9 +331,16 @@ class OpenRouterProvider(LLMProvider):
         if self.repetition_penalty is not None:
             params["repetition_penalty"] = self.repetition_penalty
 
-        # OpenRouter's REST API supports reasoning parameters but the OpenAI SDK doesn't
-        # Route to HTTP if reasoning is enabled, otherwise use SDK for efficiency
-        if self.reasoning_effort or self.thinking_budget_tokens:
+        # OpenRouter's REST API supports parameters that the OpenAI SDK doesn't recognize
+        # Route to HTTP if any non-standard parameters are set, otherwise use SDK for efficiency
+        has_non_standard_params = (
+            self.reasoning_effort is not None or
+            self.thinking_budget_tokens is not None or
+            self.min_p is not None or
+            self.repetition_penalty is not None
+        )
+
+        if has_non_standard_params:
             return self._get_completion_http(prompt, messages, enable_cache)
 
         try:
