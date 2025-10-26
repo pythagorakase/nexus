@@ -233,6 +233,12 @@ class BatchOrchestrator:
         """Get rate limits for a provider/model combination."""
         provider_key = provider.lower()
         model_key = model.lower()
+
+        # OpenRouter handles its own rate limiting and load balancing
+        if provider_key == "openrouter":
+            LOGGER.debug(f"Using OpenRouter's built-in rate limiting for {model}")
+            return RateLimits(100_000_000, 100_000)  # Effectively unlimited
+
         key = f"{provider_key}:{model_key}"
         limits = self.limits.get(key)
         if not limits:
