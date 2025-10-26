@@ -13,11 +13,17 @@ export interface Condition {
   model_name: string;
   label?: string;
   temperature?: number | null;
+  top_p?: number | null;
+  min_p?: number | null;
+  frequency_penalty?: number | null;
+  presence_penalty?: number | null;
+  repetition_penalty?: number | null;
   reasoning_effort?: string | null;
   thinking_enabled?: boolean | null;
   max_output_tokens?: number | null;
   thinking_budget_tokens?: number | null;
   is_active: boolean;
+  is_visible: boolean;
   notes?: Array<{ text: string; timestamp: string }> | null;
 }
 
