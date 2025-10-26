@@ -115,7 +115,7 @@ experiment:
     # ============================================================
     - id: claude-sonnet-4-5
       provider: anthropic
-      model_name: claude-sonnet-4-5-20250929
+      model_name: claude-sonnet-4-5
       description: "Claude Sonnet 4.5 with extended thinking experiments"
 
       lanes:
@@ -153,7 +153,7 @@ experiment:
     # ============================================================
     - id: claude-opus-4-1
       provider: anthropic
-      model_name: claude-opus-4-1-20250514
+      model_name: claude-opus-4-1
       description: "Claude Opus 4.1 with extended thinking experiments"
 
       lanes:
