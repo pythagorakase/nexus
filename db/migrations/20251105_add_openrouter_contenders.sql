@@ -1,8 +1,6 @@
 -- Migration: add OpenRouter contenders and sampling parameters
 -- Date: 2025-11-05
 
-BEGIN;
-
 -- Extend provider enum for new OpenRouter upstreams
 ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'moonshotai';
 ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'nousresearch';
@@ -23,5 +21,3 @@ ALTER TABLE apex_audition.conditions
 
 -- Ensure existing rows respect the new visibility constraint
 UPDATE apex_audition.conditions SET is_visible = true WHERE is_visible IS NULL;
-
-COMMIT;
