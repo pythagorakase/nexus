@@ -901,10 +901,25 @@ class AuditionEngine:
         max_tokens = condition.max_output_tokens or 2048
 
         # Map provider names to OpenRouter model prefixes
-        provider_lower = condition.provider.lower()
+        provider_key = condition.provider.lower()
+        normalized_provider = provider_key.replace(" ", "")
+        provider_slug_overrides = {
+            "moonshot": "moonshotai",
+            "moonshotai": "moonshotai",
+            "nousresearch": "nousresearch",
+            "nous": "nousresearch",
+        }
+        provider_slug = provider_slug_overrides.get(normalized_provider, normalized_provider)
 
-        # Determine OpenRouter model name based on provider
-        if provider_lower in ("openai", "anthropic", "google", "deepseek"):
+        model_overrides = {
+            ("moonshotai", "kimi-k2-0905-preview"): "moonshotai/kimi-k2-0905:exacto",
+            ("nousresearch", "hermes-4-405b"): "nousresearch/hermes-4-405b",
+        }
+
+        override_key = (provider_slug, condition.model)
+        if override_key in model_overrides:
+            openrouter_model = model_overrides[override_key]
+        elif provider_slug in ("openai", "anthropic", "google", "deepseek"):
             # For known providers, prepend provider name to model
             # OpenRouter uses dots in version numbers (e.g., "4.5") while database uses dashes ("4-5")
             # Convert version patterns: "claude-sonnet-4-5" -> "claude-sonnet-4.5"
@@ -913,13 +928,13 @@ class AuditionEngine:
             import re
             # Only convert if there's a two-part version number at the end (digit-dash-digit)
             model_name = re.sub(r'(\d+)-(\d+)$', r'\1.\2', model_name)
-            openrouter_model = f"{provider_lower}/{model_name}"
-        elif provider_lower == "openrouter":
+            openrouter_model = f"{provider_slug}/{model_name}"
+        elif provider_slug == "openrouter":
             # Already in OpenRouter format (e.g., "deepseek-v3.2-exp")
             openrouter_model = condition.model
         else:
             # Unknown provider, try using as-is
-            openrouter_model = f"{provider_lower}/{condition.model}"
+            openrouter_model = f"{provider_slug}/{condition.model}"
 
         if OpenRouterProvider is None:
             raise RuntimeError("OpenRouter provider not available. Install dependencies or configure differently.")
@@ -931,6 +946,11 @@ class AuditionEngine:
             system_prompt=condition.system_prompt,
             reasoning_effort=condition.reasoning_effort,
             thinking_budget_tokens=condition.thinking_budget_tokens,
+            top_p=condition.top_p,
+            min_p=condition.min_p,
+            frequency_penalty=condition.frequency_penalty,
+            presence_penalty=condition.presence_penalty,
+            repetition_penalty=condition.repetition_penalty,
         )
         return provider
 

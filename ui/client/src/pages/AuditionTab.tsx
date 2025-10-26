@@ -52,6 +52,19 @@ export default function AuditionTab() {
     queryFn: () => auditionAPI.getConditions(),
   });
 
+  const visibleConditions = useMemo(() => {
+    return (conditions || []).filter(condition => condition.is_visible !== false);
+  }, [conditions]);
+
+  useEffect(() => {
+    if (!conditionIds || conditionIds.length === 0) return;
+    const visibleIds = new Set(visibleConditions.map(condition => condition.id));
+    const filtered = conditionIds.filter(id => visibleIds.has(id));
+    if (filtered.length !== conditionIds.length) {
+      setConditionIds(filtered.length > 0 ? filtered : undefined);
+    }
+  }, [conditionIds, visibleConditions]);
+
   const { data: prompts } = useQuery({
     queryKey: ['prompts'],
     queryFn: () => auditionAPI.getPrompts(),
@@ -121,11 +134,11 @@ export default function AuditionTab() {
 
   // Filter UI handlers
   const conditionFilterItems: FilterItem[] = useMemo(() => {
-    return (conditions || []).map(c => ({
+    return visibleConditions.map(c => ({
       id: c.id,
       label: c.slug,
     }));
-  }, [conditions]);
+  }, [visibleConditions]);
 
   const promptFilterItems: FilterItem[] = useMemo(() => {
     return (prompts || []).map(p => ({
@@ -135,11 +148,11 @@ export default function AuditionTab() {
   }, [prompts]);
 
   const hasConditionFilters = conditionIds && conditionIds.length > 0 &&
-    conditionIds.length !== conditions?.length;
+    conditionIds.length !== visibleConditions.length;
   const hasPassageFilters = passageMode !== 'all';
 
   const handleApplyConditionFilters = (ids: number[]) => {
-    setConditionIds(ids.length === conditions?.length ? undefined : ids);
+    setConditionIds(ids.length === visibleConditions.length ? undefined : ids);
     refetch();
   };
 

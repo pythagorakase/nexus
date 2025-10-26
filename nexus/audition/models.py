@@ -16,6 +16,11 @@ class ConditionSpec:
     provider: str
     model: str
     temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    min_p: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    repetition_penalty: Optional[float] = None
     reasoning_effort: Optional[str] = None
     thinking_enabled: Optional[bool] = None
     max_output_tokens: Optional[int] = None
@@ -24,8 +29,14 @@ class ConditionSpec:
     description: Optional[str] = None
     system_prompt: Optional[str] = None
     is_active: bool = True
+    is_visible: bool = True
     id: Optional[int] = None
     created_at: Optional[datetime] = None
+
+    def __post_init__(self) -> None:
+        # Normalize provider identifiers for storage/lookup consistency
+        self.provider = self.provider.strip().lower().replace(" ", "")
+        self.model = self.model.strip()
 
     def with_id(self, identifier: int, created_at: datetime) -> "ConditionSpec":
         """Return a copy that includes database identifiers."""
@@ -34,6 +45,11 @@ class ConditionSpec:
             provider=self.provider,
             model=self.model,
             temperature=self.temperature,
+            top_p=self.top_p,
+            min_p=self.min_p,
+            frequency_penalty=self.frequency_penalty,
+            presence_penalty=self.presence_penalty,
+            repetition_penalty=self.repetition_penalty,
             reasoning_effort=self.reasoning_effort,
             thinking_enabled=self.thinking_enabled,
             max_output_tokens=self.max_output_tokens,
@@ -42,6 +58,7 @@ class ConditionSpec:
             description=self.description,
             system_prompt=self.system_prompt,
             is_active=self.is_active,
+            is_visible=self.is_visible,
         )
         clone.id = identifier
         clone.created_at = created_at

@@ -66,7 +66,16 @@ class AuditionRepository:
             Column("slug", String(128), nullable=False, unique=True, index=True),
             Column(
                 "provider",
-                Enum("OpenAI", "Anthropic", "DeepSeek", name="provider_enum", schema="apex_audition"),
+                Enum(
+                    "openai",
+                    "anthropic",
+                    "deepseek",
+                    "moonshot",
+                    "nousresearch",
+                    "openrouter",
+                    name="provider_enum",
+                    schema="apex_audition",
+                ),
                 nullable=False,
             ),
             Column(
@@ -75,6 +84,8 @@ class AuditionRepository:
                     "gpt-5", "gpt-4o", "o3",
                     "claude-sonnet-4-5", "claude-opus-4-1",
                     "deepseek-v3.2-exp",
+                    "kimi-k2-0905-preview",
+                    "hermes-4-405b",
                     name="model_name_enum",
                     schema="apex_audition",
                 ),
@@ -83,6 +94,11 @@ class AuditionRepository:
             Column("label", String(128)),
             Column("description", Text),
             Column("temperature", Float),
+            Column("top_p", Float),
+            Column("min_p", Float),
+            Column("frequency_penalty", Float),
+            Column("presence_penalty", Float),
+            Column("repetition_penalty", Float),
             Column(
                 "reasoning_effort",
                 Enum("minimal", "low", "medium", "high", name="reasoning_effort_enum", schema="apex_audition"),
@@ -92,6 +108,7 @@ class AuditionRepository:
             Column("thinking_budget_tokens", Integer),
             Column("system_prompt", Text),
             Column("is_active", Boolean, nullable=False, server_default=text("true")),
+            Column("is_visible", Boolean, nullable=False, server_default=text("true")),
             Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
         )
 
@@ -257,12 +274,18 @@ class AuditionRepository:
                 label=condition.label,
                 description=condition.description,
                 temperature=condition.temperature,
+                top_p=condition.top_p,
+                min_p=condition.min_p,
+                frequency_penalty=condition.frequency_penalty,
+                presence_penalty=condition.presence_penalty,
+                repetition_penalty=condition.repetition_penalty,
                 reasoning_effort=condition.reasoning_effort,
                 thinking_enabled=condition.thinking_enabled,
                 max_output_tokens=condition.max_output_tokens,
                 thinking_budget_tokens=condition.thinking_budget_tokens,
                 system_prompt=condition.system_prompt,
                 is_active=condition.is_active,
+                is_visible=condition.is_visible,
             )
             .on_conflict_do_update(
                 index_elements=[self.conditions.c.slug],
@@ -272,12 +295,18 @@ class AuditionRepository:
                     "label": condition.label,
                     "description": condition.description,
                     "temperature": condition.temperature,
+                    "top_p": condition.top_p,
+                    "min_p": condition.min_p,
+                    "frequency_penalty": condition.frequency_penalty,
+                    "presence_penalty": condition.presence_penalty,
+                    "repetition_penalty": condition.repetition_penalty,
                     "reasoning_effort": condition.reasoning_effort,
                     "thinking_enabled": condition.thinking_enabled,
                     "max_output_tokens": condition.max_output_tokens,
                     "thinking_budget_tokens": condition.thinking_budget_tokens,
                     "system_prompt": condition.system_prompt,
                     "is_active": condition.is_active,
+                    "is_visible": condition.is_visible,
                 },
             )
             .returning(self.conditions.c.id, self.conditions.c.created_at)
@@ -297,6 +326,11 @@ class AuditionRepository:
             provider=row["provider"],
             model=row["model_name"],
             temperature=row["temperature"],
+            top_p=row["top_p"],
+            min_p=row["min_p"],
+            frequency_penalty=row["frequency_penalty"],
+            presence_penalty=row["presence_penalty"],
+            repetition_penalty=row["repetition_penalty"],
             reasoning_effort=row["reasoning_effort"],
             thinking_enabled=row["thinking_enabled"],
             max_output_tokens=row["max_output_tokens"],
@@ -305,6 +339,7 @@ class AuditionRepository:
             description=row["description"],
             system_prompt=row["system_prompt"],
             is_active=row["is_active"],
+            is_visible=row["is_visible"],
         )
         spec.id = row["id"]
         spec.created_at = row["created_at"]
@@ -323,6 +358,11 @@ class AuditionRepository:
                 provider=row["provider"],
                 model=row["model_name"],
                 temperature=row["temperature"],
+                top_p=row["top_p"],
+                min_p=row["min_p"],
+                frequency_penalty=row["frequency_penalty"],
+                presence_penalty=row["presence_penalty"],
+                repetition_penalty=row["repetition_penalty"],
                 reasoning_effort=row["reasoning_effort"],
                 thinking_enabled=row["thinking_enabled"],
                 max_output_tokens=row["max_output_tokens"],
@@ -331,6 +371,7 @@ class AuditionRepository:
                 description=row["description"],
                 system_prompt=row["system_prompt"],
                 is_active=row["is_active"],
+                is_visible=row["is_visible"],
             )
             spec.id = row["id"]
             spec.created_at = row["created_at"]

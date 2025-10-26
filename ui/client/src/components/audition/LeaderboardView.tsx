@@ -74,6 +74,12 @@ export function LeaderboardView() {
     return '-';
   };
 
+  const formatOptionalNumber = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return '-';
+    const fixed = Number.isInteger(value) ? value.toString() : value.toFixed(2);
+    return fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+  };
+
   const formatModelName = (modelName: string) => {
     // Simplify model names for display
     const simplifications: Record<string, string> = {
@@ -82,12 +88,24 @@ export function LeaderboardView() {
       'gpt-4o': '4o',
       'gpt-5': 'GPT-5',
       'o3': 'o3',
+      'kimi-k2-0905-preview': 'Kimi K2 Preview',
+      'hermes-4-405b': 'Hermes 4 405B',
     };
     return simplifications[modelName] || modelName;
   };
 
   const formatProvider = (provider: string) => {
-    return provider;
+    const mapping: Record<string, string> = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      deepseek: 'DeepSeek',
+      moonshot: 'Moonshot',
+      moonshotai: 'Moonshot',
+      nousresearch: 'Nous Research',
+      openrouter: 'OpenRouter',
+    };
+    const normalized = provider.toLowerCase();
+    return mapping[normalized] || provider;
   };
 
   return (
@@ -105,6 +123,11 @@ export function LeaderboardView() {
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead className="text-center">Temperature</TableHead>
+                <TableHead className="text-center">Top&nbsp;P</TableHead>
+                <TableHead className="text-center">Min&nbsp;P</TableHead>
+                <TableHead className="text-center">Freq&nbsp;Penalty</TableHead>
+                <TableHead className="text-center">Presence&nbsp;Penalty</TableHead>
+                <TableHead className="text-center">Repetition</TableHead>
                 <TableHead className="text-center">Reasoning</TableHead>
                 <TableHead className="text-right">Ratings</TableHead>
                 <TableHead className="text-center w-16">Notes</TableHead>
@@ -127,6 +150,21 @@ export function LeaderboardView() {
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatTemperature(entry.condition.temperature)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.top_p)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.min_p)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.frequency_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.presence_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.repetition_penalty)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}

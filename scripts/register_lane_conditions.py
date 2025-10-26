@@ -114,7 +114,7 @@ def main() -> None:
 
     for model_def in models:
         model_id = model_def["id"]
-        provider = model_def["provider"]
+        provider = str(model_def["provider"]).lower()
         model_name = model_def["model_name"]
         lanes = model_def.get("lanes", [])
 
@@ -136,6 +136,11 @@ def main() -> None:
 
             # Extract individual parameters
             temperature = params.get("temperature")
+            top_p = params.get("top_p")
+            min_p = params.get("min_p")
+            frequency_penalty = params.get("frequency_penalty")
+            presence_penalty = params.get("presence_penalty")
+            repetition_penalty = params.get("repetition_penalty")
             max_output_tokens = params.get("max_output_tokens") or params.get("max_tokens")
             reasoning_effort = params.get("reasoning_effort")
 
@@ -153,6 +158,11 @@ def main() -> None:
                 provider=provider,
                 model=model_name,
                 temperature=temperature,
+                top_p=top_p,
+                min_p=min_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                repetition_penalty=repetition_penalty,
                 reasoning_effort=reasoning_effort,
                 thinking_enabled=thinking_enabled,
                 max_output_tokens=max_output_tokens,
