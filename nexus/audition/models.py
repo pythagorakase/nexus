@@ -35,7 +35,19 @@ class ConditionSpec:
 
     def __post_init__(self) -> None:
         # Normalize provider identifiers for storage/lookup consistency
-        self.provider = self.provider.strip().lower().replace(" ", "")
+        normalized_provider = (
+            self.provider.strip().lower().replace(" ", "").replace("-", "")
+        )
+        provider_canonical_map = {
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "deepseek": "DeepSeek",
+            "moonshot": "Moonshot",
+            "moonshotai": "Moonshot",
+            "nousresearch": "NousResearch",
+            "openrouter": "OpenRouter",
+        }
+        self.provider = provider_canonical_map.get(normalized_provider, self.provider.strip())
         self.model = self.model.strip()
 
     def with_id(self, identifier: int, created_at: datetime) -> "ConditionSpec":

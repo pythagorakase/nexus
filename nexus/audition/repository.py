@@ -67,12 +67,12 @@ class AuditionRepository:
             Column(
                 "provider",
                 Enum(
-                    "openai",
-                    "anthropic",
-                    "deepseek",
-                    "moonshot",
-                    "nousresearch",
-                    "openrouter",
+                    "OpenAI",
+                    "Anthropic",
+                    "DeepSeek",
+                    "Moonshot",
+                    "NousResearch",
+                    "OpenRouter",
                     name="provider_enum",
                     schema="apex_audition",
                 ),

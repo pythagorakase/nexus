@@ -5,36 +5,117 @@
 
 BEGIN;
 
--- Ensure provider enum has required values
+-- Normalize casing for existing provider enum values and ensure new entries
 DO $$
 BEGIN
-    IF NOT EXISTS (
+    IF EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'openai'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'OpenAI'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'openai' TO 'OpenAI';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'anthropic'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'Anthropic'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'anthropic' TO 'Anthropic';
+    END IF;
+    IF EXISTS (
         SELECT 1 FROM pg_enum
         WHERE enumtypid = 'apex_audition.provider_enum'::regtype
           AND enumlabel = 'deepseek'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'DeepSeek'
     ) THEN
-        ALTER TYPE apex_audition.provider_enum ADD VALUE 'deepseek';
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'deepseek' TO 'DeepSeek';
     END IF;
-    IF NOT EXISTS (
+    IF EXISTS (
         SELECT 1 FROM pg_enum
         WHERE enumtypid = 'apex_audition.provider_enum'::regtype
           AND enumlabel = 'moonshot'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'Moonshot'
     ) THEN
-        ALTER TYPE apex_audition.provider_enum ADD VALUE 'moonshot';
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'moonshot' TO 'Moonshot';
     END IF;
-    IF NOT EXISTS (
+    IF EXISTS (
         SELECT 1 FROM pg_enum
         WHERE enumtypid = 'apex_audition.provider_enum'::regtype
           AND enumlabel = 'nousresearch'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'NousResearch'
     ) THEN
-        ALTER TYPE apex_audition.provider_enum ADD VALUE 'nousresearch';
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'nousresearch' TO 'NousResearch';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'openrouter'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'OpenRouter'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum RENAME VALUE 'openrouter' TO 'OpenRouter';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'OpenAI'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'OpenAI';
     END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_enum
         WHERE enumtypid = 'apex_audition.provider_enum'::regtype
-          AND enumlabel = 'openrouter'
+          AND enumlabel = 'Anthropic'
     ) THEN
-        ALTER TYPE apex_audition.provider_enum ADD VALUE 'openrouter';
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'Anthropic';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'DeepSeek'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'DeepSeek';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'Moonshot'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'Moonshot';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'NousResearch'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'NousResearch';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_enum
+        WHERE enumtypid = 'apex_audition.provider_enum'::regtype
+          AND enumlabel = 'OpenRouter'
+    ) THEN
+        ALTER TYPE apex_audition.provider_enum ADD VALUE 'OpenRouter';
     END IF;
 END$$;
 

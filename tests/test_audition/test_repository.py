@@ -32,6 +32,7 @@ def test_upsert_condition_round_trip(audition_repo):
         max_output_tokens=512,
         description="pytest condition",
     )
+    assert spec.provider == "OpenAI"
     stored = audition_repo.upsert_condition(spec)
     assert stored.id is not None
 
@@ -54,6 +55,7 @@ def test_ingest_and_dry_run_batch(tmp_path: Path, audition_repo):
         temperature=0.2,
         max_output_tokens=300,
     )
+    assert condition.provider == "Anthropic"
     engine.register_conditions([condition])
 
     # Create sample context package
