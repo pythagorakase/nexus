@@ -3,8 +3,6 @@
 -- Description: Add new parameter columns (top_p, min_p, frequency_penalty, presence_penalty, repetition_penalty),
 --              add is_visible flag, and add new model types for Kimi K2 and Hermes 4
 
-BEGIN;
-
 -- ============================================================================
 -- Step 1: Add new parameter columns to conditions table
 -- ============================================================================
@@ -33,4 +31,8 @@ ALTER TYPE apex_audition.model_name_enum ADD VALUE IF NOT EXISTS 'kimi-k2-0905-p
 -- Add Hermes 4 model
 ALTER TYPE apex_audition.model_name_enum ADD VALUE IF NOT EXISTS 'Hermes-4-405B';
 
-COMMIT;
+-- ============================================================================
+-- Step 4: Add new provider value to provider_enum
+-- ============================================================================
+
+ALTER TYPE apex_audition.provider_enum ADD VALUE IF NOT EXISTS 'openrouter';
