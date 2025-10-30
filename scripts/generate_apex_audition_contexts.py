@@ -1187,16 +1187,30 @@ class ContextSeedBuilder:
 
         # Trim warm slice by dropping oldest chunks if we exceed max
         if warm_tokens > warm_max and warm_max > 0:
+            original_count = len(warm_chunks)
+            original_tokens = warm_tokens
             # Sort oldest first
             warm_chunks.sort(key=lambda chunk: chunk.get("chunk_id", 0))
             while warm_chunks and warm_tokens > warm_max:
                 removed = warm_chunks.pop(0)
                 warm_tokens -= max(0, removed.get("token_count") or 0)
+
+            trimmed_count = original_count - len(warm_chunks)
+            trimmed_tokens = original_tokens - warm_tokens
+            LOGGER.info(
+                "Trimmed warm slice: removed %d chunks (%d tokens) to stay within budget "
+                "(was %d tokens, now %d tokens, max %d tokens)",
+                trimmed_count, trimmed_tokens, original_tokens, warm_tokens, warm_max
+            )
+
             assembled_context["warm_slice"]["chunks"] = warm_chunks
             assembled_context["warm_slice"]["token_count"] = warm_tokens
 
         # Trim structured passages while protecting season/episode summaries
         if structured_tokens > structured_max and structured_max > 0:
+            original_count = len(structured_info)
+            original_tokens = structured_tokens
+
             def priority(item: Dict[str, Any]) -> int:
                 table = item.get("structured_table")
                 if table in {"seasons", "episodes"}:
@@ -1207,6 +1221,15 @@ class ContextSeedBuilder:
             while structured_info and structured_tokens > structured_max:
                 entry, tokens = structured_info.pop()
                 structured_tokens -= tokens
+
+            trimmed_count = original_count - len(structured_info)
+            trimmed_tokens = original_tokens - structured_tokens
+            LOGGER.info(
+                "Trimmed structured data: removed %d entries (%d tokens) to stay within budget "
+                "(was %d tokens, now %d tokens, max %d tokens)",
+                trimmed_count, trimmed_tokens, original_tokens, structured_tokens, structured_max
+            )
+
             structured_entries = [entry for entry, _ in structured_info]
 
             # Redistribute trimmed entries back into categories
@@ -1253,14 +1276,44 @@ class ContextSeedBuilder:
 
         # Trim retrieved passages according to score/ token size
         if retrieved_tokens > augmentation_max and augmentation_max > 0:
+            original_count = len(retrieved_info)
+            original_tokens = retrieved_tokens
+
             retrieved_info.sort(key=lambda pair: pair[0].get("score", 0.0))
             while retrieved_info and retrieved_tokens > augmentation_max:
                 entry, tokens = retrieved_info.pop(0)
                 retrieved_tokens -= tokens
 
+            trimmed_count = original_count - len(retrieved_info)
+            trimmed_tokens = original_tokens - retrieved_tokens
+            LOGGER.info(
+                "Trimmed retrieved passages: removed %d entries (%d tokens) to stay within budget "
+                "(was %d tokens, now %d tokens, max %d tokens)",
+                trimmed_count, trimmed_tokens, original_tokens, retrieved_tokens, augmentation_max
+            )
+
         # Always update retrieved_entries regardless of budget
         retrieved_entries = [entry for entry, _ in retrieved_info]
         assembled_context["retrieved_passages"]["results"] = retrieved_entries
+
+        # Final check: ensure total doesn't exceed apex_context_window
+        total_context_tokens = warm_tokens + structured_tokens + retrieved_tokens
+        apex_window = token_counts.get("apex_window", 100000)
+
+        if total_context_tokens > total_available:
+            LOGGER.warning(
+                "Context package exceeds total_available budget: %d tokens (warm: %d, structured: %d, retrieved: %d) "
+                "vs total_available: %d tokens. This should not happen after trimming.",
+                total_context_tokens, warm_tokens, structured_tokens, retrieved_tokens, total_available
+            )
+
+        utilization_pct = (total_context_tokens / total_available * 100) if total_available > 0 else 0
+        LOGGER.info(
+            "Final context budget - Total: %d/%d tokens (%.1f%% utilization) | "
+            "Warm: %d | Structured: %d | Retrieved: %d",
+            total_context_tokens, total_available, utilization_pct,
+            warm_tokens, structured_tokens, retrieved_tokens
+        )
 
         # Note: Token counts are now managed separately in metadata.token_budget
         # No need to store them in assembled_context
@@ -1315,34 +1368,43 @@ class ContextSeedBuilder:
         structured_tokens: int,
         retrieved_tokens: int,
     ) -> Dict[str, Any]:
-        """Build hierarchical token budget structure for metadata."""
+        """Build hierarchical token budget structure for metadata with utilization metrics."""
         total_available = token_counts.get("total_available", 0)
+        total_allocated = warm_tokens + structured_tokens + retrieved_tokens
 
         # Calculate maximums from payload budget percentages
         warm_max = int(total_available * self.payload_budget["warm_slice"]["max"] / 100.0)
         structured_max = int(total_available * self.payload_budget["structured_summaries"]["max"] / 100.0)
         retrieved_max = int(total_available * self.payload_budget["contextual_augmentation"]["max"] / 100.0)
 
+        # Helper to calculate utilization percentage
+        def utilization_pct(allocated: int, maximum: int) -> float:
+            return round((allocated / maximum * 100), 1) if maximum > 0 else 0.0
+
         return {
             "total": {
                 "maximum": total_available,
-                "allocated": warm_tokens + structured_tokens + retrieved_tokens,
+                "allocated": total_allocated,
+                "utilization_pct": utilization_pct(total_allocated, total_available),
             },
             "structured": {
                 "maximum": structured_max,
                 "allocated": structured_tokens,
+                "utilization_pct": utilization_pct(structured_tokens, structured_max),
             },
             "retrieved_passages": {
                 "maximum": retrieved_max,
                 "allocated": retrieved_tokens,
+                "utilization_pct": utilization_pct(retrieved_tokens, retrieved_max),
             },
             "warm_slice": {
                 "maximum": warm_max,
                 "allocated": warm_tokens,
+                "utilization_pct": utilization_pct(warm_tokens, warm_max),
             },
             "user_input": token_counts.get("user_input", 0),
             "endpoint": {
-                "apex_window": token_counts.get("apex_window", 200000),
+                "apex_window": token_counts.get("apex_window", 100000),
                 "system_prompt": token_counts.get("system_prompt", 5000),
                 "reasoning_reserve": token_counts.get("reasoning_reserve", 0),
                 "response_reserve": token_counts.get("response_reserve", 4000),

@@ -35,8 +35,15 @@ class TokenBudgetManager:
         Returns:
             Dictionary with token allocations
         """
-        # Get base values
-        apex_window = self.token_budget_config.get("apex_context_window", 200000)
+        # Get base values - apex_context_window is required
+        if "apex_context_window" not in self.token_budget_config:
+            raise ValueError(
+                "apex_context_window must be configured in settings.json under "
+                "Agent Settings > LORE > token_budget > apex_context_window"
+            )
+        apex_window = self.token_budget_config["apex_context_window"]
+        logger.debug(f"Using apex_context_window: {apex_window} tokens")
+
         system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
         
         # Calculate user input tokens using tiktoken
