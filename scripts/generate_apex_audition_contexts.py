@@ -10,12 +10,13 @@ import logging
 import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime, date, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 
 class DateTimeEncoder(json.JSONEncoder):
-    """Custom JSON encoder that handles datetime, date, and timedelta objects."""
+    """Custom JSON encoder that handles datetime, date, timedelta, and Decimal objects."""
 
     def default(self, obj):
         if isinstance(obj, (datetime, date)):
@@ -26,6 +27,8 @@ class DateTimeEncoder(json.JSONEncoder):
             minutes = (total_seconds % 3600) // 60
             seconds = total_seconds % 60
             return {"hours": hours, "minutes": minutes, "seconds": seconds}
+        if isinstance(obj, Decimal):
+            return float(obj)
         return super().default(obj)
 
 from sqlalchemy import bindparam, create_engine, text as sql_text
@@ -522,6 +525,14 @@ class ContextSeedBuilder:
     # Structured entity enrichment
     # ------------------------------------------------------------------
     def _gather_entity_data(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        DEPRECATED: This method uses heuristic name-based entity detection.
+
+        Use _fetch_all_characters_with_references(), _fetch_all_places_with_references(),
+        and _fetch_all_factions_with_references() instead, which query authoritative
+        reference tables (chunk_character_references, place_chunk_references,
+        chunk_faction_references) for accurate entity associations.
+        """
         characters: List[Dict[str, Any]] = []
         locations: List[Dict[str, Any]] = []
 
@@ -702,6 +713,12 @@ class ContextSeedBuilder:
         return entries
 
     def _collect_character_profiles(self, resolved: Dict[int, Dict[str, str]]) -> List[Dict[str, Any]]:
+        """
+        DEPRECATED: This method is part of the old heuristic-based entity collection pipeline.
+
+        Use _fetch_all_characters_with_references() instead, which implements the universal
+        baseline + featured entities approach with reference table queries.
+        """
         if not resolved:
             return []
 
@@ -793,6 +810,12 @@ class ContextSeedBuilder:
         return resolved
 
     def _collect_place_details(self, resolved: Dict[int, Dict[str, str]]) -> List[Dict[str, Any]]:
+        """
+        DEPRECATED: This method is part of the old heuristic-based entity collection pipeline.
+
+        Use _fetch_all_places_with_references() instead, which implements the universal
+        baseline + featured entities approach with reference table queries.
+        """
         if not resolved:
             return []
 
@@ -850,6 +873,181 @@ class ContextSeedBuilder:
             )
 
         return entries
+
+    def _fetch_all_characters_with_references(
+        self,
+        featured_chunk_ids: List[int],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch ALL characters with baseline tracking fields, plus full details for referenced characters.
+
+        Returns dict with:
+        - baseline: All characters (id, name, summary, current_activity, current_location)
+        - featured: Referenced characters with full details
+        """
+        with self.engine.connect() as conn:
+            # Get ALL characters with baseline fields
+            baseline_query = sql_text("""
+                SELECT
+                    id, name, summary,
+                    current_activity, current_location
+                FROM characters
+                ORDER BY name
+            """)
+            baseline_rows = conn.execute(baseline_query).fetchall()
+
+            # Get character IDs referenced in chunks
+            if featured_chunk_ids:
+                ref_query = sql_text("""
+                    SELECT DISTINCT character_id, reference
+                    FROM chunk_character_references
+                    WHERE chunk_id = ANY(:chunk_ids)
+                """)
+                ref_rows = conn.execute(ref_query, {"chunk_ids": featured_chunk_ids}).fetchall()
+                featured_ids = {row.character_id: row.reference for row in ref_rows}
+            else:
+                featured_ids = {}
+
+            # Get full details for featured characters
+            if featured_ids:
+                featured_query = sql_text("""
+                    SELECT
+                        id, name, summary, appearance, background,
+                        personality, emotional_state, current_activity,
+                        current_location, extra_data
+                    FROM characters
+                    WHERE id = ANY(:ids)
+                """)
+                featured_rows = conn.execute(featured_query, {"ids": list(featured_ids.keys())}).fetchall()
+            else:
+                featured_rows = []
+
+        return {
+            "baseline": [dict(row._mapping) for row in baseline_rows],
+            "featured": [
+                {**dict(row._mapping), "reference_type": str(featured_ids.get(row.id))}
+                for row in featured_rows
+            ]
+        }
+
+    def _fetch_all_places_with_references(
+        self,
+        featured_chunk_ids: List[int],
+        featured_place_ids: Optional[Set[int]] = None,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch ALL places with baseline tracking fields, plus full details for referenced places.
+
+        Args:
+            featured_chunk_ids: Chunks to check for place references
+            featured_place_ids: Additional place IDs to include (e.g., from structured_targets)
+
+        Returns dict with:
+        - baseline: All places (id, name, type, summary, current_status, coordinates)
+        - featured: Referenced places with full details
+        """
+        with self.engine.connect() as conn:
+            # Get ALL places with baseline fields
+            baseline_query = sql_text("""
+                SELECT
+                    id, name, type, summary, current_status,
+                    ST_X(coordinates::geometry) as longitude,
+                    ST_Y(coordinates::geometry) as latitude
+                FROM places
+                ORDER BY name
+            """)
+            baseline_rows = conn.execute(baseline_query).fetchall()
+
+            # Get place IDs referenced in chunks
+            featured_ids = {}
+            if featured_chunk_ids:
+                ref_query = sql_text("""
+                    SELECT DISTINCT place_id, reference_type
+                    FROM place_chunk_references
+                    WHERE chunk_id = ANY(:chunk_ids)
+                """)
+                ref_rows = conn.execute(ref_query, {"chunk_ids": featured_chunk_ids}).fetchall()
+                featured_ids = {row.place_id: str(row.reference_type) for row in ref_rows}
+
+            # Add structured_targets places
+            if featured_place_ids:
+                for pid in featured_place_ids:
+                    featured_ids.setdefault(pid, "manual_target")
+
+            # Get full details for featured places
+            if featured_ids:
+                featured_query = sql_text("""
+                    SELECT
+                        id, name, type, zone, summary, inhabitants,
+                        history, current_status, secrets, extra_data,
+                        ST_X(coordinates::geometry) as longitude,
+                        ST_Y(coordinates::geometry) as latitude
+                    FROM places
+                    WHERE id = ANY(:ids)
+                """)
+                featured_rows = conn.execute(featured_query, {"ids": list(featured_ids.keys())}).fetchall()
+            else:
+                featured_rows = []
+
+        return {
+            "baseline": [dict(row._mapping) for row in baseline_rows],
+            "featured": [
+                {**dict(row._mapping), "reference_type": featured_ids.get(row.id)}
+                for row in featured_rows
+            ]
+        }
+
+    def _fetch_all_factions_with_references(
+        self,
+        featured_chunk_ids: List[int],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Fetch ALL factions with baseline tracking fields, plus full details for referenced factions.
+
+        Returns dict with:
+        - baseline: All factions (id, name, summary, current_activity)
+        - featured: Referenced factions with full details
+        """
+        with self.engine.connect() as conn:
+            # Get ALL factions with baseline fields
+            baseline_query = sql_text("""
+                SELECT
+                    id, name, summary, current_activity
+                FROM factions
+                ORDER BY name
+            """)
+            baseline_rows = conn.execute(baseline_query).fetchall()
+
+            # Get faction IDs referenced in chunks
+            if featured_chunk_ids:
+                ref_query = sql_text("""
+                    SELECT DISTINCT faction_id
+                    FROM chunk_faction_references
+                    WHERE chunk_id = ANY(:chunk_ids)
+                """)
+                ref_rows = conn.execute(ref_query, {"chunk_ids": featured_chunk_ids}).fetchall()
+                featured_ids = {row.faction_id for row in ref_rows}
+            else:
+                featured_ids = set()
+
+            # Get full details for featured factions
+            if featured_ids:
+                featured_query = sql_text("""
+                    SELECT
+                        id, name, summary, ideology, history,
+                        current_activity, hidden_agenda, territory,
+                        primary_location, power_level, resources, extra_data
+                    FROM factions
+                    WHERE id = ANY(:ids)
+                """)
+                featured_rows = conn.execute(featured_query, {"ids": list(featured_ids)}).fetchall()
+            else:
+                featured_rows = []
+
+        return {
+            "baseline": [dict(row._mapping) for row in baseline_rows],
+            "featured": [dict(row._mapping) for row in featured_rows]
+        }
 
     def _build_psychology_directive(
         self,
@@ -1154,26 +1352,42 @@ class ContextSeedBuilder:
             return
 
         warm_chunks = assembled_context.get("warm_slice", {}).get("chunks", [])
-        # Extract all structured entries from the new structure
         structured_obj = assembled_context.get("structured", {})
-        structured_entries = (
-            structured_obj.get("characters", []) +
-            structured_obj.get("places", []) +
-            structured_obj.get("narrative_summaries", [])
-        )
         retrieved_entries = assembled_context.get("retrieved_passages", {}).get("results", []) or []
 
         warm_tokens = sum(max(0, chunk.get("token_count") or 0) for chunk in warm_chunks)
-        structured_info = [
-            (entry, self._estimate_structured_tokens(entry)) for entry in structured_entries
-        ]
-        structured_entries = [entry for entry, _ in structured_info]
-        structured_tokens = sum(tokens for _, tokens in structured_info)
         retrieved_info = [
             (entry, self._estimate_retrieval_tokens(entry)) for entry in retrieved_entries
         ]
-        retrieved_entries = [entry for entry, _ in retrieved_info]
         retrieved_tokens = sum(tokens for _, tokens in retrieved_info)
+
+        # Calculate structured tokens separately for baseline and featured
+        baseline_tokens = 0
+        featured_tokens = 0
+
+        # Count baseline entity tokens (CANNOT be trimmed - protected)
+        for char in structured_obj.get("characters", {}).get("baseline", []):
+            baseline_tokens += self._estimate_structured_tokens(char)
+        for place in structured_obj.get("places", {}).get("baseline", []):
+            baseline_tokens += self._estimate_structured_tokens(place)
+        for faction in structured_obj.get("factions", {}).get("baseline", []):
+            baseline_tokens += self._estimate_structured_tokens(faction)
+
+        # Count featured entity tokens (CAN be trimmed if needed)
+        for char in structured_obj.get("characters", {}).get("featured", []):
+            featured_tokens += self._estimate_structured_tokens(char)
+        for place in structured_obj.get("places", {}).get("featured", []):
+            featured_tokens += self._estimate_structured_tokens(place)
+        for faction in structured_obj.get("factions", {}).get("featured", []):
+            featured_tokens += self._estimate_structured_tokens(faction)
+
+        # Count relationship and narrative summary tokens (CAN be trimmed)
+        for rel in structured_obj.get("characters", {}).get("relationships", []):
+            featured_tokens += self._estimate_structured_tokens(rel)
+        for summary in structured_obj.get("narrative_summaries", []):
+            featured_tokens += self._estimate_structured_tokens(summary)
+
+        structured_tokens = baseline_tokens + featured_tokens
 
         def bounds(category: str) -> tuple[int, int]:
             config = self.payload_budget.get(category, {})
@@ -1206,54 +1420,106 @@ class ContextSeedBuilder:
             assembled_context["warm_slice"]["chunks"] = warm_chunks
             assembled_context["warm_slice"]["token_count"] = warm_tokens
 
-        # Trim structured passages while protecting season/episode summaries
+        # Trim structured data while PROTECTING baseline entities
         if structured_tokens > structured_max and structured_max > 0:
-            original_count = len(structured_info)
-            original_tokens = structured_tokens
-
-            def priority(item: Dict[str, Any]) -> int:
-                table = item.get("structured_table")
-                if table in {"seasons", "episodes"}:
-                    return 0
-                return 1
-
-            structured_info.sort(key=lambda pair: (priority(pair[0]), -pair[1]))
-            while structured_info and structured_tokens > structured_max:
-                entry, tokens = structured_info.pop()
-                structured_tokens -= tokens
-
-            trimmed_count = original_count - len(structured_info)
-            trimmed_tokens = original_tokens - structured_tokens
             LOGGER.info(
-                "Trimmed structured data: removed %d entries (%d tokens) to stay within budget "
-                "(was %d tokens, now %d tokens, max %d tokens)",
-                trimmed_count, trimmed_tokens, original_tokens, structured_tokens, structured_max
+                "Structured data (%d tokens) exceeds budget (%d tokens). "
+                "Baseline: %d tokens (protected), Featured: %d tokens (trimmable)",
+                structured_tokens, structured_max, baseline_tokens, featured_tokens
             )
 
-            structured_entries = [entry for entry, _ in structured_info]
+            # Calculate available budget for featured entities
+            available_for_featured = structured_max - baseline_tokens
 
-            # Redistribute trimmed entries back into categories
-            characters = []
-            places = []
-            narrative_summaries = []
-            for entry in structured_entries:
-                table = entry.get("structured_table")
-                if table in ("seasons", "episodes"):
-                    narrative_summaries.append(entry)
-                elif table in ("characters", "character_relationships"):
-                    characters.append(entry)
-                elif table == "places":
-                    places.append(entry)
-                elif entry.get("content_type") == "character":
-                    characters.append(entry)
-                else:
-                    narrative_summaries.append(entry)
+            if available_for_featured <= 0:
+                LOGGER.warning(
+                    "Baseline entities (%d tokens) exceed structured budget (%d tokens)! "
+                    "Consider increasing apex_context_window or structured_summaries max%%. "
+                    "Removing ALL featured entities to stay within budget.",
+                    baseline_tokens, structured_max
+                )
+                # Keep baseline, remove all featured
+                structured_obj["characters"]["featured"] = []
+                structured_obj["characters"]["relationships"] = []
+                structured_obj["places"]["featured"] = []
+                structured_obj["factions"]["featured"] = []
+                structured_obj["narrative_summaries"] = []
+            else:
+                # Collect all trimmable items with token counts
+                trimmable_items = []
 
-            assembled_context["structured"] = {
-                "characters": characters,
-                "places": places,
-                "narrative_summaries": narrative_summaries,
-            }
+                # Priority tiers: (0=highest priority, keep first)
+                # 0: Season/episode summaries (narrative context)
+                # 1: Characters with "present" reference
+                # 2: Places with "setting" reference
+                # 3: Characters with other references
+                # 4: Other places
+                # 5: Factions
+                # 6: Relationships
+
+                for summary in structured_obj.get("narrative_summaries", []):
+                    tokens = self._estimate_structured_tokens(summary)
+                    table = summary.get("structured_table")
+                    priority = 0 if table in ("seasons", "episodes") else 3
+                    trimmable_items.append(("narrative_summary", summary, tokens, priority))
+
+                for char in structured_obj.get("characters", {}).get("featured", []):
+                    tokens = self._estimate_structured_tokens(char)
+                    ref_type = char.get("reference_type", "unknown")
+                    priority = 1 if ref_type == "present" else 3
+                    trimmable_items.append(("character", char, tokens, priority))
+
+                for place in structured_obj.get("places", {}).get("featured", []):
+                    tokens = self._estimate_structured_tokens(place)
+                    ref_type = place.get("reference_type", "unknown")
+                    priority = 2 if ref_type == "setting" else 4
+                    trimmable_items.append(("place", place, tokens, priority))
+
+                for faction in structured_obj.get("factions", {}).get("featured", []):
+                    tokens = self._estimate_structured_tokens(faction)
+                    trimmable_items.append(("faction", faction, tokens, 5))
+
+                for rel in structured_obj.get("characters", {}).get("relationships", []):
+                    tokens = self._estimate_structured_tokens(rel)
+                    trimmable_items.append(("relationship", rel, tokens, 6))
+
+                # Sort by priority (lower is better), then by token count (larger first to maximize utilization)
+                trimmable_items.sort(key=lambda x: (x[3], -x[2]))
+
+                # Keep items until budget exhausted
+                current_tokens = 0
+                kept_chars, kept_places, kept_factions, kept_rels, kept_summaries = [], [], [], [], []
+                original_featured = featured_tokens
+
+                for item_type, entity, tokens, _ in trimmable_items:
+                    if current_tokens + tokens <= available_for_featured:
+                        current_tokens += tokens
+                        if item_type == "character":
+                            kept_chars.append(entity)
+                        elif item_type == "place":
+                            kept_places.append(entity)
+                        elif item_type == "faction":
+                            kept_factions.append(entity)
+                        elif item_type == "relationship":
+                            kept_rels.append(entity)
+                        elif item_type == "narrative_summary":
+                            kept_summaries.append(entity)
+
+                # Update structured object with trimmed entities
+                structured_obj["characters"]["featured"] = kept_chars
+                structured_obj["characters"]["relationships"] = kept_rels
+                structured_obj["places"]["featured"] = kept_places
+                structured_obj["factions"]["featured"] = kept_factions
+                structured_obj["narrative_summaries"] = kept_summaries
+
+                trimmed_tokens = original_featured - current_tokens
+                LOGGER.info(
+                    "Trimmed featured entities: kept %d/%d items (%d tokens), removed %d tokens",
+                    len(kept_chars) + len(kept_places) + len(kept_factions) + len(kept_rels) + len(kept_summaries),
+                    len(trimmable_items),
+                    current_tokens,
+                    trimmed_tokens
+                )
 
         # Filter out contaminated future chunks from retrieved passages
         if target_chunk_id:
@@ -1322,42 +1588,66 @@ class ContextSeedBuilder:
 
     def _build_structured_object(
         self,
-        entity_data: Dict[str, Any],
+        characters_data: Dict[str, List[Dict[str, Any]]],
+        places_data: Dict[str, List[Dict[str, Any]]],
+        factions_data: Dict[str, List[Dict[str, Any]]],
         structured_seed: List[Dict[str, Any]],
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """Consolidate entity data and structured passages into organized categories."""
-        characters: List[Dict[str, Any]] = []
-        places: List[Dict[str, Any]] = []
-        narrative_summaries: List[Dict[str, Any]] = []
+    ) -> Dict[str, Any]:
+        """
+        Build hierarchical structured object with baseline + featured entities.
 
-        # Add character data from entity_data
-        for char in entity_data.get("characters", []):
-            characters.append(char)
+        Returns nested structure:
+        {
+            "characters": {"baseline": [...], "featured": [...], "relationships": [...]},
+            "places": {"baseline": [...], "featured": [...]},
+            "factions": {"baseline": [...], "featured": [...]},
+            "narrative_summaries": [...]
+        }
+        """
+        # Extract relationship entries from structured_seed
+        relationships = []
+        for entry in structured_seed:
+            if entry.get("structured_table") == "character_relationships":
+                relationships.append(entry)
 
-        # Add location data from entity_data (rename to places)
-        for loc in entity_data.get("locations", []):
-            places.append(loc)
+        # Build characters section
+        characters = {
+            "baseline": characters_data["baseline"],
+            "featured": characters_data["featured"],
+            "relationships": relationships,
+        }
 
-        # Process structured_seed entries
+        # Build places section
+        places = {
+            "baseline": places_data["baseline"],
+            "featured": places_data["featured"],
+        }
+
+        # Build factions section
+        factions = {
+            "baseline": factions_data["baseline"],
+            "featured": factions_data["featured"],
+        }
+
+        # Extract narrative summaries from structured_seed
+        narrative_summaries = []
         for entry in structured_seed:
             table = entry.get("structured_table")
-            if table == "characters":
-                characters.append(entry)
-            elif table == "places":
-                places.append(entry)
-            elif table in ("seasons", "episodes"):
+            if table in ("seasons", "episodes", "lore_inference"):
                 narrative_summaries.append(entry)
-            elif table == "character_relationships":
-                # Keep relationships with characters
-                characters.append(entry)
-            elif table == "lore_inference":
-                # LORE inference entries could go in various places based on content
-                # For now, keep them in narrative_summaries
-                narrative_summaries.append(entry)
+
+        # Include any manually targeted character entries from structured_seed
+        for entry in structured_seed:
+            if entry.get("structured_table") == "characters":
+                # Check if not already in featured (avoid duplicates)
+                entry_id = entry.get("structured_id")
+                if entry_id and not any(c["id"] == entry_id for c in characters["featured"]):
+                    characters["featured"].append(entry)
 
         return {
             "characters": characters,
             "places": places,
+            "factions": factions,
             "narrative_summaries": narrative_summaries,
         }
 
@@ -1439,38 +1729,41 @@ class ContextSeedBuilder:
             limit_per_directive=10,
         )
 
-        analysis = self.memory_manager._analyze_storyteller_output(storyteller_text)
-        entity_data = self._gather_entity_data(analysis)
+        # Query chunk IDs for entity references (target + warm slice)
+        featured_chunk_ids = [config.chunk_id] + list(warm_chunk_ids)
 
-        present_characters: Set[str] = set()
-        for key in ("characters", "expected"):
-            for name in analysis.get(key) or []:
-                if isinstance(name, str) and name.strip():
-                    present_characters.add(name.strip())
-        for name in config.structured_targets.get("characters", []):
-            if name:
-                present_characters.add(name.strip())
-        for entry in entity_data.get("characters", []):
-            if isinstance(entry, dict):
-                label = entry.get("name") or entry.get("display_name")
-                if isinstance(label, str) and label.strip():
-                    present_characters.add(label.strip())
+        # Resolve structured_targets place names to IDs for supplementation
+        featured_place_ids = set()
+        if config.structured_targets.get("places"):
+            for place_name in config.structured_targets["places"]:
+                resolved = self._resolve_place_ids([place_name])
+                featured_place_ids.update(resolved.keys())
 
-        present_places: Set[str] = set()
-        for name in analysis.get("locations") or []:
-            if isinstance(name, str) and name.strip():
-                present_places.add(name.strip())
-        for name in config.structured_targets.get("places", []):
-            if name:
-                present_places.add(name.strip())
-        for entry in entity_data.get("locations", []):
-            if isinstance(entry, dict):
-                label = entry.get("name") or entry.get("display_name")
-                if isinstance(label, str) and label.strip():
-                    present_places.add(label.strip())
+        # NEW: Universal baseline + featured entity queries (replaces heuristic detection)
+        characters_data = self._fetch_all_characters_with_references(featured_chunk_ids)
+        places_data = self._fetch_all_places_with_references(featured_chunk_ids, featured_place_ids)
+        factions_data = self._fetch_all_factions_with_references(featured_chunk_ids)
 
-        resolved_characters = self._resolve_character_ids(present_characters)
-        resolved_places = self._resolve_place_ids(present_places)
+        LOGGER.info(
+            "Entity tracking - Baseline: %d characters, %d places, %d factions | "
+            "Featured: %d characters, %d places, %d factions",
+            len(characters_data["baseline"]),
+            len(places_data["baseline"]),
+            len(factions_data["baseline"]),
+            len(characters_data["featured"]),
+            len(places_data["featured"]),
+            len(factions_data["featured"]),
+        )
+
+        # Build compatibility dictionaries for downstream methods
+        resolved_characters = {
+            char["id"]: {"name": char["name"]}
+            for char in characters_data["featured"]
+        }
+        resolved_places = {
+            place["id"]: {"name": place["name"]}
+            for place in places_data["featured"]
+        }
 
         structured_seed: List[Dict[str, Any]] = []
         summary_entries = self._fetch_structured_summaries(
@@ -1481,9 +1774,14 @@ class ContextSeedBuilder:
         if summary_entries:
             structured_seed.extend(summary_entries)
 
-        structured_seed.extend(self._collect_structured_targets(config.structured_targets))
-        structured_seed.extend(self._collect_character_profiles(resolved_characters))
-        structured_seed.extend(self._collect_place_details(resolved_places))
+        # Still collect structured_targets for characters (as supplement/override)
+        # Note: places already handled via featured_place_ids above
+        if config.structured_targets.get("characters"):
+            structured_seed.extend(self._collect_structured_targets({
+                "characters": config.structured_targets["characters"]
+            }))
+
+        # Collect character relationships (still using existing method)
         structured_seed.extend(self._collect_character_relationships(resolved_characters))
 
         inference_directives = list(config.inference_directives)
@@ -1501,8 +1799,10 @@ class ContextSeedBuilder:
             self._estimate_retrieval_tokens(passage) for passage in authorial_passages
         )
 
-        # Build consolidated structured object
-        structured_object = self._build_structured_object(entity_data, structured_seed)
+        # Build consolidated structured object (NEW: pass full data structures)
+        structured_object = self._build_structured_object(
+            characters_data, places_data, factions_data, structured_seed
+        )
 
         # Build warm_slice with warm_span object
         warm_first = warm_slice[0].chunk_id if warm_slice else config.chunk_id
@@ -1520,10 +1820,8 @@ class ContextSeedBuilder:
             "retrieved_passages": {
                 "results": authorial_passages,
             },
-            "entity_data": entity_data,
             "structured_passages": structured_passages,
             "structured": structured_object,
-            "analysis": analysis,
         }
 
         baseline = self.memory_manager.handle_storyteller_response(
