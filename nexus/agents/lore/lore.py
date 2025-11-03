@@ -131,29 +131,9 @@ class LORE:
                 return settings
         except Exception as e:
             logger.error(f"Failed to load settings: {e}")
-            # Return minimal default settings
-            return {
-                "Agent Settings": {
-                    "LORE": {
-                        "debug": True,
-                        "llm": {
-                            "lmstudio_url": "http://localhost:1234/v1",
-                            "model_name": "local-model"
-                        },
-                        "token_budget": {
-                            "apex_context_window": 200000,
-                            "system_prompt_tokens": 5000,
-                            "reserved_response_tokens": 4000
-                        }
-                    }
-                },
-                "API Settings": {
-                    "apex": {
-                        "provider": "openai",
-                        "model": "gpt-4o"
-                    }
-                }
-            }
+            raise RuntimeError(
+                f"Cannot initialize LORE without valid settings.json: {e}"
+            ) from e
     
     def _initialize_components(self):
         """Initialize all components and utilities - FAILS HARD if any component unavailable"""

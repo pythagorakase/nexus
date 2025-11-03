@@ -191,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Settings route
+  // Settings routes
   app.get("/api/settings", async (req, res) => {
     try {
       const fs = await import("fs/promises");
@@ -203,6 +203,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.patch("/api/settings", async (req, res) => {
+    try {
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const settingsPath = path.join(process.cwd(), "..", "settings.json");
+
+      // Read current settings
+      const settingsData = await fs.readFile(settingsPath, "utf-8");
+      const settings = JSON.parse(settingsData);
+
+      // Deep merge the updates
+      const updates = req.body;
+
+      // Helper function to deep merge objects
+      function deepMerge(target: any, source: any): any {
+        for (const key in source) {
+          if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            target[key] = target[key] || {};
+            deepMerge(target[key], source[key]);
+          } else {
+            target[key] = source[key];
+          }
+        }
+        return target;
+      }
+
+      deepMerge(settings, updates);
+
+      // Write back to file with proper formatting
+      await fs.writeFile(settingsPath, JSON.stringify(settings, null, 4), "utf-8");
+
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Error updating settings:", error);
+      res.status(500).json({ error: "Failed to update settings" });
     }
   });
 

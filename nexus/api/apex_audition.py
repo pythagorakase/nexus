@@ -286,6 +286,13 @@ def get_next_comparison(
     """
     Get the next pending comparison.
 
+    Uses a two-step selection process to balance exposure:
+    1. Select one condition with bias towards low exposure (games_played)
+    2. Select a random pairing condition from valid candidates
+
+    This ensures under-exposed lanes compete against a random mix of lanes
+    rather than primarily against other under-exposed lanes.
+
     If run_id is specified, only return comparisons from that run.
     If condition IDs are specified, only return comparisons between those conditions.
     If condition_ids is specified (comma-separated), filter to comparisons within that pool.
@@ -293,54 +300,91 @@ def get_next_comparison(
     """
     with get_db() as conn:
         with conn.cursor() as cur:
-            # Build query conditions
-            where_clauses = [
-                "c.id IS NULL",
-                "ga.id < gb.id",  # Avoid duplicate pairs in opposite order
-            ]
+            # Build base filter conditions for both queries
+            base_conditions = []
             params = []
 
             if run_id:
-                where_clauses.append("ga.run_id = %s AND gb.run_id = %s")
-                params.extend([run_id, run_id])
+                base_conditions.append("g.run_id = %s")
+                params.append(run_id)
 
             if condition_a_id and condition_b_id:
-                where_clauses.append("""
-                    ((ga.condition_id = %s AND gb.condition_id = %s) OR
-                     (ga.condition_id = %s AND gb.condition_id = %s))
-                """)
-                params.extend([condition_a_id, condition_b_id, condition_b_id, condition_a_id])
+                # Special case: specific pair requested
+                base_conditions.append("g.condition_id IN (%s, %s)")
+                params.extend([condition_a_id, condition_b_id])
             elif condition_ids:
                 # Parse comma-separated condition IDs
                 cond_id_list = [int(cid.strip()) for cid in condition_ids.split(',') if cid.strip()]
                 if cond_id_list:
                     placeholders = ','.join(['%s'] * len(cond_id_list))
-                    where_clauses.append(f"ga.condition_id IN ({placeholders})")
-                    where_clauses.append(f"gb.condition_id IN ({placeholders})")
-                    params.extend(cond_id_list * 2)
+                    base_conditions.append(f"g.condition_id IN ({placeholders})")
+                    params.extend(cond_id_list)
 
+            prompt_filter = ""
+            prompt_params = []
             if prompt_id:
-                where_clauses.append("p.id = %s")
-                params.append(prompt_id)
+                prompt_filter = "AND g.prompt_id = %s"
+                prompt_params.append(prompt_id)
             elif prompt_ids:
                 # Parse comma-separated prompt IDs
                 prompt_id_list = [int(pid.strip()) for pid in prompt_ids.split(',') if pid.strip()]
                 if prompt_id_list:
                     placeholders = ','.join(['%s'] * len(prompt_id_list))
-                    where_clauses.append(f"p.id IN ({placeholders})")
-                    params.extend(prompt_id_list)
+                    prompt_filter = f"AND g.prompt_id IN ({placeholders})"
+                    prompt_params.extend(prompt_id_list)
 
-            # Ensure only active and visible conditions are included
-            where_clauses.extend([
-                "ca.is_active = TRUE",
-                "cb.is_active = TRUE",
-                "ca.is_visible = TRUE",
-                "cb.is_visible = TRUE",
-            ])
+            base_where = " AND ".join(base_conditions) if base_conditions else "TRUE"
 
-            where_sql = " AND ".join(where_clauses)
+            # Step 1: Select conditions with bias towards low exposure
+            query_biased = f"""
+                SELECT
+                    g.id as generation_id,
+                    g.condition_id,
+                    g.prompt_id,
+                    g.replicate_index,
+                    COALESCE(e.games_played, 0) as exposure
+                FROM apex_audition.generations g
+                JOIN apex_audition.conditions c ON c.id = g.condition_id
+                LEFT JOIN apex_audition.elo_ratings e ON e.condition_id = g.condition_id
+                WHERE g.status = 'completed'
+                  AND c.is_active = true
+                  AND c.is_visible = true
+                  AND {base_where}
+                  {prompt_filter}
+                ORDER BY exposure ASC, RANDOM()
+            """
 
-            query = f"""
+            cur.execute(query_biased, params + prompt_params)
+            biased_rows = cur.fetchall()
+
+            if not biased_rows:
+                return None
+
+            # Step 2/3: Iterate through biased conditions until a valid partner is found,
+            # then fetch full details for both generations.
+            query_random = f"""
+                SELECT g.id as generation_id
+                FROM apex_audition.generations g
+                JOIN apex_audition.conditions c ON c.id = g.condition_id
+                WHERE g.status = 'completed'
+                  AND c.is_active = true
+                  AND c.is_visible = true
+                  AND {base_where}
+                  {prompt_filter}
+                  AND g.prompt_id = %s
+                  AND g.replicate_index = %s
+                  AND g.condition_id != %s
+                  AND NOT EXISTS (
+                    SELECT 1 FROM apex_audition.comparisons comp
+                    WHERE comp.prompt_id = g.prompt_id
+                      AND ((comp.condition_a_id = %s AND comp.condition_b_id = g.condition_id)
+                           OR (comp.condition_a_id = g.condition_id AND comp.condition_b_id = %s))
+                  )
+                ORDER BY RANDOM()
+                LIMIT 1
+            """
+
+            fetch_query = """
                 SELECT
                     p.id AS prompt_id,
                     p.chunk_id AS prompt_chunk_id,
@@ -348,172 +392,162 @@ def get_next_comparison(
                     p.label AS prompt_label,
                     p.context AS prompt_context,
                     p.metadata AS prompt_metadata,
-                    ca.id AS condition_a_id,
-                    ca.slug AS condition_a_slug,
-                    ca.provider AS condition_a_provider,
-                    ca.model_name AS condition_a_model_name,
-                    ca.label AS condition_a_label,
-                    ca.temperature AS condition_a_temperature,
-                    ca.top_p AS condition_a_top_p,
-                    ca.min_p AS condition_a_min_p,
-                    ca.frequency_penalty AS condition_a_frequency_penalty,
-                    ca.presence_penalty AS condition_a_presence_penalty,
-                    ca.repetition_penalty AS condition_a_repetition_penalty,
-                    ca.reasoning_effort AS condition_a_reasoning_effort,
-                    ca.thinking_enabled AS condition_a_thinking_enabled,
-                    ca.max_output_tokens AS condition_a_max_output_tokens,
-                    ca.thinking_budget_tokens AS condition_a_thinking_budget_tokens,
-                    ca.is_active AS condition_a_is_active,
-                    ca.is_visible AS condition_a_is_visible,
-                    cb.id AS condition_b_id,
-                    cb.slug AS condition_b_slug,
-                    cb.provider AS condition_b_provider,
-                    cb.model_name AS condition_b_model_name,
-                    cb.label AS condition_b_label,
-                    cb.temperature AS condition_b_temperature,
-                    cb.top_p AS condition_b_top_p,
-                    cb.min_p AS condition_b_min_p,
-                    cb.frequency_penalty AS condition_b_frequency_penalty,
-                    cb.presence_penalty AS condition_b_presence_penalty,
-                    cb.repetition_penalty AS condition_b_repetition_penalty,
-                    cb.reasoning_effort AS condition_b_reasoning_effort,
-                    cb.thinking_enabled AS condition_b_thinking_enabled,
-                    cb.max_output_tokens AS condition_b_max_output_tokens,
-                    cb.thinking_budget_tokens AS condition_b_thinking_budget_tokens,
-                    cb.is_active AS condition_b_is_active,
-                    cb.is_visible AS condition_b_is_visible,
-                    ga.id AS generation_a_id,
-                    ga.condition_id AS generation_a_condition_id,
-                    ga.prompt_id AS generation_a_prompt_id,
-                    ga.replicate_index AS generation_a_replicate_index,
-                    ga.status AS generation_a_status,
-                    ga.response_payload AS generation_a_response_payload,
-                    ga.input_tokens AS generation_a_input_tokens,
-                    ga.output_tokens AS generation_a_output_tokens,
-                    ga.completed_at AS generation_a_completed_at,
-                    gb.id AS generation_b_id,
-                    gb.condition_id AS generation_b_condition_id,
-                    gb.prompt_id AS generation_b_prompt_id,
-                    gb.replicate_index AS generation_b_replicate_index,
-                    gb.status AS generation_b_status,
-                    gb.response_payload AS generation_b_response_payload,
-                    gb.input_tokens AS generation_b_input_tokens,
-                    gb.output_tokens AS generation_b_output_tokens,
-                    gb.completed_at AS generation_b_completed_at,
-                    LEAST(
-                        COALESCE(elo_a.games_played, 0),
-                        COALESCE(elo_b.games_played, 0)
-                    ) AS min_exposure
-                FROM apex_audition.prompts p
-                JOIN apex_audition.generations ga ON ga.prompt_id = p.id
-                    AND ga.status = 'completed'
-                JOIN apex_audition.generations gb ON gb.prompt_id = p.id
-                    AND gb.status = 'completed'
-                    AND gb.condition_id != ga.condition_id
-                    AND ga.replicate_index = gb.replicate_index
-                JOIN apex_audition.conditions ca ON ca.id = ga.condition_id
-                JOIN apex_audition.conditions cb ON cb.id = gb.condition_id
-                LEFT JOIN apex_audition.elo_ratings elo_a ON elo_a.condition_id = ca.id
-                LEFT JOIN apex_audition.elo_ratings elo_b ON elo_b.condition_id = cb.id
-                LEFT JOIN apex_audition.comparisons c ON c.prompt_id = p.id
-                    AND ((c.condition_a_id = ga.condition_id AND c.condition_b_id = gb.condition_id)
-                         OR (c.condition_a_id = gb.condition_id AND c.condition_b_id = ga.condition_id))
-                WHERE {where_sql}
-                ORDER BY min_exposure ASC, RANDOM()
-                LIMIT 1
+                    c.id AS condition_id,
+                    c.slug AS condition_slug,
+                    c.provider AS condition_provider,
+                    c.model_name AS condition_model_name,
+                    c.label AS condition_label,
+                    c.temperature AS condition_temperature,
+                    c.top_p AS condition_top_p,
+                    c.min_p AS condition_min_p,
+                    c.frequency_penalty AS condition_frequency_penalty,
+                    c.presence_penalty AS condition_presence_penalty,
+                    c.repetition_penalty AS condition_repetition_penalty,
+                    c.reasoning_effort AS condition_reasoning_effort,
+                    c.thinking_enabled AS condition_thinking_enabled,
+                    c.max_output_tokens AS condition_max_output_tokens,
+                    c.thinking_budget_tokens AS condition_thinking_budget_tokens,
+                    c.is_active AS condition_is_active,
+                    c.is_visible AS condition_is_visible,
+                    g.id AS generation_id,
+                    g.condition_id AS generation_condition_id,
+                    g.prompt_id AS generation_prompt_id,
+                    g.replicate_index AS generation_replicate_index,
+                    g.status AS generation_status,
+                    g.response_payload AS generation_response_payload,
+                    g.input_tokens AS generation_input_tokens,
+                    g.output_tokens AS generation_output_tokens,
+                    g.completed_at AS generation_completed_at
+                FROM apex_audition.generations g
+                JOIN apex_audition.conditions c ON c.id = g.condition_id
+                JOIN apex_audition.prompts p ON p.id = g.prompt_id
+                WHERE g.id IN (%s, %s)
             """
 
-            cur.execute(query, params)
-            row = cur.fetchone()
+            for biased_row in biased_rows:
+                biased_generation_id = biased_row["generation_id"]
+                biased_condition_id = biased_row["condition_id"]
+                biased_prompt_id = biased_row["prompt_id"]
+                biased_replicate_index = biased_row["replicate_index"]
 
-            if not row:
-                return None
+                random_params = params + prompt_params + [
+                    biased_prompt_id,
+                    biased_replicate_index,
+                    biased_condition_id,
+                    biased_condition_id,
+                    biased_condition_id,
+                ]
 
-            # Assemble response objects from aliased columns
-            prompt = Prompt(
-                id=row["prompt_id"],
-                chunk_id=row["prompt_chunk_id"],
-                category=row.get("prompt_category"),
-                label=row.get("prompt_label"),
-                context=row["prompt_context"],
-                metadata=row["prompt_metadata"],
-            )
+                cur.execute(query_random, random_params)
+                random_row = cur.fetchone()
 
-            condition_a = Condition(
-                id=row["condition_a_id"],
-                slug=row["condition_a_slug"],
-                provider=row["condition_a_provider"],
-                model=row["condition_a_model_name"],
-                label=row.get("condition_a_label"),
-                temperature=row.get("condition_a_temperature"),
-                top_p=row.get("condition_a_top_p"),
-                min_p=row.get("condition_a_min_p"),
-                frequency_penalty=row.get("condition_a_frequency_penalty"),
-                presence_penalty=row.get("condition_a_presence_penalty"),
-                repetition_penalty=row.get("condition_a_repetition_penalty"),
-                reasoning_effort=row.get("condition_a_reasoning_effort"),
-                thinking_enabled=row.get("condition_a_thinking_enabled"),
-                max_output_tokens=row.get("condition_a_max_output_tokens"),
-                thinking_budget_tokens=row.get("condition_a_thinking_budget_tokens"),
-                is_active=row["condition_a_is_active"],
-                is_visible=row["condition_a_is_visible"],
-            )
+                if not random_row:
+                    continue
 
-            condition_b = Condition(
-                id=row["condition_b_id"],
-                slug=row["condition_b_slug"],
-                provider=row["condition_b_provider"],
-                model=row["condition_b_model_name"],
-                label=row.get("condition_b_label"),
-                temperature=row.get("condition_b_temperature"),
-                top_p=row.get("condition_b_top_p"),
-                min_p=row.get("condition_b_min_p"),
-                frequency_penalty=row.get("condition_b_frequency_penalty"),
-                presence_penalty=row.get("condition_b_presence_penalty"),
-                repetition_penalty=row.get("condition_b_repetition_penalty"),
-                reasoning_effort=row.get("condition_b_reasoning_effort"),
-                thinking_enabled=row.get("condition_b_thinking_enabled"),
-                max_output_tokens=row.get("condition_b_max_output_tokens"),
-                thinking_budget_tokens=row.get("condition_b_thinking_budget_tokens"),
-                is_active=row["condition_b_is_active"],
-                is_visible=row["condition_b_is_visible"],
-            )
+                random_generation_id = random_row["generation_id"]
 
-            generation_a = Generation(
-                id=row["generation_a_id"],
-                condition_id=row["generation_a_condition_id"],
-                prompt_id=row["generation_a_prompt_id"],
-                replicate_index=row["generation_a_replicate_index"],
-                status=row["generation_a_status"],
-                response_payload=row["generation_a_response_payload"],
-                input_tokens=row.get("generation_a_input_tokens"),
-                output_tokens=row.get("generation_a_output_tokens"),
-                completed_at=row.get("generation_a_completed_at"),
-            )
+                cur.execute(fetch_query, [biased_generation_id, random_generation_id])
+                detail_rows = cur.fetchall()
 
-            generation_b = Generation(
-                id=row["generation_b_id"],
-                condition_id=row["generation_b_condition_id"],
-                prompt_id=row["generation_b_prompt_id"],
-                replicate_index=row["generation_b_replicate_index"],
-                status=row["generation_b_status"],
-                response_payload=row["generation_b_response_payload"],
-                input_tokens=row.get("generation_b_input_tokens"),
-                output_tokens=row.get("generation_b_output_tokens"),
-                completed_at=row.get("generation_b_completed_at"),
-            )
+                if len(detail_rows) != 2:
+                    continue
 
-            if random.random() < 0.5:
-                condition_a, condition_b = condition_b, condition_a
-                generation_a, generation_b = generation_b, generation_a
+                # Build response objects
+                row_map = {row["generation_id"]: row for row in detail_rows}
+                biased_detail = row_map[biased_generation_id]
+                random_detail = row_map[random_generation_id]
 
-            return ComparisonQueueItem(
-                prompt=prompt,
-                condition_a=condition_a,
-                condition_b=condition_b,
-                generation_a=generation_a,
-                generation_b=generation_b,
-            )
+                # Use the first row for prompt details (they're the same)
+                prompt_row = detail_rows[0]
+                prompt = Prompt(
+                    id=prompt_row["prompt_id"],
+                    chunk_id=prompt_row["prompt_chunk_id"],
+                    category=prompt_row.get("prompt_category"),
+                    label=prompt_row.get("prompt_label"),
+                    context=prompt_row["prompt_context"],
+                    metadata=prompt_row["prompt_metadata"],
+                )
+
+                # Build condition and generation objects for biased selection
+                condition_a = Condition(
+                    id=biased_detail["condition_id"],
+                    slug=biased_detail["condition_slug"],
+                    provider=biased_detail["condition_provider"],
+                    model=biased_detail["condition_model_name"],
+                    label=biased_detail.get("condition_label"),
+                    temperature=biased_detail.get("condition_temperature"),
+                    top_p=biased_detail.get("condition_top_p"),
+                    min_p=biased_detail.get("condition_min_p"),
+                    frequency_penalty=biased_detail.get("condition_frequency_penalty"),
+                    presence_penalty=biased_detail.get("condition_presence_penalty"),
+                    repetition_penalty=biased_detail.get("condition_repetition_penalty"),
+                    reasoning_effort=biased_detail.get("condition_reasoning_effort"),
+                    thinking_enabled=biased_detail.get("condition_thinking_enabled"),
+                    max_output_tokens=biased_detail.get("condition_max_output_tokens"),
+                    thinking_budget_tokens=biased_detail.get("condition_thinking_budget_tokens"),
+                    is_active=biased_detail["condition_is_active"],
+                    is_visible=biased_detail["condition_is_visible"],
+                )
+
+                generation_a = Generation(
+                    id=biased_detail["generation_id"],
+                    condition_id=biased_detail["generation_condition_id"],
+                    prompt_id=biased_detail["generation_prompt_id"],
+                    replicate_index=biased_detail["generation_replicate_index"],
+                    status=biased_detail["generation_status"],
+                    response_payload=biased_detail["generation_response_payload"],
+                    input_tokens=biased_detail.get("generation_input_tokens"),
+                    output_tokens=biased_detail.get("generation_output_tokens"),
+                    completed_at=biased_detail.get("generation_completed_at"),
+                )
+
+                # Build condition and generation objects for random selection
+                condition_b = Condition(
+                    id=random_detail["condition_id"],
+                    slug=random_detail["condition_slug"],
+                    provider=random_detail["condition_provider"],
+                    model=random_detail["condition_model_name"],
+                    label=random_detail.get("condition_label"),
+                    temperature=random_detail.get("condition_temperature"),
+                    top_p=random_detail.get("condition_top_p"),
+                    min_p=random_detail.get("condition_min_p"),
+                    frequency_penalty=random_detail.get("condition_frequency_penalty"),
+                    presence_penalty=random_detail.get("condition_presence_penalty"),
+                    repetition_penalty=random_detail.get("condition_repetition_penalty"),
+                    reasoning_effort=random_detail.get("condition_reasoning_effort"),
+                    thinking_enabled=random_detail.get("condition_thinking_enabled"),
+                    max_output_tokens=random_detail.get("condition_max_output_tokens"),
+                    thinking_budget_tokens=random_detail.get("condition_thinking_budget_tokens"),
+                    is_active=random_detail["condition_is_active"],
+                    is_visible=random_detail["condition_is_visible"],
+                )
+
+                generation_b = Generation(
+                    id=random_detail["generation_id"],
+                    condition_id=random_detail["generation_condition_id"],
+                    prompt_id=random_detail["generation_prompt_id"],
+                    replicate_index=random_detail["generation_replicate_index"],
+                    status=random_detail["generation_status"],
+                    response_payload=random_detail["generation_response_payload"],
+                    input_tokens=random_detail.get("generation_input_tokens"),
+                    output_tokens=random_detail.get("generation_output_tokens"),
+                    completed_at=random_detail.get("generation_completed_at"),
+                )
+
+                # Randomly shuffle left/right assignment
+                if random.random() < 0.5:
+                    condition_a, condition_b = condition_b, condition_a
+                    generation_a, generation_b = generation_b, generation_a
+
+                return ComparisonQueueItem(
+                    prompt=prompt,
+                    condition_a=condition_a,
+                    condition_b=condition_b,
+                    generation_a=generation_a,
+                    generation_b=generation_b,
+                )
+
+            return None
 
 
 @app.post("/api/audition/comparisons", response_model=dict)

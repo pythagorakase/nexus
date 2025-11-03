@@ -27,9 +27,15 @@ def validate_context(context: Dict[str, Any], settings: Dict[str, Any]) -> Tuple
     # Get LORE settings
     lore_settings = settings.get("Agent Settings", {}).get("LORE", {})
     
-    # Get token budget settings
+    # Get token budget settings - apex_context_window is required
     token_budget = lore_settings.get("token_budget", {})
-    apex_window = token_budget.get("apex_context_window", 200000)
+    if "apex_context_window" not in token_budget:
+        raise ValueError(
+            "apex_context_window must be configured in settings.json under "
+            "Agent Settings > LORE > token_budget > apex_context_window"
+        )
+    apex_window = token_budget["apex_context_window"]
+    logger.debug(f"Context validation using apex_context_window: {apex_window} tokens")
     
     # Get the percentage ranges
     ranges = lore_settings.get("payload_percent_budget", {})
