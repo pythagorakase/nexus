@@ -284,6 +284,8 @@ def has_completed_generation(repo: AuditionRepository, condition_id: int, prompt
         WHERE condition_id = :condition_id
           AND prompt_id = :prompt_id
           AND status = 'completed'
+          AND response_payload->>'content' IS NOT NULL
+          AND LENGTH(response_payload->>'content') > 0
         """
     )
     with repo.engine.connect() as connection:

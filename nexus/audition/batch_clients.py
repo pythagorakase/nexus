@@ -56,6 +56,11 @@ class BatchRequest:
     # OpenAI-specific parameters
     reasoning_effort: Optional[str] = None
     max_output_tokens: Optional[int] = None
+    top_p: Optional[float] = None
+    min_p: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    repetition_penalty: Optional[float] = None
     cache_key: Optional[str] = None  # Chunk-based cache key for prompt caching
     # Anthropic-specific parameters
     thinking_enabled: bool = False
@@ -166,6 +171,9 @@ class AnthropicBatchClient:
                 "temperature": req.temperature,
                 "messages": [{"role": "user", "content": user_content}]
             }
+
+            if req.top_p is not None:
+                params["top_p"] = req.top_p
 
             # Add extended thinking parameters if enabled
             if req.thinking_enabled:
@@ -384,6 +392,17 @@ class OpenAIBatchClient:
                 # Add temperature if provided (GPT-4o and other non-reasoning models)
                 if req.temperature is not None:
                     body["temperature"] = req.temperature
+
+                if req.top_p is not None:
+                    body["top_p"] = req.top_p
+                if req.min_p is not None:
+                    body["min_p"] = req.min_p
+                if req.frequency_penalty is not None:
+                    body["frequency_penalty"] = req.frequency_penalty
+                if req.presence_penalty is not None:
+                    body["presence_penalty"] = req.presence_penalty
+                if req.repetition_penalty is not None:
+                    body["repetition_penalty"] = req.repetition_penalty
 
                 # Add reasoning effort if provided (GPT-5, o3)
                 if req.reasoning_effort:

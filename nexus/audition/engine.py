@@ -453,6 +453,11 @@ class AuditionEngine:
                     # OpenAI-specific parameters
                     reasoning_effort=condition.reasoning_effort,
                     max_output_tokens=condition.max_output_tokens,
+                    top_p=condition.top_p,
+                    min_p=condition.min_p,
+                    frequency_penalty=condition.frequency_penalty,
+                    presence_penalty=condition.presence_penalty,
+                    repetition_penalty=condition.repetition_penalty,
                     cache_key=cache_key,
                     # Anthropic-specific parameters
                     thinking_enabled=condition.thinking_enabled or False,
@@ -634,6 +639,11 @@ class AuditionEngine:
                         # OpenAI-specific parameters
                         reasoning_effort=condition.reasoning_effort,
                         max_output_tokens=condition.max_output_tokens,
+                        top_p=condition.top_p,
+                        min_p=condition.min_p,
+                        frequency_penalty=condition.frequency_penalty,
+                        presence_penalty=condition.presence_penalty,
+                        repetition_penalty=condition.repetition_penalty,
                         cache_key=cache_key,
                         # Anthropic-specific parameters
                         thinking_enabled=condition.thinking_enabled or False,
@@ -917,6 +927,9 @@ class AuditionEngine:
         elif provider_lower == "openrouter":
             # Already in OpenRouter format (e.g., "deepseek-v3.2-exp")
             openrouter_model = condition.model
+        elif provider_lower in {"moonshot", "nousresearch"}:
+            # Use model mapping inside OpenRouterProvider for vendor-specific namespaces
+            openrouter_model = condition.model
         else:
             # Unknown provider, try using as-is
             openrouter_model = f"{provider_lower}/{condition.model}"
@@ -931,6 +944,11 @@ class AuditionEngine:
             system_prompt=condition.system_prompt,
             reasoning_effort=condition.reasoning_effort,
             thinking_budget_tokens=condition.thinking_budget_tokens,
+            top_p=condition.top_p,
+            min_p=condition.min_p,
+            frequency_penalty=condition.frequency_penalty,
+            presence_penalty=condition.presence_penalty,
+            repetition_penalty=condition.repetition_penalty,
         )
         return provider
 
