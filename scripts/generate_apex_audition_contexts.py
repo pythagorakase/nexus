@@ -1804,6 +1804,16 @@ class ContextSeedBuilder:
             characters_data, places_data, factions_data, structured_seed
         )
 
+        # Build backward-compatible entity_data for audition engine
+        # Flatten baseline + featured into simple lists that engine expects
+        all_characters = characters_data["baseline"] + characters_data["featured"]
+        all_places = places_data["baseline"] + places_data["featured"]
+
+        entity_data = {
+            "characters": all_characters,
+            "locations": all_places,  # Engine expects "locations" key
+        }
+
         # Build warm_slice with warm_span object
         warm_first = warm_slice[0].chunk_id if warm_slice else config.chunk_id
         warm_last = warm_slice[-1].chunk_id if warm_slice else config.chunk_id
@@ -1820,8 +1830,9 @@ class ContextSeedBuilder:
             "retrieved_passages": {
                 "results": authorial_passages,
             },
+            "entity_data": entity_data,  # Backward compatibility for audition engine
             "structured_passages": structured_passages,
-            "structured": structured_object,
+            "structured": structured_object,  # New hierarchical format
         }
 
         baseline = self.memory_manager.handle_storyteller_response(
