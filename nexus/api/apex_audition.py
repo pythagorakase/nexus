@@ -218,7 +218,7 @@ def get_next_comparison(
 
             base_where = " AND ".join(base_conditions) if base_conditions else "TRUE"
 
-            # Step 1: Select one condition with bias towards low exposure
+            # Step 1: Select conditions with bias towards low exposure
             query_biased = f"""
                 SELECT
                     g.id as generation_id,
@@ -234,25 +234,16 @@ def get_next_comparison(
                   AND {base_where}
                   {prompt_filter}
                 ORDER BY exposure ASC, RANDOM()
-                LIMIT 1
             """
 
             cur.execute(query_biased, params + prompt_params)
-            biased_row = cur.fetchone()
+            biased_rows = cur.fetchall()
 
-            if not biased_row:
+            if not biased_rows:
                 return None
 
-            biased_generation_id = biased_row["generation_id"]
-            biased_condition_id = biased_row["condition_id"]
-            biased_prompt_id = biased_row["prompt_id"]
-            biased_replicate_index = biased_row["replicate_index"]
-
-            # Step 2: Select a random pairing condition that:
-            # - Is from the same prompt
-            # - Has the same replicate_index
-            # - Is a different condition
-            # - Has no existing comparison with the biased condition
+            # Step 2/3: Iterate through biased conditions until a valid partner is found,
+            # then fetch full details for both generations.
             query_random = f"""
                 SELECT g.id as generation_id
                 FROM apex_audition.generations g
@@ -274,23 +265,6 @@ def get_next_comparison(
                 LIMIT 1
             """
 
-            random_params = params + prompt_params + [
-                biased_prompt_id,
-                biased_replicate_index,
-                biased_condition_id,
-                biased_condition_id,
-                biased_condition_id,
-            ]
-
-            cur.execute(query_random, random_params)
-            random_row = cur.fetchone()
-
-            if not random_row:
-                return None
-
-            random_generation_id = random_row["generation_id"]
-
-            # Step 3: Fetch full details for both generations
             fetch_query = """
                 SELECT
                     p.id AS prompt_id,
@@ -325,95 +299,118 @@ def get_next_comparison(
                 WHERE g.id IN (%s, %s)
             """
 
-            cur.execute(fetch_query, [biased_generation_id, random_generation_id])
-            detail_rows = cur.fetchall()
+            for biased_row in biased_rows:
+                biased_generation_id = biased_row["generation_id"]
+                biased_condition_id = biased_row["condition_id"]
+                biased_prompt_id = biased_row["prompt_id"]
+                biased_replicate_index = biased_row["replicate_index"]
 
-            if len(detail_rows) != 2:
-                return None
+                random_params = params + prompt_params + [
+                    biased_prompt_id,
+                    biased_replicate_index,
+                    biased_condition_id,
+                    biased_condition_id,
+                    biased_condition_id,
+                ]
 
-            # Build response objects
-            # First row is biased, second is random (but we'll shuffle at the end)
-            row_map = {row["generation_id"]: row for row in detail_rows}
-            biased_detail = row_map[biased_generation_id]
-            random_detail = row_map[random_generation_id]
+                cur.execute(query_random, random_params)
+                random_row = cur.fetchone()
 
-            # Use the first row for prompt details (they're the same)
-            prompt_row = detail_rows[0]
-            prompt = Prompt(
-                id=prompt_row["prompt_id"],
-                chunk_id=prompt_row["prompt_chunk_id"],
-                category=prompt_row.get("prompt_category"),
-                label=prompt_row.get("prompt_label"),
-                context=prompt_row["prompt_context"],
-                metadata=prompt_row["prompt_metadata"],
-            )
+                if not random_row:
+                    continue
 
-            # Build condition and generation objects for biased selection
-            condition_a = Condition(
-                id=biased_detail["condition_id"],
-                slug=biased_detail["condition_slug"],
-                provider=biased_detail["condition_provider"],
-                model=biased_detail["condition_model_name"],
-                label=biased_detail.get("condition_label"),
-                temperature=biased_detail.get("condition_temperature"),
-                reasoning_effort=biased_detail.get("condition_reasoning_effort"),
-                thinking_enabled=biased_detail.get("condition_thinking_enabled"),
-                max_output_tokens=biased_detail.get("condition_max_output_tokens"),
-                thinking_budget_tokens=biased_detail.get("condition_thinking_budget_tokens"),
-                is_active=biased_detail["condition_is_active"],
-            )
+                random_generation_id = random_row["generation_id"]
 
-            generation_a = Generation(
-                id=biased_detail["generation_id"],
-                condition_id=biased_detail["generation_condition_id"],
-                prompt_id=biased_detail["generation_prompt_id"],
-                replicate_index=biased_detail["generation_replicate_index"],
-                status=biased_detail["generation_status"],
-                response_payload=biased_detail["generation_response_payload"],
-                input_tokens=biased_detail.get("generation_input_tokens"),
-                output_tokens=biased_detail.get("generation_output_tokens"),
-                completed_at=biased_detail.get("generation_completed_at"),
-            )
+                cur.execute(fetch_query, [biased_generation_id, random_generation_id])
+                detail_rows = cur.fetchall()
 
-            # Build condition and generation objects for random selection
-            condition_b = Condition(
-                id=random_detail["condition_id"],
-                slug=random_detail["condition_slug"],
-                provider=random_detail["condition_provider"],
-                model=random_detail["condition_model_name"],
-                label=random_detail.get("condition_label"),
-                temperature=random_detail.get("condition_temperature"),
-                reasoning_effort=random_detail.get("condition_reasoning_effort"),
-                thinking_enabled=random_detail.get("condition_thinking_enabled"),
-                max_output_tokens=random_detail.get("condition_max_output_tokens"),
-                thinking_budget_tokens=random_detail.get("condition_thinking_budget_tokens"),
-                is_active=random_detail["condition_is_active"],
-            )
+                if len(detail_rows) != 2:
+                    continue
 
-            generation_b = Generation(
-                id=random_detail["generation_id"],
-                condition_id=random_detail["generation_condition_id"],
-                prompt_id=random_detail["generation_prompt_id"],
-                replicate_index=random_detail["generation_replicate_index"],
-                status=random_detail["generation_status"],
-                response_payload=random_detail["generation_response_payload"],
-                input_tokens=random_detail.get("generation_input_tokens"),
-                output_tokens=random_detail.get("generation_output_tokens"),
-                completed_at=random_detail.get("generation_completed_at"),
-            )
+                # Build response objects
+                row_map = {row["generation_id"]: row for row in detail_rows}
+                biased_detail = row_map[biased_generation_id]
+                random_detail = row_map[random_generation_id]
 
-            # Randomly shuffle left/right assignment
-            if random.random() < 0.5:
-                condition_a, condition_b = condition_b, condition_a
-                generation_a, generation_b = generation_b, generation_a
+                # Use the first row for prompt details (they're the same)
+                prompt_row = detail_rows[0]
+                prompt = Prompt(
+                    id=prompt_row["prompt_id"],
+                    chunk_id=prompt_row["prompt_chunk_id"],
+                    category=prompt_row.get("prompt_category"),
+                    label=prompt_row.get("prompt_label"),
+                    context=prompt_row["prompt_context"],
+                    metadata=prompt_row["prompt_metadata"],
+                )
 
-            return ComparisonQueueItem(
-                prompt=prompt,
-                condition_a=condition_a,
-                condition_b=condition_b,
-                generation_a=generation_a,
-                generation_b=generation_b,
-            )
+                # Build condition and generation objects for biased selection
+                condition_a = Condition(
+                    id=biased_detail["condition_id"],
+                    slug=biased_detail["condition_slug"],
+                    provider=biased_detail["condition_provider"],
+                    model=biased_detail["condition_model_name"],
+                    label=biased_detail.get("condition_label"),
+                    temperature=biased_detail.get("condition_temperature"),
+                    reasoning_effort=biased_detail.get("condition_reasoning_effort"),
+                    thinking_enabled=biased_detail.get("condition_thinking_enabled"),
+                    max_output_tokens=biased_detail.get("condition_max_output_tokens"),
+                    thinking_budget_tokens=biased_detail.get("condition_thinking_budget_tokens"),
+                    is_active=biased_detail["condition_is_active"],
+                )
+
+                generation_a = Generation(
+                    id=biased_detail["generation_id"],
+                    condition_id=biased_detail["generation_condition_id"],
+                    prompt_id=biased_detail["generation_prompt_id"],
+                    replicate_index=biased_detail["generation_replicate_index"],
+                    status=biased_detail["generation_status"],
+                    response_payload=biased_detail["generation_response_payload"],
+                    input_tokens=biased_detail.get("generation_input_tokens"),
+                    output_tokens=biased_detail.get("generation_output_tokens"),
+                    completed_at=biased_detail.get("generation_completed_at"),
+                )
+
+                # Build condition and generation objects for random selection
+                condition_b = Condition(
+                    id=random_detail["condition_id"],
+                    slug=random_detail["condition_slug"],
+                    provider=random_detail["condition_provider"],
+                    model=random_detail["condition_model_name"],
+                    label=random_detail.get("condition_label"),
+                    temperature=random_detail.get("condition_temperature"),
+                    reasoning_effort=random_detail.get("condition_reasoning_effort"),
+                    thinking_enabled=random_detail.get("condition_thinking_enabled"),
+                    max_output_tokens=random_detail.get("condition_max_output_tokens"),
+                    thinking_budget_tokens=random_detail.get("condition_thinking_budget_tokens"),
+                    is_active=random_detail["condition_is_active"],
+                )
+
+                generation_b = Generation(
+                    id=random_detail["generation_id"],
+                    condition_id=random_detail["generation_condition_id"],
+                    prompt_id=random_detail["generation_prompt_id"],
+                    replicate_index=random_detail["generation_replicate_index"],
+                    status=random_detail["generation_status"],
+                    response_payload=random_detail["generation_response_payload"],
+                    input_tokens=random_detail.get("generation_input_tokens"),
+                    output_tokens=random_detail.get("generation_output_tokens"),
+                    completed_at=random_detail.get("generation_completed_at"),
+                )
+
+                # Randomly shuffle left/right assignment
+                if random.random() < 0.5:
+                    condition_a, condition_b = condition_b, condition_a
+                    generation_a, generation_b = generation_b, generation_a
+
+                return ComparisonQueueItem(
+                    prompt=prompt,
+                    condition_a=condition_a,
+                    condition_b=condition_b,
+                    generation_a=generation_a,
+                    generation_b=generation_b,
+                )
+
+            return None
 
 
 @app.post("/api/audition/comparisons", response_model=dict)
