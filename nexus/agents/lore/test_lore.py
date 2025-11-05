@@ -19,11 +19,13 @@ import time
 import unittest
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from sqlalchemy import text
 
 from lore import LORE
 from utils.turn_context import TurnContext, TurnPhase
@@ -34,6 +36,30 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("test_lore")
+
+
+AUTHORIAL_DIRECTIVES: List[str] = [
+    "Recent private outings between Alex and Emilia since leaving the Cradle",
+    "Nyati's corporate campaign progress and current leverage",
+    "Pete and Alina collaboration highlights aboard The Ghost",
+]
+KARAOKE_CHUNK_ID = 1369
+KARAOKE_DEEP_CUT_RANGE = range(743, 770)
+_DEFAULT_WARM_SLICE_SPAN = 4
+
+
+def _split_storyteller_and_user(full_text: str) -> Tuple[str, str]:
+    """Return storyteller narrative and user prompt from a chunk payload."""
+
+    if not full_text:
+        return "", ""
+
+    marker = "\n## You"
+    if marker in full_text:
+        storyteller, user = full_text.split(marker, 1)
+        return storyteller.strip(), user.strip()
+
+    return full_text.strip(), ""
 
 
 # Module-level shared LORE instance
@@ -76,6 +102,7 @@ def tearDownModule() -> None:
 
 # Global flag for saving context output to disk (set via --save-context CLI arg)
 _save_context = False
+_test_chunks: List[int] = []
 
 
 class TestLOREInitialization(unittest.TestCase):
@@ -395,6 +422,233 @@ class TestTurnCycle(unittest.TestCase):
             self.fail(f"Context assembly failed: {e}")
 
 
+class TestDivergenceDetection(unittest.TestCase):
+    """Test LLM-backed divergence detection using narrative chunks."""
+
+    def setUp(self):
+        """Prepare shared LORE instance for divergence checks."""
+
+        self.lore = _get_shared_lore()
+
+        if not getattr(self.lore, "memnon", None):
+            self.skipTest("MEMNON not available")
+
+        llm_manager = getattr(self.lore, "llm_manager", None)
+        if not llm_manager or not llm_manager.is_available():
+            self.skipTest("Local LLM not available for divergence detection")
+
+        if getattr(self.lore, "turn_manager", None) is None:
+            self.skipTest("Turn manager not initialized")
+
+        self._reset_context_state()
+
+        try:
+            llm_manager.ensure_model_loaded()
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Could not verify model availability: %s", exc)
+
+    def _reset_context_state(self) -> None:
+        """Clear Pass 2 context between divergence checks."""
+
+        manager = getattr(self.lore, "memory_manager", None)
+        if manager and manager.context_state:
+            manager.context_state._context = None
+            manager.context_state._transition = None
+            manager.context_state._chunk_cache.clear()
+
+    def _build_warm_slice(
+        self,
+        chunk_id: int,
+        span: int = _DEFAULT_WARM_SLICE_SPAN,
+    ) -> List[Dict[str, Any]]:
+        """Collect recent narrative chunks to seed the warm slice."""
+
+        start_id = max(1, chunk_id - span)
+        memnon = self.lore.memnon
+
+        session_factory = getattr(memnon, "Session", None)
+        if session_factory is not None:
+            try:
+                with session_factory() as session:
+                    rows = session.execute(
+                        text(
+                            """
+                            SELECT id, raw_text
+                            FROM narrative_chunks
+                            WHERE id BETWEEN :start AND :end
+                            ORDER BY id
+                            """
+                        ),
+                        {"start": start_id, "end": chunk_id},
+                    ).fetchall()
+                return [
+                    {"id": row.id, "chunk_id": row.id, "text": row.raw_text}
+                    for row in rows
+                ]
+            except Exception as exc:  # pragma: no cover - diagnostic fallback
+                logger.debug("SQL warm-slice lookup failed, falling back: %s", exc)
+
+        try:
+            payload = memnon.query_memory(
+                query=f"chunk_id:[{start_id} TO {chunk_id}]",
+                k=span + 1,
+                use_hybrid=False,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to build warm slice via MEMNON: %s", exc)
+            return []
+
+        results = list(payload.get("results", [])) if payload else []
+        results.sort(
+            key=lambda chunk: int(chunk.get("chunk_id") or chunk.get("id") or 0)
+        )
+        return results
+
+    def _execute_authorial_queries(self) -> List[Dict[str, Any]]:
+        """Run authorial directives to enrich divergence context."""
+
+        passages: List[Dict[str, Any]] = []
+        for directive in AUTHORIAL_DIRECTIVES:
+            try:
+                payload = self.lore.memnon.query_memory(
+                    query=directive,
+                    k=6,
+                    use_hybrid=True,
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.warning("Authorial query failed (%s): %s", directive, exc)
+                continue
+
+            passages.extend(payload.get("results", []))
+
+        return passages
+
+    async def run_for_chunks(self, chunk_ids: Sequence[int]) -> None:
+        """Execute divergence detection for the provided chunk ids."""
+
+        if not chunk_ids:
+            raise unittest.SkipTest("No chunk ids provided for divergence detection")
+
+        for chunk_id in chunk_ids:
+            await self._run_single_chunk(chunk_id)
+            self._reset_context_state()
+
+    async def _run_single_chunk(self, chunk_id: int) -> None:
+        """Execute the full divergence workflow for a single chunk."""
+
+        logger.info("Running divergence analysis for chunk %s", chunk_id)
+
+        chunk = self.lore.memnon.get_chunk_by_id(chunk_id)
+        if not chunk:
+            self.fail(f"Chunk {chunk_id} missing from corpus")
+
+        full_text = (
+            chunk.get("full_text")
+            or chunk.get("text")
+            or chunk.get("raw_text")
+            or ""
+        )
+        storyteller_only, user_prompt = _split_storyteller_and_user(full_text)
+        user_prompt = (
+            user_prompt
+            or chunk.get("user_text")
+            or chunk.get("user_input")
+            or ""
+        ).strip()
+        self.assertTrue(user_prompt, f"No user prompt found for chunk {chunk_id}")
+
+        warm_slice = self._build_warm_slice(chunk_id)
+        self.assertTrue(warm_slice, f"Warm slice empty for chunk {chunk_id}")
+
+        token_counts = self.lore.token_manager.calculate_budget(user_prompt)
+        turn_context = TurnContext(
+            turn_id=f"divergence_{chunk_id}_{int(time.time())}",
+            user_input=user_prompt,
+            start_time=time.time(),
+        )
+        turn_context.token_counts = token_counts
+
+        original_recent = getattr(self.lore.memnon, "get_recent_chunks", None)
+        if original_recent is not None:
+            self.lore.memnon.get_recent_chunks = lambda limit=5: {  # type: ignore
+                "results": warm_slice
+            }
+
+        try:
+            await self.lore.turn_manager.process_user_input(turn_context)
+            await self.lore.turn_manager.perform_warm_analysis(turn_context)
+            await self.lore.turn_manager.query_entity_states(turn_context)
+            await self.lore.turn_manager.execute_deep_queries(turn_context)
+            await self.lore.turn_manager.assemble_context_payload(turn_context)
+        finally:
+            if original_recent is not None:
+                self.lore.memnon.get_recent_chunks = original_recent  # type: ignore
+
+        authorial_passages = self._execute_authorial_queries()
+        structured_stub = {
+            "id": "character:karaoke_incident",
+            "name": "Virginia Beach Karaoke Incident",
+            "summary": "Nightclub ambush context stub.",
+        }
+        if structured_stub not in authorial_passages:
+            authorial_passages.append(structured_stub)
+
+        assembled_context = turn_context.context_payload or {
+            "user_input": turn_context.user_input,
+            "warm_slice": {"chunks": warm_slice},
+            "entity_data": turn_context.entity_data,
+            "retrieved_passages": {"results": authorial_passages},
+            "analysis": turn_context.phase_states.get("warm_analysis", {}).get(
+                "analysis", {}
+            ),
+        }
+
+        baseline = self.lore.memory_manager.handle_storyteller_response(
+            narrative=storyteller_only,
+            warm_slice=turn_context.warm_slice or warm_slice,
+            retrieved_passages=authorial_passages,
+            token_usage=token_counts,
+            assembled_context=assembled_context,
+            authorial_directives=AUTHORIAL_DIRECTIVES,
+        )
+        self.assertIn(chunk_id, baseline.baseline_chunks)
+
+        update = self.lore.memory_manager.handle_user_input(
+            user_input=user_prompt,
+            token_counts=token_counts,
+        )
+
+        self.assertTrue(update.baseline_available, "Baseline should be available")
+        self.assertTrue(
+            update.divergence.detected,
+            f"Expected divergence for chunk {chunk_id}",
+        )
+        self.assertTrue(
+            update.retrieved_chunks,
+            "Divergence should trigger incremental retrieval",
+        )
+
+        if chunk_id == KARAOKE_CHUNK_ID:
+            additional_ids = {
+                int(entry.get("chunk_id") or entry.get("id"))
+                for entry in self.lore.memory_manager.context_state.get_additional_chunk_details()
+                if entry.get("chunk_id") or entry.get("id")
+            }
+            karaoke_hits = [
+                cid for cid in additional_ids if cid in KARAOKE_DEEP_CUT_RANGE
+            ]
+            self.assertTrue(
+                karaoke_hits,
+                f"Expected karaoke follow-up chunks in {list(KARAOKE_DEEP_CUT_RANGE)}",
+            )
+
+        logger.info(
+            "✓ Divergence detected for chunk %s (confidence %.2f)",
+            chunk_id,
+            update.divergence.confidence,
+        )
+
+
 class TestLocalLLM(unittest.TestCase):
     """Test local LLM integration via LM Studio"""
 
@@ -529,29 +783,68 @@ def run_tests():
         runner = unittest.TextTestRunner(verbosity=2)
         result = runner.run(suite)
 
+        # Re-initialize shared instance in case tearDownModule() cleared it
+        lore_instance = _get_shared_lore()
+
         # Run async tests BEFORE cleanup
         print("\n" + "="*60)
         print("Running Async Turn Cycle Tests")
         print("="*60)
 
-        async def run_async_tests():
-            """Run async test methods"""
-            test_instance = TestTurnCycle()
-            test_instance.lore = lore_instance
+        async def run_async_tests() -> None:
+            """Run async test methods including divergence checks."""
 
-            try:
-                await test_instance.test_full_turn_cycle()
-                print("✓ Full turn cycle test passed")
-            except Exception as e:
-                print(f"✗ Full turn cycle test failed: {e}")
+            if getattr(lore_instance, "llm_manager", None):
+                try:
+                    lore_instance.llm_manager.ensure_model_loaded()
+                except Exception as exc:  # pragma: no cover - logging only
+                    logger.debug("Could not verify model state before async tests: %s", exc)
 
-            try:
-                await test_instance.test_context_assembly_with_chunk_1425()
-                print("✓ Context assembly test passed")
-            except Exception as e:
-                print(f"✗ Context assembly test failed: {e}")
+            async def _run_async_case(
+                case_cls: Type[unittest.TestCase],
+                method_name: str,
+                label: str,
+                *args: object,
+            ) -> None:
+                case = case_cls()
+                try:
+                    case.setUp()
+                except unittest.SkipTest as skip_exc:
+                    print(f"⚠ {label} skipped: {skip_exc}")
+                    return
 
-        # Run async tests
+                try:
+                    method = getattr(case, method_name)
+                    await method(*args)
+                    print(f"✓ {label} passed")
+                except unittest.SkipTest as skip_exc:
+                    print(f"⚠ {label} skipped: {skip_exc}")
+                except Exception as exc:
+                    print(f"✗ {label} failed: {exc}")
+                finally:
+                    tear_down = getattr(case, "tearDown", None)
+                    if callable(tear_down):
+                        tear_down()
+
+            await _run_async_case(
+                TestTurnCycle,
+                "test_full_turn_cycle",
+                "Full turn cycle test",
+            )
+            await _run_async_case(
+                TestTurnCycle,
+                "test_context_assembly_with_chunk_1425",
+                "Context assembly test",
+            )
+            if _test_chunks:
+                chunk_list = ", ".join(str(cid) for cid in _test_chunks)
+                await _run_async_case(
+                    TestDivergenceDetection,
+                    "run_for_chunks",
+                    f"Divergence detection for chunks {chunk_list}",
+                    _test_chunks,
+                )
+
         asyncio.run(run_async_tests())
 
     finally:
@@ -598,14 +891,24 @@ Examples:
         action='store_true',
         help='Save assembled context payload to temp/ directory for inspection'
     )
+    parser.add_argument(
+        '--test-chunks',
+        nargs='+',
+        type=int,
+        metavar='CHUNK_ID',
+        help='Run async divergence detection against the specified chunk ids',
+    )
 
     args = parser.parse_args()
 
     # Set module-level flag (no 'global' needed at module scope)
     _save_context = args.save_context
+    _test_chunks = list(args.test_chunks or [])
 
     if _save_context:
         logger.info("Context saving enabled - output will be written to temp/ directory")
+    if _test_chunks:
+        logger.info("Divergence checks enabled for chunks: %s", ", ".join(map(str, _test_chunks)))
 
     # Run tests with manual lifecycle management
     success = run_tests()
