@@ -265,7 +265,11 @@ class TurnCycleManager:
                         events.append(dict(row._mapping))
                 logger.info(f"Found {len(events)} active events")
             except Exception as e:
-                logger.error(f"Failed to query active events: {e}")
+                # Events table doesn't exist yet - this is non-fatal
+                if "does not exist" in str(e):
+                    logger.debug(f"Events table not available: {e}")
+                else:
+                    logger.error(f"Failed to query active events: {e}")
 
         # Query all active threats
         threats = []
@@ -273,19 +277,25 @@ class TurnCycleManager:
             try:
                 max_threats = entity_settings.get('max_total_threats', 10)
                 with self.lore.memnon.Session() as session:
+                    # Note: threats table uses is_active boolean, not status enum
+                    # Lifecycle stages: inception, developing, active, resolved, dormant
                     threat_query = text("""
                         SELECT *
                         FROM threats
-                        WHERE status = ANY(:statuses)
+                        WHERE is_active = true
                         ORDER BY id DESC
                         LIMIT :max_threats
                     """)
-                    result = session.execute(threat_query, {"statuses": threat_statuses, "max_threats": max_threats})
+                    result = session.execute(threat_query, {"max_threats": max_threats})
                     for row in result:
                         threats.append(dict(row._mapping))
                 logger.info(f"Found {len(threats)} active threats")
             except Exception as e:
-                logger.error(f"Failed to query active threats: {e}")
+                # Handle schema mismatches gracefully
+                if "does not exist" in str(e):
+                    logger.debug(f"Threats table or column not available: {e}")
+                else:
+                    logger.error(f"Failed to query active threats: {e}")
 
         # Store hierarchical entity data
         turn_context.entity_data = {
