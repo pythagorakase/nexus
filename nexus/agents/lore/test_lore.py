@@ -53,6 +53,27 @@ def _get_shared_lore() -> LORE:
 
     return _shared_lore
 
+
+def setUpModule() -> None:
+    """unittest hook: ensure shared LORE exists for standard discovery."""
+
+    _get_shared_lore()
+
+
+def tearDownModule() -> None:
+    """unittest hook: release shared LORE when the module finishes."""
+
+    global _shared_lore
+
+    if _shared_lore and _shared_lore.llm_manager:
+        try:
+            _shared_lore.llm_manager.unload_model()
+            logger.info("✓ Model unloaded successfully")
+        except Exception as exc:  # pragma: no cover - best-effort cleanup
+            logger.debug(f"Cleanup note: {exc}")
+
+    _shared_lore = None
+
 # Global flag for saving context output to disk (set via --save-context CLI arg)
 _save_context = False
 
@@ -481,14 +502,13 @@ class TestLOGONUtility(unittest.TestCase):
 # Test runner
 def run_tests():
     """Run all LORE tests"""
-    global _shared_lore
-
-    # Ensure shared instance exists before running tests
-    logger.info("=" * 60)
-    logger.info("Ensuring shared LORE instance for test suite")
-    logger.info("=" * 60)
+    # Initialize shared instance using helper (ensures consistency with module hooks)
+    logger.info("="*60)
+    logger.info("Initializing shared LORE instance for test suite")
+    logger.info("="*60)
     try:
         lore_instance = _get_shared_lore()
+        logger.info("✓ Shared LORE instance initialized successfully (LOGON disabled)")
     except Exception as e:
         logger.error(f"✗ Failed to initialize shared LORE instance: {e}")
         raise
@@ -539,13 +559,7 @@ def run_tests():
         logger.info("="*60)
         logger.info("Cleaning up shared LORE instance")
         logger.info("="*60)
-        if _shared_lore and _shared_lore.llm_manager:
-            try:
-                _shared_lore.llm_manager.unload_model()
-                logger.info("✓ Model unloaded successfully")
-            except Exception as e:
-                logger.debug(f"Cleanup note: {e}")
-        _shared_lore = None
+        tearDownModule()
         logger.info("✓ Shared LORE instance cleaned up")
 
     # Summary
