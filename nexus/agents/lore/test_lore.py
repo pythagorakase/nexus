@@ -17,9 +17,10 @@ import logging
 import sys
 import time
 import unittest
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -27,6 +28,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from lore import LORE
 from utils.turn_context import TurnContext, TurnPhase
+
+try:
+    from sqlalchemy import text
+except ImportError:  # pragma: no cover - optional dependency for divergence harness
+    text = None  # type: ignore[assignment]
 
 # Configure logging for tests
 logging.basicConfig(
@@ -76,6 +82,45 @@ def tearDownModule() -> None:
 
 # Global flag for saving context output to disk (set via --save-context CLI arg)
 _save_context = False
+
+# Optional list of chunk identifiers requested via CLI for divergence regression
+_test_chunks: List[int] = []
+
+
+@dataclass
+class DivergenceScenario:
+    """Configuration for a divergence regression test."""
+
+    chunk_id: int
+    prompt: str
+    expect_divergence: bool = True
+    warm_span: int = 4
+    directives: Sequence[str] = ()
+    structured_stub: Optional[Dict[str, Any]] = None
+    description: str = ""
+
+
+_KNOWN_DIVERGENCE_SCENARIOS: Dict[int, DivergenceScenario] = {
+    1369: DivergenceScenario(
+        chunk_id=1369,
+        prompt=(
+            "Walk me back through the Virginia Beach karaoke ambush—the Driftlight cocktails, "
+            "Pete's duet trap, and why Emilia swore off stage lights after that meltdown."
+        ),
+        warm_span=6,
+        directives=(
+            "Recent private outings between Alex and Emilia since leaving the Cradle",
+            "Nyati's corporate campaign progress and current leverage",
+            "Pete and Alina collaboration highlights aboard The Ghost",
+        ),
+        structured_stub={
+            "id": "character:karaoke_incident",
+            "name": "Virginia Beach Karaoke Incident",
+            "summary": "Nightclub ambush that led Emilia to avoid stage lights.",
+        },
+        description="Regression guard for karaoke divergence incident",
+    ),
+}
 
 
 class TestLOREInitialization(unittest.TestCase):
@@ -499,6 +544,144 @@ class TestLOGONUtility(unittest.TestCase):
         logger.info(f"  Formatted length: {len(formatted)} characters")
 
 
+class TestDivergenceDetection(unittest.TestCase):
+    """Regression checks for divergence detection with live LORE state."""
+
+    def setUp(self):
+        """Prepare shared fixtures and verify optional dependencies."""
+
+        self.lore = _get_shared_lore()
+
+        if not _test_chunks:
+            self.skipTest("No divergence chunks specified (pass --test-chunks)")
+
+        if not self.lore.memnon:
+            self.skipTest("MEMNON not available")
+
+        if text is None:
+            self.skipTest("SQLAlchemy not available for warm slice queries")
+
+        try:
+            if not self.lore.llm_manager.is_available():
+                self.skipTest("Local LLM not available")
+        except RuntimeError as exc:
+            self.skipTest(f"Local LLM unavailable: {exc}")
+
+        self.lore.llm_manager.ensure_model_loaded()
+
+        # Reset divergence state between runs to avoid leakage across chunks
+        if self.lore.memory_manager and self.lore.memory_manager.context_state:
+            self.lore.memory_manager.context_state._context = None
+            self.lore.memory_manager.context_state._transition = None
+            self.lore.memory_manager.context_state._chunk_cache.clear()
+
+    @staticmethod
+    def _strip_user_section(full_text: str) -> str:
+        marker = "\n## You"
+        return full_text.split(marker, 1)[0] if marker in full_text else full_text
+
+    def _build_warm_slice(self, chunk_id: int, span: int) -> List[Dict[str, Any]]:
+        assert text is not None  # Guarded in setUp
+
+        start_id = max(1, chunk_id - span)
+        with self.lore.memnon.Session() as session:  # type: ignore[attr-defined]
+            rows = session.execute(
+                text(
+                    """
+                    SELECT id, raw_text
+                    FROM narrative_chunks
+                    WHERE id BETWEEN :start AND :end
+                    ORDER BY id
+                    """
+                ),
+                {"start": start_id, "end": chunk_id},
+            ).fetchall()
+
+        return [
+            {"id": row.id, "chunk_id": row.id, "text": row.raw_text}
+            for row in rows
+        ]
+
+    def _run_divergence_case(self, scenario: DivergenceScenario) -> None:
+        chunk = self.lore.memnon.get_chunk_by_id(scenario.chunk_id)
+        if not chunk:
+            self.fail(f"Chunk {scenario.chunk_id} not found in corpus")
+
+        storyteller_only = self._strip_user_section(chunk.get("full_text") or chunk.get("text") or chunk.get("raw_text") or "")
+        self.assertTrue(storyteller_only.strip(), "Storyteller portion should not be empty")
+
+        warm_slice = self._build_warm_slice(scenario.chunk_id, scenario.warm_span)
+        self.assertTrue(warm_slice, "Warm slice retrieval should yield chunks")
+
+        authorial_passages: List[Dict[str, Any]] = []
+        for directive in scenario.directives:
+            try:
+                payload = self.lore.memnon.query_memory(query=directive, k=6, use_hybrid=True)
+            except Exception as exc:  # pragma: no cover - external service
+                logger.warning("Authorial directive '%s' failed: %s", directive, exc)
+                continue
+
+            authorial_passages.extend(payload.get("results", []))
+
+        if scenario.structured_stub:
+            authorial_passages.append(dict(scenario.structured_stub))
+
+        token_counts = self.lore.token_manager.calculate_budget("divergence regression probe")
+
+        assembled_context = {
+            "user_input": "Divergence regression harness",
+            "warm_slice": {"chunks": warm_slice},
+            "entity_data": {},
+            "retrieved_passages": {"results": authorial_passages},
+            "analysis": {},
+        }
+
+        baseline = self.lore.memory_manager.handle_storyteller_response(
+            narrative=storyteller_only,
+            warm_slice=warm_slice,
+            retrieved_passages=authorial_passages,
+            token_usage=token_counts,
+            assembled_context=assembled_context,
+            authorial_directives=list(scenario.directives),
+        )
+
+        self.assertIn(scenario.chunk_id, baseline.baseline_chunks)
+
+        update = self.lore.memory_manager.handle_user_input(
+            user_input=scenario.prompt,
+            token_counts=token_counts,
+        )
+
+        summary = self.lore.memory_manager.get_memory_summary()
+
+        if scenario.expect_divergence:
+            self.assertTrue(update.divergence.detected, scenario.description or "Expected divergence not detected")
+            self.assertTrue(summary["pass2"]["divergence_detected"], "Summary should reflect divergence detection")
+            self.assertTrue(
+                self.lore.memory_manager.context_state.get_additional_chunk_details(),
+                "Pass 2 should retrieve additional context when divergence occurs",
+            )
+        else:
+            self.assertFalse(update.divergence.detected, scenario.description or "Unexpected divergence detected")
+            self.assertFalse(summary["pass2"]["divergence_detected"], "Summary should indicate no divergence")
+
+    def test_divergence_with_chunks(self):
+        executed = False
+
+        for chunk_id in _test_chunks:
+            scenario = _KNOWN_DIVERGENCE_SCENARIOS.get(chunk_id)
+            if not scenario:
+                logger.warning("No divergence scenario defined for chunk %s; skipping", chunk_id)
+                continue
+
+            executed = True
+            logger.info("Running divergence regression for chunk %s", chunk_id)
+            self._run_divergence_case(scenario)
+
+        if not executed:
+            self.skipTest("Requested divergence chunks have no configured scenarios")
+
+
 # Test runner
 def run_tests():
     """Run all LORE tests"""
@@ -524,6 +707,7 @@ def run_tests():
         suite.addTests(loader.loadTestsFromTestCase(TestTokenBudget))
         suite.addTests(loader.loadTestsFromTestCase(TestLocalLLM))
         suite.addTests(loader.loadTestsFromTestCase(TestLOGONUtility))
+        suite.addTests(loader.loadTestsFromTestCase(TestDivergenceDetection))
 
         # Run tests (module fixtures won't be called since we're using custom runner)
         runner = unittest.TextTestRunner(verbosity=2)
@@ -598,11 +782,18 @@ Examples:
         action='store_true',
         help='Save assembled context payload to temp/ directory for inspection'
     )
+    parser.add_argument(
+        '--test-chunks',
+        nargs='+',
+        type=int,
+        help='Run divergence regression tests against the provided chunk ids'
+    )
 
     args = parser.parse_args()
 
     # Set module-level flag (no 'global' needed at module scope)
     _save_context = args.save_context
+    _test_chunks = args.test_chunks or []
 
     if _save_context:
         logger.info("Context saving enabled - output will be written to temp/ directory")
