@@ -5,6 +5,8 @@ Handles initialization and interaction with local language models via LM Studio 
 """
 
 import logging
+import requests
+import json
 from typing import Optional, Dict, Any, List, Type, Union
 from typing import Literal
 from pathlib import Path
@@ -15,9 +17,6 @@ try:
     LMS_SDK_AVAILABLE = True
 except ImportError:
     LMS_SDK_AVAILABLE = False
-    # Fallback to requests if SDK not available
-    import requests
-    import json
 
 logger = logging.getLogger("nexus.lore.local_llm")
 
