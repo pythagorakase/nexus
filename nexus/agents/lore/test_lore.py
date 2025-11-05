@@ -37,9 +37,21 @@ logger = logging.getLogger("test_lore")
 
 
 # Module-level shared LORE instance
-# Note: Initialized manually in run_tests() to avoid SDK singleton issues
-# with async tests running after unittest's tearDownModule()
+# Lazily initialize the shared instance so standard unittest/pytest discovery
+# still works without invoking the custom run_tests() helper.
 _shared_lore: Optional[LORE] = None
+
+
+def _get_shared_lore() -> LORE:
+    """Return the shared LORE instance, creating it on demand."""
+    global _shared_lore
+
+    if _shared_lore is None:
+        logger.info("Initializing shared LORE instance for test suite")
+        _shared_lore = LORE(debug=True, enable_logon=False)
+        logger.info("✓ Shared LORE instance initialized successfully (LOGON disabled)")
+
+    return _shared_lore
 
 # Global flag for saving context output to disk (set via --save-context CLI arg)
 _save_context = False
@@ -50,7 +62,7 @@ class TestLOREInitialization(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -107,7 +119,7 @@ class TestMEMNONIntegration(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -177,7 +189,7 @@ class TestTokenBudget(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -229,7 +241,7 @@ class TestTurnCycle(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -367,7 +379,7 @@ class TestLocalLLM(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -416,7 +428,7 @@ class TestLOGONUtility(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        self.lore = _shared_lore
+        self.lore = _get_shared_lore()
 
         # Clear Pass 2 state between tests to prevent leakage
         # This normally happens in handle_storyteller_response() between turns
@@ -471,13 +483,12 @@ def run_tests():
     """Run all LORE tests"""
     global _shared_lore
 
-    # Initialize shared instance manually (bypassing unittest's module fixtures)
-    logger.info("="*60)
-    logger.info("Initializing shared LORE instance for test suite")
-    logger.info("="*60)
+    # Ensure shared instance exists before running tests
+    logger.info("=" * 60)
+    logger.info("Ensuring shared LORE instance for test suite")
+    logger.info("=" * 60)
     try:
-        _shared_lore = LORE(debug=True, enable_logon=False)
-        logger.info("✓ Shared LORE instance initialized successfully (LOGON disabled)")
+        lore_instance = _get_shared_lore()
     except Exception as e:
         logger.error(f"✗ Failed to initialize shared LORE instance: {e}")
         raise
@@ -506,7 +517,7 @@ def run_tests():
         async def run_async_tests():
             """Run async test methods"""
             test_instance = TestTurnCycle()
-            test_instance.lore = _shared_lore  # Use shared instance
+            test_instance.lore = lore_instance
 
             try:
                 await test_instance.test_full_turn_cycle()
