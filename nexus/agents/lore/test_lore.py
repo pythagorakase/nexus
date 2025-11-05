@@ -19,7 +19,7 @@ import time
 import unittest
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -40,6 +40,7 @@ logger = logging.getLogger("test_lore")
 # Lazily initialize the shared instance so standard unittest/pytest discovery
 # still works without invoking the custom run_tests() helper.
 _shared_lore: Optional[LORE] = None
+_defer_module_teardown = False
 
 
 def _get_shared_lore() -> LORE:
@@ -63,7 +64,11 @@ def setUpModule() -> None:
 def tearDownModule() -> None:
     """unittest hook: release shared LORE when the module finishes."""
 
-    global _shared_lore
+    global _shared_lore, _defer_module_teardown
+
+    if _defer_module_teardown:
+        logger.debug("Module teardown deferred until async tests complete")
+        return
 
     if _shared_lore and _shared_lore.llm_manager:
         try:
@@ -76,6 +81,7 @@ def tearDownModule() -> None:
 
 # Global flag for saving context output to disk (set via --save-context CLI arg)
 _save_context = False
+_test_chunks: List[int] = []
 
 
 class TestLOREInitialization(unittest.TestCase):
@@ -395,6 +401,77 @@ class TestTurnCycle(unittest.TestCase):
             self.fail(f"Context assembly failed: {e}")
 
 
+class TestDivergenceDetection(unittest.TestCase):
+    """Async tests verifying divergence detection behaviour."""
+
+    def setUp(self):
+        """Prepare shared LORE instance for divergence tests."""
+
+        self.lore = _get_shared_lore()
+
+        if not _test_chunks:
+            self.skipTest("No chunk IDs provided for divergence testing")
+
+        if not getattr(self.lore, "memnon", None):
+            self.skipTest("MEMNON not available for divergence testing")
+
+        memory_manager = getattr(self.lore, "memory_manager", None)
+        if not memory_manager or not getattr(memory_manager, "divergence_detector", None):
+            self.skipTest("Divergence detector not configured")
+
+        if not getattr(self.lore, "llm_manager", None) or not self.lore.llm_manager.is_available():
+            self.skipTest("Local LLM not available for divergence detection")
+
+    async def test_divergence_with_chunks(self):
+        """Run divergence detector against provided chunk IDs."""
+
+        context_state = self.lore.memory_manager.context_state if self.lore.memory_manager else None
+        context = context_state.context if context_state else None
+        transition = context_state.transition if context_state else None
+
+        if not context or not transition:
+            self.skipTest("Baseline context not initialized; run turn cycle test first")
+
+        try:
+            self.lore.llm_manager.ensure_model_loaded()
+        except RuntimeError as exc:
+            self.skipTest(f"Unable to load local model for divergence detection: {exc}")
+
+        for chunk_id in _test_chunks:
+            with self.subTest(chunk_id=chunk_id):
+                self._test_single_chunk(chunk_id, context, transition)
+
+    def _test_single_chunk(self, chunk_id: int, context, transition) -> None:
+        """Execute divergence detection for a specific chunk."""
+
+        logger.info(f"Running divergence detection for chunk {chunk_id}")
+
+        chunk = self.lore.memnon.get_chunk_by_id(chunk_id) if self.lore.memnon else None
+        self.assertIsNotNone(chunk, f"Chunk {chunk_id} could not be retrieved for divergence test")
+
+        user_input = (chunk.get("text") or "").strip()
+        if not user_input:
+            self.skipTest(f"Chunk {chunk_id} has no text available for divergence analysis")
+
+        detector = self.lore.memory_manager.divergence_detector
+
+        try:
+            result = detector.detect(user_input, context, transition)
+        except RuntimeError as exc:
+            if "No models loaded" in str(exc):
+                self.skipTest(f"Local LLM model not loaded: {exc}")
+            raise
+
+        self.assertIsNotNone(result, "Divergence detector returned no result")
+        self.assertIsInstance(result.detected, bool, "Divergence result missing detection flag")
+        logger.info(
+            "✓ Divergence analysis complete for chunk %s (detected=%s, confidence=%.2f)",
+            chunk_id,
+            result.detected,
+            result.confidence,
+        )
+
+
 class TestLocalLLM(unittest.TestCase):
     """Test local LLM integration via LM Studio"""
 
@@ -513,6 +590,9 @@ def run_tests():
         logger.error(f"✗ Failed to initialize shared LORE instance: {e}")
         raise
 
+    result: Optional[unittest.result.TestResult] = None
+    async_success = True
+
     try:
         # Create test suite
         loader = unittest.TestLoader()
@@ -527,6 +607,8 @@ def run_tests():
 
         # Run tests (module fixtures won't be called since we're using custom runner)
         runner = unittest.TextTestRunner(verbosity=2)
+        global _defer_module_teardown
+        _defer_module_teardown = True
         result = runner.run(suite)
 
         # Run async tests BEFORE cleanup
@@ -534,8 +616,11 @@ def run_tests():
         print("Running Async Turn Cycle Tests")
         print("="*60)
 
-        async def run_async_tests():
+        async def run_async_tests() -> bool:
             """Run async test methods"""
+
+            all_passed = True
+
             test_instance = TestTurnCycle()
             test_instance.lore = lore_instance
 
@@ -544,21 +629,49 @@ def run_tests():
                 print("✓ Full turn cycle test passed")
             except Exception as e:
                 print(f"✗ Full turn cycle test failed: {e}")
+                all_passed = False
+
+            if lore_instance.llm_manager:
+                try:
+                    lore_instance.llm_manager.ensure_model_loaded()
+                except Exception as exc:
+                    print(f"⚠ Unable to ensure local model for divergence tests: {exc}")
+
+            if _test_chunks:
+                divergence_case = TestDivergenceDetection(methodName='test_divergence_with_chunks')
+                try:
+                    divergence_case.setUp()
+                    await divergence_case.test_divergence_with_chunks()
+                    print("✓ Divergence detection test passed")
+                except unittest.SkipTest as skip:
+                    print(f"⚠ Divergence detection test skipped: {skip}")
+                except Exception as exc:
+                    print(f"✗ Divergence detection test failed: {exc}")
+                    all_passed = False
+                finally:
+                    try:
+                        divergence_case.tearDown()
+                    finally:
+                        divergence_case.doCleanups()
 
             try:
                 await test_instance.test_context_assembly_with_chunk_1425()
                 print("✓ Context assembly test passed")
             except Exception as e:
                 print(f"✗ Context assembly test failed: {e}")
+                all_passed = False
+
+            return all_passed
 
         # Run async tests
-        asyncio.run(run_async_tests())
+        async_success = asyncio.run(run_async_tests())
 
     finally:
         # Manual cleanup after ALL tests (sync and async)
         logger.info("="*60)
         logger.info("Cleaning up shared LORE instance")
         logger.info("="*60)
+        _defer_module_teardown = False
         tearDownModule()
         logger.info("✓ Shared LORE instance cleaned up")
 
@@ -567,16 +680,24 @@ def run_tests():
     print("TEST SUMMARY")
     print("="*60)
 
-    if result.wasSuccessful():
+    overall_success = bool(result and result.wasSuccessful() and async_success)
+
+    if overall_success:
         print("✅ All synchronous tests passed!")
     else:
-        print(f"❌ {len(result.failures)} failures, {len(result.errors)} errors")
-        for failure in result.failures:
-            print(f"  Failed: {failure[0]}")
-        for error in result.errors:
-            print(f"  Error: {error[0]}")
+        if result:
+            print(f"❌ {len(result.failures)} failures, {len(result.errors)} errors")
+            for failure in result.failures:
+                print(f"  Failed: {failure[0]}")
+            for error in result.errors:
+                print(f"  Error: {error[0]}")
+        else:
+            print("❌ Test suite did not complete")
 
-    return result.wasSuccessful()
+        if not async_success:
+            print("  Async test failures detected")
+
+    return overall_success
 
 
 if __name__ == "__main__":
@@ -598,11 +719,30 @@ Examples:
         action='store_true',
         help='Save assembled context payload to temp/ directory for inspection'
     )
+    parser.add_argument(
+        '--test-chunks',
+        metavar='CHUNK_ID',
+        nargs='+',
+        type=int,
+        help='Run divergence detection tests for the specified narrative chunk IDs'
+    )
 
     args = parser.parse_args()
 
     # Set module-level flag (no 'global' needed at module scope)
     _save_context = args.save_context
+
+    if args.test_chunks:
+        unique_chunks = []
+        seen = set()
+        for chunk_id in args.test_chunks:
+            if chunk_id in seen:
+                continue
+            unique_chunks.append(chunk_id)
+            seen.add(chunk_id)
+        _test_chunks.clear()
+        _test_chunks.extend(unique_chunks)
+        logger.info(f"Divergence detection enabled for chunks: {_test_chunks}")
 
     if _save_context:
         logger.info("Context saving enabled - output will be written to temp/ directory")
