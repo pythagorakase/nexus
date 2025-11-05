@@ -129,11 +129,16 @@ class ContextMemoryManager:
         self.context_state = ContextStateManager()
         self.query_memory = QueryMemory(max_iterations=self.max_sql_iterations)
 
-        # Initialize divergence detector (LLM-based or regex fallback)
+        # Initialize divergence detector
         divergence_config = memory_settings.get("divergence_detection", {})
-        use_llm = divergence_config.get("use_llm", False)
+        use_llm = divergence_config.get("use_llm", True)  # Default to True
 
-        if use_llm and llm_manager:
+        if use_llm:
+            if not llm_manager:
+                raise RuntimeError(
+                    "LLM-based divergence detection enabled (use_llm=true) but llm_manager unavailable. "
+                    "Cannot initialize LORE without LLM access."
+                )
             use_local = divergence_config.get("use_local_llm", True)
             self.divergence_detector = LLMDivergenceDetector(
                 llm_manager=llm_manager,
@@ -142,9 +147,9 @@ class ContextMemoryManager:
             )
             logger.info("Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
         else:
+            # Explicit opt-out: use regex-based detector
             self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
-            if use_llm:
-                logger.warning("LLM divergence requested but llm_manager unavailable; using regex fallback")
+            logger.info("Using regex-based divergence detector (threshold=%.2f)", self.divergence_threshold)
 
         self.incremental = IncrementalRetriever(
             memnon=memnon,

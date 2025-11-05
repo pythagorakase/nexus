@@ -235,8 +235,8 @@ class LLMDivergenceDetector:
             return result
 
         except ImportError:
-            # Fallback if LM Studio SDK not available
-            logger.warning("LM Studio SDK not available, using fallback divergence analysis")
+            # Use HTTP requests if LM Studio SDK not available
+            logger.warning("LM Studio SDK not available, using HTTP-based LLM inference")
             # Parse manually from string response
             response_text = self.llm_manager.query(
                 prompt,

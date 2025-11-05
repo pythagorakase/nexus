@@ -453,8 +453,7 @@
             "use_local_llm": true,
             "llm_temperature": 0.3,
             "llm_max_tokens": 500,
-            "confidence_threshold": 0.7,
-            "fallback_to_regex": true
+            "confidence_threshold": 0.7
         }
     },
     "Utility Settings": {

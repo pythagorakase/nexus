@@ -90,12 +90,11 @@ Settings are in `settings.json` under `memory.divergence_detection`:
 
 ```json
 "divergence_detection": {
-    "use_llm": true,              // Enable LLM-based detection (vs regex fallback)
+    "use_llm": true,              // Enable LLM-based detection
     "use_local_llm": true,         // Use local LM Studio model
     "llm_temperature": 0.3,        // Low temp for consistent analysis
     "llm_max_tokens": 500,         // Max tokens for analysis output
-    "confidence_threshold": 0.7,   // Threshold for detection (0.0-1.0)
-    "fallback_to_regex": true      // Use regex if LLM unavailable
+    "confidence_threshold": 0.7    // Threshold for detection (0.0-1.0)
 }
 ```
 
@@ -103,7 +102,6 @@ Settings are in `settings.json` under `memory.divergence_detection`:
 
 - **Manager**: `nexus/memory/manager.py` - Conditionally initializes LLMDivergenceDetector if `use_llm=true` and llm_manager available
 - **Detector**: `nexus/memory/llm_divergence.py` - LLM-based detector using structured output
-- **Fallback**: `nexus/memory/divergence.py` - Original regex detector (kept for reliability)
 - **Wiring**: `nexus/agents/lore/lore.py` - LORE agent passes llm_manager to ContextMemoryManager
 
 ### Key Benefits
