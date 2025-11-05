@@ -7,7 +7,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from nexus.memory.llm_divergence import LLMDivergenceDetector, DivergenceAnalysis
+from nexus.memory.llm_divergence import LLMDivergenceDetector, EnrichmentAnalysis
 from nexus.memory.context_state import ContextPackage, PassTransition
 
 # Configure logging

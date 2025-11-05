@@ -131,14 +131,16 @@ class ContextMemoryManager:
 
         # Initialize divergence detector
         divergence_config = memory_settings.get("divergence_detection", {})
-        use_llm = divergence_config.get("use_llm", True)  # Default to True
+        use_llm_requested = bool(divergence_config.get("use_llm", True))
 
-        if use_llm:
-            if not llm_manager:
-                raise RuntimeError(
-                    "LLM-based divergence detection enabled (use_llm=true) but llm_manager unavailable. "
-                    "Cannot initialize LORE without LLM access."
-                )
+        if use_llm_requested and not llm_manager:
+            logger.warning(
+                "LLM-based divergence detection requested but llm_manager unavailable; "
+                "falling back to regex-based detector."
+            )
+            use_llm_requested = False
+
+        if use_llm_requested and llm_manager:
             use_local = divergence_config.get("use_local_llm", True)
             self.divergence_detector = LLMDivergenceDetector(
                 llm_manager=llm_manager,
@@ -147,7 +149,7 @@ class ContextMemoryManager:
             )
             logger.info("Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
         else:
-            # Explicit opt-out: use regex-based detector
+            # Explicit opt-out or fallback when LLM unavailable: use regex-based detector
             self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
             logger.info("Using regex-based divergence detector (threshold=%.2f)", self.divergence_threshold)
 

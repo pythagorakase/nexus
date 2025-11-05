@@ -218,8 +218,18 @@ class LLMDivergenceDetector:
             )
             chat.add_user_message(prompt)
 
+            model_identifier = ""
+            if hasattr(self.llm_manager, "model"):
+                model = self.llm_manager.model
+                model_identifier = (
+                    getattr(model, "identifier", "")
+                    or getattr(model, "model_id", "")
+                )
+            if not model_identifier:
+                model_identifier = getattr(self.llm_manager, "loaded_model_id", "")
+
             # For GPT-OSS models, first get reasoning with regular response
-            if "gpt-oss" in self.llm_manager.model.identifier.lower():
+            if "gpt-oss" in str(model_identifier).lower():
                 # First, get the reasoning without structured output
                 reasoning_config = {
                     "temperature": 0.3,
