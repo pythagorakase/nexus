@@ -82,6 +82,8 @@ class LLMDivergenceDetector:
         Returns:
             DivergenceResult with detection status and metadata
         """
+        import time
+
         # If no baseline or input, no divergence to detect
         if not user_input or not context or not transition:
             logger.debug("No baseline context or user input; skipping divergence detection")
@@ -90,16 +92,22 @@ class LLMDivergenceDetector:
         # Build prompt for LLM analysis
         prompt = self._build_divergence_prompt(user_input, context, transition)
 
-        # Get LLM analysis
+        # Get LLM analysis with timing
+        start_time = time.time()
         try:
             analysis = self._get_llm_analysis(prompt)
+            elapsed = time.time() - start_time
+            logger.info(f"LLM divergence analysis completed in {elapsed:.2f}s")
         except Exception as e:
-            logger.warning(f"LLM divergence analysis failed: {e}")
+            elapsed = time.time() - start_time
+            logger.warning(f"LLM divergence analysis failed after {elapsed:.2f}s: {e}")
             # Fallback to no-divergence on error
             return DivergenceResult(False, 0.0, {}, set(), set())
 
         # Convert LLM analysis to DivergenceResult
-        return self._convert_to_result(analysis, user_input)
+        result = self._convert_to_result(analysis, user_input)
+        logger.debug(f"Divergence detection: {result.detected} (confidence={result.confidence:.2f})")
+        return result
 
     def _build_divergence_prompt(
         self,

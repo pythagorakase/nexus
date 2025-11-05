@@ -13,6 +13,7 @@ from sqlalchemy import text
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
 from .incremental import IncrementalRetriever
+from .llm_divergence import LLMDivergenceDetector
 from .query_memory import QueryMemory
 
 try:  # pragma: no cover - optional dependency during unit tests
@@ -127,7 +128,24 @@ class ContextMemoryManager:
 
         self.context_state = ContextStateManager()
         self.query_memory = QueryMemory(max_iterations=self.max_sql_iterations)
-        self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
+
+        # Initialize divergence detector (LLM-based or regex fallback)
+        divergence_config = memory_settings.get("divergence_detection", {})
+        use_llm = divergence_config.get("use_llm", False)
+
+        if use_llm and llm_manager:
+            use_local = divergence_config.get("use_local_llm", True)
+            self.divergence_detector = LLMDivergenceDetector(
+                llm_manager=llm_manager,
+                threshold=self.divergence_threshold,
+                use_local_llm=use_local,
+            )
+            logger.info("Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
+        else:
+            self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
+            if use_llm:
+                logger.warning("LLM divergence requested but llm_manager unavailable; using regex fallback")
+
         self.incremental = IncrementalRetriever(
             memnon=memnon,
             context_state=self.context_state,

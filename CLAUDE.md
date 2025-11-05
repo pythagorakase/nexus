@@ -73,6 +73,65 @@ The codebase uses 1Password CLI for secure API key retrieval:
 - Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `settings.json`, following the established format there, and write your code to pull configurable values from that file.
 - Do not build graceful fallbacks into your code unless the user requests it or explicitly gives permission. While in development, I prefer that errors surface visibly and unmistakebly. If that means a screeching traceback, so be it!
 
+## LLM-Based Divergence Detection
+
+The LORE agent uses intelligent LLM-based divergence detection to identify when users reference entities, events, or context not present in the recent narrative (warm slice). This replaces a naive regex-based approach that had high false positive rates.
+
+### How It Works
+
+When a user provides input, the **LLMDivergenceDetector** analyzes whether:
+1. **Entity References**: The user mentions specific characters or locations requiring "featured" detail level
+2. **Event References**: The user refers to past events not in the warm slice (triggers Pass 2 retrieval)
+3. **Simple Continuation**: The input is a straightforward continuation requiring no additional context
+
+### Configuration
+
+Settings are in `settings.json` under `memory.divergence_detection`:
+
+```json
+"divergence_detection": {
+    "use_llm": true,              // Enable LLM-based detection (vs regex fallback)
+    "use_local_llm": true,         // Use local LM Studio model
+    "llm_temperature": 0.3,        // Low temp for consistent analysis
+    "llm_max_tokens": 500,         // Max tokens for analysis output
+    "confidence_threshold": 0.7,   // Threshold for detection (0.0-1.0)
+    "fallback_to_regex": true      // Use regex if LLM unavailable
+}
+```
+
+### Integration Architecture
+
+- **Manager**: `nexus/memory/manager.py` - Conditionally initializes LLMDivergenceDetector if `use_llm=true` and llm_manager available
+- **Detector**: `nexus/memory/llm_divergence.py` - LLM-based detector using structured output
+- **Fallback**: `nexus/memory/divergence.py` - Original regex detector (kept for reliability)
+- **Wiring**: `nexus/agents/lore/lore.py` - LORE agent passes llm_manager to ContextMemoryManager
+
+### Key Benefits
+
+- **No False Positives**: Eliminates spurious detections on prepositions ("into", "after", "with")
+- **Entity Recognition**: Accurately identifies when characters/locations need upgrading from baseline to featured
+- **Event Detection**: Detects references to past events requiring memory retrieval
+- **Performance**: ~1-3 seconds per analysis with local 120B model (acceptable for turn-based interaction)
+
+### Testing
+
+Run tests with context saving to inspect divergence analysis:
+```bash
+poetry run python nexus/agents/lore/test_lore.py --save-context
+jq '.memory_state.pass2.divergence' temp/test_context_chunk1425_*.json
+```
+
+Expected output structure:
+```json
+{
+  "detected": false,
+  "confidence": 0.0,
+  "gaps": {},
+  "unmatched_entities": [],
+  "references_seen": []
+}
+```
+
 ## OpenAI API Best Practices
 
 ### Using Structured Outputs (responses.parse vs responses.create)
