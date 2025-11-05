@@ -47,11 +47,12 @@ class SQLStep(BaseModel):
 class LocalLLMManager:
     """Manages local LLM for LORE's reasoning capabilities via LM Studio SDK"""
     
-    def __init__(self, settings: Dict[str, Any], settings_path: Optional[Path] = None):
+    def __init__(self, settings: Dict[str, Any], settings_path: Optional[Path] = None, system_prompt: Optional[str] = None):
         """Initialize with LLM configuration from settings"""
         self.settings = settings
         self.settings_path = settings_path
         self.llm_config = settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
+        self.system_prompt = system_prompt  # Store the system prompt for use in queries
         
         # LM Studio configuration
         self.base_url = self.llm_config.get("lmstudio_url", "http://localhost:1234/v1")
@@ -150,7 +151,14 @@ class LocalLLMManager:
         if LMS_SDK_AVAILABLE and self.model:
             # Use SDK for cleaner API
             try:
-                chat = lms.Chat(system_prompt or "You are LORE, a narrative intelligence system.")
+                # Use provided system_prompt, fall back to instance prompt, or FAIL HARD
+                if system_prompt:
+                    effective_prompt = system_prompt
+                elif self.system_prompt:
+                    effective_prompt = self.system_prompt
+                else:
+                    raise RuntimeError("FATAL: No system prompt available for LLM query!")
+                chat = lms.Chat(effective_prompt)
                 chat.add_user_message(prompt)
                 
                 config = {
@@ -226,8 +234,11 @@ class LocalLLMManager:
         """
         # Combine warm slice text
         warm_text = "\n".join([chunk.get("text", "")[:200] for chunk in warm_slice[:3]])
-        
-        system_prompt = """You are LORE, a narrative analysis system. Analyze the given context and identify key entities and narrative elements. Be precise and concise."""
+
+        # REQUIRE the system prompt - fail hard if not loaded
+        if not self.system_prompt:
+            raise RuntimeError("FATAL: LORE system prompt not loaded! Cannot perform narrative analysis without proper instructions.")
+        system_prompt = self.system_prompt
         
         if LMS_SDK_AVAILABLE and self.model:
             # Use structured output for clean parsing
@@ -357,7 +368,10 @@ Response format - use exact headers:"""
         context_type = context_analysis.get("context_type", "unknown")
 
         # Build a prompt for query generation
-        system_prompt = """You are LORE's retrieval query generator. Generate 3-5 targeted search queries that would help retrieve relevant past narrative information to inform the story continuation. Queries should be specific and focused."""
+        # REQUIRE the system prompt - fail hard if not loaded
+        if not self.system_prompt:
+            raise RuntimeError("FATAL: LORE system prompt not loaded! Cannot generate retrieval queries without proper instructions.")
+        system_prompt = self.system_prompt
 
         prompt = f"""Based on the current narrative context, generate 3-5 retrieval queries to search for relevant past events, character history, or world information.
 
