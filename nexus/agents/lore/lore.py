@@ -56,6 +56,7 @@ from utils.model_manager import ModelManager
 from logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager
+from nexus.memory.user_confirmation import request_input
 
 # Import MEMNON if available
 try:
@@ -107,11 +108,14 @@ class LORE:
         self.token_manager = None
         self.turn_manager = None
         self.memory_manager = None
-        
+
+        # Load system prompt
+        self.system_prompt = self._load_system_prompt()
+
         # Turn cycle state
         self.current_phase = TurnPhase.IDLE
         self.turn_context = None
-        
+
         # Initialize utilities
         self._initialize_components()
         
@@ -134,7 +138,40 @@ class LORE:
             raise RuntimeError(
                 f"Cannot initialize LORE without valid settings.json: {e}"
             ) from e
-    
+
+    def _load_system_prompt(self) -> str:
+        """Load the LORE system prompt from file - asks user for path if not available"""
+        system_prompt_path = Path(__file__).parent / "lore_system_prompt.md"
+
+        try:
+            with open(system_prompt_path, 'r') as f:
+                prompt = f.read()
+                logger.info(f"Loaded system prompt from {system_prompt_path} ({len(prompt)} bytes)")
+                return prompt
+        except FileNotFoundError:
+            logger.warning(f"System prompt file not found at default location: {system_prompt_path}")
+
+            # Ask user for alternative path
+            user_path = request_input(
+                f"System prompt not found at:\n  {system_prompt_path}\n\nPlease enter the path to lore_system_prompt.md",
+                validation_func=lambda p: Path(p).exists() and Path(p).is_file(),
+                hook_type="system_prompt_path"
+            )
+
+            if user_path:
+                try:
+                    with open(user_path, 'r') as f:
+                        prompt = f.read()
+                        logger.info(f"Loaded system prompt from user-provided path: {user_path} ({len(prompt)} bytes)")
+                        return prompt
+                except Exception as e:
+                    logger.error(f"Failed to load system prompt from user path: {e}")
+                    raise RuntimeError(f"FATAL: Could not load system prompt from {user_path}: {e}")
+            else:
+                raise RuntimeError(f"FATAL: System prompt required but not provided. LORE cannot operate without instructions.")
+        except Exception as e:
+            raise RuntimeError(f"FATAL: Failed to load system prompt: {e}! LORE cannot operate without instructions.")
+
     def _initialize_components(self):
         """Initialize all components and utilities - FAILS HARD if any component unavailable"""
         logger.info("Initializing LORE components...")
@@ -142,7 +179,7 @@ class LORE:
         # Initialize managers - all required
         self.token_manager = TokenBudgetManager(self.settings)
         settings_path = self.settings_path if hasattr(self, 'settings_path') else None
-        self.llm_manager = LocalLLMManager(self.settings, settings_path)  # Will fail hard if LM Studio not available
+        self.llm_manager = LocalLLMManager(self.settings, settings_path, self.system_prompt)  # Pass system prompt
         self.turn_manager = TurnCycleManager(self)
         
         # MEMNON is REQUIRED

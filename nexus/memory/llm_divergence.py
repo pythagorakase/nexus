@@ -14,30 +14,20 @@ from .divergence import DivergenceResult
 logger = logging.getLogger(__name__)
 
 
-class DivergenceAnalysis(BaseModel):
-    """Structured output from LLM divergence analysis."""
+class EnrichmentAnalysis(BaseModel):
+    """Structured output identifying narrative enrichment opportunities."""
 
+    enrichment_searches: List[str] = Field(
+        default_factory=list,
+        description="Search terms for narrative callbacks, events, or references worth retrieving"
+    )
     entity_ids_to_feature: List[int] = Field(
         default_factory=list,
-        description="Entity IDs that should be upgraded from baseline to featured"
+        description="Entity IDs (if any) that should be upgraded from baseline to featured"
     )
-    requires_search: bool = Field(
-        default=False,
-        description="Whether user input references obscure/remote events requiring search"
-    )
-    search_reason: Optional[str] = Field(
+    enrichment_reason: Optional[str] = Field(
         default=None,
-        description="Explanation of why additional search is needed"
-    )
-    search_terms: List[str] = Field(
-        default_factory=list,
-        description="Specific terms to search for if requires_search=True"
-    )
-    confidence: float = Field(
-        default=0.0,
-        ge=0.0,
-        le=1.0,
-        description="Confidence in the divergence detection (0.0-1.0)"
+        description="Brief explanation of what narrative elements could be enriched"
     )
 
 
@@ -82,6 +72,8 @@ class LLMDivergenceDetector:
         Returns:
             DivergenceResult with detection status and metadata
         """
+        import time
+
         # If no baseline or input, no divergence to detect
         if not user_input or not context or not transition:
             logger.debug("No baseline context or user input; skipping divergence detection")
@@ -90,16 +82,31 @@ class LLMDivergenceDetector:
         # Build prompt for LLM analysis
         prompt = self._build_divergence_prompt(user_input, context, transition)
 
-        # Get LLM analysis
+        # Debug: Log user input
+        logger.info(f"Analyzing user input: {user_input[:100]}...")
+
+        # Log the prompt being sent (first 1000 chars for debugging)
+        logger.debug(f"Sending prompt to LLM (first 1000 chars): {prompt[:1000]}...")
+
+        # Get LLM analysis with timing
+        start_time = time.time()
         try:
             analysis = self._get_llm_analysis(prompt)
+            elapsed = time.time() - start_time
+            logger.info(f"LLM divergence analysis completed in {elapsed:.2f}s")
+
+            # Log the raw analysis result
+            logger.debug(f"LLM analysis result: searches={analysis.enrichment_searches}, entities={analysis.entity_ids_to_feature}, reason={analysis.enrichment_reason}")
         except Exception as e:
-            logger.warning(f"LLM divergence analysis failed: {e}")
+            elapsed = time.time() - start_time
+            logger.warning(f"LLM divergence analysis failed after {elapsed:.2f}s: {e}")
             # Fallback to no-divergence on error
             return DivergenceResult(False, 0.0, {}, set(), set())
 
         # Convert LLM analysis to DivergenceResult
-        return self._convert_to_result(analysis, user_input)
+        result = self._convert_to_result(analysis, user_input)
+        logger.debug(f"Divergence detection: {result.detected} (confidence={result.confidence:.2f})")
+        return result
 
     def _build_divergence_prompt(
         self,
@@ -112,12 +119,15 @@ class LLMDivergenceDetector:
         sections = []
 
         # System context
-        sections.append("# DIVERGENCE ANALYSIS TASK")
+        sections.append("# NARRATIVE ENRICHMENT ANALYSIS")
         sections.append("")
-        sections.append("You are analyzing user input for an interactive narrative system.")
-        sections.append("Your task is to identify:")
-        sections.append("1. Which baseline entities (characters/places) the user directly references")
-        sections.append("2. Whether the user mentions events/details not in recent narrative or retrieved context")
+        sections.append("You are analyzing user input to identify opportunities for narrative enrichment.")
+        sections.append("Your goal is to find:")
+        sections.append("1. Entities that would benefit from richer context")
+        sections.append("2. References and callbacks that could be enhanced with additional retrieval")
+        sections.append("3. Narrative threads worth exploring more deeply")
+        sections.append("")
+        sections.append("Remember: Casual mentions and throwaway lines often carry the most narrative weight.")
         sections.append("")
 
         # Baseline entities (characters)
@@ -170,25 +180,71 @@ class LLMDivergenceDetector:
         sections.append("")
 
         # Instructions
-        sections.append("## ANALYSIS QUESTIONS")
+        sections.append("## ENRICHMENT OPPORTUNITIES")
         sections.append("")
-        sections.append("1. **Entity References**: Which character/location IDs (if any) does the user")
-        sections.append("   directly reference, interact with, or mention? These need 'featured' details.")
-        sections.append("   - Only include entities explicitly referenced")
-        sections.append("   - Use entity IDs from the lists above")
+        sections.append("1. **Narrative References**: What events, callbacks, or allusions could be enriched?")
+        sections.append("   - Past events mentioned (even jokingly) like 'karaoke' or 'that time when...'")
+        sections.append("   - Shared history or inside references")
+        sections.append("   - Any knowledge that implies deeper context")
+        sections.append("   - List search terms to retrieve the full context (PRIMARY OUTPUT)")
         sections.append("")
-        sections.append("2. **Event References**: Does the user mention events, details, or knowledge that")
-        sections.append("   aren't explained in the recent narrative or most recent scene?")
-        sections.append("   - Examples: obscure past events, time gaps, unexplained knowledge")
-        sections.append("   - If yes, provide search terms to find relevant context")
+        sections.append("2. **Entity Upgrades** (if applicable): Which character/location IDs need fuller context?")
+        sections.append("   - Only if specific entities are directly referenced")
+        sections.append("   - List entity IDs that deserve 'featured' treatment")
+        sections.append("   - Leave empty if no specific entities need upgrading")
         sections.append("")
-        sections.append("3. **Confidence**: How confident are you in this analysis? (0.0-1.0)")
+        sections.append("3. **Enrichment Reason**: Brief explanation of what would be enriched")
         sections.append("")
         sections.append("Respond with structured JSON output.")
 
         return "\n".join(sections)
 
-    def _get_llm_analysis(self, prompt: str) -> DivergenceAnalysis:
+    def _extract_json_brace_aware(self, text: str) -> Optional[str]:
+        """Extract JSON using brace counting, respecting string boundaries.
+
+        This method properly handles JSON extraction even when string values
+        contain closing braces '}', which would break simple regex patterns.
+
+        Args:
+            text: Text containing JSON object
+
+        Returns:
+            Extracted JSON string or None if not found
+        """
+        import json
+
+        start_idx = text.find('{')
+        if start_idx == -1:
+            return None
+
+        brace_count = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text[start_idx:], start_idx):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == '\\' and in_string:
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return text[start_idx:i+1]
+
+        return None
+
+    def _get_llm_analysis(self, prompt: str) -> EnrichmentAnalysis:
         """Get LLM analysis using structured output."""
 
         # Use local LLM for fast, cheap inference
@@ -201,88 +257,177 @@ class LLMDivergenceDetector:
 
             # Create chat with system context
             chat = lms.Chat(
-                "You are LORE's divergence detection system. "
-                "Analyze user input to identify entity references and event gaps."
+                "You are LORE's narrative enrichment analyzer. "
+                "Identify opportunities to enhance the narrative with deeper context. "
+                "Remember: casual references often signal the richest retrieval opportunities."
             )
             chat.add_user_message(prompt)
 
-            # Get structured response
-            result = self.llm_manager.model.respond(
-                chat,
-                response_format=DivergenceAnalysis,
-                config={
-                    "temperature": 0.3,  # Low temperature for consistent analysis
-                    "maxTokens": 500,    # Short response sufficient
+            model_identifier = ""
+            if hasattr(self.llm_manager, "model"):
+                model = self.llm_manager.model
+                model_identifier = (
+                    getattr(model, "identifier", "")
+                    or getattr(model, "model_id", "")
+                )
+            if not model_identifier:
+                model_identifier = getattr(self.llm_manager, "loaded_model_id", "")
+
+            # For GPT-OSS models, first get reasoning with regular response
+            if "gpt-oss" in str(model_identifier).lower():
+                # First, get the reasoning without structured output
+                reasoning_config = {
+                    "temperature": 0.3,
+                    "maxTokens": 2000,
                     "contextLength": self.llm_manager.llm_config.get("context_window", 65536),
+                    "reasoning": {"effort": "high"}
                 }
+
+                # Add instruction to output JSON at the end
+                reasoning_chat = lms.Chat(
+                    "You are LORE's narrative enrichment analyzer. "
+                    "Think step-by-step about enrichment opportunities, then output JSON. "
+                    "Remember: casual references often signal the richest retrieval opportunities."
+                )
+                reasoning_chat.add_user_message(
+                    prompt + "\n\nFirst explain your reasoning about what enrichment opportunities exist. "
+                    "Then output a JSON object on a new line with exactly these keys:\n"
+                    "{\n"
+                    '  "enrichment_searches": ["search term 1", "search term 2", ...],\n'
+                    '  "entity_ids_to_feature": [1, 2, 3],\n'
+                    '  "enrichment_reason": "Brief reason why these enrichments would help"\n'
+                    "}\n\n"
+                    "The JSON must be valid and complete. Include empty arrays [] if no items needed."
+                )
+
+                reasoning_result = self.llm_manager.model.respond(
+                    reasoning_chat,
+                    config=reasoning_config
+                )
+
+                # Log the full reasoning response
+                if hasattr(reasoning_result, "content"):
+                    logger.info("=== FULL LLM RESPONSE WITH REASONING ===")
+                    logger.info(reasoning_result.content)
+                    logger.info("=== END FULL RESPONSE ===")
+
+                    # Parse JSON from the response using brace-aware extraction
+                    import json
+                    import re
+
+                    content = reasoning_result.content
+
+                    # Try brace-aware extraction first
+                    json_str = self._extract_json_brace_aware(content)
+
+                    if json_str:
+                        try:
+                            # Clean up any trailing commas before closing brackets
+                            json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+                            data = json.loads(json_str)
+                            analysis = EnrichmentAnalysis(**data)
+                            logger.debug(f"Successfully parsed JSON: {data}")
+                        except (json.JSONDecodeError, Exception) as e:
+                            logger.warning(
+                                f"Failed to parse JSON: {e}. "
+                                f"Full JSON attempted: {json_str}"
+                            )
+                            analysis = EnrichmentAnalysis()
+                    else:
+                        logger.warning(
+                            f"No valid JSON found in LLM response. "
+                            f"Full content: {content[:500]}"
+                        )
+                        analysis = EnrichmentAnalysis()
+                else:
+                    # Fallback to structured output
+                    result = self.llm_manager.model.respond(
+                        chat,
+                        response_format=EnrichmentAnalysis,
+                        config={"temperature": 0.3, "maxTokens": 500, "contextLength": 65536}
+                    )
+                    if hasattr(result, "parsed"):
+                        analysis = result.parsed
+                    else:
+                        analysis = EnrichmentAnalysis()
+            else:
+                # Non-GPT-OSS models: use structured output directly
+                result = self.llm_manager.model.respond(
+                    chat,
+                    response_format=EnrichmentAnalysis,
+                    config={
+                        "temperature": 0.3,
+                        "maxTokens": 500,
+                        "contextLength": self.llm_manager.llm_config.get("context_window", 65536),
+                    }
+                )
+
+                # Extract parsed content from PredictionResult wrapper
+                if not hasattr(result, "parsed") or result.parsed is None:
+                    raise RuntimeError("LM Studio SDK returned result without parsed content")
+
+                parsed_data = result.parsed
+
+                # result.parsed may be a dict or Pydantic model - convert to model for consistency
+                if isinstance(parsed_data, dict):
+                    analysis = EnrichmentAnalysis(**parsed_data)
+                else:
+                    analysis = parsed_data
+
+            logger.info(
+                "LLM enrichment analysis complete: searches=%s, entities=%s",
+                analysis.enrichment_searches,
+                analysis.entity_ids_to_feature if analysis.entity_ids_to_feature else "none",
             )
 
-            logger.debug(
-                "LLM divergence analysis complete: entities=%s, search=%s, confidence=%.2f",
-                len(result.entity_ids_to_feature),
-                result.requires_search,
-                result.confidence,
-            )
+            # Log enrichment reason if provided
+            if analysis.enrichment_reason:
+                logger.info("Enrichment reason: %s", analysis.enrichment_reason)
 
-            return result
+            return analysis
 
         except ImportError:
-            # Fallback if LM Studio SDK not available
-            logger.warning("LM Studio SDK not available, using fallback divergence analysis")
+            # Use HTTP requests if LM Studio SDK not available
+            logger.warning("LM Studio SDK not available, using HTTP-based LLM inference")
             # Parse manually from string response
             response_text = self.llm_manager.query(
                 prompt,
                 temperature=0.3,
                 max_tokens=500,
                 system_prompt=(
-                    "You are LORE's divergence detection system. "
+                    "You are LORE's narrative enrichment analyzer. "
                     "Respond in JSON format with keys: "
-                    "entity_ids_to_feature (list of ints), "
-                    "requires_search (bool), "
-                    "search_reason (string or null), "
-                    "search_terms (list of strings), "
-                    "confidence (float 0-1)"
+                    "enrichment_searches (list of strings), "
+                    "entity_ids_to_feature (list of ints or empty), "
+                    "enrichment_reason (string or null)"
                 )
             )
 
-            # Try to parse JSON response
-            try:
-                import json
-                data = json.loads(response_text)
-                return DivergenceAnalysis(**data)
-            except Exception as e:
-                logger.warning(f"Failed to parse divergence analysis JSON: {e}")
-                # Return safe default
-                return DivergenceAnalysis(
-                    entity_ids_to_feature=[],
-                    requires_search=False,
-                    confidence=0.0,
-                )
+            # Parse JSON response - FAIL HARD if parsing fails
+            import json
+            data = json.loads(response_text)
+            return EnrichmentAnalysis(**data)
 
     def _convert_to_result(
         self,
-        analysis: DivergenceAnalysis,
+        analysis: EnrichmentAnalysis,
         user_input: str,
     ) -> DivergenceResult:
         """Convert LLM analysis to DivergenceResult format."""
 
-        # Build gaps dict from analysis
+        # Build enrichment opportunities from analysis
         gaps: Dict[str, str] = {}
 
-        # Add entity gaps
+        # Add search terms as primary enrichment opportunities
+        for search_term in analysis.enrichment_searches:
+            gaps[search_term] = f"Narrative enrichment: {analysis.enrichment_reason or 'callback/reference'}"
+
+        # Add entity enrichment opportunities if any
         for entity_id in analysis.entity_ids_to_feature:
-            gaps[f"entity_{entity_id}"] = f"Entity ID {entity_id} referenced, needs featured details"
+            gaps[f"entity_{entity_id}"] = f"Entity ID {entity_id} could benefit from featured context"
 
-        # Add search gap if needed
-        if analysis.requires_search and analysis.search_reason:
-            for term in analysis.search_terms:
-                gaps[term] = f"Obscure reference requiring search: {analysis.search_reason}"
-
-        # Determine detection status
-        detected = (
-            (bool(analysis.entity_ids_to_feature) or analysis.requires_search)
-            and analysis.confidence >= self.threshold
-        )
+        # Detect enrichment opportunities (no confidence threshold)
+        detected = bool(analysis.enrichment_searches) or bool(analysis.entity_ids_to_feature)
 
         # Build unmatched_entities set (for compatibility)
         unmatched = set(gaps.keys())
@@ -292,16 +437,15 @@ class LLMDivergenceDetector:
         references_seen = {"user_input"} if user_input else set()
 
         logger.debug(
-            "LLM divergence result: detected=%s, confidence=%.2f, entities=%s, search=%s",
+            "LLM enrichment result: detected=%s, searches=%s, entities=%s",
             detected,
-            analysis.confidence,
+            len(analysis.enrichment_searches),
             len(analysis.entity_ids_to_feature),
-            analysis.requires_search,
         )
 
         return DivergenceResult(
             detected=detected,
-            confidence=analysis.confidence,
+            confidence=1.0 if detected else 0.0,  # Simple binary for backwards compatibility
             gaps=gaps,
             unmatched_entities=unmatched,
             references_seen=references_seen,

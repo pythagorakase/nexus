@@ -985,6 +985,11 @@ def execute_multi_model_hybrid_search(
                         logger.debug(f"Skipping model {model_key} (zero or negative weight)")
                         continue
 
+                    # Skip if embedding generation failed
+                    if embedding is None:
+                        logger.warning(f"Skipping model {model_key} (embedding is None)")
+                        continue
+
                     logger.info(f"Running vector search for model {model_key}")
 
                     # Get dimensions of the query embedding to determine which table to use

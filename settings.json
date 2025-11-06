@@ -120,6 +120,7 @@
             "model": {
                 "description": "defines default LLM to load for all agents",
                 "possible_values": [
+                    "nousresearch/hermes-4-70b",
                     "unsloth-gpt-oss-120b-hi-mlx",
                     "gpt-oss-120b-mlx",
                     "openai-gpt-oss-120b-mlx-6",
@@ -173,21 +174,21 @@
             "enable_narrative_state_allocation": false,
             "agentic_sql": true,
             "token_budget": {
-                "apex_context_window": 100000,
+                "apex_context_window": 75000,
                 "system_prompt_tokens": 5000
             },
             "payload_percent_budget": {
                 "structured_summaries": {
-                    "min": 40,
-                    "max": 70
+                    "min": 70,
+                    "max": 90
                 },
                 "contextual_augmentation": {
-                    "min": 20,
-                    "max": 35
+                    "min": 5,
+                    "max": 15
                 },
                 "warm_slice": {
-                    "min": 15,
-                    "max": 30
+                    "min": 5,
+                    "max": 15
                 }
             },
             "query_budget": 5,
@@ -199,8 +200,15 @@
                 "include_all_relationships": true,
                 "include_all_active_events": true,
                 "include_all_active_threats": true,
-                "active_event_statuses": ["active", "ongoing", "escalating"],
-                "active_threat_statuses": ["active", "imminent"],
+                "active_event_statuses": [
+                    "active",
+                    "ongoing",
+                    "escalating"
+                ],
+                "active_threat_statuses": [
+                    "active",
+                    "imminent"
+                ],
                 "max_total_characters": 30,
                 "max_total_relationships": 100,
                 "max_total_events": 15,
@@ -436,10 +444,20 @@
         }
     },
     "memory": {
+        "phase2_fraction": 0.1,
+        "raw_search_k": 30,
+        "skip_simple_choices": true,
         "pass2_budget_reserve": 0.25,
         "divergence_threshold": 0.7,
         "warm_slice_default": true,
-        "max_sql_iterations": 5
+        "max_sql_iterations": 5,
+        "divergence_detection": {
+            "use_llm": true,
+            "use_local_llm": true,
+            "llm_temperature": 0.3,
+            "llm_max_tokens": 500,
+            "confidence_threshold": 0.7
+        }
     },
     "Utility Settings": {
         "agent_base": {

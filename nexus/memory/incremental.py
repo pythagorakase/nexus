@@ -83,6 +83,93 @@ class IncrementalRetriever:
         return collected, tokens_used
 
     # ------------------------------------------------------------------
+    def retrieve_from_raw_input(
+        self,
+        user_input: str,
+        budget: int,
+        k: int = 10,
+    ) -> Tuple[List[Dict[str, object]], int]:
+        """Retrieve context using raw user input for vector search.
+
+        This method sends the unaltered user input directly to vector search,
+        allowing IDF weighting to naturally boost rare/important terms like "karaoke".
+        This runs IN ADDITION to any entity-triggered retrieval.
+
+        Args:
+            user_input: The raw user input text
+            budget: Token budget for retrieved chunks
+            k: Number of results to retrieve (default 10)
+
+        Returns:
+            Tuple of (chunks, tokens_used)
+        """
+        if not self.memnon or not user_input or budget <= 0:
+            return [], 0
+
+        collected: List[Dict[str, object]] = []
+        tokens_used = 0
+
+        # Check if we have query iterations remaining
+        if self.query_memory.remaining_iterations("pass2") <= 0:
+            logger.debug("Pass 2 query budget exhausted; cannot do raw input retrieval")
+            return [], 0
+
+        # Use the raw user input as the query (no modifications)
+        query = user_input.strip()
+
+        # Skip if we've already run this exact query
+        if self.query_memory.has_run(query):
+            logger.debug("Skipping previously executed raw input query")
+            return [], 0
+
+        try:
+            logger.info("Performing raw user input vector search for enhanced retrieval")
+            # Send raw input directly to hybrid search (vector + text)
+            result = self.memnon.query_memory(query=query, k=k, use_hybrid=True)
+        except Exception as exc:
+            logger.error("Raw input retrieval failed: %s", exc)
+            return [], 0
+
+        # Record this query
+        self.query_memory.record("pass2", query)
+
+        # Process retrieved chunks
+        for chunk in result.get("results", []):
+            chunk_id = chunk.get("chunk_id") or chunk.get("id")
+            try:
+                chunk_id = int(chunk_id) if chunk_id is not None else None
+            except (TypeError, ValueError):
+                chunk_id = None
+
+            if chunk_id is None:
+                continue
+
+            # Skip if already in context
+            if self.context_state.is_chunk_known(chunk_id):
+                continue
+
+            # Check token budget
+            estimated_tokens = self._estimate_tokens(chunk.get("text", ""))
+            if tokens_used + estimated_tokens > budget:
+                logger.debug(
+                    "Token budget reached while processing raw input chunk %s", chunk_id
+                )
+                return collected, tokens_used
+
+            collected.append({"chunk_id": chunk_id, **chunk})
+            tokens_used += estimated_tokens
+
+            if tokens_used >= budget:
+                return collected, tokens_used
+
+        logger.info(
+            "Raw input retrieval collected %d chunks using %d tokens",
+            len(collected),
+            tokens_used
+        )
+        return collected, tokens_used
+
+    # ------------------------------------------------------------------
     def expand_warm_slice(self, budget: int) -> Tuple[List[Dict[str, object]], int]:
         if not self.memnon or not self.warm_slice_default or budget <= 0:
             return [], 0
