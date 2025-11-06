@@ -5,7 +5,7 @@ Handles dynamic token budget calculation and allocation.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 from .chunk_operations import calculate_chunk_tokens
 
 logger = logging.getLogger("nexus.lore.token_budget")
@@ -35,8 +35,15 @@ class TokenBudgetManager:
         Returns:
             Dictionary with token allocations
         """
-        # Get base values
-        apex_window = self.token_budget_config.get("apex_context_window", 200000)
+        # Get base values - apex_context_window is required
+        if "apex_context_window" not in self.token_budget_config:
+            raise ValueError(
+                "apex_context_window must be configured in settings.json under "
+                "Agent Settings > LORE > token_budget > apex_context_window"
+            )
+        apex_window = self.token_budget_config["apex_context_window"]
+        logger.debug(f"Using apex_context_window: {apex_window} tokens")
+
         system_prompt = self.token_budget_config.get("system_prompt_tokens", 5000)
         
         # Calculate user input tokens using tiktoken
@@ -282,3 +289,230 @@ class TokenBudgetManager:
             return False
         
         return True
+
+    def estimate_entity_tokens(self, entity: Dict[str, Any]) -> int:
+        """
+        Estimate token count for an entity dictionary.
+
+        Args:
+            entity: Entity dictionary with various text fields
+
+        Returns:
+            Estimated token count
+        """
+        # Check if already calculated
+        if "token_count" in entity and isinstance(entity["token_count"], int):
+            return entity["token_count"]
+
+        # Collect all text content from entity
+        text_candidates = []
+        for key in ("summary", "details", "text", "content", "description", "background", "personality"):
+            value = entity.get(key)
+            if isinstance(value, str) and value.strip():
+                text_candidates.append(value)
+
+        # If no text found, create minimal representation
+        if not text_candidates:
+            name = entity.get("name", "Unknown")
+            summary = entity.get("summary", "")
+            text_candidates.append(f"{name}: {summary}")
+
+        tokens = calculate_chunk_tokens("\n".join(text_candidates))
+        entity["token_count"] = tokens
+        return tokens
+
+    def calculate_structured_tokens_by_tier(
+        self,
+        entity_data: Dict[str, Any]
+    ) -> Tuple[int, int]:
+        """
+        Calculate token counts separately for baseline and featured entities.
+
+        Args:
+            entity_data: Hierarchical entity data with baseline/featured structure
+
+        Returns:
+            Tuple of (baseline_tokens, featured_tokens)
+        """
+        baseline_tokens = 0
+        featured_tokens = 0
+
+        # Count baseline entity tokens (CANNOT be trimmed - protected)
+        for entity_type in ("characters", "locations", "factions"):
+            entities = entity_data.get(entity_type, {})
+            if isinstance(entities, dict):
+                # Hierarchical structure
+                for entity in entities.get("baseline", []):
+                    baseline_tokens += self.estimate_entity_tokens(entity)
+                for entity in entities.get("featured", []):
+                    featured_tokens += self.estimate_entity_tokens(entity)
+            else:
+                # Flat structure (backward compatibility)
+                for entity in entities:
+                    baseline_tokens += self.estimate_entity_tokens(entity)
+
+        # Count relationships as featured
+        for rel in entity_data.get("relationships", []):
+            featured_tokens += self.estimate_entity_tokens(rel)
+
+        # Count events and threats as featured
+        for event in entity_data.get("events", []):
+            featured_tokens += self.estimate_entity_tokens(event)
+
+        for threat in entity_data.get("threats", []):
+            featured_tokens += self.estimate_entity_tokens(threat)
+
+        logger.debug(f"Structured tokens: {baseline_tokens} baseline (protected), {featured_tokens} featured (trimmable)")
+        return baseline_tokens, featured_tokens
+
+    def trim_structured_with_baseline_protection(
+        self,
+        entity_data: Dict[str, Any],
+        max_tokens: int
+    ) -> Dict[str, Any]:
+        """
+        Trim structured entity data to fit budget while PROTECTING baseline entities.
+
+        Baseline entities (minimal tracking fields for ALL entities) are never trimmed.
+        Featured entities are trimmed by priority:
+        - Priority 0: Season/episode summaries (if present)
+        - Priority 1: Characters with "present" reference
+        - Priority 2: Places with "setting" reference
+        - Priority 3: Characters with other references
+        - Priority 4: Other places
+        - Priority 5: Factions
+        - Priority 6: Relationships
+        - Priority 7: Events
+        - Priority 8: Threats
+
+        Args:
+            entity_data: Hierarchical entity data to trim
+            max_tokens: Maximum tokens allowed for structured data
+
+        Returns:
+            Trimmed entity data
+        """
+        baseline_tokens, featured_tokens = self.calculate_structured_tokens_by_tier(entity_data)
+        total_tokens = baseline_tokens + featured_tokens
+
+        if total_tokens <= max_tokens:
+            logger.debug(f"No trimming needed: {total_tokens} <= {max_tokens}")
+            return entity_data
+
+        logger.info(
+            f"Structured data ({total_tokens} tokens) exceeds budget ({max_tokens} tokens). "
+            f"Baseline: {baseline_tokens} tokens (protected), Featured: {featured_tokens} tokens (trimmable)"
+        )
+
+        # Calculate available budget for featured entities
+        available_for_featured = max_tokens - baseline_tokens
+
+        if available_for_featured <= 0:
+            logger.warning(
+                f"Baseline entities ({baseline_tokens} tokens) exceed structured budget ({max_tokens} tokens)! "
+                f"Consider increasing apex_context_window or structured_summaries max%. "
+                f"Removing ALL featured entities to stay within budget."
+            )
+            # Keep baseline, remove all featured
+            trimmed_data = {
+                "characters": {
+                    "baseline": entity_data.get("characters", {}).get("baseline", []),
+                    "featured": []
+                },
+                "locations": {
+                    "baseline": entity_data.get("locations", {}).get("baseline", []),
+                    "featured": []
+                },
+                "factions": {
+                    "baseline": entity_data.get("factions", {}).get("baseline", []),
+                    "featured": []
+                },
+                "relationships": [],
+                "events": [],
+                "threats": []
+            }
+            return trimmed_data
+
+        # Collect all trimmable items with priorities
+        trimmable_items: List[Tuple[str, str, Any, int, int]] = []  # (category, type, entity, tokens, priority)
+
+        # Characters
+        for char in entity_data.get("characters", {}).get("featured", []):
+            tokens = self.estimate_entity_tokens(char)
+            ref_type = char.get("reference_type", "unknown")
+            priority = 1 if ref_type == "present" else 3
+            trimmable_items.append(("characters", "featured", char, tokens, priority))
+
+        # Places
+        for place in entity_data.get("locations", {}).get("featured", []):
+            tokens = self.estimate_entity_tokens(place)
+            ref_type = place.get("reference_type", "unknown")
+            priority = 2 if ref_type == "setting" else 4
+            trimmable_items.append(("locations", "featured", place, tokens, priority))
+
+        # Factions
+        for faction in entity_data.get("factions", {}).get("featured", []):
+            tokens = self.estimate_entity_tokens(faction)
+            trimmable_items.append(("factions", "featured", faction, tokens, 5))
+
+        # Relationships
+        for rel in entity_data.get("relationships", []):
+            tokens = self.estimate_entity_tokens(rel)
+            trimmable_items.append(("relationships", "relationship", rel, tokens, 6))
+
+        # Events
+        for event in entity_data.get("events", []):
+            tokens = self.estimate_entity_tokens(event)
+            trimmable_items.append(("events", "event", event, tokens, 7))
+
+        # Threats
+        for threat in entity_data.get("threats", []):
+            tokens = self.estimate_entity_tokens(threat)
+            trimmable_items.append(("threats", "threat", threat, tokens, 8))
+
+        # Sort by priority (lower is better), then by token count (larger first to maximize utilization)
+        trimmable_items.sort(key=lambda x: (x[4], -x[3]))
+
+        # Keep items until budget exhausted
+        current_tokens = 0
+        kept_items = {
+            "characters": [],
+            "locations": [],
+            "factions": [],
+            "relationships": [],
+            "events": [],
+            "threats": []
+        }
+
+        for category, item_type, entity, tokens, priority in trimmable_items:
+            if current_tokens + tokens <= available_for_featured:
+                current_tokens += tokens
+                kept_items[category].append(entity)
+
+        # Build trimmed entity data
+        trimmed_data = {
+            "characters": {
+                "baseline": entity_data.get("characters", {}).get("baseline", []),
+                "featured": kept_items["characters"]
+            },
+            "locations": {
+                "baseline": entity_data.get("locations", {}).get("baseline", []),
+                "featured": kept_items["locations"]
+            },
+            "factions": {
+                "baseline": entity_data.get("factions", {}).get("baseline", []),
+                "featured": kept_items["factions"]
+            },
+            "relationships": kept_items["relationships"],
+            "events": kept_items["events"],
+            "threats": kept_items["threats"]
+        }
+
+        trimmed_count = len(trimmable_items) - sum(len(items) for items in kept_items.values())
+        trimmed_tokens = featured_tokens - current_tokens
+        logger.info(
+            f"Trimmed {trimmed_count} featured items ({trimmed_tokens} tokens). "
+            f"Kept {sum(len(items) for items in kept_items.values())} items ({current_tokens} tokens)"
+        )
+
+        return trimmed_data

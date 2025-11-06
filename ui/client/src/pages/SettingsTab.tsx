@@ -1,7 +1,7 @@
 /**
- * Settings page for customizing font preferences and PWA icon.
+ * Settings page for customizing font preferences, PWA icon, and backend settings.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFonts } from '@/contexts/FontContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,7 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, Image as ImageIcon, Save, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Full font list for narrative text
 const NARRATIVE_FONTS = [
@@ -52,6 +53,33 @@ export function SettingsTab() {
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Backend settings state
+  const [apexContextWindow, setApexContextWindow] = useState<number>(100000);
+  const [originalApexContextWindow, setOriginalApexContextWindow] = useState<number>(100000);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  // Load current settings on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to load settings');
+        const settings = await response.json();
+        const contextWindow = settings?.['Agent Settings']?.LORE?.token_budget?.apex_context_window || 100000;
+        setApexContextWindow(contextWindow);
+        setOriginalApexContextWindow(contextWindow);
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        setSettingsMessage({ type: 'error', text: 'Failed to load backend settings' });
+      } finally {
+        setLoadingSettings(false);
+      }
+    }
+    loadSettings();
+  }, []);
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -97,6 +125,45 @@ export function SettingsTab() {
       setUploading(false);
     }
   };
+
+  const handleSaveApexContextWindow = async () => {
+    setSavingSettings(true);
+    setSettingsMessage(null);
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          'Agent Settings': {
+            LORE: {
+              token_budget: {
+                apex_context_window: apexContextWindow,
+              },
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update settings');
+      }
+
+      setOriginalApexContextWindow(apexContextWindow);
+      setSettingsMessage({ type: 'success', text: 'Context window updated successfully!' });
+    } catch (error) {
+      setSettingsMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to update settings'
+      });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const hasUnsavedChanges = apexContextWindow !== originalApexContextWindow;
 
   return (
     <ScrollArea className="h-full">
@@ -170,6 +237,86 @@ export function SettingsTab() {
               Reset to Defaults
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* LORE Settings Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-mono">LORE Agent Settings</CardTitle>
+          <CardDescription className="font-mono text-xs">
+            Configure token budgets and context assembly parameters
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {loadingSettings ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <>
+              {/* Apex Context Window */}
+              <div className="space-y-3">
+                <Label htmlFor="apex-context-window" className="font-mono text-sm">
+                  Apex Context Window (tokens)
+                </Label>
+                <Input
+                  id="apex-context-window"
+                  type="number"
+                  value={apexContextWindow}
+                  onChange={(e) => setApexContextWindow(parseInt(e.target.value) || 0)}
+                  className="font-mono"
+                  min="10000"
+                  max="200000"
+                  step="1000"
+                />
+                <p className="text-xs text-muted-foreground font-mono">
+                  Maximum tokens available for context assembly. Smaller values create more compact contexts.
+                  <br />
+                  Recommended: 100000 for balanced performance, 75000 for compact mode.
+                </p>
+              </div>
+
+              {/* Save Button and Messages */}
+              <div className="space-y-3">
+                <Button
+                  onClick={handleSaveApexContextWindow}
+                  disabled={!hasUnsavedChanges || savingSettings}
+                  className="font-mono"
+                >
+                  {savingSettings ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Settings
+                    </>
+                  )}
+                </Button>
+
+                {hasUnsavedChanges && !settingsMessage && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="font-mono text-xs">
+                      You have unsaved changes
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {settingsMessage && (
+                  <Alert variant={settingsMessage.type === 'error' ? 'destructive' : 'default'}>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="font-mono text-xs">
+                      {settingsMessage.text}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

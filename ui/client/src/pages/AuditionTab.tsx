@@ -8,6 +8,7 @@ import { ComparisonLayout } from '@/components/audition/ComparisonLayout';
 import { ResultsDashboard } from '@/components/audition/ResultsDashboard';
 import { GenerateMode } from '@/components/audition/GenerateMode';
 import { FilterDialog, FilterItem } from '@/components/audition/FilterDialog';
+import { ConditionManagerDialog } from '@/components/audition/ConditionManagerDialog';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -31,10 +32,6 @@ export default function AuditionTab() {
   const [skippedCount, setSkippedCount] = useState(0);
 
   // Filter state
-  const [conditionIds, setConditionIds] = useState<number[] | undefined>(() => {
-    const saved = localStorage.getItem('audition_condition_filters');
-    return saved ? JSON.parse(saved) : undefined;
-  });
   const [passageMode, setPassageMode] = useState<'all' | 'custom' | number>(() => {
     const saved = localStorage.getItem('audition_passage_mode');
     return saved ? JSON.parse(saved) : 'all';
@@ -59,14 +56,6 @@ export default function AuditionTab() {
 
   // Save filters to localStorage
   useEffect(() => {
-    if (conditionIds) {
-      localStorage.setItem('audition_condition_filters', JSON.stringify(conditionIds));
-    } else {
-      localStorage.removeItem('audition_condition_filters');
-    }
-  }, [conditionIds]);
-
-  useEffect(() => {
     localStorage.setItem('audition_passage_mode', JSON.stringify(passageMode));
   }, [passageMode]);
 
@@ -82,9 +71,8 @@ export default function AuditionTab() {
   const filterParams = useMemo(() => {
     const params: any = {};
 
-    if (conditionIds && conditionIds.length > 0) {
-      params.condition_ids = conditionIds;
-    }
+    // Note: Condition filtering is now handled via is_active and is_visible flags in the database
+    // The API automatically filters to active+visible conditions
 
     if (passageMode === 'custom' && promptIds && promptIds.length > 0) {
       params.prompt_ids = promptIds;
@@ -93,7 +81,7 @@ export default function AuditionTab() {
     }
 
     return params;
-  }, [conditionIds, passageMode, promptIds]);
+  }, [passageMode, promptIds]);
 
   const { comparison, isLoading, isError, error, refetch } = useComparison({
     enabled: mode === 'judge',
@@ -120,13 +108,6 @@ export default function AuditionTab() {
   };
 
   // Filter UI handlers
-  const conditionFilterItems: FilterItem[] = useMemo(() => {
-    return (conditions || []).map(c => ({
-      id: c.id,
-      label: c.slug,
-    }));
-  }, [conditions]);
-
   const promptFilterItems: FilterItem[] = useMemo(() => {
     return (prompts || []).map(p => ({
       id: p.id,
@@ -134,14 +115,7 @@ export default function AuditionTab() {
     }));
   }, [prompts]);
 
-  const hasConditionFilters = conditionIds && conditionIds.length > 0 &&
-    conditionIds.length !== conditions?.length;
   const hasPassageFilters = passageMode !== 'all';
-
-  const handleApplyConditionFilters = (ids: number[]) => {
-    setConditionIds(ids.length === conditions?.length ? undefined : ids);
-    refetch();
-  };
 
   const handleApplyPassageFilters = (ids: number[]) => {
     setPromptIds(ids.length === prompts?.length ? undefined : ids);
@@ -160,19 +134,7 @@ export default function AuditionTab() {
     refetch();
   };
 
-  const clearConditionFilters = () => {
-    setConditionIds(undefined);
-    refetch();
-  };
-
   const clearPassageFilters = () => {
-    setPassageMode('all');
-    setPromptIds(undefined);
-    refetch();
-  };
-
-  const clearAllFilters = () => {
-    setConditionIds(undefined);
     setPassageMode('all');
     setPromptIds(undefined);
     refetch();
@@ -275,7 +237,7 @@ export default function AuditionTab() {
                 onClick={() => setContenderDialogOpen(true)}
               >
                 <Filter className="h-3 w-3 mr-1" />
-                [C] Contenders
+                Manage Contenders
               </Button>
               <Select value={passageMode === 'all' ? 'ALL' : passageMode === 'custom' ? 'CUSTOM' : String(passageMode)} onValueChange={handlePassageModeChange}>
                 <SelectTrigger className="w-[140px] h-8 text-xs">
@@ -296,42 +258,16 @@ export default function AuditionTab() {
                   )}
                 </SelectContent>
               </Select>
-              {(hasConditionFilters || hasPassageFilters) && (
-                <>
-                  {hasConditionFilters && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearConditionFilters}
-                      className="h-7 px-2"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear Contenders
-                    </Button>
-                  )}
-                  {hasPassageFilters && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearPassageFilters}
-                      className="h-7 px-2"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear Passages
-                    </Button>
-                  )}
-                  {hasConditionFilters && hasPassageFilters && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearAllFilters}
-                      className="h-7 px-2"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear All
-                    </Button>
-                  )}
-                </>
+              {hasPassageFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearPassageFilters}
+                  className="h-7 px-2"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Passages
+                </Button>
               )}
             </>
           )}
@@ -355,15 +291,10 @@ export default function AuditionTab() {
         )}
       </div>
 
-      {/* Filter dialogs */}
-      <FilterDialog
+      {/* Management and filter dialogs */}
+      <ConditionManagerDialog
         open={contenderDialogOpen}
         onOpenChange={setContenderDialogOpen}
-        title="Filter Contenders"
-        description="Select which conditions to include in comparisons."
-        items={conditionFilterItems}
-        initialIncluded={conditionIds}
-        onApply={handleApplyConditionFilters}
       />
 
       <FilterDialog

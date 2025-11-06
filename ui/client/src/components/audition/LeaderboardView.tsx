@@ -13,7 +13,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Loader2, Mail } from 'lucide-react';
 import {
   Dialog,
@@ -47,21 +46,15 @@ export function LeaderboardView() {
     );
   }
 
-  if (!rankings || rankings.length === 0) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-center text-muted-foreground">
-            No rankings available yet. Complete some comparisons to see the leaderboard!
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const formatTemperature = (temp: number | null | undefined) => {
-    return temp !== null && temp !== undefined ? temp.toString() : '-';
+  const formatOptionalNumber = (value: number | null | undefined, fractionDigits = 2) => {
+    if (value === null || value === undefined) {
+      return '-';
+    }
+    const fixed = value.toFixed(fractionDigits);
+    return parseFloat(fixed).toString();
   };
+
+  const formatTemperature = (temp: number | null | undefined) => formatOptionalNumber(temp, 2);
 
   const formatReasoning = (reasoningEffort: string | null | undefined, thinkingEnabled: boolean | null | undefined) => {
     // Check for reasoning_effort (OpenAI reasoning models)
@@ -82,13 +75,40 @@ export function LeaderboardView() {
       'gpt-4o': '4o',
       'gpt-5': 'GPT-5',
       'o3': 'o3',
+      'kimi-k2-0905-preview': 'Kimi K2',
+      'hermes-4-405b': 'Hermes 4 405B',
     };
     return simplifications[modelName] || modelName;
   };
 
   const formatProvider = (provider: string) => {
-    return provider;
+    const map: Record<string, string> = {
+      openai: 'OpenAI',
+      anthropic: 'Anthropic',
+      deepseek: 'DeepSeek',
+      openrouter: 'OpenRouter',
+      moonshot: 'Moonshot',
+      nousresearch: 'Nous Research',
+    };
+    const key = provider.toLowerCase();
+    return map[key] || provider;
   };
+
+  const visibleRankings = (rankings ?? []).filter((entry) => entry.condition.is_visible !== false);
+
+  if (visibleRankings.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-center text-muted-foreground">
+            No rankings available yet. Complete some comparisons to see the leaderboard!
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const renderPenalty = (value: number | null | undefined) => formatOptionalNumber(value, 2);
 
   return (
     <>
@@ -105,13 +125,18 @@ export function LeaderboardView() {
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead className="text-center">Temperature</TableHead>
+                <TableHead className="text-center">Top&nbsp;P</TableHead>
+                <TableHead className="text-center">Min&nbsp;P</TableHead>
+                <TableHead className="text-center">Freq&nbsp;Penalty</TableHead>
+                <TableHead className="text-center">Presence&nbsp;Penalty</TableHead>
+                <TableHead className="text-center">Repetition&nbsp;Penalty</TableHead>
                 <TableHead className="text-center">Reasoning</TableHead>
                 <TableHead className="text-right">Ratings</TableHead>
                 <TableHead className="text-center w-16">Notes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rankings.map((entry, index) => (
+              {visibleRankings.map((entry, index) => (
                 <TableRow key={entry.condition_id} className="font-mono">
                   <TableCell className="font-semibold py-1">
                     {index + 1}
@@ -127,6 +152,21 @@ export function LeaderboardView() {
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatTemperature(entry.condition.temperature)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.top_p, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {formatOptionalNumber(entry.condition.min_p, 2)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {renderPenalty(entry.condition.frequency_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {renderPenalty(entry.condition.presence_penalty)}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground py-1">
+                    {renderPenalty(entry.condition.repetition_penalty)}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground py-1">
                     {formatReasoning(entry.condition.reasoning_effort, entry.condition.thinking_enabled)}

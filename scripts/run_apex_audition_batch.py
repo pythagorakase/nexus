@@ -15,7 +15,11 @@ LOGGER = logging.getLogger("nexus.apex_audition.cli")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--condition-slug", required=True, help="Unique identifier for the model condition")
-    parser.add_argument("--provider", choices=["openai", "anthropic"], help="Provider for a new condition")
+    parser.add_argument(
+        "--provider",
+        choices=["openai", "anthropic", "moonshotai", "nousresearch", "openrouter"],
+        help="Provider for a new condition",
+    )
     parser.add_argument("--model", help="Model name for the condition")
     parser.add_argument("--temperature", type=float, help="Sampling temperature (omit for reasoning models)")
     parser.add_argument("--max-tokens", type=int, default=2048, help="Max completion tokens")
@@ -25,6 +29,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--thinking-budget-tokens", type=int, help="Anthropic thinking budget tokens (requires --thinking-enabled)")
     parser.add_argument("--top-p", type=float, help="Anthropic / OpenAI nucleus sampling")
     parser.add_argument("--top-k", type=int, help="Anthropic top-k value")
+    parser.add_argument("--min-p", type=float, help="Minimum probability mass (OpenRouter models that support it)")
+    parser.add_argument("--frequency-penalty", type=float, help="Frequency penalty for repetition control")
+    parser.add_argument("--presence-penalty", type=float, help="Presence penalty for topic diversity")
+    parser.add_argument("--repetition-penalty", type=float, help="Repetition penalty for OpenRouter providers")
     parser.add_argument("--label", help="Human-readable label for the condition")
     parser.add_argument("--description", help="Optional description for the condition")
     parser.add_argument("--system-prompt", help="System prompt (leave blank to defer)")
@@ -63,6 +71,11 @@ def maybe_register_condition(engine: AuditionEngine, args: argparse.Namespace) -
         provider=args.provider,
         model=args.model,
         temperature=args.temperature,
+        top_p=args.top_p,
+        min_p=args.min_p,
+        frequency_penalty=args.frequency_penalty,
+        presence_penalty=args.presence_penalty,
+        repetition_penalty=args.repetition_penalty,
         reasoning_effort=args.reasoning_effort,
         thinking_enabled=args.thinking_enabled,
         max_output_tokens=args.max_output_tokens or args.max_tokens,

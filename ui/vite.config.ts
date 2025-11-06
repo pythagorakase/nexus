@@ -54,6 +54,22 @@ export default defineConfig({
                 statuses: [0, 200]
               }
             }
+          },
+          {
+            // Network-first strategy for PWA icons to support cache-busting
+            urlPattern: /\/icons\/.*\.png$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pwa-icons-cache',
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 1 week
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
         ]
       }

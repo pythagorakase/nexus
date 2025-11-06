@@ -13,9 +13,19 @@ logger = logging.getLogger("nexus.lore.turn_cycle")
 
 try:
     from .turn_context import TurnContext, TurnPhase
+    from .entity_queries import (
+        fetch_all_characters_with_references,
+        fetch_all_places_with_references,
+        fetch_all_factions_with_references,
+    )
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
+    from nexus.agents.lore.utils.entity_queries import (
+        fetch_all_characters_with_references,
+        fetch_all_places_with_references,
+        fetch_all_factions_with_references,
+    )
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -133,22 +143,24 @@ class TurnCycleManager:
     
     async def query_entity_states(self, turn_context: TurnContext):
         """
-        Phase 3: Query for entity states using programmatic database queries.
+        Phase 3: Query for entity states using hierarchical baseline + featured structure.
 
-        Queries entities referenced in recent chunks rather than relying on
-        LLM inference. This provides more generous inclusion and enables
-        off-screen character updates.
+        Universal baseline: ALL entities with minimal tracking fields (always included)
+        Featured entities: Referenced entities with full details
+
+        This enables off-screen character tracking and more generous entity inclusion.
 
         Args:
             turn_context: Current turn context
         """
-        logger.debug("Querying entity states programmatically...")
+        logger.debug("Querying entity states with hierarchical structure...")
 
         if not self.lore.memnon:
             logger.warning("MEMNON not available for entity queries")
             turn_context.entity_data = {
-                "characters": [],
-                "locations": [],
+                "characters": {"baseline": [], "featured": []},
+                "locations": {"baseline": [], "featured": []},
+                "factions": {"baseline": [], "featured": []},
                 "relationships": [],
                 "events": [],
                 "threats": []
@@ -157,73 +169,69 @@ class TurnCycleManager:
 
         # Get entity_inclusion settings
         entity_settings = self.settings.get("Agent Settings", {}).get("LORE", {}).get("entity_inclusion", {})
-        max_chars = entity_settings.get("max_characters_from_warm_slice", 25)
-        max_locs = entity_settings.get("max_locations_from_warm_slice", 10)
         include_relationships = entity_settings.get("include_all_relationships", True)
         include_events = entity_settings.get("include_all_active_events", True)
         include_threats = entity_settings.get("include_all_active_threats", True)
         event_statuses = entity_settings.get("active_event_statuses", ["active", "ongoing", "escalating"])
         threat_statuses = entity_settings.get("active_threat_statuses", ["active", "imminent"])
 
-        # Get chunk IDs from warm slice
+        # Get chunk IDs from warm slice for featured entity queries
         warm_chunk_ids = [chunk.get("id") for chunk in turn_context.warm_slice if chunk.get("id")]
 
         if not warm_chunk_ids:
             logger.warning("No chunk IDs in warm slice for entity queries")
-            turn_context.entity_data = {
-                "characters": [],
-                "locations": [],
-                "relationships": [],
-                "events": [],
-                "threats": []
-            }
-            return
+            warm_chunk_ids = []
 
-        # Query characters referenced in warm slice chunks
-        characters = []
+        # Query characters with baseline + featured structure
+        characters_data = {"baseline": [], "featured": []}
         try:
             from sqlalchemy import text
             with self.lore.memnon.Session() as session:
-                char_query = text(f"""
-                    SELECT DISTINCT c.*
-                    FROM characters c
-                    JOIN chunk_character_references ccr ON c.id = ccr.character_id
-                    WHERE ccr.chunk_id IN ({','.join(str(cid) for cid in warm_chunk_ids)})
-                    LIMIT {max_chars}
-                """)
-                result = session.execute(char_query)
-                for row in result:
-                    characters.append(dict(row._mapping))
-            logger.info(f"Found {len(characters)} characters from warm slice chunks")
+                characters_data = fetch_all_characters_with_references(session, warm_chunk_ids)
+            logger.info(
+                f"Characters: {len(characters_data['baseline'])} baseline, "
+                f"{len(characters_data['featured'])} featured"
+            )
         except Exception as e:
-            logger.error(f"Failed to query characters from chunks: {e}")
+            logger.error(f"Failed to query characters: {e}")
 
-        # Query locations (referenced in chunks or current location of characters)
-        locations = []
+        # Query places with baseline + featured structure
+        # Include places that are current_location of featured characters
+        featured_place_ids = set()
+        for char in characters_data.get("featured", []):
+            loc_name = char.get("current_location")
+            if loc_name:
+                # Get place ID from name (we'll query by name in the function)
+                pass  # fetch_all_places_with_references handles this
+
+        places_data = {"baseline": [], "featured": []}
         try:
-            # Get unique location names from characters
-            char_locations = [c.get("current_location") for c in characters if c.get("current_location")]
-            if char_locations:
-                unique_locations = list(set(char_locations))
-                with self.lore.memnon.Session() as session:
-                    loc_query = text("""
-                        SELECT DISTINCT p.*
-                        FROM places p
-                        WHERE p.name = ANY(:location_names)
-                        LIMIT :max_locs
-                    """)
-                    result = session.execute(loc_query, {"location_names": unique_locations, "max_locs": max_locs})
-                    for row in result:
-                        locations.append(dict(row._mapping))
-                logger.info(f"Found {len(locations)} locations from character positions")
+            with self.lore.memnon.Session() as session:
+                places_data = fetch_all_places_with_references(session, warm_chunk_ids, featured_place_ids)
+            logger.info(
+                f"Places: {len(places_data['baseline'])} baseline, "
+                f"{len(places_data['featured'])} featured"
+            )
         except Exception as e:
-            logger.error(f"Failed to query locations: {e}")
+            logger.error(f"Failed to query places: {e}")
 
-        # Query relationships between identified characters
+        # Query factions with baseline + featured structure
+        factions_data = {"baseline": [], "featured": []}
+        try:
+            with self.lore.memnon.Session() as session:
+                factions_data = fetch_all_factions_with_references(session, warm_chunk_ids)
+            logger.info(
+                f"Factions: {len(factions_data['baseline'])} baseline, "
+                f"{len(factions_data['featured'])} featured"
+            )
+        except Exception as e:
+            logger.error(f"Failed to query factions: {e}")
+
+        # Query relationships between featured characters
         relationships = []
-        if include_relationships and characters:
+        if include_relationships and characters_data.get("featured"):
             try:
-                char_ids = [c.get("id") for c in characters if c.get("id")]
+                char_ids = [c.get("id") for c in characters_data["featured"] if c.get("id")]
                 if char_ids:
                     with self.lore.memnon.Session() as session:
                         rel_query = text("""
@@ -235,7 +243,7 @@ class TurnCycleManager:
                         result = session.execute(rel_query, {"char_ids": char_ids})
                         for row in result:
                             relationships.append(dict(row._mapping))
-                    logger.info(f"Found {len(relationships)} relationships between characters")
+                    logger.info(f"Found {len(relationships)} relationships between featured characters")
             except Exception as e:
                 logger.error(f"Failed to query relationships: {e}")
 
@@ -257,7 +265,11 @@ class TurnCycleManager:
                         events.append(dict(row._mapping))
                 logger.info(f"Found {len(events)} active events")
             except Exception as e:
-                logger.error(f"Failed to query active events: {e}")
+                # Events table doesn't exist yet - this is non-fatal
+                if "does not exist" in str(e):
+                    logger.debug(f"Events table not available: {e}")
+                else:
+                    logger.error(f"Failed to query active events: {e}")
 
         # Query all active threats
         threats = []
@@ -265,41 +277,55 @@ class TurnCycleManager:
             try:
                 max_threats = entity_settings.get('max_total_threats', 10)
                 with self.lore.memnon.Session() as session:
+                    # Note: threats table uses is_active boolean, not status enum
+                    # Lifecycle stages: inception, developing, active, resolved, dormant
                     threat_query = text("""
                         SELECT *
                         FROM threats
-                        WHERE status = ANY(:statuses)
+                        WHERE is_active = true
                         ORDER BY id DESC
                         LIMIT :max_threats
                     """)
-                    result = session.execute(threat_query, {"statuses": threat_statuses, "max_threats": max_threats})
+                    result = session.execute(threat_query, {"max_threats": max_threats})
                     for row in result:
                         threats.append(dict(row._mapping))
                 logger.info(f"Found {len(threats)} active threats")
             except Exception as e:
-                logger.error(f"Failed to query active threats: {e}")
+                # Handle schema mismatches gracefully
+                if "does not exist" in str(e):
+                    logger.debug(f"Threats table or column not available: {e}")
+                else:
+                    logger.error(f"Failed to query active threats: {e}")
 
-        # Store all entity data
+        # Store hierarchical entity data
         turn_context.entity_data = {
-            "characters": characters,
-            "locations": locations,
+            "characters": characters_data,
+            "locations": places_data,
+            "factions": factions_data,
             "relationships": relationships,
             "events": events,
             "threats": threats
         }
 
         turn_context.phase_states["entity_state"] = {
-            "characters_found": len(characters),
-            "locations_found": len(locations),
+            "characters_baseline": len(characters_data.get("baseline", [])),
+            "characters_featured": len(characters_data.get("featured", [])),
+            "locations_baseline": len(places_data.get("baseline", [])),
+            "locations_featured": len(places_data.get("featured", [])),
+            "factions_baseline": len(factions_data.get("baseline", [])),
+            "factions_featured": len(factions_data.get("featured", [])),
             "relationships_found": len(relationships),
             "events_found": len(events),
             "threats_found": len(threats),
-            "method": "programmatic_chunk_references"
+            "method": "hierarchical_baseline_featured"
         }
 
         logger.info(
-            f"Entity query complete: {len(characters)} chars, {len(relationships)} rels, "
-            f"{len(events)} events, {len(threats)} threats, {len(locations)} locations"
+            f"Entity query complete (hierarchical): "
+            f"chars {len(characters_data.get('baseline', []))}+{len(characters_data.get('featured', []))}, "
+            f"places {len(places_data.get('baseline', []))}+{len(places_data.get('featured', []))}, "
+            f"factions {len(factions_data.get('baseline', []))}+{len(factions_data.get('featured', []))}, "
+            f"{len(relationships)} rels, {len(events)} events, {len(threats)} threats"
         )
     
     async def execute_deep_queries(self, turn_context: TurnContext):
