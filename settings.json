@@ -444,6 +444,9 @@
         }
     },
     "memory": {
+        "phase2_fraction": 0.1,
+        "raw_search_k": 30,
+        "skip_simple_choices": true,
         "pass2_budget_reserve": 0.25,
         "divergence_threshold": 0.7,
         "warm_slice_default": true,

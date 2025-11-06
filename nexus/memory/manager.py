@@ -99,6 +99,8 @@ class Pass2Update:
     retrieved_chunks: List[Dict[str, Any]]
     tokens_used: int
     baseline_available: bool = True
+    llm_unavailable: bool = False  # Flag indicating degraded mode without LLM
+    degraded_mode_reason: Optional[str] = None  # Reason for degraded mode
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -106,6 +108,8 @@ class Pass2Update:
             "retrieved_chunk_ids": [chunk.get("chunk_id") or chunk.get("id") for chunk in self.retrieved_chunks],
             "tokens_used": self.tokens_used,
             "baseline_available": self.baseline_available,
+            "llm_unavailable": self.llm_unavailable,
+            "degraded_mode_reason": self.degraded_mode_reason,
         }
 
 
@@ -120,7 +124,22 @@ class ContextMemoryManager:
         token_manager: Optional[object] = None,
     ) -> None:
         self.settings = settings
+        self.memnon = memnon  # Store reference for entity detector
         memory_settings = settings.get("memory", {})
+
+        # Phase 2 configuration
+        self.phase2_fraction = float(memory_settings.get("phase2_fraction", 0.1))  # 10% of apex window
+        self.raw_search_k = int(memory_settings.get("raw_search_k", 30))  # Overretrieve for curation
+        self.skip_simple_choices = bool(memory_settings.get("skip_simple_choices", True))
+
+        # Calculate actual Phase 2 budget from apex window
+        apex_context_window = settings.get("Agent Settings", {}).get("LORE", {}).get(
+            "token_budget", {}
+        ).get("apex_context_window", 75000)
+        self.phase2_budget = int(apex_context_window * self.phase2_fraction)
+        logger.info(f"Phase 2 budget: {self.phase2_budget} tokens ({self.phase2_fraction * 100:.0f}% of {apex_context_window})")
+
+        # Legacy settings (kept for compatibility but may be deprecated)
         self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
         self.divergence_threshold = float(memory_settings.get("divergence_threshold", 0.7))
         self.warm_slice_default = bool(memory_settings.get("warm_slice_default", True))
@@ -129,14 +148,20 @@ class ContextMemoryManager:
         self.context_state = ContextStateManager()
         self.query_memory = QueryMemory(max_iterations=self.max_sql_iterations)
 
-        # Initialize divergence detector
+        # Initialize divergence detector and track degraded mode
         divergence_config = memory_settings.get("divergence_detection", {})
         use_llm_requested = bool(divergence_config.get("use_llm", True))
+        self.using_llm_detector = False
+        self.degraded_mode_reason = None
 
         if use_llm_requested and not llm_manager:
+            self.degraded_mode_reason = "LLM manager not available - using entity-based fallback detector"
             logger.warning(
-                "LLM-based divergence detection requested but llm_manager unavailable; "
-                "falling back to regex-based detector."
+                "\n" + "="*80 +
+                "\n⚠️  DEGRADED MODE WARNING: LLM-based divergence detection unavailable!\n" +
+                "    Falling back to entity-based detector with reduced capabilities.\n" +
+                "    Narrative callbacks and references may not be detected properly.\n" +
+                "="*80
             )
             use_llm_requested = False
 
@@ -147,11 +172,29 @@ class ContextMemoryManager:
                 threshold=self.divergence_threshold,
                 use_local_llm=use_local,
             )
-            logger.info("Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
+            self.using_llm_detector = True
+            logger.info("✅ Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
         else:
-            # Explicit opt-out or fallback when LLM unavailable: use regex-based detector
+            # Import and use high-specificity entity detector as fallback
+            from .entity_detector import HighSpecificityEntityDetector
+
+            # Try to get database connection from memnon
+            db_connection = None
+            if self.memnon and hasattr(self.memnon, 'db'):
+                db_connection = self.memnon.db
+
+            self.entity_detector = HighSpecificityEntityDetector(db_connection)
             self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
-            logger.info("Using regex-based divergence detector (threshold=%.2f)", self.divergence_threshold)
+
+            if not self.degraded_mode_reason:
+                self.degraded_mode_reason = "LLM divergence detection disabled - using entity-based fallback"
+
+            logger.warning(
+                "\n" + "="*80 +
+                "\n⚠️  DEGRADED MODE: Using entity-based detector as fallback\n" +
+                "    Limited to known entities from database, may miss narrative references\n" +
+                "="*80
+            )
 
         self.incremental = IncrementalRetriever(
             memnon=memnon,
@@ -162,6 +205,17 @@ class ContextMemoryManager:
 
         self.llm_manager = llm_manager
         self.token_manager = token_manager
+
+        # Initialize LLM curator for Phase 2
+        from .llm_curator import LLMContextCurator
+        self.llm_curator = None
+        if llm_manager:
+            self.llm_curator = LLMContextCurator(
+                llm_manager=llm_manager,
+                phase2_budget=self.phase2_budget,
+                use_local_llm=True
+            )
+            logger.info("LLM Context Curator initialized for Phase 2 management")
 
         self.alias_lookup: Dict[str, List[str]] = {}
         self.canonical_name_map: Dict[str, str] = {}
@@ -345,64 +399,207 @@ class ContextMemoryManager:
     # ------------------------------------------------------------------
     # Pass 2: User Input Handling
     # ------------------------------------------------------------------
+    def _is_simple_choice(self, user_input: str) -> bool:
+        """Check if user input is just a simple choice selection.
+
+        Examples that return True:
+        - "1", "2", "3" etc.
+        - "A", "B", "C" etc.
+        - "1.", "A." (with period)
+        - "a", "b", "c" (lowercase)
+        - " 2 " (with spaces)
+        - "1!" or "B?" (with trailing punctuation)
+
+        Returns False for any elaboration like:
+        - "2, but carefully"
+        - "1 because..."
+        - "Option A"
+        """
+        if not user_input:
+            return False
+
+        # Strip whitespace and common punctuation
+        import re
+        # Remove leading/trailing whitespace and punctuation
+        cleaned = user_input.strip().strip('.,!?;:')
+
+        # Pattern: single digit, or single letter (upper/lower)
+        # After stripping, should just be the choice character
+        pattern = r'^[1-9]$|^[A-Za-z]$'
+
+        is_simple = bool(re.match(pattern, cleaned))
+        if is_simple:
+            logger.info("Simple choice detected: '%s' -> '%s' - skipping Phase 2 retrieval", user_input, cleaned)
+
+        return is_simple
+
     def handle_user_input(
         self,
         user_input: str,
         token_counts: Optional[Dict[str, int]] = None,
     ) -> Pass2Update:
-        """Run Pass 2 divergence analysis and retrieve incremental context if needed."""
+        """Run Phase 2 retrieval with intelligent LLM curation.
+
+        New architecture:
+        1. Check if simple choice -> skip if yes
+        2. Always run raw vector search
+        3. Use LLM curator to decide what to keep
+        4. Execute additional queries suggested by LLM
+        5. Return curated results
+        """
 
         context = self.context_state.context
         transition = self.context_state.transition
-        divergence = self.divergence_detector.detect(user_input, context, transition)
-        self.context_state.update_divergence(divergence.detected, divergence.confidence, divergence.gaps)
+
+        # Create empty divergence result for compatibility
+        from .divergence import DivergenceResult
+        divergence = DivergenceResult(False, 0.0, {}, set(), set())
 
         if not context or not transition:
-            logger.debug("No baseline context available; skipping incremental retrieval")
-            return Pass2Update(divergence, [], 0, baseline_available=False)
+            logger.debug("No baseline context available; skipping Phase 2")
+            return Pass2Update(
+                divergence, [], 0,
+                baseline_available=False,
+                llm_unavailable=not self.llm_curator,
+                degraded_mode_reason="No LLM curator available" if not self.llm_curator else None
+            )
 
-        if token_counts and "total_available" in token_counts:
-            # Adjust remaining budget if calculation changed significantly for this turn
-            total_available = token_counts.get("total_available", transition.remaining_budget)
-            baseline_tokens = context.token_usage.get("baseline_tokens", 0)
-            reserve = int(total_available * self.pass2_reserve)
-            new_budget = max(0, total_available - baseline_tokens)
-            self.context_state.adjust_budget(new_budget)
-            context.token_usage["reserved_for_pass2"] = reserve
-            context.token_usage["reserve_shortfall"] = max(0, reserve - new_budget)
+        # STEP 1: Check if simple choice -> skip Phase 2 if yes
+        if self.skip_simple_choices and self._is_simple_choice(user_input):
+            logger.info("📌 Phase 2 skipped: Simple choice detected")
+            return Pass2Update(
+                divergence, [], 0,
+                baseline_available=True,
+                llm_unavailable=not self.llm_curator,
+                degraded_mode_reason=None
+            )
 
-        budget = self.context_state.get_remaining_budget()
-        retrieved: List[Dict[str, Any]] = []
-        tokens_used = 0
+        # STEP 2: Always run raw vector search (unless simple choice)
+        logger.info("🔍 Phase 2 Step 1: Raw user input vector search")
+        raw_search_results, raw_tokens = self.incremental.retrieve_from_raw_input(
+            user_input,
+            budget=self.phase2_budget,  # Use full budget for initial retrieval
+            k=self.raw_search_k  # Overretrieve (default 30)
+        )
 
-        if divergence.detected and budget > 0:
-            retrieved, tokens_used = self.incremental.retrieve_gap_context(divergence.gaps, budget)
-        elif not divergence.detected and budget > 0:
-            retrieved, tokens_used = self.incremental.expand_warm_slice(budget)
+        if not raw_search_results:
+            logger.info("No results from raw vector search - Phase 2 complete")
+            return Pass2Update(
+                divergence, [], 0,
+                baseline_available=True,
+                llm_unavailable=not self.llm_curator,
+                degraded_mode_reason=None
+            )
 
-        if retrieved:
-            new_chunks = self.context_state.register_additional_chunks(retrieved)
-            tokens_consumed = self.context_state.consume_budget(tokens_used)
-            logger.debug(
-                "Pass 2 retrieved %s new chunks (tokens used=%s, consumed=%s)",
-                len(new_chunks),
-                tokens_used,
-                tokens_consumed,
+        logger.info(f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)")
+
+        # STEP 3: Use LLM curator to decide what to keep (if available)
+        if not self.llm_curator:
+            logger.warning("No LLM curator available - keeping first chunks that fit budget")
+            # Simple fallback: keep chunks that fit in budget
+            kept_chunks = []
+            total_tokens = 0
+            for chunk in raw_search_results:
+                chunk_tokens = self._estimate_tokens(chunk.get("text", ""))
+                if total_tokens + chunk_tokens > self.phase2_budget:
+                    break
+                kept_chunks.append(chunk)
+                total_tokens += chunk_tokens
+
+            return Pass2Update(
+                divergence, kept_chunks, total_tokens,
+                baseline_available=True,
+                llm_unavailable=True,
+                degraded_mode_reason="No LLM curator available"
+            )
+
+        logger.info("🤖 Phase 2 Step 2: LLM curation of results")
+
+        # Get storyteller context for the curator
+        storyteller_context = transition.storyteller_output if transition else None
+
+        # Get curation decision from LLM
+        curation = self.llm_curator.curate(
+            user_input=user_input,
+            raw_search_results=raw_search_results,
+            storyteller_context=storyteller_context
+        )
+
+        # STEP 4: Process curation decision
+        final_chunks = []
+        final_tokens = 0
+
+        # Keep selected chunks from raw search
+        kept_ids = set(curation.kept_chunk_ids)
+        for chunk in raw_search_results:
+            chunk_id = chunk.get("chunk_id") or chunk.get("id")
+            if chunk_id and int(chunk_id) in kept_ids:
+                final_chunks.append(chunk)
+                final_tokens += self._estimate_tokens(chunk.get("text", ""))
+
+        logger.info(f"LLM kept {len(final_chunks)} chunks from raw search")
+
+        # STEP 5: Execute additional queries suggested by LLM
+        remaining_budget = self.phase2_budget - final_tokens
+        if curation.additional_queries and remaining_budget > 0:
+            logger.info(f"🔍 Phase 2 Step 3: Executing {len(curation.additional_queries)} additional queries")
+
+            for query_spec in curation.additional_queries:
+                query_type = query_spec.get("type", "vector")
+                query_text = query_spec.get("query", "")
+
+                if not query_text or remaining_budget <= 0:
+                    continue
+
+                if query_type == "vector":
+                    # Execute vector query
+                    try:
+                        add_chunks, add_tokens = self.incremental.retrieve_gap_context(
+                            {query_text: "LLM-requested targeted retrieval"},
+                            remaining_budget
+                        )
+                        if add_chunks:
+                            logger.info(f"Vector query '{query_text[:50]}...' retrieved {len(add_chunks)} chunks")
+                            final_chunks.extend(add_chunks)
+                            final_tokens += add_tokens
+                            remaining_budget -= add_tokens
+                    except Exception as e:
+                        logger.warning(f"Failed to execute vector query: {e}")
+
+                elif query_type == "sql":
+                    # SQL queries could be implemented here if needed
+                    logger.info(f"SQL queries not yet implemented: {query_text[:50]}...")
+
+                if remaining_budget <= 0:
+                    logger.info("Phase 2 budget exhausted")
+                    break
+
+        # Register all chunks with context state
+        if final_chunks:
+            new_chunks = self.context_state.register_additional_chunks(final_chunks)
+            self.context_state.consume_budget(final_tokens)
+            logger.info(
+                f"✅ Phase 2 complete: {len(new_chunks)} new chunks, "
+                f"{final_tokens} tokens ({final_tokens / self.phase2_budget * 100:.1f}% of budget)"
             )
         else:
-            tokens_consumed = 0
+            logger.info("Phase 2 complete: No chunks retained after curation")
 
-        if context:
-            reserve = context.token_usage.get("reserved_for_pass2", 0)
-            context.token_usage["reserve_shortfall"] = max(
-                0, reserve - self.context_state.get_remaining_budget()
-            )
-
-        return Pass2Update(divergence, retrieved, tokens_consumed, baseline_available=True)
+        return Pass2Update(
+            divergence, final_chunks, final_tokens,
+            baseline_available=True,
+            llm_unavailable=False,
+            degraded_mode_reason=None
+        )
 
     # ------------------------------------------------------------------
     # Helper Methods
     # ------------------------------------------------------------------
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count for text."""
+        # Simple heuristic: words * 1.25 ≈ tokens
+        words = len(text.split())
+        return int(words * 1.25)
     def _execute_authorial_directives(
         self,
         directives: List[str],
