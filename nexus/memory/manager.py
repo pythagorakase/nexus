@@ -153,6 +153,7 @@ class ContextMemoryManager:
         use_llm_requested = bool(divergence_config.get("use_llm", True))
         self.using_llm_detector = False
         self.degraded_mode_reason = None
+        self.entity_detector = None
 
         if use_llm_requested and not llm_manager:
             self.degraded_mode_reason = "LLM manager not available - using entity-based fallback detector"
@@ -433,6 +434,59 @@ class ContextMemoryManager:
 
         return is_simple
 
+    def _detect_divergence(
+        self,
+        user_input: str,
+        context: Optional[ContextPackage],
+        transition: Optional[PassTransition],
+    ) -> DivergenceResult:
+        """Detect divergence using the best available detector."""
+
+        # Prefer LLM detector when available
+        if self.using_llm_detector and getattr(self, "divergence_detector", None):
+            return self.divergence_detector.detect(user_input, context, transition)
+
+        # Fall back to high-specificity entity detector in degraded mode
+        if getattr(self, "entity_detector", None):
+            entity_match = self.entity_detector.detect_entities(user_input)
+            summary = self.entity_detector.to_divergence_format(entity_match)
+            return DivergenceResult(
+                bool(summary.get("detected")),
+                float(summary.get("confidence", 0.0)),
+                summary.get("gaps", {}),
+                set(summary.get("unmatched_entities", set())),
+                set(summary.get("references_seen", set())),
+            )
+
+        # Retain placeholder behaviour if no detectors exist
+        if getattr(self, "divergence_detector", None):
+            return self.divergence_detector.detect(user_input, context, transition)
+
+        return DivergenceResult(False, 0.0, {}, set(), set())
+
+    def _compute_available_phase2_budget(self, token_counts: Optional[Dict[str, int]]) -> int:
+        """Determine the usable Phase 2 budget for this turn."""
+
+        remaining_budget = self.context_state.get_remaining_budget()
+
+        if token_counts:
+            total_available = token_counts.get("total_available")
+            if total_available is not None:
+                baseline_tokens = sum(
+                    token_counts.get(key, 0) for key in ("warm_slice", "structured", "augmentation")
+                )
+                actual_remaining = max(0, int(total_available) - int(baseline_tokens))
+                if actual_remaining != remaining_budget:
+                    logger.debug(
+                        "Adjusting remaining budget from %s to %s based on token counts",
+                        remaining_budget,
+                        actual_remaining,
+                    )
+                    self.context_state.adjust_budget(actual_remaining)
+                    remaining_budget = actual_remaining
+
+        return max(0, min(self.phase2_budget, remaining_budget))
+
     def handle_user_input(
         self,
         user_input: str,
@@ -451,15 +505,21 @@ class ContextMemoryManager:
         context = self.context_state.context
         transition = self.context_state.transition
 
-        # Run divergence detection if we have a detector
-        if hasattr(self, 'divergence_detector') and self.divergence_detector:
-            divergence = self.divergence_detector.detect(user_input, context, transition)
-            logger.debug(f"Divergence detection: {divergence.detected} (confidence={divergence.confidence:.2f})")
-        else:
-            # Fallback if no detector available
-            from .divergence import DivergenceResult
-            divergence = DivergenceResult(False, 0.0, {}, set(), set())
-            logger.debug("No divergence detector available, using empty result")
+        divergence = self._detect_divergence(user_input, context, transition)
+        logger.debug(
+            "Divergence detection: %s (confidence=%.2f)",
+            divergence.detected,
+            divergence.confidence,
+        )
+        self.context_state.update_divergence(
+            divergence.detected,
+            divergence.confidence,
+            divergence.gaps,
+        )
+
+        degraded_reason = None
+        if not self.llm_curator:
+            degraded_reason = self.degraded_mode_reason or "No LLM curator available"
 
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
@@ -467,8 +527,10 @@ class ContextMemoryManager:
                 divergence, [], 0,
                 baseline_available=False,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason="No LLM curator available" if not self.llm_curator else None
+                degraded_mode_reason=degraded_reason,
             )
+
+        available_budget = self._compute_available_phase2_budget(token_counts)
 
         # STEP 1: Check if simple choice -> skip Phase 2 if yes
         if self.skip_simple_choices and self._is_simple_choice(user_input):
@@ -477,14 +539,23 @@ class ContextMemoryManager:
                 divergence, [], 0,
                 baseline_available=True,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=None
+                degraded_mode_reason=degraded_reason
+            )
+
+        if available_budget <= 0:
+            logger.info("📉 Phase 2 skipped: No remaining token budget available")
+            return Pass2Update(
+                divergence, [], 0,
+                baseline_available=True,
+                llm_unavailable=not self.llm_curator,
+                degraded_mode_reason=degraded_reason
             )
 
         # STEP 2: Always run raw vector search (unless simple choice)
         logger.info("🔍 Phase 2 Step 1: Raw user input vector search")
         raw_search_results, raw_tokens = self.incremental.retrieve_from_raw_input(
             user_input,
-            budget=self.phase2_budget,  # Use full budget for initial retrieval
+            budget=available_budget,
             k=self.raw_search_k  # Overretrieve (default 30)
         )
 
@@ -494,7 +565,7 @@ class ContextMemoryManager:
                 divergence, [], 0,
                 baseline_available=True,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=None
+                degraded_mode_reason=degraded_reason
             )
 
         logger.info(f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)")
@@ -507,7 +578,7 @@ class ContextMemoryManager:
             total_tokens = 0
             for chunk in raw_search_results:
                 chunk_tokens = self._estimate_tokens(chunk.get("text", ""))
-                if total_tokens + chunk_tokens > self.phase2_budget:
+                if total_tokens + chunk_tokens > available_budget:
                     break
                 kept_chunks.append(chunk)
                 total_tokens += chunk_tokens
@@ -516,7 +587,7 @@ class ContextMemoryManager:
                 divergence, kept_chunks, total_tokens,
                 baseline_available=True,
                 llm_unavailable=True,
-                degraded_mode_reason="No LLM curator available"
+                degraded_mode_reason=degraded_reason
             )
 
         logger.info("🤖 Phase 2 Step 2: LLM curation of results")
@@ -546,7 +617,7 @@ class ContextMemoryManager:
         logger.info(f"LLM kept {len(final_chunks)} chunks from raw search")
 
         # STEP 5: Execute additional queries suggested by LLM
-        remaining_budget = self.phase2_budget - final_tokens
+        remaining_budget = max(0, available_budget - final_tokens)
         if curation.additional_queries and remaining_budget > 0:
             logger.info(f"🔍 Phase 2 Step 3: Executing {len(curation.additional_queries)} additional queries")
 
@@ -586,7 +657,8 @@ class ContextMemoryManager:
             self.context_state.consume_budget(final_tokens)
             logger.info(
                 f"✅ Phase 2 complete: {len(new_chunks)} new chunks, "
-                f"{final_tokens} tokens ({final_tokens / self.phase2_budget * 100:.1f}% of budget)"
+                f"{final_tokens} tokens ("
+                f"{(final_tokens / available_budget * 100) if available_budget else 0:.1f}% of budget)"
             )
         else:
             logger.info("Phase 2 complete: No chunks retained after curation")
@@ -594,8 +666,8 @@ class ContextMemoryManager:
         return Pass2Update(
             divergence, final_chunks, final_tokens,
             baseline_available=True,
-            llm_unavailable=False,
-            degraded_mode_reason=None
+            llm_unavailable=not self.llm_curator,
+            degraded_mode_reason=degraded_reason
         )
 
     # ------------------------------------------------------------------
@@ -606,6 +678,7 @@ class ContextMemoryManager:
         # Simple heuristic: words * 1.25 ≈ tokens
         words = len(text.split())
         return int(words * 1.25)
+
     def _execute_authorial_directives(
         self,
         directives: List[str],
