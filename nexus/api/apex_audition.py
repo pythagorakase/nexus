@@ -100,19 +100,16 @@ def list_generation_runs():
 
 @app.get("/api/audition/conditions", response_model=List[Condition])
 def list_conditions():
-    """List all active and visible conditions."""
+    """List all active conditions."""
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT
                     id, slug, provider, model_name, label,
-                    temperature, top_p, min_p,
-                    frequency_penalty, presence_penalty, repetition_penalty,
-                    reasoning_effort, thinking_enabled,
-                    max_output_tokens, thinking_budget_tokens,
-                    is_active, is_visible, notes
+                    temperature, reasoning_effort, thinking_enabled,
+                    max_output_tokens, thinking_budget_tokens, is_active, notes
                 FROM apex_audition.conditions
-                WHERE is_active = true AND is_visible = true
+                WHERE is_active = true
                 ORDER BY provider, model_name, temperature
             """)
             rows = cur.fetchall()
@@ -128,125 +125,11 @@ def list_conditions():
                     thinking_enabled=row.get('thinking_enabled'),
                     max_output_tokens=row.get('max_output_tokens'),
                     thinking_budget_tokens=row.get('thinking_budget_tokens'),
-                    top_p=row.get('top_p'),
-                    min_p=row.get('min_p'),
-                    frequency_penalty=row.get('frequency_penalty'),
-                    presence_penalty=row.get('presence_penalty'),
-                    repetition_penalty=row.get('repetition_penalty'),
                     is_active=row['is_active'],
-                    is_visible=row['is_visible'],
                     notes=row.get('notes'),
                 )
                 for row in rows
             ]
-
-
-@app.get("/api/audition/conditions/all", response_model=List[Condition])
-def list_all_conditions():
-    """List ALL conditions regardless of active/visible status (for management UI)."""
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT
-                    id, slug, provider, model_name, label,
-                    temperature, top_p, min_p,
-                    frequency_penalty, presence_penalty, repetition_penalty,
-                    reasoning_effort, thinking_enabled,
-                    max_output_tokens, thinking_budget_tokens,
-                    is_active, is_visible, notes
-                FROM apex_audition.conditions
-                ORDER BY provider, model_name, slug
-            """)
-            rows = cur.fetchall()
-            return [
-                Condition(
-                    id=row['id'],
-                    slug=row['slug'],
-                    provider=row['provider'],
-                    model=row['model_name'],
-                    label=row.get('label'),
-                    temperature=row.get('temperature'),
-                    reasoning_effort=row.get('reasoning_effort'),
-                    thinking_enabled=row.get('thinking_enabled'),
-                    max_output_tokens=row.get('max_output_tokens'),
-                    thinking_budget_tokens=row.get('thinking_budget_tokens'),
-                    top_p=row.get('top_p'),
-                    min_p=row.get('min_p'),
-                    frequency_penalty=row.get('frequency_penalty'),
-                    presence_penalty=row.get('presence_penalty'),
-                    repetition_penalty=row.get('repetition_penalty'),
-                    is_active=row['is_active'],
-                    is_visible=row['is_visible'],
-                    notes=row.get('notes'),
-                )
-                for row in rows
-            ]
-
-
-@app.patch("/api/audition/conditions/{condition_id}")
-def update_condition(
-    condition_id: int,
-    is_active: Optional[bool] = None,
-    is_visible: Optional[bool] = None
-):
-    """Update condition flags (is_active and/or is_visible)."""
-    if is_active is None and is_visible is None:
-        raise HTTPException(status_code=400, detail="At least one of is_active or is_visible must be provided")
-
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            # Build dynamic UPDATE statement
-            updates = []
-            params = []
-
-            if is_active is not None:
-                updates.append("is_active = %s")
-                params.append(is_active)
-
-            if is_visible is not None:
-                updates.append("is_visible = %s")
-                params.append(is_visible)
-
-            params.append(condition_id)
-
-            cur.execute(f"""
-                UPDATE apex_audition.conditions
-                SET {", ".join(updates)}
-                WHERE id = %s
-                RETURNING id, slug, provider, model_name, label,
-                    temperature, top_p, min_p,
-                    frequency_penalty, presence_penalty, repetition_penalty,
-                    reasoning_effort, thinking_enabled,
-                    max_output_tokens, thinking_budget_tokens,
-                    is_active, is_visible, notes
-            """, params)
-
-            row = cur.fetchone()
-            if not row:
-                raise HTTPException(status_code=404, detail=f"Condition {condition_id} not found")
-
-            conn.commit()
-
-            return Condition(
-                id=row['id'],
-                slug=row['slug'],
-                provider=row['provider'],
-                model=row['model_name'],
-                label=row.get('label'),
-                temperature=row.get('temperature'),
-                reasoning_effort=row.get('reasoning_effort'),
-                thinking_enabled=row.get('thinking_enabled'),
-                max_output_tokens=row.get('max_output_tokens'),
-                thinking_budget_tokens=row.get('thinking_budget_tokens'),
-                top_p=row.get('top_p'),
-                min_p=row.get('min_p'),
-                frequency_penalty=row.get('frequency_penalty'),
-                presence_penalty=row.get('presence_penalty'),
-                repetition_penalty=row.get('repetition_penalty'),
-                is_active=row['is_active'],
-                is_visible=row['is_visible'],
-                notes=row.get('notes'),
-            )
 
 
 @app.get("/api/audition/prompts", response_model=List[Prompt])
@@ -335,7 +218,7 @@ def get_next_comparison(
 
             base_where = " AND ".join(base_conditions) if base_conditions else "TRUE"
 
-            # Step 1: Select conditions with bias towards low exposure
+            # Step 1: Select one condition with bias towards low exposure
             query_biased = f"""
                 SELECT
                     g.id as generation_id,
@@ -348,32 +231,38 @@ def get_next_comparison(
                 LEFT JOIN apex_audition.elo_ratings e ON e.condition_id = g.condition_id
                 WHERE g.status = 'completed'
                   AND c.is_active = true
-                  AND c.is_visible = true
                   AND {base_where}
                   {prompt_filter}
                 ORDER BY exposure ASC, RANDOM()
+                LIMIT 1
             """
 
             cur.execute(query_biased, params + prompt_params)
-            biased_rows = cur.fetchall()
+            biased_row = cur.fetchone()
 
-            if not biased_rows:
+            if not biased_row:
                 return None
 
-            # Step 2/3: Iterate through biased conditions until a valid partner is found,
-            # then fetch full details for both generations.
+            biased_generation_id = biased_row["generation_id"]
+            biased_condition_id = biased_row["condition_id"]
+            biased_prompt_id = biased_row["prompt_id"]
+            biased_replicate_index = biased_row["replicate_index"]
+
+            # Step 2: Select a random pairing condition that:
+            # - Is from the same prompt
+            # - Has the same replicate_index
+            # - Is a different condition
+            # - Has no existing comparison with the biased condition
             query_random = f"""
                 SELECT g.id as generation_id
                 FROM apex_audition.generations g
                 JOIN apex_audition.conditions c ON c.id = g.condition_id
                 WHERE g.status = 'completed'
-                  AND c.is_active = true
-                  AND c.is_visible = true
                   AND {base_where}
-                  {prompt_filter}
                   AND g.prompt_id = %s
                   AND g.replicate_index = %s
                   AND g.condition_id != %s
+                  AND c.is_active = true
                   AND NOT EXISTS (
                     SELECT 1 FROM apex_audition.comparisons comp
                     WHERE comp.prompt_id = g.prompt_id
@@ -384,6 +273,22 @@ def get_next_comparison(
                 LIMIT 1
             """
 
+            random_params = params + [
+                biased_prompt_id,
+                biased_replicate_index,
+                biased_condition_id,
+                biased_condition_id,
+                biased_condition_id,
+            ]
+            cur.execute(query_random, random_params)
+            random_row = cur.fetchone()
+
+            if not random_row:
+                return None
+
+            random_generation_id = random_row["generation_id"]
+
+            # Step 3: Fetch full details for both generations
             fetch_query = """
                 SELECT
                     p.id AS prompt_id,
@@ -398,17 +303,11 @@ def get_next_comparison(
                     c.model_name AS condition_model_name,
                     c.label AS condition_label,
                     c.temperature AS condition_temperature,
-                    c.top_p AS condition_top_p,
-                    c.min_p AS condition_min_p,
-                    c.frequency_penalty AS condition_frequency_penalty,
-                    c.presence_penalty AS condition_presence_penalty,
-                    c.repetition_penalty AS condition_repetition_penalty,
                     c.reasoning_effort AS condition_reasoning_effort,
                     c.thinking_enabled AS condition_thinking_enabled,
                     c.max_output_tokens AS condition_max_output_tokens,
                     c.thinking_budget_tokens AS condition_thinking_budget_tokens,
                     c.is_active AS condition_is_active,
-                    c.is_visible AS condition_is_visible,
                     g.id AS generation_id,
                     g.condition_id AS generation_condition_id,
                     g.prompt_id AS generation_prompt_id,
@@ -424,130 +323,95 @@ def get_next_comparison(
                 WHERE g.id IN (%s, %s)
             """
 
-            for biased_row in biased_rows:
-                biased_generation_id = biased_row["generation_id"]
-                biased_condition_id = biased_row["condition_id"]
-                biased_prompt_id = biased_row["prompt_id"]
-                biased_replicate_index = biased_row["replicate_index"]
+            cur.execute(fetch_query, [biased_generation_id, random_generation_id])
+            detail_rows = cur.fetchall()
 
-                random_params = params + prompt_params + [
-                    biased_prompt_id,
-                    biased_replicate_index,
-                    biased_condition_id,
-                    biased_condition_id,
-                    biased_condition_id,
-                ]
+            if len(detail_rows) != 2:
+                return None
 
-                cur.execute(query_random, random_params)
-                random_row = cur.fetchone()
+            # Build response objects
+            # First row is biased, second is random (but we'll shuffle at the end)
+            row_map = {row["generation_id"]: row for row in detail_rows}
+            biased_detail = row_map[biased_generation_id]
+            random_detail = row_map[random_generation_id]
 
-                if not random_row:
-                    continue
+            # Use the first row for prompt details (they're the same)
+            prompt_row = detail_rows[0]
+            prompt = Prompt(
+                id=prompt_row["prompt_id"],
+                chunk_id=prompt_row["prompt_chunk_id"],
+                category=prompt_row.get("prompt_category"),
+                label=prompt_row.get("prompt_label"),
+                context=prompt_row["prompt_context"],
+                metadata=prompt_row["prompt_metadata"],
+            )
 
-                random_generation_id = random_row["generation_id"]
+            # Build condition and generation objects for biased selection
+            condition_a = Condition(
+                id=biased_detail["condition_id"],
+                slug=biased_detail["condition_slug"],
+                provider=biased_detail["condition_provider"],
+                model=biased_detail["condition_model_name"],
+                label=biased_detail.get("condition_label"),
+                temperature=biased_detail.get("condition_temperature"),
+                reasoning_effort=biased_detail.get("condition_reasoning_effort"),
+                thinking_enabled=biased_detail.get("condition_thinking_enabled"),
+                max_output_tokens=biased_detail.get("condition_max_output_tokens"),
+                thinking_budget_tokens=biased_detail.get("condition_thinking_budget_tokens"),
+                is_active=biased_detail["condition_is_active"],
+            )
 
-                cur.execute(fetch_query, [biased_generation_id, random_generation_id])
-                detail_rows = cur.fetchall()
+            generation_a = Generation(
+                id=biased_detail["generation_id"],
+                condition_id=biased_detail["generation_condition_id"],
+                prompt_id=biased_detail["generation_prompt_id"],
+                replicate_index=biased_detail["generation_replicate_index"],
+                status=biased_detail["generation_status"],
+                response_payload=biased_detail["generation_response_payload"],
+                input_tokens=biased_detail.get("generation_input_tokens"),
+                output_tokens=biased_detail.get("generation_output_tokens"),
+                completed_at=biased_detail.get("generation_completed_at"),
+            )
 
-                if len(detail_rows) != 2:
-                    continue
+            # Build condition and generation objects for random selection
+            condition_b = Condition(
+                id=random_detail["condition_id"],
+                slug=random_detail["condition_slug"],
+                provider=random_detail["condition_provider"],
+                model=random_detail["condition_model_name"],
+                label=random_detail.get("condition_label"),
+                temperature=random_detail.get("condition_temperature"),
+                reasoning_effort=random_detail.get("condition_reasoning_effort"),
+                thinking_enabled=random_detail.get("condition_thinking_enabled"),
+                max_output_tokens=random_detail.get("condition_max_output_tokens"),
+                thinking_budget_tokens=random_detail.get("condition_thinking_budget_tokens"),
+                is_active=random_detail["condition_is_active"],
+            )
 
-                # Build response objects
-                row_map = {row["generation_id"]: row for row in detail_rows}
-                biased_detail = row_map[biased_generation_id]
-                random_detail = row_map[random_generation_id]
+            generation_b = Generation(
+                id=random_detail["generation_id"],
+                condition_id=random_detail["generation_condition_id"],
+                prompt_id=random_detail["generation_prompt_id"],
+                replicate_index=random_detail["generation_replicate_index"],
+                status=random_detail["generation_status"],
+                response_payload=random_detail["generation_response_payload"],
+                input_tokens=random_detail.get("generation_input_tokens"),
+                output_tokens=random_detail.get("generation_output_tokens"),
+                completed_at=random_detail.get("generation_completed_at"),
+            )
 
-                # Use the first row for prompt details (they're the same)
-                prompt_row = detail_rows[0]
-                prompt = Prompt(
-                    id=prompt_row["prompt_id"],
-                    chunk_id=prompt_row["prompt_chunk_id"],
-                    category=prompt_row.get("prompt_category"),
-                    label=prompt_row.get("prompt_label"),
-                    context=prompt_row["prompt_context"],
-                    metadata=prompt_row["prompt_metadata"],
-                )
+            # Randomly shuffle left/right assignment
+            if random.random() < 0.5:
+                condition_a, condition_b = condition_b, condition_a
+                generation_a, generation_b = generation_b, generation_a
 
-                # Build condition and generation objects for biased selection
-                condition_a = Condition(
-                    id=biased_detail["condition_id"],
-                    slug=biased_detail["condition_slug"],
-                    provider=biased_detail["condition_provider"],
-                    model=biased_detail["condition_model_name"],
-                    label=biased_detail.get("condition_label"),
-                    temperature=biased_detail.get("condition_temperature"),
-                    top_p=biased_detail.get("condition_top_p"),
-                    min_p=biased_detail.get("condition_min_p"),
-                    frequency_penalty=biased_detail.get("condition_frequency_penalty"),
-                    presence_penalty=biased_detail.get("condition_presence_penalty"),
-                    repetition_penalty=biased_detail.get("condition_repetition_penalty"),
-                    reasoning_effort=biased_detail.get("condition_reasoning_effort"),
-                    thinking_enabled=biased_detail.get("condition_thinking_enabled"),
-                    max_output_tokens=biased_detail.get("condition_max_output_tokens"),
-                    thinking_budget_tokens=biased_detail.get("condition_thinking_budget_tokens"),
-                    is_active=biased_detail["condition_is_active"],
-                    is_visible=biased_detail["condition_is_visible"],
-                )
-
-                generation_a = Generation(
-                    id=biased_detail["generation_id"],
-                    condition_id=biased_detail["generation_condition_id"],
-                    prompt_id=biased_detail["generation_prompt_id"],
-                    replicate_index=biased_detail["generation_replicate_index"],
-                    status=biased_detail["generation_status"],
-                    response_payload=biased_detail["generation_response_payload"],
-                    input_tokens=biased_detail.get("generation_input_tokens"),
-                    output_tokens=biased_detail.get("generation_output_tokens"),
-                    completed_at=biased_detail.get("generation_completed_at"),
-                )
-
-                # Build condition and generation objects for random selection
-                condition_b = Condition(
-                    id=random_detail["condition_id"],
-                    slug=random_detail["condition_slug"],
-                    provider=random_detail["condition_provider"],
-                    model=random_detail["condition_model_name"],
-                    label=random_detail.get("condition_label"),
-                    temperature=random_detail.get("condition_temperature"),
-                    top_p=random_detail.get("condition_top_p"),
-                    min_p=random_detail.get("condition_min_p"),
-                    frequency_penalty=random_detail.get("condition_frequency_penalty"),
-                    presence_penalty=random_detail.get("condition_presence_penalty"),
-                    repetition_penalty=random_detail.get("condition_repetition_penalty"),
-                    reasoning_effort=random_detail.get("condition_reasoning_effort"),
-                    thinking_enabled=random_detail.get("condition_thinking_enabled"),
-                    max_output_tokens=random_detail.get("condition_max_output_tokens"),
-                    thinking_budget_tokens=random_detail.get("condition_thinking_budget_tokens"),
-                    is_active=random_detail["condition_is_active"],
-                    is_visible=random_detail["condition_is_visible"],
-                )
-
-                generation_b = Generation(
-                    id=random_detail["generation_id"],
-                    condition_id=random_detail["generation_condition_id"],
-                    prompt_id=random_detail["generation_prompt_id"],
-                    replicate_index=random_detail["generation_replicate_index"],
-                    status=random_detail["generation_status"],
-                    response_payload=random_detail["generation_response_payload"],
-                    input_tokens=random_detail.get("generation_input_tokens"),
-                    output_tokens=random_detail.get("generation_output_tokens"),
-                    completed_at=random_detail.get("generation_completed_at"),
-                )
-
-                # Randomly shuffle left/right assignment
-                if random.random() < 0.5:
-                    condition_a, condition_b = condition_b, condition_a
-                    generation_a, generation_b = generation_b, generation_a
-
-                return ComparisonQueueItem(
-                    prompt=prompt,
-                    condition_a=condition_a,
-                    condition_b=condition_b,
-                    generation_a=generation_a,
-                    generation_b=generation_b,
-                )
-
-            return None
+            return ComparisonQueueItem(
+                prompt=prompt,
+                condition_a=condition_a,
+                condition_b=condition_b,
+                generation_a=generation_a,
+                generation_b=generation_b,
+            )
 
 
 @app.post("/api/audition/comparisons", response_model=dict)
@@ -651,15 +515,11 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                     e.games_played,
                     e.last_updated,
                     c.id, c.slug, c.provider, c.model_name, c.label,
-                    c.temperature, c.top_p, c.min_p,
-                    c.frequency_penalty, c.presence_penalty, c.repetition_penalty,
-                    c.reasoning_effort, c.thinking_enabled,
-                    c.max_output_tokens, c.thinking_budget_tokens,
-                    c.is_active, c.is_visible, c.notes
+                    c.temperature, c.reasoning_effort, c.thinking_enabled,
+                    c.max_output_tokens, c.thinking_budget_tokens, c.is_active, c.notes
                 FROM apex_audition.elo_ratings e
                 JOIN apex_audition.conditions c ON c.id = e.condition_id
                 WHERE c.is_active = true
-                  AND c.is_visible = true
                 ORDER BY e.rating DESC
                 LIMIT %s
             """, (limit,))
@@ -675,17 +535,11 @@ def get_leaderboard(limit: int = Query(10, ge=1, le=100)):
                         model_name=row['model_name'],
                         label=row['label'],
                         temperature=row['temperature'],
-                        top_p=row['top_p'],
-                        min_p=row['min_p'],
-                        frequency_penalty=row['frequency_penalty'],
-                        presence_penalty=row['presence_penalty'],
-                        repetition_penalty=row['repetition_penalty'],
                         reasoning_effort=row['reasoning_effort'],
                         thinking_enabled=row['thinking_enabled'],
                         max_output_tokens=row['max_output_tokens'],
                         thinking_budget_tokens=row['thinking_budget_tokens'],
                         is_active=row['is_active'],
-                        is_visible=row['is_visible'],
                         notes=row['notes']
                     ),
                     rating=row['rating'],
@@ -848,15 +702,13 @@ def get_generation_task_count(
                         break
                     # Find first incomplete task for this condition
                     for prompt in prompts:
-                        # Check if all replicates are completed with non-empty content
+                        # Check if all replicates are completed
                         cur.execute("""
                             SELECT COUNT(*) as completed_count
                             FROM apex_audition.generations
                             WHERE condition_id = %s
                               AND prompt_id = %s
                               AND status = 'completed'
-                              AND response_payload->>'content' IS NOT NULL
-                              AND LENGTH(response_payload->>'content') > 0
                         """, (condition['id'], prompt['id']))
                         result = cur.fetchone()
                         completed_count = result['completed_count'] if result else 0
@@ -869,15 +721,13 @@ def get_generation_task_count(
                 # No limit: execute all incomplete tasks
                 for prompt in prompts:
                     for condition in conditions:
-                        # Check if all replicates are completed with non-empty content
+                        # Check if all replicates are completed
                         cur.execute("""
                             SELECT COUNT(*) as completed_count
                             FROM apex_audition.generations
                             WHERE condition_id = %s
                               AND prompt_id = %s
                               AND status = 'completed'
-                              AND response_payload->>'content' IS NOT NULL
-                              AND LENGTH(response_payload->>'content') > 0
                         """, (condition['id'], prompt['id']))
                         result = cur.fetchone()
                         completed_count = result['completed_count'] if result else 0
