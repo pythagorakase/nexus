@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
+from nexus.memory.user_confirmation import confirm_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class LLMContextCurator:
         # Get LLM decision with timing
         start_time = time.time()
         try:
-            decision = self._get_llm_decision(prompt)
+            decision = self._get_llm_decision(prompt, raw_search_results)
             elapsed = time.time() - start_time
             logger.info(f"LLM curation completed in {elapsed:.2f}s")
 
@@ -174,7 +175,7 @@ class LLMContextCurator:
 
         return "\n".join(sections)
 
-    def _get_llm_decision(self, prompt: str) -> CurationDecision:
+    def _get_llm_decision(self, prompt: str, raw_search_results: List[Dict[str, Any]]) -> CurationDecision:
         """Get LLM curation decision using structured output."""
 
         if not self.llm_manager:
@@ -229,9 +230,26 @@ class LLMContextCurator:
             return decision
 
         except ImportError:
-            # Fallback without LM Studio SDK
-            logger.warning("LM Studio SDK not available, using fallback curation")
-            return self._fallback_curation([])
+            # Fallback without LM Studio SDK - ask for user confirmation
+            logger.warning("LM Studio SDK not available")
+
+            # Ask user for confirmation to use fallback
+            if confirm_fallback(
+                "LM Studio SDK not available. Use fallback curation?",
+                details="Will use simple heuristics to select chunks based on token budget",
+                hook_type="llm_fallback"
+            ):
+                logger.info("User confirmed fallback curation")
+                return self._fallback_curation(raw_search_results)
+            else:
+                logger.warning("User declined fallback curation")
+                # Return empty decision if user declines
+                return CurationDecision(
+                    kept_chunk_ids=[],
+                    additional_queries=[],
+                    reasoning="User declined fallback curation",
+                    estimated_tokens=0
+                )
 
     def _fallback_curation(self, raw_search_results: List[Dict[str, Any]]) -> CurationDecision:
         """Simple fallback curation when LLM unavailable."""
