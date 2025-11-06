@@ -199,6 +199,51 @@ class LLMDivergenceDetector:
 
         return "\n".join(sections)
 
+    def _extract_json_brace_aware(self, text: str) -> Optional[str]:
+        """Extract JSON using brace counting, respecting string boundaries.
+
+        This method properly handles JSON extraction even when string values
+        contain closing braces '}', which would break simple regex patterns.
+
+        Args:
+            text: Text containing JSON object
+
+        Returns:
+            Extracted JSON string or None if not found
+        """
+        import json
+
+        start_idx = text.find('{')
+        if start_idx == -1:
+            return None
+
+        brace_count = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text[start_idx:], start_idx):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == '\\' and in_string:
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        return text[start_idx:i+1]
+
+        return None
+
     def _get_llm_analysis(self, prompt: str) -> EnrichmentAnalysis:
         """Get LLM analysis using structured output."""
 
@@ -266,33 +311,33 @@ class LLMDivergenceDetector:
                     logger.info(reasoning_result.content)
                     logger.info("=== END FULL RESPONSE ===")
 
-                    # Parse JSON from the response
+                    # Parse JSON from the response using brace-aware extraction
                     import json
                     import re
 
-                    # Try to find JSON block - look for opening { and matching closing }
                     content = reasoning_result.content
 
-                    # First try to find a clean JSON object
-                    json_match = re.search(r'\{[^}]*"enrichment_searches"[^}]*\}', content, re.DOTALL)
+                    # Try brace-aware extraction first
+                    json_str = self._extract_json_brace_aware(content)
 
-                    if not json_match:
-                        # Try more permissive pattern
-                        json_match = re.search(r'\{.*?\}(?=\s*$|\s*\n)', content, re.DOTALL)
-
-                    if json_match:
+                    if json_str:
                         try:
-                            json_str = json_match.group()
                             # Clean up any trailing commas before closing brackets
                             json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
                             data = json.loads(json_str)
                             analysis = EnrichmentAnalysis(**data)
                             logger.debug(f"Successfully parsed JSON: {data}")
                         except (json.JSONDecodeError, Exception) as e:
-                            logger.warning(f"Failed to parse JSON: {e}. Content was: {json_match.group()[:200]}")
+                            logger.warning(
+                                f"Failed to parse JSON: {e}. "
+                                f"Full JSON attempted: {json_str}"
+                            )
                             analysis = EnrichmentAnalysis()
                     else:
-                        # Fallback to empty response if no JSON found
+                        logger.warning(
+                            f"No valid JSON found in LLM response. "
+                            f"Full content: {content[:500]}"
+                        )
                         analysis = EnrichmentAnalysis()
                 else:
                     # Fallback to structured output
