@@ -230,10 +230,18 @@ class LLMContextCurator:
             return decision
 
         except ImportError:
-            # Fallback without LM Studio SDK - ask for user confirmation
+            # Fallback without LM Studio SDK
             logger.warning("LM Studio SDK not available")
 
-            # Ask user for confirmation to use fallback
+            # Import is_interactive at the top of the function
+            from ..memory.user_confirmation import confirm_fallback, is_interactive
+
+            # In non-interactive environments, auto-accept fallback to avoid blocking
+            if not is_interactive():
+                logger.info("Non-interactive environment detected, auto-accepting fallback curation")
+                return self._fallback_curation(raw_search_results)
+
+            # In interactive mode, ask user for confirmation
             if confirm_fallback(
                 "LM Studio SDK not available. Use fallback curation?",
                 details="Will use simple heuristics to select chunks based on token budget",

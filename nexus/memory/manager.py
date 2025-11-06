@@ -451,9 +451,15 @@ class ContextMemoryManager:
         context = self.context_state.context
         transition = self.context_state.transition
 
-        # Create empty divergence result for compatibility
-        from .divergence import DivergenceResult
-        divergence = DivergenceResult(False, 0.0, {}, set(), set())
+        # Run divergence detection if we have a detector
+        if hasattr(self, 'divergence_detector') and self.divergence_detector:
+            divergence = self.divergence_detector.detect(user_input, context, transition)
+            logger.debug(f"Divergence detection: {divergence.detected} (confidence={divergence.confidence:.2f})")
+        else:
+            # Fallback if no detector available
+            from .divergence import DivergenceResult
+            divergence = DivergenceResult(False, 0.0, {}, set(), set())
+            logger.debug("No divergence detector available, using empty result")
 
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
