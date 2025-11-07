@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 logger = logging.getLogger("nexus.api.session_manager")
 
@@ -163,13 +163,16 @@ class SessionManager:
     async def _get_lock(self, session_id: str) -> asyncio.Lock:
         """Return the asyncio lock associated with a session."""
 
+        normalized_session_id = self._normalize_session_id(session_id)
+
         async with self._locks_lock:
-            if session_id not in self._locks:
-                self._locks[session_id] = asyncio.Lock()
-            return self._locks[session_id]
+            if normalized_session_id not in self._locks:
+                self._locks[normalized_session_id] = asyncio.Lock()
+            return self._locks[normalized_session_id]
 
     def _session_path(self, session_id: str) -> Path:
-        return self.base_path / session_id
+        normalized_session_id = self._normalize_session_id(session_id)
+        return self.base_path / normalized_session_id
 
     def _metadata_path(self, session_id: str) -> Path:
         return self._session_path(session_id) / "metadata.json"
@@ -179,6 +182,15 @@ class SessionManager:
 
     def _context_dir(self, session_id: str) -> Path:
         return self._session_path(session_id) / "context"
+
+    def _normalize_session_id(self, session_id: str) -> str:
+        """Return a canonical UUID string for the provided session id."""
+
+        try:
+            normalized = str(UUID(session_id))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid session_id: {session_id!r}") from exc
+        return normalized
 
     async def create_session(
         self, session_name: Optional[str] = None, initial_context: Optional[str] = None
@@ -208,7 +220,8 @@ class SessionManager:
             json.dump([], handle, indent=2)
 
         async with self._locks_lock:
-            self._locks[session_id] = asyncio.Lock()
+            normalized_session_id = self._normalize_session_id(session_id)
+            self._locks[normalized_session_id] = asyncio.Lock()
 
         return SessionState(metadata=metadata, turns=[])
 
@@ -376,7 +389,8 @@ class SessionManager:
         session_dir.rmdir()
 
         async with self._locks_lock:
-            self._locks.pop(session_id, None)
+            normalized_session_id = self._normalize_session_id(session_id)
+            self._locks.pop(normalized_session_id, None)
 
     async def replace_last_turn(
         self,
