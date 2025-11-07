@@ -315,19 +315,29 @@ async def regenerate_turn(request: RegenerateRequest) -> Any:
     except SessionNotFoundError:
         return _error_response(404, "session_not_found", "Session does not exist", request.session_id)
 
-    history = session_manager.get_history(request.session_id, limit=1, offset=0)
-    if not history:
-        return _error_response(400, "no_history", "No turns available to regenerate", request.session_id)
-
-    last_turn = history[0]
-    user_input = last_turn.get("user_input", "")
-    previous_turn_id = last_turn.get("turn_id")
-
-    if not user_input:
-        return _error_response(400, "invalid_history", "Last turn is missing user input", request.session_id)
-
     session_lock = _get_session_lock(request.session_id)
     async with session_lock:
+        history = session_manager.get_history(request.session_id, limit=1, offset=0)
+        if not history:
+            return _error_response(
+                400,
+                "no_history",
+                "No turns available to regenerate",
+                request.session_id,
+            )
+
+        last_turn = history[0]
+        user_input = last_turn.get("user_input", "")
+        previous_turn_id = last_turn.get("turn_id")
+
+        if not user_input:
+            return _error_response(
+                400,
+                "invalid_history",
+                "Last turn is missing user input",
+                request.session_id,
+            )
+
         _ensure_lore_available()
 
         await stream_broker.publish(
