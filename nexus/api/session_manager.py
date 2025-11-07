@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import threading
 from contextlib import contextmanager
@@ -57,11 +58,12 @@ class SessionManager:
     """File-backed storage for story sessions and their turn history."""
 
     def __init__(self, base_path: Path, *, max_context_files: int = 50) -> None:
-        self.base_path = Path(base_path)
+        self.base_path = Path(base_path).resolve()
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.max_context_files = max_context_files
         self._locks: Dict[str, threading.RLock] = {}
         self._locks_lock = threading.Lock()
+        self._session_id_pattern = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
     # ------------------------------------------------------------------
     # Session lifecycle helpers
@@ -73,7 +75,7 @@ class SessionManager:
     ) -> SessionMetadata:
         """Create a new session directory and metadata."""
         session_id = str(uuid4())
-        session_dir = self.base_path / session_id
+        session_dir = self._session_dir(session_id)
         session_dir.mkdir(parents=True, exist_ok=True)
         (session_dir / "context").mkdir(parents=True, exist_ok=True)
 
@@ -89,32 +91,39 @@ class SessionManager:
             last_turn_id=None,
         )
 
-        self._register_lock(session_id)
+        self._register_lock(self._normalize_session_id(session_id))
         self._write_metadata(metadata)
         self._write_json(session_dir / "turns.json", [])
         return metadata
 
     def session_exists(self, session_id: str) -> bool:
         """Return True if the session directory exists."""
-        return (self.base_path / session_id).is_dir()
+        try:
+            return self._session_dir(session_id).is_dir()
+        except ValueError:
+            return False
 
     def delete_session(self, session_id: str) -> None:
         """Delete a session and all associated files."""
-        session_dir = self.base_path / session_id
+        try:
+            session_dir = self._session_dir(session_id)
+        except ValueError:
+            return
         if not session_dir.exists():
             return
 
         with self._session_lock(session_id):
             shutil.rmtree(session_dir, ignore_errors=True)
+            normalized_id = self._normalize_session_id(session_id)
             with self._locks_lock:
-                self._locks.pop(session_id, None)
+                self._locks.pop(normalized_id, None)
 
     # ------------------------------------------------------------------
     # Metadata operations
     # ------------------------------------------------------------------
     def get_metadata(self, session_id: str) -> SessionMetadata:
         """Load session metadata."""
-        metadata_path = self.base_path / session_id / "metadata.json"
+        metadata_path = self._session_dir(session_id) / "metadata.json"
         data = self._read_json(metadata_path)
         if data is None:
             raise FileNotFoundError(f"Session {session_id} not found")
@@ -158,7 +167,7 @@ class SessionManager:
         replace_last: bool = False,
     ) -> SessionMetadata:
         """Persist a turn record and update metadata."""
-        session_dir = self.base_path / session_id
+        session_dir = self._session_dir(session_id)
         turns_path = session_dir / "turns.json"
 
         with self._session_lock(session_id):
@@ -180,9 +189,8 @@ class SessionManager:
 
     def load_history(self, session_id: str) -> List[Dict[str, Any]]:
         """Load entire turn history for a session."""
-        turns_path = self.base_path / session_id / "turns.json"
-        history = self._read_json(turns_path)
-        return history or []
+        with self._session_lock(session_id):
+            return self._read_history(session_id)
 
     def get_history_slice(
         self,
@@ -192,19 +200,20 @@ class SessionManager:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Return paginated slice of turn history."""
-        history = self.load_history(session_id)
-        if offset < 0:
-            offset = 0
-        if limit < 0:
-            limit = 0
-        return history[offset : offset + limit] if limit else history[offset:]
+        with self._session_lock(session_id):
+            history = self._read_history(session_id)
+            if offset < 0:
+                offset = 0
+            if limit < 0:
+                limit = 0
+            return history[offset : offset + limit] if limit else history[offset:]
 
     # ------------------------------------------------------------------
     # Context persistence
     # ------------------------------------------------------------------
     def save_context(self, session_id: str, turn_id: str, context: Dict[str, Any]) -> Path:
         """Persist assembled context payload for a turn."""
-        context_dir = self.base_path / session_id / "context"
+        context_dir = self._session_dir(session_id) / "context"
         context_dir.mkdir(parents=True, exist_ok=True)
         context_path = context_dir / f"{turn_id}.json"
         self._write_json(context_path, context)
@@ -218,12 +227,12 @@ class SessionManager:
             turn_id = metadata.last_turn_id
             if not turn_id:
                 return None
-            context_path = self.base_path / session_id / "context" / f"{turn_id}.json"
+            context_path = self._session_dir(session_id) / "context" / f"{turn_id}.json"
             return self._read_json(context_path)
 
     def prune_session_context(self, session_id: str) -> None:
         """Trim context directory to keep recent files only."""
-        context_dir = self.base_path / session_id / "context"
+        context_dir = self._session_dir(session_id) / "context"
         if not context_dir.exists():
             return
 
@@ -245,7 +254,7 @@ class SessionManager:
         """Return metadata, latest turn and current context."""
         with self._session_lock(session_id):
             metadata = self.get_metadata(session_id)
-            history = self.load_history(session_id)
+            history = self._read_history(session_id)
             last_turn = history[-1] if history else None
             context = self.get_latest_context(session_id)
             return {
@@ -263,8 +272,9 @@ class SessionManager:
 
     @contextmanager
     def _session_lock(self, session_id: str):
-        self._register_lock(session_id)
-        lock = self._locks[session_id]
+        normalized_id = self._normalize_session_id(session_id)
+        self._register_lock(normalized_id)
+        lock = self._locks[normalized_id]
         lock.acquire()
         try:
             yield
@@ -272,7 +282,7 @@ class SessionManager:
             lock.release()
 
     def _write_metadata(self, metadata: SessionMetadata) -> None:
-        metadata_path = self.base_path / metadata.session_id / "metadata.json"
+        metadata_path = self._session_dir(metadata.session_id) / "metadata.json"
         self._write_json(metadata_path, metadata.to_dict())
 
     @staticmethod
@@ -298,3 +308,28 @@ class SessionManager:
             return None
         with path.open("r", encoding="utf-8") as handle:
             return json.load(handle)
+
+    def _read_history(self, session_id: str) -> List[Dict[str, Any]]:
+        """Internal helper to read a session's turn history without locking."""
+        turns_path = self._session_dir(session_id) / "turns.json"
+        history = self._read_json(turns_path)
+        return history or []
+
+    def _normalize_session_id(self, session_id: str) -> str:
+        """Validate and normalize a session identifier for filesystem use."""
+        if session_id is None:
+            raise ValueError("Session identifier is required")
+        candidate = session_id.strip()
+        if not candidate or candidate in {".", ".."}:
+            raise ValueError("Invalid session identifier")
+        if not self._session_id_pattern.match(candidate):
+            raise ValueError("Session identifier contains invalid characters")
+        return candidate
+
+    def _session_dir(self, session_id: str) -> Path:
+        """Return the absolute path to a session directory after validation."""
+        normalized_id = self._normalize_session_id(session_id)
+        session_dir = (self.base_path / normalized_id).resolve(strict=False)
+        if self.base_path not in session_dir.parents and session_dir != self.base_path:
+            raise ValueError("Session path resolves outside base directory")
+        return session_dir
