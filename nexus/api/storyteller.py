@@ -106,6 +106,7 @@ event_dispatcher = SessionEventDispatcher()
 
 _lore_agent: Optional[LORE] = None
 _lore_lock = asyncio.Lock()
+_lore_execution_lock = asyncio.Lock()
 
 
 async def get_lore_agent() -> LORE:
@@ -363,12 +364,13 @@ async def story_turn(
             ) from exc
 
         try:
-            story_response, context_snapshot = await _run_turn(
-                lore,
-                session_id,
-                user_input,
-                options,
-            )
+            async with _lore_execution_lock:
+                story_response, context_snapshot = await _run_turn(
+                    lore,
+                    session_id,
+                    user_input,
+                    options,
+                )
         except Exception as exc:
             LOGGER.exception("Turn processing failed for session %s", session_id)
             session_manager.update_phase(session_id, "error")
