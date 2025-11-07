@@ -19,6 +19,7 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -744,9 +745,9 @@ async def websocket_stream(websocket: WebSocket, session_id: str):
 async def global_exception_handler(request, exc):
     """Global exception handler"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    return HTTPException(
+    return JSONResponse(
         status_code=500,
-        detail={"error": "Internal server error", "detail": str(exc)},
+        content={"error": "Internal server error", "detail": str(exc)},
     )
 
 
