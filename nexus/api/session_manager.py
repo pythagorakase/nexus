@@ -141,7 +141,10 @@ class SessionManager:
     """Manage story session persistence on the filesystem."""
 
     def __init__(self, base_path: Optional[Path] = None, *, max_context_files: int = 50):
-        self.base_path = base_path or Path(__file__).resolve().parents[2] / "sessions"
+        raw_base_path = Path(base_path).expanduser() if base_path is not None else Path(
+            __file__
+        ).resolve().parents[2] / "sessions"
+        self.base_path = raw_base_path.resolve(strict=False)
         self.base_path.mkdir(parents=True, exist_ok=True)
         self.max_context_files = max_context_files
         self._locks: Dict[str, asyncio.Lock] = {}
