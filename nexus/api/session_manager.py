@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,11 +140,16 @@ class SessionState:
 class SessionManager:
     """Manage story session persistence on the filesystem."""
 
-    def __init__(self, base_path: Optional[Path] = None):
-        self.base_path = base_path or Path(__file__).resolve().parents[2] / "sessions"
+    def __init__(self, base_path: Optional[Path] = None, *, max_context_files: int = 50):
+        raw_base_path = Path(base_path).expanduser() if base_path is not None else Path(
+            __file__
+        ).resolve().parents[2] / "sessions"
+        self.base_path = raw_base_path.resolve(strict=False)
         self.base_path.mkdir(parents=True, exist_ok=True)
+        self.max_context_files = max_context_files
         self._locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
+        self._session_id_pattern = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
         self._recover_incomplete_sessions()
 
     def _recover_incomplete_sessions(self) -> None:
@@ -171,8 +177,14 @@ class SessionManager:
             return self._locks[normalized_session_id]
 
     def _session_path(self, session_id: str) -> Path:
+        """Return the absolute path to a session directory after validation."""
         normalized_session_id = self._normalize_session_id(session_id)
-        return self.base_path / normalized_session_id
+        session_path = (self.base_path / normalized_session_id).resolve(strict=False)
+
+        # Prevent path traversal attacks
+        if self.base_path not in session_path.parents and session_path != self.base_path:
+            raise ValueError("Session path resolves outside base directory")
+        return session_path
 
     def _metadata_path(self, session_id: str) -> Path:
         return self._session_path(session_id) / "metadata.json"
@@ -184,13 +196,24 @@ class SessionManager:
         return self._session_path(session_id) / "context"
 
     def _normalize_session_id(self, session_id: str) -> str:
-        """Return a canonical UUID string for the provided session id."""
+        """Validate and normalize a session identifier for filesystem use."""
 
+        if session_id is None:
+            raise ValueError("Session identifier is required")
+
+        # First try to parse as UUID for backwards compatibility
         try:
-            normalized = str(UUID(session_id))
-        except (ValueError, TypeError) as exc:
-            raise ValueError(f"Invalid session_id: {session_id!r}") from exc
-        return normalized
+            return str(UUID(session_id))
+        except (ValueError, TypeError):
+            pass
+
+        # Fall back to regex validation for non-UUID session IDs
+        candidate = session_id.strip()
+        if not candidate or candidate in {".", ".."}:
+            raise ValueError("Invalid session identifier")
+        if not self._session_id_pattern.match(candidate):
+            raise ValueError("Session identifier contains invalid characters")
+        return candidate
 
     async def create_session(
         self, session_name: Optional[str] = None, initial_context: Optional[str] = None
@@ -446,11 +469,30 @@ class SessionManager:
 
             return new_turn
 
+    async def prune_session_context(self, session_id: str) -> None:
+        """Trim context directory to keep recent files only."""
+        context_dir = self._context_dir(session_id)
+        if not context_dir.exists():
+            return
+
+        files = sorted(
+            context_dir.glob("*.json"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        for stale_path in files[self.max_context_files :]:
+            try:
+                stale_path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
     async def finalize_turn(self, session_id: str) -> None:
         """Background cleanup hook executed after a turn completes."""
 
         try:
             await self.update_metadata(session_id, last_accessed=_utcnow(), current_phase="idle")
+            # Prune old context files to prevent unbounded disk usage
+            await self.prune_session_context(session_id)
         except SessionNotFoundError:
             logger.debug("Finalize skipped for deleted session %s", session_id)
 
