@@ -367,8 +367,8 @@ async def story_turn(
     )
 
     try:
-        # Process the turn with LORE - it returns a string (narrative text)
-        narrative_text = await lore.process_turn(request.user_input)
+        # Process the turn with LORE - it returns a StoryTurnResponse or string on error
+        result = await lore.process_turn(request.user_input)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -384,9 +384,16 @@ async def story_turn(
             detail=_format_error("turn_failed", str(exc), request.session_id),
         ) from exc
 
-    # Create a StoryTurnResponse from the narrative text
-    # For now, we create a minimal response with just the narrative
-    story_response = create_minimal_response(narrative_text)
+    # Handle the response based on type
+    if isinstance(result, str):
+        # Error or fallback case - create minimal response
+        story_response = create_minimal_response(result)
+    elif isinstance(result, StoryTurnResponse):
+        # Full structured response from Storyteller
+        story_response = result
+    else:
+        # Unexpected type - try to coerce it
+        story_response = _coerce_story_response(result)
 
     # Extract turn context from LORE if available
     context_payload: Dict[str, Any] = {}
@@ -472,8 +479,8 @@ async def regenerate_turn(
     )
 
     try:
-        # Regenerate with LORE - it returns a string (narrative text)
-        narrative_text = await lore.process_turn(last_turn.user_input)
+        # Regenerate with LORE - it returns a StoryTurnResponse or string on error
+        result = await lore.process_turn(last_turn.user_input)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(
@@ -481,8 +488,16 @@ async def regenerate_turn(
             detail=_format_error("regenerate_failed", str(exc), request.session_id),
         ) from exc
 
-    # Create a StoryTurnResponse from the narrative text
-    story_response = create_minimal_response(narrative_text)
+    # Handle the response based on type
+    if isinstance(result, str):
+        # Error or fallback case - create minimal response
+        story_response = create_minimal_response(result)
+    elif isinstance(result, StoryTurnResponse):
+        # Full structured response from Storyteller
+        story_response = result
+    else:
+        # Unexpected type - try to coerce it
+        story_response = _coerce_story_response(result)
 
     # Extract turn context from LORE if available
     context_payload: Dict[str, Any] = {}

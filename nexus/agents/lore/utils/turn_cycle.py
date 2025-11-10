@@ -526,17 +526,24 @@ class TurnCycleManager:
             return "Error: API communication unavailable"
 
         try:
-            response = self.lore.logon.generate_narrative(turn_context.context_payload)
-            turn_context.apex_response = response.content
-            
+            # Generate narrative with structured output
+            story_response = self.lore.logon.generate_narrative(turn_context.context_payload)
+
+            # Store the full structured response
+            turn_context.apex_response = story_response
+
+            # Extract narrative text for backward compatibility
+            narrative_text = story_response.narrative.text
+
             turn_context.phase_states["apex_generation"] = {
                 "success": True,
-                "input_tokens": response.input_tokens,
-                "output_tokens": response.output_tokens,
-                "model": response.model
+                "has_metadata": story_response.metadata is not None,
+                "has_entities": story_response.referenced_entities is not None,
+                "has_state_updates": story_response.state_updates is not None,
+                "narrative_length": len(narrative_text)
             }
-            
-            return response.content
+
+            return story_response  # Return the full StoryTurnResponse
             
         except Exception as e:
             logger.error(f"Apex AI call failed: {e}")
