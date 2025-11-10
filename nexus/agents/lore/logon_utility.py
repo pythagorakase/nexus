@@ -37,7 +37,7 @@ class LogonUtility:
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
-                max_tokens=apex_settings.get("max_tokens", 4000),
+                max_output_tokens=apex_settings.get("max_output_tokens", 25000),
                 reasoning_effort=apex_settings.get("reasoning_effort", "medium")
             )
         elif provider_type == "anthropic":
