@@ -6,7 +6,7 @@ Handles the execution of individual turn cycle phases.
 
 import logging
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
 logger = logging.getLogger("nexus.lore.turn_cycle")
@@ -18,6 +18,7 @@ try:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
+    from ..logon_schemas import StoryTurnResponse, extract_narrative_text
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -26,6 +27,7 @@ except ImportError:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
+    from nexus.agents.lore.logon_schemas import StoryTurnResponse, extract_narrative_text
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -553,7 +555,11 @@ class TurnCycleManager:
             }
             return f"Error generating narrative: {str(e)}"
     
-    async def integrate_response(self, turn_context: TurnContext, response: str):
+    async def integrate_response(
+        self,
+        turn_context: TurnContext,
+        response: Union[str, StoryTurnResponse],
+    ) -> None:
         """
         Phase 7: Integrate Apex response and update state.
 
@@ -570,15 +576,25 @@ class TurnCycleManager:
         # 4. Store the new narrative chunk in database
 
         # For now, just log the completion
+        if isinstance(response, StoryTurnResponse):
+            narrative_text = extract_narrative_text(response)
+            structured_response = response
+        else:
+            narrative_text = response if isinstance(response, str) else str(response)
+            structured_response = None
+
         turn_context.phase_states["integration"] = {
-            "response_length": len(response),
-            "integration_complete": True
+            "response_length": len(narrative_text),
+            "integration_complete": True,
         }
+
+        if structured_response is not None:
+            turn_context.phase_states["integration"]["structured_response"] = structured_response.dict()
 
         if getattr(self.lore, "memory_manager", None):
             try:
                 baseline = self.lore.memory_manager.handle_storyteller_response(
-                    narrative=response,
+                    narrative=narrative_text,
                     warm_slice=turn_context.warm_slice,
                     retrieved_passages=turn_context.retrieved_passages,
                     token_usage=turn_context.token_counts,
@@ -601,7 +617,7 @@ class TurnCycleManager:
                 turn_context.memory_state.setdefault("errors", []).append(str(exc))
 
         # Store narrative chunk if MEMNON available
-        if self.lore.memnon and response:
+        if self.lore.memnon and narrative_text:
             try:
                 # This would normally use a proper method to store the chunk
                 logger.info("Would store new narrative chunk to database")
