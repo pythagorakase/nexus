@@ -367,7 +367,8 @@ async def story_turn(
     )
 
     try:
-        result = await lore.process_turn(request.user_input)
+        # Process the turn with LORE - it returns a string (narrative text)
+        narrative_text = await lore.process_turn(request.user_input)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -383,21 +384,50 @@ async def story_turn(
             detail=_format_error("turn_failed", str(exc), request.session_id),
         ) from exc
 
-    story_response = _coerce_story_response(result)
+    # Create a StoryTurnResponse from the narrative text
+    # For now, we create a minimal response with just the narrative
+    story_response = create_minimal_response(narrative_text)
 
+    # Extract turn context from LORE if available
     context_payload: Dict[str, Any] = {}
     turn_context = getattr(lore, "turn_context", None)
     if turn_context is not None:
-        context_payload = {
-            "phase_states": turn_context.phase_states,
-            "warm_slice": turn_context.warm_slice,
-            "entity_data": turn_context.entity_data,
-            "retrieved_passages": turn_context.retrieved_passages,
-            "context_payload": turn_context.context_payload,
-            "memory_state": turn_context.memory_state,
-            "token_counts": turn_context.token_counts,
-            "authorial_directives": turn_context.authorial_directives,
-        }
+        # Build context payload from LORE's turn context
+        context_dict = {}
+
+        # Add phase states if available
+        if hasattr(turn_context, "phase_states"):
+            context_dict["phase_states"] = turn_context.phase_states
+
+        # Add warm slice if available
+        if hasattr(turn_context, "warm_slice"):
+            context_dict["warm_slice"] = turn_context.warm_slice
+
+        # Add entity data if available
+        if hasattr(turn_context, "entity_data"):
+            context_dict["entity_data"] = turn_context.entity_data
+
+        # Add retrieved passages if available
+        if hasattr(turn_context, "retrieved_passages"):
+            context_dict["retrieved_passages"] = turn_context.retrieved_passages
+
+        # Add context payload if available
+        if hasattr(turn_context, "context_payload"):
+            context_dict["context_payload"] = turn_context.context_payload
+
+        # Add memory state if available
+        if hasattr(turn_context, "memory_state"):
+            context_dict["memory_state"] = turn_context.memory_state
+
+        # Add token counts if available
+        if hasattr(turn_context, "token_counts"):
+            context_dict["token_counts"] = turn_context.token_counts
+
+        # Add authorial directives if available
+        if hasattr(turn_context, "authorial_directives"):
+            context_dict["authorial_directives"] = turn_context.authorial_directives
+
+        context_payload = context_dict
 
     await manager.append_turn(
         request.session_id,
@@ -442,7 +472,8 @@ async def regenerate_turn(
     )
 
     try:
-        result = await lore.process_turn(last_turn.user_input)
+        # Regenerate with LORE - it returns a string (narrative text)
+        narrative_text = await lore.process_turn(last_turn.user_input)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(
@@ -450,21 +481,49 @@ async def regenerate_turn(
             detail=_format_error("regenerate_failed", str(exc), request.session_id),
         ) from exc
 
-    story_response = _coerce_story_response(result)
+    # Create a StoryTurnResponse from the narrative text
+    story_response = create_minimal_response(narrative_text)
 
+    # Extract turn context from LORE if available
     context_payload: Dict[str, Any] = {}
     turn_context = getattr(lore, "turn_context", None)
     if turn_context is not None:
-        context_payload = {
-            "phase_states": turn_context.phase_states,
-            "warm_slice": turn_context.warm_slice,
-            "entity_data": turn_context.entity_data,
-            "retrieved_passages": turn_context.retrieved_passages,
-            "context_payload": turn_context.context_payload,
-            "memory_state": turn_context.memory_state,
-            "token_counts": turn_context.token_counts,
-            "authorial_directives": turn_context.authorial_directives,
-        }
+        # Build context payload from LORE's turn context
+        context_dict = {}
+
+        # Add phase states if available
+        if hasattr(turn_context, "phase_states"):
+            context_dict["phase_states"] = turn_context.phase_states
+
+        # Add warm slice if available
+        if hasattr(turn_context, "warm_slice"):
+            context_dict["warm_slice"] = turn_context.warm_slice
+
+        # Add entity data if available
+        if hasattr(turn_context, "entity_data"):
+            context_dict["entity_data"] = turn_context.entity_data
+
+        # Add retrieved passages if available
+        if hasattr(turn_context, "retrieved_passages"):
+            context_dict["retrieved_passages"] = turn_context.retrieved_passages
+
+        # Add context payload if available
+        if hasattr(turn_context, "context_payload"):
+            context_dict["context_payload"] = turn_context.context_payload
+
+        # Add memory state if available
+        if hasattr(turn_context, "memory_state"):
+            context_dict["memory_state"] = turn_context.memory_state
+
+        # Add token counts if available
+        if hasattr(turn_context, "token_counts"):
+            context_dict["token_counts"] = turn_context.token_counts
+
+        # Add authorial directives if available
+        if hasattr(turn_context, "authorial_directives"):
+            context_dict["authorial_directives"] = turn_context.authorial_directives
+
+        context_payload = context_dict
 
     await manager.replace_last_turn(
         request.session_id,
