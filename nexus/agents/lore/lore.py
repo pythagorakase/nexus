@@ -261,15 +261,15 @@ class LORE:
         if self.logon is None:
             self._initialize_logon()
     
-    async def process_turn(self, user_input: str) -> str:
+    async def process_turn(self, user_input: str):
         """
         Process a complete turn cycle.
-        
+
         Args:
             user_input: The user's input text
-            
+
         Returns:
-            Generated narrative response
+            StoryTurnResponse with narrative and metadata, or string on error
         """
         logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
         

@@ -226,8 +226,7 @@
                         "claude-opus-4-0",
                         "claude-sonnet-4-0"
                     ]
-                },
-                "temperature": 0.8
+                }
             },
             "obsidian": {
                 "scrollback_chunks": 20
@@ -471,6 +470,12 @@
         }
     },
     "API Settings": {
+        "apex": {
+            "provider": "openai",
+            "model": "gpt-5",
+            "reasoning_effort": "medium",
+            "max_output_tokens": 25000
+        },
         "TPM": {
             "openai": 1000000,
             "anthropic": 80000

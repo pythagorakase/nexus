@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
 from scripts.api_openai import OpenAIProvider, LLMResponse
 from scripts.api_anthropic import AnthropicProvider
+from nexus.agents.lore.logon_schemas import StoryTurnResponse
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -36,7 +37,7 @@ class LogonUtility:
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
-                max_tokens=apex_settings.get("max_tokens", 4000),
+                max_output_tokens=apex_settings.get("max_output_tokens", 25000),
                 reasoning_effort=apex_settings.get("reasoning_effort", "medium")
             )
         elif provider_type == "anthropic":
@@ -59,15 +60,28 @@ class LogonUtility:
         """Public wrapper for provider initialization."""
         self._ensure_provider()
     
-    def generate_narrative(self, context_payload: Dict) -> LLMResponse:
-        """Generate narrative from context payload"""
+    def generate_narrative(self, context_payload: Dict) -> StoryTurnResponse:
+        """Generate narrative from context payload with structured output"""
         self._ensure_provider()
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
-        
-        # Get completion from provider
-        response = self.provider.get_completion(prompt)
-        return response
+
+        # Get structured completion from provider
+        # This returns a tuple of (parsed_object, llm_response)
+        try:
+            parsed_response, llm_response = self.provider.get_structured_completion(
+                prompt,
+                StoryTurnResponse
+            )
+            logger.debug(f"Received structured response with narrative length: {len(parsed_response.narrative.text)}")
+            return parsed_response  # Return the StoryTurnResponse object
+        except Exception as e:
+            logger.error(f"Failed to get structured response: {e}")
+            # Fall back to plain text if structured output fails
+            response = self.provider.get_completion(prompt)
+            # Create a minimal StoryTurnResponse from plain text
+            from nexus.agents.lore.logon_schemas import create_minimal_response
+            return create_minimal_response(response.content)
     
     def _format_context_prompt(self, context: Dict) -> str:
         """Format context payload into a prompt for the Apex AI"""

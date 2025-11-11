@@ -1,17 +1,7 @@
-Structured Outputs
-==================
+Structured model outputs
+========================
 
-Ensure responses adhere to a JSON schema.
-
-Try it out
-----------
-
-Try it out in the [Playground](/playground) or generate a ready-to-use schema definition to experiment with structured outputs.
-
-Generate
-
-Introduction
-------------
+Ensure text responses from the model adhere to a JSON schema you define.
 
 JSON is one of the most widely used formats in the world for applications to exchange data.
 
@@ -85,10 +75,11 @@ event = response.output_parsed
 
 ### Supported models
 
-Structured Outputs is available in our [latest large language models](/docs/models), starting with GPT-4o. Older models like `gpt-4-turbo` and earlier may use [JSON mode](#json-mode) instead.
+Structured Outputs is available in our [latest large language models](/docs/models), starting with GPT-4o. Older models like `gpt-4-turbo` and earlier may use [JSON mode](/docs/guides/structured-outputs#json-mode) instead.
 
 When to use Structured Outputs via function calling vs via text.format
-----------------------------------------------------------------------
+
+--------------------------------------------------------------------------
 
 Structured Outputs is available in two forms in the OpenAI API:
 
@@ -105,14 +96,21 @@ For example, if you are building a math tutoring application, you might want the
 
 Put simply:
 
-*   If you are connecting the model to tools, functions, data, etc. in your system, then you should use function calling
-*   If you want to structure the model's output when it responds to the user, then you should use a structured `text.format`
+*   If you are connecting the model to tools, functions, data, etc. in your system, then you should use function calling - If you want to structure the model's output when it responds to the user, then you should use a structured `text.format`
 
-The remainder of this guide will focus on non-function calling use cases in the Responses API. To learn more about how to use Structured Outputs with function calling, check out the [Function Calling](/docs/guides/function-calling#function-calling-with-structured-outputs) guide.
+The remainder of this guide will focus on non-function calling use cases in the Responses API. To learn more about how to use Structured Outputs with function calling, check out the
+
+[
+
+Function Calling
+
+](/docs/guides/function-calling#function-calling-with-structured-outputs)
+
+guide.
 
 ### Structured Outputs vs JSON mode
 
-Structured Outputs is the evolution of [JSON mode](#json-mode). While both ensure valid JSON is produced, only Structured Outputs ensure schema adherance. Both Structured Outputs and JSON mode are supported in the Responses API,Chat Completions API, Assistants API, Fine-tuning API and Batch API.
+Structured Outputs is the evolution of [JSON mode](/docs/guides/structured-outputs#json-mode). While both ensure valid JSON is produced, only Structured Outputs ensure schema adherence. Both Structured Outputs and JSON mode are supported in the Responses API, Chat Completions API, Assistants API, Fine-tuning API and Batch API.
 
 We recommend always using Structured Outputs instead of JSON mode when possible.
 
@@ -817,7 +815,7 @@ response = client.responses.create(
     text={
         "format": {
             "type": "json_schema",
-            "name": "calendar_event",
+            "name": "math_response",
             "schema": {
                 "type": "object",
                 "properties": {
@@ -1054,7 +1052,9 @@ except Exception as e:
     pass
 ```
 
-### Refusals with Structured Outputs
+### 
+
+Refusals with Structured Outputs
 
 When using Structured Outputs with user-generated input, OpenAI models may occasionally refuse to fulfill the request for safety reasons. Since a refusal does not necessarily follow the schema you have supplied in `response_format`, the API response will include a new field called `refusal` to indicate that the model refused to fulfill the request.
 
@@ -1069,11 +1069,11 @@ class MathReasoning(BaseModel):
     steps: list[Step]
     final_answer: str
 
-completion = client.beta.chat.completions.parse(
+completion = client.chat.completions.parse(
     model="gpt-4o-2024-08-06",
     messages=[
         {"role": "system", "content": "You are a helpful math tutor. Guide the user through the solution step by step."},
-        {"role": "user", "content": "how can I solve 8x + 7 = -23"}
+        {"role": "user", "content": "how can I solve 8x + 7 = -23"},
     ],
     response_format=MathReasoning,
 )
@@ -1081,7 +1081,8 @@ completion = client.beta.chat.completions.parse(
 math_reasoning = completion.choices[0].message
 
 # If the model refuses to respond, you will get a refusal message
-if (math_reasoning.refusal):
+
+if math_reasoning.refusal:
     print(math_reasoning.refusal)
 else:
     print(math_reasoning.parsed)
@@ -1089,31 +1090,31 @@ else:
 
 ```javascript
 const Step = z.object({
-  explanation: z.string(),
-  output: z.string(),
+    explanation: z.string(),
+    output: z.string(),
 });
 
 const MathReasoning = z.object({
-  steps: z.array(Step),
-  final_answer: z.string(),
+    steps: z.array(Step),
+    final_answer: z.string(),
 });
 
-const completion = await openai.beta.chat.completions.parse({
-  model: "gpt-4o-2024-08-06",
-  messages: [
-    { role: "system", content: "You are a helpful math tutor. Guide the user through the solution step by step." },
-    { role: "user", content: "how can I solve 8x + 7 = -23" },
-  ],
-  response_format: zodResponseFormat(MathReasoning, "math_reasoning"),
+const completion = await openai.chat.completions.parse({
+    model: "gpt-4o-2024-08-06",
+    messages: [
+        { role: "system", content: "You are a helpful math tutor. Guide the user through the solution step by step." },
+        { role: "user", content: "how can I solve 8x + 7 = -23" },
+    ],
+    response_format: zodResponseFormat(MathReasoning, "math_reasoning"),
 });
 
 const math_reasoning = completion.choices[0].message
 
 // If the model refuses to respond, you will get a refusal message
 if (math_reasoning.refusal) {
-  console.log(math_reasoning.refusal);
+    console.log(math_reasoning.refusal);
 } else {
-  console.log(math_reasoning.parsed);
+    console.log(math_reasoning.parsed);
 }
 ```
 
@@ -1153,7 +1154,9 @@ The API response from a refusal will look something like this:
 }
 ```
 
-### Tips and best practices
+### 
+
+Tips and best practices
 
 #### Handling user-generated input
 
@@ -1279,7 +1282,107 @@ The following types are supported for Structured Outputs:
 *   Enum
 *   anyOf
 
-#### Root objects must not be `anyOf`
+#### Supported properties
+
+In addition to specifying the type of a property, you can specify a selection of additional constraints:
+
+**Supported `string` properties:**
+
+*   `pattern` — A regular expression that the string must match.
+*   `format` — Predefined formats for strings. Currently supported:
+    *   `date-time`
+    *   `time`
+    *   `date`
+    *   `duration`
+    *   `email`
+    *   `hostname`
+    *   `ipv4`
+    *   `ipv6`
+    *   `uuid`
+
+**Supported `number` properties:**
+
+*   `multipleOf` — The number must be a multiple of this value.
+*   `maximum` — The number must be less than or equal to this value.
+*   `exclusiveMaximum` — The number must be less than this value.
+*   `minimum` — The number must be greater than or equal to this value.
+*   `exclusiveMinimum` — The number must be greater than this value.
+
+**Supported `array` properties:**
+
+*   `minItems` — The array must have at least this many items.
+*   `maxItems` — The array must have at most this many items.
+
+Here are some examples on how you can use these type restrictions:
+
+String Restrictions
+
+```json
+{
+    "name": "user_data",
+    "strict": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the user"
+            },
+            "username": {
+                "type": "string",
+                "description": "The username of the user. Must start with @",
+                "pattern": "^@[a-zA-Z0-9_]+$"
+            },
+            "email": {
+                "type": "string",
+                "description": "The email of the user",
+                "format": "email"
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "name", "username", "email"
+        ]
+    }
+}
+```
+
+Number Restrictions
+
+```json
+{
+    "name": "weather_data",
+    "strict": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "location": {
+                "type": "string",
+                "description": "The location to get the weather for"
+            },
+            "unit": {
+                "type": ["string", "null"],
+                "description": "The unit to return the temperature in",
+                "enum": ["F", "C"]
+            },
+            "value": {
+                "type": "number",
+                "description": "The actual temperature value in the location",
+                "minimum": -130,
+                "maximum": 130
+            }
+        },
+        "additionalProperties": false,
+        "required": [
+            "location", "unit", "value"
+        ]
+    }
+}
+```
+
+Note these constraints are [not yet supported for fine-tuned models](/docs/guides/structured-outputs#some-type-specific-keywords-are-not-yet-supported).
+
+#### Root objects must not be `anyOf` and must be an object
 
 Note that the root level object of a schema must be an object, and not use `anyOf`. A pattern that appears in Zod (as one example) is using a discriminated union, which produces an `anyOf` at the top level. So code such as the following won't work:
 
@@ -1287,12 +1390,12 @@ Note that the root level object of a schema must be an object, and not use `anyO
 import { z } from 'zod';
 import { zodResponseFormat } from 'openai/helpers/zod';
 
-const BaseResponseSchema = z.object({ /* ... */ });
-const UnsuccessfulResponseSchema = z.object({ /* ... */ });
+const BaseResponseSchema = z.object({/* ... */});
+const UnsuccessfulResponseSchema = z.object({/* ... */});
 
 const finalSchema = z.discriminatedUnion('status', [
-    BaseResponseSchema,
-    UnsuccessfulResponseSchema,
+BaseResponseSchema,
+UnsuccessfulResponseSchema,
 ]);
 
 // Invalid JSON Schema for Structured Outputs
@@ -1357,17 +1460,17 @@ Although all fields must be required (and the model will return a value for each
 
 #### Objects have limitations on nesting depth and size
 
-A schema may have up to 100 object properties total, with up to 5 levels of nesting.
+A schema may have up to 5000 object properties total, with up to 10 levels of nesting.
 
 #### Limitations on total string size
 
-In a schema, total string length of all property names, definition names, enum values, and const values cannot exceed 15,000 characters.
+In a schema, total string length of all property names, definition names, enum values, and const values cannot exceed 120,000 characters.
 
 #### Limitations on enum size
 
-A schema may have up to 500 enum values across all enum properties.
+A schema may have up to 1000 enum values across all enum properties.
 
-For a single enum property with string values, the total string length of all enum values cannot exceed 7,500 characters when there are more than 250 enum values.
+For a single enum property with string values, the total string length of all enum values cannot exceed 15,000 characters when there are more than 250 enum values.
 
 #### `additionalProperties: false` must always be set in objects
 
@@ -1407,12 +1510,14 @@ When using Structured Outputs, outputs will be produced in the same order as the
 
 #### Some type-specific keywords are not yet supported
 
-Notable keywords not supported include:
+*   **Composition:** `allOf`, `not`, `dependentRequired`, `dependentSchemas`, `if`, `then`, `else`
+
+For fine-tuned models, we additionally do not support the following:
 
 *   **For strings:** `minLength`, `maxLength`, `pattern`, `format`
 *   **For numbers:** `minimum`, `maximum`, `multipleOf`
-*   **For objects:** `patternProperties`, `unevaluatedProperties`, `propertyNames`, `minProperties`, `maxProperties`
-*   **For arrays:** `unevaluatedItems`, `contains`, `minContains`, `maxContains`, `minItems`, `maxItems`, `uniqueItems`
+*   **For objects:** `patternProperties`
+*   **For arrays:** `minItems`, `maxItems`
 
 If you turn on Structured Outputs by supplying `strict: true` and call the API with an unsupported JSON Schema, you will receive an error.
 

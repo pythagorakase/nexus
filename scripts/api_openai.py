@@ -374,12 +374,13 @@ class OpenAIProvider(LLMProvider):
         try:
             # Call API with different parameters based on model type
             if self.is_reasoning_model:
-                # For reasoning models (o1, o2, etc.)
+                # For reasoning models (GPT-5, o3, etc.)
                 response = self.client.responses.parse(
                     model=self.model,
                     input=input_messages,
                     reasoning={"effort": self.reasoning_effort} if self.reasoning_effort else None,
-                    text_format=schema_model
+                    text_format=schema_model,
+                    max_output_tokens=self.max_output_tokens  # Important for reasoning models
                 )
                 logger.info(f"Used reasoning model with effort: {self.reasoning_effort}")
             else:
@@ -388,7 +389,8 @@ class OpenAIProvider(LLMProvider):
                     model=self.model,
                     input=input_messages,
                     temperature=self.temperature,
-                    text_format=schema_model
+                    text_format=schema_model,
+                    max_output_tokens=self.max_output_tokens
                 )
                 logger.info(f"Used standard model with temperature: {self.temperature}")
                 
@@ -421,6 +423,7 @@ class OpenAIProvider(LLMProvider):
                     "model": self.model,
                     "input": input_messages,
                     "reasoning": {"effort": self.reasoning_effort} if self.reasoning_effort else None,
+                    "max_output_tokens": self.max_output_tokens,
                     "text": {
                         "format": {
                             "type": "json_schema",
@@ -435,6 +438,7 @@ class OpenAIProvider(LLMProvider):
                     "model": self.model,
                     "input": input_messages,
                     "temperature": self.temperature,
+                    "max_output_tokens": self.max_output_tokens,
                     "text": {
                         "format": {
                             "type": "json_schema",
