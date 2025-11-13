@@ -72,7 +72,9 @@ def load_settings() -> Dict[str, Any]:
             settings_path = Path(settings_path_env)
             settings_logger.info(f"Using settings path from environment: {settings_path}")
         else:
-            settings_path = Path("settings.json")
+            # Resolve to project root: nexus/agents/memnon/memnon.py -> nexus/
+            project_root = Path(__file__).parent.parent.parent.parent
+            settings_path = project_root / "settings.json"
             
         if settings_path.exists():
             with open(settings_path, "r") as f:

@@ -12,7 +12,7 @@ const execAsync = promisify(exec);
 
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
-  // Proxy for Audition API (FastAPI backend)
+  // Proxy for Audition API (FastAPI backend on port 8000)
   // Express strips /api/audition before passing to middleware, so we need to add it back
   // IMPORTANT: Must be registered BEFORE express.json() to access raw body stream
   const auditionProxy = createProxyMiddleware({
@@ -22,6 +22,17 @@ export function registerProxyRoutes(app: Express): void {
   });
 
   app.use("/api/audition", auditionProxy);
+
+  // Proxy for Core API (FastAPI backend on port 8001)
+  // Handles model management and system operations
+  const coreProxy = createProxyMiddleware({
+    target: "http://localhost:8001",
+    changeOrigin: true,
+    pathRewrite: (path) => `${path}`, // Path already includes /api/models
+  });
+
+  app.use("/api/models", coreProxy);
+  app.use("/api/health", coreProxy);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {

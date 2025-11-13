@@ -394,4 +394,79 @@
   .terminal-flicker {
     animation: flicker 0.15s infinite;
   }
+
+  /* Terminal loading scanline effect - animated overlay for "loading" state */
+  @keyframes terminal-scanline-fade {
+    0%, 100% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .terminal-loading {
+    position: relative;
+  }
+
+  .terminal-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(0, 0, 0, 0.3) 1px,
+      rgba(0, 0, 0, 0.3) 2px
+    );
+    animation: terminal-scanline-fade 2s ease-in-out infinite;
+  }
+
+  /* Dark mode variant with lighter scanlines */
+  .dark .terminal-loading::after {
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 1px,
+      rgba(255, 255, 255, 0.15) 1px,
+      rgba(255, 255, 255, 0.15) 2px
+    );
+  }
+
+  /* Terminal generating shimmer effect - moving gradient for "generating" state */
+  @keyframes terminal-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .terminal-generating {
+    display: inline-block;
+    background: linear-gradient(
+      to right,
+      hsl(var(--primary)),
+      hsl(var(--foreground)),
+      hsl(var(--primary))
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: terminal-shimmer 2.5s linear infinite;
+  }
+
+  /* Ensure glow is still visible with shimmer by adding a wrapper glow */
+  .terminal-generating-glow {
+    text-shadow: 0 0 15px currentColor;
+  }
+
+  /* Retro terminal cursor styling */
+  input, textarea, [contenteditable] {
+    caret-color: hsl(var(--primary));
+  }
 }

@@ -478,26 +478,6 @@ class MemStorage implements IStorage {
       worldLayer: meta.world_layer ?? null,
       timeDelta: meta.time_delta ?? null,
       place: meta.place !== undefined ? Number(meta.place) : null,
-      atmosphere: meta.atmosphere ?? null,
-      arcPosition: meta.arc_position ?? null,
-      direction: coerceJson<unknown[]>(meta.direction) ?? meta.direction ?? null,
-      magnitude: meta.magnitude ?? null,
-      characterElements:
-        coerceJson<Record<string, unknown>>(meta.character_elements) ?? meta.character_elements ?? null,
-      perspective: coerceJson<Record<string, unknown>>(meta.perspective) ?? meta.perspective ?? null,
-      interactions: coerceJson<unknown[]>(meta.interactions) ?? meta.interactions ?? null,
-      dialogueAnalysis:
-        coerceJson<Record<string, unknown>>(meta.dialogue_analysis) ?? meta.dialogue_analysis ?? null,
-      emotionalTone: coerceJson<Record<string, unknown>>(meta.emotional_tone) ?? meta.emotional_tone ?? null,
-      narrativeFunction:
-        coerceJson<Record<string, unknown>>(meta.narrative_function) ?? meta.narrative_function ?? null,
-      narrativeTechniques:
-        coerceJson<Record<string, unknown>>(meta.narrative_techniques) ?? meta.narrative_techniques ?? null,
-      thematicElements:
-        coerceJson<Record<string, unknown>>(meta.thematic_elements) ?? meta.thematic_elements ?? null,
-      causality: coerceJson<Record<string, unknown>[]>(meta.causality) ?? meta.causality ?? null,
-      continuityMarkers:
-        coerceJson<Record<string, unknown>[]>(meta.continuity_markers) ?? meta.continuity_markers ?? null,
       metadataVersion: meta.metadata_version ?? null,
       generationDate: meta.generation_date ?? null,
       slug: meta.slug ?? null,

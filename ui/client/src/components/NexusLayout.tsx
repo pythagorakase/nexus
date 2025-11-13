@@ -26,13 +26,15 @@ interface SettingsPayload {
 
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
-  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [currentModelId, setCurrentModelId] = useState("");
+  const [modelStatus, setModelStatus] = useState<"unloaded" | "loading" | "loaded" | "generating">("unloaded");
   const [isStoryMode, setIsStoryMode] = useState(true);
   const [apexStatus, setApexStatus] = useState<
     "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING"
   >("READY");
   const [activeTab, setActiveTab] = useState("narrative");
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
+  const [isInputExpanded, setIsInputExpanded] = useState(false);
 
   // Fetch settings to get model name
   const {
@@ -42,6 +44,21 @@ export function NexusLayout() {
   } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
     refetchInterval: 30000, // Refetch every 30 seconds
+  });
+
+  // Fetch latest chunk for chapter info
+  const { data: latestChunk } = useQuery<{
+    id: number;
+    rawText: string;
+    createdAt: string;
+    metadata?: {
+      season: number | null;
+      episode: number | null;
+      scene: number | null;
+    };
+  }>({
+    queryKey: ["/api/narrative/latest-chunk"],
+    refetchInterval: 10000, // Refetch every 10 seconds
   });
 
   // Parse model name from settings
@@ -54,11 +71,14 @@ export function NexusLayout() {
           ? defaultModel.split("/").pop()!.toUpperCase()
           : defaultModel.toUpperCase();
         setCurrentModel(modelName);
+        setCurrentModelId(defaultModel); // Store full ID for API calls
       } else {
         setCurrentModel("UNCONFIGURED");
+        setCurrentModelId("");
       }
     } else if (settingsError) {
       setCurrentModel("UNAVAILABLE");
+      setCurrentModelId("");
     }
   }, [settings, settingsError, settingsLoaded]);
 
@@ -67,10 +87,23 @@ export function NexusLayout() {
     const checkModelStatus = async () => {
       try {
         const apiBase = settings?.["Agent Settings"]?.global?.llm?.api_base || "http://localhost:1234";
-        const response = await fetch(`${apiBase}/v1/models`);
-        setIsModelLoaded(response.ok);
+        const response = await fetch(`${apiBase}/api/v0/models`);
+        if (response.ok) {
+          const data = await response.json();
+          // Check if any LLM models are in "loaded" state
+          if (data.data && Array.isArray(data.data)) {
+            const hasLoadedModel = data.data.some(
+              (model: any) => model.type === 'llm' && model.state === 'loaded'
+            );
+            setModelStatus(hasLoadedModel ? "loaded" : "unloaded");
+          } else {
+            setModelStatus("unloaded");
+          }
+        } else {
+          setModelStatus("unloaded");
+        }
       } catch {
-        setIsModelLoaded(false);
+        setModelStatus("unloaded");
       }
     };
 
@@ -78,6 +111,31 @@ export function NexusLayout() {
     const interval = setInterval(checkModelStatus, 5000);
     return () => clearInterval(interval);
   }, [settings]);
+
+  // Check APEX connectivity
+  useEffect(() => {
+    const checkApexConnectivity = async () => {
+      try {
+        // Check if backend is reachable
+        const response = await fetch("/api/settings", { method: "HEAD" });
+        if (response.ok) {
+          // Backend is reachable, set to READY if not in other states
+          if (apexStatus === "OFFLINE") {
+            setApexStatus("READY");
+          }
+        } else {
+          setApexStatus("OFFLINE");
+        }
+      } catch {
+        // No connectivity
+        setApexStatus("OFFLINE");
+      }
+    };
+
+    checkApexConnectivity();
+    const interval = setInterval(checkApexConnectivity, 10000);
+    return () => clearInterval(interval);
+  }, [apexStatus]);
 
   const handleCommand = (command: string) => {
     console.log("Command:", command);
@@ -116,6 +174,8 @@ export function NexusLayout() {
       setTimeout(() => setApexStatus("GENERATING"), 1000);
       setTimeout(() => setApexStatus("RECEIVING"), 3000);
       setTimeout(() => setApexStatus("READY"), 5000);
+      // Reset input to button after submission
+      setIsInputExpanded(false);
     }
   };
 
@@ -124,12 +184,13 @@ export function NexusLayout() {
       <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark">
         <StatusBar
           model={currentModel}
-          season={1}
-          episode={1}
-          scene={1}
+          modelId={currentModelId}
+          season={latestChunk?.metadata?.season ?? 1}
+          episode={latestChunk?.metadata?.episode ?? 1}
+          scene={latestChunk?.metadata?.scene ?? 1}
           apexStatus={apexStatus}
           isStoryMode={isStoryMode}
-          isModelLoaded={isModelLoaded}
+          modelStatus={modelStatus}
           onHamburgerClick={() => {
             // Can be used for mobile menu in the future
           }}
@@ -218,7 +279,9 @@ export function NexusLayout() {
                 ? "continue the story"
                 : "Enter directive or /command..."
             }
-            userPrefix={isStoryMode ? "ALEX" : "NEXUS:USER"}
+            userPrefix={isStoryMode ? "" : "NEXUS:USER"}
+            showButton={isStoryMode && !isInputExpanded}
+            onButtonClick={() => setIsInputExpanded(true)}
           />
         )}
       </div>
