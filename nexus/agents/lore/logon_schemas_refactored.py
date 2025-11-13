@@ -15,7 +15,7 @@ All models use Pydantic v2 for validation and serialization.
 
 import logging
 from typing import List, Optional, Dict, Any, Union, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 
 # Import all database ENUMs
@@ -183,14 +183,12 @@ class CharacterReference(BaseModel):
         description="How the character is referenced"
     )
 
-    @field_validator('character_id', 'character_name', 'new_character')
-    def validate_character_reference(cls, v, values):
+    @model_validator(mode='after')
+    def validate_character_reference(self):
         """Ensure we have either existing ref or new character"""
-        if not any([values.get('character_id'),
-                   values.get('character_name'),
-                   values.get('new_character')]):
+        if not any([self.character_id, self.character_name, self.new_character]):
             raise ValueError("Must provide either character_id, character_name, or new_character")
-        return v
+        return self
 
 
 class PlaceReference(BaseModel):
