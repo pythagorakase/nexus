@@ -17,3 +17,6 @@ Write concise, imperative commits (`Add divergence guard`). Stage and commit you
 
 ## Security & Configuration Tips
 Fetch API credentials via the 1Password CLI helpers in `scripts/api_openai.py` and `scripts/api_anthropic.py`; never introduce environment variable fallbacks. Ensure `op` authentication and the `NEXUS` PostgreSQL instance with vector extensions are ready before runs. Align local LLM endpoints with the models referenced in `settings.json`.
+
+## Authorization & Access Requests
+When work needs extra permissions (network, filesystem, etc.), try the action so the approval prompt can surface or spell out exactly what the user must enable—don't declare a hard "can't" if capability exists behind a permission gate.

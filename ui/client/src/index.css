@@ -416,23 +416,73 @@
     pointer-events: none;
     background-image: repeating-linear-gradient(
       0deg,
-      transparent,
-      transparent 1px,
-      rgba(0, 0, 0, 0.3) 1px,
-      rgba(0, 0, 0, 0.3) 2px
+      rgba(34, 197, 94, 0.05),
+      rgba(34, 197, 94, 0.05) 1px,
+      rgba(34, 197, 94, 0.35) 1px,
+      rgba(34, 197, 94, 0.35) 2px
     );
     animation: terminal-scanline-fade 2s ease-in-out infinite;
+    z-index: 1;
   }
 
-  /* Dark mode variant with lighter scanlines */
+  /* Dark mode variant */
   .dark .terminal-loading::after {
     background-image: repeating-linear-gradient(
       0deg,
-      transparent,
-      transparent 1px,
-      rgba(255, 255, 255, 0.15) 1px,
-      rgba(255, 255, 255, 0.15) 2px
+      rgba(16, 185, 129, 0.08),
+      rgba(16, 185, 129, 0.08) 1px,
+      rgba(110, 231, 183, 0.45) 1px,
+      rgba(110, 231, 183, 0.45) 2px
     );
+  }
+
+  /* Status bar wide loading overlay */
+  .status-bar-loading {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .status-bar-loading > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .status-bar-loading::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        0deg,
+        rgba(34, 197, 94, 0.04),
+        rgba(34, 197, 94, 0.04) 2px,
+        rgba(34, 197, 94, 0.25) 2px,
+        rgba(34, 197, 94, 0.25) 4px
+      ),
+      linear-gradient(
+        90deg,
+        rgba(34, 197, 94, 0),
+        rgba(34, 197, 94, 0.08),
+        rgba(34, 197, 94, 0)
+      );
+    animation: terminal-scanline-fade 1.8s ease-in-out infinite;
+    z-index: 0;
+  }
+
+  .dark .status-bar-loading::after {
+    background-image: repeating-linear-gradient(
+        0deg,
+        rgba(16, 185, 129, 0.05),
+        rgba(16, 185, 129, 0.05) 2px,
+        rgba(16, 185, 129, 0.35) 2px,
+        rgba(16, 185, 129, 0.35) 4px
+      ),
+      linear-gradient(
+        90deg,
+        rgba(16, 185, 129, 0),
+        rgba(16, 185, 129, 0.12),
+        rgba(16, 185, 129, 0)
+      );
   }
 
   /* Terminal generating shimmer effect - moving gradient for "generating" state */
@@ -446,23 +496,37 @@
   }
 
   .terminal-generating {
+    position: relative;
     display: inline-block;
+    color: rgba(34, 197, 94, 0.95);
+    text-shadow:
+      0 0 6px rgba(34, 197, 94, 0.7),
+      0 0 12px rgba(34, 197, 94, 0.5);
+  }
+
+  .terminal-generating::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
     background: linear-gradient(
-      to right,
-      hsl(var(--primary)),
-      hsl(var(--foreground)),
-      hsl(var(--primary))
+      90deg,
+      transparent 0%,
+      transparent 20%,
+      rgba(0, 0, 0, 0.85) 50%,
+      transparent 80%,
+      transparent 100%
     );
     background-size: 200% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    animation: terminal-shimmer 2.5s linear infinite;
+    animation: terminal-shimmer 4s linear infinite;
+    mix-blend-mode: multiply;
   }
 
   /* Ensure glow is still visible with shimmer by adding a wrapper glow */
   .terminal-generating-glow {
-    text-shadow: 0 0 15px currentColor;
+    filter:
+      drop-shadow(0 0 6px rgba(34, 197, 94, 0.5))
+      drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
   }
 
   /* Retro terminal cursor styling */

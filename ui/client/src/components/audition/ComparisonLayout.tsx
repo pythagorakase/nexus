@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComparisonQueueItem, auditionAPI } from '@/lib/audition-api';
 import { useJudgment } from '@/hooks/useJudgment';
-import { GenerationPane } from './GenerationPane';
+import { GenerationPane, resolveGenerationContent } from './GenerationPane';
 import { JudgmentBar } from './JudgmentBar';
 import { useToast } from '@/hooks/use-toast';
 import { useFonts } from '@/contexts/FontContext';
@@ -186,8 +186,6 @@ export function ComparisonLayout({
     if (isRecording) {
       return;
     }
-
-    setPendingNote('');
     setHighlightedPane(null);
     toast({
       title: 'Comparison skipped',
@@ -309,11 +307,11 @@ export function ComparisonLayout({
       },
       left_passage: {
         condition_slug: comparison.condition_a.slug,
-        text: comparison.generation_a.output,
+        text: resolveGenerationContent(comparison.generation_a),
       },
       right_passage: {
         condition_slug: comparison.condition_b.slug,
-        text: comparison.generation_b.output,
+        text: resolveGenerationContent(comparison.generation_b),
       },
     };
 
@@ -362,7 +360,7 @@ export function ComparisonLayout({
         <div className="flex items-center justify-end">
           <Button
             variant="outline"
-            size="xs"
+            size="sm"
             onClick={() => setIsDebugDialogOpen(true)}
           >
             [D] Debug

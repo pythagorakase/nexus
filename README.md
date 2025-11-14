@@ -40,6 +40,18 @@ Real-time functionality is neither needed nor desired. The system is intentional
 - **Entity State**: Character emotions, location conditions, faction status, etc.
 - **Chunk**: A discrete piece of narrative text, typically a single scene or interaction
 
+## 1.4 Local Development Servers
+
+The `./iris` helper script now orchestrates every service required for UI work:
+
+1. `cd /Users/pythagor/nexus && poetry install` (first run only).
+2. `./iris`
+   - Boots the Vite/Express dev server (default port 5001, respecting `PORT`).
+   - Starts the Audition FastAPI app on `API_PORT` (default `8000`) and proxies it through `/api/audition`.
+   - Starts the Core FastAPI model manager on `CORE_API_PORT` (default `8001`) and exposes it via `/api/models` + `/api/health`.
+
+The Core API expects LM Studio plus the `lmstudio` Python SDK to be available locally so it can query `/api/models/status` and load/unload models. If you need to run components manually, start both FastAPI apps with `poetry run uvicorn nexus.api.apex_audition:app --reload --port 8000` and `poetry run uvicorn nexus.api.core:app --reload --port 8001`, then run `npm run dev` inside `ui/` with matching `API_PORT`/`CORE_API_PORT` environment variables so the proxies target the correct ports.
+
 # 2. System Architecture
 
 ## 2.1 Architectural Overview

@@ -12,7 +12,7 @@ interface GenerationPaneProps {
   highlighted?: boolean;
 }
 
-function resolveContent(generation: Generation): string {
+export function resolveGenerationContent(generation: Generation): string {
   const payload = generation.response_payload as any;
 
   if (!payload) {
@@ -67,7 +67,7 @@ export function GenerationPane({
   label,
   highlighted = false,
 }: GenerationPaneProps) {
-  const content = resolveContent(generation);
+  const content = resolveGenerationContent(generation);
   const { fonts } = useFonts();
 
   return (

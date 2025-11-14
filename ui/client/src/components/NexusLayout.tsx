@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "./StatusBar";
 import { CommandBar } from "./CommandBar";
@@ -27,7 +27,16 @@ interface SettingsPayload {
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
   const [currentModelId, setCurrentModelId] = useState("");
-  const [modelStatus, setModelStatus] = useState<"unloaded" | "loading" | "loaded" | "generating">("unloaded");
+  type ModelStatus = "unloaded" | "loading" | "loaded" | "generating";
+  type StableModelStatus = Exclude<ModelStatus, "generating">;
+  const [modelStatus, internalSetModelStatus] = useState<ModelStatus>("unloaded");
+  const stableModelStatusRef = useRef<StableModelStatus>("unloaded");
+  const setModelStatus = useCallback((status: ModelStatus) => {
+    if (status !== "generating") {
+      stableModelStatusRef.current = status as StableModelStatus;
+    }
+    internalSetModelStatus(status);
+  }, []);
   const [isStoryMode, setIsStoryMode] = useState(true);
   const [apexStatus, setApexStatus] = useState<
     "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING"
@@ -82,35 +91,35 @@ export function NexusLayout() {
     }
   }, [settings, settingsError, settingsLoaded]);
 
-  // Check if LLM server is running and has model loaded
-  useEffect(() => {
-    const checkModelStatus = async () => {
-      try {
-        const apiBase = settings?.["Agent Settings"]?.global?.llm?.api_base || "http://localhost:1234";
-        const response = await fetch(`${apiBase}/api/v0/models`);
-        if (response.ok) {
-          const data = await response.json();
-          // Check if any LLM models are in "loaded" state
-          if (data.data && Array.isArray(data.data)) {
-            const hasLoadedModel = data.data.some(
-              (model: any) => model.type === 'llm' && model.state === 'loaded'
-            );
-            setModelStatus(hasLoadedModel ? "loaded" : "unloaded");
-          } else {
-            setModelStatus("unloaded");
-          }
-        } else {
-          setModelStatus("unloaded");
-        }
-      } catch {
+  const refreshModelStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/models/status");
+      if (response.ok) {
+        const data = await response.json();
+        const loadedModels = Array.isArray(data.loaded_models) ? data.loaded_models : [];
+        setModelStatus(loadedModels.length > 0 ? "loaded" : "unloaded");
+      } else {
         setModelStatus("unloaded");
       }
-    };
+    } catch {
+      setModelStatus("unloaded");
+    }
+  }, [setModelStatus]);
 
-    checkModelStatus();
-    const interval = setInterval(checkModelStatus, 5000);
+  // Check if LLM server is running and has model loaded
+  useEffect(() => {
+    refreshModelStatus();
+    const interval = setInterval(refreshModelStatus, 5000);
     return () => clearInterval(interval);
-  }, [settings]);
+  }, [refreshModelStatus]);
+
+  useEffect(() => {
+    if (apexStatus === "GENERATING" && stableModelStatusRef.current === "loaded") {
+      internalSetModelStatus("generating");
+    } else if (apexStatus !== "GENERATING" && modelStatus === "generating") {
+      internalSetModelStatus(stableModelStatusRef.current);
+    }
+  }, [apexStatus, modelStatus]);
 
   // Check APEX connectivity
   useEffect(() => {
@@ -191,6 +200,8 @@ export function NexusLayout() {
           apexStatus={apexStatus}
           isStoryMode={isStoryMode}
           modelStatus={modelStatus}
+          onModelStatusChange={setModelStatus}
+          onRefreshModelStatus={refreshModelStatus}
           onHamburgerClick={() => {
             // Can be used for mobile menu in the future
           }}

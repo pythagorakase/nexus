@@ -5,12 +5,16 @@ export default function StatusBarExample() {
     <div className="dark">
       <StatusBar
         model="Llama 3.3"
+        modelId="demo/model"
         season={1}
         episode={1}
         scene={2}
         apexStatus="READY"
         isStoryMode={true}
+        modelStatus="unloaded"
         onHamburgerClick={() => console.log('Hamburger clicked')}
+        onModelStatusChange={() => undefined}
+        onRefreshModelStatus={async () => undefined}
       />
     </div>
   );

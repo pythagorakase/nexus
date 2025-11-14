@@ -1,8 +1,23 @@
 // Generated from world-110m.json TopoJSON data (land/continents)
 // Natural Earth 110m resolution world map - continents only
-import type { FeatureCollection } from 'geojson';
 
-export const worldOutline: FeatureCollection = {
+type MultiPolygonGeometry = {
+  type: "MultiPolygon";
+  coordinates: number[][][][];
+};
+
+type WorldFeature = {
+  type: "Feature";
+  properties: Record<string, unknown>;
+  geometry: MultiPolygonGeometry;
+};
+
+export type WorldFeatureCollection = {
+  type: "FeatureCollection";
+  features: WorldFeature[];
+};
+
+export const worldOutline: WorldFeatureCollection = {
   "type": "FeatureCollection",
   "features": [
     {

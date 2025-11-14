@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
+import requests
+
 try:
     import lmstudio as lms
     LMS_SDK_AVAILABLE = True
@@ -34,12 +36,19 @@ class ModelManager:
         self.settings_path = settings_path or Path(__file__).parent.parent.parent.parent.parent / "settings.json"
         self.settings = self._load_settings()
         self.unload_on_exit = unload_on_exit
+        self.global_llm_config = (
+            self.settings
+            .get("Agent Settings", {})
+            .get("global", {})
+            .get("llm", {})
+        )
+        self.lmstudio_api_base = self._normalize_api_base(self.global_llm_config.get("api_base"))
         
         # Configure LM Studio client (idempotent)
         try:
             # Derive host from settings if available
             lore_llm_cfg = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
-            base_url = lore_llm_cfg.get("lmstudio_url", "http://localhost:1234/v1")
+            base_url = lore_llm_cfg.get("lmstudio_url", f"{self.lmstudio_api_base}/v1")
             host = (
                 str(base_url)
                 .replace("https://", "")
@@ -84,6 +93,92 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
             raise RuntimeError(f"Cannot save settings to {self.settings_path}")
+
+    def _normalize_api_base(self, raw_base: Optional[str]) -> str:
+        """Ensure LM Studio API base is scheme://host:port without trailing paths"""
+        base = raw_base or "http://localhost:1234"
+        base = base.rstrip("/")
+        for suffix in ("/v1", "/api/v0"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+        return base.rstrip("/")
+
+    def _extract_model_entries(self, payload: Any) -> List[Dict[str, Any]]:
+        """Normalize LM Studio model payloads into a list of dict entries."""
+        if isinstance(payload, list):
+            return [entry for entry in payload if isinstance(entry, dict)]
+        if isinstance(payload, dict):
+            for key in ("data", "models", "items", "result"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [entry for entry in value if isinstance(entry, dict)]
+        return []
+
+    def _extract_loaded_identifiers(self, entries: List[Dict[str, Any]]) -> List[str]:
+        loaded: List[str] = []
+        for entry in entries:
+            state = str(entry.get("state") or entry.get("status") or "").lower()
+            is_loaded = entry.get("loaded") or entry.get("isLoaded") or entry.get("active")
+            model_type = str(entry.get("type") or entry.get("category") or "").lower()
+            if not is_loaded:
+                if state not in {"loaded", "ready", "active"}:
+                    continue
+            if model_type and model_type not in {"llm", "language", "text"}:
+                continue
+            identifier = (
+                entry.get("id")
+                or entry.get("identifier")
+                or entry.get("model_id")
+                or entry.get("name")
+                or entry.get("path")
+            )
+            if identifier:
+                loaded.append(str(identifier))
+        return loaded
+
+    def _get_loaded_models_via_http(self) -> Optional[List[str]]:
+        """Query LM Studio's HTTP API for loaded models."""
+        endpoints = [
+            f"{self.lmstudio_api_base}/api/v0/models",
+            f"{self.lmstudio_api_base}/api/v0/models/list",
+            f"{self.lmstudio_api_base}/api/models",
+            f"{self.lmstudio_api_base}/models",
+        ]
+        for endpoint in endpoints:
+            try:
+                response = requests.get(endpoint, timeout=5)
+                if response.status_code == 404:
+                    logger.debug(f"LM Studio endpoint {endpoint} returned 404; trying next fallback")
+                    continue
+                response.raise_for_status()
+                payload = response.json()
+                entries = self._extract_model_entries(payload)
+                if not entries:
+                    logger.debug(f"LM Studio endpoint {endpoint} returned no model entries")
+                return self._extract_loaded_identifiers(entries)
+            except requests.RequestException as http_error:
+                logger.warning(f"Failed to query LM Studio via {endpoint}: {http_error}")
+            except ValueError as json_error:
+                logger.warning(f"Invalid LM Studio response from {endpoint}: {json_error}")
+        return None
+
+    def _get_loaded_models_via_sdk(self) -> List[str]:
+        """Fallback to LM Studio's Python SDK if HTTP probing fails."""
+        try:
+            loaded = lms.list_loaded_models()
+        except Exception as sdk_error:
+            logger.error(f"LM Studio SDK list_loaded_models failed: {sdk_error}")
+            return []
+        
+        identifiers: List[str] = []
+        for model in loaded or []:
+            if hasattr(model, 'id') and model.id:
+                identifiers.append(model.id)
+            elif hasattr(model, 'identifier') and model.identifier:
+                identifiers.append(model.identifier)
+            elif hasattr(model, 'model_id') and model.model_id:
+                identifiers.append(model.model_id)
+        return identifiers
     
     def update_available_models(self) -> List[str]:
         """
@@ -138,20 +233,15 @@ class ModelManager:
         return llm_models
     
     def get_loaded_models(self) -> List[str]:
-        """Get currently loaded models in LM Studio"""
-        loaded = lms.list_loaded_models()
-        if not loaded:
-            return []
-        
-        # Extract model IDs
-        model_ids = []
-        for model in loaded:
-            if hasattr(model, 'id'):
-                model_ids.append(model.id)
-            elif hasattr(model, 'identifier'):
-                model_ids.append(model.identifier)
-        
-        return model_ids
+        """Get currently loaded models in LM Studio.
+
+        Prefer the HTTP API (so manual loads via the desktop UI are detected),
+        then fall back to the SDK if HTTP probing fails entirely.
+        """
+        http_result = self._get_loaded_models_via_http()
+        if http_result is not None:
+            return http_result
+        return self._get_loaded_models_via_sdk()
     
     def unload_model(self, model_id: Optional[str] = None) -> bool:
         """
@@ -190,7 +280,7 @@ class ModelManager:
             logger.error(f"Failed to unload model: {e}")
             return False
     
-    def load_model(self, model_id: str) -> bool:
+    def load_model(self, model_id: str, context_window: Optional[int] = None) -> bool:
         """
         Load a specific model in LM Studio
         
@@ -208,9 +298,10 @@ class ModelManager:
                 self.unload_model()
                 time.sleep(2)  # Extra time between unload and load
             
-            # Get context window from settings
-            global_llm_config = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
-            context_window = global_llm_config.get("context_window", 65536)
+            # Get context window from settings when not explicitly provided
+            if context_window is None:
+                global_llm_config = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
+                context_window = global_llm_config.get("context_window", 65536)
             
             # Load the new model with explicit context window
             logger.info(f"Loading with context_window: {context_window}")

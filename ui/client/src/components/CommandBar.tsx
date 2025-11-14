@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -20,15 +20,7 @@ export function CommandBar({
   onButtonClick,
 }: CommandBarProps) {
   const [command, setCommand] = useState("");
-  const [showCursor, setShowCursor] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setShowCursor((prev) => !prev);
-    }, 500);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,15 +51,7 @@ export function CommandBar({
             className="text-xs md:text-sm font-mono text-primary terminal-glow whitespace-nowrap flex-shrink-0"
             data-testid="text-command-prefix"
           >
-            {userPrefix && (
-              <>
-                {userPrefix}
-              </>
-            )}
-            <span
-              className="inline-block w-1 md:w-2 h-3 md:h-4 bg-primary ml-1 transition-opacity duration-100"
-              style={{ opacity: showCursor ? 1 : 0 }}
-            />
+            {userPrefix}
           </span>
           <Input
             ref={inputRef}

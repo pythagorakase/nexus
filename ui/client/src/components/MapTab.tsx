@@ -13,11 +13,12 @@ import {
 import type { Place, Zone } from "@shared/schema";
 import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 import { worldOutline } from "@/lib/world-outline";
-import type { FeatureCollection } from 'geojson';
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
 }
+
+type MultiPolygonGeometry = typeof worldOutline.features[number]["geometry"];
 
 const parseInhabitants = (value: unknown): string[] => {
   if (!value) return [];
@@ -345,7 +346,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   };
 
   // Convert GeoJSON MultiPolygon coordinates to SVG path data
-  const geoJsonToSvgPath = (boundary: any): string | null => {
+  const geoJsonToSvgPath = (boundary: MultiPolygonGeometry | null | undefined): string | null => {
     if (!boundary || boundary.type !== 'MultiPolygon') return null;
 
     const paths: string[] = [];
@@ -353,10 +354,18 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     // MultiPolygon structure: [[[polygon coordinates]]]
     for (const polygon of boundary.coordinates) {
       for (const ring of polygon) {
-        const pathData = ring.map(([lng, lat]: [number, number], index: number) => {
-          const { x, y } = transformCoordinates(lng, lat);
-          return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-        }).join(' ') + ' Z';
+        const pathData = ring
+          .map((point, index: number) => {
+            const lng = point[0];
+            const lat = point[1];
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+              return null;
+            }
+            const { x, y } = transformCoordinates(lng, lat);
+            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+          })
+          .filter((segment): segment is string => Boolean(segment))
+          .join(' ') + ' Z';
         paths.push(pathData);
       }
     }
@@ -367,12 +376,12 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const visiblePlaces = places;
 
   // Group places by zone for the sidebar
-  const placesByZone = visiblePlaces.reduce((acc, place) => {
-    const zoneId = place.zoneId ?? (place as any).zone ?? 0;
+  const placesByZone = visiblePlaces.reduce<Record<number, Place[]>>((acc, place) => {
+    const zoneId = Number(place.zone ?? (place as any).zoneId ?? 0);
     if (!acc[zoneId]) acc[zoneId] = [];
     acc[zoneId].push(place);
     return acc;
-  }, {} as Record<number, Place[]>);
+  }, {});
 
   // Toggle zone expansion in sidebar
   const toggleZoneExpansion = (zoneId: number) => {
@@ -938,7 +947,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             const place = places.find(p => p.id === selectedLocation);
             if (!place) return null;
 
-            const zone = zones.find(z => z.id === place.zoneId);
+            const zone = zones.find(z => z.id === Number(place.zone ?? (place as any).zoneId ?? 0));
             const coords = extractCoordinates(place);
             const historyParagraphs = toParagraphs(place.history);
             const statusParagraphs = toParagraphs(place.currentStatus);
