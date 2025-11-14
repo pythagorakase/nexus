@@ -1,4 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  type MutableRefObject,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "./StatusBar";
 import { CommandBar } from "./CommandBar";
@@ -24,6 +31,20 @@ interface SettingsPayload {
   };
 }
 
+interface StorySessionMetadata {
+  session_id: string;
+  session_name: string;
+  created_at: string;
+  last_accessed: string;
+  turn_count: number;
+  current_phase: string;
+  initial_context?: Record<string, unknown> | null;
+}
+
+const EXPLICIT_STORY_SESSION_ID = (import.meta.env
+  .VITE_STORY_SESSION_ID || "")
+  .trim() || undefined;
+
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
   const [currentModelId, setCurrentModelId] = useState("");
@@ -41,9 +62,21 @@ export function NexusLayout() {
   const [apexStatus, setApexStatus] = useState<
     "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING"
   >("READY");
+  const apexStatusRef = useRef(apexStatus);
+  const [storySessionId, setStorySessionId] = useState<string | null>(
+    () => EXPLICIT_STORY_SESSION_ID ?? null
+  );
+  const generatingTimeoutRef = useRef<number | null>(null);
+  const readyTimeoutRef = useRef<number | null>(null);
+  const sessionStreamRef = useRef<WebSocket | null>(null);
+  const isMountedRef = useRef(true);
   const [activeTab, setActiveTab] = useState("narrative");
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
+
+  useEffect(() => {
+    apexStatusRef.current = apexStatus;
+  }, [apexStatus]);
 
   // Fetch settings to get model name
   const {
@@ -54,6 +87,206 @@ export function NexusLayout() {
     queryKey: ["/api/settings"],
     refetchInterval: 30000, // Refetch every 30 seconds
   });
+
+  const {
+    data: storySessions,
+    isError: storySessionsError,
+  } = useQuery<StorySessionMetadata[]>({
+    queryKey: ["/api/story/sessions"],
+    refetchInterval: 15000,
+    staleTime: 15000,
+    retry: false,
+  });
+
+  const activeStorySession = useMemo(() => {
+    if (!storySessions || !storySessions.length || !storySessionId) {
+      return null;
+    }
+    return (
+      storySessions.find((session) => session.session_id === storySessionId) ?? null
+    );
+  }, [storySessions, storySessionId]);
+
+  const clearTimeoutRef = useCallback((ref: MutableRefObject<number | null>) => {
+    if (ref.current !== null) {
+      window.clearTimeout(ref.current);
+      ref.current = null;
+    }
+  }, []);
+
+  const handleCompleteEvent = useCallback(() => {
+    clearTimeoutRef(generatingTimeoutRef);
+    clearTimeoutRef(readyTimeoutRef);
+    setApexStatus("RECEIVING");
+    readyTimeoutRef.current = window.setTimeout(() => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setApexStatus("READY");
+    }, 1200);
+  }, [clearTimeoutRef, setApexStatus]);
+
+  const handlePhaseEvent = useCallback(
+    (phase: string | null | undefined) => {
+      clearTimeoutRef(generatingTimeoutRef);
+      clearTimeoutRef(readyTimeoutRef);
+
+      if (phase === "processing" || phase === "regenerating") {
+        if (apexStatusRef.current !== "TRANSMITTING") {
+          setApexStatus("TRANSMITTING");
+        }
+        generatingTimeoutRef.current = window.setTimeout(() => {
+          if (!isMountedRef.current) {
+            return;
+          }
+          setApexStatus("GENERATING");
+        }, 600);
+        return;
+      }
+
+      if (!phase || phase === "idle") {
+        setApexStatus("READY");
+        return;
+      }
+
+      if (phase === "error") {
+        setApexStatus("OFFLINE");
+        return;
+      }
+
+      if (phase === "integration") {
+        setApexStatus("RECEIVING");
+        readyTimeoutRef.current = window.setTimeout(() => {
+          if (!isMountedRef.current) {
+            return;
+          }
+          setApexStatus("READY");
+        }, 1200);
+        return;
+      }
+
+      setApexStatus("GENERATING");
+    },
+    [clearTimeoutRef, setApexStatus],
+  );
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      if (sessionStreamRef.current) {
+        sessionStreamRef.current.close();
+        sessionStreamRef.current = null;
+      }
+      clearTimeoutRef(generatingTimeoutRef);
+      clearTimeoutRef(readyTimeoutRef);
+    };
+  }, [clearTimeoutRef]);
+
+  useEffect(() => {
+    if (!storySessions || storySessions.length === 0) {
+      if (!EXPLICIT_STORY_SESSION_ID) {
+        setStorySessionId(null);
+      }
+      return;
+    }
+
+    if (EXPLICIT_STORY_SESSION_ID) {
+      const hasExplicitSession = storySessions.some(
+        (session) => session.session_id === EXPLICIT_STORY_SESSION_ID
+      );
+      setStorySessionId(hasExplicitSession ? EXPLICIT_STORY_SESSION_ID : null);
+      return;
+    }
+
+    setStorySessionId((current) => {
+      if (current && storySessions.some((session) => session.session_id === current)) {
+        return current;
+      }
+      return storySessions[0]?.session_id ?? null;
+    });
+  }, [storySessions]);
+
+  useEffect(() => {
+    if (!storySessionsError) {
+      return;
+    }
+    setApexStatus((previous) => (previous === "OFFLINE" ? previous : "OFFLINE"));
+  }, [storySessionsError, setApexStatus]);
+
+  useEffect(() => {
+    if (!activeStorySession) {
+      return;
+    }
+    handlePhaseEvent(activeStorySession.current_phase);
+  }, [activeStorySession, handlePhaseEvent]);
+
+  useEffect(() => {
+    if (!storySessionId) {
+      if (sessionStreamRef.current) {
+        sessionStreamRef.current.close();
+        sessionStreamRef.current = null;
+      }
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const websocketUrl = `${protocol}//${window.location.host}/api/story/stream/${storySessionId}`;
+    const socket = new WebSocket(websocketUrl);
+    sessionStreamRef.current = socket;
+
+    socket.onopen = () => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      if (apexStatusRef.current === "OFFLINE") {
+        setApexStatus("READY");
+      }
+    };
+
+    socket.onmessage = (event) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data);
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+
+        if (payload.event === "phase") {
+          handlePhaseEvent(typeof payload.phase === "string" ? payload.phase : null);
+        } else if (payload.event === "complete") {
+          handleCompleteEvent();
+        } else if (payload.event === "error") {
+          setApexStatus("OFFLINE");
+        }
+      } catch {
+        // Ignore malformed events
+      }
+    };
+
+    const markOffline = () => {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setApexStatus((previous) => (previous === "OFFLINE" ? previous : "OFFLINE"));
+    };
+
+    socket.onerror = markOffline;
+    socket.onclose = markOffline;
+
+    return () => {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      socket.close();
+      if (sessionStreamRef.current === socket) {
+        sessionStreamRef.current = null;
+      }
+    };
+  }, [storySessionId, handlePhaseEvent, handleCompleteEvent, setApexStatus]);
 
   // Fetch latest chunk for chapter info
   const { data: latestChunk } = useQuery<{
@@ -178,11 +411,15 @@ export function NexusLayout() {
           console.log("Unknown command:", cmd);
       }
     } else if (isStoryMode) {
-      // Story mode command processing
-      setApexStatus("TRANSMITTING");
-      setTimeout(() => setApexStatus("GENERATING"), 1000);
-      setTimeout(() => setApexStatus("RECEIVING"), 3000);
-      setTimeout(() => setApexStatus("READY"), 5000);
+      if (!storySessionId) {
+        handlePhaseEvent("processing");
+        readyTimeoutRef.current = window.setTimeout(() => {
+          if (!isMountedRef.current) {
+            return;
+          }
+          handleCompleteEvent();
+        }, 3200);
+      }
       // Reset input to button after submission
       setIsInputExpanded(false);
     }
