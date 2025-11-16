@@ -52,6 +52,15 @@ The `./iris` helper script now orchestrates every service required for UI work:
 
 The Core API expects LM Studio plus the `lmstudio` Python SDK to be available locally so it can query `/api/models/status` and load/unload models. If you need to run components manually, start both FastAPI apps with `poetry run uvicorn nexus.api.apex_audition:app --reload --port 8000` and `poetry run uvicorn nexus.api.core:app --reload --port 8001`, then run `npm run dev` inside `ui/` with matching `API_PORT`/`CORE_API_PORT` environment variables so the proxies target the correct ports.
 
+For longer debugging sessions you can now supervise every service with the included `Procfile.dev`. Install either [Honcho](https://honcho.readthedocs.io/en/latest/) (`pip install honcho`) or Foreman (`brew install foreman`), then run:
+
+```
+honcho start -f Procfile.dev
+```
+
+The Procfile respects the same `PORT`, `API_PORT`, and `CORE_API_PORT` variables as `./iris`, so you can override any of them before launching if a port is already in use.
+If `DATABASE_URL` is unset, it automatically falls back to the local `postgresql://pythagor@localhost:5432/NEXUS`, mirroring the `iris` defaults.
+
 # 2. System Architecture
 
 ## 2.1 Architectural Overview

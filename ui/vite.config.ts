@@ -100,4 +100,10 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: path.resolve(import.meta.dirname, "client", "src", "tests", "setup.ts"),
+    css: true,
+  },
 });

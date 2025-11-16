@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast as showToast } from "@/hooks/use-toast";
 
 interface StatusBarProps {
   model: string;
@@ -33,11 +34,28 @@ export function StatusBar({
   const [isModelOperating, setIsModelOperating] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
   const modelErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const slowOperationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const operationToastRef = useRef<ReturnType<typeof showToast> | null>(null);
+  const [isSlowOperation, setIsSlowOperation] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState<"load" | "unload" | null>(null);
 
   useEffect(() => {
     return () => {
       if (modelErrorTimeoutRef.current) {
         clearTimeout(modelErrorTimeoutRef.current);
+      }
+      if (slowOperationTimeoutRef.current) {
+        clearTimeout(slowOperationTimeoutRef.current);
+        slowOperationTimeoutRef.current = null;
+      }
+      if (toastDismissTimeoutRef.current) {
+        clearTimeout(toastDismissTimeoutRef.current);
+        toastDismissTimeoutRef.current = null;
+      }
+      if (operationToastRef.current) {
+        operationToastRef.current.dismiss();
+        operationToastRef.current = null;
       }
     };
   }, []);
@@ -57,6 +75,95 @@ export function StatusBar({
     }
   }, [modelStatus]);
   const isBarLoading = modelStatus === "loading";
+  const shouldShowProgressBar = isBarLoading || isModelOperating || modelStatus === "generating";
+  const loaderMessage = useMemo(() => {
+    if (pendingOperation === "load") {
+      return "Loading LM Studio model...";
+    }
+    if (pendingOperation === "unload") {
+      return "Unloading LM Studio model...";
+    }
+    if (modelStatus === "generating") {
+      return "Model generating response...";
+    }
+    return "Synchronizing LM Studio status...";
+  }, [modelStatus, pendingOperation]);
+
+  const startSlowIndicator = () => {
+    if (slowOperationTimeoutRef.current) {
+      clearTimeout(slowOperationTimeoutRef.current);
+    }
+    slowOperationTimeoutRef.current = setTimeout(() => {
+      setIsSlowOperation(true);
+      slowOperationTimeoutRef.current = null;
+    }, 1500);
+  };
+
+  const stopSlowIndicator = () => {
+    if (slowOperationTimeoutRef.current) {
+      clearTimeout(slowOperationTimeoutRef.current);
+      slowOperationTimeoutRef.current = null;
+    }
+    setIsSlowOperation(false);
+  };
+
+  const scheduleToastDismiss = (delay = 1400) => {
+    if (toastDismissTimeoutRef.current) {
+      clearTimeout(toastDismissTimeoutRef.current);
+    }
+    toastDismissTimeoutRef.current = setTimeout(() => {
+      operationToastRef.current?.dismiss();
+      operationToastRef.current = null;
+      toastDismissTimeoutRef.current = null;
+    }, delay);
+  };
+
+  const startOperationToast = (action: "load" | "unload") => {
+    if (operationToastRef.current) {
+      operationToastRef.current.dismiss();
+    }
+    const actionText = action === "load" ? "Loading model" : "Unloading model";
+    operationToastRef.current = showToast({
+      title: actionText,
+      description: "Contacting LM Studio...",
+      duration: 60000,
+    });
+  };
+
+  const succeedOperationToast = (message: string) => {
+    if (!operationToastRef.current) {
+      operationToastRef.current = showToast({
+        title: "Model ready",
+        description: message,
+      });
+    } else {
+      operationToastRef.current.update({
+        title: "Model ready",
+        description: message,
+        variant: "default",
+        open: true,
+      });
+    }
+    scheduleToastDismiss();
+  };
+
+  const failOperationToast = (message: string) => {
+    if (!operationToastRef.current) {
+      operationToastRef.current = showToast({
+        title: "Model operation failed",
+        description: message,
+        variant: "destructive",
+        duration: 6000,
+      });
+    } else {
+      operationToastRef.current.update({
+        title: "Model operation failed",
+        description: message,
+        variant: "destructive",
+        open: true,
+      });
+    }
+  };
 
   const showModelError = (message: string) => {
     if (modelErrorTimeoutRef.current) {
@@ -81,6 +188,10 @@ export function StatusBar({
 
     const isLoadingAction = modelStatus === "unloaded";
     setIsModelOperating(true);
+    setPendingOperation(isLoadingAction ? "load" : "unload");
+    setIsSlowOperation(false);
+    startSlowIndicator();
+    startOperationToast(isLoadingAction ? "load" : "unload");
     onModelStatusChange?.("loading");
     try {
       if (isLoadingAction) {
@@ -94,6 +205,7 @@ export function StatusBar({
           const message = await response.text();
           throw new Error(message || "Failed to load model");
         }
+        succeedOperationToast(`Loaded ${model}`);
         onModelStatusChange?.("loaded");
       } else if (modelStatus === "loaded") {
         // Unload the model
@@ -104,6 +216,7 @@ export function StatusBar({
           const message = await response.text();
           throw new Error(message || "Failed to unload model");
         }
+        succeedOperationToast(`Unloaded ${model}`);
         onModelStatusChange?.("unloaded");
       }
     } catch (error) {
@@ -111,8 +224,11 @@ export function StatusBar({
       showModelError(
         error instanceof Error ? error.message : "Model operation failed"
       );
+      failOperationToast(error instanceof Error ? error.message : "Model operation failed");
       onModelStatusChange?.(isLoadingAction ? "unloaded" : "loaded");
     } finally {
+      stopSlowIndicator();
+      setPendingOperation(null);
       setIsModelOperating(false);
       await onRefreshModelStatus?.();
     }
@@ -136,7 +252,7 @@ export function StatusBar({
 
   return (
     <div
-      className={`h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${
+      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${
         isBarLoading ? "status-bar-loading" : ""
       }`}
     >
@@ -196,6 +312,21 @@ export function StatusBar({
           </div>
         )}
       </div>
+      {shouldShowProgressBar && (
+        <div className="status-bar-progress" role="status" aria-live="polite">
+          <div className="status-bar-progress-bar" />
+          <span className="sr-only">{loaderMessage}</span>
+          {isSlowOperation && (
+            <span className="status-bar-progress-label">
+              {pendingOperation === "load"
+                ? "Awaiting LM Studio to finish loading..."
+                : pendingOperation === "unload"
+                ? "Shutting down loaded model..."
+                : "LM Studio is busy..."}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
