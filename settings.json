@@ -472,7 +472,7 @@
     "API Settings": {
         "apex": {
             "provider": "openai",
-            "model": "gpt-5",
+            "model": "gpt-5.1",
             "reasoning_effort": "medium",
             "max_output_tokens": 25000
         },
