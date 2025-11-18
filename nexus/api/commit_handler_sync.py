@@ -389,7 +389,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
     """Apply entity state updates synchronously"""
     with conn.cursor() as cur:
         # Update character states
-        for char_update in state_updates.character_updates:
+        for char_update in state_updates.characters:
             if char_update.character_id:
                 updates = []
                 params = []
@@ -415,7 +415,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     logger.info(f"Updated character {char_update.character_id}")
 
         # Update place states
-        for place_update in state_updates.location_updates:
+        for place_update in state_updates.locations:
             if place_update.place_id and place_update.current_status:
                 cur.execute(
                     "UPDATE places SET current_status = %s WHERE id = %s",
@@ -424,7 +424,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                 logger.info(f"Updated place {place_update.place_id}")
 
         # Update faction states
-        for faction_update in state_updates.faction_updates:
+        for faction_update in state_updates.factions:
             if faction_update.faction_id and faction_update.current_activity:
                 cur.execute(
                     "UPDATE factions SET current_activity = %s WHERE id = %s",

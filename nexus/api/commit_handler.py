@@ -230,7 +230,7 @@ async def apply_state_updates(
     and similar fields for places and factions.
     """
     # Update character states
-    for char_update in state_updates.character_updates:
+    for char_update in state_updates.characters:
         if char_update.character_id:
             updates = []
             params = []
@@ -264,7 +264,7 @@ async def apply_state_updates(
                 logger.info(f"Updated character {char_update.character_id}")
 
     # Update place states
-    for place_update in state_updates.location_updates:
+    for place_update in state_updates.locations:
         if place_update.place_id and place_update.current_status:
             await conn.execute(
                 """
@@ -278,7 +278,7 @@ async def apply_state_updates(
             logger.info(f"Updated place {place_update.place_id}")
 
     # Update faction states
-    for faction_update in state_updates.faction_updates:
+    for faction_update in state_updates.factions:
         if faction_update.faction_id and faction_update.current_activity:
             await conn.execute(
                 """
