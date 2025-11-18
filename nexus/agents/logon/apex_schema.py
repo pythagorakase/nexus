@@ -306,10 +306,6 @@ class ChunkMetadataUpdate(BaseModel):
         default=WorldLayerType.PRIMARY,
         description="Narrative layer (primary, flashback, dream, etc.)"
     )
-    pacing: Optional[Literal["slow", "moderate", "fast"]] = Field(
-        default=None,
-        description="Narrative pacing"
-    )
 
     class Config:
         extra = "forbid"

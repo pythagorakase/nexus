@@ -213,7 +213,6 @@ async def generate_narrative_async(
                     "time_delta_description": "A few minutes later",
                 },
                 "world_layer": "primary",
-                "pacing": "moderate",
             },
             "entity_updates": [],
             "reference_updates": {
