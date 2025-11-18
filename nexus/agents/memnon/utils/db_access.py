@@ -638,9 +638,9 @@ def setup_database_indexes(db_url: str) -> bool:
                         SELECT table_name
                         FROM information_schema.tables
                         WHERE table_schema = 'public'
-                          AND table_name = ANY(%s)
+                          AND table_name = ANY(%s::text[])
                         """,
-                        (tuple(DIMENSION_TABLES),),
+                        (list(DIMENSION_TABLES),),
                     )
                     existing_dimension_tables = {row[0] for row in cursor.fetchall()}
 

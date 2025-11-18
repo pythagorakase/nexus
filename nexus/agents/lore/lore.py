@@ -261,12 +261,13 @@ class LORE:
         if self.logon is None:
             self._initialize_logon()
     
-    async def process_turn(self, user_input: str):
+    async def process_turn(self, user_input: str, parent_chunk_id: Optional[int] = None):
         """
         Process a complete turn cycle.
 
         Args:
             user_input: The user's input text
+            parent_chunk_id: Optional chunk id that should be continued
 
         Returns:
             StoryTurnResponse with narrative and metadata, or string on error
@@ -277,7 +278,8 @@ class LORE:
         self.turn_context = TurnContext(
             turn_id=f"turn_{int(time.time())}",
             user_input=user_input,
-            start_time=time.time()
+            start_time=time.time(),
+            target_chunk_id=parent_chunk_id
         )
         
         try:

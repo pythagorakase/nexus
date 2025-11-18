@@ -44,6 +44,15 @@ class SQLStep(BaseModel):
     sql: Optional[str] = None
 
 
+class RetrievalQueries(BaseModel):
+    """Structured retrieval query generation for Phase 4"""
+    queries: List[str] = Field(
+        min_length=3,
+        max_length=5,
+        description="Retrieval queries for finding relevant narrative context"
+    )
+
+
 class LocalLLMManager:
     """Manages local LLM for LORE's reasoning capabilities via LM Studio SDK"""
     
@@ -373,6 +382,85 @@ Response format - use exact headers:"""
             raise RuntimeError("FATAL: LORE system prompt not loaded! Cannot generate retrieval queries without proper instructions.")
         system_prompt = self.system_prompt
 
+        if LMS_SDK_AVAILABLE and self.model:
+            # Use structured output for clean, validated queries
+            try:
+                chat = lms.Chat(system_prompt)
+                chat.add_user_message(f"""Generate retrieval queries to search for relevant past events, character history, or world information.
+
+User input: {user_input}
+
+Context analysis:
+- Characters present: {', '.join(characters) if characters else 'None'}
+- Locations: {', '.join(locations) if locations else 'None'}
+- Context type: {context_type}
+- Key entities: {', '.join(entities_for_retrieval) if entities_for_retrieval else 'None'}
+
+Generate 3-5 specific queries that would retrieve:
+1. Relevant past events involving these characters
+2. History of these locations
+3. Character relationships and interactions
+4. Background information on key entities
+
+Each query should be a complete search phrase that captures what information you're looking for.""")
+
+                result = self.model.respond(
+                    chat,
+                    response_format=RetrievalQueries,
+                    config={
+                        "temperature": 0.5,  # Moderate creativity for varied queries
+                        "maxTokens": 300,
+                        "topP": 0.9,
+                        "contextLength": 65536,
+                        "reasoning": {"effort": "high"}
+                    }
+                )
+
+                # Access the parsed result correctly
+                # LM Studio SDK can return parsed as either dict or Pydantic model
+                if hasattr(result, "parsed") and result.parsed:
+                    parsed = result.parsed
+                    if isinstance(parsed, dict):
+                        queries = parsed.get("queries", [])
+                    else:
+                        queries = parsed.queries
+                elif isinstance(result, dict):
+                    queries = result.get("queries", [])
+                else:
+                    # Try direct access as last resort
+                    queries = result.queries
+
+                # Debug: log what we got
+                logger.debug(f"Structured output result type: {type(result)}")
+                logger.debug(f"Parsed queries: {queries}")
+
+                # Clean up and validate queries
+                import unicodedata
+                valid_queries = []
+                for q in queries:
+                    if q:
+                        # Clean up non-breaking spaces and other Unicode artifacts
+                        cleaned = unicodedata.normalize('NFKD', q)
+                        cleaned = cleaned.replace('\xa0', ' ')  # Replace non-breaking spaces
+                        cleaned = cleaned.replace('…', '...')  # Replace ellipsis character
+                        cleaned = ' '.join(cleaned.split())  # Normalize whitespace
+
+                        # Check if the cleaned query is valid
+                        if len(cleaned.strip()) > 10:  # Minimum meaningful query length
+                            valid_queries.append(cleaned)
+
+                if valid_queries:
+                    logger.info(f"Generated {len(valid_queries)} valid retrieval queries via structured output")
+                    return valid_queries
+                else:
+                    logger.warning("Structured output returned only empty/invalid queries, falling back to text parsing")
+                    raise ValueError("Invalid structured output")
+
+            except Exception as e:
+                logger.warning(f"SDK structured output failed: {e}, falling back to text parsing")
+                # Fall through to text parsing approach
+
+        # Fallback: Use text parsing with the regular query method
         prompt = f"""Based on the current narrative context, generate 3-5 retrieval queries to search for relevant past events, character history, or world information.
 
 User input: {user_input}
@@ -430,7 +518,7 @@ Each query should be a complete question or search phrase."""
             # Limit to 5 queries
             queries = queries[:5]
 
-            logger.info(f"Generated {len(queries)} retrieval queries")
+            logger.info(f"Generated {len(queries)} retrieval queries via text parsing")
             return queries
 
         except Exception as e:

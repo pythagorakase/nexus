@@ -9,6 +9,7 @@ import logging
 import sys
 import uuid
 import os
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -21,11 +22,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import (
     StorytellerResponseStandard,
-    StorytellerResponseMinimal,
     ChronologyUpdate,
     ChunkMetadataUpdate,
 )
-from nexus.agents.lore.logon_utility import LogonUtility
 
 # Configure logging
 logging.basicConfig(
@@ -101,7 +100,7 @@ class NarrativeTurnTester:
 
         return dict(result)
 
-    def continue_narrative(
+    async def continue_narrative(
         self,
         parent_chunk_id: int = 1425,
         user_text: str = "Continue."
@@ -131,97 +130,164 @@ class NarrativeTurnTester:
             debug=True
         )
 
-        # Step 2: Build context package
-        logger.info("Step 2: Building context package...")
+        # Step 2: Process the turn (builds context and generates narrative)
+        logger.info("Step 2: Processing turn with LORE (context + generation)...")
         start_time = datetime.now()
 
-        # Simulate the narrative flow with user text completing the parent chunk
-        completed_text = parent_info['raw_text'] + "\n\n" + user_text
+        # Call LORE's process_turn method which handles the complete pipeline
+        try:
+            response = await lore.process_turn(user_text)
+            logger.info(f"LORE returned response type: {type(response)}")
 
-        # Use LORE's turn cycle to build context
-        context_package = lore.turn_manager.build_context_package(
-            chunk_id=parent_chunk_id,
-            user_input=user_text
-        )
+            # Print the response to see what we're working with
+            if response:
+                print("\n" + "="*80)
+                print("LORE RESPONSE:")
+                print("="*80)
+                if hasattr(response, 'model_dump'):
+                    print(json.dumps(response.model_dump(), indent=2, default=str))
+                else:
+                    print(f"Response: {response}")
+                print("="*80 + "\n")
+        except Exception as e:
+            logger.error(f"LORE process_turn failed: {e}")
+            raise
 
-        context_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"Context package built in {context_time:.2f} seconds")
-        logger.info(f"Context size: {len(json.dumps(context_package))//1024}KB")
+        total_time = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Turn processed in {total_time:.2f} seconds")
 
-        # Step 3: Call LOGON (GPT-5.1)
-        logger.info("Step 3: Calling LOGON for narrative generation...")
-        start_time = datetime.now()
+        # Step 3: Parse response and prepare incubator data
+        logger.info("Step 3: Parsing response and preparing incubator data...")
 
-        # Initialize LOGON if not already done
-        if not lore.logon:
-            lore._initialize_logon()
+        # Extract narrative text from the response
+        storyteller_text = response.narrative.text if hasattr(response, 'narrative') else None
 
-        # Generate narrative
-        response = lore.logon.generate_narrative(
-            context_payload=context_package,
-            chunk_id=parent_chunk_id + 1,  # New chunk ID
-            user_turn=user_text
-        )
-
-        generation_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"Narrative generated in {generation_time:.2f} seconds")
-
-        # Step 4: Parse response and prepare incubator data
-        logger.info("Step 4: Parsing response and preparing incubator data...")
+        if not storyteller_text:
+            raise ValueError("No narrative text in response")
 
         incubator_data = {
             "chunk_id": parent_chunk_id + 1,
             "parent_chunk_id": parent_chunk_id,
             "user_text": user_text,
-            "storyteller_text": response.narrative if hasattr(response, 'narrative') else response.get('narrative'),
+            "storyteller_text": storyteller_text,
             "metadata_updates": {},
-            "entity_updates": [],
+            "entity_updates": {},
             "reference_updates": {},
             "session_id": self.session_id,
             "llm_response_id": getattr(response, 'response_id', None),
             "status": "provisional"
         }
 
-        # Extract metadata updates if present
-        if hasattr(response, 'chunk_metadata') and response.chunk_metadata:
-            metadata = response.chunk_metadata
+        # Extract metadata updates
+        if hasattr(response, 'metadata') and response.metadata:
+            metadata = response.metadata
+
+            # Handle chronology updates using new time fields
             if hasattr(metadata, 'chronology') and metadata.chronology:
-                incubator_data["metadata_updates"]["episode_transition"] = metadata.chronology.episode_transition
-                incubator_data["metadata_updates"]["time_delta_seconds"] = metadata.chronology.time_delta_seconds
-                incubator_data["metadata_updates"]["time_delta_description"] = metadata.chronology.time_delta_description
+                chron = metadata.chronology
+
+                # Handle both old boolean format and new enum format
+                if hasattr(chron, 'episode_transition'):
+                    # New format with enum
+                    episode_transition = chron.episode_transition.value if hasattr(chron.episode_transition, 'value') else chron.episode_transition or "continue"
+                else:
+                    # Old format with boolean flags
+                    if getattr(chron, 'season_increment', False):
+                        episode_transition = "new_season"
+                    elif getattr(chron, 'episode_increment', False):
+                        episode_transition = "new_episode"
+                    else:
+                        episode_transition = "continue"
+
+                incubator_data["metadata_updates"]["chronology"] = {
+                    "episode_transition": episode_transition,
+                    "time_delta_minutes": getattr(chron, 'time_delta_minutes', None),
+                    "time_delta_hours": getattr(chron, 'time_delta_hours', None),
+                    "time_delta_days": getattr(chron, 'time_delta_days', None),
+                    "time_delta_description": getattr(chron, 'time_delta_description', None) or getattr(chron, 'time_elapsed_description', None)
+                }
 
             if hasattr(metadata, 'world_layer'):
-                incubator_data["metadata_updates"]["world_layer"] = metadata.world_layer
+                incubator_data["metadata_updates"]["world_layer"] = metadata.world_layer.value if hasattr(metadata.world_layer, 'value') else metadata.world_layer
 
-            if hasattr(metadata, 'pacing'):
-                incubator_data["metadata_updates"]["pacing"] = metadata.pacing
-
-        # Extract entity updates if present
+        # Extract entity state updates
         if hasattr(response, 'state_updates') and response.state_updates:
-            for update in response.state_updates.character_updates or []:
-                incubator_data["entity_updates"].append({
-                    "type": "character",
-                    "id": update.character_id,
-                    "name": update.character_name,
-                    "field": "emotional_state",
-                    "new_value": update.emotional_state
-                })
-
-        # Extract entity references if present
-        if hasattr(response, 'referenced_entities') and response.referenced_entities:
-            refs = response.referenced_entities
-            incubator_data["reference_updates"] = {
-                "character_present": [c.character_id for c in refs.characters if c.reference_type == "present"],
-                "character_referenced": [c.character_id for c in refs.characters if c.reference_type == "mentioned"],
-                "place_referenced": [p.place_id for p in refs.places if p.place_id]
+            entity_updates = {
+                "characters": [],
+                "locations": [],
+                "factions": []
             }
 
-        # Step 5: Write to incubator (or log in dry run)
+            # Fix: Use 'characters' not 'character_updates'
+            if hasattr(response.state_updates, 'characters'):
+                for char in response.state_updates.characters:
+                    entity_updates["characters"].append({
+                        "character_id": char.character_id,
+                        "character_name": getattr(char, 'character_name', None),
+                        "emotional_state": char.emotional_state,
+                        "current_activity": getattr(char, 'current_activity', None),
+                        "current_location": getattr(char, 'current_location', None)
+                    })
+
+            if hasattr(response.state_updates, 'locations'):
+                for loc in response.state_updates.locations:
+                    entity_updates["locations"].append({
+                        "place_id": loc.place_id,
+                        "place_name": getattr(loc, 'place_name', None),
+                        "current_status": loc.current_status
+                    })
+
+            if hasattr(response.state_updates, 'factions'):
+                for faction in response.state_updates.factions:
+                    entity_updates["factions"].append({
+                        "faction_id": faction.faction_id,
+                        "faction_name": getattr(faction, 'faction_name', None),
+                        "current_activity": faction.current_activity
+                    })
+
+            incubator_data["entity_updates"] = entity_updates
+
+        # Extract entity references
+        if hasattr(response, 'referenced_entities') and response.referenced_entities:
+            refs = response.referenced_entities
+            reference_updates = {
+                "characters": [],
+                "places": [],
+                "factions": []
+            }
+
+            if hasattr(refs, 'characters'):
+                for char in refs.characters:
+                    reference_updates["characters"].append({
+                        "character_id": char.character_id,
+                        "character_name": getattr(char, 'character_name', None),
+                        "reference_type": char.reference_type.value if hasattr(char.reference_type, 'value') else char.reference_type
+                    })
+
+            if hasattr(refs, 'places'):
+                for place in refs.places:
+                    reference_updates["places"].append({
+                        "place_id": place.place_id,
+                        "place_name": getattr(place, 'place_name', None),
+                        "reference_type": place.reference_type.value if hasattr(place.reference_type, 'value') else place.reference_type,
+                        "evidence": getattr(place, 'evidence', None)
+                    })
+
+            if hasattr(refs, 'factions'):
+                for faction in refs.factions:
+                    reference_updates["factions"].append({
+                        "faction_id": faction.faction_id,
+                        "faction_name": getattr(faction, 'faction_name', None)
+                    })
+
+            incubator_data["reference_updates"] = reference_updates
+
+        # Step 4: Write to incubator (or log in dry run)
         if self.dry_run:
             logger.info("DRY RUN - Would write to incubator:")
             logger.info(json.dumps(incubator_data, indent=2, default=str))
         else:
-            logger.info("Step 5: Writing to incubator table...")
+            logger.info("Step 4: Writing to incubator table...")
             self._write_to_incubator(incubator_data)
             logger.info("Successfully written to incubator")
 
@@ -231,10 +297,7 @@ class NarrativeTurnTester:
             "session_id": self.session_id,
             "incubator_data": incubator_data,
             "diagnostics": {
-                "context_build_time": context_time,
-                "generation_time": generation_time,
-                "total_time": context_time + generation_time,
-                "context_size_kb": len(json.dumps(context_package))//1024,
+                "total_time": total_time,
                 "response_length": len(incubator_data["storyteller_text"]) if incubator_data["storyteller_text"] else 0
             }
         }
@@ -311,7 +374,7 @@ class NarrativeTurnTester:
             self.conn.close()
 
 
-def main():
+async def main():
     """Main test function"""
     import argparse
 
@@ -333,7 +396,7 @@ def main():
         if args.view:
             tester.view_incubator()
         else:
-            result = tester.continue_narrative(
+            result = await tester.continue_narrative(
                 parent_chunk_id=args.chunk_id,
                 user_text=args.user_text
             )
@@ -353,4 +416,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

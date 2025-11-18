@@ -76,6 +76,8 @@ class TurnCycleManager:
             "processed": True,
             "token_count": turn_context.token_counts.get("user_input", 0)
         }
+        if turn_context.target_chunk_id is not None:
+            phase_state["target_chunk_id"] = turn_context.target_chunk_id
         turn_context.phase_states["user_input"] = phase_state
 
         memory_update = {}
@@ -103,21 +105,48 @@ class TurnCycleManager:
         """
         logger.debug("Performing warm analysis...")
         
+        warm_slice_chunks: List[Dict[str, Any]] = []
+        target_chunk_id = getattr(turn_context, "target_chunk_id", None)
+
+        # Always try to include the requested continuation chunk first
+        if self.lore.memnon and target_chunk_id is not None:
+            try:
+                target_chunk = self.lore.memnon.get_chunk_by_id(target_chunk_id)
+                if target_chunk:
+                    target_entry = dict(target_chunk)
+                    if not target_entry.get("text") and target_entry.get("full_text"):
+                        target_entry["text"] = target_entry["full_text"]
+                    target_entry["is_target"] = True
+                    warm_slice_chunks.append(target_entry)
+                    logger.info(f"Anchored warm slice to requested chunk {target_chunk_id}")
+                else:
+                    logger.warning(f"Requested parent chunk {target_chunk_id} not found; using recent chunks instead")
+            except Exception as exc:
+                logger.error(f"Failed to load requested chunk {target_chunk_id}: {exc}")
+
         # Get recent narrative chunks from database if MEMNON available
         if self.lore.memnon:
             try:
                 # Get chunk parameters from settings
                 chunk_params = self.settings.get("Agent Settings", {}).get("LORE", {}).get("chunk_parameters", {})
                 initial_chunks = chunk_params.get("warm_slice_initial", 10)
-                
+
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
-                turn_context.warm_slice = recent_chunks.get("results", [])
-                
-                logger.info(f"Retrieved {len(turn_context.warm_slice)} recent chunks for warm slice")
+                recent_list = recent_chunks.get("results", [])
+
+                if target_chunk_id is not None:
+                    recent_list = [chunk for chunk in recent_list if chunk.get("id") != target_chunk_id]
+
+                warm_slice_chunks.extend(recent_list)
+                turn_context.warm_slice = warm_slice_chunks
+
+                logger.info(f"Retrieved {len(turn_context.warm_slice)} warm-slice chunks (including anchors)")
             except Exception as e:
                 logger.error(f"Failed to retrieve warm slice: {e}")
-                turn_context.warm_slice = []
+                turn_context.warm_slice = warm_slice_chunks
+        else:
+            turn_context.warm_slice = warm_slice_chunks
         
         if getattr(self.lore, "memory_manager", None):
             turn_context.warm_slice = self.lore.memory_manager.augment_warm_slice(turn_context.warm_slice)
@@ -467,7 +496,10 @@ class TurnCycleManager:
             },
             "memory_state": turn_context.memory_state
         }
-        
+
+        if turn_context.target_chunk_id is not None:
+            turn_context.context_payload["metadata"]["target_chunk_id"] = turn_context.target_chunk_id
+
         # Calculate utilization
         if self.lore.token_manager:
             utilization = self.lore.token_manager.calculate_utilization(
