@@ -147,6 +147,14 @@
                 "timeout": 120,
                 "reasoning_effort": "high",
                 "system_prompt": "You are a narrative intelligence system that has perfect recall of story elements."
+            },
+            "narrative": {
+                "test_mode": false,
+                "test_database_suffix": "_test",
+                "allow_entity_creation": true,
+                "require_approval": true,
+                "auto_approve_timeout": 0,
+                "description": "Live narrative generation settings"
             }
         },
         "GAIA": {
