@@ -1504,7 +1504,7 @@ class MEMNON:
             with self.Session() as session:
                 query = text("""
                     SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
-                           cm.world_layer, cm.perspective
+                           cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     ORDER BY nc.id DESC
@@ -1522,8 +1522,7 @@ class MEMNON:
                             "season": result.season,
                             "episode": result.episode,
                             "scene_number": result.scene_number,
-                            "world_layer": result.world_layer,
-                            "perspective": result.perspective
+                            "world_layer": result.world_layer
                         },
                         "score": 1.0,  # Recent chunks have perfect relevance
                         "source": "recent_chunks"
@@ -1556,7 +1555,7 @@ class MEMNON:
             with self.Session() as session:
                 query = text("""
                     SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
-                           cm.world_layer, cm.perspective
+                           cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     WHERE nc.id = :chunk_id
@@ -1575,8 +1574,7 @@ class MEMNON:
                                 "season": result.season,
                                 "episode": result.episode,
                                 "scene_number": result.scene_number,
-                                "world_layer": result.world_layer,
-                                "perspective": result.perspective
+                                "world_layer": result.world_layer
                             },
                             "score": 1.0,  # Perfect match for ID query
                             "source": "direct_id_lookup"
@@ -1843,8 +1841,6 @@ class MEMNON:
                         meta_items.append(f"Scene {metadata['scene_number']}")
                     if "matched_keyword" in metadata:
                         meta_items.append(f"Matched '{metadata['matched_keyword']}'")
-                    if "perspective" in metadata:
-                        meta_items.append(f"Perspective: {metadata['perspective']}")
                     
                     if meta_items:
                         metadata_str = f" [{', '.join(meta_items)}]"

@@ -24,6 +24,7 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
+from nexus.api.lore_adapter import response_to_incubator, validate_incubator_data
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -185,58 +186,78 @@ async def generate_narrative_async(
             }
         })
 
-        # Initialize LORE and build context
-        # NOTE: This is simplified - real implementation needs proper async handling
-        await asyncio.sleep(2)  # Simulate context building
+        # Check if we should use mock mode (for testing without LLM)
+        use_mock = test_mode is True  # Explicit True means use mock
 
-        # Send progress: calling LLM
-        await manager.send_progress(session_id, "calling_llm")
+        if use_mock:
+            # Mock mode for testing without real LLM calls
+            logger.info("Using mock mode for narrative generation")
+            await asyncio.sleep(2)  # Simulate processing
 
-        # Generate narrative (mock for now)
-        await asyncio.sleep(3)  # Simulate LLM call
+            # Send progress: calling LLM
+            await manager.send_progress(session_id, "calling_llm")
+            await asyncio.sleep(3)  # Simulate LLM call
 
-        storyteller_text = generate_mock_narrative(chunk_info, user_text)
+            storyteller_text = generate_mock_narrative(chunk_info, user_text)
 
-        # Send progress: processing response
-        await manager.send_progress(session_id, "processing_response")
-
-        # Prepare incubator data
-        incubator_data = {
-            "chunk_id": parent_chunk_id + 1,
-            "parent_chunk_id": parent_chunk_id,
-            "user_text": user_text,
-            "storyteller_text": storyteller_text,
-            "metadata_updates": {
-                "chronology": {
-                    "episode_transition": "continue",
-                    "time_delta_minutes": 3,  # 3 minutes instead of 180 seconds
-                    "time_delta_hours": None,
-                    "time_delta_days": None,
-                    "time_delta_description": "A few minutes later",
+            # Prepare mock incubator data
+            incubator_data = {
+                "chunk_id": parent_chunk_id + 1,
+                "parent_chunk_id": parent_chunk_id,
+                "user_text": user_text,
+                "storyteller_text": storyteller_text,
+                "metadata_updates": {
+                    "chronology": {
+                        "episode_transition": "continue",
+                        "time_delta_minutes": 3,
+                        "time_delta_hours": None,
+                        "time_delta_days": None,
+                        "time_delta_description": "A few minutes later",
+                    },
+                    "world_layer": "primary",
                 },
-                "world_layer": "primary",
-            },
-            "entity_updates": [],
-            "reference_updates": {
-                "characters": [
-                    {
-                        "character_id": 1,  # Alex
-                        "reference_type": "present"
-                    }
-                ],
-                "places": [
-                    {
-                        "place_id": chunk_info.get("place", 1),  # Use parent chunk's place
-                        "reference_type": "setting",
-                        "evidence": None
-                    }
-                ],
-                "factions": []
-            },
-            "session_id": session_id,
-            "llm_response_id": f"resp_{uuid.uuid4().hex[:8]}",
-            "status": "provisional"
-        }
+                "entity_updates": {},
+                "reference_updates": {
+                    "characters": [{"character_id": 1, "reference_type": "present"}],
+                    "places": [{"place_id": chunk_info.get("place", 1), "reference_type": "setting", "evidence": None}],
+                    "factions": []
+                },
+                "session_id": session_id,
+                "llm_response_id": f"mock_{uuid.uuid4().hex[:8]}",
+                "status": "provisional"
+            }
+
+        else:
+            # Real LORE integration
+            logger.info("Initializing LORE for narrative generation")
+
+            # Initialize LORE with LOGON enabled for API calls
+            lore = LORE(enable_logon=True, debug=True)
+
+            # Send progress: calling LLM
+            await manager.send_progress(session_id, "calling_llm")
+
+            # Process the turn with LORE (builds context and generates narrative)
+            try:
+                response = await lore.process_turn(user_text)
+                logger.info(f"LORE response received for session {session_id}")
+            except Exception as e:
+                logger.error(f"LORE process_turn failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to generate narrative: {str(e)}")
+
+            # Send progress: processing response
+            await manager.send_progress(session_id, "processing_response")
+
+            # Transform LORE response to incubator format
+            incubator_data = response_to_incubator(
+                response=response,
+                parent_chunk_id=parent_chunk_id,
+                user_text=user_text,
+                session_id=session_id
+            )
+
+            # Validate the data before writing
+            validate_incubator_data(incubator_data)
 
         # Write to incubator
         await write_to_incubator(conn, incubator_data)
@@ -244,7 +265,7 @@ async def generate_narrative_async(
         # Send progress: complete
         await manager.send_progress(session_id, "complete", {
             "chunk_id": parent_chunk_id + 1,
-            "preview": storyteller_text[:200] + "..."
+            "preview": incubator_data["storyteller_text"][:200] + "..."
         })
 
         logger.info(f"Narrative generation complete for session {session_id}")

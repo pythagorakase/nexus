@@ -154,7 +154,11 @@
                 "allow_entity_creation": true,
                 "require_approval": true,
                 "auto_approve_timeout": 0,
-                "description": "Live narrative generation settings"
+                "use_mock_mode": false,
+                "lore_debug_mode": true,
+                "require_lm_studio": true,
+                "lm_studio_fallback": "error",
+                "description": "Live narrative generation settings. use_mock_mode=true bypasses LORE for testing. lm_studio_fallback options: error, mock, skip"
             }
         },
         "GAIA": {
