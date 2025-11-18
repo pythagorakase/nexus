@@ -16,12 +16,6 @@ from pydantic import BaseModel, Field
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Import our new schema
-from nexus.agents.logon.apex_schema import (
-    StorytellerResponseStandard,
-    ChronologyUpdate,
-    ChunkMetadataUpdate,
-)
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import response_to_incubator, validate_incubator_data
@@ -239,7 +233,10 @@ async def generate_narrative_async(
 
             # Process the turn with LORE (builds context and generates narrative)
             try:
-                response = await lore.process_turn(user_text)
+                response = await lore.process_turn(
+                    user_text,
+                    parent_chunk_id=parent_chunk_id
+                )
                 logger.info(f"LORE response received for session {session_id}")
             except Exception as e:
                 logger.error(f"LORE process_turn failed: {e}")

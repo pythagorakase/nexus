@@ -8,19 +8,19 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 
 import logging
 from typing import Dict, Any, Optional
-from nexus.agents.logon.apex_schema import StorytellerResponseStandard
+from nexus.agents.lore.logon_schemas import StoryTurnResponse
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
 
 def response_to_incubator(
-    response: StorytellerResponseStandard,
+    response: StoryTurnResponse,
     parent_chunk_id: int,
     user_text: str,
     session_id: str
 ) -> Dict[str, Any]:
     """
-    Transform a LORE StorytellerResponseStandard into incubator table format.
+    Transform a LORE StoryTurnResponse into incubator table format.
 
     Args:
         response: The structured response from LORE.process_turn()
@@ -54,7 +54,7 @@ def response_to_incubator(
     return incubator_data
 
 
-def extract_metadata_updates(response: StorytellerResponseStandard) -> Dict[str, Any]:
+def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     """
     Extract metadata updates from the response.
 
@@ -105,7 +105,7 @@ def extract_metadata_updates(response: StorytellerResponseStandard) -> Dict[str,
     return metadata_updates
 
 
-def extract_entity_updates(response: StorytellerResponseStandard) -> Dict[str, Any]:
+def extract_entity_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     """
     Extract entity state updates from the response.
 
@@ -168,7 +168,7 @@ def extract_entity_updates(response: StorytellerResponseStandard) -> Dict[str, A
     return entity_updates
 
 
-def extract_reference_updates(response: StorytellerResponseStandard) -> Dict[str, Any]:
+def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     """
     Extract entity references from the response.
 
@@ -180,106 +180,38 @@ def extract_reference_updates(response: StorytellerResponseStandard) -> Dict[str
         "factions": []
     }
 
-    if hasattr(response, 'referenced_entities') and response.referenced_entities:
-        refs = response.referenced_entities
+    refs = getattr(response, "referenced_entities", None)
+    if not refs:
+        return reference_updates
 
-        # Extract character references
-        if hasattr(refs, 'characters'):
-            for char in refs.characters:
-                ref_data = {}
+    def _append_reference(
+        entity: Any,
+        id_key: str,
+        name_key: str,
+        target_list: list
+    ) -> None:
+        ref_data: Dict[str, Any] = {}
+        entity_id = getattr(entity, "entity_id", None)
+        if entity_id is not None:
+            ref_data[id_key] = entity_id
+        entity_name = getattr(entity, "entity_name", None)
+        if entity_name:
+            ref_data[name_key] = entity_name
+        prominence = getattr(entity, "prominence", None)
+        if prominence:
+            ref_data["reference_type"] = prominence
+        target_list.append(ref_data)
 
-                # Handle both new_character creation and existing references
-                if hasattr(char, 'new_character') and char.new_character:
-                    # New character to be created
-                    ref_data["new_character"] = {
-                        "name": char.new_character.name,
-                        "summary": char.new_character.summary,
-                        "appearance": char.new_character.appearance,
-                        "background": char.new_character.background,
-                        "personality": char.new_character.personality,
-                        "emotional_state": char.new_character.emotional_state,
-                        "current_activity": char.new_character.current_activity,
-                        "current_location": char.new_character.current_location,
-                        "extra_data": getattr(char.new_character, 'extra_data', None)
-                    }
-                elif char.character_id:
-                    ref_data["character_id"] = char.character_id
-                elif char.character_name:
-                    ref_data["character_name"] = char.character_name
+    for char in getattr(refs, "characters", []):
+        _append_reference(char, "character_id", "character_name", reference_updates["characters"])
 
-                ref_data["reference_type"] = (
-                    char.reference_type.value
-                    if hasattr(char.reference_type, 'value')
-                    else char.reference_type
-                )
+    for location in getattr(refs, "locations", []):
+        _append_reference(location, "place_id", "place_name", reference_updates["places"])
 
-                reference_updates["characters"].append(ref_data)
-
-        # Extract place references
-        if hasattr(refs, 'places'):
-            for place in refs.places:
-                ref_data = {}
-
-                # Handle both new_place creation and existing references
-                if hasattr(place, 'new_place') and place.new_place:
-                    # New place to be created
-                    ref_data["new_place"] = {
-                        "name": place.new_place.name,
-                        "summary": place.new_place.summary,
-                        "history": place.new_place.history,
-                        "current_status": place.new_place.current_status,
-                        "secrets": place.new_place.secrets,
-                        "zone": place.new_place.zone,
-                        "place_type": (
-                            place.new_place.place_type.value
-                            if hasattr(place.new_place.place_type, 'value')
-                            else place.new_place.place_type
-                        ),
-                        "extra_data": getattr(place.new_place, 'extra_data', None)
-                    }
-                elif place.place_id:
-                    ref_data["place_id"] = place.place_id
-                elif place.place_name:
-                    ref_data["place_name"] = place.place_name
-
-                ref_data["reference_type"] = (
-                    place.reference_type.value
-                    if hasattr(place.reference_type, 'value')
-                    else place.reference_type
-                )
-
-                if hasattr(place, 'evidence') and place.evidence:
-                    ref_data["evidence"] = place.evidence
-
-                reference_updates["places"].append(ref_data)
-
-        # Extract faction references
-        if hasattr(refs, 'factions'):
-            for faction in refs.factions:
-                ref_data = {}
-
-                # Handle both new_faction creation and existing references
-                if hasattr(faction, 'new_faction') and faction.new_faction:
-                    # New faction to be created
-                    ref_data["new_faction"] = {
-                        "name": faction.new_faction.name,
-                        "summary": faction.new_faction.summary,
-                        "ideology": faction.new_faction.ideology,
-                        "history": faction.new_faction.history,
-                        "current_activity": faction.new_faction.current_activity,
-                        "hidden_agenda": faction.new_faction.hidden_agenda,
-                        "territory": faction.new_faction.territory,
-                        "power_level": faction.new_faction.power_level,
-                        "resources": faction.new_faction.resources,
-                        "primary_location": faction.new_faction.primary_location,
-                        "extra_data": getattr(faction.new_faction, 'extra_data', None)
-                    }
-                elif faction.faction_id:
-                    ref_data["faction_id"] = faction.faction_id
-                elif faction.faction_name:
-                    ref_data["faction_name"] = faction.faction_name
-
-                reference_updates["factions"].append(ref_data)
+    # Factions are reported through the generic "other" list in StoryTurnResponse
+    for entity in getattr(refs, "other", []):
+        if getattr(entity, "entity_type", None) == "faction":
+            _append_reference(entity, "faction_id", "faction_name", reference_updates["factions"])
 
     return reference_updates
 
