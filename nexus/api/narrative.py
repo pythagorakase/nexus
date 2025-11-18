@@ -209,16 +209,29 @@ async def generate_narrative_async(
             "metadata_updates": {
                 "chronology": {
                     "episode_transition": "continue",
-                    "time_delta_seconds": 180,
+                    "time_delta_minutes": 3,  # 3 minutes instead of 180 seconds
+                    "time_delta_hours": None,
+                    "time_delta_days": None,
                     "time_delta_description": "A few minutes later",
                 },
                 "world_layer": "primary",
             },
             "entity_updates": [],
             "reference_updates": {
-                "character_present": [1],  # Alex
-                "character_referenced": [],
-                "place_referenced": []
+                "characters": [
+                    {
+                        "character_id": 1,  # Alex
+                        "reference_type": "present"
+                    }
+                ],
+                "places": [
+                    {
+                        "place_id": chunk_info.get("place", 1),  # Use parent chunk's place
+                        "reference_type": "setting",
+                        "evidence": None
+                    }
+                ],
+                "factions": []
             },
             "session_id": session_id,
             "llm_response_id": f"resp_{uuid.uuid4().hex[:8]}",
@@ -377,20 +390,24 @@ async def approve_narrative(
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
         if request.commit:
-            # TODO: Implement actual commit to narrative_chunks and related tables
-            # For now, just update status
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE incubator SET status = 'approved' WHERE session_id = %s",
-                    (session_id,)
-                )
-            conn.commit()
+            # Import synchronous commit function
+            from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
-            return {
-                "status": "approved",
-                "message": f"Narrative for chunk {incubator_data['chunk_id']} approved",
-                "chunk_id": incubator_data["chunk_id"]
-            }
+            try:
+                # Commit to database
+                chunk_id = commit_incubator_to_database_sync(conn, session_id)
+
+                return {
+                    "status": "committed",
+                    "message": f"Narrative committed as chunk {chunk_id}",
+                    "chunk_id": chunk_id
+                }
+            except Exception as e:
+                logger.error(f"Failed to commit narrative: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to commit narrative: {str(e)}"
+                )
         else:
             # Just mark as reviewed
             return {
