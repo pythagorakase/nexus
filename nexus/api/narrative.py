@@ -207,11 +207,13 @@ async def generate_narrative_async(
             "user_text": user_text,
             "storyteller_text": storyteller_text,
             "metadata_updates": {
-                "episode_transition": "continue",
-                "time_delta_seconds": 180,
-                "time_delta_description": "A few minutes later",
+                "chronology": {
+                    "episode_transition": "continue",
+                    "time_delta_seconds": 180,
+                    "time_delta_description": "A few minutes later",
+                },
                 "world_layer": "primary",
-                "pacing": "moderate"
+                "pacing": "moderate",
             },
             "entity_updates": [],
             "reference_updates": {
