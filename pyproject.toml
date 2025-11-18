@@ -55,4 +55,5 @@ torch = {allow-prereleases = true}
 huggingface-hub = "^0.30.2"
 textual-dev = "^1.7.0"
 pytest-asyncio = "^1.2.0"
+asyncpg = "^0.30.0"
 
