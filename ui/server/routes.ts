@@ -44,6 +44,18 @@ export function registerProxyRoutes(app: Express): void {
 
   app.use("/api/models", coreModelsProxy);
   app.use("/api/health", coreHealthProxy);
+
+  // Proxy for Narrative API (FastAPI backend on port 8002)
+  // Handles narrative generation and incubator management
+  const narrativeTarget = `http://localhost:8002`;
+  const narrativeProxy = createProxyMiddleware({
+    target: narrativeTarget,
+    changeOrigin: true,
+    ws: true,  // Enable WebSocket support
+  });
+
+  app.use("/api/narrative", narrativeProxy);
+  app.use("/ws/narrative", narrativeProxy);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
