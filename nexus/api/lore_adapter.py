@@ -8,7 +8,7 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 
 import logging
 from typing import Dict, Any, Optional
-from nexus.agents.lore.logon_schemas import StoryTurnResponse
+from nexus.agents.logon.apex_schema import StoryTurnResponse
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -32,7 +32,7 @@ def response_to_incubator(
         Dictionary formatted for incubator table insertion
     """
     # Extract narrative text
-    storyteller_text = response.narrative.text if hasattr(response, 'narrative') else None
+    storyteller_text = response.narrative if hasattr(response, 'narrative') else None
 
     if not storyteller_text:
         raise ValueError("No narrative text in LORE response")

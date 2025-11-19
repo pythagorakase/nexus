@@ -18,7 +18,7 @@ try:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
-    from ..logon_schemas import StoryTurnResponse, extract_narrative_text
+    from nexus.agents.logon.apex_schema import StoryTurnResponse, extract_narrative_text
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -27,7 +27,7 @@ except ImportError:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
-    from nexus.agents.lore.logon_schemas import StoryTurnResponse, extract_narrative_text
+    from nexus.agents.logon.apex_schema import StoryTurnResponse, extract_narrative_text
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer

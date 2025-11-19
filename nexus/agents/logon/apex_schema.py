@@ -657,3 +657,77 @@ def validate_entity_references(entities: ReferencedEntities) -> List[str]:
         warnings.append("Duplicate place references detected")
 
     return warnings
+
+
+# ============================================================================
+# Type Aliases for Compatibility
+# ============================================================================
+
+# Union type for backward compatibility with old logon_schemas
+# Accepts any of the three response types
+StoryTurnResponse = Union[
+    StorytellerResponseMinimal,
+    StorytellerResponseStandard,
+    StorytellerResponseExtended
+]
+
+
+# ============================================================================
+# Helper Functions for Compatibility
+# ============================================================================
+
+def validate_story_turn_response(data: Dict[str, Any]) -> StoryTurnResponse:
+    """
+    Validate and parse a story turn response from raw data.
+    Attempts to parse as Extended first, falls back to Standard, then Minimal.
+
+    Args:
+        data: Raw dictionary from API response
+
+    Returns:
+        Validated StoryTurnResponse (one of Minimal/Standard/Extended)
+
+    Raises:
+        ValidationError: If data doesn't match any schema
+    """
+    # Try Extended first (most complete)
+    try:
+        return StorytellerResponseExtended(**data)
+    except Exception:
+        pass
+
+    # Try Standard
+    try:
+        return StorytellerResponseStandard(**data)
+    except Exception:
+        pass
+
+    # Fall back to Minimal
+    return StorytellerResponseMinimal(**data)
+
+
+def create_minimal_response(narrative_text: str) -> StorytellerResponseMinimal:
+    """
+    Create a minimal response with just narrative text.
+    Useful for fallback scenarios.
+
+    Args:
+        narrative_text: The narrative prose
+
+    Returns:
+        StorytellerResponseMinimal with just narrative
+    """
+    return StorytellerResponseMinimal(narrative=narrative_text)
+
+
+def extract_narrative_text(response: StoryTurnResponse) -> str:
+    """
+    Extract just the narrative text from a structured response.
+
+    Args:
+        response: Structured storyteller response
+
+    Returns:
+        The narrative text
+    """
+    return response.narrative
