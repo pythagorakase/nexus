@@ -21,8 +21,11 @@ from pydantic import BaseModel, Field
 
 from nexus.api.session_manager import SessionManager, SessionNotFoundError, SessionTurn
 from nexus.agents.lore.lore import LORE
-from nexus.agents.lore.logon_schemas import (
+from nexus.agents.logon.apex_schema import (
     StoryTurnResponse,
+    StorytellerResponseMinimal,
+    StorytellerResponseStandard,
+    StorytellerResponseExtended,
     create_minimal_response,
     validate_story_turn_response,
 )
@@ -118,7 +121,7 @@ def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[st
 def _coerce_story_response(payload: Any) -> StoryTurnResponse:
     """Coerce arbitrary payloads into a StoryTurnResponse."""
 
-    if isinstance(payload, StoryTurnResponse):
+    if isinstance(payload, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
         return payload
     if isinstance(payload, dict):
         try:
@@ -385,10 +388,11 @@ async def story_turn(
         ) from exc
 
     # Handle the response based on type
+    story_response: StoryTurnResponse
     if isinstance(result, str):
         # Error or fallback case - create minimal response
         story_response = create_minimal_response(result)
-    elif isinstance(result, StoryTurnResponse):
+    elif isinstance(result, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
         # Full structured response from Storyteller
         story_response = result
     else:
@@ -489,10 +493,11 @@ async def regenerate_turn(
         ) from exc
 
     # Handle the response based on type
+    story_response: StoryTurnResponse
     if isinstance(result, str):
         # Error or fallback case - create minimal response
         story_response = create_minimal_response(result)
-    elif isinstance(result, StoryTurnResponse):
+    elif isinstance(result, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
         # Full structured response from Storyteller
         story_response = result
     else:
