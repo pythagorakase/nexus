@@ -11,6 +11,7 @@ interface StatusBarProps {
   scene: number;
   apexStatus: "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING";
   isStoryMode: boolean;
+  isTestModeEnabled?: boolean;
   modelStatus?: "unloaded" | "loading" | "loaded" | "generating";
   onHamburgerClick?: () => void;
   onModelStatusChange?: (status: "unloaded" | "loading" | "loaded" | "generating") => void;
@@ -25,6 +26,7 @@ export function StatusBar({
   scene,
   apexStatus,
   isStoryMode,
+  isTestModeEnabled = false,
   modelStatus = "unloaded",
   onHamburgerClick,
   onModelStatusChange,
@@ -309,6 +311,13 @@ export function StatusBar({
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-apex-status">
             <span className="text-muted-foreground hidden sm:inline">APEX:</span>
             <span className={`${getStatusColor()} terminal-glow text-sm md:text-base`}>{apexStatus}</span>
+          </div>
+        )}
+        {isTestModeEnabled && (
+          <div className="flex items-center gap-1 md:gap-2" data-testid="text-test-mode">
+            <span className="px-2 py-1 rounded-sm border border-destructive/40 bg-destructive/10 text-[10px] md:text-xs font-semibold tracking-wide text-destructive">
+              TEST MODE
+            </span>
           </div>
         )}
       </div>

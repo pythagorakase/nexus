@@ -12,7 +12,7 @@ import {
 import type { Episode, NarrativeChunk, ChunkMetadata, Season } from "@shared/schema";
 import { useFonts } from "@/contexts/FontContext";
 
-interface ChunkWithMetadata extends NarrativeChunk {
+export interface ChunkWithMetadata extends NarrativeChunk {
   metadata?: ChunkMetadata;
 }
 
@@ -130,7 +130,7 @@ function EpisodeNode({
       <CollapsibleContent className="pl-4 space-y-1">
         {isLoading && (
           <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Loading chunks…
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading chunks...
           </div>
         )}
         {isError && (
@@ -162,8 +162,8 @@ function EpisodeNode({
           </div>
         )}
         {isFetching && !isLoading && (
-          <div className="px-2 py-2 text-[11px] text-muted-foreground/70">
-            Refreshing…
+            <div className="px-2 py-2 text-[11px] text-muted-foreground/70">
+            Refreshing...
           </div>
         )}
       </CollapsibleContent>
@@ -224,7 +224,7 @@ function SeasonNode({
       <CollapsibleContent className="pl-4 space-y-1">
         {isLoading && (
           <div className="flex items-center gap-2 px-2 py-3 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Loading episodes…
+            <Loader2 className="h-3 w-3 animate-spin" /> Loading episodes...
           </div>
         )}
         {isError && (
@@ -258,7 +258,11 @@ function SeasonNode({
   );
 }
 
-export function NarrativeTab() {
+interface NarrativeTabProps {
+  onChunkSelected?: (chunk: ChunkWithMetadata | null) => void;
+}
+
+export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
@@ -304,6 +308,14 @@ export function NarrativeTab() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const selectChunk = useCallback(
+    (chunk: ChunkWithMetadata | null) => {
+      setSelectedChunk(chunk);
+      onChunkSelected?.(chunk);
+    },
+    [onChunkSelected],
+  );
+
   // Initialize view to latest chunk
   useEffect(() => {
     if (initialized || !latestChunk?.metadata) {
@@ -317,12 +329,12 @@ export function NarrativeTab() {
       console.log(`[NarrativeTab] Initializing to latest chunk: Season ${season}, Episode ${episode}, Chunk ${latestChunk.id}`);
       setOpenSeasons([season]);
       setOpenEpisodes([`${season}-${episode}`]);
-      setSelectedChunk(latestChunk);
+      selectChunk(latestChunk);
       setInitialized(true);
     } else {
       console.warn('[NarrativeTab] Latest chunk has null season or episode', latestChunk.metadata);
     }
-  }, [latestChunk, initialized]);
+  }, [latestChunk, initialized, selectChunk]);
 
   const toggleSeason = useCallback((seasonId: number) => {
     setOpenSeasons((prev) =>
@@ -341,8 +353,14 @@ export function NarrativeTab() {
   }, []);
 
   const ensureChunkSelected = useCallback((chunk: ChunkWithMetadata) => {
-    setSelectedChunk((current) => (current ? current : chunk));
-  }, []);
+    setSelectedChunk((current) => {
+      if (current) {
+        return current;
+      }
+      onChunkSelected?.(chunk);
+      return chunk;
+    });
+  }, [onChunkSelected]);
 
   const navigateToChunk = useCallback((chunk: ChunkWithMetadata | null) => {
     if (!chunk?.metadata) return;
@@ -357,9 +375,9 @@ export function NarrativeTab() {
       const episodeKey = `${season}-${episode}`;
       setOpenEpisodes((prev) => prev.includes(episodeKey) ? prev : [...prev, episodeKey]);
       // Select the chunk
-      setSelectedChunk(chunk);
+      selectChunk(chunk);
     }
-  }, []);
+  }, [selectChunk]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -417,7 +435,7 @@ export function NarrativeTab() {
                   openEpisodes={openEpisodes}
                   onToggleEpisode={toggleEpisode}
                   onEnsureEpisodeOpen={ensureEpisodeOpen}
-                  onSelectChunk={setSelectedChunk}
+                  onSelectChunk={selectChunk}
                   selectedChunkId={selectedChunk?.id ?? null}
                   onEnsureChunkSelected={ensureChunkSelected}
                 />
