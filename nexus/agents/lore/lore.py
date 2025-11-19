@@ -38,6 +38,9 @@ import time
 from typing import Dict, Optional, Any, List, Union
 from pathlib import Path
 
+# Import NEXUS configuration loader
+from nexus.config import load_settings_as_dict
+
 # Handle imports based on how the module is run
 import sys
 from pathlib import Path
@@ -122,21 +125,31 @@ class LORE:
         logger.info("LORE agent initialized successfully")
     
     def _load_settings(self, settings_path: Optional[str] = None) -> Dict[str, Any]:
-        """Load settings from JSON file"""
+        """
+        Load and validate settings from nexus.toml (or legacy settings.json).
+
+        Uses Pydantic models for validation and type safety.
+        Falls back to settings.json for backward compatibility.
+        """
         if not settings_path:
-            settings_path = Path(__file__).parent.parent.parent.parent / "settings.json"
-        
+            # Try nexus.toml first, then fall back to settings.json
+            config_dir = Path(__file__).parent.parent.parent.parent
+            toml_path = config_dir / "nexus.toml"
+            json_path = config_dir / "settings.json"
+
+            settings_path = toml_path if toml_path.exists() else json_path
+
         self.settings_path = settings_path  # Store for later use
-        
+
         try:
-            with open(settings_path, 'r') as f:
-                settings = json.load(f)
-                logger.info(f"Loaded settings from {settings_path}")
-                return settings
+            settings = load_settings_as_dict(settings_path)
+            logger.info(f"✓ Loaded and validated settings from {settings_path}")
+            return settings
         except Exception as e:
-            logger.error(f"Failed to load settings: {e}")
+            logger.error(f"Failed to load settings from {settings_path}: {e}")
             raise RuntimeError(
-                f"Cannot initialize LORE without valid settings.json: {e}"
+                f"Cannot initialize LORE without valid configuration: {e}\n"
+                f"Tried: {settings_path}"
             ) from e
 
     def _load_system_prompt(self) -> str:

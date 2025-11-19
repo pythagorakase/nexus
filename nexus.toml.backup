@@ -1,0 +1,310 @@
+# NEXUS Configuration
+# This file uses TOML format: https://toml.io/
+
+# =============================================================================
+# Global Settings
+# =============================================================================
+
+[global.model]
+# Default LLM model to load for local inference (via LM Studio)
+default_model = "nexveridian/gpt-oss-120b"
+possible_values = [
+    "nousresearch/hermes-4-70b",
+    "unsloth-gpt-oss-120b-hi-mlx",
+    "gpt-oss-120b-mlx",
+    "openai-gpt-oss-120b-mlx-6",
+    "llama-3.3-70b-instruct@6bit",
+    "openai/gpt-oss-120b",
+    "nexveridian/gpt-oss-120b",
+    "mixtral-8x22b-instruct-v0.1",
+    "llama-3.3-70b-instruct@8bit",
+    "llama-4-scout-17b-16e-instruct"
+]
+
+[global.llm]
+# Local LLM API configuration (LM Studio server)
+api_base = "http://localhost:1234"
+context_window = 65536  # Maximum context length for local model
+temperature = 0.8      # Sampling temperature for generation
+max_tokens = 2048      # Maximum tokens to generate per request
+
+[global.narrative]
+# Test mode settings for development
+test_mode = false
+test_database_suffix = "_test"
+
+# =============================================================================
+# LORE Agent Settings
+# =============================================================================
+
+[lore]
+debug = true
+agentic_sql = true  # Enable agent to generate SQL queries dynamically
+
+[lore.token_budget]
+# Context window limits for APEX generation
+apex_context_window = 75000  # Total tokens available for APEX (includes prompt + context)
+system_prompt_tokens = 5000  # Reserved tokens for system prompt
+
+[lore.payload_percent_budget]
+# Percentage allocation of context budget to different sections
+# These define min/max percentages of the available context window
+
+[lore.payload_percent_budget.structured_summaries]
+min = 70  # Minimum % for entity summaries, relationships, events
+max = 90  # Maximum % for structured data
+
+[lore.payload_percent_budget.contextual_augmentation]
+min = 5   # Minimum % for context enrichment (themes, callbacks)
+max = 15  # Maximum % for augmentation
+
+[lore.payload_percent_budget.warm_slice]
+min = 5   # Minimum % for recent narrative chunks
+max = 15  # Maximum % for warm slice
+
+[lore.entity_inclusion]
+# Controls which entities/events are included in context payload
+warm_slice_lookback_chunks = 20          # How many recent chunks to scan for entities
+max_characters_from_warm_slice = 25      # Max characters to extract from warm slice
+max_locations_from_warm_slice = 10       # Max locations to extract from warm slice
+include_all_relationships = true         # Include all relationships for featured characters
+include_all_active_events = true         # Include all active story events
+include_all_active_threats = true        # Include all active threats
+
+# Event statuses that count as "active"
+active_event_statuses = ["active", "ongoing", "escalating"]
+active_threat_statuses = ["active", "imminent"]
+
+# Hard caps on total entities in payload
+max_total_characters = 30
+max_total_relationships = 100
+max_total_events = 15
+max_total_threats = 10
+
+# =============================================================================
+# MEMNON Agent Settings (Memory & Retrieval)
+# =============================================================================
+
+[memnon]
+debug = true
+
+[memnon.database]
+url = "postgresql://pythagor@localhost/NEXUS"
+create_tables = true
+drop_existing = true
+
+# Embedding models configuration
+# Multiple models are ensembled for better retrieval quality
+
+[memnon.models.bge-large]
+is_active = true
+local_path = "/Users/pythagor/nexus/models/bge-large-en"
+remote_path = "BAAI/bge-large-en"
+dimensions = 1024
+weight = 0.2  # Ensemble weight for this model
+
+[memnon.models.e5-large]
+is_active = true
+local_path = "/Users/pythagor/nexus/models/e5-large-v2"
+remote_path = "intfloat/e5-large-v2"
+dimensions = 1024
+weight = 0.3
+
+[memnon.models.bge-small-custom]
+is_active = false  # Fine-tuned model, currently disabled
+local_path = "/Users/pythagor/nexus/models/bge_small_finetuned_20250320_153654"
+remote_path = null
+dimensions = 384
+weight = 0.0
+
+[memnon.models."inf-retriever-v1-1.5b"]
+is_active = true
+local_path = "/Users/pythagor/nexus/models/inf-retriever-v1-1.5b"
+remote_path = "infly/inf-retriever-v1-1.5b"
+dimensions = 1536
+weight = 0.5  # Highest weight - best performing model
+
+[memnon.import]
+# Settings for importing narrative chunks from markdown files
+base_directory = "."
+file_pattern = "**/ALEX_S*.md"
+chunk_regex = '<!--\\s*SCENE BREAK:\\s*(S(\\d+)E(\\d+))_(\\d+).*-->'
+batch_size = 10
+verbose = true
+file_limit = null  # No limit, process all files
+
+[memnon.query]
+# Default query settings
+default_limit = 50
+include_vector_results = 50
+include_text_results = 50
+include_structured_results = 0
+
+[memnon.retrieval]
+# Core retrieval parameters
+max_results = 50
+relevance_threshold = 0.65      # Minimum similarity score to include result
+entity_boost_factor = 1.2       # Boost score when entity matches query
+
+[memnon.retrieval.source_weights]
+# Relative importance of different retrieval sources
+structured_data = 1.5   # Highest weight - entity database
+vector_search = 0.8     # Semantic similarity via embeddings
+text_search = 1.0       # Keyword/BM25 search
+
+[memnon.retrieval.vector_normalization]
+# Score normalization for vector search results
+# This compresses high-similarity scores to avoid dominating the ranking
+enabled = false
+low_tier_map_enabled = true
+low_tier_threshold = 0.85
+low_tier_input_max = 0.89
+low_tier_output_min = 0.5
+low_tier_output_max = 0.6
+below_low_tier_scale_factor = 0.588
+
+# Tiered normalization mappings [input_threshold, output_score]
+tiers = [
+    [0.997, 0.95],
+    [0.99, 0.9],
+    [0.97, 0.85],
+    [0.95, 0.8],
+    [0.93, 0.75],
+    [0.91, 0.7],
+    [0.89, 0.65]
+]
+
+[memnon.retrieval]
+# Text search scoring
+text_search_base_score = 0.6     # Base score for keyword match
+text_search_count_bonus = 0.05   # Bonus per additional match
+text_search_max_score = 0.85     # Maximum possible score from text search
+
+# Structured search (entity database) scores
+structured_search_char_score = 0.95    # Score when character matches
+structured_search_place_score = 0.9    # Score when location matches
+
+[memnon.retrieval.user_character_focus_boost]
+# Boost results that focus on user-controlled character (Alex)
+enabled = true
+
+# Regex patterns that indicate user character focus
+action_patterns = [
+    "you (reach|grab|take|move|walk|run|speak|say|ask|decide)",
+    "your (hands|fingers|eyes|body|mind) (feel|sense|detect)",
+    "you (feel|think|decide|realize|understand|consider)"
+]
+
+emotional_patterns = [
+    "you (feel|experience) (a|an|the) (surge|wave|sense) of",
+    "your heart (races|pounds|skips)",
+    "(fear|hope|anger|joy|sadness) (fills|grips|washes over) you"
+]
+
+knowledge_terms = [
+    "neural implant",
+    "connection to the network",
+    "augmentations"
+]
+
+# Weights for different pattern types
+action_pattern_weight = 0.02
+emotional_pattern_weight = 0.03
+knowledge_term_weight = 0.05
+max_boost = 0.15  # Maximum total boost from all patterns
+
+[memnon.retrieval.hybrid_search]
+# Hybrid search combines vector and text search
+enabled = true
+vector_weight_default = 0.6  # Default weighting for vector search
+text_weight_default = 0.4    # Default weighting for text search
+
+# Query-type-specific weights (optimized per retrieval task)
+[memnon.retrieval.hybrid_search.weights_by_query_type]
+character = { vector = 0.8, text = 0.2 }     # Character queries are semantic
+relationship = { vector = 0.8, text = 0.2 }   # Relationships are semantic
+event = { vector = 0.5, text = 0.5 }          # Events need both
+location = { vector = 0.55, text = 0.45 }     # Locations slightly semantic
+theme = { vector = 0.85, text = 0.15 }        # Themes are very semantic
+general = { vector = 0.6, text = 0.4 }        # Default balance
+
+[memnon.retrieval.hybrid_search.temporal_boost_factors]
+# Boost recent results by query type (recency bias)
+character = 0.35
+relationship = 0.45
+event = 0.4
+location = 0.25
+theme = 0.3
+general = 0.4
+
+[memnon.retrieval.hybrid_search]
+use_query_type_weights = true             # Enable query-specific weights
+use_query_type_temporal_factors = true    # Enable query-specific recency bias
+target_model = "inf-retriever-v1-1.5b"    # Which embedding model to use
+temporal_boost_factor = 0.6               # General recency boost (if not using query-specific)
+
+[memnon.retrieval.cross_encoder_reranking]
+# Cross-encoder reranking for improved relevance
+# Reranks top-k results using a more expensive but accurate model
+enabled = true
+model_path = "/Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3"
+blend_weight = 0.3  # How much to blend reranker score with original score
+top_k = 30          # Only rerank top 30 results (for speed)
+batch_size = 16     # Batch size for reranker inference
+
+# Sliding window for long chunks
+use_sliding_window = true
+window_size = 512
+window_overlap = 256
+
+# Query-type-specific blend weights for reranker
+[memnon.retrieval.cross_encoder_reranking.weights_by_query_type]
+character = 0.25
+relationship = 0.25
+event = 0.35
+location = 0.35
+theme = 0.2
+general = 0.3
+
+[memnon.retrieval.cross_encoder_reranking]
+use_query_type_weights = false  # Use default blend weight for now
+use_8bit = false                # Don't quantize reranker (use full precision)
+
+[memnon.retrieval]
+structured_data_enabled = false  # Structured entity search currently disabled
+
+[memnon.logging]
+file = "memnon.log"
+level = "INFO"
+console = true
+
+# =============================================================================
+# Memory Manager Settings
+# =============================================================================
+
+[memory]
+phase2_fraction = 0.1            # Fraction of turn cycle for Phase 2 (warm analysis)
+raw_search_k = 30                # Number of raw results to retrieve before reranking
+skip_simple_choices = true       # Skip divergence detection for simple choices
+pass2_budget_reserve = 0.25      # Reserve 25% of budget for second pass queries
+divergence_threshold = 0.7       # Confidence threshold for divergence detection
+warm_slice_default = true        # Include warm slice by default
+max_sql_iterations = 5           # Max iterations for agentic SQL generation
+
+[memory.divergence_detection]
+# LLM-based divergence detection settings
+use_llm = true          # Use LLM for semantic divergence detection
+use_local_llm = true    # Use local LLM (vs API)
+llm_temperature = 0.3   # Low temperature for consistent detection
+llm_max_tokens = 500    # Max tokens for divergence analysis
+confidence_threshold = 0.7  # Minimum confidence to trigger retrieval
+
+# =============================================================================
+# APEX API Settings (Story Generation)
+# =============================================================================
+
+[apex]
+provider = "openai"           # API provider: "openai" or "anthropic"
+model = "gpt-5.1"             # Model to use for narrative generation
+reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
+max_output_tokens = 25000     # Maximum tokens for generated narrative
