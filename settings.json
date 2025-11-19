@@ -227,23 +227,6 @@
                 "max_total_threats": 10
             }
         },
-        "LOGON": {
-            "debug": true,
-            "apex_AI": {
-                "model": {
-                    "target_model": "gpt-5",
-                    "model_roster": [
-                        "gpt-5",
-                        "claude-opus-4-1",
-                        "claude-opus-4-0",
-                        "claude-sonnet-4-0"
-                    ]
-                }
-            },
-            "obsidian": {
-                "scrollback_chunks": 20
-            }
-        },
         "MEMNON": {
             "debug": true,
             "database": {
@@ -487,10 +470,6 @@
             "model": "gpt-5.1",
             "reasoning_effort": "medium",
             "max_output_tokens": 25000
-        },
-        "TPM": {
-            "openai": 1000000,
-            "anthropic": 80000
         },
         "cooldowns": {
             "individual": 0,
