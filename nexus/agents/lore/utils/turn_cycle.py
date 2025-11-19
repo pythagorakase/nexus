@@ -18,7 +18,13 @@ try:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
-    from nexus.agents.logon.apex_schema import StoryTurnResponse, extract_narrative_text
+    from nexus.agents.logon.apex_schema import (
+        StoryTurnResponse,
+        StorytellerResponseExtended,
+        StorytellerResponseMinimal,
+        StorytellerResponseStandard,
+        extract_narrative_text,
+    )
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -27,7 +33,13 @@ except ImportError:
         fetch_all_places_with_references,
         fetch_all_factions_with_references,
     )
-    from nexus.agents.logon.apex_schema import StoryTurnResponse, extract_narrative_text
+    from nexus.agents.logon.apex_schema import (
+        StoryTurnResponse,
+        StorytellerResponseExtended,
+        StorytellerResponseMinimal,
+        StorytellerResponseStandard,
+        extract_narrative_text,
+    )
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -35,6 +47,12 @@ try:
 except ImportError:
     MEMNON_ANALYZER_AVAILABLE = False
     logger.warning("MEMNON QueryAnalyzer not available - using fallback query generation")
+
+STRUCTURED_RESPONSE_TYPES = (
+    StorytellerResponseMinimal,
+    StorytellerResponseStandard,
+    StorytellerResponseExtended,
+)
 
 
 class TurnCycleManager:
@@ -567,13 +585,17 @@ class TurnCycleManager:
             turn_context.apex_response = story_response
 
             # Extract narrative text for backward compatibility
-            narrative_text = story_response.narrative.text
+            narrative_text = story_response.narrative
+
+            chunk_metadata = getattr(story_response, "chunk_metadata", None)
+            referenced_entities = getattr(story_response, "referenced_entities", None)
+            state_updates = getattr(story_response, "state_updates", None)
 
             turn_context.phase_states["apex_generation"] = {
                 "success": True,
-                "has_metadata": story_response.metadata is not None,
-                "has_entities": story_response.referenced_entities is not None,
-                "has_state_updates": story_response.state_updates is not None,
+                "has_metadata": chunk_metadata is not None,
+                "has_entities": referenced_entities is not None,
+                "has_state_updates": state_updates is not None,
                 "narrative_length": len(narrative_text)
             }
 
@@ -608,7 +630,7 @@ class TurnCycleManager:
         # 4. Store the new narrative chunk in database
 
         # For now, just log the completion
-        if isinstance(response, StoryTurnResponse):
+        if isinstance(response, STRUCTURED_RESPONSE_TYPES):
             narrative_text = extract_narrative_text(response)
             structured_response = response
         else:
@@ -621,7 +643,7 @@ class TurnCycleManager:
         }
 
         if structured_response is not None:
-            turn_context.phase_states["integration"]["structured_response"] = structured_response.dict()
+            turn_context.phase_states["integration"]["structured_response"] = structured_response.model_dump()
 
         if getattr(self.lore, "memory_manager", None):
             try:

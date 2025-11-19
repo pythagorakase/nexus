@@ -14,7 +14,11 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
 from scripts.api_openai import OpenAIProvider, LLMResponse
 from scripts.api_anthropic import AnthropicProvider
-from nexus.agents.logon.apex_schema import StoryTurnResponse
+from nexus.agents.logon.apex_schema import (
+    StoryTurnResponse,
+    StorytellerResponseExtended,
+    create_minimal_response,
+)
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -71,7 +75,7 @@ class LogonUtility:
         try:
             parsed_response, llm_response = self.provider.get_structured_completion(
                 prompt,
-                StoryTurnResponse
+                StorytellerResponseExtended,
             )
             logger.debug(f"Received structured response with narrative length: {len(parsed_response.narrative)}")
             return parsed_response  # Return the StoryTurnResponse object
@@ -80,7 +84,6 @@ class LogonUtility:
             # Fall back to plain text if structured output fails
             response = self.provider.get_completion(prompt)
             # Create a minimal StoryTurnResponse from plain text
-            from nexus.agents.logon.apex_schema import create_minimal_response
             return create_minimal_response(response.content)
     
     def _format_context_prompt(self, context: Dict) -> str:
