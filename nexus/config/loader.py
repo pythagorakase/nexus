@@ -144,4 +144,18 @@ def load_settings_as_dict(path: Union[str, Path] = "nexus.toml") -> Dict[str, An
         Dictionary representation of settings
     """
     settings = load_settings(path)
-    return settings.model_dump()
+    settings_dict = settings.model_dump()
+
+    # Preserve legacy structure for callers expecting "Agent Settings" and "API Settings"
+    legacy_agent_settings = {
+        "global": settings_dict.get("global", {}),
+        "LORE": settings_dict.get("lore", {}),
+        "MEMNON": settings_dict.get("memnon", {}),
+    }
+    legacy_api_settings = {"apex": settings_dict.get("apex", {})}
+
+    return {
+        **settings_dict,
+        "Agent Settings": legacy_agent_settings,
+        "API Settings": legacy_api_settings,
+    }
