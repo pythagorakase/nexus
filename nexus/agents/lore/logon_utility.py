@@ -4,10 +4,12 @@ LOGON Utility - API Communication Handler for LORE
 Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
 """
 
+import json
 import logging
 from typing import Dict, Any, Optional
 from pathlib import Path
 import sys
+import psycopg2
 
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
@@ -25,35 +27,87 @@ logger = logging.getLogger("nexus.lore.logon")
 
 class LogonUtility:
     """Wrapper for Apex AI API calls using existing providers"""
-    
+
     def __init__(self, settings: Dict[str, Any]):
         """Initialize LOGON utility with configured provider"""
         self.settings = settings
         self.provider: Optional[object] = None
+        self._system_prompt: Optional[str] = None
+
+    def _load_system_prompt(self) -> str:
+        """Load and combine the storyteller core prompt with setting context"""
+        # Load storyteller core prompt
+        core_prompt_path = Path(__file__).parent.parent.parent.parent / "prompts" / "storyteller_core.md"
+
+        try:
+            with open(core_prompt_path, 'r') as f:
+                core_prompt = f.read()
+            logger.info(f"Loaded storyteller core prompt ({len(core_prompt)} chars)")
+        except FileNotFoundError:
+            logger.warning(f"Core prompt not found at {core_prompt_path}, using minimal fallback")
+            core_prompt = "You are a narrative intelligence system generating interactive fiction."
+
+        # Query setting from global_variables
+        try:
+            conn = psycopg2.connect(
+                host="localhost",
+                database="NEXUS",
+                user="pythagor"
+            )
+            with conn.cursor() as cur:
+                cur.execute("SELECT setting FROM global_variables WHERE id = true")
+                result = cur.fetchone()
+
+                if result and result[0]:
+                    setting_data = result[0]
+                    # Extract the markdown content from the JSON
+                    setting_content = setting_data.get("content", "")
+                    setting_title = setting_data.get("title", "Setting Context")
+
+                    # Combine core prompt with setting
+                    combined_prompt = f"{core_prompt}\n\n## {setting_title}\n\n{setting_content}"
+                    logger.info(f"Combined prompt with setting context ({len(setting_content)} chars)")
+                    return combined_prompt
+                else:
+                    logger.warning("No setting data found in global_variables, using core prompt only")
+                    return core_prompt
+
+        except Exception as e:
+            logger.error(f"Failed to load setting from database: {e}")
+            return core_prompt
+        finally:
+            if 'conn' in locals():
+                conn.close()
 
     def _initialize_provider(self) -> None:
         """Initialize the appropriate API provider based on settings"""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_type = apex_settings.get("provider", "openai")
         model = apex_settings.get("model", "gpt-4o")
-        
+
+        # Load system prompt
+        system_prompt = self._load_system_prompt()
+
         if provider_type == "openai":
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
                 max_output_tokens=apex_settings.get("max_output_tokens", 25000),
-                reasoning_effort=apex_settings.get("reasoning_effort", "medium")
+                reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
+                system_prompt=system_prompt
             )
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
-                max_tokens=apex_settings.get("max_tokens", 4000)
+                max_tokens=apex_settings.get("max_tokens", 4000),
+                system_prompt=system_prompt
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
-        
+
         logger.info(f"LOGON initialized with {provider_type} provider using model {model}")
+        logger.info(f"System prompt loaded: {len(system_prompt)} chars")
     
     def _ensure_provider(self) -> None:
         """Ensure the provider is initialized before use."""
