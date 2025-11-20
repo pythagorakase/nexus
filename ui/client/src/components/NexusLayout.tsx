@@ -21,6 +21,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Book, Map, Users, Sparkles, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useNarrativeGeneration } from "@/hooks/useNarrativeGeneration";
+import type { EntityChanges } from "@/types/narrative";
+
+// Timing constants for APEX status transitions and UI updates
+const TIMEOUTS = {
+  READY_TRANSITION: 1200,           // Delay before transitioning to READY status
+  GENERATING_DEBOUNCE: 300,         // Debounce for GENERATING status during LLM call
+  TRANSMITTING_FALLBACK: 600,       // Fallback to GENERATING from TRANSMITTING
+  ELAPSED_DISPLAY_THRESHOLD: 5000,  // Show elapsed time after 5 seconds
+  ELAPSED_UPDATE_INTERVAL: 500,     // Update elapsed time every 500ms
+  MODEL_STATUS_POLL: 5000,          // Poll model status every 5 seconds
+  APEX_CONNECTIVITY_POLL: 10000,    // Poll APEX connectivity every 10 seconds
+  SETTINGS_REFETCH: 60000,          // Refetch settings every 60 seconds (optimized - settings rarely change)
+  LATEST_CHUNK_REFETCH: 30000,      // Refetch latest chunk every 30 seconds (optimized - use WebSocket for real-time updates)
+} as const;
 
 interface SettingsPayload {
   ["Agent Settings"]?: {
@@ -31,26 +46,11 @@ interface SettingsPayload {
       llm?: {
         api_base?: string;
       };
+      narrative?: {
+        test_mode?: boolean;
+      };
     };
   };
-}
-
-interface IncubatorViewPayload {
-  chunk_id: number;
-  parent_chunk_id: number;
-  parent_chunk_text?: string | null;
-  user_text?: string | null;
-  storyteller_text?: string | null;
-  episode_transition?: string | null;
-  time_delta?: string | null;
-  world_layer?: string | null;
-  pacing?: string | null;
-  entity_update_count?: number;
-  entity_changes?: any;
-  references?: any;
-  status?: string;
-  session_id?: string;
-  created_at?: string;
 }
 
 export function NexusLayout() {
@@ -74,30 +74,28 @@ export function NexusLayout() {
   const apexStatusRef = useRef(apexStatus);
   const generatingTimeoutRef = useRef<number | null>(null);
   const readyTimeoutRef = useRef<number | null>(null);
-  const narrativeStreamRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
   const [activeTab, setActiveTab] = useState("narrative");
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
-  const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
-  const activeNarrativeSessionRef = useRef<string | null>(null);
-  const [narrativePhase, setNarrativePhase] = useState<string | null>(null);
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [lastUserInput, setLastUserInput] = useState<string>("Continue.");
-  const [generationParentChunk, setGenerationParentChunk] = useState<ChunkWithMetadata | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const elapsedTimerRef = useRef<number | null>(null);
-  const [incubatorData, setIncubatorData] = useState<IncubatorViewPayload | null>(null);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;
   }, [apexStatus]);
 
-  useEffect(() => {
-    activeNarrativeSessionRef.current = activeNarrativeSession;
-  }, [activeNarrativeSession]);
+  // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
+  const narrative = useNarrativeGeneration({
+    onPhaseChange: (phase) => {
+      handlePhaseEvent(phase);
+    },
+    onComplete: () => {
+      handleCompleteEvent();
+    },
+    onError: () => {
+      setApexStatus("OFFLINE");
+    },
+  });
 
   const handleChunkSelection = useCallback((chunk: ChunkWithMetadata | null) => {
     setSelectedChunk(chunk);
@@ -113,7 +111,7 @@ export function NexusLayout() {
     isError: settingsError,
   } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: TIMEOUTS.SETTINGS_REFETCH,
   });
 
   const clearTimeoutRef = useCallback((ref: MutableRefObject<number | null>) => {
@@ -132,7 +130,7 @@ export function NexusLayout() {
         return;
       }
       setApexStatus("READY");
-    }, 1200);
+    }, TIMEOUTS.READY_TRANSITION);
   }, [clearTimeoutRef, setApexStatus]);
 
   const handlePhaseEvent = useCallback(
@@ -162,7 +160,7 @@ export function NexusLayout() {
             return;
           }
           setApexStatus("GENERATING");
-        }, 300);
+        }, TIMEOUTS.GENERATING_DEBOUNCE);
         return;
       }
 
@@ -173,7 +171,7 @@ export function NexusLayout() {
             return;
           }
           setApexStatus("GENERATING");
-        }, 600);
+        }, TIMEOUTS.TRANSMITTING_FALLBACK);
         return;
       }
 
@@ -182,36 +180,13 @@ export function NexusLayout() {
     [clearTimeoutRef, handleCompleteEvent, setApexStatus],
   );
 
-  const stopElapsedTimer = useCallback(() => {
-    if (elapsedTimerRef.current !== null) {
-      window.clearInterval(elapsedTimerRef.current);
-      elapsedTimerRef.current = null;
-    }
-  }, []);
-
-  const startElapsedTimer = useCallback(
-    (startTime: number) => {
-      stopElapsedTimer();
-      setElapsedMs(0);
-      elapsedTimerRef.current = window.setInterval(() => {
-        setElapsedMs(Date.now() - startTime);
-      }, 500);
-    },
-    [stopElapsedTimer],
-  );
-
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      if (narrativeStreamRef.current) {
-        narrativeStreamRef.current.close();
-        narrativeStreamRef.current = null;
-      }
       clearTimeoutRef(generatingTimeoutRef);
       clearTimeoutRef(readyTimeoutRef);
-      stopElapsedTimer();
     };
-  }, [clearTimeoutRef, stopElapsedTimer]);
+  }, [clearTimeoutRef]);
 
   // Fetch latest chunk for chapter info
   const { data: latestChunk } = useQuery<{
@@ -225,7 +200,7 @@ export function NexusLayout() {
     };
   }>({
     queryKey: ["/api/narrative/latest-chunk"],
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: TIMEOUTS.LATEST_CHUNK_REFETCH,
   });
 
   // Parse model name from settings
@@ -267,162 +242,11 @@ export function NexusLayout() {
     }
   }, [setModelStatus]);
 
-  const fetchIncubatorData = useCallback(async () => {
-    try {
-      const response = await fetch("/api/narrative/incubator");
-      if (!response.ok) {
-        const message = (await response.text()) || "Failed to load incubator contents";
-        throw new Error(message);
-      }
-      const payload = await response.json();
-      if (payload?.message === "Incubator is empty") {
-        setIncubatorData(null);
-        return;
-      }
-      setIncubatorData(payload as IncubatorViewPayload);
-      setShowApprovalModal(true);
-    } catch (error) {
-      console.error("Unable to load incubator data:", error);
-      setGenerationError(error instanceof Error ? error.message : "Unable to load incubator");
-    }
-  }, []);
-
-  const handleNarrativeProgress = useCallback(
-    (payload: any) => {
-      if (!payload || typeof payload !== "object") {
-        return;
-      }
-
-      const sessionId = payload.session_id as string | undefined;
-      const phase = payload.status as string | undefined;
-
-      if (!sessionId || !phase) {
-        return;
-      }
-
-      if (activeNarrativeSessionRef.current && activeNarrativeSessionRef.current !== sessionId) {
-        return; // Ignore updates for other sessions
-      }
-
-      if (!activeNarrativeSessionRef.current) {
-        setActiveNarrativeSession(sessionId);
-      }
-
-      setNarrativePhase(phase);
-      setGenerationError(null);
-      handlePhaseEvent(phase);
-
-      if (phase === "complete") {
-        stopElapsedTimer();
-        fetchIncubatorData();
-      } else if (phase === "error") {
-        stopElapsedTimer();
-        const errorMessage =
-          (payload.data && (payload.data.error as string)) || "Narrative generation failed";
-        setGenerationError(errorMessage);
-        setShowApprovalModal(false);
-      }
-    },
-    [fetchIncubatorData, handlePhaseEvent, stopElapsedTimer],
-  );
-
-  const triggerNarrativeTurn = useCallback(
-    async (userInput: string) => {
-      if (!selectedChunk) {
-        toast({
-          title: "Select a chunk",
-          description: "Choose a narrative chunk to continue (currently limited to chunk 1425).",
-        });
-        return;
-      }
-
-      if (selectedChunk.id !== 1425) {
-        toast({
-          title: "Test rollout limited",
-          description: "Continue is temporarily restricted to chunk 1425 for safety.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (
-        activeNarrativeSessionRef.current &&
-        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
-          narrativePhase ?? "",
-        )
-      ) {
-        toast({
-          title: "Generation in progress",
-          description: "Wait for the current turn to finish or cancel before starting another.",
-        });
-        return;
-      }
-
-      const trimmedInput = userInput.trim() || "Continue.";
-      setLastUserInput(trimmedInput);
-      setGenerationParentChunk(selectedChunk);
-      setNarrativePhase("initiated");
-      setGenerationError(null);
-      setIncubatorData(null);
-      setShowApprovalModal(false);
-      setActiveNarrativeSession(null);
-
-      const startedAt = Date.now();
-      startElapsedTimer(startedAt);
-      handlePhaseEvent("initiated");
-
-      try {
-        const response = await fetch("/api/narrative/continue", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chunk_id: selectedChunk.id,
-            user_text: trimmedInput,
-            test_mode: isTestModeEnabled,
-          }),
-        });
-
-        if (!response.ok) {
-          const message = (await response.text()) || "Failed to start narrative generation";
-          throw new Error(message);
-        }
-
-        const payload = await response.json();
-        setActiveNarrativeSession(payload.session_id ?? null);
-        setNarrativePhase(payload.status ?? "initiated");
-      } catch (error) {
-        console.error("Narrative generation failed:", error);
-        stopElapsedTimer();
-        setNarrativePhase(null);
-        setActiveNarrativeSession(null);
-        setGenerationParentChunk(null);
-        setApexStatus("OFFLINE");
-        const message = error instanceof Error ? error.message : "Narrative generation failed";
-        setGenerationError(message);
-        toast({
-          title: "Narrative generation failed",
-          description: message,
-          variant: "destructive",
-        });
-      } finally {
-        setIsInputExpanded(false);
-      }
-    },
-    [
-      activeNarrativeSessionRef,
-      handlePhaseEvent,
-      isTestModeEnabled,
-      narrativePhase,
-      selectedChunk,
-      startElapsedTimer,
-      stopElapsedTimer,
-    ],
-  );
 
   // Check if LLM server is running and has model loaded
   useEffect(() => {
     refreshModelStatus();
-    const interval = setInterval(refreshModelStatus, 5000);
+    const interval = setInterval(refreshModelStatus, TIMEOUTS.MODEL_STATUS_POLL);
     return () => clearInterval(interval);
   }, [refreshModelStatus]);
 
@@ -455,58 +279,10 @@ export function NexusLayout() {
     };
 
     checkApexConnectivity();
-    const interval = setInterval(checkApexConnectivity, 10000);
+    const interval = setInterval(checkApexConnectivity, TIMEOUTS.APEX_CONNECTIVITY_POLL);
     return () => clearInterval(interval);
   }, [apexStatus]);
 
-  useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const websocketUrl = `${protocol}//${window.location.host}/ws/narrative`;
-    const socket = new WebSocket(websocketUrl);
-    narrativeStreamRef.current = socket;
-
-    socket.onopen = () => {
-      if (!isMountedRef.current) {
-        return;
-      }
-      if (apexStatusRef.current === "OFFLINE") {
-        setApexStatus("READY");
-      }
-    };
-
-    socket.onmessage = (event) => {
-      if (!isMountedRef.current) {
-        return;
-      }
-      try {
-        const payload = JSON.parse(event.data);
-        handleNarrativeProgress(payload);
-      } catch (error) {
-        console.warn("Malformed narrative event", error);
-      }
-    };
-
-    const markOffline = () => {
-      if (!isMountedRef.current) {
-        return;
-      }
-      setApexStatus((previous) => (previous === "OFFLINE" ? previous : "OFFLINE"));
-    };
-
-    socket.onerror = markOffline;
-    socket.onclose = markOffline;
-
-    return () => {
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onerror = null;
-      socket.onclose = null;
-      socket.close();
-      if (narrativeStreamRef.current === socket) {
-        narrativeStreamRef.current = null;
-      }
-    };
-  }, [handleNarrativeProgress, setApexStatus]);
 
   const handleCommand = (command: string) => {
     console.log("Command:", command);
@@ -540,64 +316,11 @@ export function NexusLayout() {
           console.log("Unknown command:", cmd);
       }
     } else if (isStoryMode) {
-      triggerNarrativeTurn(command);
+      narrative.triggerNarrativeTurn(selectedChunk, command);
       setIsInputExpanded(false);
     }
   };
 
-  const handleApprove = useCallback(async () => {
-    if (!activeNarrativeSession) {
-      toast({
-        title: "No active session",
-        description: "Start a generation before approving.",
-      });
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/narrative/approve/${activeNarrativeSession}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ commit: true }),
-      });
-
-      if (!response.ok) {
-        const message = (await response.text()) || "Failed to approve narrative";
-        throw new Error(message);
-      }
-
-      const payload = await response.json().catch(() => null);
-      const chunkId = payload?.chunk_id ?? incubatorData?.chunk_id;
-
-      toast({
-        title: "Narrative approved",
-        description: chunkId ? `Committed as chunk ${chunkId}` : "Committed to database",
-      });
-      setShowApprovalModal(false);
-      setNarrativePhase(null);
-      setActiveNarrativeSession(null);
-      setGenerationParentChunk(null);
-      setIncubatorData(null);
-      stopElapsedTimer();
-      setApexStatus("READY");
-    } catch (error) {
-      console.error("Failed to approve narrative:", error);
-      const message = error instanceof Error ? error.message : "Failed to approve narrative";
-      setGenerationError(message);
-      toast({
-        title: "Approval failed",
-        description: message,
-        variant: "destructive",
-      });
-    }
-  }, [activeNarrativeSession, incubatorData, stopElapsedTimer]);
-
-  const handleRegenerate = useCallback(() => {
-    setShowApprovalModal(false);
-    setNarrativePhase(null);
-    setIncubatorData(null);
-    triggerNarrativeTurn(lastUserInput);
-  }, [lastUserInput, triggerNarrativeTurn]);
 
   const phaseLabels: Record<string, string> = {
     initiated: "Request received...",
@@ -609,34 +332,31 @@ export function NexusLayout() {
     error: "Generation failed",
   };
 
-  const isMidGeneration = ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
-    narrativePhase ?? "",
-  );
-  const progressLabel = narrativePhase ? phaseLabels[narrativePhase] ?? narrativePhase : null;
-  const showElapsed = elapsedMs > 5000;
+  const progressLabel = narrative.narrativePhase ? phaseLabels[narrative.narrativePhase] ?? narrative.narrativePhase : null;
+  const showElapsed = narrative.elapsedMs > TIMEOUTS.ELAPSED_DISPLAY_THRESHOLD;
   const canContinue = selectedChunk?.id === 1425;
-  const continueDisabled = !canContinue || (narrativePhase !== null && narrativePhase !== "error");
-  const approvalOpen = showApprovalModal && !!incubatorData;
-  const entityChanges: any = incubatorData?.entity_changes || {};
-  const referenceChanges: any = incubatorData?.references || {};
+  const continueDisabled = !canContinue || (narrative.narrativePhase !== null && narrative.narrativePhase !== "error");
+  const approvalOpen = narrative.showApprovalModal && !!narrative.incubatorData;
+  const entityChanges: EntityChanges = narrative.incubatorData?.entity_changes || {};
+  const referenceChanges = narrative.incubatorData?.references || [];
   const characterChanges = Array.isArray(entityChanges?.characters) ? entityChanges.characters : [];
   const locationChanges = Array.isArray(entityChanges?.locations) ? entityChanges.locations : [];
   const factionChanges = Array.isArray(entityChanges?.factions) ? entityChanges.factions : [];
-  const referencedCharacters = Array.isArray(referenceChanges?.characters) ? referenceChanges.characters : [];
-  const referencedPlaces = Array.isArray(referenceChanges?.places) ? referenceChanges.places : [];
-  const referencedFactions = Array.isArray(referenceChanges?.factions) ? referenceChanges.factions : [];
+  const referencedCharacters = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'character') : [];
+  const referencedPlaces = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'place') : [];
+  const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
   const chunkLabel =
-    generationParentChunk?.metadata?.season !== null &&
-    generationParentChunk?.metadata?.season !== undefined &&
-    generationParentChunk?.metadata?.episode !== null &&
-    generationParentChunk?.metadata?.episode !== undefined
-      ? `S${String(generationParentChunk.metadata.season).padStart(2, "0")}E${String(
-          generationParentChunk.metadata.episode,
+    narrative.generationParentChunk?.metadata?.season !== null &&
+    narrative.generationParentChunk?.metadata?.season !== undefined &&
+    narrative.generationParentChunk?.metadata?.episode !== null &&
+    narrative.generationParentChunk?.metadata?.episode !== undefined
+      ? `S${String(narrative.generationParentChunk.metadata.season).padStart(2, "0")}E${String(
+          narrative.generationParentChunk.metadata.episode,
         ).padStart(2, "0")}`
-      : incubatorData?.parent_chunk_id
-        ? `Chunk ${incubatorData.parent_chunk_id}`
+      : narrative.incubatorData?.parent_chunk_id
+        ? `Chunk ${narrative.incubatorData.parent_chunk_id}`
         : "Narrative turn";
-  const subtitle = generationParentChunk?.metadata?.slug || "Awaiting metadata";
+  const subtitle = narrative.generationParentChunk?.metadata?.slug || "Awaiting metadata";
 
   return (
     <FontProvider>
@@ -733,41 +453,31 @@ export function NexusLayout() {
           </TabsContent>
         </Tabs>
 
-        {activeTab === "narrative" && narrativePhase && (
+        {activeTab === "narrative" && narrative.narrativePhase && (
           <div className="border-t border-border bg-card/80 text-xs font-mono px-3 py-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className={narrativePhase === "error" ? "text-destructive" : "text-primary terminal-glow"}>
-                {narrativePhase === "error" ? "!" : ">>"}
+              <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-primary terminal-glow"}>
+                {narrative.narrativePhase === "error" ? "!" : ">>"}
               </span>
-              <span className={narrativePhase === "error" ? "text-destructive" : "text-foreground"}>
+              <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-foreground"}>
                 {progressLabel}
               </span>
-              {narrativePhase === "error" && generationError && (
-                <span className="text-destructive/80 truncate max-w-[42ch]">{generationError}</span>
+              {narrative.narrativePhase === "error" && narrative.generationError && (
+                <span className="text-destructive/80 truncate max-w-[42ch]">{narrative.generationError}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {narrativePhase === "complete" && incubatorData && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 px-3 font-mono"
-                  onClick={() => setShowApprovalModal(true)}
-                >
-                  Review & approve
-                </Button>
-              )}
               {showElapsed && (
                 <span className="text-muted-foreground">
-                  {Math.round(elapsedMs / 1000)}s elapsed
+                  {Math.round(narrative.elapsedMs / 1000)}s elapsed
                 </span>
               )}
             </div>
           </div>
         )}
-        {activeTab === "narrative" && !narrativePhase && generationError && (
+        {activeTab === "narrative" && !narrative.narrativePhase && narrative.generationError && (
           <div className="border-t border-destructive/40 bg-destructive/10 text-destructive font-mono text-xs px-3 py-2 flex items-center justify-between">
-            <span>{generationError}</span>
+            <span>{narrative.generationError}</span>
           </div>
         )}
 
@@ -783,44 +493,44 @@ export function NexusLayout() {
             }
             userPrefix={isStoryMode ? "" : "NEXUS:USER"}
             showButton={isStoryMode && !isInputExpanded}
-            onButtonClick={() => triggerNarrativeTurn(lastUserInput)}
+            onButtonClick={() => narrative.triggerNarrativeTurn(selectedChunk, narrative.lastUserInput)}
             onExpandInput={() => setIsInputExpanded(true)}
-            isGenerating={isMidGeneration}
+            isGenerating={narrative.isMidGeneration}
             continueDisabled={continueDisabled}
           />
         )}
       </div>
 
-      <Dialog open={approvalOpen} onOpenChange={setShowApprovalModal}>
+      <Dialog open={approvalOpen} onOpenChange={(open) => !open && narrative.handleCancel()}>
         <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <span>Review generated narrative</span>
               <div className="flex items-center gap-2">
                 {isTestModeEnabled && <Badge variant="destructive">TEST MODE</Badge>}
-                {activeNarrativeSession && (
-                  <Badge variant="outline">Session {activeNarrativeSession.slice(0, 8)}</Badge>
+                {narrative.activeNarrativeSession && (
+                  <Badge variant="outline">Session {narrative.activeNarrativeSession.slice(0, 8)}</Badge>
                 )}
               </div>
             </DialogTitle>
             <DialogDescription className="font-mono text-xs">
-              {chunkLabel} -> proposed chunk {incubatorData?.chunk_id ?? "pending"}
+              {chunkLabel} {'->'} proposed chunk {narrative.incubatorData?.chunk_id ?? "pending"}
             </DialogDescription>
           </DialogHeader>
 
-          {incubatorData && (
+          {narrative.incubatorData && (
             <div className="grid gap-4 md:grid-cols-3 text-sm">
               <div className="md:col-span-2 space-y-3">
                 <div className="space-y-1">
                   <div className="text-primary terminal-glow font-mono text-sm">{chunkLabel}</div>
                   <div className="text-muted-foreground italic text-xs">{subtitle}</div>
                   <div className="text-muted-foreground text-xs">
-                    {incubatorData.time_delta || "Time delta pending"}
+                    {narrative.incubatorData.time_delta || "Time delta pending"}
                   </div>
                 </div>
                 <ScrollArea className="h-72 rounded border border-border bg-card/70 p-4">
                   <div className="whitespace-pre-wrap leading-relaxed text-foreground">
-                    {incubatorData.storyteller_text || "No narrative captured"}
+                    {narrative.incubatorData.storyteller_text || "No narrative captured"}
                   </div>
                 </ScrollArea>
               </div>
@@ -828,7 +538,7 @@ export function NexusLayout() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-xs text-muted-foreground">Entity changes</span>
-                  <Badge variant="outline">{incubatorData.entity_update_count ?? 0}</Badge>
+                  <Badge variant="outline">{narrative.incubatorData.entity_update_count ?? 0}</Badge>
                 </div>
                 <div className="rounded border border-border bg-card/60 p-3 space-y-3 text-xs text-foreground">
                   {characterChanges.length > 0 ? (
@@ -908,13 +618,13 @@ export function NexusLayout() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setShowApprovalModal(false)}>
+            <Button variant="ghost" onClick={narrative.handleCancel}>
               Cancel
             </Button>
-            <Button variant="outline" onClick={handleRegenerate} disabled={isMidGeneration}>
+            <Button variant="outline" onClick={narrative.handleRegenerate} disabled={narrative.isMidGeneration}>
               Regenerate
             </Button>
-            <Button onClick={handleApprove} disabled={!activeNarrativeSession}>
+            <Button onClick={narrative.handleApprove} disabled={!narrative.activeNarrativeSession}>
               Approve &amp; Commit
             </Button>
           </DialogFooter>

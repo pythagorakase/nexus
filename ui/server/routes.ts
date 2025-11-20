@@ -3,13 +3,10 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import multer from "multer";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { parse as parseToml } from "toml";
-
-const execAsync = promisify(exec);
+import sharp from "sharp";
 
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
@@ -630,7 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tempPath = req.file.path;
       const iconsDir = path.join(import.meta.dirname, "..", "client", "public", "icons");
 
-      // Generate all required icon sizes using sips
+      // Generate all required icon sizes using sharp (safe, no shell execution)
       const sizes = [
         { size: 512, name: "icon-512.png" },
         { size: 192, name: "icon-192.png" },
@@ -640,14 +637,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const { size, name } of sizes) {
         const outputPath = path.join(iconsDir, name);
-        await execAsync(`sips -z ${size} ${size} "${tempPath}" --out "${outputPath}"`);
+        await sharp(tempPath)
+          .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .png()
+          .toFile(outputPath);
       }
 
-      // Generate favicon.ico using Python PIL
-      const favicon32Path = path.join(iconsDir, "favicon-32.png");
+      // Generate favicon.ico using sharp
       const faviconPath = path.join(import.meta.dirname, "..", "client", "public", "favicon.ico");
 
-      await execAsync(`python3 -c "from PIL import Image; img = Image.open('${favicon32Path}'); img.save('${faviconPath}', format='ICO')"`);
+      // Sharp doesn't natively support ICO, so create a 32x32 PNG as favicon
+      // Modern browsers support PNG favicons via <link rel="icon">
+      await sharp(tempPath)
+        .resize(32, 32, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toFile(faviconPath.replace('.ico', '.png'));
 
       // Copy source file for future reference
       const sourcePath = path.join(iconsDir, "icon-source.png");
