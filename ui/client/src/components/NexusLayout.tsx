@@ -2,21 +2,40 @@ import {
   useState,
   useEffect,
   useCallback,
-  useMemo,
   useRef,
   type MutableRefObject,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "./StatusBar";
 import { CommandBar } from "./CommandBar";
-import { NarrativeTab } from "./NarrativeTab";
+import { NarrativeTab, type ChunkWithMetadata } from "./NarrativeTab";
 import { MapTab } from "./MapTab";
 import { CharactersTab } from "./CharactersTab";
 import AuditionTab from "@/pages/AuditionTab";
 import { SettingsTab } from "@/pages/SettingsTab";
 import { FontProvider } from "@/contexts/FontContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { Book, Map, Users, Sparkles, Settings } from "lucide-react";
+import { toast } from "@/hooks/use-toast";
+import { useNarrativeGeneration } from "@/hooks/useNarrativeGeneration";
+import type { EntityChanges } from "@/types/narrative";
+
+// Timing constants for APEX status transitions and UI updates
+const TIMEOUTS = {
+  READY_TRANSITION: 1200,           // Delay before transitioning to READY status
+  GENERATING_DEBOUNCE: 300,         // Debounce for GENERATING status during LLM call
+  TRANSMITTING_FALLBACK: 600,       // Fallback to GENERATING from TRANSMITTING
+  ELAPSED_DISPLAY_THRESHOLD: 5000,  // Show elapsed time after 5 seconds
+  ELAPSED_UPDATE_INTERVAL: 500,     // Update elapsed time every 500ms
+  MODEL_STATUS_POLL: 5000,          // Poll model status every 5 seconds
+  APEX_CONNECTIVITY_POLL: 10000,    // Poll APEX connectivity every 10 seconds
+  SETTINGS_REFETCH: 60000,          // Refetch settings every 60 seconds (optimized - settings rarely change)
+  LATEST_CHUNK_REFETCH: 30000,      // Refetch latest chunk every 30 seconds (optimized - use WebSocket for real-time updates)
+} as const;
 
 interface SettingsPayload {
   ["Agent Settings"]?: {
@@ -27,23 +46,12 @@ interface SettingsPayload {
       llm?: {
         api_base?: string;
       };
+      narrative?: {
+        test_mode?: boolean;
+      };
     };
   };
 }
-
-interface StorySessionMetadata {
-  session_id: string;
-  session_name: string;
-  created_at: string;
-  last_accessed: string;
-  turn_count: number;
-  current_phase: string;
-  initial_context?: Record<string, unknown> | null;
-}
-
-const EXPLICIT_STORY_SESSION_ID = (import.meta.env
-  .VITE_STORY_SESSION_ID || "")
-  .trim() || undefined;
 
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
@@ -59,24 +67,42 @@ export function NexusLayout() {
     internalSetModelStatus(status);
   }, []);
   const [isStoryMode, setIsStoryMode] = useState(true);
+  const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [apexStatus, setApexStatus] = useState<
     "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING"
   >("READY");
   const apexStatusRef = useRef(apexStatus);
-  const [storySessionId, setStorySessionId] = useState<string | null>(
-    () => EXPLICIT_STORY_SESSION_ID ?? null
-  );
   const generatingTimeoutRef = useRef<number | null>(null);
   const readyTimeoutRef = useRef<number | null>(null);
-  const sessionStreamRef = useRef<WebSocket | null>(null);
   const isMountedRef = useRef(true);
   const [activeTab, setActiveTab] = useState("narrative");
+  const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;
   }, [apexStatus]);
+
+  // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
+  const narrative = useNarrativeGeneration({
+    onPhaseChange: (phase) => {
+      handlePhaseEvent(phase);
+    },
+    onComplete: () => {
+      handleCompleteEvent();
+    },
+    onError: () => {
+      setApexStatus("OFFLINE");
+    },
+  });
+
+  const handleChunkSelection = useCallback((chunk: ChunkWithMetadata | null) => {
+    setSelectedChunk(chunk);
+    if (chunk?.metadata?.slug) {
+      setCurrentChunkLocation(chunk.metadata.slug);
+    }
+  }, []);
 
   // Fetch settings to get model name
   const {
@@ -85,27 +111,8 @@ export function NexusLayout() {
     isError: settingsError,
   } = useQuery<SettingsPayload>({
     queryKey: ["/api/settings"],
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: TIMEOUTS.SETTINGS_REFETCH,
   });
-
-  const {
-    data: storySessions,
-    isError: storySessionsError,
-  } = useQuery<StorySessionMetadata[]>({
-    queryKey: ["/api/story/sessions"],
-    refetchInterval: 15000,
-    staleTime: 15000,
-    retry: false,
-  });
-
-  const activeStorySession = useMemo(() => {
-    if (!storySessions || !storySessions.length || !storySessionId) {
-      return null;
-    }
-    return (
-      storySessions.find((session) => session.session_id === storySessionId) ?? null
-    );
-  }, [storySessions, storySessionId]);
 
   const clearTimeoutRef = useCallback((ref: MutableRefObject<number | null>) => {
     if (ref.current !== null) {
@@ -123,7 +130,7 @@ export function NexusLayout() {
         return;
       }
       setApexStatus("READY");
-    }, 1200);
+    }, TIMEOUTS.READY_TRANSITION);
   }, [clearTimeoutRef, setApexStatus]);
 
   const handlePhaseEvent = useCallback(
@@ -131,21 +138,13 @@ export function NexusLayout() {
       clearTimeoutRef(generatingTimeoutRef);
       clearTimeoutRef(readyTimeoutRef);
 
-      if (phase === "processing" || phase === "regenerating") {
-        if (apexStatusRef.current !== "TRANSMITTING") {
-          setApexStatus("TRANSMITTING");
-        }
-        generatingTimeoutRef.current = window.setTimeout(() => {
-          if (!isMountedRef.current) {
-            return;
-          }
-          setApexStatus("GENERATING");
-        }, 600);
+      if (!phase) {
+        setApexStatus("READY");
         return;
       }
 
-      if (!phase || phase === "idle") {
-        setApexStatus("READY");
+      if (phase === "complete") {
+        handleCompleteEvent();
         return;
       }
 
@@ -154,139 +153,40 @@ export function NexusLayout() {
         return;
       }
 
-      if (phase === "integration") {
-        setApexStatus("RECEIVING");
-        readyTimeoutRef.current = window.setTimeout(() => {
+      if (phase === "calling_llm" || phase === "processing_response") {
+        setApexStatus("GENERATING");
+        generatingTimeoutRef.current = window.setTimeout(() => {
           if (!isMountedRef.current) {
             return;
           }
-          setApexStatus("READY");
-        }, 1200);
+          setApexStatus("GENERATING");
+        }, TIMEOUTS.GENERATING_DEBOUNCE);
         return;
       }
 
-      setApexStatus("GENERATING");
+      if (phase === "initiated" || phase === "loading_chunk" || phase === "building_context") {
+        setApexStatus("TRANSMITTING");
+        generatingTimeoutRef.current = window.setTimeout(() => {
+          if (!isMountedRef.current) {
+            return;
+          }
+          setApexStatus("GENERATING");
+        }, TIMEOUTS.TRANSMITTING_FALLBACK);
+        return;
+      }
+
+      setApexStatus("READY");
     },
-    [clearTimeoutRef, setApexStatus],
+    [clearTimeoutRef, handleCompleteEvent, setApexStatus],
   );
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      if (sessionStreamRef.current) {
-        sessionStreamRef.current.close();
-        sessionStreamRef.current = null;
-      }
       clearTimeoutRef(generatingTimeoutRef);
       clearTimeoutRef(readyTimeoutRef);
     };
   }, [clearTimeoutRef]);
-
-  useEffect(() => {
-    if (!storySessions || storySessions.length === 0) {
-      if (!EXPLICIT_STORY_SESSION_ID) {
-        setStorySessionId(null);
-      }
-      return;
-    }
-
-    if (EXPLICIT_STORY_SESSION_ID) {
-      const hasExplicitSession = storySessions.some(
-        (session) => session.session_id === EXPLICIT_STORY_SESSION_ID
-      );
-      setStorySessionId(hasExplicitSession ? EXPLICIT_STORY_SESSION_ID : null);
-      return;
-    }
-
-    setStorySessionId((current) => {
-      if (current && storySessions.some((session) => session.session_id === current)) {
-        return current;
-      }
-      return storySessions[0]?.session_id ?? null;
-    });
-  }, [storySessions]);
-
-  useEffect(() => {
-    if (!storySessionsError) {
-      return;
-    }
-    setApexStatus((previous) => (previous === "OFFLINE" ? previous : "OFFLINE"));
-  }, [storySessionsError, setApexStatus]);
-
-  useEffect(() => {
-    if (!activeStorySession) {
-      return;
-    }
-    handlePhaseEvent(activeStorySession.current_phase);
-  }, [activeStorySession, handlePhaseEvent]);
-
-  useEffect(() => {
-    if (!storySessionId) {
-      if (sessionStreamRef.current) {
-        sessionStreamRef.current.close();
-        sessionStreamRef.current = null;
-      }
-      return;
-    }
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const websocketUrl = `${protocol}//${window.location.host}/api/story/stream/${storySessionId}`;
-    const socket = new WebSocket(websocketUrl);
-    sessionStreamRef.current = socket;
-
-    socket.onopen = () => {
-      if (!isMountedRef.current) {
-        return;
-      }
-      if (apexStatusRef.current === "OFFLINE") {
-        setApexStatus("READY");
-      }
-    };
-
-    socket.onmessage = (event) => {
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      try {
-        const payload = JSON.parse(event.data);
-        if (!payload || typeof payload !== "object") {
-          return;
-        }
-
-        if (payload.event === "phase") {
-          handlePhaseEvent(typeof payload.phase === "string" ? payload.phase : null);
-        } else if (payload.event === "complete") {
-          handleCompleteEvent();
-        } else if (payload.event === "error") {
-          setApexStatus("OFFLINE");
-        }
-      } catch {
-        // Ignore malformed events
-      }
-    };
-
-    const markOffline = () => {
-      if (!isMountedRef.current) {
-        return;
-      }
-      setApexStatus((previous) => (previous === "OFFLINE" ? previous : "OFFLINE"));
-    };
-
-    socket.onerror = markOffline;
-    socket.onclose = markOffline;
-
-    return () => {
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onerror = null;
-      socket.onclose = null;
-      socket.close();
-      if (sessionStreamRef.current === socket) {
-        sessionStreamRef.current = null;
-      }
-    };
-  }, [storySessionId, handlePhaseEvent, handleCompleteEvent, setApexStatus]);
 
   // Fetch latest chunk for chapter info
   const { data: latestChunk } = useQuery<{
@@ -300,7 +200,7 @@ export function NexusLayout() {
     };
   }>({
     queryKey: ["/api/narrative/latest-chunk"],
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: TIMEOUTS.LATEST_CHUNK_REFETCH,
   });
 
   // Parse model name from settings
@@ -318,9 +218,12 @@ export function NexusLayout() {
         setCurrentModel("UNCONFIGURED");
         setCurrentModelId("");
       }
+      const testMode = Boolean(settings?.["Agent Settings"]?.global?.narrative?.test_mode);
+      setIsTestModeEnabled(testMode);
     } else if (settingsError) {
       setCurrentModel("UNAVAILABLE");
       setCurrentModelId("");
+      setIsTestModeEnabled(false);
     }
   }, [settings, settingsError, settingsLoaded]);
 
@@ -339,10 +242,11 @@ export function NexusLayout() {
     }
   }, [setModelStatus]);
 
+
   // Check if LLM server is running and has model loaded
   useEffect(() => {
     refreshModelStatus();
-    const interval = setInterval(refreshModelStatus, 5000);
+    const interval = setInterval(refreshModelStatus, TIMEOUTS.MODEL_STATUS_POLL);
     return () => clearInterval(interval);
   }, [refreshModelStatus]);
 
@@ -375,9 +279,10 @@ export function NexusLayout() {
     };
 
     checkApexConnectivity();
-    const interval = setInterval(checkApexConnectivity, 10000);
+    const interval = setInterval(checkApexConnectivity, TIMEOUTS.APEX_CONNECTIVITY_POLL);
     return () => clearInterval(interval);
   }, [apexStatus]);
+
 
   const handleCommand = (command: string) => {
     console.log("Command:", command);
@@ -411,19 +316,47 @@ export function NexusLayout() {
           console.log("Unknown command:", cmd);
       }
     } else if (isStoryMode) {
-      if (!storySessionId) {
-        handlePhaseEvent("processing");
-        readyTimeoutRef.current = window.setTimeout(() => {
-          if (!isMountedRef.current) {
-            return;
-          }
-          handleCompleteEvent();
-        }, 3200);
-      }
-      // Reset input to button after submission
+      narrative.triggerNarrativeTurn(selectedChunk, command);
       setIsInputExpanded(false);
     }
   };
+
+
+  const phaseLabels: Record<string, string> = {
+    initiated: "Request received...",
+    loading_chunk: "Loading parent chunk...",
+    building_context: "Assembling context package...",
+    calling_llm: "Calling LORE / LOGON...",
+    processing_response: "Processing response...",
+    complete: "Awaiting approval",
+    error: "Generation failed",
+  };
+
+  const progressLabel = narrative.narrativePhase ? phaseLabels[narrative.narrativePhase] ?? narrative.narrativePhase : null;
+  const showElapsed = narrative.elapsedMs > TIMEOUTS.ELAPSED_DISPLAY_THRESHOLD;
+  const canContinue = selectedChunk?.id === 1425;
+  const continueDisabled = !canContinue || (narrative.narrativePhase !== null && narrative.narrativePhase !== "error");
+  const approvalOpen = narrative.showApprovalModal && !!narrative.incubatorData;
+  const entityChanges: EntityChanges = narrative.incubatorData?.entity_changes || {};
+  const referenceChanges = narrative.incubatorData?.references || [];
+  const characterChanges = Array.isArray(entityChanges?.characters) ? entityChanges.characters : [];
+  const locationChanges = Array.isArray(entityChanges?.locations) ? entityChanges.locations : [];
+  const factionChanges = Array.isArray(entityChanges?.factions) ? entityChanges.factions : [];
+  const referencedCharacters = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'character') : [];
+  const referencedPlaces = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'place') : [];
+  const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
+  const chunkLabel =
+    narrative.generationParentChunk?.metadata?.season !== null &&
+    narrative.generationParentChunk?.metadata?.season !== undefined &&
+    narrative.generationParentChunk?.metadata?.episode !== null &&
+    narrative.generationParentChunk?.metadata?.episode !== undefined
+      ? `S${String(narrative.generationParentChunk.metadata.season).padStart(2, "0")}E${String(
+          narrative.generationParentChunk.metadata.episode,
+        ).padStart(2, "0")}`
+      : narrative.incubatorData?.parent_chunk_id
+        ? `Chunk ${narrative.incubatorData.parent_chunk_id}`
+        : "Narrative turn";
+  const subtitle = narrative.generationParentChunk?.metadata?.slug || "Awaiting metadata";
 
   return (
     <FontProvider>
@@ -436,6 +369,7 @@ export function NexusLayout() {
           scene={latestChunk?.metadata?.scene ?? 1}
           apexStatus={apexStatus}
           isStoryMode={isStoryMode}
+          isTestModeEnabled={isTestModeEnabled}
           modelStatus={modelStatus}
           onModelStatusChange={setModelStatus}
           onRefreshModelStatus={refreshModelStatus}
@@ -499,7 +433,7 @@ export function NexusLayout() {
           </div>
 
           <TabsContent value="narrative" className="flex-1 overflow-hidden m-0">
-            <NarrativeTab />
+            <NarrativeTab onChunkSelected={handleChunkSelection} />
           </TabsContent>
 
           <TabsContent value="map" className="flex-1 overflow-hidden m-0">
@@ -519,20 +453,183 @@ export function NexusLayout() {
           </TabsContent>
         </Tabs>
 
+        {activeTab === "narrative" && narrative.narrativePhase && (
+          <div className="border-t border-border bg-card/80 text-xs font-mono px-3 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-primary terminal-glow"}>
+                {narrative.narrativePhase === "error" ? "!" : ">>"}
+              </span>
+              <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-foreground"}>
+                {progressLabel}
+              </span>
+              {narrative.narrativePhase === "error" && narrative.generationError && (
+                <span className="text-destructive/80 truncate max-w-[42ch]">{narrative.generationError}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {showElapsed && (
+                <span className="text-muted-foreground">
+                  {Math.round(narrative.elapsedMs / 1000)}s elapsed
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {activeTab === "narrative" && !narrative.narrativePhase && narrative.generationError && (
+          <div className="border-t border-destructive/40 bg-destructive/10 text-destructive font-mono text-xs px-3 py-2 flex items-center justify-between">
+            <span>{narrative.generationError}</span>
+          </div>
+        )}
+
         {activeTab === "narrative" && (
           <CommandBar
             onCommand={handleCommand}
             placeholder={
               isStoryMode
-                ? "continue the story"
+                ? canContinue
+                  ? "continue the story"
+                  : "Continue available only for chunk 1425"
                 : "Enter directive or /command..."
             }
             userPrefix={isStoryMode ? "" : "NEXUS:USER"}
             showButton={isStoryMode && !isInputExpanded}
-            onButtonClick={() => setIsInputExpanded(true)}
+            onButtonClick={() => narrative.triggerNarrativeTurn(selectedChunk, narrative.lastUserInput)}
+            onExpandInput={() => setIsInputExpanded(true)}
+            isGenerating={narrative.isMidGeneration}
+            continueDisabled={continueDisabled}
           />
         )}
       </div>
+
+      <Dialog open={approvalOpen} onOpenChange={(open) => !open && narrative.handleCancel()}>
+        <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Review generated narrative</span>
+              <div className="flex items-center gap-2">
+                {isTestModeEnabled && <Badge variant="destructive">TEST MODE</Badge>}
+                {narrative.activeNarrativeSession && (
+                  <Badge variant="outline">Session {narrative.activeNarrativeSession.slice(0, 8)}</Badge>
+                )}
+              </div>
+            </DialogTitle>
+            <DialogDescription className="font-mono text-xs">
+              {chunkLabel} {'->'} proposed chunk {narrative.incubatorData?.chunk_id ?? "pending"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {narrative.incubatorData && (
+            <div className="grid gap-4 md:grid-cols-3 text-sm">
+              <div className="md:col-span-2 space-y-3">
+                <div className="space-y-1">
+                  <div className="text-primary terminal-glow font-mono text-sm">{chunkLabel}</div>
+                  <div className="text-muted-foreground italic text-xs">{subtitle}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {narrative.incubatorData.time_delta || "Time delta pending"}
+                  </div>
+                </div>
+                <ScrollArea className="h-72 rounded border border-border bg-card/70 p-4">
+                  <div className="whitespace-pre-wrap leading-relaxed text-foreground">
+                    {narrative.incubatorData.storyteller_text || "No narrative captured"}
+                  </div>
+                </ScrollArea>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-muted-foreground">Entity changes</span>
+                  <Badge variant="outline">{narrative.incubatorData.entity_update_count ?? 0}</Badge>
+                </div>
+                <div className="rounded border border-border bg-card/60 p-3 space-y-3 text-xs text-foreground">
+                  {characterChanges.length > 0 ? (
+                    <div>
+                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Characters</div>
+                      <ul className="space-y-1 list-disc list-inside">
+                        {characterChanges.map((change: any, idx: number) => (
+                          <li key={`char-${idx}`} className="leading-relaxed">
+                            #{change.character_id ?? "?"}: {change.character_name ?? "Unknown"}
+                            {change.emotional_state ? ` - ${change.emotional_state}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">No character updates</div>
+                  )}
+
+                  {locationChanges.length > 0 && (
+                    <div>
+                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Locations</div>
+                      <ul className="space-y-1 list-disc list-inside">
+                        {locationChanges.map((change: any, idx: number) => (
+                          <li key={`loc-${idx}`} className="leading-relaxed">
+                            #{change.place_id ?? "?"}: {change.place_name ?? "Unknown"}
+                            {change.current_status ? ` - ${change.current_status}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {factionChanges.length > 0 && (
+                    <div>
+                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Factions</div>
+                      <ul className="space-y-1 list-disc list-inside">
+                        {factionChanges.map((change: any, idx: number) => (
+                          <li key={`faction-${idx}`} className="leading-relaxed">
+                            #{change.faction_id ?? "?"}: {change.faction_name ?? "Unknown"}
+                            {change.current_activity ? ` - ${change.current_activity}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {(referencedCharacters.length > 0 ||
+                    referencedPlaces.length > 0 ||
+                    referencedFactions.length > 0) && (
+                    <div>
+                      <div className="font-mono text-[11px] text-muted-foreground mb-1">References</div>
+                      <ul className="space-y-1 list-disc list-inside">
+                        {referencedCharacters.map((ref: any, idx: number) => (
+                          <li key={`ref-char-${idx}`}>
+                            #{ref.character_id ?? "?"}: {ref.character_name ?? "Unknown"}{" "}
+                            {ref.reference_type ? `(${ref.reference_type})` : ""}
+                          </li>
+                        ))}
+                        {referencedPlaces.map((ref: any, idx: number) => (
+                          <li key={`ref-place-${idx}`}>
+                            #{ref.place_id ?? "?"}: {ref.place_name ?? "Unknown"}{" "}
+                            {ref.reference_type ? `(${ref.reference_type})` : ""}
+                          </li>
+                        ))}
+                        {referencedFactions.map((ref: any, idx: number) => (
+                          <li key={`ref-faction-${idx}`}>
+                            #{ref.faction_id ?? "?"}: {ref.faction_name ?? "Unknown"}{" "}
+                            {ref.reference_type ? `(${ref.reference_type})` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={narrative.handleCancel}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={narrative.handleRegenerate} disabled={narrative.isMidGeneration}>
+              Regenerate
+            </Button>
+            <Button onClick={narrative.handleApprove} disabled={!narrative.activeNarrativeSession}>
+              Approve &amp; Commit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FontProvider>
   );
 }

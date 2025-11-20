@@ -3,12 +3,10 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import multer from "multer";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-
-const execAsync = promisify(exec);
+import { parse as parseToml } from "toml";
+import sharp from "sharp";
 
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
@@ -16,6 +14,8 @@ export function registerProxyRoutes(app: Express): void {
   const auditionTarget = process.env.AUDITION_API_URL || `http://localhost:${auditionPort}`;
   const corePort = process.env.CORE_API_PORT || "8001";
   const coreTarget = process.env.CORE_API_URL || `http://localhost:${corePort}`;
+  const narrativePort = process.env.NARRATIVE_API_PORT || "8002";
+  const narrativeTarget = process.env.NARRATIVE_API_URL || `http://localhost:${narrativePort}`;
 
   // Proxy for Audition API (FastAPI backend on port 8000)
   // Express strips /api/audition before passing to middleware, so we need to add it back
@@ -46,16 +46,36 @@ export function registerProxyRoutes(app: Express): void {
   app.use("/api/health", coreHealthProxy);
 
   // Proxy for Narrative API (FastAPI backend on port 8002)
-  // Handles narrative generation and incubator management
-  const narrativeTarget = `http://localhost:8002`;
+  // Handles generation + incubator management without intercepting local narrative read routes
   const narrativeProxy = createProxyMiddleware({
     target: narrativeTarget,
     changeOrigin: true,
-    ws: true,  // Enable WebSocket support
   });
 
-  app.use("/api/narrative", narrativeProxy);
-  app.use("/ws/narrative", narrativeProxy);
+  const shouldProxyNarrative = (pathname: string) => {
+    return (
+      pathname.startsWith("/api/narrative/continue") ||
+      pathname.startsWith("/api/narrative/status") ||
+      pathname.startsWith("/api/narrative/incubator") ||
+      pathname.startsWith("/api/narrative/approve")
+    );
+  };
+
+  app.use((req, res, next) => {
+    if (shouldProxyNarrative(req.path)) {
+      return narrativeProxy(req, res, next);
+    }
+    return next();
+  });
+
+  app.use(
+    "/ws/narrative",
+    createProxyMiddleware({
+      target: narrativeTarget,
+      changeOrigin: true,
+      ws: true,
+    }),
+  );
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -230,14 +250,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Settings routes
-  app.get("/api/settings", async (req, res) => {
+  const rootDir = path.join(process.cwd(), "..");
+  const tomlSettingsPath = path.join(rootDir, "nexus.toml");
+  const legacySettingsPath = path.join(rootDir, "settings.json");
+
+  const buildSettingsPayload = (rawSettings: any) => ({
+    ...rawSettings,
+    "Agent Settings": {
+      global: rawSettings?.global ?? {},
+      LORE: rawSettings?.lore ?? rawSettings?.LORE ?? {},
+      MEMNON: rawSettings?.memnon ?? rawSettings?.MEMNON ?? {},
+    },
+    "API Settings": {
+      apex: rawSettings?.apex ?? rawSettings?.API?.apex ?? {},
+    },
+  });
+
+  const readSettings = async () => {
     try {
-      const fs = await import("fs/promises");
-      const path = await import("path");
-      const settingsPath = path.join(process.cwd(), "..", "settings.json");
-      const settingsData = await fs.readFile(settingsPath, "utf-8");
-      const settings = JSON.parse(settingsData);
-      res.json(settings);
+      const tomlContent = await fs.readFile(tomlSettingsPath, "utf-8");
+      return parseToml(tomlContent);
+    } catch (error: any) {
+      if (error?.code === "ENOENT") {
+        const legacyContent = await fs.readFile(legacySettingsPath, "utf-8");
+        return JSON.parse(legacyContent);
+      }
+      throw error;
+    }
+  };
+
+  const replaceTomlValue = (content: string, section: string, key: string, rawValue: string) => {
+    const sectionPattern = new RegExp(
+      `\\[${section.replace(/\./g, "\\.")}\\]\\s*\\n([\\s\\S]*?)(?=\\n\\[|$)`,
+      "m",
+    );
+    const sectionMatch = content.match(sectionPattern);
+    if (!sectionMatch) {
+      throw new Error(`Section [${section}] not found in nexus.toml`);
+    }
+
+    const sectionBody = sectionMatch[1];
+    const keyPattern = new RegExp(`(^\\s*${key}\\s*=\\s*)([^#\\n]*?)(\\s*(#.*)?)$`, "m");
+
+    let updatedBody: string;
+    if (keyPattern.test(sectionBody)) {
+      updatedBody = sectionBody.replace(keyPattern, (_match, prefix: string, _value: string, suffix: string) => {
+        const trailing = suffix ?? "";
+        return `${prefix}${rawValue}${trailing}`;
+      });
+    } else {
+      const trimmed = sectionBody.trimEnd();
+      const newline = trimmed.endsWith("\n") ? "" : "\n";
+      updatedBody = `${trimmed}${newline}${key} = ${rawValue}\n`;
+    }
+
+    return content.replace(sectionPattern, `[${section}]\n${updatedBody}`);
+  };
+
+  app.head("/api/settings", async (_req, res) => {
+    try {
+      await readSettings();
+      res.status(200).end();
+    } catch (error) {
+      console.error("Error fetching settings (HEAD):", error);
+      res.status(500).end();
+    }
+  });
+
+  app.get("/api/settings", async (_req, res) => {
+    try {
+      const settings = await readSettings();
+      res.json(buildSettingsPayload(settings));
     } catch (error) {
       console.error("Error fetching settings:", error);
       res.status(500).json({ error: "Failed to fetch settings" });
@@ -246,36 +329,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/settings", async (req, res) => {
     try {
-      const fs = await import("fs/promises");
-      const path = await import("path");
-      const settingsPath = path.join(process.cwd(), "..", "settings.json");
-
-      // Read current settings
-      const settingsData = await fs.readFile(settingsPath, "utf-8");
-      const settings = JSON.parse(settingsData);
-
-      // Deep merge the updates
+      let tomlContent = await fs.readFile(tomlSettingsPath, "utf-8");
       const updates = req.body;
+      let appliedUpdates = 0;
 
-      // Helper function to deep merge objects
-      const deepMerge = (target: any, source: any): any => {
-        for (const key in source) {
-          if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            target[key] = target[key] || {};
-            deepMerge(target[key], source[key]);
-          } else {
-            target[key] = source[key];
-          }
-        }
-        return target;
-      };
+      const narrativeUpdates = updates?.["Agent Settings"]?.global?.narrative ?? updates?.global?.narrative;
+      if (narrativeUpdates && typeof narrativeUpdates === "object" && "test_mode" in narrativeUpdates) {
+        const testMode = Boolean(narrativeUpdates.test_mode);
+        tomlContent = replaceTomlValue(tomlContent, "global.narrative", "test_mode", `${testMode}`);
+        appliedUpdates += 1;
+      }
 
-      deepMerge(settings, updates);
+      const apexContextWindow =
+        updates?.["Agent Settings"]?.LORE?.token_budget?.apex_context_window ??
+        updates?.lore?.token_budget?.apex_context_window;
+      if (typeof apexContextWindow === "number") {
+        tomlContent = replaceTomlValue(
+          tomlContent,
+          "lore.token_budget",
+          "apex_context_window",
+          `${apexContextWindow}`,
+        );
+        appliedUpdates += 1;
+      }
 
-      // Write back to file with proper formatting
-      await fs.writeFile(settingsPath, JSON.stringify(settings, null, 4), "utf-8");
+      if (!appliedUpdates) {
+        return res.status(400).json({ error: "No supported settings provided" });
+      }
 
-      res.json({ success: true, settings });
+      await fs.writeFile(tomlSettingsPath, tomlContent, "utf-8");
+      const updatedSettings = await readSettings();
+
+      res.json({ success: true, settings: buildSettingsPayload(updatedSettings) });
     } catch (error) {
       console.error("Error updating settings:", error);
       res.status(500).json({ error: "Failed to update settings" });
@@ -542,7 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tempPath = req.file.path;
       const iconsDir = path.join(import.meta.dirname, "..", "client", "public", "icons");
 
-      // Generate all required icon sizes using sips
+      // Generate all required icon sizes using sharp (safe, no shell execution)
       const sizes = [
         { size: 512, name: "icon-512.png" },
         { size: 192, name: "icon-192.png" },
@@ -552,14 +637,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       for (const { size, name } of sizes) {
         const outputPath = path.join(iconsDir, name);
-        await execAsync(`sips -z ${size} ${size} "${tempPath}" --out "${outputPath}"`);
+        await sharp(tempPath)
+          .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+          .png()
+          .toFile(outputPath);
       }
 
-      // Generate favicon.ico using Python PIL
-      const favicon32Path = path.join(iconsDir, "favicon-32.png");
+      // Generate favicon.ico using sharp
       const faviconPath = path.join(import.meta.dirname, "..", "client", "public", "favicon.ico");
 
-      await execAsync(`python3 -c "from PIL import Image; img = Image.open('${favicon32Path}'); img.save('${faviconPath}', format='ICO')"`);
+      // Sharp doesn't natively support ICO, so create a 32x32 PNG as favicon
+      // Modern browsers support PNG favicons via <link rel="icon">
+      await sharp(tempPath)
+        .resize(32, 32, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .png()
+        .toFile(faviconPath.replace('.ico', '.png'));
 
       // Copy source file for future reference
       const sourcePath = path.join(iconsDir, "icon-source.png");

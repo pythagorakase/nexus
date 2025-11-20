@@ -2,6 +2,7 @@
  * Settings page for customizing font preferences, PWA icon, and backend settings.
  */
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useFonts } from '@/contexts/FontContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -15,8 +16,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Image as ImageIcon, Save, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, Save, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 
 // Full font list for narrative text
 const NARRATIVE_FONTS = [
@@ -49,6 +51,7 @@ const UI_FONTS = [
 
 export function SettingsTab() {
   const { fonts, setNarrativeFont, setUIFont, resetToDefaults } = useFonts();
+  const queryClient = useQueryClient();
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -57,7 +60,10 @@ export function SettingsTab() {
   // Backend settings state
   const [apexContextWindow, setApexContextWindow] = useState<number>(100000);
   const [originalApexContextWindow, setOriginalApexContextWindow] = useState<number>(100000);
+  const [testModeEnabled, setTestModeEnabled] = useState(false);
+  const [testDatabaseSuffix, setTestDatabaseSuffix] = useState<string>("_test");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [updatingTestMode, setUpdatingTestMode] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
 
@@ -71,6 +77,11 @@ export function SettingsTab() {
         const contextWindow = settings?.['Agent Settings']?.LORE?.token_budget?.apex_context_window || 100000;
         setApexContextWindow(contextWindow);
         setOriginalApexContextWindow(contextWindow);
+        const narrativeSettings = settings?.['Agent Settings']?.global?.narrative || {};
+        setTestModeEnabled(Boolean(narrativeSettings.test_mode));
+        if (typeof narrativeSettings.test_database_suffix === 'string') {
+          setTestDatabaseSuffix(narrativeSettings.test_database_suffix);
+        }
       } catch (error) {
         console.error('Error loading settings:', error);
         setSettingsMessage({ type: 'error', text: 'Failed to load backend settings' });
@@ -80,6 +91,56 @@ export function SettingsTab() {
     }
     loadSettings();
   }, []);
+
+  const handleToggleTestMode = async (value: boolean) => {
+    const previous = testModeEnabled;
+    setTestModeEnabled(value);
+    setUpdatingTestMode(true);
+    setSettingsMessage(null);
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        'Agent Settings': {
+            global: {
+              narrative: {
+                test_mode: value,
+              },
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update test mode');
+      }
+
+      const payload = await response.json();
+      if (payload?.settings) {
+        queryClient.setQueryData(["/api/settings"], payload.settings);
+      }
+
+      setSettingsMessage({
+        type: 'success',
+        text: value
+          ? 'Test Narrative Mode enabled (using parallel test tables)'
+          : 'Test Narrative Mode disabled',
+      });
+    } catch (error) {
+      console.error('Error updating test mode:', error);
+      setTestModeEnabled(previous);
+      setSettingsMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to update test mode',
+      });
+    } finally {
+      setUpdatingTestMode(false);
+    }
+  };
 
   const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -149,6 +210,15 @@ export function SettingsTab() {
 
       if (!response.ok) {
         throw new Error('Failed to update settings');
+      }
+
+      try {
+        const payload = await response.json();
+        if (payload?.settings) {
+          queryClient.setQueryData(["/api/settings"], payload.settings);
+        }
+      } catch (err) {
+        console.warn('Unable to update cache after saving settings', err);
       }
 
       setOriginalApexContextWindow(apexContextWindow);
@@ -237,6 +307,45 @@ export function SettingsTab() {
               Reset to Defaults
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-mono">Narrative Mode</CardTitle>
+          <CardDescription className="font-mono text-xs">
+            Toggle test routing for live narrative turns.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="test-mode-toggle" className="font-mono text-sm">
+                Test Narrative Mode
+              </Label>
+              <p className="text-xs text-muted-foreground font-mono">
+                Writes provisional turns to tables suffixed with <span className="text-primary">{testDatabaseSuffix}</span> so production data stays untouched.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {updatingTestMode && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              <Switch
+                id="test-mode-toggle"
+                checked={testModeEnabled}
+                disabled={updatingTestMode || loadingSettings}
+                onCheckedChange={handleToggleTestMode}
+              />
+            </div>
+          </div>
+
+          {testModeEnabled && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="font-mono text-xs">
+                TEST MODE ON - new narrative turns will go to the isolated test tables until you switch back.
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
@@ -421,7 +530,7 @@ export function SettingsTab() {
               style={{ fontFamily: fonts.narrativeFont }}
             >
               The rain hammered against the neon-lit windows of the megastructure. In the distance,
-              chrome towers pierced the smog-choked sky. This was the world they'd inherited—a
+              chrome towers pierced the smog-choked sky. This was the world they'd inherited - a
               tapestry of silicon dreams and broken promises.
             </div>
           </div>
