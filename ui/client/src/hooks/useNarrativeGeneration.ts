@@ -41,6 +41,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
 
   // WebSocket state
   const narrativeStreamRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
 
   // Sync activeNarrativeSession with ref for closure stability
@@ -53,6 +54,10 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     return () => {
       isMountedRef.current = false;
       stopElapsedTimer();
+      if (reconnectTimeoutRef.current !== null) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (narrativeStreamRef.current) {
         narrativeStreamRef.current.close();
         narrativeStreamRef.current = null;
@@ -177,7 +182,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         narrativeStreamRef.current = null;
         // Attempt reconnection after delay if still mounted
         if (isMountedRef.current) {
-          setTimeout(connectWebSocket, 3000);
+          reconnectTimeoutRef.current = window.setTimeout(connectWebSocket, 3000);
         }
       };
     };
@@ -185,6 +190,10 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     connectWebSocket();
 
     return () => {
+      if (reconnectTimeoutRef.current !== null) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
       if (narrativeStreamRef.current) {
         narrativeStreamRef.current.close();
       }
