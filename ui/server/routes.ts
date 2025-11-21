@@ -47,35 +47,16 @@ export function registerProxyRoutes(app: Express): void {
 
   // Proxy for Narrative API (FastAPI backend on port 8002)
   // Handles generation + incubator management without intercepting local narrative read routes
-  const narrativeProxy = createProxyMiddleware({
+  const narrativeProxyOptions = {
     target: narrativeTarget,
     changeOrigin: true,
-  });
-
-  const shouldProxyNarrative = (pathname: string) => {
-    return (
-      pathname.startsWith("/api/narrative/continue") ||
-      pathname.startsWith("/api/narrative/status") ||
-      pathname.startsWith("/api/narrative/incubator") ||
-      pathname.startsWith("/api/narrative/approve")
-    );
   };
 
-  app.use((req, res, next) => {
-    if (shouldProxyNarrative(req.path)) {
-      return narrativeProxy(req, res, next);
-    }
-    return next();
-  });
-
-  app.use(
-    "/ws/narrative",
-    createProxyMiddleware({
-      target: narrativeTarget,
-      changeOrigin: true,
-      ws: true,
-    }),
-  );
+  app.use("/api/narrative/continue", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/api/narrative/status", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/api/narrative/incubator", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/api/narrative/approve", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
