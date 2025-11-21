@@ -154,7 +154,6 @@ export const episodes = pgTable("episodes", {
   episode: bigint("episode", { mode: "number" }).notNull(),
   chunkSpan: text("chunk_span"), // int8range stored as text
   summary: jsonb("summary"),
-  tempSpan: text("temp_span"), // int8range stored as text
 }, (table) => ({
   pk: primaryKey({ columns: [table.season, table.episode] })
 }));

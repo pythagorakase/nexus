@@ -99,7 +99,7 @@ export class PostgresStorage implements IStorage {
 
   // Episode methods
   async getEpisodesBySeason(seasonId: number): Promise<Episode[]> {
-    // Some databases may not have the temp_span column; query only required fields
+    // Query only required fields; temp_span has been deprecated
     const result = await this.db.execute(sql`
       SELECT season, episode, chunk_span, summary
       FROM episodes
@@ -112,7 +112,6 @@ export class PostgresStorage implements IStorage {
       episode: Number(row.episode),
       chunkSpan: row.chunk_span ?? null,
       summary: coerceJson<Record<string, unknown>>(row.summary) ?? row.summary ?? null,
-      tempSpan: row.temp_span ?? null, // may be missing; default to null
     })) as Episode[];
   }
 
