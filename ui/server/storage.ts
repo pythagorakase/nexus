@@ -99,10 +99,21 @@ export class PostgresStorage implements IStorage {
 
   // Episode methods
   async getEpisodesBySeason(seasonId: number): Promise<Episode[]> {
-    return await this.db.select()
-      .from(episodes)
-      .where(eq(episodes.season, seasonId))
-      .orderBy(episodes.episode);
+    // Some databases may not have the temp_span column; query only required fields
+    const result = await this.db.execute(sql`
+      SELECT season, episode, chunk_span, summary
+      FROM episodes
+      WHERE season = ${seasonId}
+      ORDER BY episode
+    `);
+
+    return (result.rows as any[]).map((row) => ({
+      season: Number(row.season),
+      episode: Number(row.episode),
+      chunkSpan: row.chunk_span ?? null,
+      summary: coerceJson<Record<string, unknown>>(row.summary) ?? row.summary ?? null,
+      tempSpan: row.temp_span ?? null, // may be missing; default to null
+    })) as Episode[];
   }
 
   // Narrative chunk methods
