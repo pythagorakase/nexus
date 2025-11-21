@@ -18,10 +18,11 @@ interface UseNarrativeGenerationOptions {
   onPhaseChange?: (phase: NarrativePhase | null) => void;
   onComplete?: () => void;
   onError?: () => void;
+  allowedChunkId?: number | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null } = options;
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
@@ -205,16 +206,25 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       if (!selectedChunk) {
         toast({
           title: "Select a chunk",
-          description: "Choose a narrative chunk to continue (currently limited to chunk 1425).",
+          description: "Choose the current narrative chunk before continuing.",
         });
         return;
       }
 
-      // Rollout guard - only chunk 1425 for now
-      if (selectedChunk.id !== 1425) {
+      // Rollout guard - only allow continuing the latest chunk
+      if (allowedChunkId === null || allowedChunkId === undefined) {
         toast({
-          title: "Test rollout limited",
-          description: "Continue is temporarily restricted to chunk 1425 for safety.",
+          title: "Latest chunk unavailable",
+          description: "Cannot continue until the latest chunk is loaded.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (selectedChunk.id !== allowedChunkId) {
+        toast({
+          title: "Continue latest chunk",
+          description: `Continue is limited to the newest chunk (${allowedChunkId}).`,
           variant: "destructive",
         });
         return;
@@ -284,7 +294,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
+    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
   );
 
   const handleApprove = useCallback(async () => {

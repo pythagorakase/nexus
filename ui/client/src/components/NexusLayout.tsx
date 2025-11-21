@@ -84,19 +84,6 @@ export function NexusLayout() {
     apexStatusRef.current = apexStatus;
   }, [apexStatus]);
 
-  // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
-  const narrative = useNarrativeGeneration({
-    onPhaseChange: (phase) => {
-      handlePhaseEvent(phase);
-    },
-    onComplete: () => {
-      handleCompleteEvent();
-    },
-    onError: () => {
-      setApexStatus("OFFLINE");
-    },
-  });
-
   const handleChunkSelection = useCallback((chunk: ChunkWithMetadata | null) => {
     setSelectedChunk(chunk);
     if (chunk?.metadata?.slug) {
@@ -201,6 +188,20 @@ export function NexusLayout() {
   }>({
     queryKey: ["/api/narrative/latest-chunk"],
     refetchInterval: TIMEOUTS.LATEST_CHUNK_REFETCH,
+  });
+
+  // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
+  const narrative = useNarrativeGeneration({
+    allowedChunkId: latestChunk?.id ?? null,
+    onPhaseChange: (phase) => {
+      handlePhaseEvent(phase);
+    },
+    onComplete: () => {
+      handleCompleteEvent();
+    },
+    onError: () => {
+      setApexStatus("OFFLINE");
+    },
   });
 
   // Parse model name from settings
@@ -332,9 +333,10 @@ export function NexusLayout() {
     error: "Generation failed",
   };
 
+  const latestChunkId = latestChunk?.id ?? null;
   const progressLabel = narrative.narrativePhase ? phaseLabels[narrative.narrativePhase] ?? narrative.narrativePhase : null;
   const showElapsed = narrative.elapsedMs > TIMEOUTS.ELAPSED_DISPLAY_THRESHOLD;
-  const canContinue = selectedChunk?.id === 1425;
+  const canContinue = latestChunkId !== null && selectedChunk?.id === latestChunkId;
   const continueDisabled = !canContinue || (narrative.narrativePhase !== null && narrative.narrativePhase !== "error");
   const approvalOpen = narrative.showApprovalModal && !!narrative.incubatorData;
   const entityChanges: EntityChanges = narrative.incubatorData?.entity_changes || {};
@@ -488,7 +490,9 @@ export function NexusLayout() {
               isStoryMode
                 ? canContinue
                   ? "continue the story"
-                  : "Continue available only for chunk 1425"
+                  : latestChunkId
+                    ? `Select the newest chunk (${latestChunkId}) to continue`
+                    : "Loading latest chunk..."
                 : "Enter directive or /command..."
             }
             userPrefix={isStoryMode ? "" : "NEXUS:USER"}
