@@ -262,20 +262,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   const serializeTomlValue = (value: unknown) => {
-    // Use a TOML serializer to avoid injection and ensure correct literal formatting.
-    const serialized = Toml.stringify({ value });
-    const match = serialized.match(/value\s*=\s*(.*)/);
-    if (!match || !match[1]) {
-      throw new Error("Failed to serialize TOML value");
+    // Constrain supported types so we don't inject unsafe TOML fragments.
+    const isPrimitive = (val: unknown) => ["string", "number", "boolean"].includes(typeof val);
+    const isSupportedArray =
+      Array.isArray(value) && value.every((item) => isPrimitive(item));
+
+    if (!isPrimitive(value) && !isSupportedArray) {
+      throw new Error(
+        `Unsupported TOML value type: ${typeof value} (${JSON.stringify(value)})`,
+      );
     }
-    return match[1].trim();
+
+    try {
+      const serialized = Toml.stringify({ value });
+      const match = serialized.match(/value\s*=\s*(.*)/);
+      if (!match || !match[1]) {
+        throw new Error(`Unable to extract serialized TOML literal for value: ${JSON.stringify(value)}`);
+      }
+      return match[1].trim();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown TOML serialization error";
+      throw new Error(`Failed to serialize TOML value (${JSON.stringify(value)}): ${message}`);
+    }
   };
 
   const replaceTomlValue = (content: string, section: string, key: string, value: unknown) => {
     const rawValue = serializeTomlValue(value);
     const sectionPattern = new RegExp(
-      `\\[${section.replace(/\./g, "\\.")}\\]\\s*\\n([\\s\\S]*?)(?=\\n\\[|$)`,
+      `\\[${escapeForRegex(section)}\\]\\s*\\n([\\s\\S]*?)(?=\\n\\[|$)`,
       "m",
     );
     const sectionMatch = content.match(sectionPattern);
@@ -284,7 +302,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     const sectionBody = sectionMatch[1];
-    const keyPattern = new RegExp(`(^\\s*${key}\\s*=\\s*)([^#\\n]*?)(\\s*(#.*)?)$`, "m");
+    // Capture groups:
+    // 1: leading "key =" including whitespace
+    // 2: current value
+    // 3: trailing whitespace/comment (if present)
+    const keyPattern = new RegExp(`(^\\s*${escapeForRegex(key)}\\s*=\\s*)([^#\\n]*?)(\\s*(#.*)?)$`, "m");
 
     let updatedBody: string;
     if (keyPattern.test(sectionBody)) {

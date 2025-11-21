@@ -213,7 +213,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         return;
       }
 
-      // Rollout guard - only allow continuing the latest chunk
+      // Rollout guard - caller passes the latest chunk id; avoid continuing stale chunks
       if (allowedChunkId === null || allowedChunkId === undefined) {
         toast({
           title: "Latest chunk unavailable",
