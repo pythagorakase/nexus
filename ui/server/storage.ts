@@ -131,17 +131,16 @@ export class PostgresStorage implements IStorage {
         nc.raw_text,
         nc.created_at,
         cm.chunk_id,
-        cm.season,
-        cm.episode,
-        cm.scene,
-        cm.world_layer,
-        cm.time_delta,
-        cm.metadata_version,
-        cm.generation_date,
-        cm.slug
-      FROM narrative_chunks nc
-      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-      WHERE cm.season = ${seasonId} AND cm.episode = ${episodeId}
+      cm.season,
+      cm.episode,
+      cm.scene,
+      cm.world_layer,
+      cm.time_delta,
+      cm.generation_date,
+      cm.slug
+    FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+    WHERE cm.season = ${seasonId} AND cm.episode = ${episodeId}
       ORDER BY nc.id
       LIMIT ${limit} OFFSET ${offset}
     `);
@@ -168,7 +167,6 @@ export class PostgresStorage implements IStorage {
             scene: toNumber(row.scene),
             worldLayer: row.world_layer ?? null,
             timeDelta: row.time_delta ?? null,
-            metadataVersion: row.metadata_version ?? null,
             generationDate: row.generation_date ?? null,
             slug: row.slug ?? null,
           }
@@ -185,17 +183,16 @@ export class PostgresStorage implements IStorage {
         nc.raw_text,
         nc.created_at,
         cm.chunk_id,
-        cm.season,
-        cm.episode,
-        cm.scene,
-        cm.world_layer,
-        cm.time_delta,
-        cm.metadata_version,
-        cm.generation_date,
-        cm.slug
-      FROM narrative_chunks nc
-      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-      WHERE cm.id IS NOT NULL
+      cm.season,
+      cm.episode,
+      cm.scene,
+      cm.world_layer,
+      cm.time_delta,
+      cm.generation_date,
+      cm.slug
+    FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+    WHERE cm.id IS NOT NULL
       ORDER BY nc.id DESC
       LIMIT 1
     `);
@@ -218,7 +215,6 @@ export class PostgresStorage implements IStorage {
             scene: toNumber(row.scene),
             worldLayer: row.world_layer ?? null,
             timeDelta: row.time_delta ?? null,
-            metadataVersion: row.metadata_version ?? null,
             generationDate: row.generation_date ?? null,
             slug: row.slug ?? null,
           }
@@ -236,17 +232,16 @@ export class PostgresStorage implements IStorage {
         nc.raw_text,
         nc.created_at,
         cm.chunk_id,
-        cm.season,
-        cm.episode,
-        cm.scene,
-        cm.world_layer,
-        cm.time_delta,
-        cm.metadata_version,
-        cm.generation_date,
-        cm.slug
-      FROM narrative_chunks nc
-      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-      WHERE nc.id < ${chunkId} AND cm.id IS NOT NULL
+      cm.season,
+      cm.episode,
+      cm.scene,
+      cm.world_layer,
+      cm.time_delta,
+      cm.generation_date,
+      cm.slug
+    FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+    WHERE nc.id < ${chunkId} AND cm.id IS NOT NULL
       ORDER BY nc.id DESC
       LIMIT 1
     `);
@@ -257,17 +252,16 @@ export class PostgresStorage implements IStorage {
         nc.raw_text,
         nc.created_at,
         cm.chunk_id,
-        cm.season,
-        cm.episode,
-        cm.scene,
-        cm.world_layer,
-        cm.time_delta,
-        cm.metadata_version,
-        cm.generation_date,
-        cm.slug
-      FROM narrative_chunks nc
-      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
-      WHERE nc.id > ${chunkId} AND cm.id IS NOT NULL
+      cm.season,
+      cm.episode,
+      cm.scene,
+      cm.world_layer,
+      cm.time_delta,
+      cm.generation_date,
+      cm.slug
+    FROM narrative_chunks nc
+    LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+    WHERE nc.id > ${chunkId} AND cm.id IS NOT NULL
       ORDER BY nc.id ASC
       LIMIT 1
     `);
@@ -283,15 +277,14 @@ export class PostgresStorage implements IStorage {
                   id: Number(row.chunk_id),
                   chunkId: Number(row.chunk_id),
                   season: toNumber(row.season),
-                  episode: toNumber(row.episode),
-                  scene: toNumber(row.scene),
-                  worldLayer: row.world_layer ?? null,
-                  timeDelta: row.time_delta ?? null,
-                  metadataVersion: row.metadata_version ?? null,
-                  generationDate: row.generation_date ?? null,
-                  slug: row.slug ?? null,
-                }
-              : undefined,
+            episode: toNumber(row.episode),
+            scene: toNumber(row.scene),
+            worldLayer: row.world_layer ?? null,
+            timeDelta: row.time_delta ?? null,
+            generationDate: row.generation_date ?? null,
+            slug: row.slug ?? null,
+          }
+        : undefined,
           }
         : null;
 
@@ -559,7 +552,6 @@ class MemStorage implements IStorage {
       scene: meta.scene !== undefined ? Number(meta.scene) : null,
       worldLayer: meta.world_layer ?? null,
       timeDelta: meta.time_delta ?? null,
-      metadataVersion: meta.metadata_version ?? null,
       generationDate: meta.generation_date ?? null,
       slug: meta.slug ?? null,
     })) as ChunkMetadata[];

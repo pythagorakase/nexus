@@ -174,7 +174,6 @@ export const chunkMetadata = pgTable("chunk_metadata", {
   scene: integer("scene"),
   worldLayer: text("world_layer"), // USER-DEFINED type stored as text
   timeDelta: interval("time_delta"),
-  metadataVersion: varchar("metadata_version", { length: 20 }),
   generationDate: timestamp("generation_date", { withTimezone: false }),
   slug: varchar("slug", { length: 10 }),
 });
