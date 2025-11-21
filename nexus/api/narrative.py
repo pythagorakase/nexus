@@ -283,11 +283,13 @@ async def get_chunk_info(conn, chunk_id: int) -> Dict[str, Any]:
         nv.season,
         nv.episode,
         nv.world_time,
-        cm.place,
-        p.name as place_name
+        cm.scene,
+        cm.slug,
+        cm.world_layer,
+        cm.time_delta,
+        NULL::text as place_name
     FROM narrative_view nv
     JOIN chunk_metadata cm ON cm.chunk_id = nv.id
-    LEFT JOIN places p ON p.id = cm.place
     WHERE nv.id = %s
     """
 

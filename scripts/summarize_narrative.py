@@ -3,7 +3,8 @@
 NEXUS Narrative Summary Generator
 
 This script generates comprehensive summaries of entire seasons or specific episodes
-using GPT-4.1, saving the results to the appropriate tables in the PostgreSQL database.
+using GPT-5.1 by default (with GPT-4.1 as a long-context fallback), saving the results
+to the appropriate tables in the PostgreSQL database.
 
 Features:
 - Multi-mode support: season summaries or episode summaries
@@ -62,7 +63,8 @@ logging.basicConfig(
 logger = logging.getLogger("nexus.summarize_narrative")
 
 # Constants
-DEFAULT_MODEL = "gpt-4.1"
+DEFAULT_MODEL = "gpt-5.1"
+FALLBACK_MODEL = "gpt-4.1"
 DEFAULT_TEMPERATURE = 0.2
 MAX_TOKENS_SEASON = 4000
 MAX_TOKENS_EPISODE = 2500
@@ -712,6 +714,35 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error retrieving previous episode summaries: {e}")
             return []
+
+    def episode_summary_exists(self, season: int, episode: int) -> bool:
+        """
+        Check if an episode summary already exists.
+
+        Args:
+            season: The season number
+            episode: The episode number
+
+        Returns:
+            True if a non-null summary exists, False otherwise
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        """
+                        SELECT 1
+                        FROM public.episodes
+                        WHERE season = :season AND episode = :episode AND summary IS NOT NULL
+                        LIMIT 1
+                        """
+                    ),
+                    {"season": season, "episode": episode}
+                ).scalar()
+                return result is not None
+        except Exception as e:
+            logger.error(f"Error checking for existing summary for S{season:02d}E{episode:02d}: {e}")
+            return False
             
     def get_season_summary(self, season: int) -> Optional[Dict[str, Any]]:
         """
@@ -742,8 +773,43 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error retrieving season summary: {e}")
             return None
+
+    def season_summary_exists(self, season: int) -> bool:
+        """
+        Check if a season summary already exists.
+
+        Args:
+            season: The season number
+
+        Returns:
+            True if a non-null summary exists, False otherwise
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        """
+                        SELECT 1
+                        FROM public.seasons
+                        WHERE id = :season AND summary IS NOT NULL
+                        LIMIT 1
+                        """
+                    ),
+                    {"season": season}
+                ).scalar()
+                return result is not None
+        except Exception as e:
+            logger.error(f"Error checking for existing summary for Season {season}: {e}")
+            return False
     
-    def save_season_summary(self, season: int, summary: dict, dry_run: bool = False, overwrite: bool = False) -> bool:
+    def save_season_summary(
+        self,
+        season: int,
+        summary: dict,
+        dry_run: bool = False,
+        overwrite: bool = False,
+        prompt_on_conflict: bool = True
+    ) -> bool:
         """
         Save a season summary to the database.
         
@@ -752,6 +818,7 @@ class DatabaseManager:
             summary: The summary as a dictionary (from Pydantic model)
             dry_run: If True, don't actually save
             overwrite: If True, overwrite existing summary even if it exists
+            prompt_on_conflict: If False, skip interactive overwrite prompts and keep existing data
             
         Returns:
             True if successful, False otherwise
@@ -767,6 +834,10 @@ class DatabaseManager:
                 existing = conn.execute(check_query, {"season": season}).fetchone()
                 
                 if existing and existing.summary and not overwrite:
+                    if not prompt_on_conflict:
+                        logger.info(f"Existing summary found for Season {season}; skipping (overwrite disabled)")
+                        return False
+
                     # We have an existing summary but no overwrite flag
                     # Print the new summary and ask if user wants to overwrite
                     print("\n" + "=" * 80)
@@ -829,7 +900,8 @@ class DatabaseManager:
         summary: dict, 
         dry_run: bool = False,
         overwrite: bool = False,
-        chunk_span: Optional[Tuple[int, int]] = None
+        chunk_span: Optional[Tuple[int, int]] = None,
+        prompt_on_conflict: bool = True
     ) -> bool:
         """
         Save an episode summary to the database.
@@ -841,6 +913,7 @@ class DatabaseManager:
             dry_run: If True, don't actually save
             overwrite: If True, overwrite existing summary even if it exists
             chunk_span: Optional tuple of (min_id, max_id) for the episode chunks
+            prompt_on_conflict: If False, skip interactive overwrite prompts and keep existing data
             
         Returns:
             True if successful, False otherwise
@@ -876,6 +949,10 @@ class DatabaseManager:
                 existing = conn.execute(check_query, {"season": season, "episode": episode}).fetchone()
                 
                 if existing and existing.summary and not overwrite:
+                    if not prompt_on_conflict:
+                        logger.info(f"Existing summary found for S{season:02d}E{episode:02d}; skipping (overwrite disabled)")
+                        return False
+
                     # We have an existing summary but no overwrite flag
                     # Print the new summary and ask if user wants to overwrite
                     slug = EpisodeSlugParser.format(season, episode)
@@ -1032,7 +1109,8 @@ class SummaryGenerator:
         dry_run: bool = False,
         overwrite: bool = False,
         verbose: bool = False,
-        save_prompt: bool = False
+        save_prompt: bool = False,
+        prompt_on_conflict: bool = True
     ):
         """
         Initialize the summary generator.
@@ -1045,6 +1123,7 @@ class SummaryGenerator:
             dry_run: If True, don't save results
             verbose: If True, print detailed output
             save_prompt: If True, save prompts to files
+            prompt_on_conflict: If False, skip interactive overwrite prompts when summaries already exist
         """
         self.model = model
         self.temperature = temperature
@@ -1055,6 +1134,7 @@ class SummaryGenerator:
         self.overwrite = overwrite
         self.verbose = verbose
         self.save_prompt = save_prompt
+        self.prompt_on_conflict = prompt_on_conflict
         self.provider = self._initialize_provider()
         
     def _initialize_provider(self) -> OpenAIProvider:
@@ -1373,7 +1453,8 @@ I need a comprehensive, structured summary of Season {season} of the narrative. 
                 season=season,
                 summary=summary_dict,
                 dry_run=self.dry_run,
-                overwrite=self.overwrite
+                overwrite=self.overwrite,
+                prompt_on_conflict=self.prompt_on_conflict
             )
             
             if success:
@@ -1594,7 +1675,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                 summary=summary_dict,
                 dry_run=self.dry_run,
                 overwrite=self.overwrite,
-                chunk_span=chunk_span
+                chunk_span=chunk_span,
+                prompt_on_conflict=self.prompt_on_conflict
             )
             
             if success:
@@ -1678,7 +1760,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                         summary=summary,
                         dry_run=False,
                         overwrite=self.overwrite,
-                        chunk_span=chunk_span
+                        chunk_span=chunk_span,
+                        prompt_on_conflict=self.prompt_on_conflict
                     )
                     if saved:
                         logger.info(f"Saved summary for {slug} to database for future episode context")
@@ -1711,7 +1794,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                         summary=summary,
                         dry_run=False,
                         overwrite=self.overwrite,
-                        chunk_span=chunk_span
+                        chunk_span=chunk_span,
+                        prompt_on_conflict=self.prompt_on_conflict
                     )
                     if saved:
                         logger.info(f"Saved summary for {slug} to database for future episode context")
@@ -1743,7 +1827,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                             summary=summary,
                             dry_run=False,
                             overwrite=self.overwrite,
-                            chunk_span=chunk_span
+                            chunk_span=chunk_span,
+                            prompt_on_conflict=self.prompt_on_conflict
                         )
                         if saved:
                             logger.info(f"Saved summary for {slug} to database for future episode context")
@@ -1773,7 +1858,8 @@ I need a comprehensive, structured summary of Season {season}, Episode {episode}
                         summary=summary,
                         dry_run=False,
                         overwrite=self.overwrite,
-                        chunk_span=chunk_span
+                        chunk_span=chunk_span,
+                        prompt_on_conflict=self.prompt_on_conflict
                     )
                     if saved:
                         logger.info(f"Saved summary for {slug} to database for future episode context")
@@ -1967,7 +2053,8 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
                 success = self.db_manager.save_season_summary(
                     season=season,
                     summary=summary_dict,
-                    dry_run=self.dry_run
+                    dry_run=self.dry_run,
+                    prompt_on_conflict=self.prompt_on_conflict
                 )
                 
                 if success:
@@ -1982,7 +2069,8 @@ I need a comprehensive, structured summary of the provided narrative chunks (IDs
                     episode=episode,
                     summary=summary_dict,
                     dry_run=self.dry_run,
-                    overwrite=self.overwrite
+                    overwrite=self.overwrite,
+                    prompt_on_conflict=self.prompt_on_conflict
                 )
                 
                 if success:
@@ -2040,6 +2128,16 @@ def main():
     
     # OpenAI options
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenAI model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument(
+        "--fallback-model",
+        default=FALLBACK_MODEL,
+        help=f"Alternate model to try if the primary fails (default: {FALLBACK_MODEL})"
+    )
+    parser.add_argument(
+        "--disable-fallback",
+        action="store_true",
+        help="Do not attempt a fallback model if the primary fails"
+    )
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE,
                       help=f"Model temperature for standard models (default: {DEFAULT_TEMPERATURE})")
     parser.add_argument("--effort", choices=["low", "medium", "high"], default="medium",
@@ -2048,6 +2146,7 @@ def main():
     # Processing options
     parser.add_argument("--dry-run", action="store_true", help="Don't save summaries to database")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing summaries in the database")
+    parser.add_argument("--non-interactive", action="store_true", help="Skip overwrite prompts and keep existing summaries")
     parser.add_argument("--verbose", action="store_true", help="Print detailed output including summaries")
     parser.add_argument("--save-prompt", action="store_true", help="Save prompts to files for debugging")
     parser.add_argument("--db-url", help="Database connection URL (optional)")
@@ -2065,27 +2164,55 @@ def main():
     else:
         logger.info("Abort functionality disabled")
     
-    # Initialize summary generator
-    summary_generator = SummaryGenerator(
-        model=args.model,
-        temperature=args.temperature,
-        effort=args.effort,
-        db_manager=db_manager,
-        dry_run=args.dry_run,
-        overwrite=args.overwrite,
-        verbose=args.verbose,
-        save_prompt=args.save_prompt
-    )
+    # Build model preference list and helpers
+    model_candidates: List[str] = []
+    if args.model:
+        model_candidates.append(args.model)
+    if (
+        not args.disable_fallback
+        and args.fallback_model
+        and args.fallback_model not in model_candidates
+    ):
+        model_candidates.append(args.fallback_model)
+
+    def build_generator(model_name: str) -> SummaryGenerator:
+        return SummaryGenerator(
+            model=model_name,
+            temperature=args.temperature,
+            effort=args.effort,
+            db_manager=db_manager,
+            dry_run=args.dry_run,
+            overwrite=args.overwrite,
+            verbose=args.verbose,
+            save_prompt=args.save_prompt,
+            prompt_on_conflict=not args.non_interactive
+        )
+
+    def run_with_models(run_fn):
+        for index, model_name in enumerate(model_candidates):
+            generator = build_generator(model_name)
+            result = run_fn(generator)
+            if result:
+                if model_name != args.model:
+                    logger.info(f"Used fallback model {model_name}")
+                return result, model_name
+            if index < len(model_candidates) - 1:
+                logger.warning(f"Model {model_name} did not produce a summary; trying next candidate")
+            else:
+                logger.error(f"Model {model_name} did not produce a summary; no more fallback models to try")
+        return None, None
     
     start_time = time.time()
     
     # Process based on mode
     if args.season:
         # Season mode
-        summary = summary_generator.generate_season_summary(args.season)
+        summary, used_model = run_with_models(
+            lambda gen: gen.generate_season_summary(args.season)
+        )
         
         if summary:
-            logger.info(f"Successfully generated summary for Season {args.season}")
+            logger.info(f"Successfully generated summary for Season {args.season} using {used_model}")
             if args.dry_run:
                 logger.info("[DRY RUN] Summary not saved to database")
         else:
@@ -2097,10 +2224,14 @@ def main():
             # Single episode
             try:
                 season, episode = EpisodeSlugParser.parse(args.episode[0])
-                summary = summary_generator.generate_episode_summary(season, episode)
+                summary, used_model = run_with_models(
+                    lambda gen: gen.generate_episode_summary(season, episode)
+                )
                 
                 if summary:
-                    logger.info(f"Successfully generated summary for S{season:02d}E{episode:02d}")
+                    logger.info(
+                        f"Successfully generated summary for S{season:02d}E{episode:02d} using {used_model}"
+                    )
                     if args.dry_run:
                         logger.info("[DRY RUN] Summary not saved to database")
                 else:
@@ -2119,24 +2250,28 @@ def main():
                 if not EpisodeSlugParser.validate_range(start_slug, end_slug):
                     logger.error(f"Invalid episode range: {start_slug} to {end_slug}")
                     return 1
-                    
+                
                 start_season, start_episode = EpisodeSlugParser.parse(start_slug)
                 end_season, end_episode = EpisodeSlugParser.parse(end_slug)
                 
-                results = summary_generator.generate_episode_range_summaries(
-                    start_season, start_episode,
-                    end_season, end_episode
+                results, used_model = run_with_models(
+                    lambda gen: gen.generate_episode_range_summaries(
+                        start_season, start_episode, end_season, end_episode
+                    )
                 )
                 
                 # Print summary
-                success_count = sum(1 for summary in results.values() if summary is not None)
-                logger.info(
-                    f"Generated {success_count} out of {len(results)} episode summaries "
-                    f"for range {start_slug} to {end_slug}"
-                )
-                
-                if args.dry_run:
-                    logger.info("[DRY RUN] Summaries not saved to database")
+                if results:
+                    success_count = sum(1 for summary in results.values() if summary is not None)
+                    logger.info(
+                        f"Generated {success_count} out of {len(results)} episode summaries "
+                        f"for range {start_slug} to {end_slug} using {used_model}"
+                    )
+                    
+                    if args.dry_run:
+                        logger.info("[DRY RUN] Summaries not saved to database")
+                else:
+                    logger.error(f"Failed to generate summaries for range {start_slug} to {end_slug}")
                     
             except ValueError as e:
                 logger.error(f"Error parsing episode slugs: {e}")
@@ -2154,10 +2289,12 @@ def main():
             logger.error(f"Invalid chunk range: {start_id} to {end_id}")
             return 1
             
-        summary = summary_generator.generate_chunk_range_summary(start_id, end_id)
+        summary, used_model = run_with_models(
+            lambda gen: gen.generate_chunk_range_summary(start_id, end_id)
+        )
         
         if summary:
-            logger.info(f"Successfully generated summary for chunk range {start_id}-{end_id}")
+            logger.info(f"Successfully generated summary for chunk range {start_id}-{end_id} using {used_model}")
             if args.dry_run:
                 logger.info("[DRY RUN] Summary not saved to database")
         else:

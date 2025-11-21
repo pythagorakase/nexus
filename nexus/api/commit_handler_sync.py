@@ -21,10 +21,11 @@ from nexus.agents.logon.apex_schema import (
     FactionReference,
     StateUpdates
 )
-from nexus.api.db_converters import (
-    chronology_to_db_values,
-    get_primary_place_id,
-    time_fields_to_interval
+from nexus.api.db_converters import chronology_to_db_values
+from nexus.api.summary_triggers import (
+    SummaryTask,
+    plan_summary_tasks,
+    schedule_summary_generation
 )
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
@@ -237,6 +238,9 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
     Returns:
         New chunk ID
     """
+    summary_tasks: List[SummaryTask] = []
+    chunk_id: Optional[int] = None
+
     try:
         # Start transaction
         with conn:  # This creates a transaction context
@@ -259,7 +263,7 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
             # Step 2: Get parent context
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
-                    SELECT season, episode, scene, world_layer, time_delta, place
+                    SELECT season, episode, scene, world_layer, time_delta
                     FROM chunk_metadata
                     WHERE chunk_id = %s
                 """, (incubator["parent_chunk_id"],))
@@ -268,7 +272,13 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                 if not parent_meta:
                     raise ValueError(f"No metadata found for parent chunk {incubator['parent_chunk_id']}")
 
-                logger.info(f"Parent chunk {incubator['parent_chunk_id']}: S{parent_meta['season']}E{parent_meta['episode']} scene {parent_meta['scene']}")
+                logger.info(
+                    "Parent chunk %s: S%sE%s scene %s",
+                    incubator["parent_chunk_id"],
+                    parent_meta["season"],
+                    parent_meta["episode"],
+                    parent_meta["scene"],
+                )
 
             # Step 3: Resolve entity references
             # Parse referenced entities from JSONB
@@ -287,15 +297,17 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                 current_season=parent_meta["season"],
                 current_episode=parent_meta["episode"]
             )
+            summary_tasks = plan_summary_tasks(
+                chronology.episode_transition,
+                parent_meta["season"],
+                parent_meta["episode"],
+            )
 
             # Increment scene number
             db_meta["scene"] = parent_meta["scene"] + 1
 
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
-
-            # Get primary place for legacy field
-            primary_place_id = get_primary_place_id(ref_entities.places)
 
             # Step 5: Insert narrative chunk
             with conn.cursor() as cur:
@@ -319,8 +331,8 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                 cur.execute("""
                     INSERT INTO chunk_metadata (
                         chunk_id, season, episode, scene, world_layer,
-                        time_delta, place, slug, metadata_version, generation_date
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        time_delta, generation_date, slug
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     chunk_id,
                     db_meta["season"],
@@ -328,10 +340,8 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                     db_meta["scene"],
                     world_layer,
                     db_meta["time_delta"],
-                    primary_place_id,
+                    datetime.utcnow(),
                     slug,
-                    "2.0",  # metadata version
-                    datetime.utcnow()
                 ))
                 logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
 
@@ -376,13 +386,19 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                 cur.execute("DELETE FROM incubator WHERE session_id = %s", (session_id,))
                 logger.info(f"Cleared incubator for session {session_id}")
 
-            logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
-            return chunk_id
-
     except Exception as e:
         logger.error(f"Failed to commit incubator session {session_id}: {e}")
         conn.rollback()  # Explicit rollback on error
         raise
+
+    if summary_tasks:
+        schedule_summary_generation(summary_tasks)
+
+    if chunk_id is None:
+        raise ValueError(f"Chunk commit failed for session {session_id}")
+
+    logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
+    return chunk_id
 
 
 def apply_state_updates_sync(conn, state_updates: StateUpdates):

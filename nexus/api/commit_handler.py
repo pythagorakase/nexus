@@ -10,7 +10,7 @@ and transaction management.
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import asyncpg
 
 from nexus.agents.logon.apex_schema import (
@@ -20,10 +20,14 @@ from nexus.agents.logon.apex_schema import (
 )
 from nexus.api.db_converters import (
     chronology_to_db_values,
-    get_primary_place_id,
     resolve_character_references,
     resolve_place_references,
     resolve_faction_references
+)
+from nexus.api.summary_triggers import (
+    SummaryTask,
+    plan_summary_tasks,
+    schedule_summary_generation
 )
 
 logger = logging.getLogger("nexus.api.commit_handler")
@@ -66,7 +70,7 @@ async def fetch_chunk_metadata(
     """
     row = await conn.fetchrow(
         """
-        SELECT season, episode, scene, world_layer, time_delta, place
+        SELECT season, episode, scene, world_layer, time_delta
         FROM chunk_metadata
         WHERE chunk_id = $1
         """,
@@ -114,20 +118,21 @@ async def insert_chunk_metadata(
     scene: int,
     world_layer: str,
     time_delta: Optional[Any],
-    place: Optional[int]
+    generation_date: Optional[datetime] = None
 ) -> None:
     """
     Insert metadata for a chunk.
     """
     # Generate slug (e.g., "S05E06_001")
     slug = f"S{season:02d}E{episode:02d}_{scene:03d}"
+    generation_timestamp = generation_date or datetime.utcnow()
 
     await conn.execute(
         """
         INSERT INTO chunk_metadata (
             chunk_id, season, episode, scene, world_layer,
-            time_delta, place, slug, metadata_version, generation_date
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            time_delta, generation_date, slug
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """,
         chunk_id,
         season,
@@ -135,10 +140,8 @@ async def insert_chunk_metadata(
         scene,
         world_layer,
         time_delta,
-        place,
+        generation_timestamp,
         slug,
-        "2.0",  # metadata version
-        datetime.utcnow()
     )
     logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
 
@@ -341,6 +344,9 @@ async def commit_incubator_to_database(
         ValueError: If data is missing or invalid
         asyncpg.PostgresError: If database operation fails
     """
+    summary_tasks: List[SummaryTask] = []
+    chunk_id: Optional[int] = None
+
     async with conn.transaction():
         try:
             # Step 1: Get incubator data
@@ -349,7 +355,13 @@ async def commit_incubator_to_database(
 
             # Step 2: Get parent context
             parent_meta = await fetch_chunk_metadata(conn, incubator["parent_chunk_id"])
-            logger.info(f"Parent chunk {incubator['parent_chunk_id']}: S{parent_meta['season']}E{parent_meta['episode']} scene {parent_meta['scene']}")
+            logger.info(
+                "Parent chunk %s: S%sE%s scene %s",
+                incubator["parent_chunk_id"],
+                parent_meta["season"],
+                parent_meta["episode"],
+                parent_meta["scene"],
+            )
 
             # Step 3: Resolve entity references
             # Parse referenced entities from JSONB
@@ -368,15 +380,17 @@ async def commit_incubator_to_database(
                 current_season=parent_meta["season"],
                 current_episode=parent_meta["episode"]
             )
+            summary_tasks = plan_summary_tasks(
+                chronology.episode_transition,
+                parent_meta["season"],
+                parent_meta["episode"],
+            )
 
             # Increment scene number
             db_meta["scene"] = parent_meta["scene"] + 1
 
             # Get world_layer
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
-
-            # Get primary place for legacy field
-            primary_place_id = get_primary_place_id(ref_entities.places)
 
             # Step 5: Insert narrative chunk
             chunk_id = await insert_narrative_chunk(
@@ -394,8 +408,7 @@ async def commit_incubator_to_database(
                 episode=db_meta["episode"],
                 scene=db_meta["scene"],
                 world_layer=world_layer,
-                time_delta=db_meta["time_delta"],
-                place=primary_place_id  # Legacy field
+                time_delta=db_meta["time_delta"]
             )
 
             # Step 7: Insert junction table references
@@ -411,9 +424,15 @@ async def commit_incubator_to_database(
             # Step 9: Clear incubator
             await clear_incubator(conn, session_id)
 
-            logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
-            return chunk_id
-
         except Exception as e:
             logger.error(f"Failed to commit incubator session {session_id}: {e}")
             raise
+
+    if summary_tasks:
+        schedule_summary_generation(summary_tasks)
+
+    if chunk_id is None:
+        raise ValueError(f"Chunk commit failed for session {session_id}")
+
+    logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
+    return chunk_id
