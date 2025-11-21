@@ -21,7 +21,7 @@ Everything else in this document elaborates on these four points.
 
 **Structured Targets:** Character metadata, relationship data, psychological states, and world variables
 
-**Recently Updated Fields:** Database fields modified in the previous turn, automatically included to ensure statle continuity
+**Recently Updated Fields:** Database fields modified in the previous turn, automatically included to ensure state continuity
 
 **User Input:** The player's current action, dialogue, intention, or choice
 
