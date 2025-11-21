@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChunkWithMetadata } from "../components/NarrativeTab";
 import type { IncubatorViewPayload, NarrativeProgressPayload, NarrativePhase } from "../types/narrative";
 import { toast } from "./use-toast";
@@ -23,6 +24,7 @@ interface UseNarrativeGenerationOptions {
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
   const { onPhaseChange, onComplete, onError, allowedChunkId = null } = options;
+  const queryClient = useQueryClient();
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
@@ -322,6 +324,12 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         description: "The generated narrative has been committed to the database.",
       });
 
+      // Ensure dependent data reflects the newly committed chunk
+      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === "/api/narrative/chunks",
+      });
+
       setShowApprovalModal(false);
       setIncubatorData(null);
       setActiveNarrativeSession(null);
@@ -335,7 +343,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         variant: "destructive",
       });
     }
-  }, []);
+  }, [queryClient]);
 
   const handleRegenerate = useCallback(() => {
     if (!generationParentChunk) {
