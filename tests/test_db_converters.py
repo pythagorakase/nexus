@@ -6,7 +6,6 @@ from nexus.api.db_converters import (
     time_fields_to_interval,
     interval_to_time_fields,
     chronology_to_db_values,
-    get_primary_place_id
 )
 from nexus.agents.logon.apex_schema import (
     ChronologyUpdate,
@@ -128,45 +127,6 @@ class TestChronologyConversion:
 
 class TestPlaceReference:
     """Test place reference handling"""
-
-    def test_get_primary_place_id_with_setting(self):
-        """Test extracting primary place from setting reference"""
-        places = [
-            PlaceReference(
-                place_id=1,
-                reference_type=PlaceReferenceType.MENTIONED
-            ),
-            PlaceReference(
-                place_id=2,
-                reference_type=PlaceReferenceType.SETTING
-            ),
-            PlaceReference(
-                place_id=3,
-                reference_type=PlaceReferenceType.TRANSIT
-            )
-        ]
-        primary_id = get_primary_place_id(places)
-        assert primary_id == 2  # The SETTING place
-
-    def test_get_primary_place_id_no_setting(self):
-        """Test when no setting place exists"""
-        places = [
-            PlaceReference(
-                place_id=1,
-                reference_type=PlaceReferenceType.MENTIONED
-            ),
-            PlaceReference(
-                place_id=3,
-                reference_type=PlaceReferenceType.TRANSIT
-            )
-        ]
-        primary_id = get_primary_place_id(places)
-        assert primary_id is None
-
-    def test_get_primary_place_id_empty_list(self):
-        """Test with empty place list"""
-        primary_id = get_primary_place_id([])
-        assert primary_id is None
 
     def test_place_reference_validation(self):
         """Test PlaceReference validation"""

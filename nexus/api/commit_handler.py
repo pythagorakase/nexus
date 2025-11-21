@@ -351,7 +351,7 @@ async def commit_incubator_to_database(
         try:
             # Step 1: Get incubator data
             incubator = await fetch_incubator_data(conn, session_id)
-            logger.info(f"Processing incubator session {session_id}")
+            logger.info("Processing incubator session %s", session_id)
 
             # Step 2: Get parent context
             parent_meta = await fetch_chunk_metadata(conn, incubator["parent_chunk_id"])
@@ -399,6 +399,8 @@ async def commit_incubator_to_database(
                 season=db_meta["season"],
                 episode=db_meta["episode"]
             )
+            if chunk_id is None:
+                raise ValueError("Failed to obtain chunk_id after insert")
 
             # Step 6: Insert chunk metadata
             await insert_chunk_metadata(
@@ -425,14 +427,14 @@ async def commit_incubator_to_database(
             await clear_incubator(conn, session_id)
 
         except Exception as e:
-            logger.error(f"Failed to commit incubator session {session_id}: {e}")
+            logger.error("Failed to commit incubator session %s: %s", session_id, e)
             raise
 
     if summary_tasks:
-        schedule_summary_generation(summary_tasks)
+        try:
+            schedule_summary_generation(summary_tasks)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to schedule summaries for session %s: %s", session_id, exc)
 
-    if chunk_id is None:
-        raise ValueError(f"Chunk commit failed for session {session_id}")
-
-    logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
+    logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id

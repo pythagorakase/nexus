@@ -258,7 +258,7 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                 if not incubator:
                     raise ValueError(f"No incubator data found for session {session_id}")
 
-                logger.info(f"Processing incubator session {session_id}")
+                logger.info("Processing incubator session %s", session_id)
 
             # Step 2: Get parent context
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -321,7 +321,9 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                     db_meta["episode"]
                 ))
                 chunk_id = cur.fetchone()[0]
-                logger.info(f"Created narrative chunk {chunk_id}")
+                if chunk_id is None:
+                    raise ValueError("Failed to obtain chunk_id after insert")
+                logger.info("Created narrative chunk %s", chunk_id)
 
             # Step 6: Insert chunk metadata
             with conn.cursor() as cur:
@@ -343,7 +345,7 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
                     datetime.utcnow(),
                     slug,
                 ))
-                logger.info(f"Created metadata for chunk {chunk_id}: {slug}")
+                logger.info("Created metadata for chunk %s: %s", chunk_id, slug)
 
             # Step 7: Insert junction table references
             # Insert place references
@@ -384,20 +386,20 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
             # Step 9: Clear incubator
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM incubator WHERE session_id = %s", (session_id,))
-                logger.info(f"Cleared incubator for session {session_id}")
+                logger.info("Cleared incubator for session %s", session_id)
 
     except Exception as e:
-        logger.error(f"Failed to commit incubator session {session_id}: {e}")
+        logger.error("Failed to commit incubator session %s: %s", session_id, e)
         conn.rollback()  # Explicit rollback on error
         raise
 
     if summary_tasks:
-        schedule_summary_generation(summary_tasks)
+        try:
+            schedule_summary_generation(summary_tasks)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error("Failed to schedule summaries for session %s: %s", session_id, exc)
 
-    if chunk_id is None:
-        raise ValueError(f"Chunk commit failed for session {session_id}")
-
-    logger.info(f"Successfully committed chunk {chunk_id} from session {session_id}")
+    logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id
 
 

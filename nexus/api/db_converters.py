@@ -122,33 +122,6 @@ def chronology_to_db_values(
     }
 
 
-# ============================================================================
-# Place Reference Resolution
-# ============================================================================
-
-def get_primary_place_id(place_references: List[PlaceReference]) -> Optional[int]:
-    """
-    Extract primary place ID for legacy chunk_metadata.place field.
-
-    Finds the first 'setting' place, or None if no setting exists.
-    This maintains backward compatibility with the legacy place FK.
-
-    Args:
-        place_references: List of place references from LLM
-
-    Returns:
-        Place ID for the primary setting, or None
-    """
-    for ref in place_references:
-        if ref.reference_type == PlaceReferenceType.SETTING:
-            # Return the first setting place
-            if ref.place_id:
-                return ref.place_id
-            # If it's a new place, it will be created first and ID returned
-            # This is handled in the commit logic
-    return None
-
-
 async def resolve_place_references(
     place_references: List[PlaceReference],
     conn: asyncpg.Connection

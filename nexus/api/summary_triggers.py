@@ -5,7 +5,7 @@ Helper utilities to trigger narrative summary generation after episode/season tr
 from __future__ import annotations
 
 import logging
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Sequence
 
@@ -17,6 +17,7 @@ from scripts.summarize_narrative import (
 )
 
 logger = logging.getLogger("nexus.api.summary_triggers")
+_EXECUTOR = ThreadPoolExecutor(max_workers=2)
 
 
 @dataclass(frozen=True)
@@ -100,8 +101,7 @@ def schedule_summary_generation(
     )
 
     if run_in_thread:
-        thread = threading.Thread(target=runner, daemon=True)
-        thread.start()
+        _EXECUTOR.submit(runner)
     else:
         runner()
 
