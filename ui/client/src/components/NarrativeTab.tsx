@@ -266,7 +266,7 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
   const { fonts } = useFonts();
 
   const {
@@ -316,9 +316,13 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
     [onChunkSelected],
   );
 
-  // Initialize view to latest chunk
+  // Initialize or update view to latest chunk when it changes
   useEffect(() => {
-    if (initialized || !latestChunk?.metadata) {
+    if (!latestChunk?.metadata) {
+      return;
+    }
+
+    if (initializedChunkId === latestChunk.id) {
       return;
     }
 
@@ -330,11 +334,11 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
       setOpenSeasons([season]);
       setOpenEpisodes([`${season}-${episode}`]);
       selectChunk(latestChunk);
-      setInitialized(true);
+      setInitializedChunkId(latestChunk.id);
     } else {
       console.warn('[NarrativeTab] Latest chunk has null season or episode', latestChunk.metadata);
     }
-  }, [latestChunk, initialized, selectChunk]);
+  }, [latestChunk, initializedChunkId, selectChunk]);
 
   const toggleSeason = useCallback((seasonId: number) => {
     setOpenSeasons((prev) =>

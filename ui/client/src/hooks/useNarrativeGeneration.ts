@@ -10,6 +10,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ChunkWithMetadata } from "../components/NarrativeTab";
 import type { IncubatorViewPayload, NarrativeProgressPayload, NarrativePhase } from "../types/narrative";
 import { toast } from "./use-toast";
@@ -18,10 +19,12 @@ interface UseNarrativeGenerationOptions {
   onPhaseChange?: (phase: NarrativePhase | null) => void;
   onComplete?: () => void;
   onError?: () => void;
+  allowedChunkId?: number | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null } = options;
+  const queryClient = useQueryClient();
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
@@ -205,16 +208,25 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       if (!selectedChunk) {
         toast({
           title: "Select a chunk",
-          description: "Choose a narrative chunk to continue (currently limited to chunk 1425).",
+          description: "Choose the current narrative chunk before continuing.",
         });
         return;
       }
 
-      // Rollout guard - only chunk 1425 for now
-      if (selectedChunk.id !== 1425) {
+      // Rollout guard - caller passes the latest chunk id; avoid continuing stale chunks
+      if (allowedChunkId === null || allowedChunkId === undefined) {
         toast({
-          title: "Test rollout limited",
-          description: "Continue is temporarily restricted to chunk 1425 for safety.",
+          title: "Latest chunk unavailable",
+          description: "Cannot continue until the latest chunk is loaded.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (selectedChunk.id !== allowedChunkId) {
+        toast({
+          title: "Continue latest chunk",
+          description: `Continue is limited to the newest chunk (${allowedChunkId}).`,
           variant: "destructive",
         });
         return;
@@ -284,7 +296,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
+    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
   );
 
   const handleApprove = useCallback(async () => {
@@ -312,6 +324,12 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         description: "The generated narrative has been committed to the database.",
       });
 
+      // Ensure dependent data reflects the newly committed chunk
+      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === "/api/narrative/chunks",
+      });
+
       setShowApprovalModal(false);
       setIncubatorData(null);
       setActiveNarrativeSession(null);
@@ -325,7 +343,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         variant: "destructive",
       });
     }
-  }, []);
+  }, [queryClient]);
 
   const handleRegenerate = useCallback(() => {
     if (!generationParentChunk) {
