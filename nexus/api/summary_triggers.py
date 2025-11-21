@@ -70,6 +70,10 @@ def schedule_summary_generation(
     tasks: Sequence[SummaryTask],
     overwrite: bool = False,
     model_candidates: Optional[Sequence[str]] = None,
+    *,
+    run_in_thread: bool = True,
+    db_manager_factory: Optional[Callable[[], DatabaseManager]] = None,
+    generator_cls: Callable[..., SummaryGenerator] = SummaryGenerator,
 ) -> None:
     """
     Kick off background summary generation for the provided tasks.
@@ -78,34 +82,46 @@ def schedule_summary_generation(
         tasks: Collection of summaries to generate.
         overwrite: Whether to regenerate existing summaries.
         model_candidates: Preferred models to try (fallback order).
+        run_in_thread: Execute generation on a background thread (default) or inline (for testing).
+        db_manager_factory: Optional factory for injecting a preconfigured DatabaseManager (for tests).
+        generator_cls: Optional SummaryGenerator class for dependency injection/mocking.
     """
     if not tasks:
         return
 
     models = _coalesce_models(model_candidates)
 
-    thread = threading.Thread(
-        target=_run_summary_generation,
-        args=(list(tasks), models, overwrite),
-        daemon=True,
+    runner = lambda: _run_summary_generation(
+        list(tasks),
+        models,
+        overwrite,
+        db_manager_factory=db_manager_factory,
+        generator_cls=generator_cls,
     )
-    thread.start()
+
+    if run_in_thread:
+        thread = threading.Thread(target=runner, daemon=True)
+        thread.start()
+    else:
+        runner()
 
 
 def _run_summary_generation(
     tasks: Sequence[SummaryTask],
     model_candidates: Sequence[str],
     overwrite: bool,
+    db_manager_factory: Optional[Callable[[], DatabaseManager]] = None,
+    generator_cls: Callable[..., SummaryGenerator] = SummaryGenerator,
 ) -> None:
     try:
-        db_manager = DatabaseManager()
+        db_manager = db_manager_factory() if db_manager_factory else DatabaseManager()
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Unable to start summary generation; database init failed: %s", exc)
         return
 
     for task in tasks:
         try:
-            _run_single_task(task, db_manager, model_candidates, overwrite)
+            _run_single_task(task, db_manager, model_candidates, overwrite, generator_cls)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Summary generation failed for %s: %s", task, exc)
 
@@ -115,6 +131,7 @@ def _run_single_task(
     db_manager: DatabaseManager,
     model_candidates: Sequence[str],
     overwrite: bool,
+    generator_cls: Callable[..., SummaryGenerator],
 ) -> None:
     if task.kind == "episode":
         if task.episode is None:
@@ -142,7 +159,7 @@ def _run_single_task(
         target_label = f"Season {task.season}"
 
     for index, model_name in enumerate(model_candidates):
-        generator = SummaryGenerator(
+        generator = generator_cls(
             model=model_name,
             db_manager=db_manager,
             overwrite=overwrite,
