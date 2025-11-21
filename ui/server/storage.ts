@@ -125,63 +125,104 @@ export class PostgresStorage implements IStorage {
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }> {
-    // Get chunks with their metadata for a specific season and episode
-    const chunksWithMetadata = await this.db
-      .select({
-        chunk: narrativeChunks,
-        metadata: chunkMetadata
-      })
-      .from(narrativeChunks)
-      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(and(
-        eq(chunkMetadata.season, seasonId),
-        eq(chunkMetadata.episode, episodeId)
-      ))
-      .orderBy(narrativeChunks.id)
-      .limit(limit)
-      .offset(offset);
+    const chunksWithMetadata = await this.db.execute(sql`
+      SELECT
+        nc.id,
+        nc.raw_text,
+        nc.created_at,
+        cm.chunk_id,
+        cm.season,
+        cm.episode,
+        cm.scene,
+        cm.world_layer,
+        cm.time_delta,
+        cm.metadata_version,
+        cm.generation_date,
+        cm.slug
+      FROM narrative_chunks nc
+      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE cm.season = ${seasonId} AND cm.episode = ${episodeId}
+      ORDER BY nc.id
+      LIMIT ${limit} OFFSET ${offset}
+    `);
 
-    // Get total count
-    const countResult = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(narrativeChunks)
-      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(and(
-        eq(chunkMetadata.season, seasonId),
-        eq(chunkMetadata.episode, episodeId)
-      ));
+    const countResult = await this.db.execute(sql`
+      SELECT count(*) AS count
+      FROM narrative_chunks nc
+      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE cm.season = ${seasonId} AND cm.episode = ${episodeId}
+    `);
 
-    const total = Number(countResult[0]?.count || 0);
+    const total = Number(countResult.rows?.[0]?.count || 0);
 
-    // Map to the expected format
-    const chunks = chunksWithMetadata.map(row => ({
-      ...row.chunk,
-      metadata: row.metadata || undefined
+    const chunks = (chunksWithMetadata.rows as any[]).map((row) => ({
+      id: Number(row.id),
+      rawText: row.raw_text,
+      createdAt: row.created_at ?? null,
+      metadata: row.chunk_id
+        ? {
+            id: Number(row.chunk_id),
+            chunkId: Number(row.chunk_id),
+            season: toNumber(row.season),
+            episode: toNumber(row.episode),
+            scene: toNumber(row.scene),
+            worldLayer: row.world_layer ?? null,
+            timeDelta: row.time_delta ?? null,
+            metadataVersion: row.metadata_version ?? null,
+            generationDate: row.generation_date ?? null,
+            slug: row.slug ?? null,
+          }
+        : undefined,
     }));
 
     return { chunks, total };
   }
 
   async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
-    // Get the chunk with highest ID that has metadata
-    const result = await this.db
-      .select({
-        chunk: narrativeChunks,
-        metadata: chunkMetadata
-      })
-      .from(narrativeChunks)
-      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(sql`${chunkMetadata.id} IS NOT NULL`)
-      .orderBy(sql`${narrativeChunks.id} DESC`)
-      .limit(1);
+    const result = await this.db.execute(sql`
+      SELECT
+        nc.id,
+        nc.raw_text,
+        nc.created_at,
+        cm.chunk_id,
+        cm.season,
+        cm.episode,
+        cm.scene,
+        cm.world_layer,
+        cm.time_delta,
+        cm.metadata_version,
+        cm.generation_date,
+        cm.slug
+      FROM narrative_chunks nc
+      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE cm.id IS NOT NULL
+      ORDER BY nc.id DESC
+      LIMIT 1
+    `);
 
-    if (result.length === 0) {
+    if (!result.rows || result.rows.length === 0) {
       return null;
     }
 
+    const row = result.rows[0] as any;
     return {
-      ...result[0].chunk,
-      metadata: result[0].metadata || undefined
+      id: Number(row.id),
+      rawText: row.raw_text,
+      createdAt: row.created_at ?? null,
+      metadata: row.chunk_id
+        ? {
+            id: Number(row.chunk_id),
+            chunkId: Number(row.chunk_id),
+            season: toNumber(row.season),
+            episode: toNumber(row.episode),
+            scene: toNumber(row.scene),
+            worldLayer: row.world_layer ?? null,
+            timeDelta: row.time_delta ?? null,
+            metadataVersion: row.metadata_version ?? null,
+            generationDate: row.generation_date ?? null,
+            slug: row.slug ?? null,
+          }
+        : undefined,
     };
   }
 
@@ -189,43 +230,74 @@ export class PostgresStorage implements IStorage {
     previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
     next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
   }> {
-    // Get previous chunk (highest ID less than current)
-    const previousResult = await this.db
-      .select({
-        chunk: narrativeChunks,
-        metadata: chunkMetadata
-      })
-      .from(narrativeChunks)
-      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(and(
-        sql`${narrativeChunks.id} < ${chunkId}`,
-        sql`${chunkMetadata.id} IS NOT NULL`
-      ))
-      .orderBy(sql`${narrativeChunks.id} DESC`)
-      .limit(1);
+    const previousResult = await this.db.execute(sql`
+      SELECT
+        nc.id,
+        nc.raw_text,
+        nc.created_at,
+        cm.chunk_id,
+        cm.season,
+        cm.episode,
+        cm.scene,
+        cm.world_layer,
+        cm.time_delta,
+        cm.metadata_version,
+        cm.generation_date,
+        cm.slug
+      FROM narrative_chunks nc
+      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE nc.id < ${chunkId} AND cm.id IS NOT NULL
+      ORDER BY nc.id DESC
+      LIMIT 1
+    `);
 
-    // Get next chunk (lowest ID greater than current)
-    const nextResult = await this.db
-      .select({
-        chunk: narrativeChunks,
-        metadata: chunkMetadata
-      })
-      .from(narrativeChunks)
-      .leftJoin(chunkMetadata, eq(narrativeChunks.id, chunkMetadata.chunkId))
-      .where(and(
-        sql`${narrativeChunks.id} > ${chunkId}`,
-        sql`${chunkMetadata.id} IS NOT NULL`
-      ))
-      .orderBy(sql`${narrativeChunks.id} ASC`)
-      .limit(1);
+    const nextResult = await this.db.execute(sql`
+      SELECT
+        nc.id,
+        nc.raw_text,
+        nc.created_at,
+        cm.chunk_id,
+        cm.season,
+        cm.episode,
+        cm.scene,
+        cm.world_layer,
+        cm.time_delta,
+        cm.metadata_version,
+        cm.generation_date,
+        cm.slug
+      FROM narrative_chunks nc
+      LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
+      WHERE nc.id > ${chunkId} AND cm.id IS NOT NULL
+      ORDER BY nc.id ASC
+      LIMIT 1
+    `);
+
+    const mapRow = (row: any) =>
+      row
+        ? {
+            id: Number(row.id),
+            rawText: row.raw_text,
+            createdAt: row.created_at ?? null,
+            metadata: row.chunk_id
+              ? {
+                  id: Number(row.chunk_id),
+                  chunkId: Number(row.chunk_id),
+                  season: toNumber(row.season),
+                  episode: toNumber(row.episode),
+                  scene: toNumber(row.scene),
+                  worldLayer: row.world_layer ?? null,
+                  timeDelta: row.time_delta ?? null,
+                  metadataVersion: row.metadata_version ?? null,
+                  generationDate: row.generation_date ?? null,
+                  slug: row.slug ?? null,
+                }
+              : undefined,
+          }
+        : null;
 
     return {
-      previous: previousResult.length > 0
-        ? { ...previousResult[0].chunk, metadata: previousResult[0].metadata || undefined }
-        : null,
-      next: nextResult.length > 0
-        ? { ...nextResult[0].chunk, metadata: nextResult[0].metadata || undefined }
-        : null,
+      previous: mapRow(previousResult.rows?.[0]),
+      next: mapRow(nextResult.rows?.[0]),
     };
   }
 
@@ -487,7 +559,6 @@ class MemStorage implements IStorage {
       scene: meta.scene !== undefined ? Number(meta.scene) : null,
       worldLayer: meta.world_layer ?? null,
       timeDelta: meta.time_delta ?? null,
-      place: meta.place !== undefined ? Number(meta.place) : null,
       metadataVersion: meta.metadata_version ?? null,
       generationDate: meta.generation_date ?? null,
       slug: meta.slug ?? null,
