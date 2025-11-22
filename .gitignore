@@ -39,6 +39,9 @@ log.md
 /temp/
 logs/
 
+# Ignore Save Slots
+/slots/
+
 # Ignore binaries and database files
 *.sqlite3
 
