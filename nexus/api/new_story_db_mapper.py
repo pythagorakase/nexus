@@ -7,6 +7,7 @@ into the format expected by the database tables.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
@@ -226,7 +227,7 @@ class NewStoryDatabaseMapper:
             with get_connection(self.dbname) as conn:
                 with conn.cursor() as cur:
                     # Store setting as JSONB in global_variables
-                    setting_json = setting.model_dump()
+                    setting_json = json.dumps(setting.model_dump())
 
                     cur.execute("""
                         INSERT INTO global_variables (key, value)
@@ -253,7 +254,7 @@ class NewStoryDatabaseMapper:
         try:
             with get_connection(self.dbname) as conn:
                 with conn.cursor() as cur:
-                    seed_json = seed.model_dump()
+                    seed_json = json.dumps(seed.model_dump())
 
                     cur.execute("""
                         INSERT INTO global_variables (key, value)
@@ -511,8 +512,9 @@ class NewStoryDatabaseMapper:
             logger.info("Transition complete: new_story set to false")
 
             # Clear the cache (safe to do after successful transition)
-            from nexus.api.new_story_cache import clear_new_story_cache
-            clear_new_story_cache(self.dbname)
+            from nexus.api.new_story_cache import clear_cache
+
+            clear_cache(self.dbname)
             logger.debug("Cleared new story cache")
 
             return {
