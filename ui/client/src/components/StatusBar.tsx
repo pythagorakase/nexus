@@ -140,6 +140,7 @@ export function StatusBar({
       });
     } else {
       operationToastRef.current.update({
+        id: operationToastRef.current.id,
         title: "Model ready",
         description: message,
         variant: "default",
@@ -159,6 +160,7 @@ export function StatusBar({
       });
     } else {
       operationToastRef.current.update({
+        id: operationToastRef.current.id,
         title: "Model operation failed",
         description: message,
         variant: "destructive",
@@ -254,9 +256,8 @@ export function StatusBar({
 
   return (
     <div
-      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${
-        isBarLoading ? "status-bar-loading" : ""
-      }`}
+      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${isBarLoading ? "status-bar-loading" : ""
+        }`}
     >
       <Button
         size="icon"
@@ -330,8 +331,8 @@ export function StatusBar({
               {pendingOperation === "load"
                 ? "Awaiting LM Studio to finish loading..."
                 : pendingOperation === "unload"
-                ? "Shutting down loaded model..."
-                : "LM Studio is busy..."}
+                  ? "Shutting down loaded model..."
+                  : "LM Studio is busy..."}
             </span>
           )}
         </div>

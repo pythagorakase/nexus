@@ -349,12 +349,12 @@ export function NexusLayout() {
   const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
   const chunkLabel =
     narrative.generationParentChunk?.metadata?.season !== null &&
-    narrative.generationParentChunk?.metadata?.season !== undefined &&
-    narrative.generationParentChunk?.metadata?.episode !== null &&
-    narrative.generationParentChunk?.metadata?.episode !== undefined
+      narrative.generationParentChunk?.metadata?.season !== undefined &&
+      narrative.generationParentChunk?.metadata?.episode !== null &&
+      narrative.generationParentChunk?.metadata?.episode !== undefined
       ? `S${String(narrative.generationParentChunk.metadata.season).padStart(2, "0")}E${String(
-          narrative.generationParentChunk.metadata.episode,
-        ).padStart(2, "0")}`
+        narrative.generationParentChunk.metadata.episode,
+      ).padStart(2, "0")}`
       : narrative.incubatorData?.parent_chunk_id
         ? `Chunk ${narrative.incubatorData.parent_chunk_id}`
         : "Narrative turn";
@@ -435,7 +435,10 @@ export function NexusLayout() {
           </div>
 
           <TabsContent value="narrative" className="flex-1 overflow-hidden m-0">
-            <NarrativeTab onChunkSelected={handleChunkSelection} />
+            <NarrativeTab
+              onChunkSelected={handleChunkSelection}
+              sessionId={narrative.activeNarrativeSession ?? undefined}
+            />
           </TabsContent>
 
           <TabsContent value="map" className="flex-1 overflow-hidden m-0">
@@ -592,30 +595,30 @@ export function NexusLayout() {
                   {(referencedCharacters.length > 0 ||
                     referencedPlaces.length > 0 ||
                     referencedFactions.length > 0) && (
-                    <div>
-                      <div className="font-mono text-[11px] text-muted-foreground mb-1">References</div>
-                      <ul className="space-y-1 list-disc list-inside">
-                        {referencedCharacters.map((ref: any, idx: number) => (
-                          <li key={`ref-char-${idx}`}>
-                            #{ref.character_id ?? "?"}: {ref.character_name ?? "Unknown"}{" "}
-                            {ref.reference_type ? `(${ref.reference_type})` : ""}
-                          </li>
-                        ))}
-                        {referencedPlaces.map((ref: any, idx: number) => (
-                          <li key={`ref-place-${idx}`}>
-                            #{ref.place_id ?? "?"}: {ref.place_name ?? "Unknown"}{" "}
-                            {ref.reference_type ? `(${ref.reference_type})` : ""}
-                          </li>
-                        ))}
-                        {referencedFactions.map((ref: any, idx: number) => (
-                          <li key={`ref-faction-${idx}`}>
-                            #{ref.faction_id ?? "?"}: {ref.faction_name ?? "Unknown"}{" "}
-                            {ref.reference_type ? `(${ref.reference_type})` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      <div>
+                        <div className="font-mono text-[11px] text-muted-foreground mb-1">References</div>
+                        <ul className="space-y-1 list-disc list-inside">
+                          {referencedCharacters.map((ref: any, idx: number) => (
+                            <li key={`ref-char-${idx}`}>
+                              #{ref.character_id ?? "?"}: {ref.character_name ?? "Unknown"}{" "}
+                              {ref.reference_type ? `(${ref.reference_type})` : ""}
+                            </li>
+                          ))}
+                          {referencedPlaces.map((ref: any, idx: number) => (
+                            <li key={`ref-place-${idx}`}>
+                              #{ref.place_id ?? "?"}: {ref.place_name ?? "Unknown"}{" "}
+                              {ref.reference_type ? `(${ref.reference_type})` : ""}
+                            </li>
+                          ))}
+                          {referencedFactions.map((ref: any, idx: number) => (
+                            <li key={`ref-faction-${idx}`}>
+                              #{ref.faction_id ?? "?"}: {ref.faction_name ?? "Unknown"}{" "}
+                              {ref.reference_type ? `(${ref.reference_type})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

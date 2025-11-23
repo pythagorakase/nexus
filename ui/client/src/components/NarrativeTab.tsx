@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Collapsible,
@@ -11,9 +12,16 @@ import {
 } from "@/components/ui/collapsible";
 import type { Episode, NarrativeChunk, ChunkMetadata, Season } from "@shared/schema";
 import { useFonts } from "@/contexts/FontContext";
+import { AcceptRejectButtons } from "./AcceptRejectButtons";
+import { EditPreviousDialog } from "./EditPreviousDialog";
+import { acceptChunk, rejectChunk, editChunkInput, getChunkStates, type ChunkState } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 
 export interface ChunkWithMetadata extends NarrativeChunk {
   metadata?: ChunkMetadata;
+  state?: "draft" | "pending_review" | "finalized" | "embedded";
+  regeneration_count?: number;
 }
 
 interface ChunkResponse {
@@ -144,9 +152,8 @@ function EpisodeNode({
             <Button
               key={chunk.id}
               variant="ghost"
-              className={`w-full justify-start font-mono text-xs hover-elevate h-8 text-foreground ${
-                isSelected ? "bg-accent text-accent-foreground" : ""
-              }`}
+              className={`w-full justify-start font-mono text-xs hover-elevate h-8 text-foreground ${isSelected ? "bg-accent text-accent-foreground" : ""
+                }`}
               onClick={() => onSelectChunk(chunk)}
               data-testid={`button-chunk-${chunk.id}`}
             >
@@ -162,7 +169,7 @@ function EpisodeNode({
           </div>
         )}
         {isFetching && !isLoading && (
-            <div className="px-2 py-2 text-[11px] text-muted-foreground/70">
+          <div className="px-2 py-2 text-[11px] text-muted-foreground/70">
             Refreshing...
           </div>
         )}
@@ -260,14 +267,17 @@ function SeasonNode({
 
 interface NarrativeTabProps {
   onChunkSelected?: (chunk: ChunkWithMetadata | null) => void;
+  sessionId?: string;
 }
 
-export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
+export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps = {}) {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { fonts } = useFonts();
+  const queryClient = useQueryClient();
 
   const {
     data: seasons = [],
@@ -306,6 +316,103 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
     },
     enabled: !!selectedChunk,
     staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch chunk states
+  const { data: chunkStates = [] } = useQuery<ChunkState[]>({
+    queryKey: ["/api/chunks/states", selectedChunk?.id],
+    queryFn: () => {
+      if (!selectedChunk) return Promise.resolve([]);
+      // Get states for a window around the selected chunk
+      const start = Math.max(1, selectedChunk.id - 10);
+      const end = selectedChunk.id + 10;
+      return getChunkStates(start, end);
+    },
+    enabled: !!selectedChunk,
+    refetchInterval: 5000, // Poll for state updates
+  });
+
+  const currentChunkState = useMemo(() => {
+    if (!selectedChunk) return null;
+    return chunkStates.find(s => s.id === selectedChunk.id);
+  }, [selectedChunk, chunkStates]);
+
+  // Mutations
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedChunk || !sessionId) return;
+      return acceptChunk(selectedChunk.id, sessionId);
+    },
+    onSuccess: (data) => {
+      if (data) {
+        toast({
+          title: "Chunk Accepted",
+          description: "The narrative has been finalized.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/chunks/states"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to accept chunk",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (action: "regenerate" | "edit_previous") => {
+      if (!selectedChunk || !sessionId) return;
+      if (action === "edit_previous") {
+        setIsEditDialogOpen(true);
+        return; // Don't call API yet for edit
+      }
+      return rejectChunk(selectedChunk.id, sessionId, action);
+    },
+    onSuccess: (data) => {
+      if (data) {
+        toast({
+          title: "Regenerating...",
+          description: "Previous chunk rejected. Generating new content.",
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/chunks/states"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reject chunk",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: async (newInput: string) => {
+      if (!selectedChunk || !sessionId) return;
+      return editChunkInput(selectedChunk.id, newInput, sessionId);
+    },
+    onSuccess: (data) => {
+      if (data) {
+        toast({
+          title: "Input Updated",
+          description: "Regenerating with new instructions...",
+        });
+        setIsEditDialogOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/chunks/states"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update input",
+        variant: "destructive",
+      });
+    },
   });
 
   const selectChunk = useCallback(
@@ -467,6 +574,37 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
                   </div>
                 )}
 
+                {/* Chunk State & Workflow Controls */}
+                {currentChunkState && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-xs font-mono">
+                      <span className="text-muted-foreground">STATUS:</span>
+                      <span className={cn(
+                        "px-1.5 py-0.5 rounded",
+                        currentChunkState.state === "pending_review" && "bg-warning/20 text-warning terminal-glow",
+                        currentChunkState.state === "finalized" && "bg-primary/20 text-primary",
+                        currentChunkState.state === "embedded" && "bg-primary/20 text-primary",
+                        currentChunkState.state === "draft" && "bg-muted text-muted-foreground"
+                      )}>
+                        [{currentChunkState.state.toUpperCase()}]
+                      </span>
+                      {currentChunkState.regeneration_count > 0 && (
+                        <span className="text-muted-foreground ml-2">
+                          (Attempt #{currentChunkState.regeneration_count + 1})
+                        </span>
+                      )}
+                    </div>
+
+                    {currentChunkState.state === "pending_review" && sessionId && (
+                      <AcceptRejectButtons
+                        onAccept={() => acceptMutation.mutate()}
+                        onReject={(action) => rejectMutation.mutate(action)}
+                        isProcessing={acceptMutation.isPending || rejectMutation.isPending}
+                      />
+                    )}
+                  </div>
+                )}
+
                 <div
                   className="text-foreground text-base leading-relaxed"
                   style={{ fontFamily: fonts.narrativeFont }}
@@ -511,6 +649,14 @@ export function NarrativeTab({ onChunkSelected }: NarrativeTabProps = {}) {
           </div>
         </ScrollArea>
       </div>
+
+      <EditPreviousDialog
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onSubmit={(input) => editMutation.mutate(input)}
+        initialInput="" // TODO: Fetch actual previous input if possible, or leave blank
+        isSubmitting={editMutation.isPending}
+      />
     </div>
   );
 }

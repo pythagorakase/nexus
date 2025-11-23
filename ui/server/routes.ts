@@ -67,7 +67,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Narrative routes
-  
+
   // GET /api/narrative/seasons - Get all seasons
   app.get("/api/narrative/seasons", async (req, res) => {
     try {
@@ -86,7 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(seasonId)) {
         return res.status(400).json({ error: "Invalid season ID" });
       }
-      
+
       const episodes = await storage.getEpisodesBySeason(seasonId);
       res.json(episodes);
     } catch (error) {
@@ -146,13 +146,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Character routes
-  
+
   // GET /api/characters - Get all characters with optional ID range filter
   app.get("/api/characters", async (req, res) => {
     try {
       const startId = req.query.startId ? parseInt(req.query.startId as string) : undefined;
       const endId = req.query.endId ? parseInt(req.query.endId as string) : undefined;
-      
+
       const characters = await storage.getCharacters(startId, endId);
       res.json(characters);
     } catch (error) {
@@ -168,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(characterId)) {
         return res.status(400).json({ error: "Invalid character ID" });
       }
-      
+
       const relationships = await storage.getCharacterRelationships(characterId);
       res.json(relationships);
     } catch (error) {
@@ -184,7 +184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isNaN(characterId)) {
         return res.status(400).json({ error: "Invalid character ID" });
       }
-      
+
       const psychology = await storage.getCharacterPsychology(characterId);
       if (!psychology) {
         return res.status(404).json({ error: "Character psychology not found" });
@@ -197,7 +197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Place and Zone routes
-  
+
   // GET /api/places - Get all places
   app.get("/api/places", async (req, res) => {
     try {
@@ -277,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const serialized = Toml.stringify({ value });
+      const serialized = Toml.stringify({ value } as Toml.JsonMap);
       const match = serialized.match(/value\s*=\s*(.*)/);
       if (!match || !match[1]) {
         throw new Error(`Unable to extract serialized TOML literal for value: ${JSON.stringify(value)}`);
