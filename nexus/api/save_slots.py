@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import psycopg2
@@ -36,8 +35,8 @@ def upsert_slot(
     is_active: Optional[bool] = None,
     dbname: Optional[str] = None,
 ) -> None:
-    if slot_number < 2 or slot_number > 5:
-        raise ValueError("slot_number must be between 2 and 5")
+    if slot_number < 1 or slot_number > 5:
+        raise ValueError("slot_number must be between 1 and 5")
     with _connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(
             """

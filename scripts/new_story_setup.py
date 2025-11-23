@@ -14,6 +14,7 @@ import logging
 import os
 import subprocess
 import tempfile
+from shlex import quote
 from typing import Optional
 
 import psycopg2
@@ -79,7 +80,10 @@ def create_slot_schema_only(slot: int, source_db: Optional[str], force: bool = F
     target_db = f"save_{slot:02d}"
 
     if force:
-        subprocess.run(["psql", "-c", f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{target_db}'"], check=False)
+        subprocess.run(
+            ["psql", "-c", f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{target_db}'"],
+            check=False,
+        )
         subprocess.run(["dropdb", "--if-exists", target_db], check=False)
         LOG.warning("Dropped database %s if it existed", target_db)
 
