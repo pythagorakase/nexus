@@ -15,6 +15,15 @@ logger = logging.getLogger("nexus.api.save_slots")
 
 
 def list_slots(dbname: Optional[str] = None) -> List[Dict]:
+    """
+    Retrieve all save slots from the database.
+
+    Args:
+        dbname: Optional database name (defaults to PGDATABASE env var)
+
+    Returns:
+        List of dictionaries containing slot metadata
+    """
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM assets.save_slots ORDER BY slot_number")
@@ -27,6 +36,18 @@ def upsert_slot(
     is_active: Optional[bool] = None,
     dbname: Optional[str] = None,
 ) -> None:
+    """
+    Insert or update a save slot's metadata.
+
+    Args:
+        slot_number: Slot number (1-5)
+        character_name: Optional character name (max 50 chars, alphanumeric with spaces/hyphens/apostrophes/periods)
+        is_active: Optional flag to mark slot as active
+        dbname: Optional database name (defaults to PGDATABASE env var)
+
+    Raises:
+        ValueError: If slot_number is not between 1 and 5, or character_name is invalid
+    """
     if slot_number < 1 or slot_number > 5:
         raise ValueError("slot_number must be between 1 and 5")
 
@@ -52,6 +73,12 @@ def upsert_slot(
 
 
 def clear_active(dbname: Optional[str] = None) -> None:
+    """
+    Clear the active flag on all save slots.
+
+    Args:
+        dbname: Optional database name (defaults to PGDATABASE env var)
+    """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute("UPDATE assets.save_slots SET is_active = FALSE")

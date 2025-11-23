@@ -28,10 +28,17 @@ NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("mod
 def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     """
     Start a new setup conversation for a slot.
+
     - Clears cache in the slot DB
     - Creates a conversations thread and stores thread_id
     - Marks slot as active (and clears other actives)
-    Returns thread_id.
+
+    Args:
+        slot_number: Target save slot (1-5)
+        model: Optional model name (defaults to settings.json new_story.model)
+
+    Returns:
+        Thread ID for the new conversation
     """
     dbname = slot_dbname(slot_number)
     clear_cache(dbname)
@@ -49,6 +56,12 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 def resume_setup(slot_number: int) -> Optional[Dict]:
     """
     Resume setup by returning cache contents for the slot.
+
+    Args:
+        slot_number: Target save slot (1-5)
+
+    Returns:
+        Dictionary containing cached setup data, or None if no cache exists
     """
     dbname = slot_dbname(slot_number)
     cache = read_cache(dbname)
@@ -70,6 +83,14 @@ def record_drafts(
 ) -> None:
     """
     Persist current drafts to the slot cache.
+
+    Args:
+        slot_number: Target save slot (1-5)
+        setting: Optional setting draft dictionary
+        character: Optional character draft dictionary
+        seed: Optional seed selection dictionary
+        location: Optional initial location dictionary
+        base_timestamp: Optional ISO timestamp string
     """
     dbname = slot_dbname(slot_number)
     cache = read_cache(dbname) or {}
@@ -87,7 +108,12 @@ def record_drafts(
 
 
 def reset_setup(slot_number: int) -> None:
-    """Clear cache and deactivate slot."""
+    """
+    Clear cache and deactivate slot.
+
+    Args:
+        slot_number: Target save slot (1-5)
+    """
     dbname = slot_dbname(slot_number)
     clear_cache(dbname)
     upsert_slot(slot_number, is_active=False, dbname=dbname)
@@ -97,7 +123,14 @@ def reset_setup(slot_number: int) -> None:
 def activate_slot(target_slot: int) -> Dict[str, str]:
     """
     Mark a slot as active and clear active flags in other slots.
+
     Skips slots whose databases do not exist.
+
+    Args:
+        target_slot: Slot number to activate (1-5)
+
+    Returns:
+        Dictionary mapping slot numbers to status strings ("active", "cleared", "unavailable")
     """
     results = {}
     for slot in all_slots():

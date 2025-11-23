@@ -14,6 +14,15 @@ logger = logging.getLogger("nexus.api.new_story_cache")
 
 
 def read_cache(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Read the current new-story setup cache.
+
+    Args:
+        dbname: Optional database name (defaults to PGDATABASE env var)
+
+    Returns:
+        Dictionary containing cache data, or None if no cache exists
+    """
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT * FROM assets.new_story_creator WHERE id = TRUE")
@@ -31,9 +40,24 @@ def write_cache(
     target_slot: Optional[int] = None,
     dbname: Optional[str] = None,
 ) -> None:
+    """
+    Write new-story setup state to the cache.
+
+    Replaces the existing cache row with new data. Uses UPSERT pattern
+    to ensure a single cache row exists without race conditions.
+
+    Args:
+        thread_id: Conversations thread ID
+        setting_draft: JSON-serializable setting data
+        character_draft: JSON-serializable character data
+        selected_seed: JSON-serializable seed data
+        initial_location: JSON-serializable location data
+        base_timestamp: ISO timestamp string
+        target_slot: Target save slot number
+        dbname: Optional database name (defaults to PGDATABASE env var)
+    """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             cur.execute(
                 """
                 INSERT INTO assets.new_story_creator (
@@ -42,6 +66,15 @@ def write_cache(
                 ) VALUES (
                     TRUE, %s, %s, %s, %s, %s, %s, %s
                 )
+                ON CONFLICT (id) DO UPDATE SET
+                    thread_id = EXCLUDED.thread_id,
+                    setting_draft = EXCLUDED.setting_draft,
+                    character_draft = EXCLUDED.character_draft,
+                    selected_seed = EXCLUDED.selected_seed,
+                    initial_location = EXCLUDED.initial_location,
+                    base_timestamp = EXCLUDED.base_timestamp,
+                    target_slot = EXCLUDED.target_slot,
+                    updated_at = NOW()
                 """,
                 (
                     thread_id,
@@ -57,6 +90,12 @@ def write_cache(
 
 
 def clear_cache(dbname: Optional[str] = None) -> None:
+    """
+    Clear the new-story setup cache.
+
+    Args:
+        dbname: Optional database name (defaults to PGDATABASE env var)
+    """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
