@@ -1,14 +1,20 @@
 name: Claude Code Review
 
+# Disabled: Automatic PR reviews disabled in favor of @claude mention-based reviews
+# To re-enable automatic reviews, uncomment the section below
+# on:
+#   pull_request:
+#     types: [opened, synchronize]
+#     # Optional: Only run on specific file changes
+#     # paths:
+#     #   - "src/**/*.ts"
+#     #   - "src/**/*.tsx"
+#     #   - "src/**/*.js"
+#     #   - "src/**/*.jsx"
+
+# This workflow is now inactive. Use @claude mentions in PRs to trigger reviews (see claude.yml)
 on:
-  pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+  workflow_dispatch:  # Only runs when manually triggered from GitHub Actions UI
 
 jobs:
   claude-review:
