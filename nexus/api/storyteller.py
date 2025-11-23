@@ -36,6 +36,23 @@ from nexus.api.new_story_flow import (
     reset_setup as reset_new_story_setup,
     activate_slot as activate_new_story_slot,
 )
+from nexus.api.chunk_workflow import (
+    ChunkWorkflow,
+    ChunkAcceptRequest,
+    ChunkAcceptResponse,
+    ChunkRejectRequest,
+    ChunkRejectResponse,
+    EditPreviousRequest,
+    EditPreviousResponse,
+)
+from nexus.api.retry_handler import (
+    retry_with_backoff,
+    async_retry_with_backoff,
+    DATABASE_RETRY_CONFIG,
+    OPENAI_RETRY_CONFIG,
+    openai_rate_limiter,
+    FallbackChain,
+)
 from nexus.config import load_settings_as_dict
 
 logger = logging.getLogger("nexus.api.storyteller")
@@ -736,3 +753,97 @@ async def stream_turns(websocket: WebSocket, session_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.debug("Websocket error: %s", exc)
         await stream_manager.disconnect(session_id, websocket)
+
+
+# Chunk Acceptance Workflow Endpoints
+@app.post("/api/chunks/accept", response_model=ChunkAcceptResponse)
+def accept_chunk(request: ChunkAcceptRequest) -> ChunkAcceptResponse:
+    """
+    Accept a Storyteller chunk, finalizing it and triggering embedding for the previous chunk.
+
+    This marks the acceptance boundary - the previous chunk becomes immutable and
+    embeddings are generated for it.
+    """
+    try:
+        # Get the appropriate database from session
+        # For now, using default workflow instance
+        workflow = ChunkWorkflow()
+        return workflow.accept_chunk(request.chunk_id, request.session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error accepting chunk: {e}")
+        raise HTTPException(status_code=500, detail="Failed to accept chunk")
+
+
+@app.post("/api/chunks/reject", response_model=ChunkRejectResponse)
+def reject_chunk(request: ChunkRejectRequest) -> ChunkRejectResponse:
+    """
+    Reject a Storyteller chunk with specified action.
+
+    Actions:
+    - regenerate: Generate new Storyteller text with same context
+    - edit_previous: Enable editing of the user's previous input
+    """
+    try:
+        workflow = ChunkWorkflow()
+        return workflow.reject_chunk(
+            request.chunk_id,
+            request.session_id,
+            request.action
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error rejecting chunk: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reject chunk")
+
+
+@app.post("/api/chunks/{chunk_id}/edit-user-input", response_model=EditPreviousResponse)
+def edit_previous_input(
+    chunk_id: int,
+    request: EditPreviousRequest
+) -> EditPreviousResponse:
+    """
+    Edit the user's input from the previous chunk.
+
+    Only available when the current Storyteller chunk has been rejected.
+    Updates the user's text and triggers regeneration of the Storyteller response.
+    """
+    try:
+        # Validate chunk_id matches request
+        if chunk_id != request.chunk_id:
+            raise ValueError("Chunk ID mismatch")
+
+        workflow = ChunkWorkflow()
+        return workflow.edit_previous_input(
+            chunk_id,
+            request.new_user_input,
+            request.session_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error editing previous input: {e}")
+        raise HTTPException(status_code=500, detail="Failed to edit previous input")
+
+
+@app.get("/api/chunks/states")
+def get_chunk_states(
+    start: int = Query(..., ge=1, description="Starting chunk ID"),
+    end: int = Query(..., ge=1, description="Ending chunk ID")
+) -> List[Dict[str, Any]]:
+    """
+    Get the states of chunks in a range.
+
+    Returns information about chunk states, finalization status, and embedding generation.
+    """
+    if start > end:
+        raise HTTPException(status_code=400, detail="Start must be less than or equal to end")
+
+    try:
+        workflow = ChunkWorkflow()
+        return workflow.get_chunk_states(start, end)
+    except Exception as e:
+        logger.error(f"Error getting chunk states: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get chunk states")
