@@ -69,9 +69,6 @@ export function CharacterPhase({ slot, onNext, initialData }: CharacterPhaseProp
         onSuccess: (data) => {
             // Mocking generated data
             const mockCharacter = {
-                name: form.getValues().name || "Kaelen Vane",
-                archetype: form.getValues().archetype,
-                background: "Former corporate security detail, burned after a botched extraction operation. Now works the shadows of the lower districts.",
                 stats: { STR: 8, DEX: 12, INT: 10, TECH: 14 },
                 skills: ["Hacking", "Small Arms", "Stealth", "Corporate Protocol"],
                 ...form.getValues()

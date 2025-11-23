@@ -7,10 +7,13 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { NexusLayout } from "@/components/NexusLayout";
 import NotFound from "@/pages/not-found";
 
+import NewStoryPage from "@/pages/NewStoryPage";
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={NexusLayout} />
+      <Route path="/new-story" component={NewStoryPage} />
       <Route component={NotFound} />
     </Switch>
   );
