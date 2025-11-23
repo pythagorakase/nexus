@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 import subprocess
 import json
+import re
 
 import psycopg2
 from pydantic import BaseModel, Field
@@ -25,6 +26,12 @@ from pydantic import BaseModel, Field
 from nexus.api.db_pool import get_connection
 
 logger = logging.getLogger("nexus.api.chunk_workflow")
+
+# Security: Valid database names (command injection prevention)
+VALID_DATABASES = {"save_01", "save_02", "save_03", "save_04", "save_05"}
+
+# Security: Valid model name pattern (alphanumeric, hyphens, dots, underscores only)
+VALID_MODEL_PATTERN = re.compile(r'^[a-zA-Z0-9._-]+$')
 
 
 class ChunkState(str, Enum):
@@ -91,7 +98,16 @@ class ChunkWorkflow:
     """Manages chunk acceptance workflow and embedding triggers."""
 
     def __init__(self, dbname: Optional[str] = None):
-        self.dbname = dbname or "save_01"
+        dbname = dbname or "save_01"
+
+        # Security: Validate database name to prevent command injection
+        if dbname not in VALID_DATABASES:
+            raise ValueError(
+                f"Invalid database name: {dbname}. "
+                f"Must be one of: {', '.join(sorted(VALID_DATABASES))}"
+            )
+
+        self.dbname = dbname
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
@@ -149,16 +165,30 @@ class ChunkWorkflow:
         """
         with get_connection(self.dbname) as conn:
             with conn.cursor() as cur:
-                # Mark current chunk as finalized
+                # Security: Atomic state transition to prevent race condition
+                # Only finalize if currently pending_review (prevents double-finalization)
                 cur.execute("""
                     UPDATE narrative_chunks
                     SET state = %s, finalized_at = %s
-                    WHERE id = %s
+                    WHERE id = %s AND state = %s
                     RETURNING id
-                """, (ChunkState.FINALIZED.value, datetime.now(timezone.utc), chunk_id))
+                """, (
+                    ChunkState.FINALIZED.value,
+                    datetime.now(timezone.utc),
+                    chunk_id,
+                    ChunkState.PENDING_REVIEW.value  # Only update if pending
+                ))
 
                 if not cur.fetchone():
-                    raise ValueError(f"Chunk {chunk_id} not found")
+                    # Check if chunk exists but wrong state
+                    cur.execute("SELECT state FROM narrative_chunks WHERE id = %s", (chunk_id,))
+                    result = cur.fetchone()
+                    if not result:
+                        raise ValueError(f"Chunk {chunk_id} not found")
+                    else:
+                        raise ValueError(
+                            f"Chunk {chunk_id} cannot be accepted (current state: {result[0]})"
+                        )
 
                 # Get previous chunk (N-1) to trigger embedding
                 cur.execute("""
@@ -269,12 +299,15 @@ class ChunkWorkflow:
         """
         with get_connection(self.dbname) as conn:
             with conn.cursor() as cur:
-                # Find the previous user chunk (chunk_id - 1 should be user input)
+                # Security: Compute arithmetic in Python, not SQL (prevents injection)
+                prev_chunk_id = chunk_id - 1
+
+                # Find the previous user chunk (should be user input)
                 cur.execute("""
                     SELECT id, state, raw_text
                     FROM narrative_chunks
-                    WHERE id = %s - 1
-                """, (chunk_id,))
+                    WHERE id = %s
+                """, (prev_chunk_id,))
 
                 prev_chunk = cur.fetchone()
                 if not prev_chunk:
@@ -341,14 +374,26 @@ class ChunkWorkflow:
                 logger.warning("No active embedding model found in settings - using default")
                 active_model = "inf-retriever-v1-1.5b"  # Best performing model from IR testing
 
+            # Security: Validate inputs before subprocess call
+            if not isinstance(chunk_id, int) or chunk_id <= 0:
+                raise ValueError(f"Invalid chunk_id: {chunk_id}")
+
+            if not VALID_MODEL_PATTERN.match(active_model):
+                raise ValueError(
+                    f"Invalid model name: {active_model}. "
+                    f"Model names must contain only alphanumeric characters, hyphens, dots, and underscores."
+                )
+
+            # Security: dbname already validated in __init__
+
             # Run embedding generation script
-            # This could be made async with a job queue in production
+            # TODO: Make async with FastAPI BackgroundTasks or Celery to avoid blocking
             result = subprocess.run([
                 "python", "scripts/regenerate_embeddings.py",
-                "--chunk", str(chunk_id),
-                "--model", active_model,
-                "--database", self.dbname
-            ], capture_output=True, text=True)
+                "--chunk", str(chunk_id),  # Safe: validated as positive int
+                "--model", active_model,    # Safe: validated with regex
+                "--database", self.dbname   # Safe: validated in __init__
+            ], capture_output=True, text=True, timeout=300)  # 5 min timeout
 
             if result.returncode == 0:
                 # Mark chunk as embedded
