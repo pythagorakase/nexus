@@ -18,7 +18,18 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
+from nexus.agents.lore.logon_utility import LogonUtility
+from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import response_to_incubator, validate_incubator_data
+from nexus.api.chunk_workflow import (
+    ChunkWorkflow, ChunkAcceptRequest, ChunkRejectRequest, 
+    EditPreviousRequest, default_workflow
+)
+from nexus.api.new_story_flow import (
+    start_setup, resume_setup, record_drafts, 
+    reset_setup, activate_slot
+)
+from nexus.api.slot_utils import all_slots, slot_dbname
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -479,6 +490,307 @@ async def clear_incubator():
         return {"message": "Incubator cleared"}
     finally:
         conn.close()
+
+# New Story Request Models
+class StartSetupRequest(BaseModel):
+    slot: int
+    model: Optional[str] = None
+
+class RecordDraftRequest(BaseModel):
+    slot: int
+    setting: Optional[Dict] = None
+    character: Optional[Dict] = None
+    seed: Optional[Dict] = None
+    location: Optional[Dict] = None
+    base_timestamp: Optional[str] = None
+
+class ResetSetupRequest(BaseModel):
+    slot: int
+
+class SelectSlotRequest(BaseModel):
+    slot: int
+
+# Chunk Workflow Endpoints
+@app.post("/api/chunks/accept")
+async def accept_chunk_endpoint(request: ChunkAcceptRequest):
+    """Accept a chunk and trigger embedding generation"""
+    try:
+        return default_workflow.accept_chunk(request.chunk_id, request.session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error accepting chunk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chunks/reject")
+async def reject_chunk_endpoint(request: ChunkRejectRequest):
+    """Reject a chunk and either regenerate or edit previous"""
+    try:
+        return default_workflow.reject_chunk(request.chunk_id, request.session_id, request.action)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error rejecting chunk: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/chunks/{chunk_id}/edit-user-input")
+async def edit_chunk_input_endpoint(chunk_id: int, request: EditPreviousRequest):
+    """Edit previous user input"""
+    if chunk_id != request.chunk_id:
+        raise HTTPException(status_code=400, detail="Chunk ID mismatch")
+    try:
+        return default_workflow.edit_previous_input(request.chunk_id, request.new_user_input, request.session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error editing chunk input: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/chunks/states")
+async def get_chunk_states_endpoint(start: int, end: int):
+    """Get states for a range of chunks"""
+    try:
+        return default_workflow.get_chunk_states(start, end)
+    except Exception as e:
+        logger.error(f"Error fetching chunk states: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# New Story Wizard Endpoints
+@app.post("/api/story/new/setup/start")
+async def start_setup_endpoint(request: StartSetupRequest):
+    """Start a new setup conversation"""
+    try:
+        thread_id = start_setup(request.slot, request.model)
+        return {"status": "started", "thread_id": thread_id, "slot": request.slot}
+    except Exception as e:
+        logger.error(f"Error starting setup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/story/new/setup/resume")
+async def resume_setup_endpoint(slot: int):
+    """Resume setup for a slot"""
+    try:
+        data = resume_setup(slot)
+        if not data:
+            raise HTTPException(status_code=404, detail=f"No active setup found for slot {slot}")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resuming setup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/story/new/setup/record")
+async def record_drafts_endpoint(request: RecordDraftRequest):
+    """Record draft data for a slot"""
+    try:
+        record_drafts(
+            request.slot,
+            setting=request.setting,
+            character=request.character,
+            seed=request.seed,
+            location=request.location,
+            base_timestamp=request.base_timestamp
+        )
+        return {"status": "recorded", "slot": request.slot}
+    except Exception as e:
+        logger.error(f"Error recording drafts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/story/new/setup/reset")
+async def reset_setup_endpoint(request: ResetSetupRequest):
+    """Reset setup for a slot"""
+    try:
+        reset_setup(request.slot)
+        return {"status": "reset", "slot": request.slot}
+    except Exception as e:
+        logger.error(f"Error resetting setup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/story/new/slot/select")
+async def select_slot_endpoint(request: SelectSlotRequest):
+    """Activate a slot"""
+    try:
+        results = activate_slot(request.slot)
+        return {"status": "activated", "results": results}
+    except Exception as e:
+        logger.error(f"Error activating slot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+from nexus.api.new_story_schemas import (
+    SettingCard, CharacterSheet, StorySeed, 
+    LayerDefinition, ZoneDefinition, PlaceProfile
+)
+
+class ChatRequest(BaseModel):
+    slot: int
+    thread_id: str
+    message: str
+    is_init: Optional[bool] = False
+    current_phase: Optional[str] = "setting" # setting, character, seed
+    context_data: Optional[Dict[str, Any]] = None # Accumulated wizard state
+
+@app.post("/api/story/new/chat")
+async def new_story_chat_endpoint(request: ChatRequest):
+    """Handle chat for new story wizard with tool calling"""
+    try:
+        from nexus.api.conversations import ConversationsClient
+        from scripts.api_openai import OpenAIProvider
+        import openai
+        from pathlib import Path
+        import json
+
+        # Initialize client
+        client = ConversationsClient()
+        
+        # Define tools based on current phase
+        tools = []
+        if request.current_phase == "setting":
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "submit_world_document",
+                    "description": "Submit the finalized world setting/genre document when the user agrees.",
+                    "parameters": SettingCard.model_json_schema()
+                }
+            })
+        elif request.current_phase == "character":
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "submit_character_sheet",
+                    "description": "Submit the finalized character sheet when the user agrees.",
+                    "parameters": CharacterSheet.model_json_schema()
+                }
+            })
+        elif request.current_phase == "seed":
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "submit_starting_scenario",
+                    "description": "Submit the chosen story seed and starting location details.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "seed": StorySeed.model_json_schema(),
+                            "layer": LayerDefinition.model_json_schema(),
+                            "zone": ZoneDefinition.model_json_schema(),
+                            "location": PlaceProfile.model_json_schema()
+                        },
+                        "required": ["seed", "layer", "zone", "location"]
+                    }
+                }
+            })
+
+        # If init, just return greeting
+        if request.is_init:
+            prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
+            with prompt_path.open() as f:
+                prompt_content = f.read()
+            
+            greeting = "Welcome to NEXUS. What kind of story speaks to you today?\n\n1. **Science Fiction**\n2. **Fantasy**\n3. **Horror**\n4. **Post-Apocalyptic**\n5. **Modern/Urban**\n6. **Historical**\n7. **Or describe something entirely different...**"
+            
+            client.add_message(request.thread_id, "assistant", greeting)
+            return {"message": greeting, "phase_complete": False}
+
+        # Add user message
+        client.add_message(request.thread_id, "user", request.message)
+
+        # Build context
+        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
+        with prompt_path.open() as f:
+            system_prompt = f.read()
+
+        # Fetch history
+        # Note: list_messages returns newest first, so we reverse it
+        history = client.list_messages(request.thread_id, limit=20)
+        history.reverse()
+        
+        # Filter out the message we just added (it's in history now) to avoid duplication if we append it manually
+        # Actually, list_messages might not include the one we just added immediately if there's lag, 
+        # but usually it does. Let's rely on history and NOT append request.message manually if it's there.
+        # To be safe, let's just use the history + system prompt.
+        
+        # Construct dynamic system instruction
+        phase_instruction = f"Current Phase: {request.current_phase.upper()}.\n"
+        
+        if request.current_phase == "character":
+            phase_instruction += "The world setting is established. Do NOT ask about genre. Focus on creating the protagonist.\n"
+            if request.context_data and "setting" in request.context_data:
+                phase_instruction += f"\n[WORLD SUMMARY]\n{json.dumps(request.context_data['setting'], indent=2)}\n[/WORLD SUMMARY]\n"
+        
+        elif request.current_phase == "seed":
+            phase_instruction += "World and Character are established. Focus on generating the starting scenario.\n"
+            if request.context_data:
+                if "setting" in request.context_data:
+                    phase_instruction += f"\n[WORLD SUMMARY]\n{json.dumps(request.context_data['setting'], indent=2)}\n[/WORLD SUMMARY]\n"
+                if "character" in request.context_data:
+                    phase_instruction += f"\n[CHARACTER SHEET]\n{json.dumps(request.context_data['character'], indent=2)}\n[/CHARACTER SHEET]\n"
+
+        phase_instruction += "Use the available tool to submit the artifact when the user confirms."
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": phase_instruction}
+        ] + history
+
+        provider = OpenAIProvider(model="gpt-5.1")
+        openai_client = openai.OpenAI(api_key=provider.api_key)
+
+        response = openai_client.chat.completions.create(
+            model="gpt-5.1",
+            messages=messages,
+            tools=tools if tools else None,
+            tool_choice="auto",
+            temperature=0.9
+        )
+        
+        message = response.choices[0].message
+        
+        # Check for tool calls
+        if message.tool_calls:
+            tool_call = message.tool_calls[0]
+            function_name = tool_call.function.name
+            arguments = json.loads(tool_call.function.arguments)
+            
+            # Persist the artifact to the setup cache
+            try:
+                if function_name == "submit_world_document":
+                    record_drafts(request.slot, setting=arguments)
+                elif function_name == "submit_character_sheet":
+                    record_drafts(request.slot, character=arguments)
+                elif function_name == "submit_starting_scenario":
+                    # The tool returns a composite object, but record_drafts expects separate dicts
+                    # We might need to adjust based on the schema, but let's assume arguments matches
+                    record_drafts(
+                        request.slot, 
+                        seed=arguments.get("seed"), 
+                        location=arguments.get("location")
+                        # layer and zone are part of the location context usually, or we can store them in location
+                    )
+            except Exception as e:
+                logger.error(f"Failed to persist artifact for {function_name}: {e}")
+                # We continue anyway to show the UI, but log the error
+
+            # Return the structured data to frontend
+            return {
+                "message": "Generating artifact...", 
+                "phase_complete": True,
+                "phase": request.current_phase,
+                "artifact_type": function_name,
+                "data": arguments
+            }
+        
+        reply = message.content
+        
+        # Save assistant reply to thread
+        client.add_message(request.thread_id, "assistant", reply)
+        
+        return {"message": reply, "phase_complete": False}
+
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,26 +1,24 @@
 import { useState } from "react";
-import { ChevronRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
-import { SettingPhase } from "./SettingPhase";
-import { CharacterPhase } from "./CharacterPhase";
-import { SeedPhase } from "./SeedPhase";
-import { LocationPhase } from "./LocationPhase";
+import { InteractiveWizard } from "./InteractiveWizard";
+import { useLocation } from "wouter";
 
-type Phase = "slot" | "setting" | "character" | "seed" | "location";
+type WizardPhase = "slot" | "setting" | "character" | "seed";
 
-const PHASES: { id: Phase; label: string }[] = [
+const PHASES: { id: WizardPhase; label: string }[] = [
     { id: "slot", label: "MEMORY SLOT" },
     { id: "setting", label: "WORLD GEN" },
     { id: "character", label: "PROTAGONIST" },
-    { id: "seed", label: "INCITING INCIDENT" },
-    { id: "location", label: "GEOGRAPHY" },
+    { id: "seed", label: "INITIALIZATION" },
 ];
 
 export function NewStoryWizard() {
-    const [currentPhase, setCurrentPhase] = useState<Phase>("slot");
+    const [currentPhase, setCurrentPhase] = useState<WizardPhase>("slot");
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+    const [_, setLocation] = useLocation();
 
     // State for data collected across phases
     const [wizardData, setWizardData] = useState({
@@ -33,77 +31,23 @@ export function NewStoryWizard() {
 
     const handleSlotSelected = (slot: number) => {
         setSelectedSlot(slot);
-        setWizardData(prev => ({ ...prev, slot }));
         setCurrentPhase("setting");
     };
 
-    const handleSettingComplete = (settingData: any) => {
-        setWizardData(prev => ({ ...prev, setting: settingData }));
-        setCurrentPhase("character");
+    const handleInteractivePhaseChange = (phase: "setting" | "character" | "seed") => {
+        setCurrentPhase(phase);
     };
 
-    const handleCharacterComplete = (characterData: any) => {
-        setWizardData(prev => ({ ...prev, character: characterData }));
-        setCurrentPhase("seed");
-    };
-
-    const handleSeedComplete = (seedData: any) => {
-        setWizardData(prev => ({ ...prev, seed: seedData }));
-        setCurrentPhase("location");
-    };
-
-    const handleLocationComplete = (locationData: any) => {
-        setWizardData(prev => ({ ...prev, location: locationData }));
-        // Finalization happens inside LocationPhase
-    };
-
-    const renderPhaseContent = () => {
-        switch (currentPhase) {
-            case "slot":
-                return <SlotSelector onSlotSelected={handleSlotSelected} />;
-            case "setting":
-                return (
-                    <SettingPhase
-                        slot={selectedSlot!}
-                        onNext={handleSettingComplete}
-                        initialData={wizardData.setting}
-                    />
-                );
-            case "character":
-                return (
-                    <CharacterPhase
-                        slot={selectedSlot!}
-                        onNext={handleCharacterComplete}
-                        initialData={wizardData.character}
-                    />
-                );
-            case "seed":
-                return (
-                    <SeedPhase
-                        slot={selectedSlot!}
-                        onNext={handleSeedComplete}
-                        initialData={wizardData.seed}
-                    />
-                );
-            case "location":
-                return (
-                    <LocationPhase
-                        slot={selectedSlot!}
-                        onNext={handleLocationComplete}
-                        initialData={wizardData.location}
-                    />
-                );
-            default:
-                return null;
-        }
+    const handleComplete = () => {
+        setLocation("/");
     };
 
     const currentPhaseIndex = PHASES.findIndex(p => p.id === currentPhase);
 
     return (
-        <div className="min-h-screen bg-background flex flex-col font-mono terminal-scanlines">
+        <div className="h-screen bg-background flex flex-col font-mono terminal-scanlines overflow-hidden">
             {/* Header / Stepper */}
-            <div className="border-b border-border bg-card/50 p-4">
+            <div className="border-b border-border bg-card/50 p-4 shrink-0 z-10">
                 <div className="max-w-5xl mx-auto">
                     <div className="flex items-center justify-between mb-6">
                         <h1 className="text-xl font-bold text-primary terminal-glow">
@@ -152,10 +96,25 @@ export function NewStoryWizard() {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-auto">
-                <div className="max-w-5xl mx-auto py-8">
-                    {renderPhaseContent()}
-                </div>
+            <div className="flex-1 overflow-hidden relative">
+                {currentPhase === "slot" ? (
+                    <div className="h-full overflow-auto py-8">
+                        <div className="max-w-5xl mx-auto">
+                            <SlotSelector onSlotSelected={handleSlotSelected} />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="absolute inset-0 p-4 md:p-8">
+                        <InteractiveWizard
+                            slot={selectedSlot!}
+                            onComplete={handleComplete}
+                            onCancel={() => setCurrentPhase("slot")}
+                            onPhaseChange={handleInteractivePhaseChange}
+                            wizardData={wizardData}
+                            setWizardData={setWizardData}
+                        />
+                    </div>
+                )}
             </div>
         </div>
     );

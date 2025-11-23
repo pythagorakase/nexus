@@ -88,6 +88,9 @@ class SettingCard(BaseModel):
         """Ensure themes are non-empty strings."""
         return [theme.strip() for theme in v if theme.strip()]
 
+    # Diegetic artifact
+    diegetic_artifact: str = Field(..., description="The full in-world document (e.g., guide entry, dossier, chronicle) describing the setting in a rich, immersive style.")
+
 
 class CharacterBackground(str, Enum):
     """Common character background types."""
@@ -162,6 +165,9 @@ class CharacterSheet(BaseModel):
     def validate_string_lists(cls, v: List[str]) -> List[str]:
         """Ensure list items are non-empty strings."""
         return [item.strip() for item in v if item.strip()]
+
+    # Diegetic artifact
+    diegetic_artifact: str = Field(..., description="A rich narrative portrait or dossier of the character, written in a style appropriate for the setting.")
 
 
 class StorySeedType(str, Enum):

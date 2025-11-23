@@ -57,6 +57,19 @@ export function registerProxyRoutes(app: Express): void {
   app.use("/api/narrative/status", createProxyMiddleware(narrativeProxyOptions));
   app.use("/api/narrative/incubator", createProxyMiddleware(narrativeProxyOptions));
   app.use("/api/narrative/approve", createProxyMiddleware(narrativeProxyOptions));
+
+  // Proxy for Story Wizard endpoints
+  app.use("/api/story", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/story${path}`,
+  }));
+
+  // Proxy for Chunk Workflow endpoints
+  app.use("/api/chunks", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/chunks${path}`,
+  }));
+
   app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
 }
 

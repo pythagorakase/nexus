@@ -56,19 +56,33 @@ class ConversationsClient:
         logger.debug("Added %s message to thread %s", role, thread_id)
         return msg.id
 
-    def list_messages(self, thread_id: str, limit: int = 20) -> List[str]:
+    def list_messages(self, thread_id: str, limit: int = 20) -> List[dict]:
         """
-        List message IDs in a thread.
+        List messages in a thread.
 
         Args:
             thread_id: The ID of the thread
             limit: Maximum number of messages to return (default: 20)
 
         Returns:
-            List of message IDs
+            List of message dicts {'role': str, 'content': str}
         """
         messages = self.client.beta.threads.messages.list(thread_id=thread_id, limit=limit)
-        return [m.id for m in messages.data]
+        
+        history = []
+        for msg in messages.data:
+            content = ""
+            if msg.content and len(msg.content) > 0:
+                # Assuming text content for now
+                if hasattr(msg.content[0], 'text'):
+                    content = msg.content[0].text.value
+            
+            history.append({
+                "role": msg.role,
+                "content": content
+            })
+            
+        return history
 
     def delete_thread(self, thread_id: str) -> bool:
         """
