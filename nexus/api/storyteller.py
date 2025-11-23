@@ -29,6 +29,13 @@ from nexus.agents.logon.apex_schema import (
     create_minimal_response,
     validate_story_turn_response,
 )
+from nexus.api.new_story_flow import (
+    start_setup as start_new_story_setup,
+    resume_setup as resume_new_story_setup,
+    record_drafts as record_new_story_drafts,
+    reset_setup as reset_new_story_setup,
+    activate_slot as activate_new_story_slot,
+)
 
 logger = logging.getLogger("nexus.api.storyteller")
 
@@ -110,6 +117,17 @@ class DeleteSessionResponse(BaseModel):
     """Response payload for session deletion."""
 
     status: str = "deleted"
+
+
+class NewStoryRecordRequest(BaseModel):
+    """Payload to record drafts during new story setup."""
+
+    slot: int
+    setting: Optional[Dict[str, Any]] = None
+    character: Optional[Dict[str, Any]] = None
+    seed: Optional[Dict[str, Any]] = None
+    location: Optional[Dict[str, Any]] = None
+    base_timestamp: Optional[str] = None
 
 
 def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[str, Any]:
@@ -581,6 +599,56 @@ async def delete_session(
     return DeleteSessionResponse()
 
 
+# New Story Setup Endpoints (headless)
+@app.post("/api/story/new/setup/start")
+def new_story_setup_start(slot: int, model: str = "gpt-5.1") -> Dict[str, Any]:
+    """Start a new story setup for a slot (creates conversations thread, clears cache)."""
+    thread_id = start_new_story_setup(slot, model=model)
+    return {"thread_id": thread_id, "slot": slot}
+
+
+@app.get("/api/story/new/setup/resume")
+def new_story_setup_resume(slot: int) -> Dict[str, Any]:
+    """Resume setup by returning cached drafts for the slot."""
+    cache = resume_new_story_setup(slot)
+    if not cache:
+        raise HTTPException(status_code=404, detail="No setup in progress for this slot")
+    return cache
+
+
+@app.post("/api/story/new/setup/record")
+def new_story_setup_record(payload: NewStoryRecordRequest) -> Dict[str, str]:
+    """Persist drafts during setup."""
+    record_new_story_drafts(
+        payload.slot,
+        setting=payload.setting,
+        character=payload.character,
+        seed=payload.seed,
+        location=payload.location,
+        base_timestamp=payload.base_timestamp,
+    )
+    return {"status": "ok"}
+
+
+@app.post("/api/story/new/setup/reset")
+def new_story_setup_reset(slot: int) -> Dict[str, str]:
+    """Clear setup cache for the slot and deactivate it."""
+    reset_new_story_setup(slot)
+    return {"status": "reset", "slot": slot}
+
+
+@app.post("/api/story/new/slot/select")
+def new_story_slot_select(slot: int) -> Dict[str, Any]:
+    """
+    Select an active slot across all save DBs.
+    Clears active flags in other slots; skips slots whose DBs are unavailable.
+    """
+    results = activate_new_story_slot(slot)
+    if results.get(slot) == "unavailable":
+        raise HTTPException(status_code=404, detail="Target slot database not available")
+    return {"status": "ok", "details": results}
+
+
 @app.websocket("/api/story/stream/{session_id}")
 async def stream_turns(websocket: WebSocket, session_id: str) -> None:
     """WebSocket endpoint for session event streaming."""
@@ -595,4 +663,3 @@ async def stream_turns(websocket: WebSocket, session_id: str) -> None:
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.debug("Websocket error: %s", exc)
         await stream_manager.disconnect(session_id, websocket)
-
