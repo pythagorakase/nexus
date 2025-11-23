@@ -4,8 +4,12 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Dict, Optional
+
+import psycopg2
 
 from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import read_cache, write_cache, clear_cache
@@ -14,8 +18,14 @@ from nexus.api.slot_utils import slot_dbname, all_slots
 
 logger = logging.getLogger("nexus.api.new_story_flow")
 
+# Load settings
+settings_path = Path(__file__).parent.parent.parent / "settings.json"
+with settings_path.open() as f:
+    SETTINGS = json.load(f)
+NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
-def start_setup(slot_number: int, model: str = "gpt-5.1") -> str:
+
+def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     """
     Start a new setup conversation for a slot.
     - Clears cache in the slot DB
@@ -25,7 +35,9 @@ def start_setup(slot_number: int, model: str = "gpt-5.1") -> str:
     """
     dbname = slot_dbname(slot_number)
     clear_cache(dbname)
-    client = ConversationsClient(model=model)
+    # Use provided model or fall back to settings
+    model_to_use = model or NEW_STORY_MODEL
+    client = ConversationsClient(model=model_to_use)
     thread_id = client.create_thread()
     write_cache(thread_id=thread_id, target_slot=slot_number, dbname=dbname)
     clear_active(dbname)
@@ -97,7 +109,7 @@ def activate_slot(target_slot: int) -> Dict[str, str]:
             else:
                 clear_active(dbname)
                 results[slot] = "cleared"
-        except Exception as exc:  # pragma: no cover - defensive cross-db handling
+        except (psycopg2.Error, OSError) as exc:  # pragma: no cover - defensive cross-db handling
             logger.warning("Slot %s DB not available: %s", slot, exc)
             results[slot] = "unavailable"
     return results

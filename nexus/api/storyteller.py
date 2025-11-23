@@ -36,8 +36,13 @@ from nexus.api.new_story_flow import (
     reset_setup as reset_new_story_setup,
     activate_slot as activate_new_story_slot,
 )
+from nexus.config import load_settings_as_dict
 
 logger = logging.getLogger("nexus.api.storyteller")
+
+# Load settings
+SETTINGS = load_settings_as_dict()
+NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 ORIGINS = [
     "http://localhost:3000",
@@ -119,15 +124,81 @@ class DeleteSessionResponse(BaseModel):
     status: str = "deleted"
 
 
+class NewStoryStartRequest(BaseModel):
+    """Request payload for starting new story setup."""
+
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+    model: Optional[str] = Field(None, description="Model to use for story generation")
+
+
+class NewStoryStartResponse(BaseModel):
+    """Response for new story setup start."""
+
+    thread_id: str
+    slot: int
+
+
+class NewStoryResumeRequest(BaseModel):
+    """Request payload for resuming new story setup."""
+
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+
+
+class NewStoryResumeResponse(BaseModel):
+    """Response for new story setup resume."""
+
+    thread_id: Optional[str] = None
+    setting_draft: Optional[Dict[str, Any]] = None
+    character_draft: Optional[Dict[str, Any]] = None
+    selected_seed: Optional[Dict[str, Any]] = None
+    initial_location: Optional[Dict[str, Any]] = None
+    base_timestamp: Optional[str] = None
+    target_slot: Optional[int] = None
+
+
 class NewStoryRecordRequest(BaseModel):
     """Payload to record drafts during new story setup."""
 
-    slot: int
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
     setting: Optional[Dict[str, Any]] = None
     character: Optional[Dict[str, Any]] = None
     seed: Optional[Dict[str, Any]] = None
     location: Optional[Dict[str, Any]] = None
-    base_timestamp: Optional[str] = None
+    base_timestamp: Optional[str] = Field(None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$')
+
+
+class NewStoryRecordResponse(BaseModel):
+    """Response for recording new story drafts."""
+
+    status: str = "recorded"
+    slot: int
+
+
+class NewStoryResetRequest(BaseModel):
+    """Request payload for resetting new story setup."""
+
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+
+
+class NewStoryResetResponse(BaseModel):
+    """Response for new story reset."""
+
+    status: str = "reset"
+    slot: int
+
+
+class NewStoryActivateRequest(BaseModel):
+    """Request payload for activating a save slot."""
+
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+
+
+class NewStoryActivateResponse(BaseModel):
+    """Response for slot activation."""
+
+    status: str = "activated"
+    slot: int
+    results: Dict[str, str]
 
 
 def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[str, Any]:
@@ -600,24 +671,26 @@ async def delete_session(
 
 
 # New Story Setup Endpoints (headless)
-@app.post("/api/story/new/setup/start")
-def new_story_setup_start(slot: int, model: str = "gpt-5.1") -> Dict[str, Any]:
+@app.post("/api/story/new/setup/start", response_model=NewStoryStartResponse)
+def new_story_setup_start(request: NewStoryStartRequest) -> NewStoryStartResponse:
     """Start a new story setup for a slot (creates conversations thread, clears cache)."""
-    thread_id = start_new_story_setup(slot, model=model)
-    return {"thread_id": thread_id, "slot": slot}
+    # Use provided model or fall back to settings
+    model_to_use = request.model or NEW_STORY_MODEL
+    thread_id = start_new_story_setup(request.slot, model=model_to_use)
+    return NewStoryStartResponse(thread_id=thread_id, slot=request.slot)
 
 
-@app.get("/api/story/new/setup/resume")
-def new_story_setup_resume(slot: int) -> Dict[str, Any]:
+@app.get("/api/story/new/setup/resume", response_model=NewStoryResumeResponse)
+def new_story_setup_resume(slot: int = Query(..., ge=1, le=5)) -> NewStoryResumeResponse:
     """Resume setup by returning cached drafts for the slot."""
     cache = resume_new_story_setup(slot)
     if not cache:
         raise HTTPException(status_code=404, detail="No setup in progress for this slot")
-    return cache
+    return NewStoryResumeResponse(**cache)
 
 
-@app.post("/api/story/new/setup/record")
-def new_story_setup_record(payload: NewStoryRecordRequest) -> Dict[str, str]:
+@app.post("/api/story/new/setup/record", response_model=NewStoryRecordResponse)
+def new_story_setup_record(payload: NewStoryRecordRequest) -> NewStoryRecordResponse:
     """Persist drafts during setup."""
     record_new_story_drafts(
         payload.slot,
@@ -627,26 +700,26 @@ def new_story_setup_record(payload: NewStoryRecordRequest) -> Dict[str, str]:
         location=payload.location,
         base_timestamp=payload.base_timestamp,
     )
-    return {"status": "ok"}
+    return NewStoryRecordResponse(status="recorded", slot=payload.slot)
 
 
-@app.post("/api/story/new/setup/reset")
-def new_story_setup_reset(slot: int) -> Dict[str, str]:
+@app.post("/api/story/new/setup/reset", response_model=NewStoryResetResponse)
+def new_story_setup_reset(request: NewStoryResetRequest) -> NewStoryResetResponse:
     """Clear setup cache for the slot and deactivate it."""
-    reset_new_story_setup(slot)
-    return {"status": "reset", "slot": slot}
+    reset_new_story_setup(request.slot)
+    return NewStoryResetResponse(status="reset", slot=request.slot)
 
 
-@app.post("/api/story/new/slot/select")
-def new_story_slot_select(slot: int) -> Dict[str, Any]:
+@app.post("/api/story/new/slot/select", response_model=NewStoryActivateResponse)
+def new_story_slot_select(request: NewStoryActivateRequest) -> NewStoryActivateResponse:
     """
     Select an active slot across all save DBs.
     Clears active flags in other slots; skips slots whose DBs are unavailable.
     """
-    results = activate_new_story_slot(slot)
-    if results.get(slot) == "unavailable":
+    results = activate_new_story_slot(request.slot)
+    if results.get(str(request.slot)) == "unavailable":
         raise HTTPException(status_code=404, detail="Target slot database not available")
-    return {"status": "ok", "details": results}
+    return NewStoryActivateResponse(status="activated", slot=request.slot, results=results)
 
 
 @app.websocket("/api/story/stream/{session_id}")
