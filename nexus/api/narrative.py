@@ -802,6 +802,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
             system_prompt = doc.content  # The markdown content without frontmatter
             welcome_message = doc.get("welcome_message", "")
 
+        # Conditionally append trait menu for character creation phase
+        if request.current_phase == "character":
+            trait_menu_path = (
+                Path(__file__).parent.parent.parent / "docs" / "trait_menu.md"
+            )
+            if trait_menu_path.exists():
+                trait_menu = trait_menu_path.read_text()
+                system_prompt += f"\n\n---\n\n# Trait Reference\n\n{trait_menu}"
+
         # Check if this is the first message (thread is empty)
         # If so, prepend the welcome message as an assistant message
         history = client.list_messages(request.thread_id, limit=history_limit)

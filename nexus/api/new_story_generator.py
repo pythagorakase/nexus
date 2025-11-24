@@ -56,12 +56,13 @@ class StoryComponentGenerator:
             self.client = create_resilient_client(api_key, async_client=False)
         else:
             import openai
+
             self.client = openai.OpenAI(api_key=api_key)
 
     def generate_setting_card(
         self,
         user_preferences: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None
+        conversation_context: Optional[List[Dict[str, str]]] = None,
     ) -> SettingCard:
         """
         Generate a complete setting card based on user preferences.
@@ -80,7 +81,7 @@ class StoryComponentGenerator:
                     "You are a creative world-builder for an interactive narrative system. "
                     "Create rich, consistent settings that provide fertile ground for storytelling. "
                     "Ensure all details work together cohesively."
-                )
+                ),
             }
         ]
 
@@ -88,22 +89,24 @@ class StoryComponentGenerator:
         if conversation_context:
             messages.extend(conversation_context)
 
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Based on these preferences, create a complete setting for the story:\n\n"
-                f"{user_preferences}\n\n"
-                f"Generate a detailed SettingCard with all required fields. "
-                f"Make the world feel lived-in and authentic to its genre."
-            )
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Based on these preferences, create a complete setting for the story:\n\n"
+                    f"{user_preferences}\n\n"
+                    f"Generate a detailed SettingCard with all required fields. "
+                    f"Make the world feel lived-in and authentic to its genre."
+                ),
+            }
+        )
 
         try:
             response = self.client.responses.parse(
                 model=self.model,
                 input=messages,
                 temperature=0.7,  # Some creativity for world-building
-                text_format=SettingCard
+                text_format=SettingCard,
             )
 
             result = response.output_parsed
@@ -118,7 +121,7 @@ class StoryComponentGenerator:
         self,
         setting: SettingCard,
         character_concept: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None
+        conversation_context: Optional[List[Dict[str, str]]] = None,
     ) -> CharacterSheet:
         """
         Generate a complete character sheet based on setting and user input.
@@ -138,7 +141,7 @@ class StoryComponentGenerator:
                     "You are a character designer for an interactive narrative system. "
                     "Create compelling protagonists with clear motivations, flaws, and growth potential. "
                     "Characters should feel authentic to their setting while being interesting to play."
-                )
+                ),
             }
         ]
 
@@ -155,24 +158,26 @@ class StoryComponentGenerator:
             f"Tone: {setting.tone}"
         )
 
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Create a protagonist for this setting:\n\n"
-                f"{setting_context}\n\n"
-                f"Character Concept:\n{character_concept}\n\n"
-                f"Generate a complete CharacterSheet with rich detail. "
-                f"The character should have clear strengths, weaknesses, and room for growth. "
-                f"Make them feel like a real person with history and relationships."
-            )
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Create a protagonist for this setting:\n\n"
+                    f"{setting_context}\n\n"
+                    f"Character Concept:\n{character_concept}\n\n"
+                    f"Generate a complete CharacterSheet with rich detail. "
+                    f"The character should have clear strengths, weaknesses, and room for growth. "
+                    f"Make them feel like a real person with history and relationships."
+                ),
+            }
+        )
 
         try:
             response = self.client.responses.parse(
                 model=self.model,
                 input=messages,
                 temperature=0.6,  # Balance consistency with creativity
-                text_format=CharacterSheet
+                text_format=CharacterSheet,
             )
 
             result = response.output_parsed
@@ -184,10 +189,7 @@ class StoryComponentGenerator:
             raise
 
     def generate_story_seeds(
-        self,
-        setting: SettingCard,
-        character: CharacterSheet,
-        num_seeds: int = 3
+        self, setting: SettingCard, character: CharacterSheet, num_seeds: int = 3
     ) -> List[StorySeed]:
         """
         Generate multiple story seed options for the user to choose from.
@@ -200,20 +202,44 @@ class StoryComponentGenerator:
         Returns:
             List of StorySeed objects
         """
+
         # Create a wrapper model for multiple seeds
         class StorySeedCollection(BaseModel):
             """Collection of story seeds"""
+
             seeds: List[StorySeed] = Field(
                 min_items=num_seeds,
                 max_items=num_seeds,
-                description=f"Exactly {num_seeds} unique story seeds"
+                description=f"Exactly {num_seeds} unique story seeds",
             )
 
             class Config:
                 extra = "forbid"
 
-        top_skills = character.skills[:3] if character.skills else []
-        primary_motivation = character.motivations[0] if character.motivations else "Not specified"
+        # Extract selected traits (the 3 chosen from the 10 optional traits)
+        trait_fields = [
+            "allies",
+            "contacts",
+            "patron",
+            "dependents",
+            "status",
+            "reputation",
+            "resources",
+            "domain",
+            "enemies",
+            "obligations",
+        ]
+        selected_traits = []
+        for field in trait_fields:
+            value = getattr(character, field, None)
+            if value is not None:
+                selected_traits.append(f"{field.title()}: {value}")
+
+        # Format traits for the prompt
+        traits_text = (
+            "\n".join(selected_traits) if selected_traits else "None specified"
+        )
+        wildcard_text = f"{character.wildcard_name}: {character.wildcard_description}"
 
         messages = [
             {
@@ -222,7 +248,7 @@ class StoryComponentGenerator:
                     "You are a narrative designer creating compelling story openings. "
                     "Each seed should offer different types of experiences and player choices. "
                     "Openings should provide immediate engagement while setting up longer arcs."
-                )
+                ),
             },
             {
                 "role": "user",
@@ -232,18 +258,18 @@ class StoryComponentGenerator:
                     f"Protagonist: {character.name}\n"
                     f"Summary: {character.summary}\n"
                     f"Background: {character.background}\n"
-                    f"Personality: {character.personality}\n"
-                    f"Skills: {', '.join(top_skills) if top_skills else 'Not specified'}\n"
-                    f"Motivation: {primary_motivation}\n\n"
+                    f"Personality: {character.personality}\n\n"
+                    f"Character Traits:\n{traits_text}\n\n"
+                    f"Wildcard: {wildcard_text}\n\n"
                     f"Each seed should:\n"
                     f"1. Start in a different type of situation\n"
                     f"2. Offer clear player agency\n"
-                    f"3. Connect to the character's background\n"
+                    f"3. Connect to the character's traits and background\n"
                     f"4. Set up interesting narrative possibilities\n"
                     f"5. Feel appropriate to the {setting.tone} tone\n\n"
                     f"Generate exactly {num_seeds} StorySeed objects with all required fields."
-                )
-            }
+                ),
+            },
         ]
 
         try:
@@ -251,7 +277,7 @@ class StoryComponentGenerator:
                 model=self.model,
                 input=messages,
                 temperature=0.8,  # Higher creativity for variety
-                text_format=StorySeedCollection
+                text_format=StorySeedCollection,
             )
 
             result = response.output_parsed
@@ -263,10 +289,7 @@ class StoryComponentGenerator:
             raise
 
     def generate_location_hierarchy(
-        self,
-        setting: SettingCard,
-        seed: StorySeed,
-        character: CharacterSheet
+        self, setting: SettingCard, seed: StorySeed, character: CharacterSheet
     ) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
         """
         Generate the complete location hierarchy based on chosen seed.
@@ -279,12 +302,16 @@ class StoryComponentGenerator:
         Returns:
             Tuple of (LayerDefinition, ZoneDefinition, PlaceProfile)
         """
+
         # Create a wrapper for the complete hierarchy
         class LocationHierarchy(BaseModel):
             """Complete location hierarchy from layer down to place"""
+
             layer: LayerDefinition = Field(description="World layer (planet/dimension)")
             zone: ZoneDefinition = Field(description="Geographic zone")
-            place: PlaceProfile = Field(description="The specific place with coordinates")
+            place: PlaceProfile = Field(
+                description="The specific place with coordinates"
+            )
 
             class Config:
                 extra = "forbid"
@@ -296,7 +323,7 @@ class StoryComponentGenerator:
                     "You are a location designer for an interactive narrative. "
                     "Create vivid, atmospheric locations that serve both as settings "
                     "and as active participants in the story."
-                )
+                ),
             },
             {
                 "role": "user",
@@ -316,8 +343,8 @@ class StoryComponentGenerator:
                     f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
                     f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
                     f"The place should be where {character.name} begins their story, with exact coordinates."
-                )
-            }
+                ),
+            },
         ]
 
         try:
@@ -325,7 +352,7 @@ class StoryComponentGenerator:
                 model=self.model,
                 input=messages,
                 temperature=0.6,
-                text_format=LocationHierarchy
+                text_format=LocationHierarchy,
             )
 
             result = response.output_parsed
@@ -349,7 +376,7 @@ class StoryComponentGenerator:
         layer: LayerDefinition,
         zone: ZoneDefinition,
         location: PlaceProfile,
-        setup_start_time: Optional[datetime] = None
+        setup_start_time: Optional[datetime] = None,
     ) -> TransitionData:
         """
         Assemble complete transition data package.
@@ -382,7 +409,7 @@ class StoryComponentGenerator:
             location=location,
             base_timestamp=datetime.now(timezone.utc),  # Can be overridden
             thread_id=thread_id,
-            setup_duration_minutes=setup_duration
+            setup_duration_minutes=setup_duration,
         )
 
         # Validate completeness
@@ -429,8 +456,7 @@ class InteractiveSetupFlow:
         """Phase 1: Generate setting based on user preferences."""
         self.add_to_history("user", user_input)
         self.setting = self.generator.generate_setting_card(
-            user_input,
-            self.conversation_history
+            user_input, self.conversation_history
         )
         self.add_to_history("assistant", f"Created setting: {self.setting.world_name}")
         return self.setting
@@ -442,9 +468,7 @@ class InteractiveSetupFlow:
 
         self.add_to_history("user", user_input)
         self.character = self.generator.generate_character_sheet(
-            self.setting,
-            user_input,
-            self.conversation_history
+            self.setting, user_input, self.conversation_history
         )
         self.add_to_history("assistant", f"Created character: {self.character.name}")
         return self.character
@@ -454,14 +478,11 @@ class InteractiveSetupFlow:
         if not self.setting or not self.character:
             raise ValueError("Setting and character required for seeds")
 
-        self.seeds = self.generator.generate_story_seeds(
-            self.setting,
-            self.character
-        )
+        self.seeds = self.generator.generate_story_seeds(self.setting, self.character)
         self.add_to_history(
             "assistant",
-            f"Generated {len(self.seeds)} story options: " +
-            ", ".join([s.title for s in self.seeds])
+            f"Generated {len(self.seeds)} story options: "
+            + ", ".join([s.title for s in self.seeds]),
         )
         return self.seeds
 
@@ -474,15 +495,15 @@ class InteractiveSetupFlow:
         else:
             raise ValueError(f"Invalid seed index: {seed_index}")
 
-    def phase4_generate_location(self) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
+    def phase4_generate_location(
+        self,
+    ) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
         """Phase 4: Generate complete location hierarchy."""
         if not self.chosen_seed:
             raise ValueError("Must choose seed before generating location")
 
         layer, zone, location = self.generator.generate_location_hierarchy(
-            self.setting,
-            self.chosen_seed,
-            self.character
+            self.setting, self.chosen_seed, self.character
         )
 
         self.layer = layer
@@ -490,7 +511,7 @@ class InteractiveSetupFlow:
         self.location = location
         self.add_to_history(
             "assistant",
-            f"Created location hierarchy: {layer.name} -> {zone.name} -> {location.name}"
+            f"Created location hierarchy: {layer.name} -> {zone.name} -> {location.name}",
         )
         return layer, zone, location
 
@@ -504,8 +525,16 @@ class InteractiveSetupFlow:
         Returns:
             Complete transition data package
         """
-        if not all([self.setting, self.character, self.chosen_seed,
-                   self.layer, self.zone, self.location]):
+        if not all(
+            [
+                self.setting,
+                self.character,
+                self.chosen_seed,
+                self.layer,
+                self.zone,
+                self.location,
+            ]
+        ):
             raise ValueError("All components must be generated before transition")
 
         return self.generator.generate_transition_data(
@@ -516,5 +545,5 @@ class InteractiveSetupFlow:
             layer=self.layer,
             zone=self.zone,
             location=self.location,
-            setup_start_time=self.setup_start
+            setup_start_time=self.setup_start,
         )

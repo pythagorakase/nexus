@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timezone
 
 from nexus.api.new_story_schemas import (
@@ -62,7 +62,7 @@ class NewStoryDatabaseMapper:
             Dictionary ready for database insertion
         """
         # Core fields that map directly to columns
-        db_record = {
+        db_record: Dict[str, Any] = {
             "name": character.name,
             "summary": character.summary,
             "appearance": character.appearance,
@@ -73,46 +73,15 @@ class NewStoryDatabaseMapper:
             # current_location will be set after place is created
         }
 
-        # Everything else goes in extra_data (only include fields that are actually populated)
-        extra_data = {}
-
-        # Only add fields that have meaningful values
-        if character.skills:
-            extra_data["skills"] = character.skills
-        if character.weaknesses:
-            extra_data["weaknesses"] = character.weaknesses
-        if character.motivations:
-            extra_data["motivations"] = character.motivations
-        if character.fears:
-            extra_data["fears"] = character.fears
-        if character.allies:
-            extra_data["allies"] = character.allies
-        if character.enemies:
-            extra_data["enemies"] = character.enemies
-        if character.family:
-            extra_data["family"] = character.family
-        if character.occupation:
-            extra_data["occupation"] = character.occupation
-        if character.faction:
-            extra_data["faction"] = character.faction
-        if character.possessions:
-            extra_data["possessions"] = character.possessions
-        if character.wealth_level:
-            extra_data["wealth_level"] = character.wealth_level
-        if character.special_abilities:
-            extra_data["special_abilities"] = character.special_abilities
-        if character.secrets:
-            extra_data["secrets"] = character.secrets
-        if character.reputation:
-            extra_data["reputation"] = character.reputation
-        if character.codes_and_beliefs:
-            extra_data["codes_and_beliefs"] = character.codes_and_beliefs
-
+        # Build extra_data from Mind's Eye Theatre traits
+        extra_data = self._build_character_extra_data(character)
         db_record["extra_data"] = extra_data
 
         return db_record
 
-    def map_place_to_db(self, place: PlaceProfile, zone_id: Optional[int] = None) -> Dict[str, Any]:
+    def map_place_to_db(
+        self, place: PlaceProfile, zone_id: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Map PlaceProfile to places table format.
 
@@ -128,7 +97,7 @@ class NewStoryDatabaseMapper:
             Dictionary ready for database insertion
         """
         # Core fields map directly to columns
-        db_record = {
+        db_record: Dict[str, Any] = {
             "name": place.name,
             "type": place.place_type,  # Already matches database enum
             "zone": zone_id,  # Will be set after zone creation
@@ -136,7 +105,7 @@ class NewStoryDatabaseMapper:
             "inhabitants": place.inhabitants or [],
             "history": place.history,
             "current_status": place.current_status,
-            "secrets": place.secrets or "No known secrets",
+            "secrets": place.secrets,
         }
 
         # Additional data in extra_data
@@ -218,12 +187,15 @@ class NewStoryDatabaseMapper:
         if cursor:
             # Use provided cursor (part of larger transaction)
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO global_variables (key, value)
                     VALUES ('setting', %s::jsonb)
                     ON CONFLICT (key) DO UPDATE
                     SET value = EXCLUDED.value
-                """, (setting_json,))
+                """,
+                    (setting_json,),
+                )
                 logger.info(f"Saved setting to global_variables: {setting.world_name}")
             except Exception as e:
                 logger.error(f"Failed to save setting {setting.world_name}: {e}")
@@ -233,13 +205,18 @@ class NewStoryDatabaseMapper:
             try:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO global_variables (key, value)
                             VALUES ('setting', %s::jsonb)
                             ON CONFLICT (key) DO UPDATE
                             SET value = EXCLUDED.value
-                        """, (setting_json,))
-                        logger.info(f"Saved setting to global_variables: {setting.world_name}")
+                        """,
+                            (setting_json,),
+                        )
+                        logger.info(
+                            f"Saved setting to global_variables: {setting.world_name}"
+                        )
             except Exception as e:
                 logger.error(f"Failed to save setting {setting.world_name}: {e}")
                 raise
@@ -260,12 +237,15 @@ class NewStoryDatabaseMapper:
         if cursor:
             # Use provided cursor (part of larger transaction)
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO global_variables (key, value)
                     VALUES ('story_seed', %s::jsonb)
                     ON CONFLICT (key) DO UPDATE
                     SET value = EXCLUDED.value
-                """, (seed_json,))
+                """,
+                    (seed_json,),
+                )
                 logger.info(f"Saved story seed: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
@@ -275,12 +255,15 @@ class NewStoryDatabaseMapper:
             try:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO global_variables (key, value)
                             VALUES ('story_seed', %s::jsonb)
                             ON CONFLICT (key) DO UPDATE
                             SET value = EXCLUDED.value
-                        """, (seed_json,))
+                        """,
+                            (seed_json,),
+                        )
                         logger.info(f"Saved story seed: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
@@ -305,7 +288,8 @@ class NewStoryDatabaseMapper:
         if cursor:
             # Use provided cursor (part of larger transaction)
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO characters (
                         name, summary, appearance, background, personality,
                         emotional_state, current_activity, extra_data
@@ -315,19 +299,26 @@ class NewStoryDatabaseMapper:
                         %(extra_data)s::jsonb
                     )
                     RETURNING id
-                """, db_record)
+                """,
+                    db_record,
+                )
 
                 character_id = cursor.fetchone()[0]
 
                 # Update global_variables to point to this character
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO global_variables (key, value)
                     VALUES ('user_character', %s)
                     ON CONFLICT (key) DO UPDATE
                     SET value = EXCLUDED.value
-                """, (character_id,))
+                """,
+                    (character_id,),
+                )
 
-                logger.info(f"Created protagonist: {character.name} (ID: {character_id})")
+                logger.info(
+                    f"Created protagonist: {character.name} (ID: {character_id})"
+                )
                 return character_id
 
             except Exception as e:
@@ -338,7 +329,8 @@ class NewStoryDatabaseMapper:
             with get_connection(self.dbname) as conn:
                 try:
                     with conn.cursor() as cur:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO characters (
                                 name, summary, appearance, background, personality,
                                 emotional_state, current_activity, extra_data
@@ -348,19 +340,26 @@ class NewStoryDatabaseMapper:
                                 %(extra_data)s::jsonb
                             )
                             RETURNING id
-                        """, db_record)
+                        """,
+                            db_record,
+                        )
 
                         character_id = cur.fetchone()[0]
 
                         # Update global_variables to point to this character
-                        cur.execute("""
+                        cur.execute(
+                            """
                             INSERT INTO global_variables (key, value)
                             VALUES ('user_character', %s)
                             ON CONFLICT (key) DO UPDATE
                             SET value = EXCLUDED.value
-                        """, (character_id,))
+                        """,
+                            (character_id,),
+                        )
 
-                    logger.info(f"Created protagonist: {character.name} (ID: {character_id})")
+                    logger.info(
+                        f"Created protagonist: {character.name} (ID: {character_id})"
+                    )
                     return character_id
 
                 except Exception as e:
@@ -373,7 +372,7 @@ class NewStoryDatabaseMapper:
         zone: ZoneDefinition,
         place: PlaceProfile,
         character_id: int,
-        cursor=None
+        cursor=None,
     ) -> Dict[str, int]:
         """
         Create the complete location hierarchy: layer -> zone -> place.
@@ -409,21 +408,27 @@ class NewStoryDatabaseMapper:
 
             # First create the layer
             layer_record = self.map_layer_to_db(layer)
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO layers (name, type, description)
                 VALUES (%(name)s, %(type)s, %(description)s)
                 RETURNING id
-            """, layer_record)
+            """,
+                layer_record,
+            )
             layer_id = cur.fetchone()[0]
             logger.debug(f"Created layer: {layer.name} (ID: {layer_id})")
 
             # Then create the zone with layer reference
             zone_record = self.map_zone_to_db(zone, layer_id)
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO zones (name, summary, layer)
                 VALUES (%(name)s, %(summary)s, %(layer)s)
                 RETURNING id
-            """, zone_record)
+            """,
+                zone_record,
+            )
             zone_id = cur.fetchone()[0]
             logger.debug(f"Created zone: {zone.name} (ID: {zone_id})")
 
@@ -431,10 +436,11 @@ class NewStoryDatabaseMapper:
             place_record = self.map_place_to_db(place, zone_id)
 
             # Add coordinates to the record for named parameter binding
-            place_record['lon'] = lon
-            place_record['lat'] = lat
+            place_record["lon"] = lon
+            place_record["lat"] = lat
 
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO places (
                     name, type, zone, summary, inhabitants,
                     history, current_status, secrets, extra_data,
@@ -445,16 +451,23 @@ class NewStoryDatabaseMapper:
                     ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s, 0, 0), 4326)::geography
                 )
                 RETURNING id
-            """, place_record)  # Note: PostGIS takes (lon, lat) not (lat, lon)
+            """,
+                place_record,
+            )  # Note: PostGIS takes (lon, lat) not (lat, lon)
             place_id = cur.fetchone()[0]
-            logger.debug(f"Created place: {place.name} (ID: {place_id}) at ({lat}, {lon})")
+            logger.debug(
+                f"Created place: {place.name} (ID: {place_id}) at ({lat}, {lon})"
+            )
 
             # Update character's current location
-            cur.execute("""
+            cur.execute(
+                """
                 UPDATE characters
                 SET current_location = %s
                 WHERE id = %s
-            """, (place_id, character_id))
+            """,
+                (place_id, character_id),
+            )
 
             # Generate a default circular boundary for the zone
             # Using a 50-mile radius (approximately 80km) centered on the place
@@ -465,11 +478,7 @@ class NewStoryDatabaseMapper:
                 f"-> {zone.name} (ID: {zone_id}) "
                 f"-> {place.name} (ID: {place_id})"
             )
-            return {
-                "layer_id": layer_id,
-                "zone_id": zone_id,
-                "place_id": place_id
-            }
+            return {"layer_id": layer_id, "zone_id": zone_id, "place_id": place_id}
 
         if cursor:
             # Use provided cursor (part of larger transaction)
@@ -540,7 +549,9 @@ class NewStoryDatabaseMapper:
                 f"Transition data is incomplete. Missing: {', '.join(missing_fields)}"
             )
 
-        logger.info(f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}")
+        logger.info(
+            f"Starting atomic transition for {transition_data.character.name} in {transition_data.setting.world_name}"
+        )
 
         # ATOMIC OPERATION: All database operations in ONE transaction
         with get_connection(self.dbname) as conn:
@@ -555,7 +566,9 @@ class NewStoryDatabaseMapper:
                     logger.debug("Saved story seed to global_variables")
 
                     # Create protagonist (using shared cursor)
-                    character_id = self.create_protagonist(transition_data.character, cursor=cur)
+                    character_id = self.create_protagonist(
+                        transition_data.character, cursor=cur
+                    )
                     logger.debug(f"Created protagonist with ID {character_id}")
 
                     # Create complete location hierarchy (using shared cursor)
@@ -564,24 +577,29 @@ class NewStoryDatabaseMapper:
                         transition_data.zone,
                         transition_data.location,
                         character_id,
-                        cursor=cur
+                        cursor=cur,
                     )
                     logger.debug(f"Created location hierarchy: {location_ids}")
 
                     # Set base timestamp
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO global_variables (key, value)
                         VALUES ('base_timestamp', %s)
                         ON CONFLICT (key) DO UPDATE
                         SET value = EXCLUDED.value
-                    """, (transition_data.base_timestamp.isoformat(),))
+                    """,
+                        (transition_data.base_timestamp.isoformat(),),
+                    )
 
                     # Finally, set new_story = false to transition to narrative mode
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE global_variables
                         SET value = 'false'
                         WHERE key = 'new_story'
-                    """)
+                    """
+                    )
 
                 # Transaction commits automatically on successful context exit
                 logger.info("Atomic transition complete: new_story set to false")
@@ -594,7 +612,7 @@ class NewStoryDatabaseMapper:
                     "character_id": character_id,
                     "layer_id": location_ids["layer_id"],
                     "zone_id": location_ids["zone_id"],
-                    "place_id": location_ids["place_id"]
+                    "place_id": location_ids["place_id"],
                 }
 
             except Exception as e:
@@ -605,7 +623,54 @@ class NewStoryDatabaseMapper:
                 )
                 raise
 
-    def _create_default_zone_boundary(self, cursor, zone_id: int, coordinates: tuple[float, float]) -> None:
+    def _build_character_extra_data(self, character: CharacterSheet) -> Dict[str, Any]:
+        """
+        Build extra_data JSONB from CharacterSheet traits.
+
+        The Mind's Eye Theatre system uses 10 optional traits (exactly 3 selected)
+        plus a required wildcard trait. All traits are stored in the extra_data
+        JSONB column rather than as separate database columns.
+
+        Args:
+            character: CharacterSheet with trait selections
+
+        Returns:
+            Dictionary ready for JSONB storage
+        """
+        extra_data: Dict[str, Any] = {}
+
+        # Collect selected traits (exactly 3 of these 10 will be non-None)
+        trait_fields = [
+            "allies",
+            "contacts",
+            "patron",
+            "dependents",
+            "status",
+            "reputation",
+            "resources",
+            "domain",
+            "enemies",
+            "obligations",
+        ]
+        for field in trait_fields:
+            value = getattr(character, field)
+            if value is not None:
+                extra_data[field] = value
+
+        # Add required wildcard trait
+        extra_data["wildcard"] = {
+            "name": character.wildcard_name,
+            "description": character.wildcard_description,
+        }
+
+        # Store diegetic artifact (narrative portrait)
+        extra_data["diegetic_artifact"] = character.diegetic_artifact
+
+        return extra_data
+
+    def _create_default_zone_boundary(
+        self, cursor: Any, zone_id: int, coordinates: Tuple[float, float]
+    ) -> None:
         """
         Create a default circular boundary for a zone.
 
@@ -621,7 +686,8 @@ class NewStoryDatabaseMapper:
             # Create a 50-mile (approximately 80.47 km) radius circle
             # PostGIS ST_Buffer with geography type handles the spherical calculations
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE zones
                 SET boundary = ST_Multi(
                     ST_Buffer(
@@ -630,9 +696,13 @@ class NewStoryDatabaseMapper:
                     )::geometry
                 )
                 WHERE id = %s
-            """, (lon, lat, zone_id))  # Note: PostGIS takes (lon, lat)
+            """,
+                (lon, lat, zone_id),
+            )  # Note: PostGIS takes (lon, lat)
 
-            logger.info(f"Created default 50-mile radius boundary for zone {zone_id} centered at ({lat}, {lon})")
+            logger.info(
+                f"Created default 50-mile radius boundary for zone {zone_id} centered at ({lat}, {lon})"
+            )
         except Exception as e:
             # Log but don't fail - boundary is optional
             logger.warning(f"Could not create default boundary for zone {zone_id}: {e}")

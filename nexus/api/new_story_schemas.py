@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 
 class Genre(str, Enum):
     """Supported story genres."""
+
     FANTASY = "fantasy"
     SCIFI = "scifi"
     HORROR = "horror"
@@ -33,6 +34,7 @@ class Genre(str, Enum):
 
 class TechLevel(str, Enum):
     """Technology level for the setting."""
+
     STONE_AGE = "stone_age"
     BRONZE_AGE = "bronze_age"
     IRON_AGE = "iron_age"
@@ -52,146 +54,202 @@ class SettingCard(BaseModel):
     This defines the overall world, time period, and thematic elements
     that will shape the narrative.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     genre: Genre = Field(..., description="Primary genre of the story")
-    secondary_genres: List[Genre] = Field(default_factory=list, description="Additional genre elements")
+    secondary_genres: List[Genre] = Field(
+        default_factory=list, description="Additional genre elements"
+    )
 
-    world_name: str = Field(..., min_length=1, max_length=100, description="Name of the world/setting")
-    time_period: str = Field(..., description="Historical period or future date (e.g., '1920s', '2185 CE')")
+    world_name: str = Field(
+        ..., min_length=1, max_length=100, description="Name of the world/setting"
+    )
+    time_period: str = Field(
+        ..., description="Historical period or future date (e.g., '1920s', '2185 CE')"
+    )
     tech_level: TechLevel = Field(..., description="General technology level")
 
     # World details
-    magic_exists: bool = Field(False, description="Whether magic/supernatural elements exist")
-    magic_description: Optional[str] = Field(None, description="How magic works if it exists")
-
-    political_structure: str = Field(..., description="Type of government/political system")
-    major_conflict: str = Field(..., description="Primary tension or conflict in the world")
-
-    # Atmosphere and tone
-    tone: Literal["light", "balanced", "dark", "grimdark"] = Field("balanced", description="Overall tone")
-    themes: List[str] = Field(..., min_items=1, max_items=5, description="Major thematic elements")
-
-    # Cultural notes
-    cultural_notes: str = Field(..., description="Key cultural elements, customs, or social norms")
-    language_notes: Optional[str] = Field(None, description="Language quirks or naming conventions")
-
-    # Geographic scope
-    geographic_scope: Literal["local", "regional", "continental", "global", "interplanetary"] = Field(
-        "regional",
-        description="Scale of the story world"
+    magic_exists: bool = Field(
+        False, description="Whether magic/supernatural elements exist"
+    )
+    magic_description: Optional[str] = Field(
+        None, description="How magic works if it exists"
     )
 
-    @field_validator('themes')
+    political_structure: str = Field(
+        ..., description="Type of government/political system"
+    )
+    major_conflict: str = Field(
+        ..., description="Primary tension or conflict in the world"
+    )
+
+    # Atmosphere and tone
+    tone: Literal["light", "balanced", "dark", "grimdark"] = Field(
+        "balanced", description="Overall tone"
+    )
+    themes: List[str] = Field(
+        ..., min_items=1, max_items=5, description="Major thematic elements"
+    )
+
+    # Cultural notes
+    cultural_notes: str = Field(
+        ..., description="Key cultural elements, customs, or social norms"
+    )
+    language_notes: Optional[str] = Field(
+        None, description="Language quirks or naming conventions"
+    )
+
+    # Geographic scope
+    geographic_scope: Literal[
+        "local", "regional", "continental", "global", "interplanetary"
+    ] = Field("regional", description="Scale of the story world")
+
+    @field_validator("themes")
     @classmethod
     def validate_themes(cls, v: List[str]) -> List[str]:
         """Ensure themes are non-empty strings."""
         return [theme.strip() for theme in v if theme.strip()]
 
     # Diegetic artifact
-    diegetic_artifact: str = Field(..., description="The full in-world document (e.g., guide entry, dossier, chronicle) describing the setting in a rich, immersive style.")
-
-
-class CharacterBackground(str, Enum):
-    """Common character background types."""
-    NOBLE = "noble"
-    COMMONER = "commoner"
-    MERCHANT = "merchant"
-    SCHOLAR = "scholar"
-    SOLDIER = "soldier"
-    CRIMINAL = "criminal"
-    ARTISAN = "artisan"
-    CLERGY = "clergy"
-    WANDERER = "wanderer"
-    OUTCAST = "outcast"
-    OTHER = "other"
+    diegetic_artifact: str = Field(
+        ...,
+        description="The full in-world document (e.g., guide entry, dossier, chronicle) describing the setting in a rich, immersive style.",
+    )
 
 
 class CharacterSheet(BaseModel):
     """
-    Complete character definition for the protagonist.
+    Character definition following Mind's Eye Theatre trait philosophy.
 
-    This aligns with the characters table schema in the database:
+    This aligns with the characters table schema:
     - Core fields (name, summary, appearance, background, personality) map to table columns
-    - Additional attributes stored in extra_data JSONB field (at least 3 required)
-    - Dynamic fields (emotional_state, current_activity, current_location) set during story seed selection
+    - Traits stored in extra_data JSONB field (exactly 3 of 10 optional + required wildcard)
+    - Dynamic fields (emotional_state, current_activity, current_location) set during story seed
 
-    Philosophy: Like World of Darkness character sheets, focus on what makes THIS character
-    distinct. Demographics (age, species) go in summary if important. The extra_data fields
-    represent meaningful character aspects where you'd "invest dots" - not all are relevant
-    to every character.
+    Philosophy: Traits signal what aspects of the character should be narratively foregrounded -
+    generating opportunities, complications, and story weight. Not choosing a trait doesn't mean
+    absence - just that it won't be a guaranteed source of narrative focus.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     # Core database fields (map directly to characters table columns)
-    name: str = Field(..., min_length=1, max_length=50, description="Character's full name")
-    summary: str = Field(..., min_length=20, description="Brief character overview capturing essence, including age/species if relevant")
-    appearance: str = Field(..., min_length=30, description="Physical description including build, features, and how they present themselves")
-    background: str = Field(..., min_length=50, description="Character's history, origin, and what shaped them")
-    personality: str = Field(..., min_length=30, description="Personality traits, behavioral patterns, temperament, and how they typically respond")
-
-    # Optional extra_data fields - pick at least 3 that are meaningful for THIS character
-    # Think: What makes this character distinct? Where would you "invest dots"?
-
-    skills: Optional[List[str]] = Field(None, max_items=8, description="Notable skills and abilities they've cultivated")
-    weaknesses: Optional[List[str]] = Field(None, max_items=5, description="Limitations, flaws, or struggles that define them")
-    motivations: Optional[List[str]] = Field(None, max_items=4, description="Core drives and what pushes them forward")
-    fears: Optional[List[str]] = Field(None, max_items=4, description="What haunts or terrifies them")
-
-    allies: Optional[List[str]] = Field(None, max_items=6, description="Key allies, contacts, or supporters")
-    enemies: Optional[List[str]] = Field(None, max_items=6, description="Rivals, antagonists, or those who oppose them")
-    family: Optional[str] = Field(None, description="Family ties, lineage, or household")
-
-    occupation: Optional[str] = Field(None, description="Profession, role, or calling")
-    faction: Optional[str] = Field(None, description="Organization, house, gang, or group affiliation")
-
-    possessions: Optional[List[str]] = Field(None, max_items=6, description="Signature gear, prized items, or important belongings")
-    wealth_level: Optional[Literal["destitute", "poor", "modest", "comfortable", "wealthy", "rich"]] = Field(
-        None,
-        description="Economic status and resources"
+    name: str = Field(
+        ..., min_length=1, max_length=50, description="Character's full name"
+    )
+    summary: str = Field(
+        ..., min_length=20, description="Brief character overview capturing essence"
+    )
+    appearance: str = Field(
+        ...,
+        min_length=30,
+        description="Physical description and how they present themselves",
+    )
+    background: str = Field(
+        ...,
+        min_length=50,
+        description="Character's history, origin, and what shaped them",
+    )
+    personality: str = Field(
+        ...,
+        min_length=30,
+        description="Personality traits, behavioral patterns, temperament",
     )
 
-    special_abilities: Optional[List[str]] = Field(None, max_items=5, description="Magical powers, cybernetic enhancements, supernatural gifts, or unique talents")
-    secrets: Optional[List[str]] = Field(None, max_items=4, description="Hidden truths, concealed past, or knowledge they guard")
-    reputation: Optional[str] = Field(None, description="How they're known, their standing, or public persona")
-    codes_and_beliefs: Optional[List[str]] = Field(None, max_items=4, description="Personal codes, philosophy, vows, or unbreakable principles")
+    # Diegetic artifact (narrative portrait)
+    diegetic_artifact: str = Field(
+        ...,
+        description="A rich narrative portrait in a style appropriate for the setting",
+    )
 
-    @field_validator('skills', 'weaknesses', 'motivations', 'fears', 'allies', 'enemies', 'possessions', 'special_abilities', 'secrets', 'codes_and_beliefs')
-    @classmethod
-    def validate_string_lists(cls, v: Optional[List[str]]) -> Optional[List[str]]:
-        """Ensure list items are non-empty strings."""
-        if v is None:
-            return None
-        cleaned = [item.strip() for item in v if item.strip()]
-        return cleaned if cleaned else None
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TRAIT SYSTEM - Choose exactly 3 of these 10 optional traits
+    # Each signals narrative focus, not mechanical capability
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    @model_validator(mode='after')
-    def validate_minimum_extra_data(self):
-        """Require at least 3 extra_data fields to be populated."""
-        extra_fields = [
-            'skills', 'weaknesses', 'motivations', 'fears',
-            'allies', 'enemies', 'family',
-            'occupation', 'faction',
-            'possessions', 'wealth_level',
-            'special_abilities', 'secrets', 'reputation', 'codes_and_beliefs'
+    # Social Network
+    allies: Optional[str] = Field(
+        None, description="Who will actively help and take risks for you"
+    )
+    contacts: Optional[str] = Field(
+        None,
+        description="Information/favor sources - limited risk-taking, may be transactional",
+    )
+    patron: Optional[str] = Field(
+        None, description="Powerful mentor/sponsor with their own position and agenda"
+    )
+    dependents: Optional[str] = Field(
+        None, description="Those who rely on you for support, protection, or guidance"
+    )
+
+    # Power & Position
+    status: Optional[str] = Field(
+        None,
+        description="Formal standing recognized by an institution or social structure",
+    )
+    reputation: Optional[str] = Field(
+        None, description="How widely known you are, what for, for better or worse"
+    )
+
+    # Assets & Territory
+    resources: Optional[str] = Field(
+        None, description="Material wealth, equipment, supplies, or reliable access"
+    )
+    domain: Optional[str] = Field(
+        None, description="Place or area you control or claim"
+    )
+
+    # Liabilities
+    enemies: Optional[str] = Field(
+        None, description="Those actively opposed who will expend energy to thwart you"
+    )
+    obligations: Optional[str] = Field(
+        None, description="Debts, oaths, or duties you must honor"
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # WILDCARD - Required custom trait that sets this character apart
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    wildcard_name: str = Field(
+        ..., min_length=1, max_length=50, description="Name of the unique custom trait"
+    )
+    wildcard_description: str = Field(
+        ...,
+        min_length=20,
+        description="What this trait means for the character - capability, possession, relationship, or curse",
+    )
+
+    @model_validator(mode="after")
+    def validate_exactly_three_traits(self) -> "CharacterSheet":
+        """Ensure exactly 3 of 10 optional traits are selected."""
+        trait_fields = [
+            "allies",
+            "contacts",
+            "patron",
+            "dependents",
+            "status",
+            "reputation",
+            "resources",
+            "domain",
+            "enemies",
+            "obligations",
         ]
-
-        populated = sum(1 for field in extra_fields if getattr(self, field, None) is not None)
-
-        if populated < 3:
+        selected = sum(1 for f in trait_fields if getattr(self, f) is not None)
+        if selected != 3:
             raise ValueError(
-                f"Character must have at least 3 meaningful extra_data fields populated. "
-                f"Currently has {populated}. Choose fields relevant to this character's concept."
+                f"Must select exactly 3 traits from the 10 optional traits. "
+                f"Currently selected: {selected}. "
+                f"Traits signal narrative focus - choose what matters most for this character."
             )
-
         return self
-
-    # Diegetic artifact
-    diegetic_artifact: Optional[str] = Field(None, description="A rich narrative portrait or dossier of the character, written in a style appropriate for the setting.")
 
 
 class StorySeedType(str, Enum):
     """Types of story openings."""
+
     IN_MEDIAS_RES = "in_medias_res"  # Start in the middle of action
     DISCOVERY = "discovery"  # Character discovers something
     ARRIVAL = "arrival"  # Character arrives somewhere new
@@ -209,10 +267,13 @@ class StorySeed(BaseModel):
 
     The system generates 3 of these for the user to choose from.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     seed_type: StorySeedType = Field(..., description="Type of story opening")
-    title: str = Field(..., min_length=1, max_length=100, description="Short, evocative title")
+    title: str = Field(
+        ..., min_length=1, max_length=100, description="Short, evocative title"
+    )
 
     # Opening scenario
     situation: str = Field(..., min_length=50, description="The opening situation")
@@ -229,17 +290,28 @@ class StorySeed(BaseModel):
     weather: Optional[str] = Field(None, description="Weather conditions if relevant")
 
     # Initial elements
-    key_npcs: List[str] = Field(default_factory=list, max_items=3, description="Important NPCs in opening")
-    initial_mystery: Optional[str] = Field(None, description="Mystery or question to explore")
+    key_npcs: List[str] = Field(
+        default_factory=list, max_items=3, description="Important NPCs in opening"
+    )
+    initial_mystery: Optional[str] = Field(
+        None, description="Mystery or question to explore"
+    )
 
     # Player agency
-    immediate_choices: List[str] = Field(..., min_items=2, max_items=4, description="Initial choices available")
-    potential_allies: List[str] = Field(default_factory=list, description="Potential allies nearby")
-    potential_obstacles: List[str] = Field(..., min_items=1, description="Initial challenges")
+    immediate_choices: List[str] = Field(
+        ..., min_items=2, max_items=4, description="Initial choices available"
+    )
+    potential_allies: List[str] = Field(
+        default_factory=list, description="Potential allies nearby"
+    )
+    potential_obstacles: List[str] = Field(
+        ..., min_items=1, description="Initial challenges"
+    )
 
 
 class LayerType(str, Enum):
     """Types of world layers."""
+
     PLANET = "planet"
     DIMENSION = "dimension"
 
@@ -251,15 +323,24 @@ class LayerDefinition(BaseModel):
     This is the top level of the location hierarchy: layer -> zone -> place
     Maps directly to the layers table.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(..., min_length=1, max_length=50, description="Layer name (e.g., 'Earth', 'Aethermoor')")
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Layer name (e.g., 'Earth', 'Aethermoor')",
+    )
     type: LayerType = Field(..., description="Type of layer (planet or dimension)")
-    description: str = Field(..., min_length=20, description="Description of this world/realm")
+    description: str = Field(
+        ..., min_length=20, description="Description of this world/realm"
+    )
 
 
 class PlaceCategory(str, Enum):
     """Categories of locations."""
+
     SETTLEMENT = "settlement"
     WILDERNESS = "wilderness"
     DUNGEON = "dungeon"
@@ -279,60 +360,100 @@ class PlaceProfile(BaseModel):
     - Additional attributes stored in extra_data JSONB field
     - Coordinates stored as PostGIS geography type
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     # Core database fields
     name: str = Field(..., min_length=1, max_length=50, description="Place name")
     place_type: Literal["fixed_location", "vehicle", "virtual", "other"] = Field(
-        "fixed_location",
-        description="Type of place matching database enum"
+        "fixed_location", description="Type of place matching database enum"
     )
 
     # Description fields (map to database columns)
-    summary: str = Field(..., min_length=50, description="Detailed description of the location")
-    history: str = Field(..., min_length=30, description="Historical background and significance")
-    current_status: str = Field(..., min_length=20, description="Present condition, activity, and what's happening now")
-    secrets: Optional[str] = Field(None, description="Hidden information, dangers, or plot hooks")
+    summary: str = Field(
+        ..., min_length=50, description="Detailed description of the location"
+    )
+    history: str = Field(
+        ..., min_length=30, description="Historical background and significance"
+    )
+    current_status: str = Field(
+        ...,
+        min_length=20,
+        description="Present condition, activity, and what's happening now",
+    )
+    secrets: str = Field(
+        ...,
+        description="Hidden information, dangers, or plot hooks - every location has secrets",
+    )
 
     # Inhabitants (stored as text array in database)
-    inhabitants: List[str] = Field(default_factory=list, max_items=10, description="Who lives, works, or frequents this location")
+    inhabitants: List[str] = Field(
+        default_factory=list,
+        max_items=10,
+        description="Who lives, works, or frequents this location",
+    )
 
     # Geographic information (required for database)
     coordinates: List[float] = Field(
         ...,
         min_length=2,
         max_length=2,
-        description="Latitude and longitude coordinates [lat, lon] for the place"
+        description="Latitude and longitude coordinates [lat, lon] for the place",
     )
 
     # Additional attributes (stored in extra_data JSONB)
-    category: Optional[PlaceCategory] = Field(None, description="Narrative category of location")
-    size: Optional[Literal["tiny", "small", "medium", "large", "huge", "massive"]] = Field(None, description="Relative size")
-    population: Optional[int] = Field(None, ge=0, description="Population if applicable")
+    category: Optional[PlaceCategory] = Field(
+        None, description="Narrative category of location"
+    )
+    size: Optional[Literal["tiny", "small", "medium", "large", "huge", "massive"]] = (
+        Field(None, description="Relative size")
+    )
+    population: Optional[int] = Field(
+        None, ge=0, description="Population if applicable"
+    )
     atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
 
     # Features and details (stored in extra_data)
-    notable_features: List[str] = Field(default_factory=list, max_items=8, description="Distinctive physical features")
-    resources: List[str] = Field(default_factory=list, max_items=5, description="Available resources")
-    dangers: List[str] = Field(default_factory=list, max_items=5, description="Known threats or hazards")
+    notable_features: List[str] = Field(
+        default_factory=list, max_items=8, description="Distinctive physical features"
+    )
+    resources: List[str] = Field(
+        default_factory=list, max_items=5, description="Available resources"
+    )
+    dangers: List[str] = Field(
+        default_factory=list, max_items=5, description="Known threats or hazards"
+    )
 
     # Social and economic (stored in extra_data)
     ruler: Optional[str] = Field(None, description="Who controls or governs this place")
-    factions: List[str] = Field(default_factory=list, max_items=5, description="Active factions or groups")
-    culture: Optional[str] = Field(None, description="Cultural characteristics and customs")
+    factions: List[str] = Field(
+        default_factory=list, max_items=5, description="Active factions or groups"
+    )
+    culture: Optional[str] = Field(
+        None, description="Cultural characteristics and customs"
+    )
     economy: Optional[str] = Field(None, description="Economic base and activities")
-    trade_goods: List[str] = Field(default_factory=list, max_items=5, description="Goods produced or traded")
+    trade_goods: List[str] = Field(
+        default_factory=list, max_items=5, description="Goods produced or traded"
+    )
 
     # Nearby context (stored in extra_data)
-    nearby_landmarks: List[str] = Field(default_factory=list, max_items=5, description="Nearby notable locations")
+    nearby_landmarks: List[str] = Field(
+        default_factory=list, max_items=5, description="Nearby notable locations"
+    )
 
     # Current happenings (stored in extra_data)
-    current_events: List[str] = Field(default_factory=list, max_items=3, description="Ongoing events")
-    rumors: List[str] = Field(default_factory=list, max_items=3, description="Current rumors or gossip")
+    current_events: List[str] = Field(
+        default_factory=list, max_items=3, description="Ongoing events"
+    )
+    rumors: List[str] = Field(
+        default_factory=list, max_items=3, description="Current rumors or gossip"
+    )
 
 
 class ZoneType(str, Enum):
     """Types of zones within a location."""
+
     PUBLIC = "public"
     PRIVATE = "private"
     COMMERCIAL = "commercial"
@@ -350,19 +471,22 @@ class ZoneDefinition(BaseModel):
     Zones are geographic regions with optional boundaries (PostGIS polygons).
     They form the middle tier: layer -> zone -> place
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, max_length=50, description="Zone name")
-    summary: str = Field(..., min_length=20, max_length=500, description="Zone description")
+    summary: str = Field(
+        ..., min_length=20, max_length=500, description="Zone description"
+    )
 
     # Geographic shape (will be converted to PostGIS MultiPolygon)
     boundary_description: Optional[str] = Field(
         None,
-        description="Textual description of zone boundaries (e.g., 'Northern mountains to eastern river')"
+        description="Textual description of zone boundaries (e.g., 'Northern mountains to eastern river')",
     )
     approximate_area: Optional[str] = Field(
         None,
-        description="Rough size estimate (e.g., '100 square miles', 'size of France')"
+        description="Rough size estimate (e.g., '100 square miles', 'size of France')",
     )
 
     # Note: actual PostGIS boundary polygon will be added later if needed
@@ -376,6 +500,7 @@ class SpecificLocation(BaseModel):
     This represents the exact spot where the story begins (e.g., "Common Room" within "The Inn").
     Not stored in database but used for narrative context.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, max_length=100, description="Location name")
@@ -397,17 +522,29 @@ class SpecificLocation(BaseModel):
 
     # Access and movement
     entrances: List[str] = Field(..., min_items=1, description="How to enter/exit")
-    connected_areas: List[str] = Field(default_factory=list, description="Adjacent areas")
-    accessibility: Literal["public", "restricted", "private", "secret"] = Field("public")
+    connected_areas: List[str] = Field(
+        default_factory=list, description="Adjacent areas"
+    )
+    accessibility: Literal["public", "restricted", "private", "secret"] = Field(
+        "public"
+    )
 
     # Current state
-    occupants: List[str] = Field(default_factory=list, description="Who's typically here")
-    objects: List[str] = Field(..., min_items=1, description="Notable objects or furniture")
+    occupants: List[str] = Field(
+        default_factory=list, description="Who's typically here"
+    )
+    objects: List[str] = Field(
+        ..., min_items=1, description="Notable objects or furniture"
+    )
     lighting: Literal["dark", "dim", "normal", "bright", "variable"] = Field("normal")
 
     # Activity
-    typical_activities: List[str] = Field(..., min_items=1, description="What happens here")
-    busy_times: Optional[str] = Field(None, description="When this location is most active")
+    typical_activities: List[str] = Field(
+        ..., min_items=1, description="What happens here"
+    )
+    busy_times: Optional[str] = Field(
+        None, description="When this location is most active"
+    )
 
 
 class TransitionData(BaseModel):
@@ -416,30 +553,39 @@ class TransitionData(BaseModel):
 
     This contains all the structured data collected during new story initialization.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     # Core components
     setting: SettingCard = Field(..., description="World and setting information")
-    character: CharacterSheet = Field(..., description="Complete protagonist definition")
+    character: CharacterSheet = Field(
+        ..., description="Complete protagonist definition"
+    )
     seed: StorySeed = Field(..., description="Selected story opening")
 
     # Location hierarchy: layer -> zone -> place
     layer: LayerDefinition = Field(..., description="World layer (planet/dimension)")
     zone: ZoneDefinition = Field(..., description="Geographic zone")
-    location: PlaceProfile = Field(..., description="Starting place with exact coordinates")
+    location: PlaceProfile = Field(
+        ..., description="Starting place with exact coordinates"
+    )
 
     # Timing
     base_timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        description="In-game starting time"
+        description="In-game starting time",
     )
 
     # Session metadata
     thread_id: str = Field(..., description="OpenAI conversation thread ID")
-    setup_duration_minutes: Optional[int] = Field(None, description="How long setup took")
+    setup_duration_minutes: Optional[int] = Field(
+        None, description="How long setup took"
+    )
 
     # Validation flags
-    ready_for_transition: bool = Field(False, description="All required fields complete")
+    ready_for_transition: bool = Field(
+        False, description="All required fields complete"
+    )
     validated: bool = Field(False, description="Data has been validated")
 
     def validate_completeness(self) -> bool:
@@ -449,31 +595,31 @@ class TransitionData(BaseModel):
         Returns:
             True if ready to transition to narrative mode
         """
-        required_complete = all([
-            self.setting,
-            self.character,
-            self.seed,
-            self.layer,
-            self.zone,
-            self.location,
-            self.base_timestamp,
-            self.thread_id
-        ])
+        required_complete = all(
+            [
+                self.setting,
+                self.character,
+                self.seed,
+                self.layer,
+                self.zone,
+                self.location,
+                self.base_timestamp,
+                self.thread_id,
+            ]
+        )
 
         if required_complete:
             # Additional validation
             character_ready = (
-                self.character.name and
-                self.character.summary and
-                self.character.background and
-                self.character.personality and
-                self.character.appearance
+                self.character.name
+                and self.character.summary
+                and self.character.background
+                and self.character.personality
+                and self.character.appearance
             )
 
             location_ready = (
-                self.location.name and
-                self.location.summary and
-                self.zone.name
+                self.location.name and self.location.summary and self.zone.name
             )
 
             self.validated = character_ready and location_ready
@@ -486,13 +632,18 @@ class NewStoryValidation(BaseModel):
     """
     Validation response for checking transition readiness.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     is_valid: bool = Field(..., description="Whether data is valid")
     ready_for_transition: bool = Field(..., description="Ready to start narrative")
 
-    missing_fields: List[str] = Field(default_factory=list, description="Required fields that are missing")
-    validation_errors: List[str] = Field(default_factory=list, description="Validation error messages")
+    missing_fields: List[str] = Field(
+        default_factory=list, description="Required fields that are missing"
+    )
+    validation_errors: List[str] = Field(
+        default_factory=list, description="Validation error messages"
+    )
 
     # Component status
     setting_complete: bool = Field(False)
@@ -510,43 +661,13 @@ with the genre and tone selected.
 """
 
 CHARACTER_SHEET_SCHEMA_PROMPT = """
-Create a complete CharacterSheet for the protagonist based on the setting and user input.
+Create a CharacterSheet with:
+- Core identity fields: name, summary, appearance, background, personality
+- Exactly 3 of 10 optional traits (see attached Trait Reference)
+- Required wildcard trait (wildcard_name + wildcard_description)
+- A diegetic_artifact narrative portrait
 
-REQUIRED CORE FIELDS (map to database columns):
-- name: Character's full name
-- summary: Brief overview (1-2 sentences) - include age/species here if relevant
-- appearance: Physical description and how they present themselves
-- background: History, origin, what shaped them
-- personality: Traits, behavioral patterns, temperament
-
-OPTIONAL EXTRA_DATA FIELDS (choose at least 3 that are meaningful for THIS character):
-Think like a World of Darkness character sheet - where would you "invest dots" for this specific character?
-Not every field applies to every character. A loner survivalist might focus on: skills, weaknesses, possessions.
-A scheming courtier might focus on: allies, enemies, faction, reputation.
-
-Available fields:
-- skills: Notable abilities they've cultivated
-- weaknesses: Limitations or flaws that define them
-- motivations: Core drives
-- fears: What haunts them
-- allies: Key supporters or contacts
-- enemies: Rivals or antagonists
-- family: Family ties or lineage
-- occupation: Profession or calling
-- faction: Group affiliation
-- possessions: Signature gear or prized items
-- wealth_level: Economic status
-- special_abilities: Magical/cybernetic/supernatural powers
-- secrets: Hidden truths or concealed past
-- reputation: How they're known publicly
-- codes_and_beliefs: Personal philosophy or unbreakable principles
-
-IMPORTANT:
-- Do NOT include emotional_state, current_activity, or current_location - these will be set during story seed selection
-- Choose extra_data fields that matter to THIS character's concept
-- You MUST populate at least 3 extra_data fields
-
-The character should be compelling and well-defined. The output must be valid JSON conforming to the CharacterSheet schema.
+The output must be valid JSON conforming to the CharacterSheet schema.
 """
 
 STORY_SEEDS_SCHEMA_PROMPT = """
