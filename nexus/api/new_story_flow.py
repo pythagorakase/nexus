@@ -78,6 +78,8 @@ def record_drafts(
     setting: Optional[Dict] = None,
     character: Optional[Dict] = None,
     seed: Optional[Dict] = None,
+    layer: Optional[Dict] = None,
+    zone: Optional[Dict] = None,
     location: Optional[Dict] = None,
     base_timestamp: Optional[str] = None,
 ) -> None:
@@ -89,6 +91,8 @@ def record_drafts(
         setting: Optional setting draft dictionary
         character: Optional character draft dictionary
         seed: Optional seed selection dictionary
+        layer: Optional layer definition dictionary
+        zone: Optional zone definition dictionary
         location: Optional initial location dictionary
         base_timestamp: Optional ISO timestamp string
     """
@@ -99,6 +103,8 @@ def record_drafts(
         setting_draft=setting or cache.get("setting_draft"),
         character_draft=character or cache.get("character_draft"),
         selected_seed=seed or cache.get("selected_seed"),
+        layer_draft=layer or cache.get("layer_draft"),
+        zone_draft=zone or cache.get("zone_draft"),
         initial_location=location or cache.get("initial_location"),
         base_timestamp=base_timestamp or cache.get("base_timestamp"),
         target_slot=slot_number,

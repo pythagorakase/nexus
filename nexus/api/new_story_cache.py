@@ -35,6 +35,8 @@ def write_cache(
     setting_draft: Optional[Dict[str, Any]] = None,
     character_draft: Optional[Dict[str, Any]] = None,
     selected_seed: Optional[Dict[str, Any]] = None,
+    layer_draft: Optional[Dict[str, Any]] = None,
+    zone_draft: Optional[Dict[str, Any]] = None,
     initial_location: Optional[Dict[str, Any]] = None,
     base_timestamp: Optional[str] = None,
     target_slot: Optional[int] = None,
@@ -51,6 +53,8 @@ def write_cache(
         setting_draft: JSON-serializable setting data
         character_draft: JSON-serializable character data
         selected_seed: JSON-serializable seed data
+        layer_draft: JSON-serializable layer definition data
+        zone_draft: JSON-serializable zone definition data
         initial_location: JSON-serializable location data
         base_timestamp: ISO timestamp string
         target_slot: Target save slot number
@@ -62,15 +66,17 @@ def write_cache(
                 """
                 INSERT INTO assets.new_story_creator (
                     id, thread_id, setting_draft, character_draft, selected_seed,
-                    initial_location, base_timestamp, target_slot
+                    layer_draft, zone_draft, initial_location, base_timestamp, target_slot
                 ) VALUES (
-                    TRUE, %s, %s, %s, %s, %s, %s, %s
+                    TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     thread_id = EXCLUDED.thread_id,
                     setting_draft = EXCLUDED.setting_draft,
                     character_draft = EXCLUDED.character_draft,
                     selected_seed = EXCLUDED.selected_seed,
+                    layer_draft = EXCLUDED.layer_draft,
+                    zone_draft = EXCLUDED.zone_draft,
                     initial_location = EXCLUDED.initial_location,
                     base_timestamp = EXCLUDED.base_timestamp,
                     target_slot = EXCLUDED.target_slot,
@@ -81,6 +87,8 @@ def write_cache(
                     json.dumps(setting_draft) if setting_draft else None,
                     json.dumps(character_draft) if character_draft else None,
                     json.dumps(selected_seed) if selected_seed else None,
+                    json.dumps(layer_draft) if layer_draft else None,
+                    json.dumps(zone_draft) if zone_draft else None,
                     json.dumps(initial_location) if initial_location else None,
                     base_timestamp,
                     target_slot,

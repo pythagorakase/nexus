@@ -5,13 +5,19 @@ Thin wrapper around the OpenAI Conversations API for new-story setup flows.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, TypedDict
 
 import openai
 
 from scripts.api_openai import OpenAIProvider
 
 logger = logging.getLogger("nexus.api.conversations")
+
+
+class Message(TypedDict):
+    """Type definition for conversation messages."""
+    role: str
+    content: str
 
 
 class ConversationsClient:
@@ -56,7 +62,7 @@ class ConversationsClient:
         logger.debug("Added %s message to thread %s", role, thread_id)
         return msg.id
 
-    def list_messages(self, thread_id: str, limit: int = 20) -> List[dict]:
+    def list_messages(self, thread_id: str, limit: int = 20) -> List[Message]:
         """
         List messages in a thread.
 
@@ -65,7 +71,7 @@ class ConversationsClient:
             limit: Maximum number of messages to return (default: 20)
 
         Returns:
-            List of message dicts {'role': str, 'content': str}
+            List of Message TypedDicts with 'role' and 'content' fields
         """
         messages = self.client.beta.threads.messages.list(thread_id=thread_id, limit=limit)
         

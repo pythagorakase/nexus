@@ -3,11 +3,12 @@ FastAPI endpoints for live narrative turns with incubator support
 """
 
 import asyncio
+import frontmatter
 import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Literal
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
@@ -16,8 +17,6 @@ from pydantic import BaseModel, Field
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-from nexus.agents.lore.logon_utility import LogonUtility
-from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import response_to_incubator, validate_incubator_data
@@ -79,12 +78,21 @@ manager = ConnectionManager()
 
 # Database connection
 def get_db_connection():
-    """Get database connection"""
-    return psycopg2.connect(
-        host="localhost",
-        database="NEXUS",
-        user="pythagor"
-    )
+    """Get database connection from settings"""
+    settings = load_settings()
+    db_url = settings.get("Agent Settings", {}).get("MEMNON", {}).get("database", {}).get("url")
+
+    if db_url:
+        # Use connection string from settings
+        return psycopg2.connect(db_url)
+    else:
+        # Fallback to hardcoded values if settings missing
+        logger.warning("Database URL not found in settings, using default connection")
+        return psycopg2.connect(
+            host="localhost",
+            database="NEXUS",
+            user="pythagor"
+        )
 
 def load_settings():
     """Load settings from settings.json"""
@@ -626,8 +634,7 @@ class ChatRequest(BaseModel):
     slot: int
     thread_id: str
     message: str
-    is_init: Optional[bool] = False
-    current_phase: Optional[str] = "setting" # setting, character, seed
+    current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None # Accumulated wizard state
 
 @app.post("/api/story/new/chat")
@@ -640,9 +647,32 @@ async def new_story_chat_endpoint(request: ChatRequest):
         from pathlib import Path
         import json
 
+        # Load settings for new story workflow
+        settings = load_settings()
+        new_story_config = settings.get("API Settings", {}).get("new_story", {})
+        model = new_story_config.get("model", "gpt-5.1")
+        history_limit = new_story_config.get("message_history_limit", 20)
+
         # Initialize client
-        client = ConversationsClient()
-        
+        client = ConversationsClient(model=model)
+
+        # Load prompt and extract welcome message from frontmatter
+        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
+        with prompt_path.open() as f:
+            doc = frontmatter.load(f)
+            system_prompt = doc.content  # The markdown content without frontmatter
+            welcome_message = doc.get("welcome_message", "")
+
+        # Check if this is the first message (thread is empty)
+        # If so, prepend the welcome message as an assistant message
+        history = client.list_messages(request.thread_id, limit=history_limit)
+        if len(history) == 0 and welcome_message:
+            # Thread is empty, prepend welcome message
+            client.add_message(request.thread_id, "assistant", welcome_message)
+
+        # Add user message
+        client.add_message(request.thread_id, "user", request.message)
+
         # Define tools based on current phase
         tools = []
         if request.current_phase == "setting":
@@ -682,28 +712,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 }
             })
 
-        # If init, just return greeting
-        if request.is_init:
-            prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
-            with prompt_path.open() as f:
-                prompt_content = f.read()
-            
-            greeting = "Welcome to NEXUS. What kind of story speaks to you today?\n\n1. **Science Fiction**\n2. **Fantasy**\n3. **Horror**\n4. **Post-Apocalyptic**\n5. **Modern/Urban**\n6. **Historical**\n7. **Or describe something entirely different...**"
-            
-            client.add_message(request.thread_id, "assistant", greeting)
-            return {"message": greeting, "phase_complete": False}
-
-        # Add user message
-        client.add_message(request.thread_id, "user", request.message)
-
-        # Build context
-        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
-        with prompt_path.open() as f:
-            system_prompt = f.read()
-
-        # Fetch history
+        # Fetch updated history (now includes welcome + user message if first interaction)
         # Note: list_messages returns newest first, so we reverse it
-        history = client.list_messages(request.thread_id, limit=20)
+        history = client.list_messages(request.thread_id, limit=history_limit)
         history.reverse()
         
         # Filter out the message we just added (it's in history now) to avoid duplication if we append it manually
@@ -734,15 +745,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
             {"role": "system", "content": phase_instruction}
         ] + history
 
-        provider = OpenAIProvider(model="gpt-5.1")
+        provider = OpenAIProvider(model=model)
         openai_client = openai.OpenAI(api_key=provider.api_key)
 
         response = openai_client.chat.completions.create(
-            model="gpt-5.1",
+            model=model,
             messages=messages,
             tools=tools if tools else None,
-            tool_choice="auto",
-            temperature=0.9
+            tool_choice="auto"
         )
         
         message = response.choices[0].message
@@ -751,8 +761,17 @@ async def new_story_chat_endpoint(request: ChatRequest):
         if message.tool_calls:
             tool_call = message.tool_calls[0]
             function_name = tool_call.function.name
-            arguments = json.loads(tool_call.function.arguments)
-            
+
+            # Parse tool arguments
+            try:
+                arguments = json.loads(tool_call.function.arguments)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse tool call arguments: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Invalid tool call arguments from LLM: {str(e)}"
+                )
+
             # Persist the artifact to the setup cache
             try:
                 if function_name == "submit_world_document":
@@ -760,13 +779,13 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 elif function_name == "submit_character_sheet":
                     record_drafts(request.slot, character=arguments)
                 elif function_name == "submit_starting_scenario":
-                    # The tool returns a composite object, but record_drafts expects separate dicts
-                    # We might need to adjust based on the schema, but let's assume arguments matches
+                    # The tool returns a composite object with seed, layer, zone, and location
                     record_drafts(
-                        request.slot, 
-                        seed=arguments.get("seed"), 
+                        request.slot,
+                        seed=arguments.get("seed"),
+                        layer=arguments.get("layer"),
+                        zone=arguments.get("zone"),
                         location=arguments.get("location")
-                        # layer and zone are part of the location context usually, or we can store them in location
                     )
             except Exception as e:
                 logger.error(f"Failed to persist artifact for {function_name}: {e}")

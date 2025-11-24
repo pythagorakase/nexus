@@ -474,7 +474,8 @@
         "new_story": {
             "provider": "openai",
             "model": "gpt-5.1",
-            "description": "Model for new story initialization via Conversations API"
+            "message_history_limit": 20,
+            "description": "Model and settings for new story initialization via Conversations API"
         },
         "summarization": {
             "default_model": "gpt-5.1",
