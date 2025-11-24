@@ -54,24 +54,11 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 });
 
                 if (!startRes.ok) throw new Error("Failed to start setup");
-                const { thread_id } = await startRes.json();
+                const { thread_id, welcome_message } = await startRes.json();
                 setThreadId(thread_id);
 
-                const initialRes = await fetch("/api/story/new/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        slot,
-                        thread_id,
-                        message: "INIT_GREETING",
-                        is_init: true,
-                        current_phase: "setting"
-                    }),
-                });
-
-                if (initialRes.ok) {
-                    const data = await initialRes.json();
-                    addMessage("assistant", data.message);
+                if (welcome_message) {
+                    addMessage("assistant", welcome_message);
                 }
             } catch (error) {
                 console.error("Failed to init chat:", error);

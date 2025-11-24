@@ -31,21 +31,17 @@ export function SlotSelector({ onSlotSelected }: SlotSelectorProps) {
     const { data: slots = [], isLoading } = useQuery<SlotData[]>({
         queryKey: ["/api/story/new/slots"],
         queryFn: async () => {
-            // We'll simulate this for now by checking resume status for each slot
-            // In a real implementation, we'd have a dedicated endpoint for slot status
-            const promises = [1, 2, 3, 4, 5].map(async (slot) => {
-                try {
-                    const res = await fetch(`/api/story/new/setup/resume?slot=${slot}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        return { slot, ...data, is_active: !!data.thread_id };
-                    }
-                    return { slot, is_active: false };
-                } catch {
-                    return { slot, is_active: false };
-                }
-            });
-            return Promise.all(promises);
+            const res = await fetch("/api/story/new/slots");
+            if (!res.ok) throw new Error("Failed to fetch slots");
+            const data = await res.json();
+
+            // Map response to expected format
+            return data.map((slot: any) => ({
+                slot: slot.slot_number,
+                is_active: slot.is_active,
+                character_name: slot.character_name,
+                last_played: slot.last_played
+            }));
         },
     });
 

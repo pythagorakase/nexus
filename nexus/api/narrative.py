@@ -569,7 +569,31 @@ async def start_setup_endpoint(request: StartSetupRequest):
     """Start a new setup conversation"""
     try:
         thread_id = start_setup(request.slot, request.model)
-        return {"status": "started", "thread_id": thread_id, "slot": request.slot}
+        
+        # Load welcome message
+        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
+        welcome_message = ""
+        if prompt_path.exists():
+            with prompt_path.open() as f:
+                doc = frontmatter.load(f)
+                welcome_message = doc.get("welcome_message", "")
+
+        # Seed welcome message if exists
+        if welcome_message:
+            from nexus.api.conversations import ConversationsClient
+            # Re-use logic to get model or just use default
+            settings = load_settings()
+            new_story_config = settings.get("API Settings", {}).get("new_story", {})
+            model = new_story_config.get("model", "gpt-5.1")
+            client = ConversationsClient(model=model)
+            client.add_message(thread_id, "assistant", welcome_message)
+
+        return {
+            "status": "started", 
+            "thread_id": thread_id, 
+            "slot": request.slot,
+            "welcome_message": welcome_message
+        }
     except Exception as e:
         logger.error(f"Error starting setup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -624,6 +648,31 @@ async def select_slot_endpoint(request: SelectSlotRequest):
     except Exception as e:
         logger.error(f"Error activating slot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/story/new/slots")
+async def get_slots_status_endpoint():
+    """Get status of all save slots"""
+    from nexus.api.slot_utils import all_slots, slot_dbname
+    from nexus.api.save_slots import list_slots
+    
+    results = []
+    for slot in all_slots():
+        dbname = slot_dbname(slot)
+        try:
+            # Try to list slots from this DB
+            slots_data = list_slots(dbname=dbname)
+            # Find the row for this slot
+            slot_data = next((s for s in slots_data if s["slot_number"] == slot), None)
+            
+            if slot_data:
+                results.append(slot_data)
+            else:
+                results.append({"slot_number": slot, "is_active": False})
+        except Exception:
+            # DB might not exist or connection failed
+            results.append({"slot_number": slot, "is_active": False})
+            
+    return results
 
 from nexus.api.new_story_schemas import (
     SettingCard, CharacterSheet, StorySeed, 
