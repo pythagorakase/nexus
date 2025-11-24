@@ -212,6 +212,9 @@ class StoryComponentGenerator:
             class Config:
                 extra = "forbid"
 
+        top_skills = character.skills[:3] if character.skills else []
+        primary_motivation = character.motivations[0] if character.motivations else "Not specified"
+
         messages = [
             {
                 "role": "system",
@@ -226,9 +229,12 @@ class StoryComponentGenerator:
                 "content": (
                     f"Create {num_seeds} unique story openings for:\n\n"
                     f"Setting: {setting.world_name} ({setting.genre})\n"
-                    f"Protagonist: {character.name}, {character.age} year old {character.background}\n"
-                    f"Skills: {', '.join(character.skills[:3])}\n"
-                    f"Motivation: {character.motivations[0]}\n\n"
+                    f"Protagonist: {character.name}\n"
+                    f"Summary: {character.summary}\n"
+                    f"Background: {character.background}\n"
+                    f"Personality: {character.personality}\n"
+                    f"Skills: {', '.join(top_skills) if top_skills else 'Not specified'}\n"
+                    f"Motivation: {primary_motivation}\n\n"
                     f"Each seed should:\n"
                     f"1. Start in a different type of situation\n"
                     f"2. Offer clear player agency\n"
