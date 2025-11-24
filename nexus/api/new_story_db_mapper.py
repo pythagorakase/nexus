@@ -73,24 +73,40 @@ class NewStoryDatabaseMapper:
             # current_location will be set after place is created
         }
 
-        # Everything else goes in extra_data
-        extra_data = {
-            "age": character.age,
-            "gender": character.gender,
-            "species": character.species,
-            "occupation": character.occupation,
-            "faction": character.faction,
-            "motivations": character.motivations or [],
-            "fears": character.fears or [],
-            "skills": character.skills or [],
-            "weaknesses": character.weaknesses or [],
-            "special_abilities": character.special_abilities or [],
-            "family": character.family,
-            "possessions": character.possessions or [],
-            "wealth_level": character.wealth_level,
-            "allies": character.allies or [],
-            "enemies": character.enemies or [],
-        }
+        # Everything else goes in extra_data (only include fields that are actually populated)
+        extra_data = {}
+
+        # Only add fields that have meaningful values
+        if character.skills:
+            extra_data["skills"] = character.skills
+        if character.weaknesses:
+            extra_data["weaknesses"] = character.weaknesses
+        if character.motivations:
+            extra_data["motivations"] = character.motivations
+        if character.fears:
+            extra_data["fears"] = character.fears
+        if character.allies:
+            extra_data["allies"] = character.allies
+        if character.enemies:
+            extra_data["enemies"] = character.enemies
+        if character.family:
+            extra_data["family"] = character.family
+        if character.occupation:
+            extra_data["occupation"] = character.occupation
+        if character.faction:
+            extra_data["faction"] = character.faction
+        if character.possessions:
+            extra_data["possessions"] = character.possessions
+        if character.wealth_level:
+            extra_data["wealth_level"] = character.wealth_level
+        if character.special_abilities:
+            extra_data["special_abilities"] = character.special_abilities
+        if character.secrets:
+            extra_data["secrets"] = character.secrets
+        if character.reputation:
+            extra_data["reputation"] = character.reputation
+        if character.codes_and_beliefs:
+            extra_data["codes_and_beliefs"] = character.codes_and_beliefs
 
         db_record["extra_data"] = extra_data
 

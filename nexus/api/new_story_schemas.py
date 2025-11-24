@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Literal
 from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
 class Genre(str, Enum):
@@ -113,55 +113,78 @@ class CharacterSheet(BaseModel):
 
     This aligns with the characters table schema in the database:
     - Core fields (name, summary, appearance, background, personality) map to table columns
-    - Additional attributes stored in extra_data JSONB field
+    - Additional attributes stored in extra_data JSONB field (at least 3 required)
     - Dynamic fields (emotional_state, current_activity, current_location) set during story seed selection
+
+    Philosophy: Like World of Darkness character sheets, focus on what makes THIS character
+    distinct. Demographics (age, species) go in summary if important. The extra_data fields
+    represent meaningful character aspects where you'd "invest dots" - not all are relevant
+    to every character.
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
     # Core database fields (map directly to characters table columns)
     name: str = Field(..., min_length=1, max_length=50, description="Character's full name")
-    summary: str = Field(..., min_length=20, description="Brief character overview (1-2 sentences)")
+    summary: str = Field(..., min_length=20, description="Brief character overview capturing essence, including age/species if relevant")
     appearance: str = Field(..., min_length=30, description="Physical description including build, features, and how they present themselves")
     background: str = Field(..., min_length=50, description="Character's history, origin, and what shaped them")
     personality: str = Field(..., min_length=30, description="Personality traits, behavioral patterns, temperament, and how they typically respond")
 
-    # Essential metadata (stored in extra_data)
-    age: Optional[int] = Field(None, ge=0, le=500, description="Character's age in years")
-    gender: Optional[Literal["male", "female", "non-binary", "other"]] = Field(None, description="Character's gender")
-    species: str = Field("human", description="Character's species/race")
+    # Optional extra_data fields - pick at least 3 that are meaningful for THIS character
+    # Think: What makes this character distinct? Where would you "invest dots"?
 
-    # Role and affiliations (stored in extra_data)
-    occupation: Optional[str] = Field(None, description="Current occupation or role")
-    faction: Optional[str] = Field(None, description="Affiliated faction or organization")
+    skills: Optional[List[str]] = Field(None, max_items=8, description="Notable skills and abilities they've cultivated")
+    weaknesses: Optional[List[str]] = Field(None, max_items=5, description="Limitations, flaws, or struggles that define them")
+    motivations: Optional[List[str]] = Field(None, max_items=4, description="Core drives and what pushes them forward")
+    fears: Optional[List[str]] = Field(None, max_items=4, description="What haunts or terrifies them")
 
-    # Capabilities and limitations (stored in extra_data)
-    skills: List[str] = Field(default_factory=list, max_items=8, description="Notable skills and abilities")
-    weaknesses: List[str] = Field(default_factory=list, max_items=3, description="Character weaknesses or limitations")
-    special_abilities: Optional[List[str]] = Field(None, max_items=5, description="Magical or supernatural abilities if any")
+    allies: Optional[List[str]] = Field(None, max_items=6, description="Key allies, contacts, or supporters")
+    enemies: Optional[List[str]] = Field(None, max_items=6, description="Rivals, antagonists, or those who oppose them")
+    family: Optional[str] = Field(None, description="Family ties, lineage, or household")
 
-    # Motivations and psychology (stored in extra_data)
-    motivations: List[str] = Field(default_factory=list, max_items=3, description="Core motivations and drives")
-    fears: Optional[List[str]] = Field(None, max_items=3, description="Major fears or anxieties")
+    occupation: Optional[str] = Field(None, description="Profession, role, or calling")
+    faction: Optional[str] = Field(None, description="Organization, house, gang, or group affiliation")
 
-    # Relationships (stored in extra_data)
-    allies: Optional[List[str]] = Field(None, max_items=5, description="Initial allies or friends")
-    enemies: Optional[List[str]] = Field(None, max_items=5, description="Initial enemies or rivals")
-    family: Optional[str] = Field(None, description="Family situation and relationships")
-
-    # Starting resources (stored in extra_data)
-    possessions: Optional[List[str]] = Field(None, max_items=8, description="Starting equipment and possessions")
+    possessions: Optional[List[str]] = Field(None, max_items=6, description="Signature gear, prized items, or important belongings")
     wealth_level: Optional[Literal["destitute", "poor", "modest", "comfortable", "wealthy", "rich"]] = Field(
         None,
-        description="Economic status"
+        description="Economic status and resources"
     )
 
-    @field_validator('skills', 'motivations', 'weaknesses')
+    special_abilities: Optional[List[str]] = Field(None, max_items=5, description="Magical powers, cybernetic enhancements, supernatural gifts, or unique talents")
+    secrets: Optional[List[str]] = Field(None, max_items=4, description="Hidden truths, concealed past, or knowledge they guard")
+    reputation: Optional[str] = Field(None, description="How they're known, their standing, or public persona")
+    codes_and_beliefs: Optional[List[str]] = Field(None, max_items=4, description="Personal codes, philosophy, vows, or unbreakable principles")
+
+    @field_validator('skills', 'weaknesses', 'motivations', 'fears', 'allies', 'enemies', 'possessions', 'special_abilities', 'secrets', 'codes_and_beliefs')
     @classmethod
-    def validate_string_lists(cls, v: List[str]) -> List[str]:
+    def validate_string_lists(cls, v: Optional[List[str]]) -> Optional[List[str]]:
         """Ensure list items are non-empty strings."""
         if v is None:
-            return []
-        return [item.strip() for item in v if item.strip()]
+            return None
+        cleaned = [item.strip() for item in v if item.strip()]
+        return cleaned if cleaned else None
+
+    @model_validator(mode='after')
+    def validate_minimum_extra_data(self):
+        """Require at least 3 extra_data fields to be populated."""
+        extra_fields = [
+            'skills', 'weaknesses', 'motivations', 'fears',
+            'allies', 'enemies', 'family',
+            'occupation', 'faction',
+            'possessions', 'wealth_level',
+            'special_abilities', 'secrets', 'reputation', 'codes_and_beliefs'
+        ]
+
+        populated = sum(1 for field in extra_fields if getattr(self, field, None) is not None)
+
+        if populated < 3:
+            raise ValueError(
+                f"Character must have at least 3 meaningful extra_data fields populated. "
+                f"Currently has {populated}. Choose fields relevant to this character's concept."
+            )
+
+        return self
 
     # Diegetic artifact
     diegetic_artifact: Optional[str] = Field(None, description="A rich narrative portrait or dossier of the character, written in a style appropriate for the setting.")
@@ -488,10 +511,40 @@ with the genre and tone selected.
 
 CHARACTER_SHEET_SCHEMA_PROMPT = """
 Create a complete CharacterSheet for the protagonist based on the setting and user input.
-Focus on the core character traits that persist across the story:
-- name, summary, appearance, background, personality (required database fields)
-- Additional details like skills, motivations, and relationships (stored in extra_data)
+
+REQUIRED CORE FIELDS (map to database columns):
+- name: Character's full name
+- summary: Brief overview (1-2 sentences) - include age/species here if relevant
+- appearance: Physical description and how they present themselves
+- background: History, origin, what shaped them
+- personality: Traits, behavioral patterns, temperament
+
+OPTIONAL EXTRA_DATA FIELDS (choose at least 3 that are meaningful for THIS character):
+Think like a World of Darkness character sheet - where would you "invest dots" for this specific character?
+Not every field applies to every character. A loner survivalist might focus on: skills, weaknesses, possessions.
+A scheming courtier might focus on: allies, enemies, faction, reputation.
+
+Available fields:
+- skills: Notable abilities they've cultivated
+- weaknesses: Limitations or flaws that define them
+- motivations: Core drives
+- fears: What haunts them
+- allies: Key supporters or contacts
+- enemies: Rivals or antagonists
+- family: Family ties or lineage
+- occupation: Profession or calling
+- faction: Group affiliation
+- possessions: Signature gear or prized items
+- wealth_level: Economic status
+- special_abilities: Magical/cybernetic/supernatural powers
+- secrets: Hidden truths or concealed past
+- reputation: How they're known publicly
+- codes_and_beliefs: Personal philosophy or unbreakable principles
+
+IMPORTANT:
 - Do NOT include emotional_state, current_activity, or current_location - these will be set during story seed selection
+- Choose extra_data fields that matter to THIS character's concept
+- You MUST populate at least 3 extra_data fields
 
 The character should be compelling and well-defined. The output must be valid JSON conforming to the CharacterSheet schema.
 """
