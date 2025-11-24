@@ -63,8 +63,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
             } catch (error) {
                 console.error("Failed to init chat:", error);
                 toast({
-                    title: "Connection Error",
-                    description: "Failed to connect to the narrative core.",
+                    title: "Initialization Error",
+                    description: "Failed to initialize new story wizard. Please try again.",
                     variant: "destructive",
                 });
             } finally {
