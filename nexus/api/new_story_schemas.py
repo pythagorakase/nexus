@@ -111,63 +111,60 @@ class CharacterSheet(BaseModel):
     """
     Complete character definition for the protagonist.
 
-    This aligns with the characters table schema in the database.
+    This aligns with the characters table schema in the database:
+    - Core fields (name, summary, appearance, background, personality) map to table columns
+    - Additional attributes stored in extra_data JSONB field
+    - Dynamic fields (emotional_state, current_activity, current_location) set during story seed selection
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    # Basic information (required fields from characters table)
-    name: str = Field(..., min_length=1, max_length=100, description="Character's full name")
-    age: int = Field(..., ge=0, le=500, description="Character's age in years")
-    gender: Literal["male", "female", "non-binary", "other"] = Field(..., description="Character's gender")
+    # Core database fields (map directly to characters table columns)
+    name: str = Field(..., min_length=1, max_length=50, description="Character's full name")
+    summary: str = Field(..., min_length=20, description="Brief character overview (1-2 sentences)")
+    appearance: str = Field(..., min_length=30, description="Physical description including build, features, and how they present themselves")
+    background: str = Field(..., min_length=50, description="Character's history, origin, and what shaped them")
+    personality: str = Field(..., min_length=30, description="Personality traits, behavioral patterns, temperament, and how they typically respond")
+
+    # Essential metadata (stored in extra_data)
+    age: Optional[int] = Field(None, ge=0, le=500, description="Character's age in years")
+    gender: Optional[Literal["male", "female", "non-binary", "other"]] = Field(None, description="Character's gender")
     species: str = Field("human", description="Character's species/race")
 
-    # Background and role
-    background: CharacterBackground = Field(..., description="Character's social background")
-    occupation: str = Field(..., description="Current occupation or role")
+    # Role and affiliations (stored in extra_data)
+    occupation: Optional[str] = Field(None, description="Current occupation or role")
     faction: Optional[str] = Field(None, description="Affiliated faction or organization")
 
-    # Physical description
-    height: str = Field(..., description="Height description (e.g., 'tall', '5 feet 8 inches')")
-    build: str = Field(..., description="Body build (e.g., 'athletic', 'slender', 'stocky')")
-    appearance: str = Field(..., min_length=20, description="Physical appearance description")
-    distinguishing_features: List[str] = Field(default_factory=list, max_items=5, description="Notable physical features")
+    # Capabilities and limitations (stored in extra_data)
+    skills: List[str] = Field(default_factory=list, max_items=8, description="Notable skills and abilities")
+    weaknesses: List[str] = Field(default_factory=list, max_items=3, description="Character weaknesses or limitations")
+    special_abilities: Optional[List[str]] = Field(None, max_items=5, description="Magical or supernatural abilities if any")
 
-    # Personality and traits
-    personality: str = Field(..., min_length=20, description="Personality description")
-    motivations: List[str] = Field(..., min_items=1, max_items=3, description="Core motivations")
-    fears: List[str] = Field(..., min_items=1, max_items=3, description="Major fears or anxieties")
+    # Motivations and psychology (stored in extra_data)
+    motivations: List[str] = Field(default_factory=list, max_items=3, description="Core motivations and drives")
+    fears: Optional[List[str]] = Field(None, max_items=3, description="Major fears or anxieties")
 
-    # Abilities and skills
-    skills: List[str] = Field(..., min_items=1, max_items=10, description="Notable skills and abilities")
-    weaknesses: List[str] = Field(..., min_items=1, max_items=3, description="Character weaknesses or limitations")
-    special_abilities: Optional[List[str]] = Field(None, description="Magical or special abilities if any")
-
-    # Background story
-    backstory: str = Field(..., min_length=50, description="Character's history and background")
+    # Relationships (stored in extra_data)
+    allies: Optional[List[str]] = Field(None, max_items=5, description="Initial allies or friends")
+    enemies: Optional[List[str]] = Field(None, max_items=5, description="Initial enemies or rivals")
     family: Optional[str] = Field(None, description="Family situation and relationships")
 
-    # Starting conditions
-    possessions: List[str] = Field(..., min_items=1, description="Starting equipment and possessions")
-    wealth_level: Literal["destitute", "poor", "modest", "comfortable", "wealthy", "rich"] = Field(
-        "modest",
+    # Starting resources (stored in extra_data)
+    possessions: Optional[List[str]] = Field(None, max_items=8, description="Starting equipment and possessions")
+    wealth_level: Optional[Literal["destitute", "poor", "modest", "comfortable", "wealthy", "rich"]] = Field(
+        None,
         description="Economic status"
     )
 
-    # Relationships
-    allies: Optional[List[str]] = Field(default_factory=list, description="Initial allies or friends")
-    enemies: Optional[List[str]] = Field(default_factory=list, description="Initial enemies or rivals")
-
-    # Character arc potential
-    growth_areas: List[str] = Field(..., min_items=1, max_items=3, description="Areas for character development")
-
-    @field_validator('skills', 'motivations', 'fears', 'weaknesses', 'growth_areas')
+    @field_validator('skills', 'motivations', 'weaknesses')
     @classmethod
     def validate_string_lists(cls, v: List[str]) -> List[str]:
         """Ensure list items are non-empty strings."""
+        if v is None:
+            return []
         return [item.strip() for item in v if item.strip()]
 
     # Diegetic artifact
-    diegetic_artifact: str = Field(..., description="A rich narrative portrait or dossier of the character, written in a style appropriate for the setting.")
+    diegetic_artifact: Optional[str] = Field(None, description="A rich narrative portrait or dossier of the character, written in a style appropriate for the setting.")
 
 
 class StorySeedType(str, Enum):
@@ -254,48 +251,61 @@ class PlaceProfile(BaseModel):
     """
     Detailed information about a location.
 
-    Aligns with the places table in the database.
+    Aligns with the places table in the database:
+    - Core fields (name, type, summary, inhabitants, history, current_status, secrets) map to columns
+    - Additional attributes stored in extra_data JSONB field
+    - Coordinates stored as PostGIS geography type
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    name: str = Field(..., min_length=1, max_length=100, description="Place name")
-    category: PlaceCategory = Field(..., description="Type of location")
+    # Core database fields
+    name: str = Field(..., min_length=1, max_length=50, description="Place name")
+    place_type: Literal["fixed_location", "vehicle", "virtual", "other"] = Field(
+        "fixed_location",
+        description="Type of place matching database enum"
+    )
 
-    # Description
-    description: str = Field(..., min_length=50, description="Detailed description")
-    atmosphere: str = Field(..., description="Mood and feeling of the place")
+    # Description fields (map to database columns)
+    summary: str = Field(..., min_length=50, description="Detailed description of the location")
+    history: str = Field(..., min_length=30, description="Historical background and significance")
+    current_status: str = Field(..., min_length=20, description="Present condition, activity, and what's happening now")
+    secrets: Optional[str] = Field(None, description="Hidden information, dangers, or plot hooks")
 
-    # Physical characteristics
-    size: Literal["tiny", "small", "medium", "large", "huge", "massive"] = Field("medium")
-    population: Optional[int] = Field(None, description="Population if applicable")
+    # Inhabitants (stored as text array in database)
+    inhabitants: List[str] = Field(default_factory=list, max_items=10, description="Who lives, works, or frequents this location")
 
-    # Geographic information
-    region: str = Field(..., description="Broader region this place belongs to")
+    # Geographic information (required for database)
     coordinates: List[float] = Field(
         ...,
         min_length=2,
         max_length=2,
         description="Latitude and longitude coordinates [lat, lon] for the place"
     )
+
+    # Additional attributes (stored in extra_data JSONB)
+    category: Optional[PlaceCategory] = Field(None, description="Narrative category of location")
+    size: Optional[Literal["tiny", "small", "medium", "large", "huge", "massive"]] = Field(None, description="Relative size")
+    population: Optional[int] = Field(None, ge=0, description="Population if applicable")
+    atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
+
+    # Features and details (stored in extra_data)
+    notable_features: List[str] = Field(default_factory=list, max_items=8, description="Distinctive physical features")
+    resources: List[str] = Field(default_factory=list, max_items=5, description="Available resources")
+    dangers: List[str] = Field(default_factory=list, max_items=5, description="Known threats or hazards")
+
+    # Social and economic (stored in extra_data)
+    ruler: Optional[str] = Field(None, description="Who controls or governs this place")
+    factions: List[str] = Field(default_factory=list, max_items=5, description="Active factions or groups")
+    culture: Optional[str] = Field(None, description="Cultural characteristics and customs")
+    economy: Optional[str] = Field(None, description="Economic base and activities")
+    trade_goods: List[str] = Field(default_factory=list, max_items=5, description="Goods produced or traded")
+
+    # Nearby context (stored in extra_data)
     nearby_landmarks: List[str] = Field(default_factory=list, max_items=5, description="Nearby notable locations")
 
-    # Features
-    notable_features: List[str] = Field(..., min_items=1, max_items=5, description="Distinctive features")
-    resources: List[str] = Field(default_factory=list, description="Available resources")
-    dangers: List[str] = Field(default_factory=list, description="Potential threats")
-
-    # Social aspects
-    ruler: Optional[str] = Field(None, description="Who controls this place")
-    factions: List[str] = Field(default_factory=list, description="Active factions")
-    culture: str = Field(..., description="Cultural characteristics")
-
-    # Economic aspects
-    economy: Optional[str] = Field(None, description="Economic base if applicable")
-    trade_goods: List[str] = Field(default_factory=list, description="Goods traded here")
-
-    # Current state
+    # Current happenings (stored in extra_data)
     current_events: List[str] = Field(default_factory=list, max_items=3, description="Ongoing events")
-    rumors: List[str] = Field(default_factory=list, max_items=3, description="Current rumors")
+    rumors: List[str] = Field(default_factory=list, max_items=3, description="Current rumors or gossip")
 
 
 class ZoneType(str, Enum):
@@ -431,13 +441,15 @@ class TransitionData(BaseModel):
             # Additional validation
             character_ready = (
                 self.character.name and
-                self.character.backstory and
-                len(self.character.skills) > 0
+                self.character.summary and
+                self.character.background and
+                self.character.personality and
+                self.character.appearance
             )
 
             location_ready = (
                 self.location.name and
-                self.location.description and
+                self.location.summary and
                 self.zone.name
             )
 
@@ -476,8 +488,12 @@ with the genre and tone selected.
 
 CHARACTER_SHEET_SCHEMA_PROMPT = """
 Create a complete CharacterSheet for the protagonist based on the setting and user input.
-The character should be compelling, with clear motivations and room for growth. The output
-must be valid JSON conforming to the CharacterSheet schema.
+Focus on the core character traits that persist across the story:
+- name, summary, appearance, background, personality (required database fields)
+- Additional details like skills, motivations, and relationships (stored in extra_data)
+- Do NOT include emotional_state, current_activity, or current_location - these will be set during story seed selection
+
+The character should be compelling and well-defined. The output must be valid JSON conforming to the CharacterSheet schema.
 """
 
 STORY_SEEDS_SCHEMA_PROMPT = """

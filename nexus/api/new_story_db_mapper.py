@@ -51,6 +51,8 @@ class NewStoryDatabaseMapper:
 
         Database columns:
         - name, summary, appearance, background, personality (text fields)
+        - emotional_state, current_activity (will be set during story seed)
+        - current_location (set after place is created)
         - extra_data (JSONB for everything else)
 
         Args:
@@ -59,15 +61,15 @@ class NewStoryDatabaseMapper:
         Returns:
             Dictionary ready for database insertion
         """
-        # Core fields that map to columns
+        # Core fields that map directly to columns
         db_record = {
             "name": character.name,
-            "summary": self._generate_character_summary(character),
+            "summary": character.summary,
             "appearance": character.appearance,
-            "background": character.backstory,
+            "background": character.background,
             "personality": character.personality,
-            "emotional_state": "calm",  # Default starting state
-            "current_activity": "Beginning their journey",  # Will be updated by story
+            "emotional_state": None,  # Will be set during story seed selection
+            "current_activity": None,  # Will be set during story seed selection
             # current_location will be set after place is created
         }
 
@@ -78,21 +80,16 @@ class NewStoryDatabaseMapper:
             "species": character.species,
             "occupation": character.occupation,
             "faction": character.faction,
-            "height": character.height,
-            "build": character.build,
-            "distinguishing_features": character.distinguishing_features,
-            "motivations": character.motivations,
-            "fears": character.fears,
-            "skills": character.skills,
-            "weaknesses": character.weaknesses,
-            "special_abilities": character.special_abilities,
+            "motivations": character.motivations or [],
+            "fears": character.fears or [],
+            "skills": character.skills or [],
+            "weaknesses": character.weaknesses or [],
+            "special_abilities": character.special_abilities or [],
             "family": character.family,
-            "possessions": character.possessions,
+            "possessions": character.possessions or [],
             "wealth_level": character.wealth_level,
             "allies": character.allies or [],
             "enemies": character.enemies or [],
-            "growth_areas": character.growth_areas,
-            "background_type": character.background.value,
         }
 
         db_record["extra_data"] = extra_data
@@ -114,60 +111,35 @@ class NewStoryDatabaseMapper:
         Returns:
             Dictionary ready for database insertion
         """
-        # Map our category to database place_type enum
-        type_mapping = {
-            "settlement": "fixed_location",
-            "wilderness": "fixed_location",
-            "dungeon": "fixed_location",
-            "building": "fixed_location",
-            "district": "fixed_location",
-            "landmark": "fixed_location",
-            "road": "fixed_location",  # Could be 'other'
-            "border": "other",
-        }
-        db_type = type_mapping.get(place.category.value, "other")
-
-        # Build inhabitants list (if population is set, include it)
-        inhabitants = []
-        if place.population:
-            inhabitants.append(f"Population: {place.population}")
-        if place.ruler:
-            inhabitants.append(f"Ruled by: {place.ruler}")
-        if place.factions:
-            inhabitants.extend([f"Faction: {f}" for f in place.factions])
-
-        # Build secrets/plot hooks
-        secrets_parts = []
-        if place.dangers:
-            secrets_parts.append(f"Dangers: {', '.join(place.dangers)}")
-        if place.rumors:
-            secrets_parts.append(f"Rumors: {'; '.join(place.rumors)}")
-        secrets = " | ".join(secrets_parts) if secrets_parts else "No known secrets"
-
-        # Core fields
+        # Core fields map directly to columns
         db_record = {
             "name": place.name,
-            "type": db_type,
+            "type": place.place_type,  # Already matches database enum
             "zone": zone_id,  # Will be set after zone creation
-            "summary": place.description,
-            "inhabitants": inhabitants,
-            "history": place.atmosphere,  # Using atmosphere as history for now
-            "current_status": self._generate_place_status(place),
-            "secrets": secrets,
+            "summary": place.summary,
+            "inhabitants": place.inhabitants or [],
+            "history": place.history,
+            "current_status": place.current_status,
+            "secrets": place.secrets or "No known secrets",
         }
 
         # Additional data in extra_data
         extra_data = {
-            "category": place.category.value,
+            "category": place.category.value if place.category else None,
             "size": place.size,
-            "region": place.region,
-            "nearby_landmarks": place.nearby_landmarks,
-            "notable_features": place.notable_features,
-            "resources": place.resources,
+            "population": place.population,
+            "atmosphere": place.atmosphere,
+            "nearby_landmarks": place.nearby_landmarks or [],
+            "notable_features": place.notable_features or [],
+            "resources": place.resources or [],
+            "dangers": place.dangers or [],
+            "ruler": place.ruler,
+            "factions": place.factions or [],
             "culture": place.culture,
             "economy": place.economy,
-            "trade_goods": place.trade_goods,
-            "current_events": place.current_events,
+            "trade_goods": place.trade_goods or [],
+            "current_events": place.current_events or [],
+            "rumors": place.rumors or [],
         }
 
         db_record["extra_data"] = extra_data
@@ -617,14 +589,6 @@ class NewStoryDatabaseMapper:
                 )
                 raise
 
-    def _generate_character_summary(self, character: CharacterSheet) -> str:
-        """Generate a brief character summary."""
-        return (
-            f"{character.name} is a {character.age} year old {character.gender} {character.species} "
-            f"with a {character.background.value} background, currently working as {character.occupation}. "
-            f"{character.motivations[0] if character.motivations else 'Seeking their destiny'}."
-        )
-
     def _create_default_zone_boundary(self, cursor, zone_id: int, coordinates: tuple[float, float]) -> None:
         """
         Create a default circular boundary for a zone.
@@ -656,18 +620,3 @@ class NewStoryDatabaseMapper:
         except Exception as e:
             # Log but don't fail - boundary is optional
             logger.warning(f"Could not create default boundary for zone {zone_id}: {e}")
-
-    def _generate_place_status(self, place: PlaceProfile) -> str:
-        """Generate current status description for a place."""
-        status_parts = []
-
-        if place.current_events:
-            status_parts.append(f"Current events: {'; '.join(place.current_events)}")
-
-        if place.economy:
-            status_parts.append(f"Economy based on {place.economy}")
-
-        if place.trade_goods:
-            status_parts.append(f"Trading in {', '.join(place.trade_goods[:3])}")
-
-        return " | ".join(status_parts) if status_parts else "Normal operations"

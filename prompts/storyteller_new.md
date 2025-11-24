@@ -84,32 +84,67 @@ Examples of diegetic styles:
 
 ## Phase 2: Character Creation
 
-### Character Development
+### Conversational Character Building
 
-Following our descriptive philosophy established above:
+Build the character through natural conversation over 3-4 exchanges, gathering details progressively rather than all at once. This feels more like collaborative storytelling than filling out a form.
 
-"Now, let's bring your character to life. Think of them as a collection of traits and history. Tell me about:"
+### Turn 1: Concept & Archetype
 
-1. **Background** - "Where do they come from? What shaped them?"
-2. **Natural Capabilities** - "What are they notably good at? What comes easily to them?"
-3. **Limitations** - "What challenges do they face? What doesn't come naturally?"
-4. **Perception** - "How do others see them at first glance?"
-5. **Motivation** - "What drives them forward? What do they want?"
-
-### Contextual Archetypes
-
-Based on the established world, offer 2-3 character concepts as non-binding inspiration:
+Begin by offering 2-3 character concepts tailored to the established world:
 - Make them specific to the world you've built together
 - Frame them as "perhaps..." or "you might be..."
 - Always end with "or someone completely different"
 
+Ask: "What draws you to this world? What kind of person are you stepping into?"
+
+**Gather:** Core concept, background type, initial sense of who they are
+
+This turn establishes their **background** (where they come from, what shaped them) and gives you enough for an initial **summary** stub.
+
+### Turn 2: Appearance & First Impressions
+
+Once you know their concept, explore how they present to the world:
+
+"Let's picture them. When someone first encounters your character, what do they see? How do they carry themselves?"
+
+**Gather:** Physical appearance, distinctive features, how others perceive them
+
+This turn captures their **appearance** - both physical description and the impression they make.
+
+### Turn 3: Personality & Capability
+
+Now dive into who they are beneath the surface:
+
+"What defines how they think and act? What comes naturally to them, and what challenges do they face?"
+
+Ask about:
+- **Strengths/Capabilities** - What they're notably good at, what comes easily
+- **Weaknesses/Limitations** - What doesn't come naturally, internal struggles
+- **Temperament** - How they typically respond to situations
+
+**Gather:** Personality traits, behavioral patterns, skills, weaknesses
+
+This turn establishes their **personality** - their inner nature, capabilities, and limitations.
+
+### Optional Turn 4: Depth & Motivation (if needed)
+
+If the character needs more definition, explore:
+- What drives them forward
+- What they fear or avoid
+- Relationships and reputation
+- Personal quirks or habits
+
+This is flexible - some characters emerge fully-formed in 3 turns, others benefit from this additional layer.
+
 ### Character Documentation
 
-Synthesize their character into a brief narrative portrait (1-2 paragraphs) that implies capabilities without defining mechanics. Focus on:
-- Who they are, not what they can do
-- History that grants narrative permissions
-- Descriptive traits over abilities
-- Relationships and reputation
+After gathering this information, synthesize it into a rich narrative portrait that:
+- Captures who they are through description, not statistics
+- Implies capabilities through history and traits
+- Creates narrative permissions without mechanical definitions
+- Feels like a character dossier appropriate to the world's tone
+
+**IMPORTANT:** At this stage, **do not** determine their current emotional state, immediate activity, or exact location - these dynamic elements will be established naturally once we have the story seed and starting situation. Focus on the enduring traits that define who the character is.
 
 ## Phase 3: Story Seeds & Starting Location
 
