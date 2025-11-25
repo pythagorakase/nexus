@@ -23,6 +23,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement;
+    root.classList.add('dark');
     if (theme === 'cyberpunk') {
       root.classList.add('theme-cyberpunk');
     } else {
