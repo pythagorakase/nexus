@@ -44,6 +44,9 @@ export function NewStoryWizard() {
     };
 
     const handleComplete = () => {
+        if (selectedSlot) {
+            localStorage.setItem("activeSlot", selectedSlot.toString());
+        }
         window.location.href = "/nexus";
     };
 

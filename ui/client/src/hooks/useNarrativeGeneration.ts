@@ -20,11 +20,21 @@ interface UseNarrativeGenerationOptions {
   onComplete?: () => void;
   onError?: () => void;
   allowedChunkId?: number | null;
+  slot?: number | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError, allowedChunkId = null } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot = null } = options;
   const queryClient = useQueryClient();
+
+  const withSlot = useCallback(
+    (path: string) => {
+      if (!slot) return path;
+      const separator = path.includes("?") ? "&" : "?";
+      return `${path}${separator}slot=${slot}`;
+    },
+    [slot],
+  );
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
@@ -88,7 +98,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
 
   const fetchIncubatorData = useCallback(async () => {
     try {
-      const response = await fetch("/api/narrative/incubator");
+      const response = await fetch(withSlot("/api/narrative/incubator"));
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load incubator contents";
         throw new Error(message);
@@ -104,7 +114,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       console.error("Unable to load incubator data:", error);
       setGenerationError(error instanceof Error ? error.message : "Unable to load incubator");
     }
-  }, []);
+  }, [withSlot]);
 
   const handleNarrativeProgress = useCallback(
     (payload: NarrativeProgressPayload) => {
@@ -260,7 +270,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       onPhaseChange?.("initiated");
 
       try {
-        const response = await fetch("/api/narrative/continue", {
+        const response = await fetch(withSlot("/api/narrative/continue"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -296,7 +306,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
+    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer, withSlot],
   );
 
   const handleApprove = useCallback(async () => {
@@ -310,7 +320,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     }
 
     try {
-      const response = await fetch(`/api/narrative/approve/${activeNarrativeSessionRef.current}`, {
+      const response = await fetch(withSlot(`/api/narrative/approve/${activeNarrativeSessionRef.current}`), {
         method: "POST",
       });
 
@@ -325,7 +335,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       });
 
       // Ensure dependent data reflects the newly committed chunk
-      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk", slot ?? null] });
       queryClient.invalidateQueries({
         predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === "/api/narrative/chunks",
       });
@@ -343,7 +353,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         variant: "destructive",
       });
     }
-  }, [queryClient]);
+  }, [queryClient, slot, withSlot]);
 
   const handleRegenerate = useCallback(() => {
     if (!generationParentChunk) {
