@@ -14,6 +14,29 @@ import type { Place, Zone } from "@shared/schema";
 import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 import { worldOutline } from "@/lib/world-outline";
 import { useGeoProjection } from "@/hooks/useGeoProjection";
+import { useTheme } from "@/contexts/ThemeContext";
+
+// Theme-aware color palettes for the map
+const MAP_COLORS = {
+  cyberpunk: {
+    default: "#00ff41",      // Matrix green
+    hover: "#00ff80",        // Brighter green
+    selected: "#00ffff",     // Cyan
+    current: "#ffff00",      // Yellow
+    grid: "#00ff0010",       // Faint green grid
+    landFill: "#001a00",     // Dark green land
+    landStroke: "#00ff41",   // Green border
+  },
+  gilded: {
+    default: "#c9a227",      // Brass gold
+    hover: "#e6b82e",        // Brighter gold
+    selected: "#f5d442",     // Bright gold
+    current: "#ff6b35",      // Warm orange for current
+    grid: "#c9a22710",       // Faint brass grid
+    landFill: "#1a1408",     // Dark sepia land
+    landStroke: "#c9a227",   // Brass border
+  },
+} as const;
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
@@ -50,6 +73,10 @@ const toParagraphs = (value: string | null | undefined): string[] => {
 };
 
 export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps) {
+  // Theme-aware colors
+  const { isCyberpunk } = useTheme();
+  const colors = isCyberpunk ? MAP_COLORS.cyberpunk : MAP_COLORS.gilded;
+
   // State management for location interactions
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
@@ -470,18 +497,18 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
     setZoom(newZoom);
   };
 
-  // Determine pin color based on state
+  // Determine pin color based on state (uses theme-aware colors)
   const getPinColor = (place: Place) => {
     if (currentChunkLocation && place.name === currentChunkLocation) {
-      return "#ffff00"; // Yellow for current narrative location
+      return colors.current;
     }
     if (selectedLocation === place.id) {
-      return "#00ffff"; // Cyan for selected
+      return colors.selected;
     }
     if (hoveredLocation === place.id) {
-      return "#00ff80"; // Brighter green for hover
+      return colors.hover;
     }
-    return "#00ff41"; // Default green
+    return colors.default;
   };
 
   const shouldDisplayLabelByZoom = useCallback((index: number) => {
@@ -636,28 +663,28 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
           {/* Background */}
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="#000000" />
 
-          {/* Grid pattern for cyberpunk aesthetic */}
+          {/* Grid pattern - theme-aware */}
           <defs>
             <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
               <path
                 d="M 50 0 L 0 0 0 50"
                 fill="none"
-                stroke="#00ff0010"
+                stroke={colors.grid}
                 strokeWidth="0.5"
               />
             </pattern>
           </defs>
           <rect width={mapDimensions.width} height={mapDimensions.height} fill="url(#grid)" />
 
-          {/* World countries */}
+          {/* World countries - theme-aware */}
           <g opacity="0.45">
             {worldCountries.map((country) => (
               <path
                 key={country.id}
                 d={country.pathData}
-                fill="#001a00"
+                fill={colors.landFill}
                 fillOpacity={0.35}
-                stroke="#00ff41"
+                stroke={colors.landStroke}
                 strokeOpacity={0.4}
                 strokeWidth={1 / zoom}
               />
@@ -773,7 +800,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
               x="50%"
               y="50%"
               textAnchor="middle"
-              fill="#00ff0080"
+              fill={`${colors.default}80`}
               fontSize="14"
               className="font-mono"
             >
@@ -782,7 +809,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
           )}
         </svg>
 
-        {/* Legend and Controls */}
+        {/* Legend and Controls - theme-aware */}
         <div className="absolute bottom-4 left-4 bg-card/90 border border-border p-3 rounded-md font-mono text-xs">
           <div className="text-primary mb-2">[MAP CONTROLS]</div>
           <div className="space-y-1 text-muted-foreground">
@@ -790,15 +817,15 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
             <div>Click location to select</div>
             <div className="mt-2 flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: "#00ff41" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.default }} />
                 <span>Default</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: "#ffff00" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.current }} />
                 <span>Current</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: "#00ffff" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: colors.selected }} />
                 <span>Selected</span>
               </div>
             </div>
@@ -888,8 +915,8 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
                                 <div
                                   className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1"
                                   style={{
-                                    background: isCurrent ? "#ffff00" : (isSelected ? "#00ffff" : "#00ff41"),
-                                    boxShadow: `0 0 4px ${isCurrent ? "#ffff00" : (isSelected ? "#00ffff" : "#00ff41")}`
+                                    background: isCurrent ? colors.current : (isSelected ? colors.selected : colors.default),
+                                    boxShadow: `0 0 4px ${isCurrent ? colors.current : (isSelected ? colors.selected : colors.default)}`
                                   }}
                                 />
                                 <span className="text-left flex-1 break-words">

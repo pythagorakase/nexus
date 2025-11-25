@@ -14,12 +14,13 @@ import { CharactersTab } from "./CharactersTab";
 import AuditionTab from "@/pages/AuditionTab";
 import { SettingsTab } from "@/pages/SettingsTab";
 import { FontProvider } from "@/contexts/FontContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Book, Map, Users, Sparkles, Settings } from "lucide-react";
+import { Book, Map, Users } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useNarrativeGeneration } from "@/hooks/useNarrativeGeneration";
 import type { EntityChanges } from "@/types/narrative";
@@ -75,6 +76,7 @@ export function NexusLayout() {
   const generatingTimeoutRef = useRef<number | null>(null);
   const readyTimeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
+  const { isCyberpunk } = useTheme();
   const [activeTab, setActiveTab] = useState("narrative");
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
@@ -387,6 +389,7 @@ export function NexusLayout() {
           modelStatus={modelStatus}
           onModelStatusChange={setModelStatus}
           onRefreshModelStatus={refreshModelStatus}
+          onNavigate={setActiveTab}
           onHamburgerClick={() => {
             // Can be used for mobile menu in the future
           }}
@@ -401,7 +404,7 @@ export function NexusLayout() {
             <TabsList className="h-10 bg-transparent border-0 rounded-none p-0 inline-flex min-w-full">
               <TabsTrigger
                 value="narrative"
-                className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs terminal-glow flex items-center gap-1 md:gap-2 flex-1 md:flex-initial"
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-narrative"
               >
                 <Book className="h-3 w-3" />
@@ -410,7 +413,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="map"
-                className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs terminal-glow flex items-center gap-1 md:gap-2 flex-1 md:flex-initial"
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-map"
               >
                 <Map className="h-3 w-3" />
@@ -418,30 +421,12 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="characters"
-                className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs terminal-glow flex items-center gap-1 md:gap-2 flex-1 md:flex-initial"
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-characters"
               >
                 <Users className="h-3 w-3" />
                 <span className="hidden sm:inline">CHARACTERS</span>
                 <span className="sm:hidden">CHAR</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="audition"
-                className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs terminal-glow flex items-center gap-1 md:gap-2 flex-1 md:flex-initial"
-                data-testid="tab-audition"
-              >
-                <Sparkles className="h-3 w-3" />
-                <span className="hidden sm:inline">AUDITION</span>
-                <span className="sm:hidden">AUD</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="settings"
-                className="data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs terminal-glow flex items-center gap-1 md:gap-2 ml-auto"
-                data-testid="tab-settings"
-              >
-                <Settings className="h-3 w-3" />
-                <span className="hidden sm:inline">SETTINGS</span>
-                <span className="sm:hidden">SET</span>
               </TabsTrigger>
             </TabsList>
           </div>

@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFonts } from '@/contexts/FontContext';
+import { useTheme, type Theme } from '@/contexts/ThemeContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,42 +17,51 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Save, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-// Full font list for narrative text
-const NARRATIVE_FONTS = [
-  'Source Code Pro',
-  'Georgia',
-  'Lora',
-  'Merriweather',
-  'Crimson Text',
-  'Spectral',
-  'Literata',
-  'Newsreader',
-  'EB Garamond',
-  'PT Serif',
+// Gilded theme fonts - elegant Art Deco options
+const GILDED_BODY_FONTS = [
+  'Cormorant Garamond',
   'Libre Baskerville',
-  'Inter',
-  'Noto Sans',
-  'Source Sans 3',
-  'Open Sans',
-  'Lato',
 ];
 
-// Fixed-width fonts only for UI text
-const UI_FONTS = [
+const GILDED_MENU_FONTS = [
+  'Xanh Mono',
+  'Space Mono',
+];
+
+// Cyberpunk theme fonts - terminal/monospace options
+const CYBERPUNK_NARRATIVE_FONTS = [
+  'Source Code Pro',
+  'JetBrains Mono',
+  'Fira Code',
+  'IBM Plex Mono',
+];
+
+const CYBERPUNK_UI_FONTS = [
   'Source Code Pro',
   'Courier Prime',
-  'Courier New',
   'Monaco',
   'Consolas',
 ];
 
 export function SettingsTab() {
-  const { fonts, setNarrativeFont, setUIFont, resetToDefaults } = useFonts();
+  const {
+    fonts,
+    setCyberpunkNarrativeFont,
+    setCyberpunkUIFont,
+    setGildedBodyFont,
+    setGildedMenuFont,
+    resetToDefaults,
+    currentBodyFont,
+    currentMenuFont,
+  } = useFonts();
+  const { theme, setTheme, isGilded, isCyberpunk } = useTheme();
   const queryClient = useQueryClient();
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -239,63 +249,193 @@ export function SettingsTab() {
     <ScrollArea className="h-full">
       <div className="container max-w-4xl py-8 px-6 space-y-6">
         <div className="space-y-2">
-          <h2 className="text-2xl font-mono font-bold text-primary terminal-glow">Settings</h2>
+          <h2 className={`text-2xl font-mono font-bold text-primary ${glowClass}`}>Settings</h2>
           <p className="text-muted-foreground font-mono text-sm pl-1">
             Customize typography and appearance preferences
           </p>
         </div>
 
+      {/* Theme Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-mono">Theme</CardTitle>
+          <CardDescription className="font-mono text-xs">
+            Choose the visual style for the interface
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RadioGroup
+            value={theme}
+            onValueChange={(value: Theme) => setTheme(value)}
+            className="grid grid-cols-2 gap-4"
+          >
+            <Label
+              htmlFor="theme-gilded"
+              className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${
+                isGilded ? "border-primary bg-primary/5" : "border-muted"
+              }`}
+            >
+              <RadioGroupItem value="gilded" id="theme-gilded" className="sr-only" />
+              <Sparkles className={`mb-3 h-6 w-6 ${isGilded ? "text-primary" : "text-muted-foreground"}`} />
+              <span className={`font-mono text-sm font-semibold ${isGilded ? "text-primary" : ""}`}>
+                Gilded
+              </span>
+              <span className="font-mono text-xs text-muted-foreground mt-1">
+                Art Deco elegance
+              </span>
+            </Label>
+            <Label
+              htmlFor="theme-cyberpunk"
+              className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${
+                isCyberpunk ? "border-primary bg-primary/5" : "border-muted"
+              }`}
+            >
+              <RadioGroupItem value="cyberpunk" id="theme-cyberpunk" className="sr-only" />
+              <Monitor className={`mb-3 h-6 w-6 ${isCyberpunk ? "text-primary" : "text-muted-foreground"}`} />
+              <span className={`font-mono text-sm font-semibold ${isCyberpunk ? "text-primary" : ""}`}>
+                Cyberpunk
+              </span>
+              <span className="font-mono text-xs text-muted-foreground mt-1">
+                Terminal aesthetic
+              </span>
+            </Label>
+          </RadioGroup>
+        </CardContent>
+      </Card>
+
+      {/* Typography - Subordinate to Theme */}
       <Card>
         <CardHeader>
           <CardTitle className="font-mono">Typography</CardTitle>
           <CardDescription className="font-mono text-xs">
-            Choose fonts for different parts of the interface
+            {isGilded
+              ? "Elegant serif options for the Gilded theme"
+              : "Terminal fonts for the Cyberpunk aesthetic"
+            }
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Narrative Text Font */}
-          <div className="space-y-3">
-            <Label htmlFor="narrative-font" className="font-mono text-sm">
-              Narrative Text
-            </Label>
-            <Select value={fonts.narrativeFont} onValueChange={setNarrativeFont}>
-              <SelectTrigger id="narrative-font" className="font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {NARRATIVE_FONTS.map((font) => (
-                  <SelectItem key={font} value={font} className="font-mono">
-                    <span style={{ fontFamily: font }}>{font}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground font-mono">
-              Font used for story content and narrative text
-            </p>
-          </div>
+          {isGilded ? (
+            <>
+              {/* Gilded Body Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="gilded-body-font" className="font-mono text-sm">
+                  Body Text
+                </Label>
+                <Select
+                  value={fonts.gildedBodyFont}
+                  onValueChange={setGildedBodyFont}
+                >
+                  <SelectTrigger id="gilded-body-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GILDED_BODY_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview */}
+                <div
+                  className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
+                  style={{ fontFamily: currentBodyFont }}
+                >
+                  Gatsby believed in the green light, the orgastic future that year by year recedes before us.
+                </div>
+              </div>
 
-          {/* UI Text Font */}
-          <div className="space-y-3">
-            <Label htmlFor="ui-font" className="font-mono text-sm">
-              UI Text
-            </Label>
-            <Select value={fonts.uiFont} onValueChange={setUIFont}>
-              <SelectTrigger id="ui-font" className="font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {UI_FONTS.map((font) => (
-                  <SelectItem key={font} value={font} className="font-mono">
-                    <span style={{ fontFamily: font }}>{font}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground font-mono">
-              Fixed-width font for buttons, labels, and interface elements
-            </p>
-          </div>
+              {/* Gilded Menu Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="gilded-menu-font" className="font-mono text-sm">
+                  Menu &amp; Labels
+                </Label>
+                <Select
+                  value={fonts.gildedMenuFont}
+                  onValueChange={setGildedMenuFont}
+                >
+                  <SelectTrigger id="gilded-menu-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GILDED_MENU_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview */}
+                <div
+                  className="p-3 rounded-md bg-muted/50 text-sm border border-border tracking-wider"
+                  style={{ fontFamily: currentMenuFont }}
+                >
+                  STATUS: READY // CHAPTER: S01-E01-S001
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Cyberpunk Narrative Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="cyber-narrative-font" className="font-mono text-sm">
+                  Narrative Text
+                </Label>
+                <Select
+                  value={fonts.cyberpunkNarrativeFont}
+                  onValueChange={setCyberpunkNarrativeFont}
+                >
+                  <SelectTrigger id="cyber-narrative-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CYBERPUNK_NARRATIVE_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview */}
+                <div
+                  className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
+                  style={{ fontFamily: currentBodyFont }}
+                >
+                  The rain hammered against the neon-lit windows of the megastructure. Chrome towers pierced the smog-choked sky.
+                </div>
+              </div>
+
+              {/* Cyberpunk UI Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="cyber-ui-font" className="font-mono text-sm">
+                  UI Text
+                </Label>
+                <Select
+                  value={fonts.cyberpunkUIFont}
+                  onValueChange={setCyberpunkUIFont}
+                >
+                  <SelectTrigger id="cyber-ui-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CYBERPUNK_UI_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview */}
+                <div
+                  className="p-3 rounded-md bg-muted/50 text-sm border border-border"
+                  style={{ fontFamily: currentMenuFont }}
+                >
+                  [STATUS: READY] // APEX: ONLINE // CHAPTER: S01-E01-S001
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Reset Button */}
           <div className="pt-4">
@@ -506,7 +646,7 @@ export function SettingsTab() {
               {uploadMessage && (
                 <p
                   className={`text-xs font-mono ${
-                    uploadMessage.type === 'success' ? 'text-green-600' : 'text-destructive'
+                    uploadMessage.type === 'success' ? 'text-primary' : 'text-destructive'
                   }`}
                 >
                   {uploadMessage.text}
@@ -517,36 +657,6 @@ export function SettingsTab() {
         </CardContent>
       </Card>
 
-      {/* Preview Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">Preview</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="font-mono text-sm mb-2 block">Narrative Text Sample:</Label>
-            <div
-              className="p-4 rounded-md bg-muted/50 text-sm leading-relaxed"
-              style={{ fontFamily: fonts.narrativeFont }}
-            >
-              The rain hammered against the neon-lit windows of the megastructure. In the distance,
-              chrome towers pierced the smog-choked sky. This was the world they'd inherited - a
-              tapestry of silicon dreams and broken promises.
-            </div>
-          </div>
-          <div>
-            <Label className="font-mono text-sm mb-2 block">UI Text Sample:</Label>
-            <div className="space-y-2">
-              <Button variant="outline" style={{ fontFamily: fonts.uiFont }}>
-                Sample Button
-              </Button>
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: fonts.uiFont }}>
-                Menu items and labels appear in this font
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
       </div>
     </ScrollArea>
   );

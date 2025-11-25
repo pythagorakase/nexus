@@ -289,7 +289,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const { fonts } = useFonts();
+  const { currentBodyFont } = useFonts();
   const queryClient = useQueryClient();
 
   const {
@@ -635,7 +635,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
 
                 <div
                   className="text-foreground text-base leading-relaxed"
-                  style={{ fontFamily: fonts.narrativeFont }}
+                  style={{ fontFamily: currentBodyFont }}
                 >
                   <ReactMarkdown components={markdownComponents}>
                     {selectedChunk.rawText || ""}

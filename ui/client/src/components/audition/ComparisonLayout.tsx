@@ -86,7 +86,7 @@ export function ComparisonLayout({
   const precedingScrollRef = useRef<HTMLDivElement>(null);
   const { recordJudgmentAsync, isRecording } = useJudgment();
   const { toast } = useToast();
-  const { fonts } = useFonts();
+  const { currentBodyFont } = useFonts();
 
   const warmChunks = useMemo(
     () => extractWarmChunks(comparison.prompt.context),
@@ -375,7 +375,7 @@ export function ComparisonLayout({
             <ScrollArea className="h-32" ref={precedingScrollRef} style={{ transform: 'translateZ(0)', contain: 'layout style' }}>
               <div
                 className="text-sm leading-relaxed text-foreground pr-4 pl-3"
-                style={{ fontFamily: fonts.narrativeFont }}
+                style={{ fontFamily: currentBodyFont }}
               >
                 <ReactMarkdown
                   components={{

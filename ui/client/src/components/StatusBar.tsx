@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu } from "lucide-react";
+import { Menu, Home, Settings, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast as showToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -7,9 +7,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { CornerSunburst } from "@/components/deco";
 
 interface StatusBarProps {
   model: string;
@@ -24,6 +26,7 @@ interface StatusBarProps {
   onHamburgerClick?: () => void;
   onModelStatusChange?: (status: "unloaded" | "loading" | "loaded" | "generating") => void;
   onRefreshModelStatus?: () => Promise<void> | void;
+  onNavigate?: (tab: string) => void;
 }
 
 export function StatusBar({
@@ -39,7 +42,9 @@ export function StatusBar({
   onHamburgerClick,
   onModelStatusChange,
   onRefreshModelStatus,
+  onNavigate,
 }: StatusBarProps) {
+  const { isGilded, isCyberpunk } = useTheme();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -70,20 +75,24 @@ export function StatusBar({
     };
   }, []);
 
+  // Theme-aware glow classes
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const generatingClass = isGilded ? "deco-shimmer deco-glow" : "terminal-generating terminal-generating-glow";
+
   const modelVisualClasses = useMemo(() => {
     switch (modelStatus) {
       case "unloaded":
         return "text-muted-foreground";
       case "loading":
-        return "text-primary terminal-glow";
+        return `text-primary ${glowClass}`;
       case "loaded":
-        return "text-primary terminal-glow";
+        return `text-primary ${glowClass}`;
       case "generating":
-        return "terminal-generating terminal-generating-glow";
+        return generatingClass;
       default:
         return "text-muted-foreground";
     }
-  }, [modelStatus]);
+  }, [modelStatus, glowClass, generatingClass]);
   const isBarLoading = modelStatus === "loading";
   const shouldShowProgressBar = isBarLoading || isModelOperating || modelStatus === "generating";
   const loaderMessage = useMemo(() => {
@@ -264,15 +273,24 @@ export function StatusBar({
 
   return (
     <div
-      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${isBarLoading ? "status-bar-loading" : ""
-        }`}
+      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden ${
+        isCyberpunk ? "terminal-scanlines" : ""
+      } ${isBarLoading ? "status-bar-loading" : ""}`}
     >
+      {/* Art Deco corner sunbursts */}
+      {isGilded && (
+        <>
+          <CornerSunburst position="tl" size={60} rays={8} opacity={0.08} />
+          <CornerSunburst position="tr" size={60} rays={8} opacity={0.08} />
+        </>
+      )}
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             size="icon"
             variant="ghost"
-            className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0"
+            className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0 z-10"
             data-testid="button-hamburger-menu"
           >
             <Menu className="h-3 w-3 md:h-4 md:w-4" />
@@ -286,6 +304,19 @@ export function StatusBar({
                 <span>Home</span>
               </div>
             </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onNavigate?.("settings")}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Settings className="h-4 w-4" />
+              <span>Settings</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onNavigate?.("audition")}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Sparkles className="h-4 w-4" />
+              <span>Audition</span>
+            </div>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -304,18 +335,18 @@ export function StatusBar({
             </span>
             {/* Hover overlay */}
             {modelError && (
-              <span className="absolute inset-0 flex items-center justify-center bg-background/95 text-destructive terminal-glow font-bold text-[0.6rem] md:text-xs px-2 text-center leading-snug">
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/95 text-destructive ${glowClass} font-bold text-[0.6rem] md:text-xs px-2 text-center leading-snug`}>
                 {modelError}
               </span>
             )}
             {isModelHovered && !isModelOperating && !modelError && modelStatus !== "loading" && modelStatus !== "generating" && (
-              <span className="absolute inset-0 flex items-center justify-center bg-background/90 text-primary terminal-glow font-bold">
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-primary ${glowClass} font-bold`}>
                 {modelStatus === "unloaded" ? "LOAD" : "UNLOAD"}
               </span>
             )}
             {/* Operating state */}
             {isModelOperating && !modelError && (
-              <span className="absolute inset-0 flex items-center justify-center bg-background/90 text-accent terminal-glow font-bold">
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-accent ${glowClass} font-bold`}>
                 ...
               </span>
             )}
@@ -332,7 +363,7 @@ export function StatusBar({
         {isStoryMode && (
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-apex-status">
             <span className="text-muted-foreground hidden sm:inline">APEX:</span>
-            <span className={`${getStatusColor()} terminal-glow text-sm md:text-base`}>{apexStatus}</span>
+            <span className={`${getStatusColor()} ${glowClass} text-sm md:text-base`}>{apexStatus}</span>
           </div>
         )}
         {isTestModeEnabled && (
