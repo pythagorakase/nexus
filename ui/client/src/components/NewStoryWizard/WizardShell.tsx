@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
 import { InteractiveWizard } from "./InteractiveWizard";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 type WizardPhase = "slot" | "setting" | "character" | "seed";
 
@@ -38,14 +38,23 @@ export function NewStoryWizard() {
         setCurrentPhase(phase);
     };
 
+    const handleSlotResumed = (slot: number) => {
+        localStorage.setItem("activeSlot", slot.toString());
+        window.location.href = "/nexus";
+    };
+
     const handleComplete = () => {
-        setLocation("/");
+        window.location.href = "/nexus";
+    };
+
+    const handleAbort = () => {
+        window.location.href = "/";
     };
 
     const currentPhaseIndex = PHASES.findIndex(p => p.id === currentPhase);
 
     return (
-        <div className="h-screen bg-background flex flex-col font-mono terminal-scanlines overflow-hidden">
+        <div className="h-screen bg-background flex flex-col font-mono terminal-scanlines overflow-hidden dark">
             {/* Header / Stepper */}
             <div className="border-b border-border bg-card/50 p-4 shrink-0 z-10">
                 <div className="max-w-5xl mx-auto">
@@ -53,18 +62,23 @@ export function NewStoryWizard() {
                         <h1 className="text-xl font-bold text-primary terminal-glow">
                             NEXUS // INITIALIZATION_SEQUENCE
                         </h1>
-                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={handleAbort}
+                        >
                             [ABORT SEQUENCE]
                         </Button>
                     </div>
 
-                    <div className="flex items-center justify-between relative">
+                    <div className="flex items-start justify-between relative">
                         {/* Progress Bar Background */}
-                        <div className="absolute left-0 top-1/2 w-full h-0.5 bg-border -z-10" />
+                        <div className="absolute left-0 top-4 w-full h-0.5 bg-border -z-10" />
 
                         {/* Progress Bar Fill */}
                         <div
-                            className="absolute left-0 top-1/2 h-0.5 bg-primary transition-all duration-500 -z-10"
+                            className="absolute left-0 top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
                             style={{ width: `${(currentPhaseIndex / (PHASES.length - 1)) * 100}%` }}
                         />
 
@@ -73,7 +87,7 @@ export function NewStoryWizard() {
                             const isCompleted = index < currentPhaseIndex;
 
                             return (
-                                <div key={phase.id} className="flex flex-col items-center gap-2 bg-background px-2">
+                                <div key={phase.id} className="flex flex-col items-center gap-2">
                                     <div className={cn(
                                         "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300",
                                         isActive && "border-primary bg-background text-primary terminal-glow scale-110",
@@ -100,7 +114,10 @@ export function NewStoryWizard() {
                 {currentPhase === "slot" ? (
                     <div className="h-full overflow-auto py-8">
                         <div className="max-w-5xl mx-auto">
-                            <SlotSelector onSlotSelected={handleSlotSelected} />
+                            <SlotSelector
+                                onSlotSelected={handleSlotSelected}
+                                onSlotResumed={handleSlotResumed}
+                            />
                         </div>
                     </div>
                 ) : (
@@ -108,7 +125,7 @@ export function NewStoryWizard() {
                         <InteractiveWizard
                             slot={selectedSlot!}
                             onComplete={handleComplete}
-                            onCancel={() => setCurrentPhase("slot")}
+                            onCancel={handleAbort}
                             onPhaseChange={handleInteractivePhaseChange}
                             wizardData={wizardData}
                             setWizardData={setWizardData}

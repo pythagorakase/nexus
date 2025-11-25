@@ -79,6 +79,14 @@ export function NexusLayout() {
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
+
+  useEffect(() => {
+    const storedSlot = localStorage.getItem("activeSlot");
+    if (storedSlot) {
+      setActiveSlot(parseInt(storedSlot, 10));
+    }
+  }, []);
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;
@@ -186,13 +194,21 @@ export function NexusLayout() {
       scene: number | null;
     };
   }>({
-    queryKey: ["/api/narrative/latest-chunk"],
+    queryKey: ["/api/narrative/latest-chunk", activeSlot],
+    queryFn: async () => {
+      if (!activeSlot) return null;
+      const res = await fetch(`/api/narrative/latest-chunk?slot=${activeSlot}`);
+      if (!res.ok) throw new Error("Failed to fetch latest chunk");
+      return res.json();
+    },
+    enabled: !!activeSlot,
     refetchInterval: TIMEOUTS.LATEST_CHUNK_REFETCH,
   });
 
   // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
   const narrative = useNarrativeGeneration({
     allowedChunkId: latestChunk?.id ?? null,
+    slot: activeSlot,
     onPhaseChange: (phase) => {
       handlePhaseEvent(phase);
     },
@@ -438,15 +454,16 @@ export function NexusLayout() {
             <NarrativeTab
               onChunkSelected={handleChunkSelection}
               sessionId={narrative.activeNarrativeSession ?? undefined}
+              slot={activeSlot}
             />
           </TabsContent>
 
           <TabsContent value="map" className="flex-1 overflow-hidden m-0">
-            <MapTab currentChunkLocation={currentChunkLocation} />
+            <MapTab currentChunkLocation={currentChunkLocation} slot={activeSlot} />
           </TabsContent>
 
           <TabsContent value="characters" className="flex-1 overflow-hidden m-0">
-            <CharactersTab />
+            <CharactersTab slot={activeSlot} />
           </TabsContent>
 
           <TabsContent value="audition" className="flex-1 overflow-hidden m-0">

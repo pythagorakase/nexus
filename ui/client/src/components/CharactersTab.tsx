@@ -75,7 +75,7 @@ const renderPsychologyField = (label: string, field: unknown) => {
   );
 };
 
-export function CharactersTab() {
+export function CharactersTab({ slot = null }: { slot?: number | null }) {
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [relationshipsOpen, setRelationshipsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -89,7 +89,12 @@ export function CharactersTab() {
     isError: charactersError,
     error: charactersErrorData,
   } = useQuery<Character[]>({
-    queryKey: ["/api/characters"],
+    queryKey: ["/api/characters", slot],
+    queryFn: async () => {
+      const res = await fetch(`/api/characters${slot ? `?slot=${slot}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch characters");
+      return res.json();
+    },
     select: (data) => [...data].sort((a, b) => a.id - b.id),
   });
 
@@ -113,10 +118,10 @@ export function CharactersTab() {
     isError: relationshipsError,
     error: relationshipsErrorData,
   } = useQuery<CharacterRelationship[]>({
-    queryKey: ["/api/characters", selectedCharacter?.id, "relationships"],
+    queryKey: ["/api/characters", selectedCharacter?.id, "relationships", slot],
     queryFn: async () => {
       if (!selectedCharacter) return [];
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/relationships`);
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/relationships${slot ? `?slot=${slot}` : ""}`);
       if (response.status === 404) {
         return [];
       }
@@ -159,10 +164,10 @@ export function CharactersTab() {
     isError: psychologyError,
     error: psychologyErrorData,
   } = useQuery<CharacterPsychology | null>({
-    queryKey: ["/api/characters", selectedCharacter?.id, "psychology"],
+    queryKey: ["/api/characters", selectedCharacter?.id, "psychology", slot],
     queryFn: async () => {
       if (!selectedCharacter) return null;
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/psychology`);
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/psychology${slot ? `?slot=${slot}` : ""}`);
       if (response.status === 404) {
         return null;
       }
@@ -178,10 +183,10 @@ export function CharactersTab() {
     data: characterImages = [],
     isLoading: imagesLoading,
   } = useQuery<ImageData[]>({
-    queryKey: ["/api/characters", selectedCharacter?.id, "images"],
+    queryKey: ["/api/characters", selectedCharacter?.id, "images", slot],
     queryFn: async () => {
       if (!selectedCharacter) return [];
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/images`);
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images${slot ? `?slot=${slot}` : ""}`);
       if (!response.ok) {
         throw new Error("Failed to load images");
       }
@@ -196,7 +201,7 @@ export function CharactersTab() {
       const formData = new FormData();
       Array.from(files).forEach((file) => formData.append("images", file));
 
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/images`, {
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images${slot ? `?slot=${slot}` : ""}`, {
         method: "POST",
         body: formData,
       });
@@ -207,14 +212,14 @@ export function CharactersTab() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images", slot] });
     },
   });
 
   const setMainImageMutation = useMutation({
     mutationFn: async (imageId: number) => {
       if (!selectedCharacter) throw new Error("No character selected");
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}/main`, {
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}/main${slot ? `?slot=${slot}` : ""}`, {
         method: "PUT",
       });
       if (!response.ok) {
@@ -223,14 +228,14 @@ export function CharactersTab() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images", slot] });
     },
   });
 
   const deleteImageMutation = useMutation({
     mutationFn: async (imageId: number) => {
       if (!selectedCharacter) throw new Error("No character selected");
-      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}`, {
+      const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}${slot ? `?slot=${slot}` : ""}`, {
         method: "DELETE",
       });
       if (!response.ok) {
@@ -239,7 +244,7 @@ export function CharactersTab() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/characters", selectedCharacter?.id, "images", slot] });
     },
   });
 
@@ -339,9 +344,8 @@ export function CharactersTab() {
                   <button
                     key={character.id}
                     type="button"
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 font-mono text-xs transition-colors ${
-                      isActive ? "bg-primary/10 text-primary" : "hover:bg-card/70 text-foreground"
-                    }`}
+                    className={`w-full text-left px-4 py-3 flex items-center gap-3 font-mono text-xs transition-colors ${isActive ? "bg-primary/10 text-primary" : "hover:bg-card/70 text-foreground"
+                      }`}
                     onClick={() => {
                       setSelectedCharacterId(character.id);
                     }}

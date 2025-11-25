@@ -21,9 +21,10 @@ interface SlotData {
 
 interface SlotSelectorProps {
     onSlotSelected: (slot: number) => void;
+    onSlotResumed: (slot: number) => void;
 }
 
-export function SlotSelector({ onSlotSelected }: SlotSelectorProps) {
+export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProps) {
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
     const queryClient = useQueryClient();
 
@@ -75,6 +76,11 @@ export function SlotSelector({ onSlotSelected }: SlotSelectorProps) {
         }
         setSelectedSlot(slot);
         onSlotSelected(slot);
+    };
+
+    const handleResume = (e: React.MouseEvent, slot: number) => {
+        e.stopPropagation();
+        onSlotResumed(slot);
     };
 
     const handleReset = (e: React.MouseEvent, slot: number) => {
@@ -164,15 +170,24 @@ export function SlotSelector({ onSlotSelected }: SlotSelectorProps) {
                                 ) : (
                                     <>
                                         {slotData.is_active && (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={(e) => handleReset(e, slotData.slot)}
-                                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
-                                            >
-                                                <Trash2 className="h-3 w-3 mr-2" />
-                                                CLEAR
-                                            </Button>
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => handleReset(e, slotData.slot)}
+                                                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
+                                                >
+                                                    <Trash2 className="h-3 w-3 mr-2" />
+                                                    CLEAR
+                                                </Button>
+                                                <Button
+                                                    variant="default"
+                                                    className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 terminal-glow"
+                                                    onClick={(e) => handleResume(e, slotData.slot)}
+                                                >
+                                                    RESUME
+                                                </Button>
+                                            </>
                                         )}
                                         <Button
                                             variant="ghost"
