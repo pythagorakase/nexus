@@ -34,8 +34,8 @@ interface UseGeoProjectionResult {
   projection: GeoProjection;
   /** D3 path generator for converting GeoJSON to SVG paths */
   pathGenerator: GeoPath<unknown, GeoPermissibleObjects>;
-  /** Transform geographic coordinates to SVG coordinates */
-  transformCoordinates: (lng: number, lat: number) => { x: number; y: number };
+  /** Transform geographic coordinates to SVG coordinates (returns null if projection fails) */
+  transformCoordinates: (lng: number, lat: number) => { x: number; y: number } | null;
   /** Convert GeoJSON geometry to SVG path string */
   geoJsonToSvgPath: (geometry: GeoPermissibleObjects | null | undefined) => string | null;
 }
@@ -98,12 +98,12 @@ export function useGeoProjection({ mapDimensions, mapBounds }: ProjectionConfig)
     return geoPath().projection(projection);
   }, [projection]);
 
-  const transformCoordinates = useCallback((lng: number, lat: number): { x: number; y: number } => {
+  const transformCoordinates = useCallback((lng: number, lat: number): { x: number; y: number } | null => {
     const coords = projection([lng, lat]);
     if (!coords) {
-      // This can happen for points outside the projection's valid range
+      // Return null for fail-fast behavior - callers should handle missing coordinates
       console.warn(`Failed to project coordinates: [${lng}, ${lat}]`);
-      return { x: 0, y: 0 };
+      return null;
     }
     return { x: coords[0], y: coords[1] };
   }, [projection]);

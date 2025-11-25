@@ -584,13 +584,18 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
   const worldCountries = useMemo(() => {
     if (!worldOutline || worldOutline.type !== 'FeatureCollection') return [];
 
-    return worldOutline.features.map((feature, index) => {
-      const pathData = geoJsonToSvgPath(feature.geometry);
-      return {
-        id: index,
-        pathData,
-      };
-    }).filter(country => country.pathData !== null);
+    return worldOutline.features
+      .map((feature, index) => {
+        const pathData = geoJsonToSvgPath(feature.geometry);
+        return {
+          id: index,
+          pathData,
+        };
+      })
+      // Type guard filter to guarantee non-null pathData for TypeScript
+      .filter((country): country is { id: number; pathData: string } =>
+        country.pathData !== null
+      );
   }, [geoJsonToSvgPath]);
 
   return (
@@ -649,7 +654,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
             {worldCountries.map((country) => (
               <path
                 key={country.id}
-                d={country.pathData!}
+                d={country.pathData}
                 fill="#001a00"
                 fillOpacity={0.35}
                 stroke="#00ff41"
