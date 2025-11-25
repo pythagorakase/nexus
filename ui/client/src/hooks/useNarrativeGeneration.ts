@@ -20,10 +20,11 @@ interface UseNarrativeGenerationOptions {
   onComplete?: () => void;
   onError?: () => void;
   allowedChunkId?: number | null;
+  slot?: number | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError, allowedChunkId = null } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot } = options;
   const queryClient = useQueryClient();
 
   // Session state
@@ -88,7 +89,8 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
 
   const fetchIncubatorData = useCallback(async () => {
     try {
-      const response = await fetch("/api/narrative/incubator");
+      const url = slot ? `/api/narrative/incubator?slot=${slot}` : "/api/narrative/incubator";
+      const response = await fetch(url);
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load incubator contents";
         throw new Error(message);
@@ -266,6 +268,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
           body: JSON.stringify({
             chunk_id: selectedChunk.id,
             user_text: trimmedInput,
+            slot: slot,
           }),
         });
 
@@ -310,7 +313,11 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     }
 
     try {
-      const response = await fetch(`/api/narrative/approve/${activeNarrativeSessionRef.current}`, {
+      const url = slot
+        ? `/api/narrative/approve/${activeNarrativeSessionRef.current}?slot=${slot}`
+        : `/api/narrative/approve/${activeNarrativeSessionRef.current}`;
+
+      const response = await fetch(url, {
         method: "POST",
       });
 
@@ -325,7 +332,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       });
 
       // Ensure dependent data reflects the newly committed chunk
-      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk", slot] });
       queryClient.invalidateQueries({
         predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === "/api/narrative/chunks",
       });

@@ -229,7 +229,7 @@ def create_new_faction_sync(cur, new_faction):
 # Main Synchronous Commit Function
 # ============================================================================
 
-def commit_incubator_to_database_sync(conn, session_id: str) -> int:
+def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int] = None) -> int:
     """
     Synchronous version of commit flow from incubator to production tables.
 
@@ -395,7 +395,7 @@ def commit_incubator_to_database_sync(conn, session_id: str) -> int:
 
     if summary_tasks:
         try:
-            schedule_summary_generation(summary_tasks)
+            schedule_summary_generation(summary_tasks, slot=slot)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.error("Failed to schedule summaries for session %s: %s", session_id, exc)
 

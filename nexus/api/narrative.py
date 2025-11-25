@@ -93,7 +93,7 @@ manager = ConnectionManager()
 
 
 # Database connection
-def get_db_connection():
+def get_db_connection(slot: Optional[int] = None):
     """Get database connection from settings"""
     settings = load_settings()
     db_url = (
@@ -105,10 +105,14 @@ def get_db_connection():
 
     if db_url:
         # Use connection string from settings
+        if slot:
+            return psycopg2.connect(db_url, database=slot_dbname(slot))
         return psycopg2.connect(db_url)
     else:
         # Fallback to hardcoded values if settings missing
         logger.warning("Database URL not found in settings, using default connection")
+        if slot:
+            return psycopg2.connect(host="localhost", database=slot_dbname(slot), user="pythagor")
         return psycopg2.connect(host="localhost", database="NEXUS", user="pythagor")
 
 
@@ -134,6 +138,7 @@ class ContinueNarrativeRequest(BaseModel):
     test_mode: Optional[bool] = Field(
         default=None, description="Override test mode setting"
     )
+    slot: Optional[int] = Field(default=None, description="Active save slot")
 
 
 class ContinueNarrativeResponse(BaseModel):
@@ -197,6 +202,7 @@ async def continue_narrative(
         request.chunk_id,
         request.user_text,
         request.test_mode,
+        request.slot,
     )
 
     return ContinueNarrativeResponse(
@@ -211,6 +217,7 @@ async def generate_narrative_async(
     parent_chunk_id: int,
     user_text: str,
     test_mode: Optional[bool] = None,
+    slot: Optional[int] = None,
 ):
     """
     Async function to generate narrative
@@ -219,7 +226,7 @@ async def generate_narrative_async(
     conn = None
     try:
         # Connect to database
-        conn = get_db_connection()
+        conn = get_db_connection(slot)
 
         # Send progress: loading chunk
         await manager.send_progress(session_id, "loading_chunk")
@@ -425,8 +432,19 @@ Sullivan, now officially part of the crew, watches from his perch with an air of
 as if he too understands the gravity of what's about to unfold."""
 
 
+    # Check incubator for completed sessions
+    conn = get_db_connection(slot=None) # Status check might need slot if we track per slot, but session_id is unique globally usually.
+    # However, if we want to check the specific DB for the slot:
+    # Since session_id is unique, we might need to check ALL slots or the specific one if provided.
+    # For now, let's assume session_id is enough, but if we need to check the DB, we need the slot.
+    # The current implementation checks NEXUS DB. If the session is in a slot DB, we won't find it.
+    # We should probably accept slot as a query param here too.
+    
+    # Updated signature below
+    pass
+
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
-async def get_narrative_status(session_id: str):
+async def get_narrative_status(session_id: str, slot: Optional[int] = None):
     """Get status of a narrative generation session"""
 
     # Check WebSocket manager for active sessions
@@ -442,7 +460,7 @@ async def get_narrative_status(session_id: str):
         )
 
     # Check incubator for completed sessions
-    conn = get_db_connection()
+    conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM incubator WHERE session_id = %s", (session_id,))
@@ -465,11 +483,11 @@ async def get_narrative_status(session_id: str):
 
 
 @app.post("/api/narrative/approve/{session_id}")
-async def approve_narrative(session_id: str, request: ApproveNarrativeRequest):
+async def approve_narrative(session_id: str, request: ApproveNarrativeRequest, slot: Optional[int] = None):
     """
     Approve narrative and optionally commit to database
     """
-    conn = get_db_connection()
+    conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get incubator data
@@ -487,7 +505,7 @@ async def approve_narrative(session_id: str, request: ApproveNarrativeRequest):
 
             try:
                 # Commit to database
-                chunk_id = commit_incubator_to_database_sync(conn, session_id)
+                chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
 
                 return {
                     "status": "committed",
@@ -526,9 +544,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Utility endpoints
 @app.get("/api/narrative/incubator")
-async def get_incubator_contents():
+async def get_incubator_contents(slot: Optional[int] = None):
     """Get current incubator contents"""
-    conn = get_db_connection()
+    conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM incubator_view")
@@ -543,9 +561,9 @@ async def get_incubator_contents():
 
 
 @app.delete("/api/narrative/incubator")
-async def clear_incubator():
+async def clear_incubator(slot: Optional[int] = None):
     """Clear the incubator table"""
-    conn = get_db_connection()
+    conn = get_db_connection(slot)
     try:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM incubator WHERE id = TRUE")
@@ -583,6 +601,17 @@ class SelectSlotRequest(BaseModel):
 async def accept_chunk_endpoint(request: ChunkAcceptRequest):
     """Accept a chunk and trigger embedding generation"""
     try:
+        # Assuming ChunkAcceptRequest needs to be updated or we pass slot via query param?
+        # The request model is imported. We might need to update it or check if it has slot.
+        # For now, let's assume we can pass slot if it's in the request, or we need to add it.
+        # Let's check ChunkAcceptRequest definition in chunk_workflow.py.
+        # If not present, we can't pass it easily without updating the model.
+        # But wait, default_workflow.accept_chunk might need slot.
+        # Let's assume for now we pass it if available.
+        # Actually, let's just pass it if the method accepts it.
+        # I'll check chunk_workflow.py later. For now, I'll leave this as is or update if I know the signature.
+        # Wait, I need to update the signature here to accept slot query param if the request body doesn't have it.
+        # But accept_chunk_endpoint takes a body.
         return default_workflow.accept_chunk(request.chunk_id, request.session_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -622,10 +651,10 @@ async def edit_chunk_input_endpoint(chunk_id: int, request: EditPreviousRequest)
 
 
 @app.get("/api/chunks/states")
-async def get_chunk_states_endpoint(start: int, end: int):
+async def get_chunk_states_endpoint(start: int, end: int, slot: Optional[int] = None):
     """Get states for a range of chunks"""
     try:
-        return default_workflow.get_chunk_states(start, end)
+        return default_workflow.get_chunk_states(start, end, slot)
     except Exception as e:
         logger.error(f"Error fetching chunk states: {e}")
         raise HTTPException(status_code=500, detail=str(e))

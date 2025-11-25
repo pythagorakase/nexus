@@ -16,6 +16,7 @@ import { worldOutline } from "@/lib/world-outline";
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
+  slot?: number | null;
 }
 
 type MultiPolygonGeometry = typeof worldOutline.features[number]["geometry"];
@@ -47,7 +48,7 @@ const toParagraphs = (value: string | null | undefined): string[] => {
     .filter(Boolean);
 };
 
-export function MapTab({ currentChunkLocation = null }: MapTabProps) {
+export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps) {
   // State management for location interactions
   const [hoveredLocation, setHoveredLocation] = useState<number | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<number | null>(null);
@@ -58,7 +59,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const queryClient = useQueryClient();
 
   const [expandedZones, setExpandedZones] = useState<Set<number>>(new Set());
-  
+
   // Map control states
   const svgRef = useRef<SVGSVGElement>(null);
   const activePointerId = useRef<number | null>(null);
@@ -94,7 +95,12 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     isError: placesError,
     error: placesErrorData,
   } = useQuery<Place[]>({
-    queryKey: ["/api/places"],
+    queryKey: ["/api/places", slot],
+    queryFn: async () => {
+      const res = await fetch(`/api/places${slot ? `?slot=${slot}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch places");
+      return res.json();
+    },
   });
 
   // Fetch zones
@@ -104,21 +110,26 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
     isError: zonesError,
     error: zonesErrorData,
   } = useQuery<Zone[]>({
-    queryKey: ["/api/zones"],
+    queryKey: ["/api/zones", slot],
+    queryFn: async () => {
+      const res = await fetch(`/api/zones${slot ? `?slot=${slot}` : ""}`);
+      if (!res.ok) throw new Error("Failed to fetch zones");
+      return res.json();
+    },
   });
 
   // Fetch place images
   const {
     data: placeImages = [],
   } = useQuery<ImageData[]>({
-    queryKey: ["/api/places", selectedLocation, "images"],
+    queryKey: ["/api/places", selectedLocation, "images", slot],
     queryFn: async () => {
       if (!selectedLocation) return [];
-      const response = await fetch(`/api/places/${selectedLocation}/images`);
-      if (!response.ok) {
+      const res = await fetch(`/api/places/${selectedLocation}/images${slot ? `?slot=${slot}` : ""}`);
+      if (!res.ok) {
         throw new Error("Failed to load images");
       }
-      return response.json();
+      return res.json();
     },
     enabled: !!selectedLocation,
   });
@@ -129,7 +140,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
       const formData = new FormData();
       Array.from(files).forEach((file) => formData.append("images", file));
 
-      const response = await fetch(`/api/places/${selectedLocation}/images`, {
+      const response = await fetch(`/api/places/${selectedLocation}/images${slot ? `?slot=${slot}` : ""}`, {
         method: "POST",
         body: formData,
       });
@@ -147,7 +158,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const setMainImageMutation = useMutation({
     mutationFn: async (imageId: number) => {
       if (!selectedLocation) throw new Error("No place selected");
-      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}/main`, {
+      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}/main${slot ? `?slot=${slot}` : ""}`, {
         method: "PUT",
       });
       if (!response.ok) {
@@ -163,7 +174,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
   const deleteImageMutation = useMutation({
     mutationFn: async (imageId: number) => {
       if (!selectedLocation) throw new Error("No place selected");
-      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}`, {
+      const response = await fetch(`/api/places/${selectedLocation}/images/${imageId}${slot ? `?slot=${slot}` : ""}`, {
         method: "DELETE",
       });
       if (!response.ok) {
@@ -362,11 +373,46 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
               return null;
             }
             const { x, y } = transformCoordinates(lng, lat);
-            return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+            return { x, y, lng };
           })
-          .filter((segment): segment is string => Boolean(segment))
-          .join(' ') + ' Z';
-        paths.push(pathData);
+          .filter((point): point is { x: number; y: number; lng: number } => Boolean(point));
+
+        // Split into subpaths based on date line crossing
+        const subpaths: { x: number, y: number, lng: number }[][] = [];
+        let currentSubpath: { x: number, y: number, lng: number }[] = [];
+
+        if (pathData.length > 0) {
+          currentSubpath.push(pathData[0]);
+          for (let i = 1; i < pathData.length; i++) {
+            const prev = pathData[i - 1];
+            const curr = pathData[i];
+            if (Math.abs(curr.lng - prev.lng) > 180) {
+              subpaths.push(currentSubpath);
+              currentSubpath = [curr];
+            } else {
+              currentSubpath.push(curr);
+            }
+          }
+          subpaths.push(currentSubpath);
+        }
+
+        // Generate path strings for each subpath
+        for (const subpath of subpaths) {
+          if (subpath.length === 0) continue;
+          const start = subpath[0];
+          const end = subpath[subpath.length - 1];
+
+          let d = `M ${start.x} ${start.y}`;
+          for (let i = 1; i < subpath.length; i++) {
+            d += ` L ${subpath[i].x} ${subpath[i].y}`;
+          }
+
+          // Only close if start and end are close in longitude
+          if (Math.abs(end.lng - start.lng) <= 180) {
+            d += ' Z';
+          }
+          paths.push(d);
+        }
       }
     }
 
@@ -850,7 +896,7 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
             {visiblePlaces.length} locations across {Object.keys(placesByZone).length} zones
           </div>
         </div>
-        
+
         <ScrollArea className="flex-1">
           <div className="p-4 pr-2 space-y-2">
             {Object.entries(placesByZone)
@@ -879,20 +925,19 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
                         </Badge>
                       </div>
                     </Button>
-                    
+
                     {isExpanded && (
                       <div className="border-t border-border">
                         {zonePlaces.map(place => {
                           const isSelected = selectedLocation === place.id;
                           const isCurrent = currentChunkLocation === place.name;
-                          
+
                           return (
                             <Button
                               key={place.id}
                               variant="ghost"
-                              className={`w-full justify-start px-6 py-2 text-xs font-mono hover-elevate text-foreground ${
-                                isSelected ? 'bg-accent' : ''
-                              } ${isCurrent ? 'text-yellow-400' : ''}`}
+                              className={`w-full justify-start px-6 py-2 text-xs font-mono hover-elevate text-foreground ${isSelected ? 'bg-accent' : ''
+                                } ${isCurrent ? 'text-yellow-400' : ''}`}
                               onClick={() => {
                                 setSelectedLocation(place.id);
                                 setDetailsDialogOpen(true);
@@ -1015,81 +1060,81 @@ export function MapTab({ currentChunkLocation = null }: MapTabProps) {
 
                   {/* Details section */}
                   <div className="space-y-4 font-mono text-sm">
-                  {place.type && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Type</div>
-                      <div className="text-foreground">{place.type}</div>
-                    </div>
-                  )}
-
-                  {zone && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Zone</div>
-                      <div className="text-foreground">{zone.name}</div>
-                    </div>
-                  )}
-
-                  {coords && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Coordinates</div>
-                      <div className="text-foreground">
-                        {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                    {place.type && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Type</div>
+                        <div className="text-foreground">{place.type}</div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {place.summary && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
-                      <div className="text-foreground whitespace-pre-wrap leading-relaxed">{place.summary}</div>
-                    </div>
-                  )}
-
-                  {historyParagraphs.length > 0 && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">History</div>
-                      <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
-                        {historyParagraphs.map((paragraph, index) => (
-                          <p key={`history-${index}`}>{paragraph}</p>
-                        ))}
+                    {zone && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Zone</div>
+                        <div className="text-foreground">{zone.name}</div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {statusParagraphs.length > 0 && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
-                      <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
-                        {statusParagraphs.map((paragraph, index) => (
-                          <p key={`status-${index}`}>{paragraph}</p>
-                        ))}
+                    {coords && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Coordinates</div>
+                        <div className="text-foreground">
+                          {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {inhabitantsList.length > 0 && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
-                      <ul className="list-disc pl-4 space-y-1 text-foreground whitespace-pre-wrap">
-                        {inhabitantsList.map((name, index) => (
-                          <li key={`inhabitant-${index}`}>{name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {secretsParagraphs.length > 0 && (
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
-                      <div className="space-y-3 text-foreground italic whitespace-pre-wrap leading-relaxed">
-                        {secretsParagraphs.map((paragraph, index) => (
-                          <p key={`secret-${index}`}>{paragraph}</p>
-                        ))}
+                    {place.summary && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
+                        <div className="text-foreground whitespace-pre-wrap leading-relaxed">{place.summary}</div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                    {historyParagraphs.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">History</div>
+                        <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
+                          {historyParagraphs.map((paragraph, index) => (
+                            <p key={`history-${index}`}>{paragraph}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {statusParagraphs.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
+                        <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
+                          {statusParagraphs.map((paragraph, index) => (
+                            <p key={`status-${index}`}>{paragraph}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {inhabitantsList.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
+                        <ul className="list-disc pl-4 space-y-1 text-foreground whitespace-pre-wrap">
+                          {inhabitantsList.map((name, index) => (
+                            <li key={`inhabitant-${index}`}>{name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {secretsParagraphs.length > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
+                        <div className="space-y-3 text-foreground italic whitespace-pre-wrap leading-relaxed">
+                          {secretsParagraphs.map((paragraph, index) => (
+                            <p key={`secret-${index}`}>{paragraph}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
               </ScrollArea>
             );
           })()}

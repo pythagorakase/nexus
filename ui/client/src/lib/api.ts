@@ -149,8 +149,12 @@ export async function getSlotsStatus(): Promise<Array<{ slot: number; is_active:
   return response.json();
 }
 
-export async function getChunkStates(startId: number, endId: number): Promise<ChunkState[]> {
-  const response = await fetch(`/api/chunks/states?start=${startId}&end=${endId}`);
+export async function getChunkStates(startId: number, endId: number, slot?: number | null): Promise<ChunkState[]> {
+  let url = `/api/chunks/states?start=${startId}&end=${endId}`;
+  if (slot) {
+    url += `&slot=${slot}`;
+  }
+  const response = await fetch(url);
 
   if (!response.ok) {
     const error = await response.text();

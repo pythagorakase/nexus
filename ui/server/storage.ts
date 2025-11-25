@@ -29,57 +29,57 @@ import {
   zones,
   factions
 } from "@shared/schema";
-import { db } from "./db";
+import { db, getDb } from "./db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Season methods
-  getAllSeasons(): Promise<Season[]>;
-  
+  getAllSeasons(slot?: number | null): Promise<Season[]>;
+
   // Episode methods
-  getEpisodesBySeason(seasonId: number): Promise<Episode[]>;
-  
+  getEpisodesBySeason(seasonId: number, slot?: number | null): Promise<Episode[]>;
+
   // Narrative chunk methods
-  getChunksBySeasonAndEpisode(seasonId: number, episodeId: number, offset?: number, limit?: number): Promise<{
+  getChunksBySeasonAndEpisode(seasonId: number, episodeId: number, offset?: number, limit?: number, slot?: number | null): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }>;
-  getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
-  getAdjacentChunks(chunkId: number): Promise<{
+  getLatestChunk(slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null>;
+  getAdjacentChunks(chunkId: number, slot?: number | null): Promise<{
     previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
     next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
   }>;
 
   // Character methods
-  getCharacters(startId?: number, endId?: number): Promise<Character[]>;
-  getCharacterById(id: number): Promise<Character | undefined>;
-  
+  getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<Character[]>;
+  getCharacterById(id: number, slot?: number | null): Promise<Character | undefined>;
+
   // Character relationship methods
-  getCharacterRelationships(characterId: number): Promise<CharacterRelationship[]>;
-  
+  getCharacterRelationships(characterId: number, slot?: number | null): Promise<CharacterRelationship[]>;
+
   // Character psychology methods
-  getCharacterPsychology(characterId: number): Promise<CharacterPsychology | undefined>;
+  getCharacterPsychology(characterId: number, slot?: number | null): Promise<CharacterPsychology | undefined>;
 
   // Character image methods
-  getCharacterImages(characterId: number): Promise<CharacterImage[]>;
-  addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number): Promise<CharacterImage>;
-  setMainCharacterImage(characterId: number, imageId: number): Promise<void>;
-  deleteCharacterImage(imageId: number): Promise<void>;
+  getCharacterImages(characterId: number, slot?: number | null): Promise<CharacterImage[]>;
+  addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number, slot?: number | null): Promise<CharacterImage>;
+  setMainCharacterImage(characterId: number, imageId: number, slot?: number | null): Promise<void>;
+  deleteCharacterImage(imageId: number, slot?: number | null): Promise<void>;
 
   // Place methods
-  getAllPlaces(): Promise<Place[]>;
+  getAllPlaces(slot?: number | null): Promise<Place[]>;
 
   // Place image methods
-  getPlaceImages(placeId: number): Promise<PlaceImage[]>;
-  addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number): Promise<PlaceImage>;
-  setMainPlaceImage(placeId: number, imageId: number): Promise<void>;
-  deletePlaceImage(imageId: number): Promise<void>;
-  
+  getPlaceImages(placeId: number, slot?: number | null): Promise<PlaceImage[]>;
+  addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number, slot?: number | null): Promise<PlaceImage>;
+  setMainPlaceImage(placeId: number, imageId: number, slot?: number | null): Promise<void>;
+  deletePlaceImage(imageId: number, slot?: number | null): Promise<void>;
+
   // Zone methods
-  getAllZones(): Promise<Zone[]>;
-  
+  getAllZones(slot?: number | null): Promise<Zone[]>;
+
   // Faction methods
-  getAllFactions(): Promise<Faction[]>;
+  getAllFactions(slot?: number | null): Promise<Faction[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -93,14 +93,16 @@ export class PostgresStorage implements IStorage {
   }
 
   // Season methods
-  async getAllSeasons(): Promise<Season[]> {
-    return await this.db.select().from(seasons).orderBy(seasons.id);
+  async getAllSeasons(slot?: number | null): Promise<Season[]> {
+    const db = getDb(slot) || this.db;
+    return await db.select().from(seasons).orderBy(seasons.id);
   }
 
   // Episode methods
-  async getEpisodesBySeason(seasonId: number): Promise<Episode[]> {
+  async getEpisodesBySeason(seasonId: number, slot?: number | null): Promise<Episode[]> {
+    const db = getDb(slot) || this.db;
     // Query only required fields; temp_span has been deprecated
-    const result = await this.db.execute(sql`
+    const result = await db.execute(sql`
       SELECT season, episode, chunk_span, summary
       FROM episodes
       WHERE season = ${seasonId}
@@ -120,12 +122,14 @@ export class PostgresStorage implements IStorage {
     seasonId: number,
     episodeId: number,
     offset: number = 0,
-    limit: number = 50
+    limit: number = 50,
+    slot?: number | null
   ): Promise<{
     chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>;
     total: number;
   }> {
-    const chunksWithMetadata = await this.db.execute(sql`
+    const db = getDb(slot) || this.db;
+    const chunksWithMetadata = await db.execute(sql`
       SELECT
         nc.id,
         nc.raw_text,
@@ -145,7 +149,7 @@ export class PostgresStorage implements IStorage {
       LIMIT ${limit} OFFSET ${offset}
     `);
 
-    const countResult = await this.db.execute(sql`
+    const countResult = await db.execute(sql`
       SELECT count(*) AS count
       FROM narrative_chunks nc
       LEFT JOIN chunk_metadata cm ON cm.chunk_id = nc.id
@@ -160,24 +164,25 @@ export class PostgresStorage implements IStorage {
       createdAt: row.created_at ?? null,
       metadata: row.chunk_id
         ? {
-            id: Number(row.chunk_id),
-            chunkId: Number(row.chunk_id),
-            season: toNumber(row.season),
-            episode: toNumber(row.episode),
-            scene: toNumber(row.scene),
-            worldLayer: row.world_layer ?? null,
-            timeDelta: row.time_delta ?? null,
-            generationDate: row.generation_date ?? null,
-            slug: row.slug ?? null,
-          }
+          id: Number(row.chunk_id),
+          chunkId: Number(row.chunk_id),
+          season: toNumber(row.season),
+          episode: toNumber(row.episode),
+          scene: toNumber(row.scene),
+          worldLayer: row.world_layer ?? null,
+          timeDelta: row.time_delta ?? null,
+          generationDate: row.generation_date ?? null,
+          slug: row.slug ?? null,
+        }
         : undefined,
     }));
 
     return { chunks, total };
   }
 
-  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
-    const result = await this.db.execute(sql`
+  async getLatestChunk(slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+    const db = getDb(slot) || this.db;
+    const result = await db.execute(sql`
       SELECT
         nc.id,
         nc.raw_text,
@@ -208,25 +213,26 @@ export class PostgresStorage implements IStorage {
       createdAt: row.created_at ?? null,
       metadata: row.chunk_id
         ? {
-            id: Number(row.chunk_id),
-            chunkId: Number(row.chunk_id),
-            season: toNumber(row.season),
-            episode: toNumber(row.episode),
-            scene: toNumber(row.scene),
-            worldLayer: row.world_layer ?? null,
-            timeDelta: row.time_delta ?? null,
-            generationDate: row.generation_date ?? null,
-            slug: row.slug ?? null,
-          }
+          id: Number(row.chunk_id),
+          chunkId: Number(row.chunk_id),
+          season: toNumber(row.season),
+          episode: toNumber(row.episode),
+          scene: toNumber(row.scene),
+          worldLayer: row.world_layer ?? null,
+          timeDelta: row.time_delta ?? null,
+          generationDate: row.generation_date ?? null,
+          slug: row.slug ?? null,
+        }
         : undefined,
     };
   }
 
-  async getAdjacentChunks(chunkId: number): Promise<{
+  async getAdjacentChunks(chunkId: number, slot?: number | null): Promise<{
     previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
     next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
   }> {
-    const previousResult = await this.db.execute(sql`
+    const db = getDb(slot) || this.db;
+    const previousResult = await db.execute(sql`
       SELECT
         nc.id,
         nc.raw_text,
@@ -246,7 +252,7 @@ export class PostgresStorage implements IStorage {
       LIMIT 1
     `);
 
-    const nextResult = await this.db.execute(sql`
+    const nextResult = await db.execute(sql`
       SELECT
         nc.id,
         nc.raw_text,
@@ -269,23 +275,23 @@ export class PostgresStorage implements IStorage {
     const mapRow = (row: any) =>
       row
         ? {
-            id: Number(row.id),
-            rawText: row.raw_text,
-            createdAt: row.created_at ?? null,
-            metadata: row.chunk_id
-              ? {
-                  id: Number(row.chunk_id),
-                  chunkId: Number(row.chunk_id),
-                  season: toNumber(row.season),
-            episode: toNumber(row.episode),
-            scene: toNumber(row.scene),
-            worldLayer: row.world_layer ?? null,
-            timeDelta: row.time_delta ?? null,
-            generationDate: row.generation_date ?? null,
-            slug: row.slug ?? null,
-          }
-        : undefined,
-          }
+          id: Number(row.id),
+          rawText: row.raw_text,
+          createdAt: row.created_at ?? null,
+          metadata: row.chunk_id
+            ? {
+              id: Number(row.chunk_id),
+              chunkId: Number(row.chunk_id),
+              season: toNumber(row.season),
+              episode: toNumber(row.episode),
+              scene: toNumber(row.scene),
+              worldLayer: row.world_layer ?? null,
+              timeDelta: row.time_delta ?? null,
+              generationDate: row.generation_date ?? null,
+              slug: row.slug ?? null,
+            }
+            : undefined,
+        }
         : null;
 
     return {
@@ -295,9 +301,10 @@ export class PostgresStorage implements IStorage {
   }
 
   // Character methods
-  async getCharacters(startId?: number, endId?: number): Promise<Character[]> {
+  async getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<Character[]> {
+    const db = getDb(slot) || this.db;
     if (startId !== undefined && endId !== undefined) {
-      return await this.db.select()
+      return await db.select()
         .from(characters)
         .where(and(
           gte(characters.id, startId),
@@ -305,30 +312,32 @@ export class PostgresStorage implements IStorage {
         ))
         .orderBy(characters.id);
     } else if (startId !== undefined) {
-      return await this.db.select()
+      return await db.select()
         .from(characters)
         .where(gte(characters.id, startId))
         .orderBy(characters.id);
     } else if (endId !== undefined) {
-      return await this.db.select()
+      return await db.select()
         .from(characters)
         .where(lte(characters.id, endId))
         .orderBy(characters.id);
     }
-    
-    return await this.db.select()
+
+    return await db.select()
       .from(characters)
       .orderBy(characters.id);
   }
 
-  async getCharacterById(id: number): Promise<Character | undefined> {
-    const result = await this.db.select().from(characters).where(eq(characters.id, id)).limit(1);
+  async getCharacterById(id: number, slot?: number | null): Promise<Character | undefined> {
+    const db = getDb(slot) || this.db;
+    const result = await db.select().from(characters).where(eq(characters.id, id)).limit(1);
     return result[0];
   }
 
   // Character relationship methods
-  async getCharacterRelationships(characterId: number): Promise<CharacterRelationship[]> {
-    return await this.db.select()
+  async getCharacterRelationships(characterId: number, slot?: number | null): Promise<CharacterRelationship[]> {
+    const db = getDb(slot) || this.db;
+    return await db.select()
       .from(characterRelationships)
       .where(
         sql`${characterRelationships.character1Id} = ${characterId} OR ${characterRelationships.character2Id} = ${characterId}`
@@ -336,8 +345,9 @@ export class PostgresStorage implements IStorage {
   }
 
   // Character psychology methods
-  async getCharacterPsychology(characterId: number): Promise<CharacterPsychology | undefined> {
-    const result = await this.db.select()
+  async getCharacterPsychology(characterId: number, slot?: number | null): Promise<CharacterPsychology | undefined> {
+    const db = getDb(slot) || this.db;
+    const result = await db.select()
       .from(characterPsychology)
       .where(eq(characterPsychology.characterId, characterId))
       .limit(1);
@@ -345,41 +355,46 @@ export class PostgresStorage implements IStorage {
   }
 
   // Character image methods
-  async getCharacterImages(characterId: number): Promise<CharacterImage[]> {
-    return await this.db.select()
+  async getCharacterImages(characterId: number, slot?: number | null): Promise<CharacterImage[]> {
+    const db = getDb(slot) || this.db;
+    return await db.select()
       .from(characterImages)
       .where(eq(characterImages.characterId, characterId))
       .orderBy(characterImages.displayOrder);
   }
 
-  async addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number): Promise<CharacterImage> {
-    const result = await this.db.insert(characterImages)
+  async addCharacterImage(characterId: number, filePath: string, isMain: number, displayOrder: number, slot?: number | null): Promise<CharacterImage> {
+    const db = getDb(slot) || this.db;
+    const result = await db.insert(characterImages)
       .values({ characterId, filePath, isMain, displayOrder })
       .returning();
     return result[0];
   }
 
-  async setMainCharacterImage(characterId: number, imageId: number): Promise<void> {
+  async setMainCharacterImage(characterId: number, imageId: number, slot?: number | null): Promise<void> {
+    const db = getDb(slot) || this.db;
     // First, unset all images for this character
-    await this.db.update(characterImages)
+    await db.update(characterImages)
       .set({ isMain: 0 })
       .where(eq(characterImages.characterId, characterId));
 
     // Then set the specified image as main
-    await this.db.update(characterImages)
+    await db.update(characterImages)
       .set({ isMain: 1 })
       .where(eq(characterImages.id, imageId));
   }
 
-  async deleteCharacterImage(imageId: number): Promise<void> {
-    await this.db.delete(characterImages)
+  async deleteCharacterImage(imageId: number, slot?: number | null): Promise<void> {
+    const db = getDb(slot) || this.db;
+    await db.delete(characterImages)
       .where(eq(characterImages.id, imageId));
   }
 
   // Place methods
-  async getAllPlaces(): Promise<Place[]> {
+  async getAllPlaces(slot?: number | null): Promise<Place[]> {
+    const db = getDb(slot) || this.db;
     // Use raw SQL to extract coordinates as GeoJSON from PostGIS geography
-    const result = await this.db.execute(sql`
+    const result = await db.execute(sql`
       SELECT
         id,
         name,
@@ -416,41 +431,46 @@ export class PostgresStorage implements IStorage {
   }
 
   // Place image methods
-  async getPlaceImages(placeId: number): Promise<PlaceImage[]> {
-    return await this.db.select()
+  async getPlaceImages(placeId: number, slot?: number | null): Promise<PlaceImage[]> {
+    const db = getDb(slot) || this.db;
+    return await db.select()
       .from(placeImages)
       .where(eq(placeImages.placeId, placeId))
       .orderBy(placeImages.displayOrder);
   }
 
-  async addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number): Promise<PlaceImage> {
-    const result = await this.db.insert(placeImages)
+  async addPlaceImage(placeId: number, filePath: string, isMain: number, displayOrder: number, slot?: number | null): Promise<PlaceImage> {
+    const db = getDb(slot) || this.db;
+    const result = await db.insert(placeImages)
       .values({ placeId, filePath, isMain, displayOrder })
       .returning();
     return result[0];
   }
 
-  async setMainPlaceImage(placeId: number, imageId: number): Promise<void> {
+  async setMainPlaceImage(placeId: number, imageId: number, slot?: number | null): Promise<void> {
+    const db = getDb(slot) || this.db;
     // First, unset all images for this place
-    await this.db.update(placeImages)
+    await db.update(placeImages)
       .set({ isMain: 0 })
       .where(eq(placeImages.placeId, placeId));
 
     // Then set the specified image as main
-    await this.db.update(placeImages)
+    await db.update(placeImages)
       .set({ isMain: 1 })
       .where(eq(placeImages.id, imageId));
   }
 
-  async deletePlaceImage(imageId: number): Promise<void> {
-    await this.db.delete(placeImages)
+  async deletePlaceImage(imageId: number, slot?: number | null): Promise<void> {
+    const db = getDb(slot) || this.db;
+    await db.delete(placeImages)
       .where(eq(placeImages.id, imageId));
   }
 
   // Zone methods
-  async getAllZones(): Promise<Zone[]> {
+  async getAllZones(slot?: number | null): Promise<Zone[]> {
+    const db = getDb(slot) || this.db;
     // Use raw SQL to extract boundary as text from PostGIS geometry
-    const result = await this.db.execute(sql`
+    const result = await db.execute(sql`
       SELECT
         id,
         name,
@@ -469,8 +489,9 @@ export class PostgresStorage implements IStorage {
   }
 
   // Faction methods
-  async getAllFactions(): Promise<Faction[]> {
-    return await this.db.select().from(factions).orderBy(factions.id);
+  async getAllFactions(slot?: number | null): Promise<Faction[]> {
+    const db = getDb(slot) || this.db;
+    return await db.select().from(factions).orderBy(factions.id);
   }
 }
 
@@ -659,11 +680,11 @@ class MemStorage implements IStorage {
     })) as Faction[];
   }
 
-  async getAllSeasons(): Promise<Season[]> {
+  async getAllSeasons(slot?: number | null): Promise<Season[]> {
     return this.seasons;
   }
 
-  async getEpisodesBySeason(seasonId: number): Promise<Episode[]> {
+  async getEpisodesBySeason(seasonId: number, slot?: number | null): Promise<Episode[]> {
     return this.episodes
       .filter((episode) => episode.season === seasonId)
       .sort((a, b) => a.episode - b.episode);
@@ -674,6 +695,7 @@ class MemStorage implements IStorage {
     episodeId: number,
     offset: number = 0,
     limit: number = 50,
+    slot?: number | null
   ): Promise<{ chunks: Array<NarrativeChunk & { metadata?: ChunkMetadata }>; total: number }> {
     const metadataForEpisode = this.metadata.filter(
       (meta) => meta.season === seasonId && meta.episode === episodeId
@@ -694,7 +716,7 @@ class MemStorage implements IStorage {
     };
   }
 
-  async getLatestChunk(): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
+  async getLatestChunk(slot?: number | null): Promise<(NarrativeChunk & { metadata?: ChunkMetadata }) | null> {
     // Get chunk with highest ID that has metadata
     const chunksWithMetadata = this.chunks
       .map((chunk) => ({

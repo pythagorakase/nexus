@@ -84,7 +84,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/narrative/seasons - Get all seasons
   app.get("/api/narrative/seasons", async (req, res) => {
     try {
-      const seasons = await storage.getAllSeasons();
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const seasons = await storage.getAllSeasons(slot);
       res.json(seasons);
     } catch (error) {
       console.error("Error fetching seasons:", error);
@@ -100,7 +101,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid season ID" });
       }
 
-      const episodes = await storage.getEpisodesBySeason(seasonId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const episodes = await storage.getEpisodesBySeason(seasonId, slot);
       res.json(episodes);
     } catch (error) {
       console.error("Error fetching episodes:", error);
@@ -111,7 +113,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/narrative/latest-chunk - Get the newest chunk
   app.get("/api/narrative/latest-chunk", async (req, res) => {
     try {
-      const chunk = await storage.getLatestChunk();
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const chunk = await storage.getLatestChunk(slot);
       if (!chunk) {
         return res.status(404).json({ error: "No chunks found" });
       }
@@ -130,7 +133,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid chunk ID" });
       }
 
-      const result = await storage.getAdjacentChunks(chunkId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const result = await storage.getAdjacentChunks(chunkId, slot);
       res.json(result);
     } catch (error) {
       console.error("Error fetching adjacent chunks:", error);
@@ -149,8 +153,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const offset = parseInt(req.query.offset as string) || 0;
       const limit = parseInt(req.query.limit as string) || 50;
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
 
-      const result = await storage.getChunksBySeasonAndEpisode(seasonId, episodeId, offset, limit);
+      const result = await storage.getChunksBySeasonAndEpisode(seasonId, episodeId, offset, limit, slot);
       res.json(result);
     } catch (error) {
       console.error("Error fetching chunks:", error);
@@ -165,8 +170,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const startId = req.query.startId ? parseInt(req.query.startId as string) : undefined;
       const endId = req.query.endId ? parseInt(req.query.endId as string) : undefined;
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
 
-      const characters = await storage.getCharacters(startId, endId);
+      const characters = await storage.getCharacters(startId, endId, slot);
       res.json(characters);
     } catch (error) {
       console.error("Error fetching characters:", error);
@@ -182,7 +188,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid character ID" });
       }
 
-      const relationships = await storage.getCharacterRelationships(characterId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const relationships = await storage.getCharacterRelationships(characterId, slot);
       res.json(relationships);
     } catch (error) {
       console.error("Error fetching character relationships:", error);
@@ -198,7 +205,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid character ID" });
       }
 
-      const psychology = await storage.getCharacterPsychology(characterId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const psychology = await storage.getCharacterPsychology(characterId, slot);
       if (!psychology) {
         return res.status(404).json({ error: "Character psychology not found" });
       }
@@ -214,7 +222,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/places - Get all places
   app.get("/api/places", async (req, res) => {
     try {
-      const places = await storage.getAllPlaces();
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const places = await storage.getAllPlaces(slot);
       res.json(places);
     } catch (error) {
       console.error("Error fetching places:", error);
@@ -225,7 +234,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/zones - Get all zones
   app.get("/api/zones", async (req, res) => {
     try {
-      const zones = await storage.getAllZones();
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const zones = await storage.getAllZones(slot);
       res.json(zones);
     } catch (error) {
       console.error("Error fetching zones:", error);
@@ -236,7 +246,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Additional faction route (for completeness)
   app.get("/api/factions", async (req, res) => {
     try {
-      const factions = await storage.getAllFactions();
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const factions = await storage.getAllFactions(slot);
       res.json(factions);
     } catch (error) {
       console.error("Error fetching factions:", error);
@@ -426,7 +437,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid character ID" });
       }
 
-      const images = await storage.getCharacterImages(characterId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const images = await storage.getCharacterImages(characterId, slot);
       res.json(images);
     } catch (error) {
       console.error("Error fetching character images:", error);
@@ -465,11 +477,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
 
-        const relativePath = `/character_portraits/${characterId}/${filename}`;
+        const relativePath = `character_portraits/${characterId}/${filename}`;
+
         const isMain = existingImages.length === 0 && uploadedImages.length === 0 ? 1 : 0;
         maxOrder++;
 
-        const image = await storage.addCharacterImage(characterId, relativePath, isMain, maxOrder);
+        const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+        const image = await storage.addCharacterImage(characterId, relativePath, isMain, maxOrder, slot);
         uploadedImages.push(image);
       }
 
@@ -495,7 +509,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid IDs" });
       }
 
-      await storage.setMainCharacterImage(characterId, imageId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      await storage.setMainCharacterImage(characterId, imageId, slot);
       res.json({ success: true });
     } catch (error) {
       console.error("Error setting main character image:", error);
@@ -524,7 +539,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      await storage.deleteCharacterImage(imageId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      await storage.deleteCharacterImage(imageId, slot);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting character image:", error);
@@ -540,7 +556,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid place ID" });
       }
 
-      const images = await storage.getPlaceImages(placeId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const images = await storage.getPlaceImages(placeId, slot);
       res.json(images);
     } catch (error) {
       console.error("Error fetching place images:", error);
@@ -579,11 +596,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
 
-        const relativePath = `/place_images/${placeId}/${filename}`;
+        const relativePath = `place_images/${placeId}/${filename}`;
+
         const isMain = existingImages.length === 0 && uploadedImages.length === 0 ? 1 : 0;
         maxOrder++;
 
-        const image = await storage.addPlaceImage(placeId, relativePath, isMain, maxOrder);
+        const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+        const image = await storage.addPlaceImage(placeId, relativePath, isMain, maxOrder, slot);
         uploadedImages.push(image);
       }
 
@@ -609,7 +628,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid IDs" });
       }
 
-      await storage.setMainPlaceImage(placeId, imageId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      await storage.setMainPlaceImage(placeId, imageId, slot);
       res.json({ success: true });
     } catch (error) {
       console.error("Error setting main place image:", error);
@@ -638,7 +658,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      await storage.deletePlaceImage(imageId);
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      await storage.deletePlaceImage(imageId, slot);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting place image:", error);
