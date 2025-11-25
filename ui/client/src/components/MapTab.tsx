@@ -13,6 +13,7 @@ import {
 import type { Place, Zone } from "@shared/schema";
 import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 import { worldOutline } from "@/lib/world-outline";
+import { useGeoProjection } from "@/hooks/useGeoProjection";
 
 interface MapTabProps {
   currentChunkLocation?: string | null;
@@ -69,6 +70,12 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 800, height: 600 });
   const [zoom, setZoom] = useState(1);
+
+  // D3.js geo projection for proper date-line handling and alternate geography support
+  const { transformCoordinates, geoJsonToSvgPath } = useGeoProjection({
+    mapDimensions,
+    mapBounds,
+  });
 
   const clampViewBox = useCallback(
     (box: { x: number; y: number; width: number; height: number }) => {
@@ -326,27 +333,6 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
 
   const isLoading = placesLoading || zonesLoading;
 
-  // Transform coordinates for SVG display using dynamic bounds
-  const transformCoordinates = (lng: number, lat: number) => {
-    // Use dynamic bounds if available, otherwise use global defaults
-    const bounds = mapBounds || {
-      minLng: -180,
-      maxLng: 180,
-      minLat: -90,
-      maxLat: 90
-    };
-
-    const lngSpan = Math.max(bounds.maxLng - bounds.minLng, 0.0001);
-    const latSpan = Math.max(bounds.maxLat - bounds.minLat, 0.0001);
-    const width = Math.max(mapDimensions.width, 1);
-    const height = Math.max(mapDimensions.height, 1);
-
-    const x = ((lng - bounds.minLng) / lngSpan) * width;
-    const y = height - ((lat - bounds.minLat) / latSpan) * height;
-
-    return { x, y };
-  };
-
   // Get place coordinates - only return valid coordinates, no fallbacks
   const getPlaceCoordinates = (place: Place): { x: number; y: number } | null => {
     const coords = extractCoordinates(place);
@@ -354,69 +340,6 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
       return transformCoordinates(coords.longitude, coords.latitude);
     }
     return null;
-  };
-
-  // Convert GeoJSON MultiPolygon coordinates to SVG path data
-  const geoJsonToSvgPath = (boundary: MultiPolygonGeometry | null | undefined): string | null => {
-    if (!boundary || boundary.type !== 'MultiPolygon') return null;
-
-    const paths: string[] = [];
-
-    // MultiPolygon structure: [[[polygon coordinates]]]
-    for (const polygon of boundary.coordinates) {
-      for (const ring of polygon) {
-        const pathData = ring
-          .map((point, index: number) => {
-            const lng = point[0];
-            const lat = point[1];
-            if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-              return null;
-            }
-            const { x, y } = transformCoordinates(lng, lat);
-            return { x, y, lng };
-          })
-          .filter((point): point is { x: number; y: number; lng: number } => Boolean(point));
-
-        // Split into subpaths based on date line crossing
-        const subpaths: { x: number, y: number, lng: number }[][] = [];
-        let currentSubpath: { x: number, y: number, lng: number }[] = [];
-
-        if (pathData.length > 0) {
-          currentSubpath.push(pathData[0]);
-          for (let i = 1; i < pathData.length; i++) {
-            const prev = pathData[i - 1];
-            const curr = pathData[i];
-            if (Math.abs(curr.lng - prev.lng) > 180) {
-              subpaths.push(currentSubpath);
-              currentSubpath = [curr];
-            } else {
-              currentSubpath.push(curr);
-            }
-          }
-          subpaths.push(currentSubpath);
-        }
-
-        // Generate path strings for each subpath
-        for (const subpath of subpaths) {
-          if (subpath.length === 0) continue;
-          const start = subpath[0];
-          const end = subpath[subpath.length - 1];
-
-          let d = `M ${start.x} ${start.y}`;
-          for (let i = 1; i < subpath.length; i++) {
-            d += ` L ${subpath[i].x} ${subpath[i].y}`;
-          }
-
-          // Only close if start and end are close in longitude
-          if (Math.abs(end.lng - start.lng) <= 180) {
-            d += ' Z';
-          }
-          paths.push(d);
-        }
-      }
-    }
-
-    return paths.join(' ');
   };
 
   const visiblePlaces = places;
@@ -584,7 +507,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
       cache.set(place.id, getPlaceCoordinates(place));
     });
     return cache;
-  }, [visiblePlaces, mapBounds, mapDimensions]);
+  }, [visiblePlaces, transformCoordinates]);
 
   const labelVisibility = useMemo(() => {
     const boxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
@@ -668,7 +591,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
         pathData,
       };
     }).filter(country => country.pathData !== null);
-  }, [mapBounds, mapDimensions]);
+  }, [geoJsonToSvgPath]);
 
   return (
     <div className="flex h-full bg-background">
