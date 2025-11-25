@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe } from "lucide-react";
+import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,6 +26,47 @@ interface InteractiveWizardProps {
 }
 
 type Phase = "setting" | "character" | "seed";
+
+
+interface CollapsibleSectionProps {
+    title: string;
+    children: React.ReactNode;
+    defaultOpen?: boolean;
+    icon?: React.ReactNode;
+}
+
+function CollapsibleSection({ title, children, defaultOpen = false, icon }: CollapsibleSectionProps) {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    return (
+        <div className="border border-primary/20 rounded-md overflow-hidden bg-background/40">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between p-3 bg-primary/10 hover:bg-primary/20 transition-colors"
+            >
+                <div className="flex items-center gap-2">
+                    {icon}
+                    <span className="text-primary font-mono text-sm uppercase tracking-wider">{title}</span>
+                </div>
+                {isOpen ? <ChevronDown className="w-4 h-4 text-primary" /> : <ChevronRight className="w-4 h-4 text-primary" />}
+            </button>
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        <div className="p-4 border-t border-primary/20">
+                            {children}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
 
 export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, wizardData, setWizardData }: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -162,12 +203,17 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
             triggerNextPhase("seed");
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
+            setPendingArtifact(null);
             // Finalize
             toast({
                 title: "Initialization Complete",
                 description: "Entering simulation...",
             });
-            setTimeout(onComplete, 2000);
+            // Ensure we don't try to render anything else or trigger next phase
+            setTimeout(() => {
+                localStorage.setItem("activeSlot", slot.toString());
+                onComplete();
+            }, 1000);
         }
     };
 
@@ -207,10 +253,11 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 animate={{ opacity: 1, scale: 1 }}
                 className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
             >
-                <Card className="w-full max-w-2xl bg-black border border-cyan-500/50 p-6 space-y-6 shadow-[0_0_50px_rgba(6,182,212,0.2)]">
-                    <div className="flex items-center gap-3 border-b border-cyan-500/30 pb-4">
-                        <CheckCircle className="w-6 h-6 text-cyan-400" />
-                        <h3 className="text-xl font-mono text-cyan-100 uppercase tracking-widest">
+
+                <Card className="w-full max-w-2xl bg-card border border-primary/50 p-6 space-y-6 shadow-lg">
+                    <div className="flex items-center gap-3 border-b border-primary/30 pb-4">
+                        <CheckCircle className="w-6 h-6 text-primary" />
+                        <h3 className="text-xl font-mono text-primary uppercase tracking-widest">
                             Confirm {currentPhase}
                         </h3>
                     </div>
@@ -218,118 +265,142 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                     <ScrollArea className="h-[400px] pr-4">
                         <div className="space-y-4 font-mono text-sm text-cyan-100/80">
                             {type === "submit_world_document" && (
-                                <div className="space-y-6">
-                                    <div className="border-l-2 border-cyan-500 pl-4">
+                                <div className="space-y-4">
+                                    <div className="border-l-2 border-cyan-500 pl-4 mb-6">
                                         <h4 className="text-xl text-white font-bold mb-2">{data.world_name}</h4>
-                                        <p className="text-cyan-400 text-sm uppercase tracking-wider mb-4">{data.genre} // {data.time_period}</p>
+                                        <p className="text-cyan-400 text-sm uppercase tracking-wider">{data.genre} // {data.time_period}</p>
+                                    </div>
+
+                                    <CollapsibleSection title="World Overview" defaultOpen={true} icon={<Globe className="w-4 h-4 text-cyan-500" />}>
                                         <div className="prose prose-invert prose-sm max-w-none">
                                             <p className="whitespace-pre-wrap text-cyan-100/90 italic leading-relaxed">
                                                 {data.diegetic_artifact || data.cultural_notes}
                                             </p>
                                         </div>
-                                    </div>
+                                    </CollapsibleSection>
 
-                                    <div className="grid grid-cols-2 gap-4 text-xs">
-                                        <div>
-                                            <span className="text-cyan-500 block uppercase">Tone</span>
-                                            <span className="text-white">{data.tone}</span>
+                                    <CollapsibleSection title="System Parameters" icon={<Sparkles className="w-4 h-4 text-cyan-500" />}>
+                                        <div className="grid grid-cols-2 gap-4 text-xs">
+                                            <div>
+                                                <span className="text-cyan-500 block uppercase">Tone</span>
+                                                <span className="text-white">{data.tone}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-cyan-500 block uppercase">Tech Level</span>
+                                                <span className="text-white">{data.tech_level}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span className="text-cyan-500 block uppercase">Tech Level</span>
-                                            <span className="text-white">{data.tech_level}</span>
-                                        </div>
-                                    </div>
+                                    </CollapsibleSection>
                                 </div>
                             )}
 
                             {type === "submit_character_sheet" && (
-                                <div className="space-y-6">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-16 h-16 bg-cyan-900/30 rounded-full flex items-center justify-center border border-cyan-500/30">
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-4 mb-6">
+                                        <div className="w-16 h-16 bg-cyan-900/30 rounded-full flex items-center justify-center border border-cyan-500/30 shrink-0">
                                             <User className="w-8 h-8 text-cyan-400" />
                                         </div>
                                         <div>
                                             <h4 className="text-2xl text-white font-bold">{data.name}</h4>
-                                            <p className="text-cyan-400">{data.age} y/o {data.background} {data.occupation}</p>
+                                            <p className="text-cyan-400 text-sm">{data.summary}</p>
                                         </div>
                                     </div>
 
-                                    <div className="bg-black/40 border border-cyan-500/20 p-4 rounded-md">
-                                        <span className="text-cyan-500 block text-xs uppercase mb-2">Dossier</span>
+                                    <CollapsibleSection title="Narrative Portrait" defaultOpen={true} icon={<FileText className="w-4 h-4 text-cyan-500" />}>
                                         <p className="whitespace-pre-wrap text-cyan-100/90 italic leading-relaxed text-sm">
-                                            {data.diegetic_artifact || data.backstory}
+                                            {data.diegetic_artifact}
                                         </p>
-                                    </div>
+                                    </CollapsibleSection>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <CollapsibleSection title="Wildcard" defaultOpen={true} icon={<Sparkles className="w-4 h-4 text-cyan-500" />}>
                                         <div>
-                                            <span className="text-cyan-500 block text-xs uppercase">Appearance</span>
-                                            <p className="text-sm">{data.appearance}</p>
+                                            <span className="text-cyan-500 block text-xs uppercase mb-1">{data.wildcard_name}</span>
+                                            <p className="text-sm text-white/90">{data.wildcard_description}</p>
                                         </div>
-                                        <div>
-                                            <span className="text-cyan-500 block text-xs uppercase">Personality</span>
-                                            <p className="text-sm">{data.personality}</p>
+                                    </CollapsibleSection>
+
+                                    <CollapsibleSection title="Attributes & Traits" icon={<User className="w-4 h-4 text-cyan-500" />}>
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span className="text-cyan-500 block text-xs uppercase mb-1">Appearance</span>
+                                                    <p className="text-sm text-white/80">{data.appearance}</p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-cyan-500 block text-xs uppercase mb-1">Personality</span>
+                                                    <p className="text-sm text-white/80">{data.personality}</p>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <span className="text-cyan-500 block text-xs uppercase mb-2">Traits</span>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                    {[
+                                                        "allies", "contacts", "patron", "dependents",
+                                                        "status", "reputation", "resources", "domain",
+                                                        "enemies", "obligations"
+                                                    ].map(trait => {
+                                                        if (data[trait]) {
+                                                            return (
+                                                                <div key={trait} className="bg-cyan-900/10 border border-cyan-500/20 p-2 rounded">
+                                                                    <span className="text-cyan-400 text-xs uppercase block mb-1">{trait}</span>
+                                                                    <p className="text-xs text-white/80">{data[trait]}</p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <span className="text-cyan-500 block text-xs uppercase">Skills</span>
-                                        <div className="flex flex-wrap gap-2 mt-1">
-                                            {data.skills.map((s: string, i: number) => (
-                                                <span key={i} className="px-2 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded text-xs">
-                                                    {s}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    </CollapsibleSection>
                                 </div>
                             )}
 
                             {type === "submit_starting_scenario" && (
-                                <div className="space-y-6">
-                                    <div className="border-l-2 border-cyan-500 pl-4">
+                                <div className="space-y-4">
+                                    <div className="border-l-2 border-cyan-500 pl-4 mb-6">
                                         <span className="text-cyan-500 block text-xs uppercase mb-1">Starting Scenario</span>
                                         <h4 className="text-xl text-white font-bold mb-2">{data.seed.title}</h4>
                                         <p className="italic text-cyan-100/60">{data.seed.hook}</p>
                                     </div>
 
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between border-b border-white/10 py-2">
-                                            <span className="text-cyan-500">assets.selected_seed</span>
-                                            <span className="text-white text-right">{data.seed.title}</span>
+                                    <CollapsibleSection title="Location Details" defaultOpen={true} icon={<MapPin className="w-4 h-4 text-cyan-500" />}>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between border-b border-white/10 py-2">
+                                                <span className="text-cyan-500">Region (Layer)</span>
+                                                <span className="text-white text-right">{data.layer.name}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b border-white/10 py-2">
+                                                <span className="text-cyan-500">Zone</span>
+                                                <span className="text-white text-right">{data.zone.name}</span>
+                                            </div>
+                                            <div className="flex justify-between border-b border-white/10 py-2">
+                                                <span className="text-cyan-500">Specific Location</span>
+                                                <span className="text-white text-right">{data.location.name}</span>
+                                            </div>
+                                            <div className="pt-2">
+                                                <span className="text-cyan-500 block text-xs uppercase mb-1">Description</span>
+                                                <p className="text-sm text-white/80">{(data.location.description || "").substring(0, 200)}...</p>
+                                            </div>
                                         </div>
-                                        <div className="flex justify-between border-b border-white/10 py-2">
-                                            <span className="text-cyan-500">public.layers.name</span>
-                                            <span className="text-white text-right">{data.layer.name}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-white/10 py-2">
-                                            <span className="text-cyan-500">public.zones.name</span>
-                                            <span className="text-white text-right">{data.zone.name}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-white/10 py-2">
-                                            <span className="text-cyan-500">public.places.name</span>
-                                            <span className="text-white text-right">{data.location.name}</span>
-                                        </div>
-                                        <div className="pt-2">
-                                            <span className="text-cyan-500 block text-xs uppercase mb-1">public.places.summary</span>
-                                            <p className="text-sm text-white/80">{data.location.description.substring(0, 200)}...</p>
-                                        </div>
-                                    </div>
+                                    </CollapsibleSection>
                                 </div>
                             )}
                         </div>
                     </ScrollArea>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-cyan-500/30">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-primary/30">
                         <Button
                             variant="outline"
                             onClick={() => setPendingArtifact(null)}
-                            className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+                            className="border-destructive/50 text-destructive hover:bg-destructive/10"
                         >
                             REVISE
                         </Button>
                         <Button
                             onClick={handleArtifactConfirm}
-                            className="bg-cyan-500/20 border border-cyan-500 text-cyan-400 hover:bg-cyan-500/30"
+                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30"
                         >
                             CONFIRM & PROCEED
                         </Button>
@@ -340,25 +411,56 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
     };
 
     return (
-        <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-black/40 border border-cyan-500/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
+        <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
             {renderArtifactConfirmation()}
 
             {/* Header */}
-            <div className="p-4 border-b border-cyan-500/30 bg-black/60 flex justify-between items-center">
+            <div className="p-4 border-b border-primary/30 bg-background/60 flex justify-between items-center">
                 <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-cyan-400" />
-                    <h3 className="font-mono text-cyan-100">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    <h3 className="font-mono text-foreground">
                         NEXUS // {currentPhase.toUpperCase()} PROTOCOL
                     </h3>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onCancel}
-                    className="text-cyan-400/60 hover:text-cyan-400"
-                >
-                    ABORT
-                </Button>
+                <div>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onCancel}
+                        className="text-muted-foreground hover:text-primary"
+                    >
+                        ABORT
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                            try {
+                                setIsLoading(true);
+                                await fetch("/api/story/new/debug/fill", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ slot }),
+                                });
+                                toast({
+                                    title: "Debug Fill Complete",
+                                    description: "Skipping to simulation...",
+                                });
+                                setTimeout(() => {
+                                    localStorage.setItem("activeSlot", slot.toString());
+                                    onComplete();
+                                }, 1000);
+                            } catch (e) {
+                                console.error(e);
+                                toast({ title: "Debug Error", variant: "destructive" });
+                                setIsLoading(false);
+                            }
+                        }}
+                        className="text-yellow-400/60 hover:text-yellow-400 ml-2"
+                    >
+                        SKIP (TEST)
+                    </Button>
+                </div>
             </div>
 
             {/* Chat Area */}
@@ -379,8 +481,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                                     className={cn(
                                         "max-w-[85%] p-4 rounded-lg font-mono text-sm leading-relaxed shadow-lg",
                                         msg.role === "user"
-                                            ? "bg-cyan-900/20 border border-cyan-500/30 text-cyan-100"
-                                            : "bg-black/80 border border-purple-500/30 text-gray-100"
+                                            ? "bg-primary/20 border border-primary/30 text-foreground"
+                                            : "bg-background/80 border border-border text-foreground"
                                     )}
                                 >
                                     {msg.role === "assistant" ? (
@@ -412,7 +514,7 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
             </ScrollArea>
 
             {/* Input Area */}
-            <div className="p-4 border-t border-cyan-500/30 bg-black/60">
+            <div className="p-4 border-t border-primary/30 bg-background/60">
                 <form
                     onSubmit={(e) => {
                         e.preventDefault();
@@ -434,19 +536,19 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                             }
                         }}
                         placeholder={`Input for ${currentPhase} phase...`}
-                        className="flex-1 bg-black/40 border border-cyan-500/30 text-cyan-100 focus:border-cyan-400 font-mono min-h-[48px] max-h-[200px] p-3 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                        className="flex-1 bg-background/40 border border-primary/30 text-foreground focus:border-primary font-mono min-h-[48px] max-h-[200px] p-3 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                         disabled={isLoading || !!pendingArtifact}
                         rows={1}
                     />
                     <Button
                         type="submit"
                         disabled={isLoading || !input.trim() || !!pendingArtifact}
-                        className="h-12 px-6 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30"
+                        className="h-12 px-6 bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
                     >
                         <Send className="w-5 h-5" />
                     </Button>
                 </form>
             </div>
-        </div>
+        </div >
     );
 }

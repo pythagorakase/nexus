@@ -24,17 +24,8 @@ interface UseNarrativeGenerationOptions {
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot = null } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot } = options;
   const queryClient = useQueryClient();
-
-  const withSlot = useCallback(
-    (path: string) => {
-      if (!slot) return path;
-      const separator = path.includes("?") ? "&" : "?";
-      return `${path}${separator}slot=${slot}`;
-    },
-    [slot],
-  );
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
@@ -98,7 +89,8 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
 
   const fetchIncubatorData = useCallback(async () => {
     try {
-      const response = await fetch(withSlot("/api/narrative/incubator"));
+      const url = slot ? `/api/narrative/incubator?slot=${slot}` : "/api/narrative/incubator";
+      const response = await fetch(url);
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load incubator contents";
         throw new Error(message);
@@ -114,7 +106,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       console.error("Unable to load incubator data:", error);
       setGenerationError(error instanceof Error ? error.message : "Unable to load incubator");
     }
-  }, [withSlot]);
+  }, []);
 
   const handleNarrativeProgress = useCallback(
     (payload: NarrativeProgressPayload) => {
@@ -270,12 +262,13 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       onPhaseChange?.("initiated");
 
       try {
-        const response = await fetch(withSlot("/api/narrative/continue"), {
+        const response = await fetch("/api/narrative/continue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chunk_id: selectedChunk.id,
             user_text: trimmedInput,
+            slot: slot,
           }),
         });
 
@@ -306,7 +299,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer, withSlot],
+    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
   );
 
   const handleApprove = useCallback(async () => {
@@ -320,7 +313,11 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     }
 
     try {
-      const response = await fetch(withSlot(`/api/narrative/approve/${activeNarrativeSessionRef.current}`), {
+      const url = slot
+        ? `/api/narrative/approve/${activeNarrativeSessionRef.current}?slot=${slot}`
+        : `/api/narrative/approve/${activeNarrativeSessionRef.current}`;
+
+      const response = await fetch(url, {
         method: "POST",
       });
 
@@ -335,7 +332,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       });
 
       // Ensure dependent data reflects the newly committed chunk
-      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk", slot ?? null] });
+      queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk", slot] });
       queryClient.invalidateQueries({
         predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === "/api/narrative/chunks",
       });
@@ -353,7 +350,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         variant: "destructive",
       });
     }
-  }, [queryClient, slot, withSlot]);
+  }, [queryClient]);
 
   const handleRegenerate = useCallback(() => {
     if (!generationParentChunk) {

@@ -477,6 +477,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
 
+        const relativePath = `character_portraits/${characterId}/${filename}`;
+
         const isMain = existingImages.length === 0 && uploadedImages.length === 0 ? 1 : 0;
         maxOrder++;
 
@@ -593,6 +595,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const destPath = path.join(placeDir, filename);
         await fs.copyFile(file.path, destPath);
         await fs.unlink(file.path);
+
+        const relativePath = `place_images/${placeId}/${filename}`;
 
         const isMain = existingImages.length === 0 && uploadedImages.length === 0 ? 1 : 0;
         maxOrder++;

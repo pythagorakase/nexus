@@ -5,9 +5,12 @@ Helper utilities to trigger narrative summary generation after episode/season tr
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Callable, List, Literal, Optional, Sequence
+
+from nexus.api.slot_utils import slot_dbname
 
 from scripts.summarize_narrative import (
     DatabaseManager,
@@ -71,6 +74,7 @@ def schedule_summary_generation(
     tasks: Sequence[SummaryTask],
     overwrite: bool = False,
     model_candidates: Optional[Sequence[str]] = None,
+    slot: Optional[int] = None,
     *,
     run_in_thread: bool = True,
     db_manager_factory: Optional[Callable[[], DatabaseManager]] = None,
@@ -96,6 +100,7 @@ def schedule_summary_generation(
         list(tasks),
         models,
         overwrite,
+        slot=slot,
         db_manager_factory=db_manager_factory,
         generator_cls=generator_cls,
     )
@@ -110,11 +115,28 @@ def _run_summary_generation(
     tasks: Sequence[SummaryTask],
     model_candidates: Sequence[str],
     overwrite: bool,
+    slot: Optional[int] = None,
     db_manager_factory: Optional[Callable[[], DatabaseManager]] = None,
     generator_cls: Callable[..., SummaryGenerator] = SummaryGenerator,
 ) -> None:
     try:
-        db_manager = db_manager_factory() if db_manager_factory else DatabaseManager()
+        if db_manager_factory:
+            db_manager = db_manager_factory()
+        else:
+            db_url = None
+            if slot:
+                dbname = slot_dbname(slot)
+                user = os.environ.get("DB_USER", "pythagor")
+                password = os.environ.get("DB_PASSWORD", "")
+                host = os.environ.get("DB_HOST", "localhost")
+                port = os.environ.get("DB_PORT", "5432")
+                
+                if password:
+                    db_url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+                else:
+                    db_url = f"postgresql://{user}@{host}:{port}/{dbname}"
+            
+            db_manager = DatabaseManager(db_url=db_url)
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Unable to start summary generation; database init failed: %s", exc)
         return

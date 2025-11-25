@@ -79,14 +79,10 @@ export function NexusLayout() {
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
-  const [activeSlot, setActiveSlot] = useState<number | null>(null);
-
-  useEffect(() => {
+  const [activeSlot, setActiveSlot] = useState<number | null>(() => {
     const storedSlot = localStorage.getItem("activeSlot");
-    if (storedSlot) {
-      setActiveSlot(parseInt(storedSlot, 10));
-    }
-  }, []);
+    return storedSlot ? parseInt(storedSlot, 10) : null;
+  });
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;

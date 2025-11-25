@@ -12,25 +12,29 @@ export const db = pool
   ? drizzle(pool, { schema })
   : null;
 
-const slotPools = new Map<number, pg.Pool>();
-const slotDbs = new Map<number, ReturnType<typeof drizzle>>();
+// Cache pools to avoid creating too many connections
+const pools: Record<string, pg.Pool> = {};
 
 export function getDb(slot?: number | null) {
-  if (slot === undefined || slot === null) {
-    return db;
+  if (!process.env.DATABASE_URL) return null;
+
+  let connectionString = process.env.DATABASE_URL;
+
+  if (slot) {
+    const dbName = `save_${String(slot).padStart(2, '0')}`;
+    try {
+      const url = new URL(connectionString);
+      url.pathname = `/${dbName}`;
+      connectionString = url.toString();
+    } catch (e) {
+      console.error("Invalid DATABASE_URL", e);
+      return null;
+    }
   }
 
-  const slotUrl = process.env[`DATABASE_URL_SLOT_${slot}`];
-
-  if (!slotUrl) {
-    return db;
+  if (!pools[connectionString]) {
+    pools[connectionString] = new Pool({ connectionString });
   }
 
-  if (!slotPools.has(slot)) {
-    const slotPool = new Pool({ connectionString: slotUrl });
-    slotPools.set(slot, slotPool);
-    slotDbs.set(slot, drizzle(slotPool, { schema }));
-  }
-
-  return slotDbs.get(slot) ?? db;
+  return drizzle(pools[connectionString], { schema });
 }

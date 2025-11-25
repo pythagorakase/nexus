@@ -84,6 +84,7 @@ interface EpisodeNodeProps {
   onSelectChunk: (chunk: ChunkWithMetadata) => void;
   selectedChunkId: number | null;
   onEnsureChunkSelected: (chunk: ChunkWithMetadata) => void;
+  slot: number | null;
 }
 
 function EpisodeNode({
@@ -94,6 +95,7 @@ function EpisodeNode({
   onSelectChunk,
   selectedChunkId,
   onEnsureChunkSelected,
+  slot,
 }: EpisodeNodeProps) {
   const episodeKey = `${seasonId}-${episode.episode}`;
 
@@ -104,9 +106,10 @@ function EpisodeNode({
     error,
     isFetching,
   } = useQuery<ChunkResponse>({
-    queryKey: ["/api/narrative/chunks", seasonId, episode.episode],
+    queryKey: ["/api/narrative/chunks", seasonId, episode.episode, slot],
     queryFn: async () => {
-      const response = await fetch(`/api/narrative/chunks/${seasonId}/${episode.episode}?limit=200`);
+      if (!slot) return { chunks: [], total: 0 };
+      const response = await fetch(`/api/narrative/chunks/${seasonId}/${episode.episode}?limit=200&slot=${slot}`);
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load chunks";
         throw new Error(message);
@@ -188,6 +191,7 @@ interface SeasonNodeProps {
   onSelectChunk: (chunk: ChunkWithMetadata) => void;
   selectedChunkId: number | null;
   onEnsureChunkSelected: (chunk: ChunkWithMetadata) => void;
+  slot: number | null;
 }
 
 function SeasonNode({
@@ -200,6 +204,7 @@ function SeasonNode({
   onSelectChunk,
   selectedChunkId,
   onEnsureChunkSelected,
+  slot,
 }: SeasonNodeProps) {
   const {
     data: episodes = [],
@@ -207,8 +212,14 @@ function SeasonNode({
     isError,
     error,
   } = useQuery<Episode[]>({
-    queryKey: ["/api/narrative/episodes", season.id],
-    enabled: isOpen,
+    queryKey: ["/api/narrative/episodes", season.id, slot],
+    queryFn: async () => {
+      if (!slot) return [];
+      const res = await fetch(`/api/narrative/episodes/${season.id}?slot=${slot}`);
+      if (!res.ok) throw new Error("Failed to fetch episodes");
+      return res.json();
+    },
+    enabled: isOpen && !!slot,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -252,6 +263,7 @@ function SeasonNode({
               onSelectChunk={onSelectChunk}
               selectedChunkId={selectedChunkId}
               onEnsureChunkSelected={onEnsureChunkSelected}
+              slot={slot}
             />
           );
         })}
@@ -268,9 +280,10 @@ function SeasonNode({
 interface NarrativeTabProps {
   onChunkSelected?: (chunk: ChunkWithMetadata | null) => void;
   sessionId?: string;
+  slot?: number | null;
 }
 
-export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps = {}) {
+export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabProps = {}) {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
@@ -285,7 +298,14 @@ export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps =
     isError: seasonsError,
     error: seasonsErrorData,
   } = useQuery<Season[]>({
-    queryKey: ["/api/narrative/seasons"],
+    queryKey: ["/api/narrative/seasons", slot],
+    queryFn: async () => {
+      if (!slot) return [];
+      const res = await fetch(`/api/narrative/seasons?slot=${slot}`);
+      if (!res.ok) throw new Error("Failed to fetch seasons");
+      return res.json();
+    },
+    enabled: !!slot,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -294,7 +314,14 @@ export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps =
     data: latestChunk,
     isLoading: latestChunkLoading,
   } = useQuery<ChunkWithMetadata>({
-    queryKey: ["/api/narrative/latest-chunk"],
+    queryKey: ["/api/narrative/latest-chunk", slot],
+    queryFn: async () => {
+      if (!slot) return null;
+      const res = await fetch(`/api/narrative/latest-chunk?slot=${slot}`);
+      if (!res.ok) throw new Error("Failed to fetch latest chunk");
+      return res.json();
+    },
+    enabled: !!slot,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -308,7 +335,7 @@ export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps =
       if (!selectedChunk) {
         return { previous: null, next: null };
       }
-      const response = await fetch(`/api/narrative/chunks/${selectedChunk.id}/adjacent`);
+      const response = await fetch(`/api/narrative/chunks/${selectedChunk.id}/adjacent?slot=${slot}`);
       if (!response.ok) {
         throw new Error("Failed to fetch adjacent chunks");
       }
@@ -326,9 +353,9 @@ export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps =
       // Get states for a window around the selected chunk
       const start = Math.max(1, selectedChunk.id - 10);
       const end = selectedChunk.id + 10;
-      return getChunkStates(start, end);
+      return getChunkStates(start, end, slot);
     },
-    enabled: !!selectedChunk,
+    enabled: !!selectedChunk && !!slot,
     refetchInterval: 5000, // Poll for state updates
   });
 
@@ -549,6 +576,7 @@ export function NarrativeTab({ onChunkSelected, sessionId }: NarrativeTabProps =
                   onSelectChunk={selectChunk}
                   selectedChunkId={selectedChunk?.id ?? null}
                   onEnsureChunkSelected={ensureChunkSelected}
+                  slot={slot ?? null}
                 />
               ))
             )}

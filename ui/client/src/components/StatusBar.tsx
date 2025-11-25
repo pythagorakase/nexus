@@ -2,6 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast as showToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Home } from "lucide-react";
 
 interface StatusBarProps {
   model: string;
@@ -259,15 +267,28 @@ export function StatusBar({
       className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 terminal-scanlines ${isBarLoading ? "status-bar-loading" : ""
         }`}
     >
-      <Button
-        size="icon"
-        variant="ghost"
-        onClick={onHamburgerClick}
-        className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0"
-        data-testid="button-hamburger-menu"
-      >
-        <Menu className="h-3 w-3 md:h-4 md:w-4" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 md:h-8 md:w-8 flex-shrink-0"
+            data-testid="button-hamburger-menu"
+          >
+            <Menu className="h-3 w-3 md:h-4 md:w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem asChild>
+            <Link href="/">
+              <div className="flex items-center gap-2 cursor-pointer">
+                <Home className="h-4 w-4" />
+                <span>Home</span>
+              </div>
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <div className="flex items-center gap-2 md:gap-6 text-sm md:text-base font-mono flex-1 overflow-hidden">
         <div className="hidden md:flex items-center gap-2" data-testid="text-model-status">

@@ -15,6 +15,7 @@ from nexus.api.conversations import ConversationsClient
 from nexus.api.new_story_cache import read_cache, write_cache, clear_cache
 from nexus.api.save_slots import upsert_slot, clear_active
 from nexus.api.slot_utils import slot_dbname, all_slots
+from scripts.new_story_setup import create_slot_schema_only
 
 logger = logging.getLogger("nexus.api.new_story_flow")
 
@@ -41,6 +42,16 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
         Thread ID for the new conversation
     """
     dbname = slot_dbname(slot_number)
+    
+    # Ensure database exists
+    try:
+        conn = psycopg2.connect(database=dbname)
+        conn.close()
+    except psycopg2.OperationalError:
+        logger.info("Database %s does not exist. Creating...", dbname)
+        # Assuming NEXUS is the source template
+        create_slot_schema_only(slot_number, source_db="NEXUS")
+
     clear_cache(dbname)
     # Use provided model or fall back to settings
     model_to_use = model or NEW_STORY_MODEL
