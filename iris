@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+#
+# IRIS - Integrated Runtime for Interactive Stories
+#
+# Clears occupied ports, then runs honcho for proper process management
+# with color-coded output and better lifecycle handling.
+#
 
 set -euo pipefail
 
@@ -10,88 +16,22 @@ if [ ! -d "$UI_DIR" ]; then
   exit 1
 fi
 
-cd "$UI_DIR"
+cd "$ROOT_DIR"
 
-if [ ! -d node_modules ]; then
+# Install UI dependencies if needed (first run)
+if [ ! -d "$UI_DIR/node_modules" ]; then
   echo "Installing UI dependencies (first run)..."
-  npm install
+  npm --prefix "$UI_DIR" install
 fi
 
 # Kill any existing processes on our ports to prevent EADDRINUSE errors
-echo "Cleaning up any existing processes on ports 5001, 8000, 8001, and 8002..." >&2
-lsof -ti:5001 | xargs kill -9 2>/dev/null || true
-lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-lsof -ti:8001 | xargs kill -9 2>/dev/null || true
-lsof -ti:8002 | xargs kill -9 2>/dev/null || true
+PORTS=(5001 8000 8001 8002)
+echo "Clearing ports: ${PORTS[*]}..." >&2
+for port in "${PORTS[@]}"; do
+  lsof -ti:"$port" | xargs kill -9 2>/dev/null || true
+done
 sleep 0.5  # Brief pause to ensure ports are fully released
 
-if [ -z "${PORT:-}" ]; then
-  PORT=$(python3 - <<'PY'
-import socket
-preferred = 5001
-def is_free(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            s.bind(("127.0.0.1", port))
-        except OSError:
-            return False
-    return True
-
-if is_free(preferred):
-    print(preferred)
-else:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        print(s.getsockname()[1])
-PY
-)
-fi
-
-API_PORT="${API_PORT:-8000}"
-CORE_API_PORT="${CORE_API_PORT:-8001}"
-APP_URL="http://localhost:${PORT}"
-
-# Set DATABASE_URL to local Postgres by default
-if [ -z "${DATABASE_URL:-}" ]; then
-  export DATABASE_URL="postgresql://pythagor@localhost:5432/NEXUS"
-  echo "Using local PostgreSQL database: ${DATABASE_URL}" >&2
-fi
-
-# Browser auto-open disabled - PWA should be on dock
-# if command -v open >/dev/null 2>&1; then
-#   ( sleep 2 && open "$APP_URL" ) >/dev/null 2>&1 &
-# elif command -v xdg-open >/dev/null 2>&1; then
-#   ( sleep 2 && xdg-open "$APP_URL" ) >/dev/null 2>&1 &
-# else
-#   echo "Launch your browser and visit $APP_URL"
-# fi
-
-echo "Starting Iris dev server on $APP_URL"
-echo "FastAPI audition API proxied via /api/audition (backend on port ${API_PORT})"
-echo "Core model-management API proxied via /api/models and /api/health (backend on port ${CORE_API_PORT})"
-
-cleanup() {
-  if [ -n "${UVICORN_PID:-}" ] && kill -0 "$UVICORN_PID" 2>/dev/null; then
-    kill "$UVICORN_PID" 2>/dev/null || true
-  fi
-  if [ -n "${CORE_UVICORN_PID:-}" ] && kill -0 "$CORE_UVICORN_PID" 2>/dev/null; then
-    kill "$CORE_UVICORN_PID" 2>/dev/null || true
-  fi
-  if [ -n "${NARRATIVE_UVICORN_PID:-}" ] && kill -0 "$NARRATIVE_UVICORN_PID" 2>/dev/null; then
-    kill "$NARRATIVE_UVICORN_PID" 2>/dev/null || true
-  fi
-}
-
-poetry run uvicorn nexus.api.apex_audition:app --reload --host 127.0.0.1 --port "$API_PORT" &
-UVICORN_PID=$!
-poetry run uvicorn nexus.api.core:app --reload --host 127.0.0.1 --port "$CORE_API_PORT" &
-CORE_UVICORN_PID=$!
-poetry run uvicorn nexus.api.narrative:app --reload --host 127.0.0.1 --port 8002 &
-NARRATIVE_UVICORN_PID=$!
-trap cleanup EXIT INT TERM
-
-PORT="$PORT" API_PORT="$API_PORT" CORE_API_PORT="$CORE_API_PORT" npm run dev
-STATUS=$?
-cleanup
-exit $STATUS
+# Run honcho for proper process management (color-coded output, better signals)
+echo "Starting NEXUS services..."
+exec poetry run honcho start -f Procfile.dev
