@@ -68,7 +68,7 @@ export function GenerationPane({
   highlighted = false,
 }: GenerationPaneProps) {
   const content = resolveGenerationContent(generation);
-  const { fonts } = useFonts();
+  const { currentBodyFont } = useFonts();
 
   return (
     <div
@@ -84,7 +84,7 @@ export function GenerationPane({
       <ScrollArea className="flex-1 p-4" style={{ transform: 'translateZ(0)', contain: 'layout style' }}>
         <div
           className="text-sm leading-relaxed text-foreground"
-          style={{ fontFamily: fonts.narrativeFont }}
+          style={{ fontFamily: currentBodyFont }}
         >
           <ReactMarkdown
             components={{

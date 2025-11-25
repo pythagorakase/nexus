@@ -43,6 +43,8 @@ agentic_sql = true  # Enable agent to generate SQL queries dynamically
 
 [lore.token_budget]
 # Context window limits for APEX generation
+apex_context_window = 50_000
+
 apex_context_window = 75000  # Total tokens available for APEX (includes prompt + context)
 system_prompt_tokens = 5000  # Reserved tokens for system prompt
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFonts } from "@/contexts/FontContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import ReactMarkdown from 'react-markdown';
 
 export interface NarrativeSection {
@@ -58,7 +59,9 @@ export function NarrativePane({
   typingChunk,
 }: NarrativePaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { fonts } = useFonts();
+  const { currentBodyFont } = useFonts();
+  const { isGilded, isCyberpunk } = useTheme();
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -70,19 +73,19 @@ export function NarrativePane({
   const typingChunkData = isTyping && typingChunk ? chunks.find((c) => c.id === typingChunk) : null;
 
   return (
-    <div className="flex-1 flex flex-col bg-background terminal-scanlines overflow-hidden">
+    <div className={`flex-1 flex flex-col bg-background overflow-hidden ${isCyberpunk ? "terminal-scanlines" : ""}`}>
       <ScrollArea className="flex-1" data-testid="scroll-narrative">
         <div
           ref={scrollRef}
           className="p-3 md:p-6 space-y-4 md:space-y-8 text-xs md:text-sm leading-relaxed"
-          style={{ fontFamily: fonts.narrativeFont }}
+          style={{ fontFamily: currentBodyFont }}
         >
           {currentChunkData && (
             <div key={currentChunkData.id} className="space-y-4">
               <div className="border border-border p-3 md:p-4 rounded-md bg-card" data-testid={`chunk-header-${currentChunkData.id}`}>
                 <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-xs text-muted-foreground">
                   <span>S{currentChunkData.season}E{currentChunkData.episode}S{currentChunkData.scene}</span>
-                  <span className="text-primary terminal-glow">{currentChunkData.metadata.location}</span>
+                  <span className={`text-primary ${glowClass}`}>{currentChunkData.metadata.location}</span>
                   <span>{currentChunkData.metadata.timestamp}</span>
                 </div>
                 <div className="mt-2 text-[10px] md:text-xs text-muted-foreground">
@@ -95,7 +98,7 @@ export function NarrativePane({
                   key={idx}
                   className={`${
                     section.type === "you"
-                      ? "text-primary terminal-glow"
+                      ? `text-primary ${glowClass}`
                       : "text-foreground"
                   } leading-relaxed`}
                   data-testid={`section-${section.type}-${idx}`}
@@ -154,7 +157,7 @@ export function NarrativePane({
           )}
 
           {isLoading && (
-            <div className="text-primary terminal-glow animate-pulse" data-testid="text-loading">
+            <div className={`text-primary ${glowClass} animate-pulse`} data-testid="text-loading">
               <span className="mr-2">{">"}</span>
               Processing...
             </div>
