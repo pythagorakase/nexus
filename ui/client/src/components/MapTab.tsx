@@ -626,7 +626,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
   }, [geoJsonToSvgPath]);
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full min-h-0 w-full bg-background">
       {/* Map Area */}
       <div className="flex-1 relative overflow-hidden">
         {(isLoading) && (

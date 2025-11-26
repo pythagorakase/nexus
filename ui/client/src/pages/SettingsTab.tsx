@@ -246,7 +246,7 @@ export function SettingsTab() {
   const hasUnsavedChanges = apexContextWindow !== originalApexContextWindow;
 
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="h-full min-h-0 w-full">
       <div className="container max-w-4xl py-8 px-6 space-y-6">
         <div className="space-y-2">
           <h2 className={`text-2xl font-mono font-bold text-primary ${glowClass}`}>Settings</h2>

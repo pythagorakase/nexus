@@ -360,6 +360,7 @@ export function NexusLayout() {
   const referencedCharacters = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'character') : [];
   const referencedPlaces = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'place') : [];
   const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
+  const tabContentClass = "flex-1 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden";
   const chunkLabel =
     narrative.generationParentChunk?.metadata?.season !== null &&
       narrative.generationParentChunk?.metadata?.season !== undefined &&
@@ -397,9 +398,9 @@ export function NexusLayout() {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className={`flex-1 flex flex-col overflow-hidden bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
+          className={`flex-1 flex flex-col min-h-0 overflow-hidden bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
         >
-          <div className="border-b border-border bg-card/50 overflow-x-auto">
+          <div className="border-b border-border bg-card/50 overflow-x-auto flex-shrink-0">
             <TabsList className="h-10 bg-transparent border-0 rounded-none p-0 inline-flex min-w-full">
               <TabsTrigger
                 value="narrative"
@@ -430,7 +431,7 @@ export function NexusLayout() {
             </TabsList>
           </div>
 
-          <TabsContent value="narrative" className="flex-1 overflow-hidden m-0 min-h-0 flex flex-col">
+          <TabsContent value="narrative" className={tabContentClass}>
             <NarrativeTab
               onChunkSelected={handleChunkSelection}
               sessionId={narrative.activeNarrativeSession ?? undefined}
@@ -438,19 +439,19 @@ export function NexusLayout() {
             />
           </TabsContent>
 
-          <TabsContent value="map" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="map" className={tabContentClass}>
             <MapTab currentChunkLocation={currentChunkLocation} slot={activeSlot} />
           </TabsContent>
 
-          <TabsContent value="characters" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="characters" className={tabContentClass}>
             <CharactersTab slot={activeSlot} />
           </TabsContent>
 
-          <TabsContent value="audition" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="audition" className={tabContentClass}>
             <AuditionTab />
           </TabsContent>
 
-          <TabsContent value="settings" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="settings" className={tabContentClass}>
             <SettingsTab />
           </TabsContent>
         </Tabs>
