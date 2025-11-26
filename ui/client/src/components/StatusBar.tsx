@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/contexts/ThemeContext";
 import { CornerSunburst } from "@/components/deco";
+import { cn } from "@/lib/utils";
 
 interface StatusBarProps {
   model: string;
@@ -80,6 +81,11 @@ export function StatusBar({
   const generatingClass = isGilded ? "deco-shimmer deco-glow" : "terminal-generating terminal-generating-glow";
 
   const modelVisualClasses = useMemo(() => {
+    // In Gilded mode, force gold color for loaded/loading states to avoid green tint
+    if (isGilded && (modelStatus === "loaded" || modelStatus === "loading")) {
+      return "text-primary/90 deco-glow";
+    }
+
     switch (modelStatus) {
       case "unloaded":
         return "text-muted-foreground";
@@ -92,7 +98,7 @@ export function StatusBar({
       default:
         return "text-muted-foreground";
     }
-  }, [modelStatus, glowClass, generatingClass]);
+  }, [modelStatus, glowClass, generatingClass, isGilded]);
   const isBarLoading = modelStatus === "loading";
   const shouldShowProgressBar = isBarLoading || isModelOperating || modelStatus === "generating";
   const loaderMessage = useMemo(() => {
@@ -273,9 +279,11 @@ export function StatusBar({
 
   return (
     <div
-      className={`relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden ${
-        isCyberpunk ? "terminal-scanlines" : ""
-      } ${isBarLoading ? "status-bar-loading" : ""}`}
+      className={cn(
+        "relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden flex-shrink-0",
+        isCyberpunk && "terminal-scanlines",
+        isBarLoading && "status-bar-loading"
+      )}
     >
       {/* Art Deco corner sunbursts */}
       {isGilded && (
@@ -323,7 +331,7 @@ export function StatusBar({
 
       <div className="flex items-center gap-2 md:gap-6 text-sm md:text-base font-mono flex-1 overflow-hidden">
         <div className="hidden md:flex items-center gap-2" data-testid="text-model-status">
-          <span className="text-muted-foreground">MODEL:</span>
+          <span className="text-primary/70">MODEL:</span>
           <div
             className="relative cursor-pointer text-base md:text-lg tracking-wide"
             onMouseEnter={() => setIsModelHovered(true)}
@@ -354,7 +362,7 @@ export function StatusBar({
         </div>
 
         <div className="flex items-center gap-1 md:gap-2" data-testid="text-chapter-info">
-          <span className="text-muted-foreground hidden sm:inline">CHAPTER:</span>
+          <span className="text-primary/70 hidden sm:inline">CHAPTER:</span>
           <span className="text-foreground">
             S{season.toString().padStart(2, '0')}-E{episode.toString().padStart(2, '0')}-S{scene.toString().padStart(3, '0')}
           </span>
@@ -362,7 +370,7 @@ export function StatusBar({
 
         {isStoryMode && (
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-apex-status">
-            <span className="text-muted-foreground hidden sm:inline">APEX:</span>
+            <span className="text-primary/70 hidden sm:inline">APEX:</span>
             <span className={`${getStatusColor()} ${glowClass} text-sm md:text-base`}>{apexStatus}</span>
           </div>
         )}

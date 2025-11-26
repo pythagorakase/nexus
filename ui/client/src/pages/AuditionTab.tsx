@@ -200,7 +200,7 @@ export default function AuditionTab() {
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col w-full">
       <div className="border-b border-border px-4 py-2 flex items-center justify-between font-mono text-xs sm:text-sm">
         <div className="flex items-center gap-3">
           <Button
@@ -278,7 +278,7 @@ export default function AuditionTab() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {mode === 'judge' ? (
           renderJudgeMode()
         ) : mode === 'generate' ? (

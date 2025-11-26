@@ -7,7 +7,6 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBar } from "./StatusBar";
-import { CommandBar } from "./CommandBar";
 import { NarrativeTab, type ChunkWithMetadata } from "./NarrativeTab";
 import { MapTab } from "./MapTab";
 import { CharactersTab } from "./CharactersTab";
@@ -361,6 +360,7 @@ export function NexusLayout() {
   const referencedCharacters = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'character') : [];
   const referencedPlaces = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'place') : [];
   const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
+  const tabContentClass = "flex-1 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden";
   const chunkLabel =
     narrative.generationParentChunk?.metadata?.season !== null &&
       narrative.generationParentChunk?.metadata?.season !== undefined &&
@@ -398,13 +398,13 @@ export function NexusLayout() {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="flex-1 flex flex-col overflow-hidden"
+          className={`flex-1 flex flex-col min-h-0 overflow-hidden bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
         >
-          <div className="border-b border-border bg-card/50 overflow-x-auto">
+          <div className="border-b border-border bg-card/50 overflow-x-auto flex-shrink-0">
             <TabsList className="h-10 bg-transparent border-0 rounded-none p-0 inline-flex min-w-full">
               <TabsTrigger
                 value="narrative"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-narrative"
               >
                 <Book className="h-3 w-3" />
@@ -413,7 +413,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="map"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-map"
               >
                 <Map className="h-3 w-3" />
@@ -421,7 +421,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="characters"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-characters"
               >
                 <Users className="h-3 w-3" />
@@ -431,7 +431,7 @@ export function NexusLayout() {
             </TabsList>
           </div>
 
-          <TabsContent value="narrative" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="narrative" className={tabContentClass}>
             <NarrativeTab
               onChunkSelected={handleChunkSelection}
               sessionId={narrative.activeNarrativeSession ?? undefined}
@@ -439,19 +439,19 @@ export function NexusLayout() {
             />
           </TabsContent>
 
-          <TabsContent value="map" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="map" className={tabContentClass}>
             <MapTab currentChunkLocation={currentChunkLocation} slot={activeSlot} />
           </TabsContent>
 
-          <TabsContent value="characters" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="characters" className={tabContentClass}>
             <CharactersTab slot={activeSlot} />
           </TabsContent>
 
-          <TabsContent value="audition" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="audition" className={tabContentClass}>
             <AuditionTab />
           </TabsContent>
 
-          <TabsContent value="settings" className="flex-1 overflow-hidden m-0">
+          <TabsContent value="settings" className={tabContentClass}>
             <SettingsTab />
           </TabsContent>
         </Tabs>
@@ -482,27 +482,6 @@ export function NexusLayout() {
           <div className="border-t border-destructive/40 bg-destructive/10 text-destructive font-mono text-xs px-3 py-2 flex items-center justify-between">
             <span>{narrative.generationError}</span>
           </div>
-        )}
-
-        {activeTab === "narrative" && (
-          <CommandBar
-            onCommand={handleCommand}
-            placeholder={
-              isStoryMode
-                ? canContinue
-                  ? "continue the story"
-                  : latestChunkId
-                    ? `Select the newest chunk (${latestChunkId}) to continue`
-                    : "Loading latest chunk..."
-                : "Enter directive or /command..."
-            }
-            userPrefix={isStoryMode ? "" : "NEXUS:USER"}
-            showButton={isStoryMode && !isInputExpanded}
-            onButtonClick={() => narrative.triggerNarrativeTurn(selectedChunk, narrative.lastUserInput)}
-            onExpandInput={() => setIsInputExpanded(true)}
-            isGenerating={narrative.isMidGeneration}
-            continueDisabled={continueDisabled}
-          />
         )}
       </div>
 

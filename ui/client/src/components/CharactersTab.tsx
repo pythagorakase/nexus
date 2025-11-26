@@ -321,7 +321,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
   };
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full min-h-0 w-full bg-background">
       <aside className="w-72 border-r border-border bg-card/40 flex flex-col">
         <div className="px-4 py-3 border-b border-border">
           <h2 className="text-sm font-mono text-primary terminal-glow">[CHARACTER INDEX]</h2>
@@ -363,7 +363,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
         </ScrollArea>
       </aside>
 
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 min-h-0 overflow-hidden">
         {selectedCharacter ? (
           <div className="h-full overflow-auto p-6 space-y-6">
             <Card className="bg-card/70 border-border">
