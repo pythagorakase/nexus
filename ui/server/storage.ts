@@ -133,6 +133,9 @@ export class PostgresStorage implements IStorage {
       SELECT
         nc.id,
         nc.raw_text,
+        nc.storyteller_text,
+        nc.choice_object,
+        nc.choice_text,
         nc.created_at,
         cm.chunk_id,
       cm.season,
@@ -161,6 +164,9 @@ export class PostgresStorage implements IStorage {
     const chunks = (chunksWithMetadata.rows as any[]).map((row) => ({
       id: Number(row.id),
       rawText: row.raw_text,
+      storytellerText: row.storyteller_text ?? null,
+      choiceObject: row.choice_object ?? null,
+      choiceText: row.choice_text ?? null,
       createdAt: row.created_at ?? null,
       metadata: row.chunk_id
         ? {
@@ -186,6 +192,9 @@ export class PostgresStorage implements IStorage {
       SELECT
         nc.id,
         nc.raw_text,
+        nc.storyteller_text,
+        nc.choice_object,
+        nc.choice_text,
         nc.created_at,
         cm.chunk_id,
       cm.season,
@@ -210,6 +219,9 @@ export class PostgresStorage implements IStorage {
     return {
       id: Number(row.id),
       rawText: row.raw_text,
+      storytellerText: row.storyteller_text ?? null,
+      choiceObject: row.choice_object ?? null,
+      choiceText: row.choice_text ?? null,
       createdAt: row.created_at ?? null,
       metadata: row.chunk_id
         ? {
@@ -236,6 +248,9 @@ export class PostgresStorage implements IStorage {
       SELECT
         nc.id,
         nc.raw_text,
+        nc.storyteller_text,
+        nc.choice_object,
+        nc.choice_text,
         nc.created_at,
         cm.chunk_id,
       cm.season,
@@ -256,6 +271,9 @@ export class PostgresStorage implements IStorage {
       SELECT
         nc.id,
         nc.raw_text,
+        nc.storyteller_text,
+        nc.choice_object,
+        nc.choice_text,
         nc.created_at,
         cm.chunk_id,
       cm.season,
@@ -277,6 +295,9 @@ export class PostgresStorage implements IStorage {
         ? {
           id: Number(row.id),
           rawText: row.raw_text,
+          storytellerText: row.storyteller_text ?? null,
+          choiceObject: row.choice_object ?? null,
+          choiceText: row.choice_text ?? null,
           createdAt: row.created_at ?? null,
           metadata: row.chunk_id
             ? {

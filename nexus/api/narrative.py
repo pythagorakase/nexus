@@ -25,7 +25,12 @@ from psycopg2.extras import RealDictCursor
 
 from nexus.agents.lore.logon_utility import LogonUtility
 from nexus.agents.lore.lore import LORE
-from nexus.api.lore_adapter import response_to_incubator, validate_incubator_data
+from nexus.api.lore_adapter import (
+    response_to_incubator,
+    validate_incubator_data,
+    format_choice_text,
+    compute_raw_text,
+)
 from nexus.api.chunk_workflow import (
     ChunkWorkflow,
     ChunkAcceptRequest,
@@ -129,6 +134,52 @@ def get_new_story_model() -> str:
     return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
+import re
+
+
+def extract_choices_from_text(text: str) -> List[str]:
+    """
+    Extract structured choices from LLM response text.
+
+    Looks for numbered lists like:
+    1. **Science Fiction** - description
+    2. **Fantasy** - description
+
+    Or simple numbered items:
+    1. Option A
+    2. Option B
+
+    Returns list of choice strings (2-4 items), or empty list if no pattern found.
+    """
+    if not text:
+        return []
+
+    # Pattern: numbered items (1. 2. 3. etc) optionally with bold text
+    # Match: "1. **Title** - description" or "1. Title - description" or "1. Title"
+    pattern = r'^\s*(\d+)\.\s+(?:\*\*([^*]+)\*\*\s*[-–—]?\s*(.*)|(.*))$'
+
+    choices = []
+    for line in text.split('\n'):
+        match = re.match(pattern, line.strip())
+        if match:
+            num = match.group(1)
+            if match.group(2):  # Bold format: **Title** - description
+                title = match.group(2).strip()
+                desc = match.group(3).strip() if match.group(3) else ""
+                if desc:
+                    choices.append(f"{title} — {desc}")
+                else:
+                    choices.append(title)
+            elif match.group(4):  # Simple format: just the text after number
+                choices.append(match.group(4).strip())
+
+    # Only return if we found 2-4 sequential choices starting from 1
+    if len(choices) >= 2 and len(choices) <= 4:
+        return choices
+
+    return []
+
+
 # Request/Response models
 class ContinueNarrativeRequest(BaseModel):
     """Request to continue narrative from a chunk"""
@@ -165,6 +216,35 @@ class NarrativeStatus(BaseModel):
     parent_chunk_id: Optional[int]
     created_at: Optional[datetime]
     error: Optional[str]
+
+
+class ChoiceSelection(BaseModel):
+    """User's selection from presented choices"""
+
+    label: int | Literal["freeform"] = Field(
+        description="Choice number (1-4) or 'freeform' for custom input"
+    )
+    text: str = Field(description="The text of the selection (original or edited)")
+    edited: bool = Field(
+        default=False,
+        description="True if user edited the choice before submitting"
+    )
+
+
+class SelectChoiceRequest(BaseModel):
+    """Request to record user's choice selection for a chunk"""
+
+    chunk_id: int = Field(description="The narrative chunk ID")
+    selection: ChoiceSelection = Field(description="The user's choice selection")
+    slot: Optional[int] = Field(default=None, description="Active save slot")
+
+
+class SelectChoiceResponse(BaseModel):
+    """Response after recording choice selection"""
+
+    status: str = Field(description="Status of the operation")
+    chunk_id: int = Field(description="The updated chunk ID")
+    raw_text: str = Field(description="The finalized raw_text for embeddings")
 
 
 # API Endpoints
@@ -392,10 +472,10 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
         query = """
         INSERT INTO incubator (
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
-            metadata_updates, entity_updates, reference_updates,
+            choice_object, metadata_updates, entity_updates, reference_updates,
             session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -406,6 +486,7 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                 data["parent_chunk_id"],
                 data["user_text"],
                 data["storyteller_text"],
+                json.dumps(data.get("choice_object")) if data.get("choice_object") else None,
                 json.dumps(data["metadata_updates"]),
                 json.dumps(data["entity_updates"]),
                 json.dumps(data["reference_updates"]),
@@ -525,6 +606,87 @@ async def approve_narrative(session_id: str, request: ApproveNarrativeRequest, s
                 "chunk_id": incubator_data["chunk_id"],
             }
 
+    finally:
+        conn.close()
+
+
+@app.post("/api/narrative/select-choice", response_model=SelectChoiceResponse)
+async def select_choice(request: SelectChoiceRequest):
+    """
+    Record user's choice selection and finalize the chunk's raw_text.
+
+    This is Phase 2 of the two-phase storage flow:
+    1. Storyteller generates narrative with choices → stored with choice_object
+    2. User selects a choice → this endpoint updates choice_object.selected,
+       generates choice_text, and computes final raw_text for embeddings
+    """
+    conn = get_db_connection(request.slot)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Get current chunk data
+            cur.execute("""
+                SELECT id, storyteller_text, choice_object
+                FROM narrative_chunks
+                WHERE id = %s
+            """, (request.chunk_id,))
+            chunk = cur.fetchone()
+
+            if not chunk:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Chunk {request.chunk_id} not found"
+                )
+
+            # Validate choice_object exists
+            choice_object = chunk.get("choice_object")
+            if not choice_object:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Chunk {request.chunk_id} has no choices to select from"
+                )
+
+            # Update choice_object with selection
+            choice_object["selected"] = {
+                "label": request.selection.label,
+                "text": request.selection.text,
+                "edited": request.selection.edited,
+            }
+
+            # Generate choice_text markdown
+            choice_text = format_choice_text(choice_object, include_selection=True)
+
+            # Compute final raw_text for embeddings
+            storyteller_text = chunk.get("storyteller_text") or ""
+            raw_text = compute_raw_text(storyteller_text, choice_object)
+
+            # Update the chunk
+            cur.execute("""
+                UPDATE narrative_chunks
+                SET choice_object = %s,
+                    choice_text = %s,
+                    raw_text = %s
+                WHERE id = %s
+            """, (
+                json.dumps(choice_object),
+                choice_text,
+                raw_text,
+                request.chunk_id
+            ))
+
+        conn.commit()
+        logger.info(f"Finalized choice selection for chunk {request.chunk_id}")
+
+        return SelectChoiceResponse(
+            status="finalized",
+            chunk_id=request.chunk_id,
+            raw_text=raw_text
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error selecting choice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
 
@@ -667,17 +829,19 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
     try:
         thread_id = start_setup(request.slot, request.model)
 
-        # Load welcome message
+        # Load welcome message and choices from frontmatter
         prompt_path = (
             Path(__file__).parent.parent.parent / "prompts" / "storyteller_new.md"
         )
         welcome_message = ""
+        welcome_choices: List[str] = []
         if prompt_path.exists():
             with prompt_path.open() as f:
                 doc = frontmatter.load(f)
                 welcome_message = doc.get("welcome_message", "")
+                welcome_choices = doc.get("welcome_choices", [])
 
-        # Seed welcome message if exists
+        # Seed welcome message if exists (without choices - UI renders those)
         if welcome_message:
             model = get_new_story_model()
             client = ConversationsClient(model=model)
@@ -688,6 +852,7 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
             "thread_id": thread_id,
             "slot": request.slot,
             "welcome_message": welcome_message,
+            "welcome_choices": welcome_choices,
         }
     except Exception as e:
         logger.error(f"Error starting setup: {e}")
@@ -990,7 +1155,10 @@ async def new_story_chat_endpoint(request: ChatRequest):
         # Save assistant reply to thread
         client.add_message(request.thread_id, "assistant", reply)
 
-        return {"message": reply, "phase_complete": False}
+        # Extract structured choices from LLM response if present
+        choices = extract_choices_from_text(reply)
+
+        return {"message": reply, "phase_complete": False, "choices": choices}
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
