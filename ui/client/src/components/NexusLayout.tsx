@@ -397,7 +397,7 @@ export function NexusLayout() {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className={`flex-1 flex flex-col bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
+          className={`flex-1 flex flex-col overflow-hidden bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
         >
           <div className="border-b border-border bg-card/50 overflow-x-auto">
             <TabsList className="h-10 bg-transparent border-0 rounded-none p-0 inline-flex min-w-full">
@@ -477,12 +477,6 @@ export function NexusLayout() {
             </div>
           </div>
         )}
-        {activeTab === "narrative" && !narrative.narrativePhase && narrative.generationError && (
-          <div className="border-t border-destructive/40 bg-destructive/10 text-destructive font-mono text-xs px-3 py-2 flex items-center justify-between">
-            <span>{narrative.generationError}</span>
-          </div>
-        )}
-
         {activeTab === "narrative" && !narrative.narrativePhase && narrative.generationError && (
           <div className="border-t border-destructive/40 bg-destructive/10 text-destructive font-mono text-xs px-3 py-2 flex items-center justify-between">
             <span>{narrative.generationError}</span>
