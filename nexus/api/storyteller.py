@@ -475,9 +475,20 @@ async def story_turn(
         {"event": "phase", "phase": "processing", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    previous_choices: List[Dict[str, Any]] = []
+    try:
+        session_state = await manager.load_session(request.session_id)
+        if session_state.turns:
+            last_response = session_state.turns[-1].response or {}
+            if isinstance(last_response.get("choices"), list):
+                previous_choices = last_response.get("choices") or []
+    except SessionNotFoundError:
+        # Session existence already validated above; ignore if unavailable mid-turn
+        previous_choices = []
+
     try:
         # Process the turn with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(request.user_input)
+        result = await lore.process_turn(request.user_input, previous_choices=previous_choices)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -588,9 +599,21 @@ async def regenerate_turn(
         {"event": "phase", "phase": "regenerating", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    previous_choices: List[Dict[str, Any]] = []
+    try:
+        session_state = await manager.load_session(request.session_id)
+        if len(session_state.turns) >= 2:
+            penultimate_response = session_state.turns[-2].response or {}
+            if isinstance(penultimate_response.get("choices"), list):
+                previous_choices = penultimate_response.get("choices") or []
+    except SessionNotFoundError:
+        previous_choices = []
+
     try:
         # Regenerate with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(last_turn.user_input)
+        result = await lore.process_turn(
+            last_turn.user_input, previous_choices=previous_choices
+        )
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(

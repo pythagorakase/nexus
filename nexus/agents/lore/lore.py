@@ -274,7 +274,12 @@ class LORE:
         if self.logon is None:
             self._initialize_logon()
     
-    async def process_turn(self, user_input: str, parent_chunk_id: Optional[int] = None):
+    async def process_turn(
+        self,
+        user_input: str,
+        parent_chunk_id: Optional[int] = None,
+        previous_choices: Optional[List[Dict[str, Any]]] = None,
+    ):
         """
         Process a complete turn cycle.
 
@@ -286,13 +291,14 @@ class LORE:
             StoryTurnResponse with narrative and metadata, or string on error
         """
         logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
-        
+
         # Initialize turn context
         self.turn_context = TurnContext(
             turn_id=f"turn_{int(time.time())}",
             user_input=user_input,
             start_time=time.time(),
-            target_chunk_id=parent_chunk_id
+            target_chunk_id=parent_chunk_id,
+            previous_choices=previous_choices or [],
         )
         
         try:

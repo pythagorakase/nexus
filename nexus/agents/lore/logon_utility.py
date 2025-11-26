@@ -154,6 +154,18 @@ class LogonUtility:
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
+        previous_choices = context.get("metadata", {}).get("previous_choices", [])
+        if previous_choices:
+            sections.append("\n=== PRIOR PLAYER OPTIONS ===")
+            sections.append("Last turn you offered these numbered options:")
+            for choice in previous_choices:
+                choice_id = choice.get("id", "?")
+                label = choice.get("label", "")
+                sections.append(f"{choice_id}. {label}")
+            sections.append(
+                "When the player says '#2' or 'option 2', they mean the option with id \"2\"."
+            )
+
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:

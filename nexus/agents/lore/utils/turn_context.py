@@ -32,6 +32,7 @@ class TurnContext:
     entity_data: Dict[str, Any] = field(default_factory=dict)
     retrieved_passages: List[Dict] = field(default_factory=list)
     context_payload: Dict[str, Any] = field(default_factory=dict)
+    previous_choices: List[Dict[str, Any]] = field(default_factory=list)
     apex_response: Optional[str] = None
     error_log: List[str] = field(default_factory=list)
     token_counts: Dict[str, int] = field(default_factory=dict)

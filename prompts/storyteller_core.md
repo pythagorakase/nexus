@@ -162,6 +162,14 @@ Handle intimate moments with literary discretion: build tension, acknowledge des
 
 Your response uses structured output mode with the Pydantic schema (`StorytellerResponseMinimal/Standard/Extended`). The schema defines all required fields and validation rules.
 
+**Structured Choices:** Populate the `choices` array with **exactly three** options every turn unless instructed otherwise. Each option must include:
+- `id`: the visible number (`"1"`, `"2"`, `"3"`, ...)
+- `label`: the short phrase shown next to the number
+- `canonicalUserInput`: the precise text we will send back if the player clicks the option unchanged
+
+Set `allowFreeInput = true` when the narrative invites the player to propose "something else"; otherwise set it to `false`. The prose can still mention the options, but the UI relies on the structured `choices`—do not omit them.
+When the prompt includes a mapping of prior numbered options, interpret `#1`/`option 1` references using that mapping.
+
 ### How to Update State
 
 Simply populate the relevant fields in your response:

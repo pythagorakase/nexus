@@ -557,6 +557,36 @@ class Operations(BaseModel):
 
 
 # ============================================================================
+# Player Choice Output
+# ============================================================================
+
+class StoryChoice(BaseModel):
+    """Structured representation of a numbered player choice."""
+
+    id: str = Field(
+        description="Number the player sees, e.g., '1', '2', '3'"
+    )
+    label: str = Field(
+        description="Short label shown next to the number"
+    )
+    canonicalUserInput: str = Field(
+        description=(
+            "Canonical text that should be sent back if the player selects this option"
+        )
+    )
+
+    @field_validator("id")
+    @classmethod
+    def validate_numeric_id(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("Choice id must be a numeric string")
+        return value
+
+    class Config:
+        extra = "forbid"
+
+
+# ============================================================================
 # Main Response Schema with Hierarchical Options
 # ============================================================================
 
@@ -568,6 +598,14 @@ class StorytellerResponseMinimal(BaseModel):
     referenced_entities: Optional[ReferencedEntities] = Field(
         default=None,
         description="Entities referenced in narrative"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of structured player options"
+    )
+    allowFreeInput: bool = Field(
+        default=False,
+        description="Whether to show a freeform 'Something else?' option"
     )
 
     class Config:
@@ -588,6 +626,14 @@ class StorytellerResponseStandard(BaseModel):
     state_updates: Optional[StateUpdates] = Field(
         default=None,
         description="State changes for entities"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of structured player options"
+    )
+    allowFreeInput: bool = Field(
+        default=False,
+        description="Whether to show a freeform 'Something else?' option"
     )
 
     class Config:
@@ -615,6 +661,14 @@ class StorytellerResponseExtended(BaseModel):
     reasoning: Optional[str] = Field(
         default=None,
         description="Storyteller's reasoning (debug mode only)"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of structured player options"
+    )
+    allowFreeInput: bool = Field(
+        default=False,
+        description="Whether to show a freeform 'Something else?' option"
     )
 
     class Config:
