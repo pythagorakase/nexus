@@ -141,18 +141,18 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
     };
 
     return (
-        <div className="flex flex-col h-[600px] max-w-4xl mx-auto bg-black/40 border border-cyan-500/30 rounded-lg overflow-hidden backdrop-blur-sm">
+        <div className="flex flex-col h-[600px] max-w-4xl mx-auto bg-card border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm">
             {/* Header */}
-            <div className="p-4 border-b border-cyan-500/30 bg-black/60 flex justify-between items-center">
+            <div className="p-4 border-b border-primary/30 bg-muted/50 flex justify-between items-center">
                 <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-cyan-400" />
-                    <h3 className="font-mono text-cyan-100">NARRATIVE INITIALIZATION</h3>
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    <h3 className="font-mono text-foreground">NARRATIVE INITIALIZATION</h3>
                 </div>
                 <Button
                     variant="ghost"
                     size="sm"
                     onClick={onCancel}
-                    className="text-cyan-400/60 hover:text-cyan-400"
+                    className="text-muted-foreground hover:text-primary"
                 >
                     CANCEL
                 </Button>
@@ -176,8 +176,8 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
                                     className={cn(
                                         "max-w-[80%] p-3 rounded-lg font-mono text-sm leading-relaxed",
                                         msg.role === "user"
-                                            ? "bg-cyan-500/20 border border-cyan-500/30 text-cyan-100"
-                                            : "bg-black/60 border border-purple-500/30 text-purple-100"
+                                            ? "bg-primary/20 border border-primary/30 text-primary-foreground"
+                                            : "bg-muted/60 border border-accent/30 text-foreground"
                                     )}
                                 >
                                     {msg.content}
@@ -191,8 +191,8 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
                             animate={{ opacity: 1 }}
                             className="flex justify-start"
                         >
-                            <div className="bg-black/60 border border-purple-500/30 p-3 rounded-lg">
-                                <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                            <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg">
+                                <Loader2 className="w-4 h-4 text-accent animate-spin" />
                             </div>
                         </motion.div>
                     )}
@@ -200,7 +200,7 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
             </ScrollArea>
 
             {/* Input Area */}
-            <div className="p-4 border-t border-cyan-500/30 bg-black/60">
+            <div className="p-4 border-t border-primary/30 bg-muted/50">
                 <form
                     onSubmit={(e) => {
                         e.preventDefault();
@@ -212,13 +212,13 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         placeholder="Describe your world or answer the prompt..."
-                        className="bg-black/40 border-cyan-500/30 text-cyan-100 focus:border-cyan-400 font-mono"
+                        className="bg-background border-primary/30 text-foreground focus:border-primary font-mono"
                         disabled={isLoading}
                     />
                     <Button
                         type="submit"
                         disabled={isLoading || !input.trim()}
-                        className="bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/30"
+                        className="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
                     >
                         <Send className="w-4 h-4" />
                     </Button>

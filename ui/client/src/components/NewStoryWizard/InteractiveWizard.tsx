@@ -263,30 +263,30 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                     </div>
 
                     <ScrollArea className="h-[400px] pr-4">
-                        <div className="space-y-4 font-mono text-sm text-cyan-100/80">
+                        <div className="space-y-4 font-mono text-sm text-muted-foreground">
                             {type === "submit_world_document" && (
                                 <div className="space-y-4">
-                                    <div className="border-l-2 border-cyan-500 pl-4 mb-6">
+                                    <div className="border-l-2 border-primary pl-4 mb-6">
                                         <h4 className="text-xl text-white font-bold mb-2">{data.world_name}</h4>
-                                        <p className="text-cyan-400 text-sm uppercase tracking-wider">{data.genre} // {data.time_period}</p>
+                                        <p className="text-primary text-sm uppercase tracking-wider">{data.genre} // {data.time_period}</p>
                                     </div>
 
-                                    <CollapsibleSection title="World Overview" defaultOpen={true} icon={<Globe className="w-4 h-4 text-cyan-500" />}>
+                                    <CollapsibleSection title="World Overview" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
                                         <div className="prose prose-invert prose-sm max-w-none">
-                                            <p className="whitespace-pre-wrap text-cyan-100/90 italic leading-relaxed">
+                                            <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
                                                 {data.diegetic_artifact || data.cultural_notes}
                                             </p>
                                         </div>
                                     </CollapsibleSection>
 
-                                    <CollapsibleSection title="System Parameters" icon={<Sparkles className="w-4 h-4 text-cyan-500" />}>
+                                    <CollapsibleSection title="System Parameters" icon={<Sparkles className="w-4 h-4 text-primary" />}>
                                         <div className="grid grid-cols-2 gap-4 text-xs">
                                             <div>
-                                                <span className="text-cyan-500 block uppercase">Tone</span>
+                                                <span className="text-primary block uppercase">Tone</span>
                                                 <span className="text-white">{data.tone}</span>
                                             </div>
                                             <div>
-                                                <span className="text-cyan-500 block uppercase">Tech Level</span>
+                                                <span className="text-primary block uppercase">Tech Level</span>
                                                 <span className="text-white">{data.tech_level}</span>
                                             </div>
                                         </div>
@@ -297,43 +297,43 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                             {type === "submit_character_sheet" && (
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-4 mb-6">
-                                        <div className="w-16 h-16 bg-cyan-900/30 rounded-full flex items-center justify-center border border-cyan-500/30 shrink-0">
-                                            <User className="w-8 h-8 text-cyan-400" />
+                                        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center border border-primary/30 shrink-0">
+                                            <User className="w-8 h-8 text-primary" />
                                         </div>
                                         <div>
                                             <h4 className="text-2xl text-white font-bold">{data.name}</h4>
-                                            <p className="text-cyan-400 text-sm">{data.summary}</p>
+                                            <p className="text-primary text-sm">{data.summary}</p>
                                         </div>
                                     </div>
 
-                                    <CollapsibleSection title="Narrative Portrait" defaultOpen={true} icon={<FileText className="w-4 h-4 text-cyan-500" />}>
-                                        <p className="whitespace-pre-wrap text-cyan-100/90 italic leading-relaxed text-sm">
+                                    <CollapsibleSection title="Narrative Portrait" defaultOpen={true} icon={<FileText className="w-4 h-4 text-primary" />}>
+                                        <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed text-sm">
                                             {data.diegetic_artifact}
                                         </p>
                                     </CollapsibleSection>
 
-                                    <CollapsibleSection title="Wildcard" defaultOpen={true} icon={<Sparkles className="w-4 h-4 text-cyan-500" />}>
+                                    <CollapsibleSection title="Wildcard" defaultOpen={true} icon={<Sparkles className="w-4 h-4 text-primary" />}>
                                         <div>
-                                            <span className="text-cyan-500 block text-xs uppercase mb-1">{data.wildcard_name}</span>
+                                            <span className="text-primary block text-xs uppercase mb-1">{data.wildcard_name}</span>
                                             <p className="text-sm text-white/90">{data.wildcard_description}</p>
                                         </div>
                                     </CollapsibleSection>
 
-                                    <CollapsibleSection title="Attributes & Traits" icon={<User className="w-4 h-4 text-cyan-500" />}>
+                                    <CollapsibleSection title="Attributes & Traits" icon={<User className="w-4 h-4 text-primary" />}>
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <span className="text-cyan-500 block text-xs uppercase mb-1">Appearance</span>
+                                                    <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
                                                     <p className="text-sm text-white/80">{data.appearance}</p>
                                                 </div>
                                                 <div>
-                                                    <span className="text-cyan-500 block text-xs uppercase mb-1">Personality</span>
+                                                    <span className="text-primary block text-xs uppercase mb-1">Personality</span>
                                                     <p className="text-sm text-white/80">{data.personality}</p>
                                                 </div>
                                             </div>
 
                                             <div>
-                                                <span className="text-cyan-500 block text-xs uppercase mb-2">Traits</span>
+                                                <span className="text-primary block text-xs uppercase mb-2">Traits</span>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     {[
                                                         "allies", "contacts", "patron", "dependents",
@@ -342,8 +342,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                                                     ].map(trait => {
                                                         if (data[trait]) {
                                                             return (
-                                                                <div key={trait} className="bg-cyan-900/10 border border-cyan-500/20 p-2 rounded">
-                                                                    <span className="text-cyan-400 text-xs uppercase block mb-1">{trait}</span>
+                                                                <div key={trait} className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                                    <span className="text-primary text-xs uppercase block mb-1">{trait}</span>
                                                                     <p className="text-xs text-white/80">{data[trait]}</p>
                                                                 </div>
                                                             );
@@ -359,28 +359,28 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
 
                             {type === "submit_starting_scenario" && (
                                 <div className="space-y-4">
-                                    <div className="border-l-2 border-cyan-500 pl-4 mb-6">
-                                        <span className="text-cyan-500 block text-xs uppercase mb-1">Starting Scenario</span>
+                                    <div className="border-l-2 border-primary pl-4 mb-6">
+                                        <span className="text-primary block text-xs uppercase mb-1">Starting Scenario</span>
                                         <h4 className="text-xl text-white font-bold mb-2">{data.seed.title}</h4>
-                                        <p className="italic text-cyan-100/60">{data.seed.hook}</p>
+                                        <p className="italic text-muted-foreground/60">{data.seed.hook}</p>
                                     </div>
 
-                                    <CollapsibleSection title="Location Details" defaultOpen={true} icon={<MapPin className="w-4 h-4 text-cyan-500" />}>
+                                    <CollapsibleSection title="Location Details" defaultOpen={true} icon={<MapPin className="w-4 h-4 text-primary" />}>
                                         <div className="space-y-2">
                                             <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-cyan-500">Region (Layer)</span>
+                                                <span className="text-primary">Region (Layer)</span>
                                                 <span className="text-white text-right">{data.layer.name}</span>
                                             </div>
                                             <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-cyan-500">Zone</span>
+                                                <span className="text-primary">Zone</span>
                                                 <span className="text-white text-right">{data.zone.name}</span>
                                             </div>
                                             <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-cyan-500">Specific Location</span>
+                                                <span className="text-primary">Specific Location</span>
                                                 <span className="text-white text-right">{data.location.name}</span>
                                             </div>
                                             <div className="pt-2">
-                                                <span className="text-cyan-500 block text-xs uppercase mb-1">Description</span>
+                                                <span className="text-primary block text-xs uppercase mb-1">Description</span>
                                                 <p className="text-sm text-white/80">{(data.location.description || "").substring(0, 200)}...</p>
                                             </div>
                                         </div>
@@ -504,9 +504,9 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                             animate={{ opacity: 1 }}
                             className="flex justify-start"
                         >
-                            <div className="bg-black/60 border border-purple-500/30 p-3 rounded-lg flex items-center gap-2">
-                                <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
-                                <span className="text-xs text-purple-400/60 font-mono">PROCESSING...</span>
+                            <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg flex items-center gap-2">
+                                <Loader2 className="w-4 h-4 text-accent animate-spin" />
+                                <span className="text-xs text-muted-foreground font-mono">PROCESSING...</span>
                             </div>
                         </motion.div>
                     )}

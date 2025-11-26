@@ -12,10 +12,10 @@ export function ModeSelector({ onSelectMode }: ModeSelectorProps) {
     return (
         <div className="max-w-4xl mx-auto space-y-8 p-6">
             <div className="text-center space-y-4">
-                <h2 className="text-3xl font-mono text-cyan-400 tracking-wider glow-text">
+                <h2 className="text-3xl font-mono text-primary tracking-wider glow-text">
                     INITIALIZATION PROTOCOL
                 </h2>
-                <p className="text-cyan-400/60 font-mono">
+                <p className="text-muted-foreground font-mono">
                     Select your preferred narrative initialization method.
                 </p>
             </div>
@@ -27,40 +27,40 @@ export function ModeSelector({ onSelectMode }: ModeSelectorProps) {
                     whileTap={{ scale: 0.98 }}
                 >
                     <Card
-                        className="h-full p-6 bg-black/40 border-cyan-500/30 hover:border-cyan-400 cursor-pointer group transition-all duration-300 relative overflow-hidden"
+                        className="h-full p-6 bg-card border-primary/30 hover:border-primary cursor-pointer group transition-all duration-300 relative overflow-hidden"
                         onClick={() => onSelectMode("express")}
                     >
-                        <div className="absolute inset-0 bg-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
 
                         <div className="relative z-10 flex flex-col h-full space-y-4">
                             <div className="flex items-center justify-between">
-                                <div className="p-3 rounded-full bg-cyan-500/10 border border-cyan-500/30 group-hover:border-cyan-400 group-hover:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all">
-                                    <MessageSquare className="w-8 h-8 text-cyan-400" />
+                                <div className="p-3 rounded-full bg-primary/10 border border-primary/30 group-hover:border-primary group-hover:shadow-[0_0_15px_rgba(var(--primary),0.3)] transition-all">
+                                    <MessageSquare className="w-8 h-8 text-primary" />
                                 </div>
-                                <div className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/30 text-xs font-mono text-cyan-300">
+                                <div className="px-2 py-1 rounded bg-primary/20 border border-primary/30 text-xs font-mono text-primary">
                                     RECOMMENDED
                                 </div>
                             </div>
 
                             <div>
-                                <h3 className="text-xl font-mono text-cyan-100 mb-2 group-hover:text-cyan-400 transition-colors">
+                                <h3 className="text-xl font-mono text-foreground mb-2 group-hover:text-primary transition-colors">
                                     EXPRESS MODE
                                 </h3>
-                                <p className="text-sm text-cyan-400/60 font-mono leading-relaxed">
+                                <p className="text-sm text-muted-foreground font-mono leading-relaxed">
                                     Conversational initialization. Chat with the system to organically build your world, character, and story seed. Best for fluid, creative exploration.
                                 </p>
                             </div>
 
                             <div className="mt-auto pt-4">
-                                <ul className="space-y-2 text-xs font-mono text-cyan-400/50">
+                                <ul className="space-y-2 text-xs font-mono text-muted-foreground">
                                     <li className="flex items-center gap-2">
-                                        <Zap className="w-3 h-3" /> Natural language interface
+                                        <Zap className="w-3 h-3 text-primary" /> Natural language interface
                                     </li>
                                     <li className="flex items-center gap-2">
-                                        <Zap className="w-3 h-3" /> Dynamic suggestions
+                                        <Zap className="w-3 h-3 text-primary" /> Dynamic suggestions
                                     </li>
                                     <li className="flex items-center gap-2">
-                                        <Zap className="w-3 h-3" /> Rapid iteration
+                                        <Zap className="w-3 h-3 text-primary" /> Rapid iteration
                                     </li>
                                 </ul>
                             </div>
@@ -74,37 +74,37 @@ export function ModeSelector({ onSelectMode }: ModeSelectorProps) {
                     whileTap={{ scale: 0.98 }}
                 >
                     <Card
-                        className="h-full p-6 bg-black/40 border-cyan-500/30 hover:border-purple-400 cursor-pointer group transition-all duration-300 relative overflow-hidden"
+                        className="h-full p-6 bg-card border-primary/30 hover:border-accent cursor-pointer group transition-all duration-300 relative overflow-hidden"
                         onClick={() => onSelectMode("advanced")}
                     >
-                        <div className="absolute inset-0 bg-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
 
                         <div className="relative z-10 flex flex-col h-full space-y-4">
                             <div className="flex items-center justify-between">
-                                <div className="p-3 rounded-full bg-purple-500/10 border border-purple-500/30 group-hover:border-purple-400 group-hover:shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all">
-                                    <Settings className="w-8 h-8 text-purple-400" />
+                                <div className="p-3 rounded-full bg-accent/10 border border-accent/30 group-hover:border-accent group-hover:shadow-[0_0_15px_rgba(var(--accent),0.3)] transition-all">
+                                    <Settings className="w-8 h-8 text-accent" />
                                 </div>
                             </div>
 
                             <div>
-                                <h3 className="text-xl font-mono text-purple-100 mb-2 group-hover:text-purple-400 transition-colors">
+                                <h3 className="text-xl font-mono text-foreground mb-2 group-hover:text-accent transition-colors">
                                     ADVANCED MODE
                                 </h3>
-                                <p className="text-sm text-purple-400/60 font-mono leading-relaxed">
+                                <p className="text-sm text-muted-foreground font-mono leading-relaxed">
                                     Structured initialization. Manually configure every aspect of your simulation parameters using detailed forms. Best for specific, pre-planned scenarios.
                                 </p>
                             </div>
 
                             <div className="mt-auto pt-4">
-                                <ul className="space-y-2 text-xs font-mono text-purple-400/50">
+                                <ul className="space-y-2 text-xs font-mono text-muted-foreground">
                                     <li className="flex items-center gap-2">
-                                        <FileText className="w-3 h-3" /> Granular control
+                                        <FileText className="w-3 h-3 text-accent" /> Granular control
                                     </li>
                                     <li className="flex items-center gap-2">
-                                        <FileText className="w-3 h-3" /> Parameter validation
+                                        <FileText className="w-3 h-3 text-accent" /> Parameter validation
                                     </li>
                                     <li className="flex items-center gap-2">
-                                        <FileText className="w-3 h-3" /> Direct input
+                                        <FileText className="w-3 h-3 text-accent" /> Direct input
                                     </li>
                                 </ul>
                             </div>
