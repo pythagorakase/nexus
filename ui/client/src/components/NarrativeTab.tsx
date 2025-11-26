@@ -677,7 +677,9 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                   style={{ fontFamily: currentBodyFont }}
                 >
                   <ReactMarkdown components={markdownComponents}>
-                    {selectedChunk.storytellerText || selectedChunk.rawText || ""}
+                    {selectedChunk.choiceObject?.selected
+                      ? selectedChunk.rawText || selectedChunk.storytellerText || ""
+                      : selectedChunk.storytellerText || selectedChunk.rawText || ""}
                   </ReactMarkdown>
                 </div>
 
