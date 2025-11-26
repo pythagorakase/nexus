@@ -154,6 +154,19 @@ class LogonUtility:
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
+        # Add previous turn choices to help resolve references like "#2"
+        previous_choices = context.get("previous_choices") or context.get("metadata", {}).get("previous_choices")
+        if previous_choices:
+            sections.append("\n=== PREVIOUS TURN OPTIONS ===")
+            sections.append("Last turn you offered these numbered options:")
+            for choice in previous_choices:
+                choice_id = choice.get("id", "?")
+                label = choice.get("label", "")
+                sections.append(f"{choice_id}. {label}".strip())
+            sections.append(
+                "When the player refers to #1/#2/#3 or similar, map it to the option with the matching id above."
+            )
+
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:

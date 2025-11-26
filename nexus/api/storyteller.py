@@ -475,9 +475,20 @@ async def story_turn(
         {"event": "phase", "phase": "processing", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    # Capture previous structured choices to help the storyteller resolve references
+    previous_choices: List[Dict[str, Any]] = []
+    try:
+        last_turn = await manager.get_last_turn(request.session_id)
+        if isinstance(last_turn.response, dict):
+            candidate_choices = last_turn.response.get("choices")
+            if isinstance(candidate_choices, list):
+                previous_choices = candidate_choices
+    except (SessionNotFoundError, ValueError):
+        previous_choices = []
+
     try:
         # Process the turn with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(request.user_input)
+        result = await lore.process_turn(request.user_input, previous_choices=previous_choices)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -588,9 +599,15 @@ async def regenerate_turn(
         {"event": "phase", "phase": "regenerating", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    previous_choices: List[Dict[str, Any]] = []
+    if isinstance(last_turn.response, dict):
+        candidate_choices = last_turn.response.get("choices")
+        if isinstance(candidate_choices, list):
+            previous_choices = candidate_choices
+
     try:
         # Regenerate with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(last_turn.user_input)
+        result = await lore.process_turn(last_turn.user_input, previous_choices=previous_choices)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(

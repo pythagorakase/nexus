@@ -128,6 +128,18 @@ When the user provides specific actions or dialogue, integrate them directly int
 
 **Pause/Resume Protocol:** If the user signals “pause game” or you detect need for meta-discussion, step out of narrative voice to discuss options, then resume when ready.
 
+### Structured Choices (Keep Numbers Stable)
+
+You return structured output in addition to the prose and metadata. Populate the choice fields every turn unless the scene truly offers no numbered options.
+
+- Provide an ordered `choices` list with three options. Each entry must include:
+  - `id`: the visible number as a string ("1", "2", "3").
+  - `label`: the short phrase shown next to that number.
+  - `canonicalUserInput`: the exact text we would send back if the player clicks without editing.
+- Set `allowFreeInput` to `true` when the narrative invites “something else?”; otherwise use `false`.
+- The prose can still mention or format the options, but the UI relies on the structured `choices` array.
+- The system will pass your previous choices back on the next call (formatted as numbered labels). When the player references “#2” or “option 3”, resolve it using the `id` mapping you provided.
+
 ## Violence & Consequences
 
 ### Combat Handling

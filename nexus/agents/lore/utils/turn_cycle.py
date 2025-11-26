@@ -515,6 +515,9 @@ class TurnCycleManager:
             "memory_state": turn_context.memory_state
         }
 
+        if turn_context.previous_choices:
+            turn_context.context_payload["previous_choices"] = turn_context.previous_choices
+
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"]["target_chunk_id"] = turn_context.target_chunk_id
 

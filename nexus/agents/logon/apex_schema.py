@@ -501,6 +501,33 @@ class StateUpdates(BaseModel):
 
 
 # ============================================================================
+# Story Choices (Player-Facing Options)
+# ============================================================================
+
+
+class StoryChoice(BaseModel):
+    """Structured representation of a numbered player option."""
+
+    id: str = Field(
+        description="Visible numeric identifier for the option (e.g., '1').",
+        pattern=r"^\d+$",
+    )
+    label: str = Field(
+        description="Short label shown alongside the option number."
+    )
+    canonical_user_input: str = Field(
+        alias="canonicalUserInput",
+        description=(
+            "Canonical text to send back to the storyteller when the player "
+            "selects this option without editing."
+        ),
+    )
+
+    class Config:
+        extra = "forbid"
+
+
+# ============================================================================
 # Operations
 # ============================================================================
 
@@ -569,6 +596,15 @@ class StorytellerResponseMinimal(BaseModel):
         default=None,
         description="Entities referenced in narrative"
     )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of player-facing options with numeric IDs",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        description="True when players are invited to propose something else",
+    )
 
     class Config:
         extra = "forbid"
@@ -588,6 +624,15 @@ class StorytellerResponseStandard(BaseModel):
     state_updates: Optional[StateUpdates] = Field(
         default=None,
         description="State changes for entities"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of player-facing options with numeric IDs",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        description="True when players are invited to propose something else",
     )
 
     class Config:
@@ -615,6 +660,15 @@ class StorytellerResponseExtended(BaseModel):
     reasoning: Optional[str] = Field(
         default=None,
         description="Storyteller's reasoning (debug mode only)"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of player-facing options with numeric IDs",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        description="True when players are invited to propose something else",
     )
 
     class Config:
