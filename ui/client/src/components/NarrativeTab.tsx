@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/collapsible";
 import type { Episode, NarrativeChunk, ChunkMetadata, Season } from "@shared/schema";
 import { useFonts } from "@/contexts/FontContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { AcceptRejectButtons } from "./AcceptRejectButtons";
 import { EditPreviousDialog } from "./EditPreviousDialog";
 import { acceptChunk, rejectChunk, editChunkInput, getChunkStates, type ChunkState } from "@/lib/api";
@@ -290,6 +291,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
   const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { currentBodyFont } = useFonts();
+  const { isCyberpunk } = useTheme();
   const queryClient = useQueryClient();
 
   const {
@@ -546,7 +548,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
   const activeSeasonIds = useMemo(() => new Set(openSeasons), [openSeasons]);
 
   return (
-    <div className="flex h-full flex-col md:flex-row">
+    <div className="flex flex-col md:flex-row flex-1 min-h-0 h-full">
       <div className="md:w-80 border-b md:border-b-0 md:border-r border-border bg-card/50 flex flex-col h-1/3 md:h-full">
         <div className="p-3 md:p-4 border-b border-border">
           <h2 className="text-xs md:text-sm font-mono text-primary terminal-glow" data-testid="text-narrative-title">
@@ -584,8 +586,8 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
         </ScrollArea>
       </div>
 
-      <div className="flex-1 flex flex-col bg-background terminal-scanlines">
-        <ScrollArea className="flex-1">
+      <div className={cn("flex-1 flex flex-col bg-background relative", isCyberpunk && "terminal-scanlines")}>
+        <ScrollArea className="flex-1 h-full relative z-10">
           <div className="p-6 space-y-6">
             {selectedChunk ? (
               <div className="space-y-4">
@@ -595,9 +597,6 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                       <span className="text-primary terminal-glow">
                         {selectedChunk.metadata.slug}
                       </span>
-                      {selectedChunk.metadata.scene !== null && (
-                        <span>Scene {selectedChunk.metadata.scene}</span>
-                      )}
                     </div>
                   </div>
                 )}
