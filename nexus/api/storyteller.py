@@ -475,9 +475,16 @@ async def story_turn(
         {"event": "phase", "phase": "processing", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    previous_choices: Optional[List[Dict[str, Any]]] = None
+    try:
+        last_turn = await manager.get_last_turn(request.session_id)
+        previous_choices = last_turn.response.get("choices") if last_turn.response else None
+    except (SessionNotFoundError, ValueError):
+        previous_choices = None
+
     try:
         # Process the turn with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(request.user_input)
+        result = await lore.process_turn(request.user_input, previous_choices=previous_choices)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -549,7 +556,7 @@ async def story_turn(
     await manager.append_turn(
         request.session_id,
         user_input=request.user_input,
-        response=story_response.model_dump(),
+        response=story_response.model_dump(by_alias=True),
         options=request.options,
         context_payload=context_payload,
     )
@@ -560,7 +567,7 @@ async def story_turn(
         request.session_id,
         {
             "event": "complete",
-            "turn": story_response.model_dump(),
+            "turn": story_response.model_dump(by_alias=True),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -588,9 +595,11 @@ async def regenerate_turn(
         {"event": "phase", "phase": "regenerating", "timestamp": datetime.now(timezone.utc).isoformat()},
     )
 
+    previous_choices = last_turn.response.get("choices") if last_turn.response else None
+
     try:
         # Regenerate with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(last_turn.user_input)
+        result = await lore.process_turn(last_turn.user_input, previous_choices=previous_choices)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(
@@ -654,7 +663,7 @@ async def regenerate_turn(
     await manager.replace_last_turn(
         request.session_id,
         user_input=last_turn.user_input,
-        response=story_response.model_dump(),
+        response=story_response.model_dump(by_alias=True),
         options=request.options or last_turn.options,
         context_payload=context_payload,
     )
@@ -665,7 +674,7 @@ async def regenerate_turn(
         request.session_id,
         {
             "event": "complete",
-            "turn": story_response.model_dump(),
+            "turn": story_response.model_dump(by_alias=True),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )

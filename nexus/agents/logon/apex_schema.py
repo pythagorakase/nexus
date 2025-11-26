@@ -273,6 +273,7 @@ class ReferencedEntities(BaseModel):
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 # ============================================================================
@@ -519,6 +520,30 @@ class SummaryRequest(BaseModel):
         extra = "forbid"
 
 
+class StoryChoice(BaseModel):
+    """Structured representation of a numbered story option."""
+
+    id: str = Field(
+        pattern=r"^\d+$",
+        description="Visible numeric identifier for the option (e.g., '1', '2').",
+    )
+    label: str = Field(
+        description="Short label shown next to the option number."
+    )
+    canonical_user_input: str = Field(
+        alias="canonicalUserInput",
+        serialization_alias="canonicalUserInput",
+        description=(
+            "Canonical text we would send back to the LLM if the player selects"
+            " this option without editing it."
+        ),
+    )
+
+    class Config:
+        extra = "forbid"
+        populate_by_name = True
+
+
 class RegenerationRequest(BaseModel):
     """Request to regenerate this narrative chunk."""
     reason: str = Field(
@@ -565,6 +590,16 @@ class StorytellerResponseMinimal(BaseModel):
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
     )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered numbered options for the player."
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+        description="Whether to show a freeform 'something else?' option to the player."
+    )
     referenced_entities: Optional[ReferencedEntities] = Field(
         default=None,
         description="Entities referenced in narrative"
@@ -572,12 +607,23 @@ class StorytellerResponseMinimal(BaseModel):
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 class StorytellerResponseStandard(BaseModel):
     """Standard response with narrative and essential metadata."""
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered numbered options for the player."
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+        description="Whether to show a freeform 'something else?' option to the player."
     )
     chunk_metadata: ChunkMetadataUpdate = Field(
         description="Essential chunk metadata"
@@ -592,12 +638,23 @@ class StorytellerResponseStandard(BaseModel):
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 class StorytellerResponseExtended(BaseModel):
     """Extended response with all features including operations."""
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
+    )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered numbered options for the player."
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+        description="Whether to show a freeform 'something else?' option to the player."
     )
     chunk_metadata: ChunkMetadataUpdate = Field(
         description="Essential chunk metadata"
@@ -619,6 +676,7 @@ class StorytellerResponseExtended(BaseModel):
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 # ============================================================================

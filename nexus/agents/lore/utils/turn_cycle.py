@@ -518,6 +518,9 @@ class TurnCycleManager:
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"]["target_chunk_id"] = turn_context.target_chunk_id
 
+        if turn_context.previous_choices:
+            turn_context.context_payload["metadata"]["previous_choices"] = turn_context.previous_choices
+
         # Calculate utilization
         if self.lore.token_manager:
             utilization = self.lore.token_manager.calculate_utilization(
