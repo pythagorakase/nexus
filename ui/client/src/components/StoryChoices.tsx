@@ -116,6 +116,12 @@ function ChoiceItem({
         onClick={() => isHovered && !isEditing && !disabled && handleEdit()}
         onInput={(e) => setEditedText(e.currentTarget.textContent || "")}
         onKeyDown={handleKeyDown}
+        onPaste={(e) => {
+          // P2: Strip HTML on paste to prevent XSS
+          e.preventDefault();
+          const text = e.clipboardData.getData('text/plain');
+          document.execCommand('insertText', false, text);
+        }}
         className={cn(
           "flex-1 text-sm leading-relaxed outline-none min-h-[1.6em]",
           "transition-colors duration-150",
@@ -246,6 +252,12 @@ function FreeformChoice({ onSend, disabled = false }: FreeformChoiceProps) {
           contentEditable
           onInput={(e) => setInputText(e.currentTarget.textContent || "")}
           onKeyDown={handleKeyDown}
+          onPaste={(e) => {
+            // P2: Strip HTML on paste to prevent XSS
+            e.preventDefault();
+            const text = e.clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+          }}
           data-placeholder="Describe your action..."
           className={cn(
             "text-sm leading-relaxed text-foreground outline-none min-h-[1.6em] mb-2",

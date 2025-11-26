@@ -7,6 +7,10 @@ interface TraitSelectorProps {
     disabled?: boolean;
 }
 
+// P3: Extract magic numbers as named constants
+const MIN_TRAIT_SELECTION = 1;
+const MAX_TRAIT_SELECTION = 5;
+
 const TRAIT_CATEGORIES = {
     "Social Network": ["allies", "contacts", "patron", "dependents"],
     "Power & Position": ["status", "reputation"],
@@ -26,25 +30,24 @@ export function TraitSelector({ onConfirm, disabled = false }: TraitSelectorProp
             const next = new Set(prev);
             if (next.has(trait)) {
                 next.delete(trait);
-            } else if (next.size < 5) {
-                // Only allow up to 5 selections
+            } else if (next.size < MAX_TRAIT_SELECTION) {
                 next.add(trait);
             }
             return next;
         });
     };
 
-    const canConfirm = selected.size >= 1 && selected.size <= 5;
+    const canConfirm = selected.size >= MIN_TRAIT_SELECTION && selected.size <= MAX_TRAIT_SELECTION;
 
     return (
         <div className="flex flex-col h-full">
             {/* Header */}
             <div className="border-b border-primary/30 pb-3 mb-4">
                 <h3 className="font-mono text-primary text-sm uppercase tracking-wider">
-                    Trait Selection ({selected.size}/5)
+                    Trait Selection ({selected.size}/{MAX_TRAIT_SELECTION})
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                    Select 1-5 traits
+                    Select {MIN_TRAIT_SELECTION}-{MAX_TRAIT_SELECTION} traits
                 </p>
             </div>
 
@@ -58,7 +61,7 @@ export function TraitSelector({ onConfirm, disabled = false }: TraitSelectorProp
                         <div className="space-y-1">
                             {traits.map((trait) => {
                                 const isSelected = selected.has(trait);
-                                const isDisabled = disabled || (!isSelected && selected.size >= 5);
+                                const isDisabled = disabled || (!isSelected && selected.size >= MAX_TRAIT_SELECTION);
 
                                 return (
                                     <button

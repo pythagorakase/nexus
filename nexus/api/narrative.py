@@ -175,8 +175,11 @@ def extract_choices_from_text(text: str) -> List[str]:
 
     # Only return if we found 2-4 sequential choices starting from 1
     if len(choices) >= 2 and len(choices) <= 4:
+        logger.debug(f"Extracted {len(choices)} choices from LLM response")
         return choices
 
+    if choices:
+        logger.debug(f"Choice extraction found {len(choices)} items, expected 2-4. Returning empty list.")
     return []
 
 
@@ -645,6 +648,32 @@ async def select_choice(request: SelectChoiceRequest):
                     detail=f"Chunk {request.chunk_id} has no choices to select from"
                 )
 
+            # P1: Check if choice already selected (prevent race condition)
+            if choice_object.get("selected"):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Choice already selected for chunk {request.chunk_id}. Cannot re-select."
+                )
+
+            # P0: Validate selection label is valid
+            presented = choice_object.get("presented", [])
+            if request.selection.label != "freeform":
+                if not isinstance(request.selection.label, int):
+                    raise HTTPException(status_code=400, detail="Invalid label type")
+                if not (1 <= request.selection.label <= len(presented)):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid choice label: {request.selection.label}. Must be 1-{len(presented)} or 'freeform'"
+                    )
+
+            # P0: Validate text length (prevent abuse)
+            MAX_CHOICE_TEXT_LENGTH = 1000
+            if len(request.selection.text) > MAX_CHOICE_TEXT_LENGTH:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selection text too long ({len(request.selection.text)} chars). Max: {MAX_CHOICE_TEXT_LENGTH}"
+                )
+
             # Update choice_object with selection
             choice_object["selected"] = {
                 "label": request.selection.label,
@@ -683,8 +712,10 @@ async def select_choice(request: SelectChoiceRequest):
         )
 
     except HTTPException:
+        conn.rollback()  # P2: Explicit rollback on validation errors
         raise
     except Exception as e:
+        conn.rollback()  # P2: Explicit rollback on unexpected errors
         logger.error(f"Error selecting choice: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
