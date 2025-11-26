@@ -477,7 +477,7 @@ async def story_turn(
 
     try:
         # Process the turn with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(request.user_input)
+        result = await lore.process_turn(request.user_input, options=request.options)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         await stream_manager.broadcast(
@@ -546,10 +546,12 @@ async def story_turn(
 
         context_payload = context_dict
 
+    response_payload = story_response.model_dump(mode="json", by_alias=True)
+
     await manager.append_turn(
         request.session_id,
         user_input=request.user_input,
-        response=story_response.model_dump(),
+        response=response_payload,
         options=request.options,
         context_payload=context_payload,
     )
@@ -560,7 +562,7 @@ async def story_turn(
         request.session_id,
         {
             "event": "complete",
-            "turn": story_response.model_dump(),
+            "turn": response_payload,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -590,7 +592,7 @@ async def regenerate_turn(
 
     try:
         # Regenerate with LORE - it returns a StoryTurnResponse or string on error
-        result = await lore.process_turn(last_turn.user_input)
+        result = await lore.process_turn(last_turn.user_input, options=request.options or last_turn.options)
     except Exception as exc:
         await manager.update_metadata(request.session_id, current_phase="error")
         raise HTTPException(
@@ -651,10 +653,12 @@ async def regenerate_turn(
 
         context_payload = context_dict
 
+    response_payload = story_response.model_dump(mode="json", by_alias=True)
+
     await manager.replace_last_turn(
         request.session_id,
         user_input=last_turn.user_input,
-        response=story_response.model_dump(),
+        response=response_payload,
         options=request.options or last_turn.options,
         context_payload=context_payload,
     )
@@ -665,7 +669,7 @@ async def regenerate_turn(
         request.session_id,
         {
             "event": "complete",
-            "turn": story_response.model_dump(),
+            "turn": response_payload,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )

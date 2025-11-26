@@ -162,6 +162,13 @@ Handle intimate moments with literary discretion: build tension, acknowledge des
 
 Your response uses structured output mode with the Pydantic schema (`StorytellerResponseMinimal/Standard/Extended`). The schema defines all required fields and validation rules.
 
+**Structured Choices:**
+
+- Populate `choices` with three numbered options. Each entry must include the numeric `id` (`"1"`, `"2"`, `"3"`), a concise `label`, and the full `canonicalUserInput` we should send back if the player selects it unchanged.
+- Set `allowFreeInput` to `true` when the narrative invites the player to propose something else; otherwise `false`.
+- The narrative may reference the options naturally, but the UI reads from the structured `choices` array, so make sure those fields are complete.
+- You may receive a `PREVIOUS CHOICES` context block listing the prior turn's option numbers and labels. When the player references `#<number>` or `option <number>`, resolve it using that mapping.
+
 ### How to Update State
 
 Simply populate the relevant fields in your response:

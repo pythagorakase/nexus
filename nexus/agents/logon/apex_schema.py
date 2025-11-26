@@ -16,7 +16,7 @@ All models use Pydantic v2 for validation and serialization.
 """
 
 import logging
-from typing import List, Optional, Dict, Any, Union, Literal
+from typing import List, Optional, Dict, Any, Union, Literal, NewType
 from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 
@@ -560,8 +560,39 @@ class Operations(BaseModel):
 # Main Response Schema with Hierarchical Options
 # ============================================================================
 
+StoryChoiceId = NewType("StoryChoiceId", str)
+
+
+class StoryChoice(BaseModel):
+    """A structured, numbered choice surfaced to the player."""
+
+    id: StoryChoiceId = Field(
+        description="Number the player sees, e.g. '1', '2', '3'.",
+        validation_alias="id",
+        serialization_alias="id",
+    )
+    label: str = Field(
+        description="Short label shown next to the number.",
+        validation_alias="label",
+        serialization_alias="label",
+    )
+    canonical_user_input: str = Field(
+        description=(
+            "Canonical text to send back to the Storyteller if the player "
+            "chooses this option without editing."
+        ),
+        validation_alias="canonicalUserInput",
+        serialization_alias="canonicalUserInput",
+    )
+
+    class Config:
+        extra = "forbid"
+        populate_by_name = True
+
+
 class StorytellerResponseMinimal(BaseModel):
     """Minimal response for quick narrative generation."""
+
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
     )
@@ -569,13 +600,25 @@ class StorytellerResponseMinimal(BaseModel):
         default=None,
         description="Entities referenced in narrative"
     )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of numbered player options",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        description="Whether to invite freeform input alongside choices",
+        validation_alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+    )
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 class StorytellerResponseStandard(BaseModel):
     """Standard response with narrative and essential metadata."""
+
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
     )
@@ -589,13 +632,25 @@ class StorytellerResponseStandard(BaseModel):
         default=None,
         description="State changes for entities"
     )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of numbered player options",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        description="Whether to invite freeform input alongside choices",
+        validation_alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+    )
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 class StorytellerResponseExtended(BaseModel):
     """Extended response with all features including operations."""
+
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
     )
@@ -616,9 +671,20 @@ class StorytellerResponseExtended(BaseModel):
         default=None,
         description="Storyteller's reasoning (debug mode only)"
     )
+    choices: Optional[List[StoryChoice]] = Field(
+        default=None,
+        description="Ordered list of numbered player options",
+    )
+    allow_free_input: bool = Field(
+        default=False,
+        description="Whether to invite freeform input alongside choices",
+        validation_alias="allowFreeInput",
+        serialization_alias="allowFreeInput",
+    )
 
     class Config:
         extra = "forbid"
+        populate_by_name = True
 
 
 # ============================================================================

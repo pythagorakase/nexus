@@ -154,6 +154,21 @@ class LogonUtility:
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
+        # Add previous structured choices to preserve numbering context
+        options_context = context.get("options", {}) if isinstance(context.get("options", {}), dict) else {}
+        previous_choices = options_context.get("previous_choices") or options_context.get("choices")
+        if previous_choices:
+            sections.append("\n=== PREVIOUS CHOICES ===")
+            sections.append("Last turn you offered these numbered options (id: label):")
+            for choice in previous_choices:
+                choice_id = choice.get("id") or choice.get("choice_id")
+                label = choice.get("label", "")
+                sections.append(f"{choice_id}. {label}")
+            sections.append(
+                "When the player references #<number> or option <number>, map it to the corresponding id above."
+            )
+
+
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:
