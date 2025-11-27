@@ -565,6 +565,11 @@ class StorytellerResponseMinimal(BaseModel):
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
     )
+    choices: List[str] = Field(
+        min_length=2,
+        max_length=4,
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+    )
     referenced_entities: Optional[ReferencedEntities] = Field(
         default=None,
         description="Entities referenced in narrative"
@@ -578,6 +583,11 @@ class StorytellerResponseStandard(BaseModel):
     """Standard response with narrative and essential metadata."""
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
+    )
+    choices: List[str] = Field(
+        min_length=2,
+        max_length=4,
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
     )
     chunk_metadata: ChunkMetadataUpdate = Field(
         description="Essential chunk metadata"
@@ -598,6 +608,11 @@ class StorytellerResponseExtended(BaseModel):
     """Extended response with all features including operations."""
     narrative: str = Field(
         description="The narrative prose (500-1500 words)"
+    )
+    choices: List[str] = Field(
+        min_length=2,
+        max_length=4,
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
     )
     chunk_metadata: ChunkMetadataUpdate = Field(
         description="Essential chunk metadata"

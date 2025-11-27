@@ -162,6 +162,9 @@ export const episodes = pgTable("episodes", {
 export const narrativeChunks = pgTable("narrative_chunks", {
   id: bigint("id", { mode: "number" }).primaryKey().default(sql`nextval('narrative_chunks_id_seq'::regclass)`),
   rawText: text("raw_text").notNull(),
+  storytellerText: text("storyteller_text"),
+  choiceObject: jsonb("choice_object"),
+  choiceText: text("choice_text"),
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 

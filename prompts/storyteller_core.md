@@ -175,6 +175,28 @@ Simply populate the relevant fields in your response:
 - Small mundane updates ("commuting," "sleeping") are fine for maintaining life
 - Not everyone needs dramatic changes—some just need to be somewhere, doing something
 
+### Structured Choices
+
+At decision points, provide 2-4 choices in the `choices` field as a simple array of strings:
+
+```json
+{
+  "narrative": "...What's your play?",
+  "choices": [
+    "Accept Vivienne's invitation—the Toreador are well-connected gossips.",
+    "Excuse yourself to find the Nosferatu in the gallery.",
+    "Make your way toward the Prince."
+  ]
+}
+```
+
+**Guidelines:**
+- Each choice should be a complete, actionable option (not just "Option A" or "Go left")
+- Write from the player's perspective ("Accept...", "Find...", "Approach...")
+- 2 choices for binary decisions, up to 4 for complex situations
+- The player can ALWAYS enter freeform text instead of selecting a choice—your choices are suggestions, not constraints
+- Choices should reflect the genuine options available given the narrative context
+
 ### Entity Creation
 
 When introducing new characters/places/factions, use the `new_character`, `new_place`, or `new_faction` fields within `referenced_entities`. The system handles database insertion.

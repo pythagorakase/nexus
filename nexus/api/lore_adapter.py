@@ -7,10 +7,100 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from nexus.agents.logon.apex_schema import StoryTurnResponse
 
 logger = logging.getLogger("nexus.api.lore_adapter")
+
+
+# =============================================================================
+# Choice Handling Functions
+# =============================================================================
+
+def extract_choice_object(response: StoryTurnResponse) -> Optional[Dict[str, Any]]:
+    """
+    Extract structured choice object from the response.
+
+    Returns:
+        Dictionary with {presented: [...], selected: null} or None if no choices
+    """
+    choices = getattr(response, 'choices', None)
+    if not choices or not isinstance(choices, list) or len(choices) < 2:
+        return None
+
+    return {
+        "presented": choices,
+        "selected": None  # Will be populated when user makes selection
+    }
+
+
+def format_choice_text(
+    choice_object: Dict[str, Any],
+    include_selection: bool = True
+) -> str:
+    """
+    Generate markdown-formatted text from choice object.
+
+    Args:
+        choice_object: The structured choice data
+        include_selection: Whether to include the user's selection
+
+    Returns:
+        Markdown-formatted string representing choices and selection
+    """
+    if not choice_object or not choice_object.get("presented"):
+        return ""
+
+    lines = ["", "**Your options were:**"]
+
+    # List all presented choices
+    for i, choice in enumerate(choice_object["presented"], 1):
+        lines.append(f"{i}. {choice}")
+
+    # Add user selection if present
+    if include_selection and choice_object.get("selected"):
+        selected = choice_object["selected"]
+        label = selected.get("label")
+        text = selected.get("text", "")
+        edited = selected.get("edited", False)
+
+        lines.append("")
+
+        if label == "freeform":
+            lines.append(f'**You chose:** "{text}"')
+        elif edited:
+            lines.append(f'**You chose:** "{text}" (edited from option {label})')
+        else:
+            lines.append(f"**You chose:** Option {label}")
+
+    return "\n".join(lines)
+
+
+def compute_raw_text(
+    storyteller_text: str,
+    choice_object: Optional[Dict[str, Any]]
+) -> str:
+    """
+    Compute full raw_text by combining storyteller prose with choice text.
+
+    This is what gets embedded and searched.
+
+    Args:
+        storyteller_text: The narrative prose from the storyteller
+        choice_object: The structured choice data (may be None for legacy/freeform)
+
+    Returns:
+        Combined text for embeddings and search
+    """
+    if not choice_object or not choice_object.get("selected"):
+        # No choices or selection not yet made - just use storyteller text
+        return storyteller_text
+
+    choice_text = format_choice_text(choice_object, include_selection=True)
+    if choice_text:
+        return storyteller_text + "\n" + choice_text
+
+    return storyteller_text
 
 
 def response_to_incubator(
@@ -37,12 +127,17 @@ def response_to_incubator(
     if not storyteller_text:
         raise ValueError("No narrative text in LORE response")
 
+    # Extract choice object (presented choices, no selection yet)
+    choice_object = extract_choice_object(response)
+
     # Build incubator data structure
     incubator_data = {
         "chunk_id": parent_chunk_id + 1,
         "parent_chunk_id": parent_chunk_id,
         "user_text": user_text,
         "storyteller_text": storyteller_text,
+        "choice_object": choice_object,  # Structured choices data
+        "choice_text": None,  # Generated when user makes selection
         "metadata_updates": extract_metadata_updates(response),
         "entity_updates": extract_entity_updates(response),
         "reference_updates": extract_reference_updates(response),

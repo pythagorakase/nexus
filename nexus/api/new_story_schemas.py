@@ -125,7 +125,7 @@ class CharacterSheet(BaseModel):
 
     This aligns with the characters table schema:
     - Core fields (name, summary, appearance, background, personality) map to table columns
-    - Traits stored in extra_data JSONB field (exactly 3 of 10 optional + required wildcard)
+    - Traits stored in extra_data JSONB field (1-5 of 10 optional + required wildcard)
     - Dynamic fields (emotional_state, current_activity, current_location) set during story seed
 
     Philosophy: Traits signal what aspects of the character should be narratively foregrounded -
@@ -165,7 +165,7 @@ class CharacterSheet(BaseModel):
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TRAIT SYSTEM - Choose exactly 3 of these 10 optional traits
+    # TRAIT SYSTEM - Choose 1-5 of these 10 optional traits
     # Each signals narrative focus, not mechanical capability
     # ═══════════════════════════════════════════════════════════════════════════
 
@@ -223,8 +223,8 @@ class CharacterSheet(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_exactly_three_traits(self) -> "CharacterSheet":
-        """Ensure exactly 3 of 10 optional traits are selected."""
+    def validate_trait_count(self) -> "CharacterSheet":
+        """Ensure 1-5 of 10 optional traits are selected."""
         trait_fields = [
             "allies",
             "contacts",
@@ -238,9 +238,9 @@ class CharacterSheet(BaseModel):
             "obligations",
         ]
         selected = sum(1 for f in trait_fields if getattr(self, f) is not None)
-        if selected != 3:
+        if not (1 <= selected <= 5):
             raise ValueError(
-                f"Must select exactly 3 traits from the 10 optional traits. "
+                f"Must select 1-5 traits from the 10 optional traits. "
                 f"Currently selected: {selected}. "
                 f"Traits signal narrative focus - choose what matters most for this character."
             )
@@ -663,7 +663,7 @@ with the genre and tone selected.
 CHARACTER_SHEET_SCHEMA_PROMPT = """
 Create a CharacterSheet with:
 - Core identity fields: name, summary, appearance, background, personality
-- Exactly 3 of 10 optional traits (see attached Trait Reference)
+- 1-5 of 10 optional traits (see attached Trait Reference)
 - Required wildcard trait (wildcard_name + wildcard_description)
 - A diegetic_artifact narrative portrait
 

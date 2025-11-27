@@ -15,14 +15,29 @@ import { useFonts } from "@/contexts/FontContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { AcceptRejectButtons } from "./AcceptRejectButtons";
 import { EditPreviousDialog } from "./EditPreviousDialog";
-import { acceptChunk, rejectChunk, editChunkInput, getChunkStates, type ChunkState } from "@/lib/api";
+import { StoryChoices, type ChoiceSelection } from "./StoryChoices";
+import { acceptChunk, rejectChunk, editChunkInput, getChunkStates, selectChoice, type ChunkState } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 
-export interface ChunkWithMetadata extends NarrativeChunk {
+/**
+ * Choice object structure from database JSONB column
+ */
+interface ChoiceObject {
+  presented: string[];
+  selected?: {
+    label: number | "freeform";
+    text: string;
+    edited: boolean;
+  };
+}
+
+export interface ChunkWithMetadata extends Omit<NarrativeChunk, 'choiceObject'> {
   metadata?: ChunkMetadata;
   state?: "draft" | "pending_review" | "finalized" | "embedded";
   regeneration_count?: number;
+  // Choice fields - typed more specifically than base schema's `unknown`
+  choiceObject?: ChoiceObject | null;
 }
 
 interface ChunkResponse {
@@ -444,6 +459,31 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
     },
   });
 
+  const choiceSelectionMutation = useMutation({
+    mutationFn: async (selection: ChoiceSelection) => {
+      if (!selectedChunk) return;
+      return selectChoice(selectedChunk.id, selection, slot);
+    },
+    onSuccess: (data) => {
+      if (data) {
+        toast({
+          title: "Choice Recorded",
+          description: "Your selection has been saved.",
+        });
+        // Invalidate to refresh chunk data with updated raw_text
+        queryClient.invalidateQueries({ queryKey: ["/api/narrative/chunks"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/narrative/latest-chunk"] });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to record choice",
+        variant: "destructive",
+      });
+    },
+  });
+
   const selectChunk = useCallback(
     (chunk: ChunkWithMetadata | null) => {
       setSelectedChunk(chunk);
@@ -637,9 +677,33 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                   style={{ fontFamily: currentBodyFont }}
                 >
                   <ReactMarkdown components={markdownComponents}>
-                    {selectedChunk.rawText || ""}
+                    {selectedChunk.choiceObject?.selected
+                      ? selectedChunk.rawText || selectedChunk.storytellerText || ""
+                      : selectedChunk.storytellerText || selectedChunk.rawText || ""}
                   </ReactMarkdown>
                 </div>
+
+                {/* Story Choices - only show if choices exist and not yet selected */}
+                {selectedChunk.choiceObject?.presented &&
+                  selectedChunk.choiceObject.presented.length >= 2 &&
+                  !selectedChunk.choiceObject.selected && (
+                    <StoryChoices
+                      choices={selectedChunk.choiceObject.presented}
+                      previousSelection={undefined}
+                      onSelect={(selection) => choiceSelectionMutation.mutate(selection)}
+                      disabled={choiceSelectionMutation.isPending}
+                    />
+                  )}
+
+                {/* Show selected choice (if any) */}
+                {selectedChunk.choiceObject?.selected && (
+                  <div className="mt-6 px-4 py-3 border-l-2 border-l-accent bg-secondary/20">
+                    <span className="text-sm text-foreground">
+                      <span className="font-semibold text-accent">You chose: </span>
+                      {selectedChunk.choiceObject.selected.text}
+                    </span>
+                  </div>
+                )}
 
                 {/* Navigation controls */}
                 <div className="flex justify-between items-center pt-4 border-t border-border">

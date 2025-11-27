@@ -90,7 +90,7 @@ export async function editChunkInput(
 }
 
 // New Story Wizard API
-export async function startSetup(slot: number, model?: string): Promise<{ status: string; thread_id: string; slot: number }> {
+export async function startSetup(slot: number, model?: string): Promise<{ status: string; thread_id: string; slot: number; welcome_message?: string; welcome_choices?: string[] }> {
   const response = await fetch("/api/story/new/setup/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -159,6 +159,42 @@ export async function getChunkStates(startId: number, endId: number, slot?: numb
   if (!response.ok) {
     const error = await response.text();
     throw new Error(error || "Failed to get chunk states");
+  }
+
+  return response.json();
+}
+
+// Choice Selection API
+export interface ChoiceSelectionRequest {
+  label: number | "freeform";
+  text: string;
+  edited: boolean;
+}
+
+export interface SelectChoiceResponse {
+  status: string;
+  chunk_id: number;
+  raw_text: string;
+}
+
+export async function selectChoice(
+  chunkId: number,
+  selection: ChoiceSelectionRequest,
+  slot?: number | null
+): Promise<SelectChoiceResponse> {
+  const response = await fetch("/api/narrative/select-choice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chunk_id: chunkId,
+      selection,
+      slot,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || "Failed to select choice");
   }
 
   return response.json();

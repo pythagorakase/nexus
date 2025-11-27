@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
+import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
+import { TraitSelector } from "./TraitSelector";
 
 interface Message {
     id: string;
@@ -75,6 +77,9 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>("setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
+    const [welcomeChoices, setWelcomeChoices] = useState<string[] | null>(null);
+    const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
+    const [showTraitSelector, setShowTraitSelector] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
@@ -95,11 +100,14 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 });
 
                 if (!startRes.ok) throw new Error("Failed to start setup");
-                const { thread_id, welcome_message } = await startRes.json();
+                const { thread_id, welcome_message, welcome_choices } = await startRes.json();
                 setThreadId(thread_id);
 
                 if (welcome_message) {
                     addMessage("assistant", welcome_message);
+                }
+                if (welcome_choices && welcome_choices.length > 0) {
+                    setWelcomeChoices(welcome_choices);
                 }
             } catch (error) {
                 console.error("Failed to init chat:", error);
@@ -171,8 +179,19 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
 
             if (data.phase_complete) {
                 setPendingArtifact({ type: data.artifact_type, data: data.data });
+                setCurrentChoices(null);
             } else {
                 addMessage("assistant", data.message);
+                // Set choices if returned by backend
+                if (data.choices && data.choices.length > 0) {
+                    setCurrentChoices(data.choices);
+                } else {
+                    setCurrentChoices(null);
+                }
+                // Check if LLM is prompting for trait selection
+                if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
+                    setShowTraitSelector(true);
+                }
             }
 
         } catch (error) {
@@ -185,6 +204,105 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleChoiceSelect = (selection: ChoiceSelection) => {
+        // Clear all choices and send the selected text
+        setWelcomeChoices(null);
+        setCurrentChoices(null);
+        const inputToSend = selection.text;
+        addMessage("user", inputToSend);
+        setIsLoading(true);
+
+        fetch("/api/story/new/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                slot,
+                thread_id: threadId,
+                message: inputToSend,
+                current_phase: currentPhase,
+                context_data: wizardData
+            }),
+        })
+            .then(async (res) => {
+                if (!res.ok) throw new Error("Failed to send message");
+                const data = await res.json();
+                if (data.phase_complete) {
+                    setPendingArtifact({ type: data.artifact_type, data: data.data });
+                    setCurrentChoices(null);
+                } else {
+                    addMessage("assistant", data.message);
+                    // Set choices if returned by backend
+                    if (data.choices && data.choices.length > 0) {
+                        setCurrentChoices(data.choices);
+                    }
+                    // Check if LLM is prompting for trait selection
+                    if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
+                        setShowTraitSelector(true);
+                    }
+                }
+            })
+            .catch((error) => {
+                console.error("Chat error:", error);
+                toast({
+                    title: "Transmission Error",
+                    description: "Failed to send message. Please try again.",
+                    variant: "destructive",
+                });
+            })
+            .finally(() => {
+                setIsLoading(false);
+            });
+    };
+
+    // Detect if LLM message is prompting for trait selection
+    const shouldShowTraitSelector = (message: string): boolean => {
+        const lowerMessage = message.toLowerCase();
+        const traitKeywords = ["select", "choose", "pick"];
+        const traitMentions = ["trait", "traits"];
+        return traitKeywords.some(k => lowerMessage.includes(k)) &&
+               traitMentions.some(t => lowerMessage.includes(t));
+    };
+
+    const handleTraitConfirm = (traits: string[]) => {
+        setShowTraitSelector(false);
+        const traitMessage = `I'll take: ${traits.join(", ")}`;
+        setInput("");
+        addMessage("user", traitMessage);
+        setIsLoading(true);
+
+        fetch("/api/story/new/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                slot,
+                thread_id: threadId,
+                message: traitMessage,
+                current_phase: currentPhase,
+                context_data: wizardData
+            }),
+        })
+            .then(async (res) => {
+                if (!res.ok) throw new Error("Failed to send message");
+                const data = await res.json();
+                if (data.phase_complete) {
+                    setPendingArtifact({ type: data.artifact_type, data: data.data });
+                } else {
+                    addMessage("assistant", data.message);
+                }
+            })
+            .catch((error) => {
+                console.error("Chat error:", error);
+                toast({
+                    title: "Transmission Error",
+                    description: "Failed to send message. Please try again.",
+                    variant: "destructive",
+                });
+            })
+            .finally(() => {
+                setIsLoading(false);
+            });
     };
 
     const handleArtifactConfirm = async () => {
@@ -463,8 +581,12 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 </div>
             </div>
 
-            {/* Chat Area */}
-            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+            {/* Main content area with optional sidebar */}
+            <div className="flex flex-1 overflow-hidden">
+                {/* Chat column */}
+                <div className="flex-1 flex flex-col min-w-0">
+                    {/* Chat Area */}
+                    <ScrollArea className="flex-1 p-4" ref={scrollRef}>
                 <div className="space-y-6">
                     <AnimatePresence initial={false}>
                         {messages.map((msg) => (
@@ -498,6 +620,20 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                             </motion.div>
                         ))}
                     </AnimatePresence>
+                    {/* Structured choices - shown for welcome message or any LLM response with choices */}
+                    {((welcomeChoices && messages.length === 1) || currentChoices) && !isLoading && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-4"
+                        >
+                            <StoryChoices
+                                choices={welcomeChoices || currentChoices || []}
+                                onSelect={handleChoiceSelect}
+                                disabled={isLoading}
+                            />
+                        </motion.div>
+                    )}
                     {isLoading && (
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -548,6 +684,24 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                         <Send className="w-5 h-5" />
                     </Button>
                 </form>
+                    </div>
+                </div>
+
+                {/* Trait Selection Sidebar */}
+                {showTraitSelector && (
+                    <motion.div
+                        initial={{ width: 0, opacity: 0 }}
+                        animate={{ width: 280, opacity: 1 }}
+                        exit={{ width: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="border-l border-primary/30 bg-background/80 p-4 overflow-hidden"
+                    >
+                        <TraitSelector
+                            onConfirm={handleTraitConfirm}
+                            disabled={isLoading}
+                        />
+                    </motion.div>
+                )}
             </div>
         </div >
     );

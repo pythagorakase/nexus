@@ -248,7 +248,7 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
                 # Step 1: Get incubator data
                 cur.execute("""
                     SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
-                           metadata_updates, entity_updates, reference_updates,
+                           choice_object, metadata_updates, entity_updates, reference_updates,
                            llm_response_id, status
                     FROM incubator
                     WHERE session_id = %s
@@ -310,13 +310,20 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
             # Step 5: Insert narrative chunk
+            # Initially raw_text = storyteller_text (user selection updates it later)
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO narrative_chunks (raw_text, season, episode)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO narrative_chunks (
+                        raw_text, storyteller_text, choice_object, choice_text,
+                        season, episode
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
-                    incubator["storyteller_text"],
+                    incubator["storyteller_text"],  # raw_text starts as storyteller_text
+                    incubator["storyteller_text"],  # storyteller_text (pure prose)
+                    json.dumps(incubator.get("choice_object")) if incubator.get("choice_object") else None,
+                    None,  # choice_text populated when user selects
                     db_meta["season"],
                     db_meta["episode"]
                 ))
