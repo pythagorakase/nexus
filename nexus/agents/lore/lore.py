@@ -59,6 +59,7 @@ from utils.model_manager import ModelManager
 from logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager
+from nexus.api.slot_utils import get_slot_db_url
 from nexus.memory.user_confirmation import request_input
 
 # Import MEMNON if available
@@ -85,15 +86,23 @@ class LORE:
         settings_path: Optional[str] = None,
         debug: bool = False,
         enable_logon: bool = True,
+        dbname: Optional[str] = None,
+        slot: Optional[int] = None,
     ):
         """
         Initialize LORE agent.
-        
+
         Args:
             settings_path: Path to settings.json file
             debug: Enable debug logging
+            enable_logon: Whether to enable LOGON utility
+            dbname: Database name (save_01 through save_05).
+                    If not provided, uses slot or NEXUS_SLOT env var.
+            slot: Slot number (1-5). Alternative to dbname.
         """
         self.debug = debug
+        self.dbname = dbname
+        self.slot = slot
         self.settings = self._load_settings(settings_path)
         
         # Configure logging
@@ -228,19 +237,19 @@ class LORE:
             class MinimalInterface:
                 def assistant_message(self, msg): logger.info(f"MEMNON: {msg}")
                 def error_message(self, msg): logger.error(f"MEMNON Error: {msg}")
-            
-            # Get database URL from settings
-            memnon_settings = self.settings.get("Agent Settings", {}).get("MEMNON", {})
-            db_url = memnon_settings.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
-            
+
+            # Get database URL - use slot-aware resolution
+            # Priority: explicit dbname > slot > NEXUS_SLOT env var
+            db_url = get_slot_db_url(dbname=self.dbname, slot=self.slot)
+
             # Create minimal agent state and user objects
             class MinimalAgentState:
                 state = {"name": "LORE"}
-            
+
             class MinimalUser:
                 id = "lore_system"
                 name = "LORE"
-            
+
             self.memnon = MEMNON(
                 interface=MinimalInterface(),
                 agent_state=MinimalAgentState(),
@@ -248,7 +257,7 @@ class LORE:
                 db_url=db_url,
                 debug=self.debug
             )
-            logger.info("MEMNON utility initialized")
+            logger.info("MEMNON utility initialized with database: %s", db_url)
         except Exception as e:
             logger.error(f"Failed to initialize MEMNON: {e}")
             self.memnon = None
@@ -256,7 +265,10 @@ class LORE:
     def _initialize_logon(self):
         """Initialize LOGON utility for API communication"""
         try:
-            self.logon = LogonUtility(self.settings)
+            # Pass dbname for slot-aware database connections
+            from nexus.api.slot_utils import require_slot_dbname
+            db = require_slot_dbname(dbname=self.dbname, slot=self.slot)
+            self.logon = LogonUtility(self.settings, dbname=db)
             self._logon_initialized = True
             logger.info("LOGON utility initialized on first use")
         except Exception as e:

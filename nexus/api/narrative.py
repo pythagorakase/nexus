@@ -41,7 +41,7 @@ from nexus.api.new_story_flow import (
     reset_setup,
     activate_slot,
 )
-from nexus.api.slot_utils import all_slots, slot_dbname
+from nexus.api.slot_utils import all_slots, slot_dbname, require_slot_dbname
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -94,26 +94,27 @@ manager = ConnectionManager()
 
 # Database connection
 def get_db_connection(slot: Optional[int] = None):
-    """Get database connection from settings"""
-    settings = load_settings()
-    db_url = (
-        settings.get("Agent Settings", {})
-        .get("MEMNON", {})
-        .get("database", {})
-        .get("url")
-    )
+    """
+    Get database connection for a save slot.
 
-    if db_url:
-        # Use connection string from settings
-        if slot:
-            return psycopg2.connect(db_url, database=slot_dbname(slot))
-        return psycopg2.connect(db_url)
-    else:
-        # Fallback to hardcoded values if settings missing
-        logger.warning("Database URL not found in settings, using default connection")
-        if slot:
-            return psycopg2.connect(host="localhost", database=slot_dbname(slot), user="pythagor")
-        return psycopg2.connect(host="localhost", database="NEXUS", user="pythagor")
+    Args:
+        slot: Save slot number (1-5). If not provided, uses NEXUS_SLOT env var.
+
+    Returns:
+        psycopg2 connection to the slot database
+
+    Raises:
+        RuntimeError: If no slot specified and NEXUS_SLOT not set
+        ValueError: If slot is not valid (1-5)
+    """
+    # Resolve database name - requires explicit slot or NEXUS_SLOT env var
+    dbname = require_slot_dbname(slot=slot)
+
+    return psycopg2.connect(
+        host="localhost",
+        database=dbname,
+        user="pythagor"
+    )
 
 
 def load_settings():
@@ -431,17 +432,6 @@ layer to the complex puzzle they're trying to solve.
 Sullivan, now officially part of the crew, watches from his perch with an air of feline wisdom,
 as if he too understands the gravity of what's about to unfold."""
 
-
-    # Check incubator for completed sessions
-    conn = get_db_connection(slot=None) # Status check might need slot if we track per slot, but session_id is unique globally usually.
-    # However, if we want to check the specific DB for the slot:
-    # Since session_id is unique, we might need to check ALL slots or the specific one if provided.
-    # For now, let's assume session_id is enough, but if we need to check the DB, we need the slot.
-    # The current implementation checks NEXUS DB. If the session is in a slot DB, we won't find it.
-    # We should probably accept slot as a query param here too.
-    
-    # Updated signature below
-    pass
 
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
 async def get_narrative_status(session_id: str, slot: Optional[int] = None):

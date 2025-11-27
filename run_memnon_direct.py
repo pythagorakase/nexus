@@ -384,8 +384,9 @@ def main():
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
     print(f"Debug mode {'enabled' if debug else 'disabled'}")
     
-    # Set database URL
-    db_url = memnon_settings.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
+    # Set database URL using slot-aware resolution
+    from nexus.api.slot_utils import get_slot_db_url
+    db_url = get_slot_db_url()
     print(f"Using database: {db_url}")
     
     # Get model ID from global settings

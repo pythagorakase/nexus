@@ -1,4 +1,9 @@
+# Audition API is save-independent (like IR Eval), no slot needed
 audition: bash -lc 'DB_URL=${DATABASE_URL:-postgresql://pythagor@localhost:5432/NEXUS}; API_PORT=${API_PORT:-8000}; DATABASE_URL="${DB_URL}" poetry run uvicorn nexus.api.apex_audition:app --reload --host 127.0.0.1 --port ${API_PORT}'
-core: bash -lc 'DB_URL=${DATABASE_URL:-postgresql://pythagor@localhost:5432/NEXUS}; CORE_API_PORT=${CORE_API_PORT:-8001}; DATABASE_URL="${DB_URL}" poetry run uvicorn nexus.api.core:app --reload --host 127.0.0.1 --port ${CORE_API_PORT}'
-narrative: bash -lc 'DB_URL=${DATABASE_URL:-postgresql://pythagor@localhost:5432/NEXUS}; NARRATIVE_API_PORT=${NARRATIVE_API_PORT:-8002}; DATABASE_URL="${DB_URL}" poetry run uvicorn nexus.api.narrative:app --reload --host 127.0.0.1 --port ${NARRATIVE_API_PORT}'
-ui: bash -lc 'DB_URL=${DATABASE_URL:-postgresql://pythagor@localhost:5432/NEXUS}; APP_PORT=${APP_PORT:-5001}; API_PORT=${API_PORT:-8000}; CORE_API_PORT=${CORE_API_PORT:-8001}; NARRATIVE_API_PORT=${NARRATIVE_API_PORT:-8002}; DATABASE_URL="${DB_URL}" PORT="${APP_PORT}" API_PORT="${API_PORT}" CORE_API_PORT="${CORE_API_PORT}" NARRATIVE_API_PORT="${NARRATIVE_API_PORT}" npm --prefix ui run dev'
+
+# Core and Narrative APIs require NEXUS_SLOT to be set (1-5)
+core: bash -lc 'NEXUS_SLOT=${NEXUS_SLOT:-1}; CORE_API_PORT=${CORE_API_PORT:-8001}; NEXUS_SLOT="${NEXUS_SLOT}" poetry run uvicorn nexus.api.core:app --reload --host 127.0.0.1 --port ${CORE_API_PORT}'
+narrative: bash -lc 'NEXUS_SLOT=${NEXUS_SLOT:-1}; NARRATIVE_API_PORT=${NARRATIVE_API_PORT:-8002}; NEXUS_SLOT="${NEXUS_SLOT}" poetry run uvicorn nexus.api.narrative:app --reload --host 127.0.0.1 --port ${NARRATIVE_API_PORT}'
+
+# UI also needs NEXUS_SLOT for backend API calls
+ui: bash -lc 'NEXUS_SLOT=${NEXUS_SLOT:-1}; APP_PORT=${APP_PORT:-5001}; API_PORT=${API_PORT:-8000}; CORE_API_PORT=${CORE_API_PORT:-8001}; NARRATIVE_API_PORT=${NARRATIVE_API_PORT:-8002}; NEXUS_SLOT="${NEXUS_SLOT}" PORT="${APP_PORT}" API_PORT="${API_PORT}" CORE_API_PORT="${CORE_API_PORT}" NARRATIVE_API_PORT="${NARRATIVE_API_PORT}" npm --prefix ui run dev'

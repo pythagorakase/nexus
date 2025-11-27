@@ -22,17 +22,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Use SQLAlchemy for database interactions
 - When working with agents, follow NEXUS runtime conventions
 
-## Database Connection
-- Database Name: NEXUS
+## Database Connection (Save Slots)
+
+NEXUS uses a multi-slot save system. Each save slot has its own database:
+- **Slot 1**: `save_01`
+- **Slot 2**: `save_02`
+- **Slot 3**: `save_03`
+- **Slot 4**: `save_04`
+- **Slot 5**: `save_05`
+
+**IMPORTANT**: The `NEXUS` database is now only used as a schema template for creating new slots. It is NOT a valid target for gameplay data.
+
+### Active Slot Configuration
+Set the active slot via the `NEXUS_SLOT` environment variable (1-5):
+```bash
+export NEXUS_SLOT=1  # Use save_01 database
+```
+
+### Slot Utilities
+Use functions from `nexus/api/slot_utils.py`:
+- `require_slot_dbname(dbname=None, slot=None)` - Get validated database name
+- `get_slot_db_url(dbname=None, slot=None)` - Get full PostgreSQL URL
+- `get_active_slot()` - Get active slot from NEXUS_SLOT env var
+- `slot_dbname(slot)` - Convert slot number (1-5) to database name
+
+### Connection Details
 - Host: localhost
 - User: pythagor
 - Password: None (uses system authentication)
 - Port: 5432 (default PostgreSQL port)
-- Connection string: `postgresql://pythagor@localhost:5432/NEXUS`
-- Main tables:
-  - `narrative_chunks`: Contains the raw text content (fields: id, raw_text, created_at)
-  - `chunk_metadata`: Contains metadata for each chunk (fields: id, chunk_id, world_layer, etc.)
-  - `chunk_embeddings`: Contains vector embeddings for search (fields: chunk_id, model, embedding)
+- Example connection string: `postgresql://pythagor@localhost:5432/save_01`
+
+### Main Tables (per slot)
+- `narrative_chunks`: Contains the raw text content (fields: id, raw_text, created_at)
+- `chunk_metadata`: Contains metadata for each chunk (fields: id, chunk_id, world_layer, etc.)
+- `chunk_embeddings`: Contains vector embeddings for search (fields: chunk_id, model, embedding)
 
 ## API Key Management
 

@@ -88,6 +88,10 @@ max_total_threats = 10
 debug = true
 
 [memnon.database]
+# NOTE: This URL is deprecated for gameplay. Database is now determined by
+# NEXUS_SLOT environment variable (1-5), which maps to save_01 through save_05.
+# This URL is only used as a fallback for development/testing or when slot_utils
+# is not available.
 url = "postgresql://pythagor@localhost/NEXUS"
 create_tables = true
 drop_existing = true

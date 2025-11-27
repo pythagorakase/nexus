@@ -69,7 +69,7 @@ def upsert_slot(
                 """,
                 (slot_number, character_name, is_active, is_active),
             )
-    logger.info("Updated save slot %s in %s", slot_number, dbname or os.environ.get("PGDATABASE", "NEXUS"))
+    logger.info("Updated save slot %s in %s", slot_number, dbname or "(default slot)")
 
 
 def clear_active(dbname: Optional[str] = None) -> None:
@@ -82,4 +82,4 @@ def clear_active(dbname: Optional[str] = None) -> None:
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute("UPDATE assets.save_slots SET is_active = FALSE")
-    logger.info("Cleared active flag on all slots in %s", dbname or os.environ.get("PGDATABASE", "NEXUS"))
+    logger.info("Cleared active flag on all slots in %s", dbname or "(default slot)")

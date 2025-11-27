@@ -3,6 +3,10 @@ Centralized database connection pooling for NEXUS API.
 
 This module provides thread-safe connection pooling to prevent
 database connection exhaustion and improve performance.
+
+Database connections are made to slot databases (save_01 through save_05).
+The active slot is determined by the NEXUS_SLOT environment variable,
+or can be explicitly passed to connection functions.
 """
 
 from __future__ import annotations
@@ -16,6 +20,8 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
+from nexus.api.slot_utils import require_slot_dbname
+
 logger = logging.getLogger("nexus.api.db_pool")
 
 # Global pool instances per database
@@ -27,9 +33,26 @@ MAX_CONNECTIONS = 10
 
 
 def _get_connection_params(dbname: Optional[str] = None) -> Dict[str, Any]:
-    """Get database connection parameters from environment."""
+    """
+    Get database connection parameters.
+
+    Args:
+        dbname: Explicit database name (save_01 through save_05).
+                If not provided, uses NEXUS_SLOT env var.
+
+    Returns:
+        Connection parameters dict for psycopg2
+
+    Raises:
+        ValueError: If dbname is not a valid slot database
+        RuntimeError: If no slot can be determined
+    """
+    # Use require_slot_dbname to validate and resolve the database name
+    # This ensures we never accidentally connect to NEXUS
+    resolved_dbname = require_slot_dbname(dbname=dbname)
+
     return {
-        "dbname": dbname or os.environ.get("PGDATABASE", "NEXUS"),
+        "dbname": resolved_dbname,
         "user": os.environ.get("PGUSER", "pythagor"),
         "host": os.environ.get("PGHOST", "localhost"),
         "port": os.environ.get("PGPORT", "5432"),
@@ -37,8 +60,22 @@ def _get_connection_params(dbname: Optional[str] = None) -> Dict[str, Any]:
 
 
 def _get_pool(dbname: Optional[str] = None) -> pool.ThreadedConnectionPool:
-    """Get or create a connection pool for the specified database."""
-    db_key = dbname or os.environ.get("PGDATABASE", "NEXUS")
+    """
+    Get or create a connection pool for the specified database.
+
+    Args:
+        dbname: Explicit database name (save_01 through save_05).
+                If not provided, uses NEXUS_SLOT env var.
+
+    Returns:
+        A ThreadedConnectionPool for the database
+
+    Raises:
+        ValueError: If dbname is not a valid slot database
+        RuntimeError: If no slot can be determined
+    """
+    # Resolve and validate the database name
+    db_key = require_slot_dbname(dbname=dbname)
 
     if db_key not in _pools:
         params = _get_connection_params(dbname)
@@ -62,11 +99,16 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
     Get a database connection from the pool.
 
     Args:
-        dbname: Database name (defaults to PGDATABASE env var or "NEXUS")
+        dbname: Database name (save_01 through save_05).
+                If not provided, uses NEXUS_SLOT env var.
         dict_cursor: If True, use RealDictCursor for dictionary results
 
     Yields:
         A database connection object
+
+    Raises:
+        ValueError: If dbname is not a valid slot database
+        RuntimeError: If no slot can be determined (NEXUS_SLOT not set)
 
     Example:
         with get_connection("save_01", dict_cursor=True) as conn:
@@ -129,7 +171,16 @@ def _connect(dbname: Optional[str] = None):
 
     DEPRECATED: Use get_connection() context manager instead.
 
-    Note: This returns a connection that must be manually closed!
+    Args:
+        dbname: Database name (save_01 through save_05).
+                If not provided, uses NEXUS_SLOT env var.
+
+    Returns:
+        A database connection (must be manually closed!)
+
+    Raises:
+        ValueError: If dbname is not a valid slot database
+        RuntimeError: If no slot can be determined
     """
     logger.warning("Using deprecated _connect() function. Please migrate to get_connection()")
     params = _get_connection_params(dbname)
