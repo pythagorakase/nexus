@@ -360,8 +360,9 @@ class ContextSeedBuilder:
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        with settings_path.open("r", encoding="utf-8") as handle:
-            self.settings = json.load(handle)
+        # Use centralized config loader
+        from nexus.config import load_settings_as_dict
+        self.settings = load_settings_as_dict()
 
         self.engine: Engine = create_engine("postgresql://pythagor@localhost:5432/NEXUS")
 
