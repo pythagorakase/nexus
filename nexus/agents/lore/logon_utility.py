@@ -21,6 +21,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
     create_minimal_response,
 )
+from nexus.api.slot_utils import require_slot_dbname
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -28,9 +29,17 @@ logger = logging.getLogger("nexus.lore.logon")
 class LogonUtility:
     """Wrapper for Apex AI API calls using existing providers"""
 
-    def __init__(self, settings: Dict[str, Any]):
-        """Initialize LOGON utility with configured provider"""
+    def __init__(self, settings: Dict[str, Any], dbname: Optional[str] = None):
+        """
+        Initialize LOGON utility with configured provider.
+
+        Args:
+            settings: Application settings dictionary
+            dbname: Database name (save_01 through save_05).
+                    If not provided, uses NEXUS_SLOT env var.
+        """
         self.settings = settings
+        self.dbname = dbname
         self.provider: Optional[object] = None
         self._system_prompt: Optional[str] = None
 
@@ -49,9 +58,11 @@ class LogonUtility:
 
         # Query setting from global_variables
         try:
+            # Use slot-aware database connection
+            db = require_slot_dbname(dbname=self.dbname)
             conn = psycopg2.connect(
                 host="localhost",
-                database="NEXUS",
+                database=db,
                 user="pythagor"
             )
             with conn.cursor() as cur:

@@ -270,9 +270,23 @@ class EmbeddingRegenerator:
         self.sequence_reset_done = False  # Track if we've reset the sequence
         self.force_id_for_first_insert = False  # Will be set to True if needed
         
-        # Set default database URL if not provided
-        default_db_url = SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
-        self.db_url = db_url or os.environ.get("NEXUS_DB_URL", default_db_url)
+        # Set database URL using slot-aware resolution
+        if db_url:
+            self.db_url = db_url
+        else:
+            # Try slot-aware resolution first, fall back to env var or error
+            try:
+                from nexus.api.slot_utils import get_slot_db_url
+                self.db_url = get_slot_db_url()
+            except (ImportError, RuntimeError) as e:
+                # If slot_utils not available or NEXUS_SLOT not set, require explicit URL
+                explicit_url = os.environ.get("NEXUS_DB_URL")
+                if not explicit_url:
+                    raise RuntimeError(
+                        "No database URL provided. Set NEXUS_SLOT (1-5) or NEXUS_DB_URL "
+                        "environment variable, or pass --db-url explicitly."
+                    ) from e
+                self.db_url = explicit_url
         
         # Initialize database connection
         self.engine = create_engine(self.db_url)
@@ -1178,8 +1192,17 @@ def regenerate_missing_chunks(model_name: str, missing_file: str, batch_size: in
             logger.warning("No missing chunk IDs found, nothing to do")
             return {"total": 0, "success": 0, "failed": 0}
         
-        # Connect to database
-        db_url = db_url or os.environ.get("NEXUS_DB_URL", SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS"))
+        # Connect to database using slot-aware resolution
+        if not db_url:
+            try:
+                from nexus.api.slot_utils import get_slot_db_url
+                db_url = get_slot_db_url()
+            except (ImportError, RuntimeError):
+                db_url = os.environ.get("NEXUS_DB_URL")
+                if not db_url:
+                    raise RuntimeError(
+                        "No database URL provided. Set NEXUS_SLOT (1-5) or NEXUS_DB_URL."
+                    )
         engine = create_engine(db_url)
         
         # Get the chunks for these IDs

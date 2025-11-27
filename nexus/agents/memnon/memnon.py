@@ -127,8 +127,17 @@ logger = logging.getLogger("nexus.memnon")
 MODEL_CONFIG = GLOBAL_SETTINGS.get("model", {})
 DEFAULT_MODEL_ID = MODEL_CONFIG.get("default_model", "llama-3.3-70b-instruct@q6_k")
 
-# Database settings
-DEFAULT_DB_URL = MEMNON_SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
+# Database settings - use slot-aware resolution
+# Import lazily to avoid circular imports
+def get_default_db_url() -> str:
+    """Get the default database URL using slot-aware resolution."""
+    from nexus.api.slot_utils import get_slot_db_url
+    return get_slot_db_url()
+
+
+# Legacy constant for backwards compatibility - will be deprecated
+# New code should use get_default_db_url() or pass db_url explicitly
+DEFAULT_DB_URL = None  # Will be resolved at runtime
 
 # Define SQL Alchemy Base
 Base = declarative_base()
@@ -252,7 +261,8 @@ class MEMNON:
             logger.debug("Debug logging enabled")
         
         # Set up database connection using DatabaseManager
-        self.db_url = db_url or DEFAULT_DB_URL
+        # If no db_url provided, use slot-aware resolution
+        self.db_url = db_url or get_default_db_url()
         logger.info(f"Using database URL: {self.db_url}")
         self.db_manager = DatabaseManager(self.db_url, settings=MEMNON_SETTINGS)
         self.Session = self.db_manager.Session

@@ -49,7 +49,8 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
         conn.close()
     except psycopg2.OperationalError:
         logger.info("Database %s does not exist. Creating...", dbname)
-        # Assuming NEXUS is the source template
+        # NEXUS is the schema template database (not for gameplay data).
+        # New slot databases are created by cloning the NEXUS schema structure.
         create_slot_schema_only(slot_number, source_db="NEXUS")
 
     clear_cache(dbname)

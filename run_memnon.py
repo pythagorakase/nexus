@@ -42,8 +42,10 @@ def main():
         print(f"Error importing MEMNON: {e}")
         return 1
     
-    # Get database URL from settings
-    db_url = MEMNON_SETTINGS.get("database", {}).get("url", "postgresql://pythagor@localhost/NEXUS")
+    # Get database URL using slot-aware resolution
+    from nexus.api.slot_utils import get_slot_db_url
+    db_url = get_slot_db_url()
+    logger.info(f"Using slot database: {db_url}")
     
     # Get model from global settings
     from nexus.agents.memnon.memnon import GLOBAL_SETTINGS
