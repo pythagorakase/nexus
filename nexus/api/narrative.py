@@ -126,10 +126,9 @@ def get_db_connection(slot: Optional[int] = None):
 
 
 def load_settings():
-    """Load settings from settings.json"""
-    settings_path = Path(__file__).parent.parent.parent / "settings.json"
-    with open(settings_path, "r") as f:
-        return json.load(f)
+    """Load settings using centralized config loader."""
+    from nexus.config import load_settings_as_dict
+    return load_settings_as_dict()
 
 
 def get_new_story_model() -> str:

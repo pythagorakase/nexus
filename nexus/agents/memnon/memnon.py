@@ -64,37 +64,21 @@ if not settings_logger.handlers:
 
 # Load settings
 def load_settings() -> Dict[str, Any]:
-    """Load settings from settings.json file."""
+    """Load settings using centralized config loader."""
     try:
-        # Check for environment variable first
+        # Import here to avoid circular imports
+        from nexus.config import load_settings_as_dict
+
+        # Check for environment variable override
         settings_path_env = os.environ.get("NEXUS_SETTINGS_PATH")
         if settings_path_env:
-            settings_path = Path(settings_path_env)
-            settings_logger.info(f"Using settings path from environment: {settings_path}")
+            settings_logger.info(f"Using settings path from environment: {settings_path_env}")
+            settings = load_settings_as_dict(settings_path_env)
         else:
-            # Resolve to project root: nexus/agents/memnon/memnon.py -> nexus/
-            project_root = Path(__file__).parent.parent.parent.parent
-            settings_path = project_root / "settings.json"
-            
-        if settings_path.exists():
-            with open(settings_path, "r") as f:
-                settings = json.load(f)
-                settings_logger.info(f"Loaded settings from {settings_path}")
-                
-                # Debug temporal boosting settings
-                if ("Agent Settings" in settings and "MEMNON" in settings["Agent Settings"] and
-                    "retrieval" in settings["Agent Settings"]["MEMNON"] and 
-                    "hybrid_search" in settings["Agent Settings"]["MEMNON"]["retrieval"]):
-                    hybrid = settings["Agent Settings"]["MEMNON"]["retrieval"]["hybrid_search"]
-                    temporal_factor = hybrid.get("temporal_boost_factor", "not set")
-                    query_specific = hybrid.get("use_query_type_temporal_factors", "not set")
-                    # settings_logger.info(f"SETTINGS DEBUG - temporal_boost_factor: {temporal_factor}")
-                    # settings_logger.info(f"SETTINGS DEBUG - use_query_type_temporal_factors: {query_specific}")
-                
-                return settings
-        else:
-            settings_logger.warning(f"Warning: settings.json not found at {settings_path.absolute()}")
-            return {}
+            settings = load_settings_as_dict()
+
+        settings_logger.info("Loaded settings via centralized config loader")
+        return settings
     except Exception as e:
         settings_logger.error(f"Error loading settings: {e}")
         return {}
