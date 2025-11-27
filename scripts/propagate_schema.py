@@ -15,24 +15,33 @@ Usage:
 
 import argparse
 import sys
+import tomllib
 from pathlib import Path
 
 import psycopg2
 from psycopg2.extensions import connection as PGConnection
+
+# Load database settings from nexus.toml
+SETTINGS_PATH = Path(__file__).parent.parent / "nexus.toml"
+with SETTINGS_PATH.open("rb") as f:
+    _settings = tomllib.load(f)
+_db_settings = _settings.get("database", {})
+DB_USER = _db_settings.get("user", "pythagor")
+DB_HOST = _db_settings.get("host", "localhost")
 
 TEMPLATE_DB = "NEXUS_template"
 TARGET_DBS = ["NEXUS", "save_01", "save_02", "save_03", "save_04", "save_05"]
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 
-def get_template_connection():
+def get_template_connection() -> PGConnection:
     """Get connection to the template database."""
-    return psycopg2.connect(dbname=TEMPLATE_DB, user="pythagor", host="localhost")
+    return psycopg2.connect(dbname=TEMPLATE_DB, user=DB_USER, host=DB_HOST)
 
 
-def get_target_connection(db_name: str):
+def get_target_connection(db_name: str) -> PGConnection:
     """Get connection to a target database."""
-    return psycopg2.connect(dbname=db_name, user="pythagor", host="localhost")
+    return psycopg2.connect(dbname=db_name, user=DB_USER, host=DB_HOST)
 
 
 def ensure_schema_migrations_table(conn: PGConnection) -> None:
@@ -144,11 +153,13 @@ def apply_migration_to_template(migration_path: Path, dry_run: bool = False) -> 
             with conn.cursor() as cur:
                 cur.execute(sql)
             conn.commit()
+            print(f"  [TEMPLATE] ✓ {migration_path.name}")
         finally:
             conn.close()
     except Exception as e:
-        # Ignore errors on template (might already have changes from schema dump)
-        print(f"  [TEMPLATE] {migration_path.name}: {e} (continuing anyway)")
+        # Surface errors visibly per CLAUDE.md - don't silently continue
+        print(f"  [TEMPLATE] ✗ {migration_path.name}: {e}")
+        return False
 
     return True
 
@@ -243,7 +254,10 @@ Examples:
             if success:
                 any_applied = True
                 # Also apply to template (for future clones)
-                apply_migration_to_template(migration, dry_run=args.dry_run)
+                template_success = apply_migration_to_template(migration, dry_run=args.dry_run)
+                if not template_success:
+                    print(f"  ⚠ Template migration failed - target DB was updated but template may be out of sync")
+                    sys.exit(1)
             else:
                 print(f"  Stopping due to error.")
                 sys.exit(1)
