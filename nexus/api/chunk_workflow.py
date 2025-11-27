@@ -17,7 +17,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import subprocess
-import json
 import re
 
 import psycopg2
@@ -355,9 +354,8 @@ class ChunkWorkflow:
         """
         try:
             # Load settings to get embedding configuration
-            settings_path = Path(__file__).parent.parent.parent / "settings.json"
-            with settings_path.open() as f:
-                settings = json.load(f)
+            from nexus.config import load_settings_as_dict
+            settings = load_settings_as_dict()
 
             # Get the appropriate embedding model from settings
             embedding_config = settings.get("Agent Settings", {}).get("MEMNON", {}).get("embedding", {})

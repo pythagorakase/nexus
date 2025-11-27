@@ -1221,29 +1221,19 @@ def main():
     """Main execution function."""
     args = parse_arguments()
 
-    # Load blacklist from settings.json
+    # Load blacklist from config
     blacklist = set()
     try:
-        # Assumes settings.json is in the parent directory of scripts/
-        settings_path = os.path.join(os.path.dirname(__file__), '..', 'settings.json') 
-        if not os.path.exists(settings_path):
-            # Fallback if running script from workspace root
-             settings_path = 'settings.json'
-             
-        if os.path.exists(settings_path):
-            with open(settings_path, 'r') as f:
-                settings_data = json.load(f)
-                raw_blacklist = settings_data.get("API Settings", {}).get("process_characters", {}).get("blacklist", [])
-                if isinstance(raw_blacklist, list):
-                    blacklist = {item.lower() for item in raw_blacklist if isinstance(item, str)}
-                    logger.info(f"Loaded {len(blacklist)} items into character blacklist.")
-                else:
-                    logger.warning("Blacklist in settings.json is not a list. Using empty blacklist.")
+        from nexus.config import load_settings_as_dict
+        settings_data = load_settings_as_dict()
+        raw_blacklist = settings_data.get("API Settings", {}).get("process_characters", {}).get("blacklist", [])
+        if isinstance(raw_blacklist, list):
+            blacklist = {item.lower() for item in raw_blacklist if isinstance(item, str)}
+            logger.info(f"Loaded {len(blacklist)} items into character blacklist.")
         else:
-             logger.warning(f"settings.json not found at expected paths. Using empty blacklist.")
-             
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError) as e:
-        logger.warning(f"Error loading character blacklist from settings.json: {e}. Using empty blacklist.")
+            logger.warning("Blacklist in config is not a list. Using empty blacklist.")
+    except Exception as e:
+        logger.warning(f"Error loading character blacklist from config: {e}. Using empty blacklist.")
 
     # --- Test Mode ---
     if args.test:

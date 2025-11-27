@@ -26,12 +26,13 @@ from typing import Dict, Any, List, Optional, Union
 # Add parent directory to sys.path to import from nexus package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Try to load settings
+# Try to load settings using centralized config loader
 try:
-    with open(os.path.join(os.path.dirname(__file__), '..', 'settings.json'), 'r') as f:
-        SETTINGS = json.load(f)["Agent Settings"]["MEMNON"]
+    from nexus.config import load_settings_as_dict
+    _all_settings = load_settings_as_dict()
+    SETTINGS = _all_settings.get("Agent Settings", {}).get("MEMNON", {})
 except Exception as e:
-    print(f"Warning: Could not load settings from settings.json: {e}")
+    print(f"Warning: Could not load settings via config loader: {e}")
     SETTINGS = {}
 
 # Configure logging from settings

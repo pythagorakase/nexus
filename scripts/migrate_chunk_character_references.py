@@ -24,11 +24,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load database settings
-with open('settings.json', 'r') as f:
-    settings = json.load(f)
-    # Database config is under Agent Settings -> MEMNON -> database
-    db_url = settings['Agent Settings']['MEMNON']['database']['url']
+# Load database settings using centralized config loader
+from nexus.config import load_settings_as_dict
+settings = load_settings_as_dict()
+# Database config is under Agent Settings -> MEMNON -> database
+db_url = settings['Agent Settings']['MEMNON']['database']['url']
 
 def get_db_connection():
     """Create and return a database connection."""

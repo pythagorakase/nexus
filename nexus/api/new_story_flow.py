@@ -4,7 +4,6 @@ Headless helpers to manage new-story setup per slot.
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional
@@ -19,10 +18,14 @@ from scripts.new_story_setup import create_slot_schema_only
 
 logger = logging.getLogger("nexus.api.new_story_flow")
 
-# Load settings
-settings_path = Path(__file__).parent.parent.parent / "settings.json"
-with settings_path.open() as f:
-    SETTINGS = json.load(f)
+# Load settings using centralized config loader
+try:
+    from nexus.config import load_settings_as_dict
+    SETTINGS = load_settings_as_dict()
+except Exception as e:
+    logger.error(f"Failed to load settings: {e}")
+    raise RuntimeError(f"Cannot load settings: {e}")
+
 NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 

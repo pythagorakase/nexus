@@ -18,29 +18,24 @@ def get_apex_model_encoding():
     """
     Get the tiktoken encoding for the Apex AI model from settings.
     """
-    # Find settings.json
-    module_dir = Path(__file__).parent.parent.parent.parent
-    settings_path = module_dir / "settings.json"
-    
-    if settings_path.exists():
-        try:
-            with open(settings_path, 'r') as f:
-                settings = json.load(f)
-                target_model = settings.get("Agent Settings", {}).get("LOGON", {}).get("apex_AI", {}).get("model", {}).get("target_model")
-                if target_model:
-                    # Map model names to tiktoken-compatible names
-                    # Note: Using gpt-4o encoding as proxy until newer models are supported
-                    model_map = {
-                        "gpt-5": "gpt-4o",
-                        "claude-opus-4-1": "gpt-4o",
-                        "claude-opus-4-0": "gpt-4o",
-                        "claude-sonnet-4-0": "gpt-4o"
-                    }
-                    model_name = model_map.get(target_model, target_model)
-                    return tiktoken.encoding_for_model(model_name)
-        except Exception as e:
-            logger.warning(f"Failed to load target model from settings: {e}")
-    
+    try:
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+        target_model = settings.get("Agent Settings", {}).get("LOGON", {}).get("apex_AI", {}).get("model", {}).get("target_model")
+        if target_model:
+            # Map model names to tiktoken-compatible names
+            # Note: Using gpt-4o encoding as proxy until newer models are supported
+            model_map = {
+                "gpt-5": "gpt-4o",
+                "claude-opus-4-1": "gpt-4o",
+                "claude-opus-4-0": "gpt-4o",
+                "claude-sonnet-4-0": "gpt-4o"
+            }
+            model_name = model_map.get(target_model, target_model)
+            return tiktoken.encoding_for_model(model_name)
+    except Exception as e:
+        logger.warning(f"Failed to load target model from settings: {e}")
+
     # Default fallback
     return tiktoken.encoding_for_model("gpt-4o")
 
@@ -48,7 +43,7 @@ def get_apex_model_encoding():
 def calculate_chunk_tokens(text: str) -> int:
     """
     Calculate precise token count using tiktoken.
-    Uses the Apex AI model's encoding from settings.json.
+    Uses the Apex AI model's encoding from nexus.toml configuration.
     
     Args:
         text: Text to tokenize

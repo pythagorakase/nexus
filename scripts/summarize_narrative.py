@@ -1264,16 +1264,15 @@ Your summaries will be accessed by another AI to maintain narrative consistency.
             True if within limits, False otherwise
         """
         token_count = get_token_count(text, self.model)
-        
-        # Load settings to get the TPM from settings.json
-        settings_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'settings.json')
-        with open(settings_path, 'r') as f:
-            settings = json.load(f)
-            
+
+        # Load settings to get the TPM
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+
         # Get the OpenAI TPM limit
         openai_tpm = settings.get("API Settings", {}).get("TPM", {}).get("openai")
         if not openai_tpm:
-            raise ValueError("Could not find OpenAI TPM limit in settings.json")
+            raise ValueError("Could not find OpenAI TPM limit in configuration")
             
         # Set output token limit based on mode
         expected_output_tokens = MAX_TOKENS_SEASON if mode == "season" else MAX_TOKENS_EPISODE

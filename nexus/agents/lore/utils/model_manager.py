@@ -1,7 +1,8 @@
 """
 Automatic Model Manager for LM Studio
 
-Manages loading/unloading of LLM models based on settings.json configuration.
+Manages loading/unloading of LLM models based on configuration.
+Uses centralized config loader (nexus.toml with settings.json fallback).
 """
 
 import json
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 import requests
+
+# Import centralized config loader
+from nexus.config import load_settings_as_dict
 
 try:
     import lmstudio as lms
@@ -28,13 +32,15 @@ class ModelManager:
     def __init__(self, settings_path: Optional[str] = None, unload_on_exit: bool = True):
         """
         Initialize model manager with settings
-        
+
         Args:
-            settings_path: Path to settings.json
+            settings_path: Path to config file (optional, uses centralized loader if not specified)
             unload_on_exit: Whether to unload models on cleanup (overrides settings)
         """
-        self.settings_path = settings_path or Path(__file__).parent.parent.parent.parent.parent / "settings.json"
+        self.settings_path = settings_path
         self.settings = self._load_settings()
+        # Store JSON path for save operations (settings.json is still used for model list updates)
+        self._json_settings_path = Path(__file__).parent.parent.parent.parent.parent / "settings.json"
         self.unload_on_exit = unload_on_exit
         self.global_llm_config = (
             self.settings
@@ -76,23 +82,30 @@ class ModelManager:
         self.current_model_id = None
         
     def _load_settings(self) -> Dict[str, Any]:
-        """Load settings from JSON file"""
+        """Load settings using centralized config loader."""
         try:
-            with open(self.settings_path, 'r') as f:
-                return json.load(f)
+            if self.settings_path:
+                return load_settings_as_dict(self.settings_path)
+            else:
+                return load_settings_as_dict()
         except Exception as e:
             logger.error(f"Failed to load settings: {e}")
-            raise RuntimeError(f"Cannot load settings from {self.settings_path}")
+            raise RuntimeError(f"Cannot load settings: {e}")
     
     def _save_settings(self, settings: Dict[str, Any]) -> None:
-        """Save settings back to JSON file"""
+        """Save settings back to JSON file (for model list updates).
+
+        TODO: Migrate to TOML write support when nexus.config gains a save_settings() function.
+        Currently writes to settings.json because the centralized loader only reads configs.
+        See: https://github.com/pythagorakase/nexus/issues/XXX (create tracking issue)
+        """
         try:
-            with open(self.settings_path, 'w') as f:
+            with open(self._json_settings_path, 'w') as f:
                 json.dump(settings, f, indent=4)
-            logger.info(f"Updated settings saved to {self.settings_path}")
+            logger.info(f"Updated settings saved to {self._json_settings_path}")
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
-            raise RuntimeError(f"Cannot save settings to {self.settings_path}")
+            raise RuntimeError(f"Cannot save settings to {self._json_settings_path}")
 
     def _normalize_api_base(self, raw_base: Optional[str]) -> str:
         """Ensure LM Studio API base is scheme://host:port without trailing paths"""

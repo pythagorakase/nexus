@@ -31,7 +31,7 @@ def validate_context(context: Dict[str, Any], settings: Dict[str, Any]) -> Tuple
     token_budget = lore_settings.get("token_budget", {})
     if "apex_context_window" not in token_budget:
         raise ValueError(
-            "apex_context_window must be configured in settings.json under "
+            "apex_context_window must be configured in the configuration file under "
             "Agent Settings > LORE > token_budget > apex_context_window"
         )
     apex_window = token_budget["apex_context_window"]
