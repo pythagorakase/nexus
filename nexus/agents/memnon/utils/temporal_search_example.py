@@ -23,11 +23,11 @@ from nexus.agents.memnon.utils.temporal_search import (
 
 # Load settings
 def load_settings():
-    """Load database settings from settings.json"""
+    """Load database settings from config"""
     try:
-        with open(Path.cwd() / "settings.json", "r") as f:
-            data = json.load(f)
-            return data.get("Agent Settings", {}).get("MEMNON", {})
+        from nexus.config import load_settings_as_dict
+        data = load_settings_as_dict()
+        return data.get("Agent Settings", {}).get("MEMNON", {})
     except Exception as e:
         logger.error(f"Error loading settings: {e}")
         return {}
