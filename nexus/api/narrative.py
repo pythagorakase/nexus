@@ -6,6 +6,7 @@ import asyncio
 import frontmatter
 import json
 import logging
+import os
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Literal
@@ -110,10 +111,12 @@ def get_db_connection(slot: Optional[int] = None):
     # Resolve database name - requires explicit slot or NEXUS_SLOT env var
     dbname = require_slot_dbname(slot=slot)
 
+    # Respect environment variables for connection settings (like db_pool.py)
     return psycopg2.connect(
-        host="localhost",
+        host=os.environ.get("PGHOST", "localhost"),
         database=dbname,
-        user="pythagor"
+        user=os.environ.get("PGUSER", "pythagor"),
+        port=os.environ.get("PGPORT", "5432")
     )
 
 
