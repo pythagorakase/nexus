@@ -10,9 +10,11 @@ interface FontPreferences {
   // Cyberpunk theme fonts
   cyberpunkNarrativeFont: string;
   cyberpunkUIFont: string;
+  cyberpunkDisplayFont: string;
   // Gilded theme fonts
   gildedBodyFont: string;
   gildedMenuFont: string;
+  gildedDisplayFont: string;
 }
 
 interface FontContextType {
@@ -20,13 +22,16 @@ interface FontContextType {
   // Cyberpunk setters
   setCyberpunkNarrativeFont: (font: string) => void;
   setCyberpunkUIFont: (font: string) => void;
+  setCyberpunkDisplayFont: (font: string) => void;
   // Gilded setters
   setGildedBodyFont: (font: string) => void;
   setGildedMenuFont: (font: string) => void;
+  setGildedDisplayFont: (font: string) => void;
   resetToDefaults: () => void;
   // Convenience getters for current theme
   currentBodyFont: string;
   currentMenuFont: string;
+  currentDisplayFont: string;
 }
 
 const FontContext = createContext<FontContextType | undefined>(undefined);
@@ -34,11 +39,13 @@ const FontContext = createContext<FontContextType | undefined>(undefined);
 const DEFAULT_FONTS: FontPreferences = {
   cyberpunkNarrativeFont: 'Source Code Pro',
   cyberpunkUIFont: 'Source Code Pro',
+  cyberpunkDisplayFont: 'Sixtyfour',
   gildedBodyFont: 'Cormorant Garamond',
   gildedMenuFont: 'Xanh Mono',
+  gildedDisplayFont: 'Monoton',
 };
 
-const STORAGE_KEY = 'nexus-font-preferences-v2';
+const STORAGE_KEY = 'nexus-font-preferences-v3';
 
 export function FontProvider({ children }: { children: ReactNode }) {
   const { theme, isGilded } = useTheme();
@@ -64,12 +71,14 @@ export function FontProvider({ children }: { children: ReactNode }) {
       root.style.setProperty('--font-sans', fonts.gildedBodyFont);
       root.style.setProperty('--font-serif', fonts.gildedBodyFont);
       root.style.setProperty('--font-mono', fonts.gildedMenuFont);
+      root.style.setProperty('--font-display', fonts.gildedDisplayFont);
     } else {
       // Cyberpunk theme: Use cyberpunk-specific fonts
       root.style.setProperty('--font-narrative', fonts.cyberpunkNarrativeFont);
       root.style.setProperty('--font-sans', fonts.cyberpunkUIFont);
       root.style.setProperty('--font-serif', fonts.cyberpunkUIFont);
       root.style.setProperty('--font-mono', fonts.cyberpunkUIFont);
+      root.style.setProperty('--font-display', fonts.cyberpunkDisplayFont);
     }
 
     // Save to localStorage
@@ -92,6 +101,14 @@ export function FontProvider({ children }: { children: ReactNode }) {
     setFonts(prev => ({ ...prev, gildedMenuFont: font }));
   };
 
+  const setGildedDisplayFont = (font: string) => {
+    setFonts(prev => ({ ...prev, gildedDisplayFont: font }));
+  };
+
+  const setCyberpunkDisplayFont = (font: string) => {
+    setFonts(prev => ({ ...prev, cyberpunkDisplayFont: font }));
+  };
+
   const resetToDefaults = () => {
     setFonts(DEFAULT_FONTS);
   };
@@ -99,17 +116,21 @@ export function FontProvider({ children }: { children: ReactNode }) {
   // Convenience getters for current theme
   const currentBodyFont = isGilded ? fonts.gildedBodyFont : fonts.cyberpunkNarrativeFont;
   const currentMenuFont = isGilded ? fonts.gildedMenuFont : fonts.cyberpunkUIFont;
+  const currentDisplayFont = isGilded ? fonts.gildedDisplayFont : fonts.cyberpunkDisplayFont;
 
   return (
     <FontContext.Provider value={{
       fonts,
       setCyberpunkNarrativeFont,
       setCyberpunkUIFont,
+      setCyberpunkDisplayFont,
       setGildedBodyFont,
       setGildedMenuFont,
+      setGildedDisplayFont,
       resetToDefaults,
       currentBodyFont,
       currentMenuFont,
+      currentDisplayFont,
     }}>
       {children}
     </FontContext.Provider>

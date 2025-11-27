@@ -48,16 +48,29 @@ const CYBERPUNK_UI_FONTS = [
   'Consolas',
 ];
 
+// Display fonts - decorative fonts for headings and large text
+const GILDED_DISPLAY_FONTS = [
+  'Monoton',
+  'Major Mono Display',
+];
+
+const CYBERPUNK_DISPLAY_FONTS = [
+  'Sixtyfour',
+];
+
 export function SettingsTab() {
   const {
     fonts,
     setCyberpunkNarrativeFont,
     setCyberpunkUIFont,
+    setCyberpunkDisplayFont,
     setGildedBodyFont,
     setGildedMenuFont,
+    setGildedDisplayFont,
     resetToDefaults,
     currentBodyFont,
     currentMenuFont,
+    currentDisplayFont,
   } = useFonts();
   const { theme, setTheme, isGilded, isCyberpunk } = useTheme();
   const queryClient = useQueryClient();
@@ -249,7 +262,7 @@ export function SettingsTab() {
     <ScrollArea className="h-full min-h-0 w-full">
       <div className="container max-w-4xl py-8 px-6 space-y-6">
         <div className="space-y-2">
-          <h2 className={`text-2xl font-mono font-bold text-primary ${glowClass}`}>Settings</h2>
+          <h2 className={`text-2xl font-display font-bold text-primary ${glowClass}`}>Settings</h2>
           <p className="text-muted-foreground font-mono text-sm pl-1">
             Customize typography and appearance preferences
           </p>
@@ -374,6 +387,38 @@ export function SettingsTab() {
                   STATUS: READY // CHAPTER: S01-E01-S001
                 </div>
               </div>
+
+              {/* Gilded Display Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="gilded-display-font" className="font-mono text-sm">
+                  Display Text
+                </Label>
+                <Select
+                  value={fonts.gildedDisplayFont}
+                  onValueChange={setGildedDisplayFont}
+                >
+                  <SelectTrigger id="gilded-display-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GILDED_DISPLAY_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview - larger text for display font */}
+                <div
+                  className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
+                  style={{ fontFamily: currentDisplayFont }}
+                >
+                  NEXUS IRIS
+                </div>
+                <p className="text-xs text-muted-foreground font-mono">
+                  For decorative headings and large display text
+                </p>
+              </div>
             </>
           ) : (
             <>
@@ -433,6 +478,38 @@ export function SettingsTab() {
                 >
                   [STATUS: READY] // APEX: ONLINE // CHAPTER: S01-E01-S001
                 </div>
+              </div>
+
+              {/* Cyberpunk Display Font with inline preview */}
+              <div className="space-y-3">
+                <Label htmlFor="cyber-display-font" className="font-mono text-sm">
+                  Display Text
+                </Label>
+                <Select
+                  value={fonts.cyberpunkDisplayFont}
+                  onValueChange={setCyberpunkDisplayFont}
+                >
+                  <SelectTrigger id="cyber-display-font" className="font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CYBERPUNK_DISPLAY_FONTS.map((font) => (
+                      <SelectItem key={font} value={font} className="font-mono">
+                        <span style={{ fontFamily: font }}>{font}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* Inline preview - larger text for display font */}
+                <div
+                  className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
+                  style={{ fontFamily: currentDisplayFont }}
+                >
+                  NEXUS IRIS
+                </div>
+                <p className="text-xs text-muted-foreground font-mono">
+                  For decorative headings and large display text
+                </p>
               </div>
             </>
           )}

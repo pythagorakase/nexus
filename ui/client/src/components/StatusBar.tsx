@@ -293,6 +293,13 @@ export function StatusBar({
         </>
       )}
 
+      {/* Centered NEXUS title - absolutely positioned for true window centering */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+        <span className={`font-display text-xl md:text-2xl text-primary ${glowClass} tracking-wider`}>
+          NEXUS
+        </span>
+      </div>
+
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -329,45 +336,43 @@ export function StatusBar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div className="flex items-center gap-2 md:gap-6 text-sm md:text-base font-mono flex-1 overflow-hidden">
-        <div className="hidden md:flex items-center gap-2" data-testid="text-model-status">
-          <span className="text-primary/70">MODEL:</span>
-          <div
-            className="relative cursor-pointer text-base md:text-lg tracking-wide"
-            onMouseEnter={() => setIsModelHovered(true)}
-            onMouseLeave={() => setIsModelHovered(false)}
-            onClick={handleModelClick}
-          >
-            <span className={`relative inline-block min-w-[3rem] px-0.5 transition-colors duration-300 ${modelVisualClasses}`}>
-              {model}
-            </span>
-            {/* Hover overlay */}
-            {modelError && (
-              <span className={`absolute inset-0 flex items-center justify-center bg-background/95 text-destructive ${glowClass} font-bold text-[0.6rem] md:text-xs px-2 text-center leading-snug`}>
-                {modelError}
-              </span>
-            )}
-            {isModelHovered && !isModelOperating && !modelError && modelStatus !== "loading" && modelStatus !== "generating" && (
-              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-primary ${glowClass} font-bold`}>
-                {modelStatus === "unloaded" ? "LOAD" : "UNLOAD"}
-              </span>
-            )}
-            {/* Operating state */}
-            {isModelOperating && !modelError && (
-              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-accent ${glowClass} font-bold`}>
-                ...
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 md:gap-2" data-testid="text-chapter-info">
-          <span className="text-primary/70 hidden sm:inline">CHAPTER:</span>
-          <span className="text-foreground">
-            S{season.toString().padStart(2, '0')}-E{episode.toString().padStart(2, '0')}-S{scene.toString().padStart(3, '0')}
+      {/* Left side: MODEL status */}
+      <div className="hidden md:flex items-center gap-2 text-sm md:text-base font-mono z-10" data-testid="text-model-status">
+        <span className="text-primary/70">MODEL:</span>
+        <div
+          className="relative cursor-pointer text-base md:text-lg tracking-wide"
+          onMouseEnter={() => setIsModelHovered(true)}
+          onMouseLeave={() => setIsModelHovered(false)}
+          onClick={handleModelClick}
+        >
+          <span className={`relative inline-block min-w-[3rem] px-0.5 transition-colors duration-300 ${modelVisualClasses}`}>
+            {model}
           </span>
+          {/* Hover overlay */}
+          {modelError && (
+            <span className={`absolute inset-0 flex items-center justify-center bg-background/95 text-destructive ${glowClass} font-bold text-[0.6rem] md:text-xs px-2 text-center leading-snug`}>
+              {modelError}
+            </span>
+          )}
+          {isModelHovered && !isModelOperating && !modelError && modelStatus !== "loading" && modelStatus !== "generating" && (
+            <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-primary ${glowClass} font-bold`}>
+              {modelStatus === "unloaded" ? "LOAD" : "UNLOAD"}
+            </span>
+          )}
+          {/* Operating state */}
+          {isModelOperating && !modelError && (
+            <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-accent ${glowClass} font-bold`}>
+              ...
+            </span>
+          )}
         </div>
+      </div>
 
+      {/* Spacer to push right-side elements */}
+      <div className="flex-1" />
+
+      {/* Right side: APEX status and TEST MODE badge */}
+      <div className="flex items-center gap-2 md:gap-4 text-sm md:text-base font-mono z-10">
         {isStoryMode && (
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-apex-status">
             <span className="text-primary/70 hidden sm:inline">APEX:</span>
