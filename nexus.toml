@@ -317,3 +317,12 @@ provider = "openai"           # API provider: "openai" or "anthropic"
 model = "gpt-5.1"             # Model to use for narrative generation
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
+
+# =============================================================================
+# Database Connection Settings
+# =============================================================================
+
+[database]
+user = "pythagor"             # PostgreSQL username
+host = "localhost"            # Database server host
+port = 5432                   # PostgreSQL port
