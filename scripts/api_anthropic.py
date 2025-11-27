@@ -79,35 +79,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.metadata")
 
-# Load settings.json for API limits
-SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-                           "settings.json")
-
 # Default TPM limits if settings file is not available
 DEFAULT_TPM_LIMITS = {
     "anthropic": 30000
 }
 
-# Load settings
+DEFAULT_COOLDOWNS = {
+    "individual": 15,
+    "batch": 30,
+    "rate_limit": 300
+}
+
+# Load settings using centralized config loader
 try:
-    with open(SETTINGS_PATH, 'r') as f:
-        SETTINGS = json.load(f)
+    from nexus.config import load_settings_as_dict
+    SETTINGS = load_settings_as_dict()
     TPM_LIMITS = SETTINGS.get("API Settings", {}).get("TPM", DEFAULT_TPM_LIMITS)
-    COOLDOWNS = SETTINGS.get("API Settings", {}).get("cooldowns", {
-        "individual": 15,
-        "batch": 30,
-        "rate_limit": 300
-    })
-    # logger.info(f"Loaded API TPM limits from settings.json: {TPM_LIMITS}")
-    # logger.info(f"Loaded API cooldown values from settings.json: {COOLDOWNS}")
+    COOLDOWNS = SETTINGS.get("API Settings", {}).get("cooldowns", DEFAULT_COOLDOWNS)
 except Exception as e:
-    logger.warning(f"Failed to load settings.json: {str(e)}. Using default TPM limits: {DEFAULT_TPM_LIMITS}")
+    logger.warning(f"Failed to load settings via config loader: {str(e)}. Using defaults.")
     TPM_LIMITS = DEFAULT_TPM_LIMITS
-    COOLDOWNS = {
-        "individual": 15,
-        "batch": 30,
-        "rate_limit": 300
-    }
+    COOLDOWNS = DEFAULT_COOLDOWNS
 
 
 class LLMResponse:

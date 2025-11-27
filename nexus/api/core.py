@@ -6,7 +6,6 @@ Provides REST API endpoints for:
 - System health and status
 - Model availability queries
 """
-from pathlib import Path
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -26,10 +25,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Path to settings.json
-ROOT_DIR = Path(__file__).resolve().parents[2]
-SETTINGS_PATH = ROOT_DIR / "settings.json"
 
 
 # Request/Response models
@@ -57,7 +52,7 @@ class ModelOperationResponse(BaseModel):
 async def load_model(request: ModelLoadRequest):
     """Load a specific model by ID."""
     try:
-        manager = ModelManager(settings_path=str(SETTINGS_PATH), unload_on_exit=False)
+        manager = ModelManager(unload_on_exit=False)
 
         # Load the model with optional context window override
         success = manager.load_model(
@@ -85,7 +80,7 @@ async def load_model(request: ModelLoadRequest):
 async def unload_model():
     """Unload the currently loaded model to free resources."""
     try:
-        manager = ModelManager(settings_path=str(SETTINGS_PATH))
+        manager = ModelManager()
 
         # Get current model before unloading
         loaded_models = manager.get_loaded_models()
@@ -112,7 +107,7 @@ async def unload_model():
 async def get_model_status():
     """Get list of currently loaded models."""
     try:
-        manager = ModelManager(settings_path=str(SETTINGS_PATH))
+        manager = ModelManager()
         loaded_models = manager.get_loaded_models()
 
         return ModelStatusResponse(loaded_models=loaded_models)
@@ -124,7 +119,7 @@ async def get_model_status():
 async def get_available_models():
     """Get list of available (downloaded) models."""
     try:
-        manager = ModelManager(settings_path=str(SETTINGS_PATH))
+        manager = ModelManager()
         available_models = manager.update_available_models()
 
         return ModelAvailableResponse(available_models=available_models)

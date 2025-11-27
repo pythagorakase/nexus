@@ -575,14 +575,15 @@ class AuditionRepository:
     # ------------------------------------------------------------------
     @staticmethod
     def _load_db_url(settings_path: Path) -> str:
+        """Load database URL from settings using centralized config loader."""
         try:
-            with settings_path.open("r", encoding="utf-8") as handle:
-                settings = json.load(handle)
+            from nexus.config import load_settings_as_dict
+            settings = load_settings_as_dict(str(settings_path) if settings_path != SETTINGS_PATH else None)
             memnon = settings.get("Agent Settings", {}).get("MEMNON", {})
             database = memnon.get("database", {})
             return database.get("url", DEFAULT_DB_URL)
-        except (OSError, json.JSONDecodeError) as exc:  # pragma: no cover - defensive
-            raise RuntimeError(f"Failed to load database URL from {settings_path}: {exc}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Failed to load database URL: {exc}") from exc
 
     # Global settings -------------------------------------------------------
     def get_replicate_count(self) -> int:
