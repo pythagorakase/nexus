@@ -47,12 +47,13 @@ except ImportError:
     logger.error("SQLAlchemy not found. Please install with: pip install sqlalchemy")
     sys.exit(1)
 
-# Try to load settings
+# Try to load settings using centralized config loader
 try:
-    with open(os.path.join(os.path.dirname(__file__), '..', 'settings.json'), 'r') as f:
-        SETTINGS = json.load(f)["Agent Settings"]["MEMNON"]
+    from nexus.config import load_settings_as_dict
+    _all_settings = load_settings_as_dict()
+    SETTINGS = _all_settings.get("Agent Settings", {}).get("MEMNON", {})
 except Exception as e:
-    logger.warning(f"Warning: Could not load settings from settings.json: {e}")
+    logger.warning(f"Warning: Could not load settings via config loader: {e}")
     SETTINGS = {}
 
 # Create SQL Alchemy Base

@@ -100,29 +100,23 @@ def read_file_with_fallback(file_path: Path) -> Optional[str]:
         return None
 
 def get_target_model() -> str:
-    """Get the target model from settings.json for accurate token counting."""
-    # Find settings.json by looking up from script location
-    script_dir = Path(__file__).parent
-    nexus_root = script_dir.parent
-    settings_path = nexus_root / "settings.json"
-    
-    if settings_path.exists():
-        try:
-            with open(settings_path, 'r') as f:
-                settings = json.load(f)
-                target_model = settings.get("Agent Settings", {}).get("LOGON", {}).get("apex_AI", {}).get("model", {}).get("target_model")
-                if target_model:
-                    # Map model names to tiktoken-compatible names
-                    model_map = {
-                        "gpt-5": "gpt-4o",  # Use gpt-4o encoding until gpt-5 is officially supported
-                        "claude-opus-4-1": "gpt-4o",  # Claude uses similar tokenization
-                        "claude-opus-4-0": "gpt-4o",
-                        "claude-sonnet-4-0": "gpt-4o"
-                    }
-                    return model_map.get(target_model, target_model)
-        except Exception as e:
-            pass
-    
+    """Get the target model from configuration for accurate token counting."""
+    try:
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+        target_model = settings.get("Agent Settings", {}).get("LOGON", {}).get("apex_AI", {}).get("model", {}).get("target_model")
+        if target_model:
+            # Map model names to tiktoken-compatible names
+            model_map = {
+                "gpt-5": "gpt-4o",  # Use gpt-4o encoding until gpt-5 is officially supported
+                "claude-opus-4-1": "gpt-4o",  # Claude uses similar tokenization
+                "claude-opus-4-0": "gpt-4o",
+                "claude-sonnet-4-0": "gpt-4o"
+            }
+            return model_map.get(target_model, target_model)
+    except Exception:
+        pass
+
     # Default fallback
     return "gpt-4o"
 

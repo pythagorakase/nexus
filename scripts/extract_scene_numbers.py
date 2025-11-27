@@ -26,48 +26,48 @@ logger = logging.getLogger(__name__)
 
 # Load database configuration
 def load_db_config() -> Dict[str, Any]:
-    """Load database configuration from settings.json file"""
+    """Load database configuration from config file"""
     try:
-        with open("settings.json", "r") as f:
-            settings = json.load(f)
-            # Extract from MEMNON agent settings
-            if "Agent Settings" in settings and "MEMNON" in settings["Agent Settings"]:
-                db_url = settings["Agent Settings"]["MEMNON"]["database"].get("url")
-                if db_url:
-                    # Parse PostgreSQL URL
-                    # Format: postgresql://username:password@host:port/database
-                    # Remove postgresql:// prefix
-                    db_url = db_url.replace("postgresql://", "")
-                    # Split by @ to separate credentials and host/database
-                    if "@" in db_url:
-                        creds, host_db = db_url.split("@", 1)
-                        # Split credentials by : to get username and password
-                        if ":" in creds:
-                            username, password = creds.split(":", 1)
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+        # Extract from MEMNON agent settings
+        if "Agent Settings" in settings and "MEMNON" in settings["Agent Settings"]:
+            db_url = settings["Agent Settings"]["MEMNON"]["database"].get("url")
+            if db_url:
+                # Parse PostgreSQL URL
+                # Format: postgresql://username:password@host:port/database
+                # Remove postgresql:// prefix
+                db_url = db_url.replace("postgresql://", "")
+                # Split by @ to separate credentials and host/database
+                if "@" in db_url:
+                    creds, host_db = db_url.split("@", 1)
+                    # Split credentials by : to get username and password
+                    if ":" in creds:
+                        username, password = creds.split(":", 1)
+                    else:
+                        username, password = creds, ""
+                    # Split host/db by / to get host and database
+                    if "/" in host_db:
+                        host_part, database = host_db.split("/", 1)
+                        # Check if port is specified
+                        if ":" in host_part:
+                            host, port = host_part.split(":", 1)
+                            port = int(port)
                         else:
-                            username, password = creds, ""
-                        # Split host/db by / to get host and database
-                        if "/" in host_db:
-                            host_part, database = host_db.split("/", 1)
-                            # Check if port is specified
-                            if ":" in host_part:
-                                host, port = host_part.split(":", 1)
-                                port = int(port)
-                            else:
-                                host, port = host_part, 5432
-                            
-                            return {
-                                "host": host,
-                                "port": port,
-                                "database": database,
-                                "user": username,
-                                "password": password
-                            }
-                    logger.warning(f"Failed to parse database URL: {db_url}")
-                
-            logger.warning("Database configuration not found in MEMNON agent settings, using empty config")
-            return {}
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+                            host, port = host_part, 5432
+
+                        return {
+                            "host": host,
+                            "port": port,
+                            "database": database,
+                            "user": username,
+                            "password": password
+                        }
+                logger.warning(f"Failed to parse database URL: {db_url}")
+
+        logger.warning("Database configuration not found in MEMNON agent settings, using empty config")
+        return {}
+    except Exception as e:
         logger.error(f"Error loading database configuration: {e}")
         return {}
 
@@ -97,16 +97,16 @@ def extract_scene_from_slug(slug: str) -> Optional[int]:
     
     # Try to load pattern from settings
     try:
-        with open("settings.json", "r") as f:
-            settings = json.load(f)
-            if "Agent Settings" in settings and "MEMNON" in settings["Agent Settings"]:
-                if "import" in settings["Agent Settings"]["MEMNON"]:
-                    import_settings = settings["Agent Settings"]["MEMNON"]["import"]
-                    if "chunk_regex" in import_settings:
-                        pattern = import_settings["chunk_regex"]
-                        logger.info(f"Using regex pattern from settings: {pattern}")
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Could not load regex pattern from settings: {e}")
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+        if "Agent Settings" in settings and "MEMNON" in settings["Agent Settings"]:
+            if "import" in settings["Agent Settings"]["MEMNON"]:
+                import_settings = settings["Agent Settings"]["MEMNON"]["import"]
+                if "chunk_regex" in import_settings:
+                    pattern = import_settings["chunk_regex"]
+                    logger.info(f"Using regex pattern from settings: {pattern}")
+    except Exception as e:
+        logger.warning(f"Could not load regex pattern from config: {e}")
     
     # Define regex pattern to extract the scene number
     # Pattern should capture the scene number in group 4 based on settings
