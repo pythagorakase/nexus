@@ -28,17 +28,12 @@ logger = logging.getLogger("memnon-direct")
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 def load_settings() -> Dict[str, Any]:
-    """Load settings from settings.json file"""
+    """Load settings using centralized config loader"""
     try:
-        settings_path = os.path.join(os.path.dirname(__file__), "settings.json")
-        if os.path.exists(settings_path):
-            with open(settings_path, 'r') as f:
-                settings = json.load(f)
-                logger.info(f"Successfully loaded settings from {settings_path}")
-                return settings
-        else:
-            logger.warning(f"Warning: settings.json not found at {settings_path}")
-            return {}
+        from nexus.config import load_settings_as_dict
+        settings = load_settings_as_dict()
+        logger.info("Successfully loaded settings via config loader")
+        return settings
     except Exception as e:
         logger.error(f"Error loading settings: {e}")
         return {}
