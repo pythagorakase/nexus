@@ -93,7 +93,12 @@ class ModelManager:
             raise RuntimeError(f"Cannot load settings: {e}")
     
     def _save_settings(self, settings: Dict[str, Any]) -> None:
-        """Save settings back to JSON file (for model list updates)"""
+        """Save settings back to JSON file (for model list updates).
+
+        TODO: Migrate to TOML write support when nexus.config gains a save_settings() function.
+        Currently writes to settings.json because the centralized loader only reads configs.
+        See: https://github.com/pythagorakase/nexus/issues/XXX (create tracking issue)
+        """
         try:
             with open(self._json_settings_path, 'w') as f:
                 json.dump(settings, f, indent=4)

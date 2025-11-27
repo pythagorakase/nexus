@@ -38,8 +38,8 @@ class TokenBudgetManager:
         # Get base values - apex_context_window is required
         if "apex_context_window" not in self.token_budget_config:
             raise ValueError(
-                "apex_context_window must be configured in nexus.toml under "
-                "[lore.token_budget] apex_context_window = <value>"
+                "apex_context_window must be configured in the configuration file under "
+                "Agent Settings > LORE > token_budget > apex_context_window"
             )
         apex_window = self.token_budget_config["apex_context_window"]
         logger.debug(f"Using apex_context_window: {apex_window} tokens")
