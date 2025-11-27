@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 import psycopg2
+from psycopg2.extensions import connection as PGConnection
 
 TEMPLATE_DB = "NEXUS_template"
 TARGET_DBS = ["NEXUS", "save_01", "save_02", "save_03", "save_04", "save_05"]
@@ -34,10 +35,28 @@ def get_target_connection(db_name: str):
     return psycopg2.connect(dbname=db_name, user="pythagor", host="localhost")
 
 
+def ensure_schema_migrations_table(conn: PGConnection) -> None:
+    """Create schema_migrations table in template if missing."""
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                migration_name TEXT NOT NULL,
+                database_name TEXT NOT NULL,
+                applied_at TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (migration_name, database_name)
+            )
+            """
+        )
+    conn.commit()
+
+
 def get_applied_migrations(db_name: str) -> set[str]:
     """Query template for migrations already applied to this database."""
     conn = get_template_connection()
     try:
+        ensure_schema_migrations_table(conn)
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT migration_name FROM schema_migrations WHERE database_name = %s",
@@ -90,6 +109,7 @@ def apply_migration(db_name: str, migration_path: Path, dry_run: bool = False) -
     try:
         template_conn = get_template_connection()
         try:
+            ensure_schema_migrations_table(template_conn)
             with template_conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO schema_migrations (migration_name, database_name) VALUES (%s, %s)",
@@ -192,6 +212,7 @@ Examples:
     # Check template database exists
     try:
         conn = get_template_connection()
+        ensure_schema_migrations_table(conn)
         conn.close()
     except psycopg2.OperationalError as e:
         print(f"Error: Cannot connect to {TEMPLATE_DB}: {e}")
