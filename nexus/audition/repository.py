@@ -578,10 +578,8 @@ class AuditionRepository:
         """Load database URL from settings using centralized config loader."""
         try:
             from nexus.config import load_settings_as_dict
-            if settings_path == SETTINGS_PATH:
-                settings = load_settings_as_dict()
-            else:
-                settings = load_settings_as_dict(str(settings_path))
+            # Use centralized loader (ignores settings_path, uses nexus.toml with fallback)
+            settings = load_settings_as_dict()
             memnon = settings.get("Agent Settings", {}).get("MEMNON", {})
             database = memnon.get("database", {})
             return database.get("url", DEFAULT_DB_URL)
