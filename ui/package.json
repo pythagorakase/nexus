@@ -12,6 +12,8 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@arwes/react": "^1.0.0-next.25020502",
+    "@arwes/react-frames": "^1.0.0-next.25020502",
     "@hookform/resolvers": "^3.10.0",
     "@iarna/toml": "^2.2.5",
     "@jridgewell/trace-mapping": "^0.3.25",
