@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Book, Map, Users } from "lucide-react";
+import { Book, Map, Users, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useNarrativeGeneration } from "@/hooks/useNarrativeGeneration";
 import type { EntityChanges } from "@/types/narrative";
@@ -75,7 +75,8 @@ export function NexusLayout() {
   const generatingTimeoutRef = useRef<number | null>(null);
   const readyTimeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
-  const { isCyberpunk } = useTheme();
+  const { isCyberpunk, isGilded } = useTheme();
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
   // Read initial tab from URL query param (e.g., /nexus?tab=settings)
   const [activeTab, setActiveTab] = useState(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -432,6 +433,15 @@ export function NexusLayout() {
                 <span className="hidden sm:inline">CHARACTERS</span>
                 <span className="sm:hidden">CHAR</span>
               </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                data-testid="tab-settings"
+              >
+                <Settings className="h-3 w-3" />
+                <span className="hidden sm:inline">SETTINGS</span>
+                <span className="sm:hidden">SET</span>
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -463,7 +473,7 @@ export function NexusLayout() {
         {activeTab === "narrative" && narrative.narrativePhase && (
           <div className="border-t border-border bg-card/80 text-xs font-mono px-3 py-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-primary terminal-glow"}>
+              <span className={narrative.narrativePhase === "error" ? "text-destructive" : `text-primary ${glowClass}`}>
                 {narrative.narrativePhase === "error" ? "!" : ">>"}
               </span>
               <span className={narrative.narrativePhase === "error" ? "text-destructive" : "text-foreground"}>
@@ -510,7 +520,7 @@ export function NexusLayout() {
             <div className="grid gap-4 md:grid-cols-3 text-sm">
               <div className="md:col-span-2 space-y-3">
                 <div className="space-y-1">
-                  <div className="text-primary terminal-glow font-mono text-sm">{chunkLabel}</div>
+                  <div className={`text-primary ${glowClass} font-mono text-sm`}>{chunkLabel}</div>
                   <div className="text-muted-foreground italic text-xs">{subtitle}</div>
                   <div className="text-muted-foreground text-xs">
                     {narrative.incubatorData.time_delta || "Time delta pending"}

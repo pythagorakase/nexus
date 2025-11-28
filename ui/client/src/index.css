@@ -38,15 +38,16 @@ html {
 
 /* LIGHT MODE */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
 
   /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
+  --opaque-button-border-intensity: -8;
+  /* In terms of percentages */
 
   /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
   --background: 0 0% 98%;
 
@@ -114,7 +115,8 @@ html {
   --font-sans: 'Source Code Pro', 'Courier New', Courier, monospace;
   --font-serif: 'Source Code Pro', 'Courier New', Courier, monospace;
   --font-mono: 'Source Code Pro', 'Courier New', Courier, monospace;
-  --radius: .25rem; /* 4px */
+  --radius: .25rem;
+  /* 4px */
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
@@ -172,21 +174,27 @@ html {
   --elevate-2: rgba(201, 162, 39, 0.08);
 
   /* Core Surfaces - Ink Black */
-  --background: 0 0% 4%;              /* #0a0a0b */
-  --foreground: 45 20% 93%;           /* #f5f0e1 cream */
+  --background: 0 0% 4%;
+  /* #0a0a0b */
+  --foreground: 45 20% 93%;
+  /* #f5f0e1 cream */
 
-  --border: 43 30% 22%;               /* muted brass */
+  --border: 43 30% 22%;
+  /* muted brass */
 
   /* Cards/Panels */
-  --card: 0 0% 7%;                    /* #121214 */
+  --card: 0 0% 7%;
+  /* #121214 */
   --card-foreground: 45 20% 93%;
-  --card-border: 43 40% 28%;          /* brass border */
+  --card-border: 43 40% 28%;
+  /* brass border */
 
   /* Sidebar */
   --sidebar: 0 0% 5%;
   --sidebar-foreground: 45 20% 93%;
   --sidebar-border: 43 35% 25%;
-  --sidebar-primary: 43 74% 47%;      /* #c9a227 warm brass */
+  --sidebar-primary: 43 74% 47%;
+  /* #c9a227 warm brass */
   --sidebar-primary-foreground: 0 0% 4%;
   --sidebar-accent: 43 40% 20%;
   --sidebar-accent-foreground: 45 20% 93%;
@@ -207,7 +215,8 @@ html {
 
   /* Muted - Subdued Brass */
   --muted: 35 20% 14%;
-  --muted-foreground: 43 40% 52%;     /* #b59953 - warmer, less olive */
+  --muted-foreground: 43 40% 52%;
+  /* #b59953 - warmer, less olive */
 
   /* Accent - Light Gold #e4c76b */
   --accent: 45 55% 60%;
@@ -222,11 +231,16 @@ html {
   --ring: 43 74% 47%;
 
   /* Charts - Gold/Bronze palette */
-  --chart-1: 43 74% 47%;              /* brass */
-  --chart-2: 30 50% 45%;              /* bronze */
-  --chart-3: 45 60% 65%;              /* light gold */
-  --chart-4: 35 40% 35%;              /* dark bronze */
-  --chart-5: 50 30% 50%;              /* muted gold */
+  --chart-1: 43 74% 47%;
+  /* brass */
+  --chart-2: 30 50% 45%;
+  /* bronze */
+  --chart-3: 45 60% 65%;
+  /* light gold */
+  --chart-4: 35 40% 35%;
+  /* dark bronze */
+  --chart-5: 50 30% 50%;
+  /* muted gold */
 
   /* Typography - Cormorant Garamond for body, mono font controlled by FontContext */
   --font-sans: 'Cormorant Garamond', Georgia, serif;
@@ -235,7 +249,8 @@ html {
   --font-display: 'Monoton', fantasy;
 
   /* Sharper corners for Art Deco aesthetic */
-  --radius: 0.125rem;                 /* 2px */
+  --radius: 0.125rem;
+  /* 2px */
 
   /* Shadows - subtle warm glow */
   --shadow-2xs: 0px 1px 2px 0px hsl(43 50% 10% / 0.3);
@@ -268,60 +283,67 @@ html {
    CYBERPUNK THEME (LEGACY)
    Green terminal aesthetic - activated via .theme-cyberpunk class
    ═══════════════════════════════════════════════════════════════════════════ */
-.dark.theme-cyberpunk {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+.dark.theme-cyberpunk,
+.theme-cyberpunk .dark {
+  --button-outline: rgba(0, 229, 255, .15);
+  --badge-outline: rgba(0, 229, 255, .10);
 
-  --opaque-button-border-intensity: 9;
+  --opaque-button-border-intensity: 10;
 
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(0, 229, 255, .05);
+  --elevate-2: rgba(0, 229, 255, .10);
 
-  --background: 0 0% 4%;
-  --foreground: 142 100% 85%;
+  /* Deep Void Background */
+  --background: 180 30% 3%;
+  --foreground: 180 30% 90%;
 
-  --border: 0 0% 14%;
+  --border: 185 50% 20%;
 
-  --card: 0 0% 8%;
-  --card-foreground: 142 100% 85%;
-  --card-border: 0 0% 12%;
+  --card: 180 30% 5%;
+  --card-foreground: 180 30% 90%;
+  --card-border: 185 50% 20%;
 
-  --sidebar: 0 0% 6%;
-  --sidebar-foreground: 142 100% 85%;
-  --sidebar-border: 0 0% 10%;
-  --sidebar-primary: 142 100% 30%;
-  --sidebar-primary-foreground: 142 100% 95%;
-  --sidebar-accent: 0 0% 12%;
-  --sidebar-accent-foreground: 142 100% 85%;
-  --sidebar-ring: 142 100% 50%;
+  --sidebar: 180 30% 4%;
+  --sidebar-foreground: 180 30% 90%;
+  --sidebar-border: 185 50% 20%;
+  --sidebar-primary: 185 100% 50%;
+  --sidebar-primary-foreground: 180 30% 3%;
+  --sidebar-accent: 185 30% 10%;
+  --sidebar-accent-foreground: 180 30% 90%;
+  --sidebar-ring: 185 100% 50%;
 
-  --popover: 0 0% 10%;
-  --popover-foreground: 142 100% 85%;
-  --popover-border: 0 0% 14%;
+  --popover: 180 30% 3%;
+  --popover-foreground: 180 30% 90%;
+  --popover-border: 185 50% 20%;
 
-  --primary: 142 100% 30%;
-  --primary-foreground: 142 100% 95%;
+  /* Neon Cyan Primary */
+  --primary: 185 100% 50%;
+  --primary-foreground: 180 30% 3%;
 
-  --secondary: 0 0% 14%;
-  --secondary-foreground: 142 100% 85%;
+  /* Steel Gray Secondary */
+  --secondary: 190 25% 15%;
+  --secondary-foreground: 180 25% 80%;
 
-  --muted: 142 8% 12%;
-  --muted-foreground: 142 50% 70%;
+  /* Dark Slate Muted */
+  --muted: 185 20% 12%;
+  --muted-foreground: 185 40% 55%;
 
-  --accent: 142 12% 16%;
-  --accent-foreground: 142 100% 85%;
+  /* Electric Blue Accent */
+  --accent: 190 80% 60%;
+  --accent-foreground: 180 30% 3%;
 
-  --destructive: 0 84% 35%;
-  --destructive-foreground: 0 84% 95%;
+  /* Neon Pink Destructive */
+  --destructive: 350 80% 55%;
+  --destructive-foreground: 180 30% 90%;
 
-  --input: 0 0% 25%;
-  --ring: 142 100% 50%;
+  --input: 185 50% 20%;
+  --ring: 185 100% 50%;
 
-  --chart-1: 142 100% 65%;
-  --chart-2: 180 100% 60%;
-  --chart-3: 200 90% 65%;
-  --chart-4: 280 65% 70%;
-  --chart-5: 340 75% 68%;
+  --chart-1: 185 100% 50%;
+  --chart-2: 200 90% 55%;
+  --chart-3: 170 70% 50%;
+  --chart-4: 260 60% 60%;
+  --chart-5: 320 70% 60%;
 
   /* Typography - Monospace */
   --font-sans: 'Source Code Pro', 'Courier New', Courier, monospace;
@@ -333,11 +355,16 @@ html {
 
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
+    0px 1px 2px -1px hsl(0 0% 0% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
+    0px 2px 4px -1px hsl(0 0% 0% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
+    0px 4px 6px -1px hsl(0 0% 0% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
+    0px 8px 10px -1px hsl(0 0% 0% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
 
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -354,6 +381,10 @@ html {
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.font-narrative {
+  font-family: var(--font-narrative);
 }
 
 @layer base {
@@ -500,19 +531,24 @@ html {
     left: 0;
     right: 0;
     bottom: 0;
-    background: linear-gradient(
-      to bottom,
-      transparent 50%,
-      rgba(0, 0, 0, 0.05) 50%
-    );
+    background: linear-gradient(to bottom,
+        transparent 50%,
+        rgba(0, 0, 0, 0.05) 50%);
     background-size: 100% 4px;
     pointer-events: none;
     z-index: 1;
   }
 
   @keyframes flicker {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.98; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.98;
+    }
   }
 
   .terminal-flicker {
@@ -521,9 +557,12 @@ html {
 
   /* Terminal loading scanline effect - animated overlay for "loading" state */
   @keyframes terminal-scanline-fade {
-    0%, 100% {
+
+    0%,
+    100% {
       opacity: 0;
     }
+
     50% {
       opacity: 0.5;
     }
@@ -546,13 +585,11 @@ html {
 
   /* Cyberpunk theme variant - green terminal scanlines */
   .dark.theme-cyberpunk .terminal-loading::after {
-    background-image: repeating-linear-gradient(
-      0deg,
-      rgba(16, 185, 129, 0.08),
-      rgba(16, 185, 129, 0.08) 1px,
-      rgba(110, 231, 183, 0.45) 1px,
-      rgba(110, 231, 183, 0.45) 2px
-    );
+    background-image: repeating-linear-gradient(0deg,
+        rgba(16, 185, 129, 0.08),
+        rgba(16, 185, 129, 0.08) 1px,
+        rgba(110, 231, 183, 0.45) 1px,
+        rgba(110, 231, 183, 0.45) 2px);
   }
 
   /* Gilded theme - disable terminal loading effect */
@@ -566,7 +603,7 @@ html {
     overflow: hidden;
   }
 
-  .status-bar-loading > * {
+  .status-bar-loading>* {
     position: relative;
     z-index: 1;
   }
@@ -584,19 +621,15 @@ html {
 
   /* Cyberpunk theme - green status bar loading */
   .dark.theme-cyberpunk .status-bar-loading::after {
-    background-image: repeating-linear-gradient(
-        0deg,
+    background-image: repeating-linear-gradient(0deg,
         rgba(16, 185, 129, 0.05),
         rgba(16, 185, 129, 0.05) 2px,
         rgba(16, 185, 129, 0.35) 2px,
-        rgba(16, 185, 129, 0.35) 4px
-      ),
-      linear-gradient(
-        90deg,
+        rgba(16, 185, 129, 0.35) 4px),
+      linear-gradient(90deg,
         rgba(16, 185, 129, 0),
         rgba(16, 185, 129, 0.12),
-        rgba(16, 185, 129, 0)
-      );
+        rgba(16, 185, 129, 0));
   }
 
   /* NOTE: Gilded brass version is defined later in the Art Deco effects section */
@@ -626,12 +659,10 @@ html {
 
   /* Cyberpunk theme - green progress bar */
   .dark.theme-cyberpunk .status-bar-progress-bar {
-    background-image: linear-gradient(
-      90deg,
-      rgba(16, 185, 129, 0),
-      rgba(16, 185, 129, 0.8),
-      rgba(16, 185, 129, 0)
-    );
+    background-image: linear-gradient(90deg,
+        rgba(16, 185, 129, 0),
+        rgba(16, 185, 129, 0.8),
+        rgba(16, 185, 129, 0));
     box-shadow:
       0 0 8px rgba(16, 185, 129, 0.5),
       0 0 16px rgba(16, 185, 129, 0.35);
@@ -666,6 +697,7 @@ html {
     0% {
       background-position: 200% 0;
     }
+
     100% {
       background-position: -200% 0;
     }
@@ -676,6 +708,7 @@ html {
     0% {
       background-position: -200% 0;
     }
+
     100% {
       background-position: 200% 0;
     }
@@ -697,14 +730,12 @@ html {
     inset: 0;
     pointer-events: none;
     z-index: 2;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      transparent 20%,
-      rgba(0, 0, 0, 0.85) 50%,
-      transparent 80%,
-      transparent 100%
-    );
+    background: linear-gradient(90deg,
+        transparent 0%,
+        transparent 20%,
+        rgba(0, 0, 0, 0.85) 50%,
+        transparent 80%,
+        transparent 100%);
     background-size: 200% 100%;
     animation: terminal-shimmer 4s linear infinite;
     mix-blend-mode: multiply;
@@ -713,8 +744,7 @@ html {
   /* Ensure glow is still visible with shimmer by adding a wrapper glow */
   .dark.theme-cyberpunk .terminal-generating-glow {
     filter:
-      drop-shadow(0 0 6px rgba(34, 197, 94, 0.5))
-      drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
+      drop-shadow(0 0 6px rgba(34, 197, 94, 0.5)) drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
   }
 
   /* Gilded theme - terminal-generating should be invisible (use deco-shimmer instead) */
@@ -730,7 +760,9 @@ html {
   }
 
   /* Retro terminal cursor styling */
-  input, textarea, [contenteditable] {
+  input,
+  textarea,
+  [contenteditable] {
     caret-color: hsl(var(--primary));
   }
 
@@ -746,8 +778,15 @@ html {
 
   /* Gold pulse animation */
   @keyframes deco-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.7;
+    }
   }
 
   .deco-pulse {
@@ -756,8 +795,13 @@ html {
 
   /* Brass shimmer animation */
   @keyframes deco-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+      background-position: 200% 0;
+    }
+
+    100% {
+      background-position: -200% 0;
+    }
   }
 
   .deco-shimmer {
@@ -769,42 +813,34 @@ html {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      transparent 30%,
-      rgba(201, 162, 39, 0.2) 50%,
-      transparent 70%,
-      transparent 100%
-    );
+    background: linear-gradient(90deg,
+        transparent 0%,
+        transparent 30%,
+        rgba(201, 162, 39, 0.2) 50%,
+        transparent 70%,
+        transparent 100%);
     background-size: 200% 100%;
     animation: deco-shimmer 3s linear infinite;
   }
 
   /* Gilded theme status bar loading */
   .dark:not(.theme-cyberpunk) .status-bar-loading::after {
-    background-image: repeating-linear-gradient(
-        0deg,
+    background-image: repeating-linear-gradient(0deg,
         rgba(201, 162, 39, 0.03),
         rgba(201, 162, 39, 0.03) 2px,
         rgba(201, 162, 39, 0.15) 2px,
-        rgba(201, 162, 39, 0.15) 4px
-      ),
-      linear-gradient(
-        90deg,
+        rgba(201, 162, 39, 0.15) 4px),
+      linear-gradient(90deg,
         rgba(201, 162, 39, 0),
         rgba(201, 162, 39, 0.08),
-        rgba(201, 162, 39, 0)
-      );
+        rgba(201, 162, 39, 0));
   }
 
   .dark:not(.theme-cyberpunk) .status-bar-progress-bar {
-    background-image: linear-gradient(
-      90deg,
-      rgba(201, 162, 39, 0),
-      rgba(201, 162, 39, 0.8),
-      rgba(201, 162, 39, 0)
-    );
+    background-image: linear-gradient(90deg,
+        rgba(201, 162, 39, 0),
+        rgba(201, 162, 39, 0.8),
+        rgba(201, 162, 39, 0));
     box-shadow:
       0 0 8px rgba(201, 162, 39, 0.5),
       0 0 16px rgba(201, 162, 39, 0.35);
@@ -825,20 +861,18 @@ html {
 
   /* Stepped corner clip-path for Art Deco panels */
   .deco-corners {
-    clip-path: polygon(
-      0 8px,
-      8px 8px,
-      8px 0,
-      calc(100% - 8px) 0,
-      calc(100% - 8px) 8px,
-      100% 8px,
-      100% calc(100% - 8px),
-      calc(100% - 8px) calc(100% - 8px),
-      calc(100% - 8px) 100%,
-      8px 100%,
-      8px calc(100% - 8px),
-      0 calc(100% - 8px)
-    );
+    clip-path: polygon(0 8px,
+        8px 8px,
+        8px 0,
+        calc(100% - 8px) 0,
+        calc(100% - 8px) 8px,
+        100% 8px,
+        100% calc(100% - 8px),
+        calc(100% - 8px) calc(100% - 8px),
+        calc(100% - 8px) 100%,
+        8px 100%,
+        8px calc(100% - 8px),
+        0 calc(100% - 8px));
   }
 
   /* ═══════════════════════════════════════════════════════════════════════════
@@ -897,13 +931,23 @@ html {
      ═══════════════════════════════════════════════════════════════════════════ */
 
   @keyframes fadeOut {
-    from { opacity: 1; }
-    to { opacity: 0; }
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
   }
 
   .animate-fade-out-fast {

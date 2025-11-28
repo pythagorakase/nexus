@@ -2,8 +2,9 @@
  * Cyberpunk theme splash page - Terminal-style home screen with glitch effects.
  * Features animated grid background, deciphering text, and octagonal buttons.
  */
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSplashNavigation } from './shared';
+import { FrameCorners } from '@arwes/react-frames';
 
 // Cyberpunk color palette
 const colors = {
@@ -15,7 +16,9 @@ const colors = {
   text: '#c0f0f0',
 };
 
-const glyphSet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}';
+// Non-alphabetic glyphs to avoid triggering "typo detection" in the brain
+// Using symbols that render at consistent widths across fonts
+const glyphSet = 'ΩΣΔΠ∞±▓░▒◆●■▲◀▶';
 
 // Decipher text component - individual characters can be targeted for glitch effect
 interface DecipherTextProps {
@@ -29,11 +32,13 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
 
   useEffect(() => {
     const intervals: Record<number, ReturnType<typeof setInterval>> = {};
+    const animatingIndices: number[] = [];
 
     activeIndices.forEach(idx => {
       if (idx < text.length && text[idx] !== ' ') {
+        animatingIndices.push(idx);
         let cycleCount = 0;
-        const maxCycles = 8 + Math.floor(Math.random() * 6);
+        const maxCycles = 7 + Math.floor(Math.random() * 3); // 7-9 cycles @ 60ms = ~480ms avg
 
         intervals[idx] = setInterval(() => {
           if (cycleCount < maxCycles) {
@@ -55,7 +60,15 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
     });
 
     return () => {
+      // Clear intervals AND reset any glyph states that were being animated
       Object.values(intervals).forEach(clearInterval);
+      if (animatingIndices.length > 0) {
+        setGlyphStates(prev => {
+          const next = { ...prev };
+          animatingIndices.forEach(idx => delete next[idx]);
+          return next;
+        });
+      }
     };
   }, [activeIndices.join(','), text]);
 
@@ -70,6 +83,8 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
             key={i}
             style={{
               display: 'inline-block',
+              width: '1ch',
+              textAlign: 'center',
               color: isGlitching ? colors.cyan : undefined,
               textShadow: isGlitching ? `0 0 8px ${colors.cyan}, 0 0 16px ${colors.cyan}` : undefined,
               transform: isGlitching ? `translateY(${Math.random() > 0.5 ? -1 : 1}px)` : undefined,
@@ -84,7 +99,11 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
   );
 };
 
+// Animation duration: 7-9 cycles @ 60ms = 420-540ms, plus buffer
+const DECIPHER_CYCLE_DURATION = 600;
+
 // Global decipher controller - manages which characters are active across all text
+// Uses sequential timing: waits for one animation to complete before starting the next
 const useDecipherController = (textItems: string[]) => {
   const [activeTargets, setActiveTargets] = useState<Record<number, number[]>>({});
 
@@ -100,31 +119,37 @@ const useDecipherController = (textItems: string[]) => {
     return map;
   }, [textItems.join('|')]);
 
+  const pickNewTarget = useCallback(() => {
+    const target = charMap[Math.floor(Math.random() * charMap.length)];
+    if (target) {
+      setActiveTargets({ [target.textIdx]: [target.charIdx] });
+    }
+  }, [charMap]);
+
   useEffect(() => {
-    const pickNewTargets = () => {
-      const count = Math.random() > 0.5 ? 2 : 1;
-      const newTargets: Record<number, number[]> = {};
+    if (charMap.length === 0) return;
 
-      for (let i = 0; i < count; i++) {
-        const target = charMap[Math.floor(Math.random() * charMap.length)];
-        if (target) {
-          if (!newTargets[target.textIdx]) {
-            newTargets[target.textIdx] = [];
-          }
-          if (!newTargets[target.textIdx].includes(target.charIdx)) {
-            newTargets[target.textIdx].push(target.charIdx);
-          }
-        }
-      }
+    // Pick first target immediately
+    pickNewTarget();
 
-      setActiveTargets(newTargets);
+    // Chain: wait for animation to complete, then pick next target
+    const scheduleNext = () => {
+      return setTimeout(() => {
+        // Clear current target
+        setActiveTargets({});
+        // Small pause between animations (200-400ms)
+        setTimeout(() => {
+          pickNewTarget();
+          // Schedule the next cycle
+          timeoutId = scheduleNext();
+        }, 200 + Math.random() * 200);
+      }, DECIPHER_CYCLE_DURATION);
     };
 
-    pickNewTargets();
-    const interval = setInterval(pickNewTargets, 800 + Math.random() * 400);
+    let timeoutId = scheduleNext();
 
-    return () => clearInterval(interval);
-  }, [charMap]);
+    return () => clearTimeout(timeoutId);
+  }, [charMap, pickNewTarget]);
 
   return activeTargets;
 };
@@ -327,6 +352,22 @@ export function CyberpunkSplash() {
       {/* Background fades out fast */}
       <div className={isExiting ? 'animate-fade-out-fast' : ''} style={{ position: 'absolute', inset: 0 }}>
         <GridBackground />
+      </div>
+
+      {/* Window frame - Arwes corner frame */}
+      <div
+        className={`arwes-frame ${isExiting ? 'animate-fade-out-fast' : ''}`}
+        style={{ position: 'absolute', inset: 20, pointerEvents: 'none' }}
+      >
+        <style>{`
+          .arwes-frame [data-name=bg] { color: transparent; }
+          .arwes-frame [data-name=line] { color: ${colors.cyan}; }
+          .arwes-frame svg { filter: drop-shadow(0 0 4px ${colors.cyan}40); }
+        `}</style>
+        <FrameCorners
+          cornerLength={48}
+          strokeWidth={2}
+        />
       </div>
 
       {/* Content */}

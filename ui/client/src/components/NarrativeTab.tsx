@@ -306,7 +306,8 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
   const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { currentBodyFont } = useFonts();
-  const { isCyberpunk } = useTheme();
+  const { isCyberpunk, isGilded } = useTheme();
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
   const queryClient = useQueryClient();
 
   const {
@@ -591,7 +592,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
     <div className="flex flex-col md:flex-row flex-1 min-h-0 h-full">
       <div className="md:w-80 border-b md:border-b-0 md:border-r border-border bg-card/50 flex flex-col h-1/3 md:h-full">
         <div className="p-3 md:p-4 border-b border-border">
-          <h2 className="text-xs md:text-sm font-mono text-primary terminal-glow" data-testid="text-narrative-title">
+          <h2 className={`text-xs md:text-sm font-mono text-primary ${glowClass}`} data-testid="text-narrative-title">
             [NARRATIVE HIERARCHY]
           </h2>
         </div>
@@ -599,7 +600,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
           <div className="p-2 space-y-0.5 text-foreground/90">
             {seasonsLoading ? (
               <div className="flex items-center justify-center p-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <Loader2 className={`h-6 w-6 animate-spin text-primary ${glowClass}`} />
               </div>
             ) : seasonsError ? (
               <div className="p-4 text-xs text-destructive font-mono">
@@ -634,7 +635,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                 {selectedChunk.metadata && (
                   <div className="border border-border p-4 rounded-md bg-card/30">
                     <div className="flex items-center gap-4 text-xs text-muted-foreground font-mono">
-                      <span className="text-primary terminal-glow">
+                      <span className={`text-primary ${glowClass}`}>
                         {selectedChunk.metadata.slug}
                       </span>
                     </div>
@@ -648,7 +649,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                       <span className="text-muted-foreground">STATUS:</span>
                       <span className={cn(
                         "px-1.5 py-0.5 rounded",
-                        currentChunkState.state === "pending_review" && "bg-warning/20 text-warning terminal-glow",
+                        currentChunkState.state === "pending_review" && `bg-warning/20 text-warning ${glowClass}`,
                         currentChunkState.state === "finalized" && "bg-primary/20 text-primary",
                         currentChunkState.state === "embedded" && "bg-primary/20 text-primary",
                         currentChunkState.state === "draft" && "bg-muted text-muted-foreground"
