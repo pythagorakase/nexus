@@ -68,7 +68,7 @@ export function NewStoryWizard() {
 
     return (
         <div className={cn(
-            "h-screen bg-background flex flex-col font-mono overflow-hidden dark",
+            "h-screen bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in",
             isCyberpunk && "terminal-scanlines"
         )}>
             {/* Status Bar with Hamburger Menu */}
@@ -121,8 +121,8 @@ export function NewStoryWizard() {
                 </DropdownMenu>
 
                 <div className="flex-1 flex items-center justify-center">
-                    <span className={`text-sm md:text-base font-bold text-primary ${glowClass} tracking-wider`}>
-                        NEXUS // INITIALIZATION
+                    <span className={`font-display text-2xl md:text-4xl text-primary ${glowClass} tracking-wider`}>
+                        NEXUS
                     </span>
                 </div>
 

@@ -76,7 +76,11 @@ export function NexusLayout() {
   const readyTimeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
   const { isCyberpunk } = useTheme();
-  const [activeTab, setActiveTab] = useState("narrative");
+  // Read initial tab from URL query param (e.g., /nexus?tab=settings)
+  const [activeTab, setActiveTab] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get('tab') || 'narrative';
+  });
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
   const [currentChunkLocation, setCurrentChunkLocation] = useState<string | null>("Night City Center");
   const [isInputExpanded, setIsInputExpanded] = useState(false);
@@ -376,7 +380,7 @@ export function NexusLayout() {
 
   return (
     <FontProvider>
-      <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark">
+      <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in">
         <StatusBar
           model={currentModel}
           modelId={currentModelId}

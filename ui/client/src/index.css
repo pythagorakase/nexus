@@ -1,6 +1,40 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOCAL DISPLAY FONTS
+   Decorative fonts for headings and display text
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: 'Monoton';
+  src: url('/fonts/Monoton-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Major Mono Display';
+  src: url('/fonts/MajorMonoDisplay-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sixtyfour';
+  src: url('/fonts/Sixtyfour-Variable.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Prevent white flash during page transitions - matches dark theme background */
+html {
+  background-color: #0a0a0a;
+}
 
 /* LIGHT MODE */
 :root {
@@ -197,7 +231,8 @@
   /* Typography - Cormorant Garamond for body, mono font controlled by FontContext */
   --font-sans: 'Cormorant Garamond', Georgia, serif;
   --font-serif: 'Cormorant Garamond', Georgia, serif;
-  /* NOTE: --font-mono is set dynamically by FontContext to allow user selection */
+  /* NOTE: --font-mono and --font-display are set dynamically by FontContext */
+  --font-display: 'Monoton', fantasy;
 
   /* Sharper corners for Art Deco aesthetic */
   --radius: 0.125rem;                 /* 2px */
@@ -292,6 +327,7 @@
   --font-sans: 'Source Code Pro', 'Courier New', Courier, monospace;
   --font-serif: 'Source Code Pro', 'Courier New', Courier, monospace;
   --font-mono: 'Source Code Pro', 'Courier New', Courier, monospace;
+  --font-display: 'Sixtyfour', monospace;
 
   --radius: .25rem;
 
@@ -853,5 +889,32 @@
   .dark:not(.theme-cyberpunk) .font-mono.text-xs {
     font-size: 0.875rem;
     letter-spacing: 0.12em;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     PAGE TRANSITION ANIMATIONS
+     Staggered fade effects for splash screen navigation
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  @keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-fade-out-fast {
+    animation: fadeOut 0.5s ease-out forwards;
+  }
+
+  .animate-fade-out-slow {
+    animation: fadeOut 0.75s ease-out forwards;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
   }
 }
