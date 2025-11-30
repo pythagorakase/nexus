@@ -11,6 +11,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface NormalizedRelationship {
   character1Id: number;
@@ -51,7 +52,7 @@ const formatValence = (value: string | null | undefined): string => {
   return value.includes("|") ? value.replace("|", " | ") : value;
 };
 
-const renderPsychologyField = (label: string, field: unknown) => {
+const renderPsychologyField = (label: string, field: unknown, glowClass: string) => {
   if (!field) return null;
   const renderValue = (value: any) => {
     if (Array.isArray(value)) {
@@ -67,7 +68,7 @@ const renderPsychologyField = (label: string, field: unknown) => {
 
   return (
     <div className="space-y-1">
-      <h4 className="text-xs font-mono text-primary terminal-glow uppercase">{label}</h4>
+      <h4 className={`text-xs font-mono text-primary ${glowClass} uppercase`}>{label}</h4>
       <pre className="whitespace-pre-wrap text-xs text-foreground/90 leading-relaxed">
         {renderValue(field)}
       </pre>
@@ -76,6 +77,8 @@ const renderPsychologyField = (label: string, field: unknown) => {
 };
 
 export function CharactersTab({ slot = null }: { slot?: number | null }) {
+  const { isGilded } = useTheme();
+  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [relationshipsOpen, setRelationshipsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
@@ -295,24 +298,24 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
           </div>
           <div className="flex items-start gap-2">
             <span className="w-24 text-muted-foreground uppercase tracking-wide">Valence</span>
-            <span className="flex-1">{formatValence(rel.emotionalValence)}</span>
+            <span className="flex-1 font-sans">{formatValence(rel.emotionalValence)}</span>
           </div>
           {rel.dynamic && (
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Dynamic</div>
-              <p className="whitespace-pre-wrap leading-relaxed">{rel.dynamic}</p>
+              <p className="whitespace-pre-wrap leading-relaxed font-sans">{rel.dynamic}</p>
             </div>
           )}
           {rel.recentEvents && (
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Recent Events</div>
-              <p className="whitespace-pre-wrap leading-relaxed">{rel.recentEvents}</p>
+              <p className="whitespace-pre-wrap leading-relaxed font-sans">{rel.recentEvents}</p>
             </div>
           )}
           {rel.history && (
             <div>
               <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">History</div>
-              <p className="whitespace-pre-wrap leading-relaxed text-foreground">{rel.history}</p>
+              <p className="whitespace-pre-wrap leading-relaxed text-foreground font-sans">{rel.history}</p>
             </div>
           )}
         </div>
@@ -324,7 +327,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     <div className="flex h-full min-h-0 w-full bg-background">
       <aside className="w-72 border-r border-border bg-card/40 flex flex-col">
         <div className="px-4 py-3 border-b border-border">
-          <h2 className="text-sm font-mono text-primary terminal-glow">[CHARACTER INDEX]</h2>
+          <h2 className={`text-sm font-mono text-primary ${glowClass}`}>[CHARACTER INDEX]</h2>
           <p className="text-xs text-muted-foreground">Sorted by ID</p>
         </div>
         <ScrollArea className="flex-1">
@@ -414,7 +417,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
                   />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-lg font-mono text-primary terminal-glow">
+                  <CardTitle className={`text-lg font-mono text-primary ${glowClass}`}>
                     {selectedCharacter.name}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">ID: {selectedCharacter.id}</p>
@@ -424,31 +427,31 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
                 {selectedCharacter.summary && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Summary</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.summary}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.summary}</p>
                   </section>
                 )}
                 {selectedCharacter.background && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Background</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.background}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.background}</p>
                   </section>
                 )}
                 {selectedCharacter.personality && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Personality</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.personality}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.personality}</p>
                   </section>
                 )}
                 {selectedCharacter.currentActivity && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Activity</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.currentActivity}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.currentActivity}</p>
                   </section>
                 )}
                 {selectedCharacter.currentLocation && (
                   <section>
                     <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Location</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.currentLocation}</p>
+                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.currentLocation}</p>
                   </section>
                 )}
               </CardContent>
@@ -485,14 +488,14 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
                   Psychology
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {renderPsychologyField("Self Concept", psychologyRecord.selfConcept)}
-                  {renderPsychologyField("Behavior", psychologyRecord.behavior)}
-                  {renderPsychologyField("Cognitive Framework", psychologyRecord.cognitiveFramework)}
-                  {renderPsychologyField("Temperament", psychologyRecord.temperament)}
-                  {renderPsychologyField("Relational Style", psychologyRecord.relationalStyle)}
-                  {renderPsychologyField("Defense Mechanisms", psychologyRecord.defenseMechanisms)}
-                  {renderPsychologyField("Character Arc", psychologyRecord.characterArc)}
-                  {renderPsychologyField("Secrets", psychologyRecord.secrets)}
+                  {renderPsychologyField("Self Concept", psychologyRecord.selfConcept, glowClass)}
+                  {renderPsychologyField("Behavior", psychologyRecord.behavior, glowClass)}
+                  {renderPsychologyField("Cognitive Framework", psychologyRecord.cognitiveFramework, glowClass)}
+                  {renderPsychologyField("Temperament", psychologyRecord.temperament, glowClass)}
+                  {renderPsychologyField("Relational Style", psychologyRecord.relationalStyle, glowClass)}
+                  {renderPsychologyField("Defense Mechanisms", psychologyRecord.defenseMechanisms, glowClass)}
+                  {renderPsychologyField("Character Arc", psychologyRecord.characterArc, glowClass)}
+                  {renderPsychologyField("Secrets", psychologyRecord.secrets, glowClass)}
                 </CardContent>
               </Card>
             ) : null}
@@ -542,7 +545,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
                             key={pair.counterpartId}
                             className="border border-border/40 rounded-md bg-background/70 p-4 space-y-4"
                           >
-                            <div className="flex items-center justify-between text-sm font-mono text-primary terminal-glow">
+                            <div className={`flex items-center justify-between text-sm font-mono text-primary ${glowClass}`}>
                               <span>{counterpartName}</span>
                               <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
                                 ID {pair.counterpartId}

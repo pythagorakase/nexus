@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useFonts } from "@/contexts/FontContext";
 import { CornerSunburst } from "@/components/deco";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,7 @@ export function StatusBar({
   onNavigate,
 }: StatusBarProps) {
   const { isGilded, isCyberpunk } = useTheme();
+  const { currentDisplayFont } = useFonts();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -295,7 +297,10 @@ export function StatusBar({
 
       {/* Centered NEXUS title - absolutely positioned for true window centering */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-        <span className={`font-display text-xl md:text-2xl text-primary ${glowClass} tracking-wider`}>
+        <span
+          className={`text-xl md:text-2xl text-primary ${glowClass} tracking-wider`}
+          style={{ fontFamily: currentDisplayFont }}
+        >
           NEXUS
         </span>
       </div>

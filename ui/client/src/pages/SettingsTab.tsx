@@ -124,11 +124,11 @@ export function SettingsTab() {
     try {
       const response = await fetch('/api/settings', {
         method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        'Agent Settings': {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          'Agent Settings': {
             global: {
               narrative: {
                 test_mode: value,
@@ -262,477 +262,479 @@ export function SettingsTab() {
     <ScrollArea className="h-full min-h-0 w-full">
       <div className="container max-w-4xl py-8 px-6 space-y-6">
         <div className="space-y-2">
-          <h2 className={`text-2xl font-display font-bold text-primary ${glowClass}`}>Settings</h2>
+          <h2
+            className={`text-2xl font-bold text-primary ${glowClass}`}
+            style={{ fontFamily: currentDisplayFont }}
+          >
+            Settings
+          </h2>
           <p className="text-muted-foreground font-mono text-sm pl-1">
             Customize typography and appearance preferences
           </p>
         </div>
 
-      {/* Theme Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">Theme</CardTitle>
-          <CardDescription className="font-mono text-xs">
-            Choose the visual style for the interface
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RadioGroup
-            value={theme}
-            onValueChange={(value: Theme) => setTheme(value)}
-            className="grid grid-cols-2 gap-4"
-          >
-            <Label
-              htmlFor="theme-gilded"
-              className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${
-                isGilded ? "border-primary bg-primary/5" : "border-muted"
-              }`}
+        {/* Theme Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono">Theme</CardTitle>
+            <CardDescription className="font-mono text-xs">
+              Choose the visual style for the interface
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RadioGroup
+              value={theme}
+              onValueChange={(value: Theme) => setTheme(value)}
+              className="grid grid-cols-2 gap-4"
             >
-              <RadioGroupItem value="gilded" id="theme-gilded" className="sr-only" />
-              <Sparkles className={`mb-3 h-6 w-6 ${isGilded ? "text-primary" : "text-muted-foreground"}`} />
-              <span className={`font-mono text-sm font-semibold ${isGilded ? "text-primary" : ""}`}>
-                Gilded
-              </span>
-              <span className="font-mono text-xs text-muted-foreground mt-1">
-                Art Deco elegance
-              </span>
-            </Label>
-            <Label
-              htmlFor="theme-cyberpunk"
-              className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${
-                isCyberpunk ? "border-primary bg-primary/5" : "border-muted"
-              }`}
-            >
-              <RadioGroupItem value="cyberpunk" id="theme-cyberpunk" className="sr-only" />
-              <Monitor className={`mb-3 h-6 w-6 ${isCyberpunk ? "text-primary" : "text-muted-foreground"}`} />
-              <span className={`font-mono text-sm font-semibold ${isCyberpunk ? "text-primary" : ""}`}>
-                Cyberpunk
-              </span>
-              <span className="font-mono text-xs text-muted-foreground mt-1">
-                Terminal aesthetic
-              </span>
-            </Label>
-          </RadioGroup>
-        </CardContent>
-      </Card>
-
-      {/* Typography - Subordinate to Theme */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">Typography</CardTitle>
-          <CardDescription className="font-mono text-xs">
-            {isGilded
-              ? "Elegant serif options for the Gilded theme"
-              : "Terminal fonts for the Cyberpunk aesthetic"
-            }
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {isGilded ? (
-            <>
-              {/* Gilded Body Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="gilded-body-font" className="font-mono text-sm">
-                  Body Text
-                </Label>
-                <Select
-                  value={fonts.gildedBodyFont}
-                  onValueChange={setGildedBodyFont}
-                >
-                  <SelectTrigger id="gilded-body-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GILDED_BODY_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview */}
-                <div
-                  className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
-                  style={{ fontFamily: currentBodyFont }}
-                >
-                  Gatsby believed in the green light, the orgastic future that year by year recedes before us.
-                </div>
-              </div>
-
-              {/* Gilded Menu Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="gilded-menu-font" className="font-mono text-sm">
-                  Menu &amp; Labels
-                </Label>
-                <Select
-                  value={fonts.gildedMenuFont}
-                  onValueChange={setGildedMenuFont}
-                >
-                  <SelectTrigger id="gilded-menu-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GILDED_MENU_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview */}
-                <div
-                  className="p-3 rounded-md bg-muted/50 text-sm border border-border tracking-wider"
-                  style={{ fontFamily: currentMenuFont }}
-                >
-                  STATUS: READY // CHAPTER: S01-E01-S001
-                </div>
-              </div>
-
-              {/* Gilded Display Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="gilded-display-font" className="font-mono text-sm">
-                  Display Text
-                </Label>
-                <Select
-                  value={fonts.gildedDisplayFont}
-                  onValueChange={setGildedDisplayFont}
-                >
-                  <SelectTrigger id="gilded-display-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GILDED_DISPLAY_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview - larger text for display font */}
-                <div
-                  className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
-                  style={{ fontFamily: currentDisplayFont }}
-                >
-                  NEXUS IRIS
-                </div>
-                <p className="text-xs text-muted-foreground font-mono">
-                  For decorative headings and large display text
-                </p>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Cyberpunk Narrative Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="cyber-narrative-font" className="font-mono text-sm">
-                  Narrative Text
-                </Label>
-                <Select
-                  value={fonts.cyberpunkNarrativeFont}
-                  onValueChange={setCyberpunkNarrativeFont}
-                >
-                  <SelectTrigger id="cyber-narrative-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CYBERPUNK_NARRATIVE_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview */}
-                <div
-                  className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
-                  style={{ fontFamily: currentBodyFont }}
-                >
-                  The rain hammered against the neon-lit windows of the megastructure. Chrome towers pierced the smog-choked sky.
-                </div>
-              </div>
-
-              {/* Cyberpunk UI Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="cyber-ui-font" className="font-mono text-sm">
-                  UI Text
-                </Label>
-                <Select
-                  value={fonts.cyberpunkUIFont}
-                  onValueChange={setCyberpunkUIFont}
-                >
-                  <SelectTrigger id="cyber-ui-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CYBERPUNK_UI_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview */}
-                <div
-                  className="p-3 rounded-md bg-muted/50 text-sm border border-border"
-                  style={{ fontFamily: currentMenuFont }}
-                >
-                  [STATUS: READY] // APEX: ONLINE // CHAPTER: S01-E01-S001
-                </div>
-              </div>
-
-              {/* Cyberpunk Display Font with inline preview */}
-              <div className="space-y-3">
-                <Label htmlFor="cyber-display-font" className="font-mono text-sm">
-                  Display Text
-                </Label>
-                <Select
-                  value={fonts.cyberpunkDisplayFont}
-                  onValueChange={setCyberpunkDisplayFont}
-                >
-                  <SelectTrigger id="cyber-display-font" className="font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CYBERPUNK_DISPLAY_FONTS.map((font) => (
-                      <SelectItem key={font} value={font} className="font-mono">
-                        <span style={{ fontFamily: font }}>{font}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Inline preview - larger text for display font */}
-                <div
-                  className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
-                  style={{ fontFamily: currentDisplayFont }}
-                >
-                  NEXUS IRIS
-                </div>
-                <p className="text-xs text-muted-foreground font-mono">
-                  For decorative headings and large display text
-                </p>
-              </div>
-            </>
-          )}
-
-          {/* Reset Button */}
-          <div className="pt-4">
-            <Button
-              onClick={resetToDefaults}
-              variant="outline"
-              className="font-mono"
-            >
-              Reset to Defaults
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">Narrative Mode</CardTitle>
-          <CardDescription className="font-mono text-xs">
-            Toggle test routing for live narrative turns.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="test-mode-toggle" className="font-mono text-sm">
-                Test Narrative Mode
+              <Label
+                htmlFor="theme-gilded"
+                className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${isGilded ? "border-primary bg-primary/5" : "border-muted"
+                  }`}
+              >
+                <RadioGroupItem value="gilded" id="theme-gilded" className="sr-only" />
+                <Sparkles className={`mb-3 h-6 w-6 ${isGilded ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`font-mono text-sm font-semibold ${isGilded ? "text-primary" : ""}`}>
+                  Gilded
+                </span>
+                <span className="font-mono text-xs text-muted-foreground mt-1">
+                  Art Deco elegance
+                </span>
               </Label>
-              <p className="text-xs text-muted-foreground font-mono">
-                Writes provisional turns to tables suffixed with <span className="text-primary">{testDatabaseSuffix}</span> so production data stays untouched.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {updatingTestMode && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              <Switch
-                id="test-mode-toggle"
-                checked={testModeEnabled}
-                disabled={updatingTestMode || loadingSettings}
-                onCheckedChange={handleToggleTestMode}
-              />
-            </div>
-          </div>
+              <Label
+                htmlFor="theme-cyberpunk"
+                className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${isCyberpunk ? "border-primary bg-primary/5" : "border-muted"
+                  }`}
+              >
+                <RadioGroupItem value="cyberpunk" id="theme-cyberpunk" className="sr-only" />
+                <Monitor className={`mb-3 h-6 w-6 ${isCyberpunk ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`font-mono text-sm font-semibold ${isCyberpunk ? "text-primary" : ""}`}>
+                  Cyberpunk
+                </span>
+                <span className="font-mono text-xs text-muted-foreground mt-1">
+                  Terminal aesthetic
+                </span>
+              </Label>
+            </RadioGroup>
+          </CardContent>
+        </Card>
 
-          {testModeEnabled && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="font-mono text-xs">
-                TEST MODE ON - new narrative turns will go to the isolated test tables until you switch back.
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+        {/* Typography - Subordinate to Theme */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono">Typography</CardTitle>
+            <CardDescription className="font-mono text-xs">
+              {isGilded
+                ? "Elegant serif options for the Gilded theme"
+                : "Terminal fonts for the Cyberpunk aesthetic"
+              }
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {isGilded ? (
+              <>
+                {/* Gilded Body Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="gilded-body-font" className="font-mono text-sm">
+                    Body Text
+                  </Label>
+                  <Select
+                    value={fonts.gildedBodyFont}
+                    onValueChange={setGildedBodyFont}
+                  >
+                    <SelectTrigger id="gilded-body-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GILDED_BODY_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
+                    style={{ fontFamily: currentBodyFont }}
+                  >
+                    Gatsby believed in the green light, the orgastic future that year by year recedes before us.
+                  </div>
+                </div>
 
-      {/* LORE Settings Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">LORE Agent Settings</CardTitle>
-          <CardDescription className="font-mono text-xs">
-            Configure token budgets and context assembly parameters
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {loadingSettings ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                {/* Gilded Menu Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="gilded-menu-font" className="font-mono text-sm">
+                    Menu &amp; Labels
+                  </Label>
+                  <Select
+                    value={fonts.gildedMenuFont}
+                    onValueChange={setGildedMenuFont}
+                  >
+                    <SelectTrigger id="gilded-menu-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GILDED_MENU_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm border border-border tracking-wider"
+                    style={{ fontFamily: currentMenuFont }}
+                  >
+                    STATUS: READY // CHAPTER: S01-E01-S001
+                  </div>
+                </div>
+
+                {/* Gilded Display Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="gilded-display-font" className="font-mono text-sm">
+                    Display Text
+                  </Label>
+                  <Select
+                    value={fonts.gildedDisplayFont}
+                    onValueChange={setGildedDisplayFont}
+                  >
+                    <SelectTrigger id="gilded-display-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GILDED_DISPLAY_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview - larger text for display font */}
+                  <div
+                    className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
+                    style={{ fontFamily: currentDisplayFont }}
+                  >
+                    NEXUS IRIS
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    For decorative headings and large display text
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Cyberpunk Narrative Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="cyber-narrative-font" className="font-mono text-sm">
+                    Narrative Text
+                  </Label>
+                  <Select
+                    value={fonts.cyberpunkNarrativeFont}
+                    onValueChange={setCyberpunkNarrativeFont}
+                  >
+                    <SelectTrigger id="cyber-narrative-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CYBERPUNK_NARRATIVE_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
+                    style={{ fontFamily: currentBodyFont }}
+                  >
+                    The rain hammered against the neon-lit windows of the megastructure. Chrome towers pierced the smog-choked sky.
+                  </div>
+                </div>
+
+                {/* Cyberpunk UI Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="cyber-ui-font" className="font-mono text-sm">
+                    UI Text
+                  </Label>
+                  <Select
+                    value={fonts.cyberpunkUIFont}
+                    onValueChange={setCyberpunkUIFont}
+                  >
+                    <SelectTrigger id="cyber-ui-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CYBERPUNK_UI_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm border border-border"
+                    style={{ fontFamily: currentMenuFont }}
+                  >
+                    [STATUS: READY] // APEX: ONLINE // CHAPTER: S01-E01-S001
+                  </div>
+                </div>
+
+                {/* Cyberpunk Display Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="cyber-display-font" className="font-mono text-sm">
+                    Display Text
+                  </Label>
+                  <Select
+                    value={fonts.cyberpunkDisplayFont}
+                    onValueChange={setCyberpunkDisplayFont}
+                  >
+                    <SelectTrigger id="cyber-display-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CYBERPUNK_DISPLAY_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview - larger text for display font */}
+                  <div
+                    className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
+                    style={{ fontFamily: currentDisplayFont }}
+                  >
+                    NEXUS IRIS
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    For decorative headings and large display text
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* Reset Button */}
+            <div className="pt-4">
+              <Button
+                onClick={resetToDefaults}
+                variant="outline"
+                className="font-mono"
+              >
+                Reset to Defaults
+              </Button>
             </div>
-          ) : (
-            <>
-              {/* Apex Context Window */}
-              <div className="space-y-3">
-                <Label htmlFor="apex-context-window" className="font-mono text-sm">
-                  Apex Context Window (tokens)
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono">Narrative Mode</CardTitle>
+            <CardDescription className="font-mono text-xs">
+              Toggle test routing for live narrative turns.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="test-mode-toggle" className="font-mono text-sm">
+                  Test Narrative Mode
                 </Label>
-                <Input
-                  id="apex-context-window"
-                  type="number"
-                  value={apexContextWindow}
-                  onChange={(e) => setApexContextWindow(parseInt(e.target.value) || 0)}
-                  className="font-mono"
-                  min="10000"
-                  max="200000"
-                  step="1000"
-                />
                 <p className="text-xs text-muted-foreground font-mono">
-                  Maximum tokens available for context assembly. Smaller values create more compact contexts.
-                  <br />
-                  Recommended: 100000 for balanced performance, 75000 for compact mode.
+                  Writes provisional turns to tables suffixed with <span className="text-primary">{testDatabaseSuffix}</span> so production data stays untouched.
                 </p>
               </div>
+              <div className="flex items-center gap-3">
+                {updatingTestMode && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                <Switch
+                  id="test-mode-toggle"
+                  checked={testModeEnabled}
+                  disabled={updatingTestMode || loadingSettings}
+                  onCheckedChange={handleToggleTestMode}
+                />
+              </div>
+            </div>
 
-              {/* Save Button and Messages */}
-              <div className="space-y-3">
+            {testModeEnabled && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="font-mono text-xs">
+                  TEST MODE ON - new narrative turns will go to the isolated test tables until you switch back.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* LORE Settings Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono">LORE Agent Settings</CardTitle>
+            <CardDescription className="font-mono text-xs">
+              Configure token budgets and context assembly parameters
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {loadingSettings ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {/* Apex Context Window */}
+                <div className="space-y-3">
+                  <Label htmlFor="apex-context-window" className="font-mono text-sm">
+                    Apex Context Window (tokens)
+                  </Label>
+                  <Input
+                    id="apex-context-window"
+                    type="number"
+                    value={apexContextWindow}
+                    onChange={(e) => setApexContextWindow(parseInt(e.target.value) || 0)}
+                    className="font-mono"
+                    min="10000"
+                    max="200000"
+                    step="1000"
+                  />
+                  <p className="text-xs text-muted-foreground font-mono">
+                    Maximum tokens available for context assembly. Smaller values create more compact contexts.
+                    <br />
+                    Recommended: 100000 for balanced performance, 75000 for compact mode.
+                  </p>
+                </div>
+
+                {/* Save Button and Messages */}
+                <div className="space-y-3">
+                  <Button
+                    onClick={handleSaveApexContextWindow}
+                    disabled={!hasUnsavedChanges || savingSettings}
+                    className="font-mono"
+                  >
+                    {savingSettings ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Settings
+                      </>
+                    )}
+                  </Button>
+
+                  {hasUnsavedChanges && !settingsMessage && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="font-mono text-xs">
+                        You have unsaved changes
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {settingsMessage && (
+                    <Alert variant={settingsMessage.type === 'error' ? 'destructive' : 'default'}>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="font-mono text-xs">
+                        {settingsMessage.text}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* PWA Icon Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-mono">PWA Icon</CardTitle>
+            <CardDescription className="font-mono text-xs">
+              Customize the icon that appears on your home screen and dock
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-4">
+              {/* Current Icon Preview */}
+              <div className="flex-shrink-0">
+                <Label className="font-mono text-sm mb-2 block">Current Icon:</Label>
+                <div className="w-24 h-24 rounded-lg border border-border bg-muted/50 flex items-center justify-center overflow-hidden">
+                  <img
+                    src="/icons/icon-192.png"
+                    alt="Current PWA icon"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+
+              {/* Upload Section */}
+              <div className="flex-1 space-y-3">
+                <div>
+                  <Label htmlFor="icon-upload" className="font-mono text-sm mb-2 block">
+                    Upload New Icon:
+                  </Label>
+                  <Input
+                    id="icon-upload"
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    onChange={handleIconSelect}
+                    className="font-mono cursor-pointer"
+                  />
+                  <p className="text-xs text-muted-foreground font-mono mt-1">
+                    PNG or JPEG, recommended 512x512 or larger
+                  </p>
+                </div>
+
+                {/* Preview of selected file */}
+                {iconPreview && (
+                  <div>
+                    <Label className="font-mono text-sm mb-2 block">Preview:</Label>
+                    <div className="w-24 h-24 rounded-lg border border-border bg-muted/50 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={iconPreview}
+                        alt="Icon preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload Button */}
                 <Button
-                  onClick={handleSaveApexContextWindow}
-                  disabled={!hasUnsavedChanges || savingSettings}
+                  onClick={handleIconUpload}
+                  disabled={!iconFile || uploading}
                   className="font-mono"
                 >
-                  {savingSettings ? (
+                  {uploading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
+                      Uploading...
                     </>
                   ) : (
                     <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Settings
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Icon
                     </>
                   )}
                 </Button>
 
-                {hasUnsavedChanges && !settingsMessage && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="font-mono text-xs">
-                      You have unsaved changes
-                    </AlertDescription>
-                  </Alert>
+                {/* Upload Message */}
+                {uploadMessage && (
+                  <p
+                    className={`text-xs font-mono ${uploadMessage.type === 'success' ? 'text-primary' : 'text-destructive'
+                      }`}
+                  >
+                    {uploadMessage.text}
+                  </p>
                 )}
-
-                {settingsMessage && (
-                  <Alert variant={settingsMessage.type === 'error' ? 'destructive' : 'default'}>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="font-mono text-xs">
-                      {settingsMessage.text}
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* PWA Icon Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-mono">PWA Icon</CardTitle>
-          <CardDescription className="font-mono text-xs">
-            Customize the icon that appears on your home screen and dock
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-4">
-            {/* Current Icon Preview */}
-            <div className="flex-shrink-0">
-              <Label className="font-mono text-sm mb-2 block">Current Icon:</Label>
-              <div className="w-24 h-24 rounded-lg border border-border bg-muted/50 flex items-center justify-center overflow-hidden">
-                <img
-                  src="/icons/icon-192.png"
-                  alt="Current PWA icon"
-                  className="w-full h-full object-cover"
-                />
               </div>
             </div>
-
-            {/* Upload Section */}
-            <div className="flex-1 space-y-3">
-              <div>
-                <Label htmlFor="icon-upload" className="font-mono text-sm mb-2 block">
-                  Upload New Icon:
-                </Label>
-                <Input
-                  id="icon-upload"
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg"
-                  onChange={handleIconSelect}
-                  className="font-mono cursor-pointer"
-                />
-                <p className="text-xs text-muted-foreground font-mono mt-1">
-                  PNG or JPEG, recommended 512x512 or larger
-                </p>
-              </div>
-
-              {/* Preview of selected file */}
-              {iconPreview && (
-                <div>
-                  <Label className="font-mono text-sm mb-2 block">Preview:</Label>
-                  <div className="w-24 h-24 rounded-lg border border-border bg-muted/50 flex items-center justify-center overflow-hidden">
-                    <img
-                      src={iconPreview}
-                      alt="Icon preview"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Upload Button */}
-              <Button
-                onClick={handleIconUpload}
-                disabled={!iconFile || uploading}
-                className="font-mono"
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Icon
-                  </>
-                )}
-              </Button>
-
-              {/* Upload Message */}
-              {uploadMessage && (
-                <p
-                  className={`text-xs font-mono ${
-                    uploadMessage.type === 'success' ? 'text-primary' : 'text-destructive'
-                  }`}
-                >
-                  {uploadMessage.text}
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
       </div>
     </ScrollArea>
