@@ -60,15 +60,8 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
     });
 
     return () => {
-      // Clear intervals AND reset any glyph states that were being animated
+      // Clear intervals - no need to reset state since component is unmounting
       Object.values(intervals).forEach(clearInterval);
-      if (animatingIndices.length > 0) {
-        setGlyphStates(prev => {
-          const next = { ...prev };
-          animatingIndices.forEach(idx => delete next[idx]);
-          return next;
-        });
-      }
     };
   }, [activeIndices.join(','), text]);
 

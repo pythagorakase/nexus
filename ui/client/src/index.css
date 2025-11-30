@@ -283,6 +283,9 @@ html {
    CYBERPUNK THEME (LEGACY)
    Green terminal aesthetic - activated via .theme-cyberpunk class
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Dual selector for robustness:
+   - .dark.theme-cyberpunk: both classes on same element (e.g., <body class="dark theme-cyberpunk">)
+   - .theme-cyberpunk .dark: .dark as descendant (e.g., nested theme contexts) */
 .dark.theme-cyberpunk,
 .theme-cyberpunk .dark {
   --button-outline: rgba(0, 229, 255, .15);
