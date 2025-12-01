@@ -240,13 +240,39 @@ class CharacterSheet(BaseModel):
             )
         return self
 
+    def get_selected_traits(self) -> Dict[str, str]:
+        """Return dict of selected trait names and their values."""
+        trait_fields = [
+            "allies",
+            "contacts",
+            "patron",
+            "dependents",
+            "status",
+            "reputation",
+            "resources",
+            "domain",
+            "enemies",
+            "obligations",
+        ]
+        return {
+            field: getattr(self, field)
+            for field in trait_fields
+            if getattr(self, field) is not None
+        }
+
 
 class StoryTimestamp(BaseModel):
     """
     Atomized timestamp for story start - LLM-friendly integer fields.
 
-    Instead of asking the LLM to generate a complex ISO 8601 string,
+    Instead of asking the LLM to generate a complex ISO 8601 string
+    or parse natural language like "Late afternoon, spring equinox",
     we use constrained integer fields that are validated individually.
+
+    Example:
+        >>> ts = StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30)
+        >>> ts.to_datetime()
+        datetime(1347, 9, 15, 16, 30, 0, tzinfo=timezone.utc)
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)

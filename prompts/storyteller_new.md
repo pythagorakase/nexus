@@ -108,7 +108,7 @@ For each trait, briefly convey its narrative implications in the context of thei
 Respond to whatever the player offers:
 - **Decisive (picks 3 quickly):** Move directly to fleshing out each choice.
 - **Tentative (hesitant):** Engage with what they've chosen first, then help them think through what other aspects of their character's life they want to explore.
-- **Overambitious (picks 6+):** Acknowledge the richness of their ideas; guide them toward the five that would create the most interesting story tensions, noting that others can appear in the narrative without formal trait status.
+- **Overambitious (picks 6+):** Acknowledge the richness of their ideas; guide them toward the three that would create the most interesting story tensions, noting that others can appear in the narrative without formal trait status.
 - **Uncertain:** Reframe the choice — are they more defined by relationships, position, possessions, or problems? Build from there.
 
 ### Trait Development

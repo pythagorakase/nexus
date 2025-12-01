@@ -134,6 +134,24 @@ class TestNewStorySchemas:
         with pytest.raises(ValidationError):
             StoryTimestamp(year=10000, month=1, day=1, hour=0, minute=0)
 
+    def test_story_timestamp_year_zero(self):
+        """Year 0 should fail (ge=1 constraint)."""
+        with pytest.raises(ValidationError):
+            StoryTimestamp(year=0, month=1, day=1, hour=0, minute=0)
+
+    def test_story_timestamp_feb_29_leap_year(self):
+        """February 29 on a leap year should pass."""
+        ts = StoryTimestamp(year=2024, month=2, day=29, hour=12, minute=0)
+        assert ts.day == 29
+        dt = ts.to_datetime()
+        assert dt.month == 2
+        assert dt.day == 29
+
+    def test_story_timestamp_feb_29_non_leap_year(self):
+        """February 29 on a non-leap year should fail."""
+        with pytest.raises(ValidationError):
+            StoryTimestamp(year=2023, month=2, day=29, hour=12, minute=0)
+
     def test_place_profile_creation(self):
         """Test creating a valid PlaceProfile."""
         place = PlaceProfile(
