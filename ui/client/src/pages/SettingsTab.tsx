@@ -81,6 +81,9 @@ export function SettingsTab() {
     setGildedBodyFont,
     setGildedMenuFont,
     setGildedDisplayFont,
+    setVeilBodyFont,
+    setVeilMenuFont,
+    setVeilDisplayFont,
     resetToDefaults,
     currentBodyFont,
     currentMenuFont,
@@ -461,8 +464,8 @@ export function SettingsTab() {
                     Body Text
                   </Label>
                   <Select
-                    value={fonts.gildedBodyFont}
-                    onValueChange={setGildedBodyFont}
+                    value={fonts.veilBodyFont}
+                    onValueChange={setVeilBodyFont}
                   >
                     <SelectTrigger id="veil-body-font" className="font-mono">
                       <SelectValue />
@@ -490,8 +493,8 @@ export function SettingsTab() {
                     Menu &amp; Labels
                   </Label>
                   <Select
-                    value={fonts.gildedMenuFont}
-                    onValueChange={setGildedMenuFont}
+                    value={fonts.veilMenuFont}
+                    onValueChange={setVeilMenuFont}
                   >
                     <SelectTrigger id="veil-menu-font" className="font-mono">
                       <SelectValue />
@@ -519,8 +522,8 @@ export function SettingsTab() {
                     Display Text
                   </Label>
                   <Select
-                    value={fonts.gildedDisplayFont}
-                    onValueChange={setGildedDisplayFont}
+                    value={fonts.veilDisplayFont}
+                    onValueChange={setVeilDisplayFont}
                   >
                     <SelectTrigger id="veil-display-font" className="font-mono">
                       <SelectValue />
