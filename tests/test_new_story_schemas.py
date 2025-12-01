@@ -113,14 +113,15 @@ class TestNewStorySchemas:
             weather="Gathering storm clouds",
             key_npcs=["Innkeeper Gareth", "Caravan guard survivor"],
             initial_mystery="Strange blue flames were seen the night of each disappearance",
-            immediate_choices=["Investigate the campsite", "Question the survivor",
-                              "Research blue flame phenomena", "Warn tomorrow's caravan"],
             potential_allies=["Local ranger", "Traveling wizard"],
-            potential_obstacles=["Hostile wilderness", "Uncooperative witnesses", "Magical interference"]
+            potential_obstacles=["Hostile wilderness", "Uncooperative witnesses", "Magical interference"],
+            secrets="The blue flames are caused by a rogue fire elemental bound to a cursed artifact. "
+                   "The innkeeper's brother was the first to disappear and secretly joined the bandits. "
+                   "The 'survivor' is actually the bandit leader's spy, feeding false information."
         )
 
         assert seed.seed_type == StorySeedType.MYSTERY
-        assert len(seed.immediate_choices) == 4
+        assert len(seed.secrets) >= 50
         assert seed.initial_mystery is not None
         # Test timestamp conversion
         dt = seed.get_base_datetime()
@@ -246,8 +247,8 @@ class TestNewStorySchemas:
             tension_source="Test tension",
             starting_location="Test location",
             base_timestamp=StoryTimestamp(year=2024, month=6, day=15, hour=9, minute=0),
-            immediate_choices=["Choice 1", "Choice 2"],
-            potential_obstacles=["Test obstacle"]
+            potential_obstacles=["Test obstacle"],
+            secrets="Test secrets: hidden plot information that the user never sees - NPC agendas and twists"
         )
 
         place = PlaceProfile(

@@ -977,7 +977,14 @@ from nexus.api.new_story_schemas import (
     LayerDefinition,
     ZoneDefinition,
     PlaceProfile,
+    CharacterConcept,
+    TraitSelection,
+    WildcardTrait,
+    CharacterCreationState,
+    TransitionData,
 )
+from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
+from nexus.api.new_story_cache import read_cache
 
 
 class ChatRequest(BaseModel):
@@ -1052,16 +1059,60 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 }
             )
         elif request.current_phase == "character":
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "submit_character_sheet",
-                        "description": "Submit the finalized character sheet when the user agrees.",
-                        "parameters": CharacterSheet.model_json_schema(),
-                    },
-                }
-            )
+            # Determine sub-phase based on character_state in context_data
+            char_state = (request.context_data or {}).get("character_state", {})
+            has_concept = char_state.get("concept") is not None
+            has_traits = char_state.get("trait_selection") is not None
+            has_wildcard = char_state.get("wildcard") is not None
+
+            if not has_concept:
+                # Sub-phase 1: Gather archetype, background, name, appearance
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_character_concept",
+                            "description": "Submit the character's core concept (archetype, background, name, appearance) when established.",
+                            "parameters": CharacterConcept.model_json_schema(),
+                        },
+                    }
+                )
+            elif not has_traits:
+                # Sub-phase 2: Select 3 traits from the 10 optional traits
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_trait_selection",
+                            "description": "Submit the 3 selected traits with rationales when the user confirms their choices.",
+                            "parameters": TraitSelection.model_json_schema(),
+                        },
+                    }
+                )
+            elif not has_wildcard:
+                # Sub-phase 3: Define the custom wildcard trait
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_wildcard_trait",
+                            "description": "Submit the unique wildcard trait when defined.",
+                            "parameters": WildcardTrait.model_json_schema(),
+                        },
+                    }
+                )
+            else:
+                # All sub-phases complete - offer final character sheet assembly
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_character_sheet",
+                            "description": "Submit the finalized character sheet when the user agrees.",
+                            "parameters": CharacterSheet.model_json_schema(),
+                        },
+                    }
+                )
         elif request.current_phase == "seed":
             tools.append(
                 {
@@ -1160,14 +1211,24 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         zone=arguments.get("zone"),
                         location=arguments.get("location"),
                     )
+                # Character creation sub-phase tools don't persist to DB cache
+                # They return to frontend to update local state
             except Exception as e:
                 logger.error(f"Failed to persist artifact for {function_name}: {e}")
                 # We continue anyway to show the UI, but log the error
 
+            # Determine if this completes the entire phase or just a sub-phase
+            is_subphase_tool = function_name in [
+                "submit_character_concept",
+                "submit_trait_selection",
+                "submit_wildcard_trait",
+            ]
+
             # Return the structured data to frontend
             return {
                 "message": "Generating artifact...",
-                "phase_complete": True,
+                "phase_complete": not is_subphase_tool,  # Sub-phase tools don't complete the phase
+                "subphase_complete": is_subphase_tool,   # Flag for frontend sub-phase handling
                 "phase": request.current_phase,
                 "artifact_type": function_name,
                 "data": arguments,
@@ -1186,6 +1247,117 @@ async def new_story_chat_endpoint(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class TransitionRequest(BaseModel):
+    """Request to transition from wizard setup to narrative mode."""
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+
+
+class TransitionResponse(BaseModel):
+    """Response from successful transition."""
+    status: str
+    character_id: int
+    place_id: int
+    layer_id: int
+    zone_id: int
+    message: str
+
+
+@app.post("/api/story/new/transition", response_model=TransitionResponse)
+async def transition_to_narrative_endpoint(request: TransitionRequest):
+    """
+    Transition from wizard setup to narrative mode.
+
+    Reads from assets.new_story_creator cache, validates completeness,
+    and calls perform_transition() to populate public schema atomically.
+
+    This is the final step that:
+    1. Moves all wizard data to the game database
+    2. Creates the character, location hierarchy
+    3. Sets new_story=false to enable narrative mode
+    4. Clears the setup cache
+    """
+    from datetime import datetime, timezone
+    from pydantic import ValidationError
+
+    dbname = slot_dbname(request.slot)
+
+    # Read the setup cache
+    cache = read_cache(dbname)
+    if not cache:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No setup data found for slot {request.slot}. Complete the wizard first."
+        )
+
+    # Validate required fields exist in cache
+    required_fields = ["setting_draft", "character_draft", "selected_seed", "layer_draft", "zone_draft", "initial_location"]
+    missing = [f for f in required_fields if not cache.get(f)]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Incomplete setup data. Missing: {', '.join(missing)}"
+        )
+
+    # Build TransitionData from cache
+    try:
+        # Parse timestamps from seed's base_timestamp
+        seed_data = cache["selected_seed"]
+        base_ts_data = seed_data.get("base_timestamp", {})
+        if isinstance(base_ts_data, dict):
+            # StoryTimestamp atomized format
+            base_timestamp = datetime(
+                year=base_ts_data.get("year", 2024),
+                month=base_ts_data.get("month", 1),
+                day=base_ts_data.get("day", 1),
+                hour=base_ts_data.get("hour", 12),
+                minute=base_ts_data.get("minute", 0),
+                tzinfo=timezone.utc
+            )
+        elif cache.get("base_timestamp"):
+            base_timestamp = datetime.fromisoformat(cache["base_timestamp"])
+        else:
+            base_timestamp = datetime.now(timezone.utc)
+
+        transition_data = TransitionData(
+            setting=SettingCard(**cache["setting_draft"]),
+            character=CharacterSheet(**cache["character_draft"]),
+            seed=StorySeed(**cache["selected_seed"]),
+            layer=LayerDefinition(**cache["layer_draft"]),
+            zone=ZoneDefinition(**cache["zone_draft"]),
+            location=PlaceProfile(**cache["initial_location"]),
+            base_timestamp=base_timestamp,
+            thread_id=cache.get("thread_id", ""),
+        )
+    except ValidationError as e:
+        # Fail loudly per user directive
+        logger.error(f"Validation error building TransitionData: {e}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Setup data validation failed: {e.errors()}"
+        )
+
+    # Perform atomic transition
+    mapper = NewStoryDatabaseMapper(dbname=dbname)
+    try:
+        result = mapper.perform_transition(transition_data)
+        logger.info(f"Transition complete for slot {request.slot}: {result}")
+
+        return TransitionResponse(
+            status="transitioned",
+            character_id=result["character_id"],
+            place_id=result["place_id"],
+            layer_id=result["layer_id"],
+            zone_id=result["zone_id"],
+            message=f"Welcome to {transition_data.setting.world_name}. Your story begins."
+        )
+    except ValueError as e:
+        logger.error(f"Transition validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Transition failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transition failed: {str(e)}")
 
 
 if __name__ == "__main__":

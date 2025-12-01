@@ -80,6 +80,7 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
     const [welcomeChoices, setWelcomeChoices] = useState<string[] | null>(null);
     const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
+    const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
@@ -180,6 +181,33 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
             if (data.phase_complete) {
                 setPendingArtifact({ type: data.artifact_type, data: data.data });
                 setCurrentChoices(null);
+            } else if (data.subphase_complete) {
+                // Handle character creation sub-phase completion
+                const artifactType = data.artifact_type;
+                const artifactData = data.data;
+
+                // Update character_state in wizardData
+                setWizardData((prev: any) => {
+                    const charState = prev.character_state || {};
+                    if (artifactType === "submit_character_concept") {
+                        return { ...prev, character_state: { ...charState, concept: artifactData } };
+                    } else if (artifactType === "submit_trait_selection") {
+                        setShowTraitSelector(false); // Close trait selector after confirmation
+                        return { ...prev, character_state: { ...charState, trait_selection: artifactData } };
+                    } else if (artifactType === "submit_wildcard_trait") {
+                        return { ...prev, character_state: { ...charState, wildcard: artifactData } };
+                    }
+                    return prev;
+                });
+
+                // Show trait selector after concept is submitted
+                if (artifactType === "submit_character_concept") {
+                    // Extract suggested traits if present in the next response
+                    setShowTraitSelector(true);
+                }
+
+                // Continue conversation - request next sub-phase intro
+                addMessage("system", `[${artifactType} confirmed]`);
             } else {
                 addMessage("assistant", data.message);
                 // Set choices if returned by backend
@@ -191,6 +219,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 // Check if LLM is prompting for trait selection
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
+                    // Try to extract suggested traits from message
+                    extractSuggestedTraits(data.message);
                 }
             }
 
@@ -265,6 +295,35 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                traitMentions.some(t => lowerMessage.includes(t));
     };
 
+    // Extract suggested traits from LLM message
+    const extractSuggestedTraits = (message: string): void => {
+        const lowerMessage = message.toLowerCase();
+        const traitNames = [
+            "allies", "contacts", "patron", "dependents",
+            "status", "reputation", "resources", "domain",
+            "enemies", "obligations"
+        ];
+
+        const suggested: string[] = [];
+
+        // Look for bolded traits or traits mentioned with positive context
+        for (const trait of traitNames) {
+            if (!suggested.includes(trait)) {
+                // Check for bold formatting
+                const boldPattern = new RegExp(`\\*\\*${trait}\\*\\*`, 'i');
+                // Check for suggestion context
+                const suggestionPattern = new RegExp(`(suggest|recommend|interesting|compelling|fitting|suits|matches)[^.]*${trait}`, 'i');
+                if (boldPattern.test(message) || suggestionPattern.test(message)) {
+                    suggested.push(trait);
+                }
+            }
+        }
+
+        if (suggested.length > 0) {
+            setSuggestedTraits(suggested.slice(0, 3)); // Max 3 suggestions
+        }
+    };
+
     const handleTraitConfirm = (traits: string[]) => {
         setShowTraitSelector(false);
         const traitMessage = `I'll take: ${traits.join(", ")}`;
@@ -305,6 +364,43 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
             });
     };
 
+    // Handle invalid trait selection (≠3 traits) - sends to LLM for dialog, UI stays open
+    const handleInvalidTraitConfirm = (traits: string[], count: number) => {
+        // UI stays open for continued adjustment
+        const direction = count < 3 ? "add more" : "narrow down";
+        const traitMessage = `I've selected ${count} trait${count !== 1 ? "s" : ""}: ${traits.join(", ")}. I need to ${direction} my selection.`;
+        addMessage("user", traitMessage);
+        setIsLoading(true);
+
+        fetch("/api/story/new/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                slot,
+                thread_id: threadId,
+                message: traitMessage,
+                current_phase: currentPhase,
+                context_data: wizardData
+            }),
+        })
+            .then(async (res) => {
+                if (!res.ok) throw new Error("Failed to send message");
+                const data = await res.json();
+                addMessage("assistant", data.message);
+            })
+            .catch((error) => {
+                console.error("Chat error:", error);
+                toast({
+                    title: "Transmission Error",
+                    description: "Failed to send message. Please try again.",
+                    variant: "destructive",
+                });
+            })
+            .finally(() => {
+                setIsLoading(false);
+            });
+    };
+
     const handleArtifactConfirm = async () => {
         // Determine next phase or completion
         if (currentPhase === "setting") {
@@ -322,16 +418,43 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
             setPendingArtifact(null);
-            // Finalize
-            toast({
-                title: "Initialization Complete",
-                description: "Entering simulation...",
-            });
-            // Ensure we don't try to render anything else or trigger next phase
-            setTimeout(() => {
-                localStorage.setItem("activeSlot", slot.toString());
-                onComplete();
-            }, 1000);
+            setIsLoading(true);
+
+            // Call transition endpoint to finalize and populate database
+            try {
+                const res = await fetch("/api/story/new/transition", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ slot }),
+                });
+
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.detail || "Transition failed");
+                }
+
+                const result = await res.json();
+
+                toast({
+                    title: "Initialization Complete",
+                    description: result.message || "Entering simulation...",
+                });
+
+                // Navigate to game after successful transition
+                setTimeout(() => {
+                    localStorage.setItem("activeSlot", slot.toString());
+                    onComplete();
+                }, 1000);
+            } catch (e: any) {
+                console.error("Transition error:", e);
+                toast({
+                    title: "Transition Error",
+                    description: e.message || "Failed to initialize story. Please try again.",
+                    variant: "destructive",
+                });
+                setIsLoading(false);
+                // Don't navigate - stay on wizard for retry
+            }
         }
     };
 
@@ -537,48 +660,55 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-primary" />
                     <h3 className="font-mono text-foreground">
-                        NEXUS // {currentPhase.toUpperCase()} PROTOCOL
+                        SKALD // {currentPhase.toUpperCase()} PROTOCOL
                     </h3>
                 </div>
-                <div>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onCancel}
-                        className="text-muted-foreground hover:text-primary"
-                    >
-                        ABORT
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={async () => {
-                            try {
-                                setIsLoading(true);
-                                await fetch("/api/story/new/debug/fill", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ slot }),
-                                });
-                                toast({
-                                    title: "Debug Fill Complete",
-                                    description: "Skipping to simulation...",
-                                });
-                                setTimeout(() => {
-                                    localStorage.setItem("activeSlot", slot.toString());
-                                    onComplete();
-                                }, 1000);
-                            } catch (e) {
-                                console.error(e);
-                                toast({ title: "Debug Error", variant: "destructive" });
-                                setIsLoading(false);
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                        if (!threadId || isLoading) return;
+                        // Send "Accept Fate" instruction to LLM
+                        const fateMessage = `[ACCEPT FATE] I choose to let destiny guide my path. Please make creative choices for all remaining decisions in this phase and immediately finalize with the appropriate submission.`;
+                        addMessage("user", "I accept fate — surprise me.");
+                        setIsLoading(true);
+
+                        try {
+                            const res = await fetch("/api/story/new/chat", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    slot,
+                                    thread_id: threadId,
+                                    message: fateMessage,
+                                    current_phase: currentPhase,
+                                    context_data: wizardData
+                                }),
+                            });
+
+                            if (!res.ok) throw new Error("Failed to send message");
+                            const data = await res.json();
+
+                            if (data.phase_complete) {
+                                setPendingArtifact({ type: data.artifact_type, data: data.data });
+                            } else {
+                                addMessage("assistant", data.message);
+                                if (data.choices && data.choices.length > 0) {
+                                    setCurrentChoices(data.choices);
+                                }
                             }
-                        }}
-                        className="text-yellow-400/60 hover:text-yellow-400 ml-2"
-                    >
-                        SKIP (TEST)
-                    </Button>
-                </div>
+                        } catch (e) {
+                            console.error(e);
+                            toast({ title: "Transmission Error", variant: "destructive" });
+                        } finally {
+                            setIsLoading(false);
+                        }
+                    }}
+                    className="text-amber-500/70 hover:text-amber-400 font-mono text-xs uppercase tracking-wider"
+                    disabled={isLoading || !threadId}
+                >
+                    Accept Fate
+                </Button>
             </div>
 
             {/* Main content area with optional sidebar */}
@@ -608,10 +738,16 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                                     )}
                                 >
                                     {msg.role === "assistant" ? (
-                                        <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10">
-                                            <ReactMarkdown>
-                                                {msg.content}
-                                            </ReactMarkdown>
+                                        <div>
+                                            <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-primary/20">
+                                                <Sparkles className="w-3 h-3 text-primary" />
+                                                <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
+                                            </div>
+                                            <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10">
+                                                <ReactMarkdown>
+                                                    {msg.content}
+                                                </ReactMarkdown>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -698,7 +834,9 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                     >
                         <TraitSelector
                             onConfirm={handleTraitConfirm}
+                            onInvalidConfirm={handleInvalidTraitConfirm}
                             disabled={isLoading}
+                            suggestedTraits={suggestedTraits}
                         />
                     </motion.div>
                 )}
