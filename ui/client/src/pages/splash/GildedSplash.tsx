@@ -3,7 +3,7 @@
  * Showcases the Monoton display font and brass/gold color palette.
  */
 import { useState } from 'react';
-import { useSplashNavigation } from './shared';
+import { useSplashNavigation, SplashThemeMenu } from './shared';
 
 // CSS variable references for theme-aware colors
 const themeColors = {
@@ -240,6 +240,9 @@ export function GildedSplash() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden flex flex-col items-center">
+      {/* Theme switcher menu */}
+      <SplashThemeMenu />
+
       {/* DecoFrame fades out fast (not the clicked element) */}
       <div className={isExiting ? 'animate-fade-out-fast' : ''}>
         <DecoFrame />

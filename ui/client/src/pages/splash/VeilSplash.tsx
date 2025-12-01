@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Animator } from '@arwes/react-animator';
 import { Puffs } from '@arwes/react-bgs';
-import { useSplashNavigation } from './shared';
+import { useSplashNavigation, SplashThemeMenu } from './shared';
 import nexusFrameSrc from '@/assets/veil/nexus-frame.svg';
 // Button frame SVG available at '@/assets/veil/button-frame.svg' for future ornamental buttons
 
@@ -45,7 +45,7 @@ const VeilButton = ({ children, onClick, animationClass = '', primary = false }:
         width: 220,
         height: 56,
         background: 'transparent',
-        border: `1px solid ${hovered ? colors.magenta : colors.deepViolet}80`,
+        border: `2px solid ${hovered ? colors.magenta : colors.deepViolet}aa`,
         borderRadius: 4,
         cursor: 'pointer',
         padding: 0,
@@ -93,6 +93,9 @@ export function VeilSplash() {
         overflow: 'hidden',
       }}
     >
+      {/* Theme switcher menu */}
+      <SplashThemeMenu />
+
       {/* Arwes Puffs background */}
       <div
         className={isExiting ? 'animate-fade-out-fast' : ''}
