@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Menu, Home, Settings, Sparkles } from "lucide-react";
+import { Check, Menu, Home, Settings, Sparkles, Monitor, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
@@ -10,6 +10,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -27,8 +28,7 @@ export function NewStoryWizard() {
     const [currentPhase, setCurrentPhase] = useState<WizardPhase>("slot");
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
     const [_, setLocation] = useLocation();
-    const { isGilded, isCyberpunk } = useTheme();
-    const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+    const { isGilded, isVector, theme, setTheme, glowClass } = useTheme();
 
     // State for data collected across phases
     const [wizardData, setWizardData] = useState({
@@ -69,7 +69,7 @@ export function NewStoryWizard() {
     return (
         <div className={cn(
             "h-screen bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in",
-            isCyberpunk && "terminal-scanlines"
+            isVector && "terminal-scanlines"
         )}>
             {/* Status Bar with Hamburger Menu */}
             <div className="relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden">
@@ -116,6 +116,28 @@ export function NewStoryWizard() {
                                     <span>Audition</span>
                                 </div>
                             </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">
+                            Theme
+                        </DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => setTheme('gilded')}>
+                            <div className="flex items-center gap-2 cursor-pointer">
+                                <Sparkles className="h-4 w-4" />
+                                <span>Gilded{theme === 'gilded' ? ' ✓' : ''}</span>
+                            </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme('vector')}>
+                            <div className="flex items-center gap-2 cursor-pointer">
+                                <Monitor className="h-4 w-4" />
+                                <span>Vector{theme === 'vector' ? ' ✓' : ''}</span>
+                            </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setTheme('veil')}>
+                            <div className="flex items-center gap-2 cursor-pointer">
+                                <Wand2 className="h-4 w-4" />
+                                <span>Veil{theme === 'veil' ? ' ✓' : ''}</span>
+                            </div>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
