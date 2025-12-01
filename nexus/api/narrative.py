@@ -1225,10 +1225,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
             ]
 
             # Return the structured data to frontend
+            # phase_complete: True when entire phase (world/character/seed) is done
+            # subphase_complete: True for character sub-phases (concept/traits/wildcard)
+            #                    Frontend uses this to update character_state and
+            #                    trigger next sub-phase tool availability
             return {
                 "message": "Generating artifact...",
-                "phase_complete": not is_subphase_tool,  # Sub-phase tools don't complete the phase
-                "subphase_complete": is_subphase_tool,   # Flag for frontend sub-phase handling
+                "phase_complete": not is_subphase_tool,
+                "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
                 "data": arguments,
@@ -1320,9 +1324,18 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
         else:
             base_timestamp = datetime.now(timezone.utc)
 
+        # Handle legacy vs sub-phase character_draft format
+        # Legacy: direct CharacterSheet dict (name, summary, traits, etc.)
+        # Sub-phase: CharacterCreationState dict (concept, trait_selection, wildcard)
+        char_draft = cache["character_draft"]
+        if "concept" in char_draft or "trait_selection" in char_draft:
+            # Sub-phase format - assemble from CharacterCreationState
+            state = CharacterCreationState(**char_draft)
+            char_draft = state.to_character_sheet().model_dump()
+
         transition_data = TransitionData(
             setting=SettingCard(**cache["setting_draft"]),
-            character=CharacterSheet(**cache["character_draft"]),
+            character=CharacterSheet(**char_draft),
             seed=StorySeed(**cache["selected_seed"]),
             layer=LayerDefinition(**cache["layer_draft"]),
             zone=ZoneDefinition(**cache["zone_draft"]),
