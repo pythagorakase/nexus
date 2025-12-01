@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { FontProvider } from "@/contexts/FontContext";
 import { NexusLayout } from "@/components/NexusLayout";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
@@ -24,14 +25,16 @@ function Router() {
 function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <ErrorBoundary>
-            <Toaster />
-            <Router />
-          </ErrorBoundary>
-        </TooltipProvider>
-      </QueryClientProvider>
+      <FontProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <ErrorBoundary>
+              <Toaster />
+              <Router />
+            </ErrorBoundary>
+          </TooltipProvider>
+        </QueryClientProvider>
+      </FontProvider>
     </ThemeProvider>
   );
 }

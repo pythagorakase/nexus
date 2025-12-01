@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Home, Settings, Sparkles } from "lucide-react";
+import { Menu, Home, Settings, Sparkles, Monitor, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast as showToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -46,7 +47,7 @@ export function StatusBar({
   onRefreshModelStatus,
   onNavigate,
 }: StatusBarProps) {
-  const { isGilded, isCyberpunk } = useTheme();
+  const { isGilded, isVector, theme, setTheme, glowClass, generatingClass } = useTheme();
   const { currentDisplayFont } = useFonts();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
@@ -77,10 +78,6 @@ export function StatusBar({
       }
     };
   }, []);
-
-  // Theme-aware glow classes
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
-  const generatingClass = isGilded ? "deco-shimmer deco-glow" : "terminal-generating terminal-generating-glow";
 
   const modelVisualClasses = useMemo(() => {
     // In Gilded mode, force gold color for loaded/loading states to avoid green tint
@@ -283,7 +280,7 @@ export function StatusBar({
     <div
       className={cn(
         "relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden flex-shrink-0",
-        isCyberpunk && "terminal-scanlines",
+        isVector && "terminal-scanlines",
         isBarLoading && "status-bar-loading"
       )}
     >
@@ -336,6 +333,28 @@ export function StatusBar({
             <div className="flex items-center gap-2 cursor-pointer">
               <Sparkles className="h-4 w-4" />
               <span>Audition</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => setTheme('gilded')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Sparkles className="h-4 w-4" />
+              <span>Gilded{theme === 'gilded' ? ' ✓' : ''}</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('vector')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Monitor className="h-4 w-4" />
+              <span>Vector{theme === 'vector' ? ' ✓' : ''}</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('veil')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Wand2 className="h-4 w-4" />
+              <span>Veil{theme === 'veil' ? ' ✓' : ''}</span>
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>

@@ -12,7 +12,7 @@ import { MapTab } from "./MapTab";
 import { CharactersTab } from "./CharactersTab";
 import AuditionTab from "@/pages/AuditionTab";
 import { SettingsTab } from "@/pages/SettingsTab";
-import { FontProvider } from "@/contexts/FontContext";
+// FontProvider moved to App.tsx to wrap entire app
 import { useTheme } from "@/contexts/ThemeContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,8 +75,7 @@ export function NexusLayout() {
   const generatingTimeoutRef = useRef<number | null>(null);
   const readyTimeoutRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
-  const { isCyberpunk, isGilded } = useTheme();
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const { isVector, isGilded, glowClass } = useTheme();
   // Read initial tab from URL query param (e.g., /nexus?tab=settings)
   const [activeTab, setActiveTab] = useState(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -380,7 +379,7 @@ export function NexusLayout() {
   const subtitle = narrative.generationParentChunk?.metadata?.slug || "Awaiting metadata";
 
   return (
-    <FontProvider>
+    <>
       <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in">
         <StatusBar
           model={currentModel}
@@ -403,13 +402,13 @@ export function NexusLayout() {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className={`flex-1 flex flex-col min-h-0 overflow-hidden bg-background ${isCyberpunk ? "terminal-scanlines" : ""}`}
+          className={`flex-1 flex flex-col min-h-0 overflow-hidden bg-background ${isVector ? "terminal-scanlines" : ""}`}
         >
           <div className="border-b border-border bg-card/50 overflow-x-auto flex-shrink-0">
             <TabsList className="h-10 bg-transparent border-0 rounded-none p-0 inline-flex min-w-full">
               <TabsTrigger
                 value="narrative"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${glowClass} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-narrative"
               >
                 <Book className="h-3 w-3" />
@@ -418,7 +417,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="map"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${glowClass} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-map"
               >
                 <Map className="h-3 w-3" />
@@ -426,7 +425,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="characters"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${glowClass} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-characters"
               >
                 <Users className="h-3 w-3" />
@@ -435,7 +434,7 @@ export function NexusLayout() {
               </TabsTrigger>
               <TabsTrigger
                 value="settings"
-                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${isCyberpunk ? "terminal-glow" : "deco-glow"} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
+                className={`data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-10 px-3 md:px-4 font-mono text-xs text-primary/70 ${glowClass} flex items-center gap-1 md:gap-2 flex-1 md:flex-initial`}
                 data-testid="tab-settings"
               >
                 <Settings className="h-3 w-3" />
@@ -628,6 +627,6 @@ export function NexusLayout() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </FontProvider>
+    </>
   );
 }

@@ -4,6 +4,16 @@
  */
 import { useState } from 'react';
 import { useLocation } from 'wouter';
+import { Menu, Sparkles, Monitor, Wand2 } from 'lucide-react';
+import { useTheme, Theme } from '@/contexts/ThemeContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 // Animation timing constants (in milliseconds)
 export const ANIMATION = {
@@ -72,4 +82,47 @@ export const useSplashNavigation = () => {
     handleSettings,
     getAnimationClass,
   };
+};
+
+/**
+ * Theme switcher menu for splash screens.
+ * Positioned in top-left corner with theme-aware styling.
+ */
+export const SplashThemeMenu = () => {
+  const { theme, setTheme, glowClass } = useTheme();
+
+  const themeOptions: { value: Theme; label: string; icon: typeof Sparkles }[] = [
+    { value: 'gilded', label: 'Gilded', icon: Sparkles },
+    { value: 'vector', label: 'Vector', icon: Monitor },
+    { value: 'veil', label: 'Veil', icon: Wand2 },
+  ];
+
+  return (
+    <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 50 }}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`text-primary/70 hover:text-primary hover:bg-primary/10 ${glowClass}`}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-[140px]">
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          {themeOptions.map(({ value, label, icon: Icon }) => (
+            <DropdownMenuItem key={value} onClick={() => setTheme(value)}>
+              <div className="flex items-center gap-2 cursor-pointer">
+                <Icon className="h-4 w-4" />
+                <span>{label}{theme === value ? ' ✓' : ''}</span>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
 };
