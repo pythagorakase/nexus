@@ -125,7 +125,7 @@ class CharacterSheet(BaseModel):
 
     This aligns with the characters table schema:
     - Core fields (name, summary, appearance, background, personality) map to table columns
-    - Traits stored in extra_data JSONB field (1-5 of 10 optional + required wildcard)
+    - Traits stored in extra_data JSONB field (exactly 3 of 10 optional + required wildcard)
     - Dynamic fields (emotional_state, current_activity, current_location) set during story seed
 
     Philosophy: Traits signal what aspects of the character should be narratively foregrounded -
@@ -158,14 +158,8 @@ class CharacterSheet(BaseModel):
         description="Personality traits, behavioral patterns, temperament",
     )
 
-    # Diegetic artifact (narrative portrait)
-    diegetic_artifact: str = Field(
-        ...,
-        description="A rich narrative portrait in a style appropriate for the setting",
-    )
-
     # ═══════════════════════════════════════════════════════════════════════════
-    # TRAIT SYSTEM - Choose 1-5 of these 10 optional traits
+    # TRAIT SYSTEM - Choose exactly 3 of these 10 optional traits
     # Each signals narrative focus, not mechanical capability
     # ═══════════════════════════════════════════════════════════════════════════
 
@@ -224,7 +218,7 @@ class CharacterSheet(BaseModel):
 
     @model_validator(mode="after")
     def validate_trait_count(self) -> "CharacterSheet":
-        """Ensure 1-5 of 10 optional traits are selected."""
+        """Ensure exactly 3 of 10 optional traits are selected."""
         trait_fields = [
             "allies",
             "contacts",
@@ -238,13 +232,80 @@ class CharacterSheet(BaseModel):
             "obligations",
         ]
         selected = sum(1 for f in trait_fields if getattr(self, f) is not None)
-        if not (1 <= selected <= 5):
+        if selected != 3:
             raise ValueError(
-                f"Must select 1-5 traits from the 10 optional traits. "
+                f"Must select exactly 3 traits from the 10 optional traits. "
                 f"Currently selected: {selected}. "
                 f"Traits signal narrative focus - choose what matters most for this character."
             )
         return self
+
+    def get_selected_traits(self) -> Dict[str, str]:
+        """Return dict of selected trait names and their values."""
+        trait_fields = [
+            "allies",
+            "contacts",
+            "patron",
+            "dependents",
+            "status",
+            "reputation",
+            "resources",
+            "domain",
+            "enemies",
+            "obligations",
+        ]
+        return {
+            field: getattr(self, field)
+            for field in trait_fields
+            if getattr(self, field) is not None
+        }
+
+
+class StoryTimestamp(BaseModel):
+    """
+    Atomized timestamp for story start - LLM-friendly integer fields.
+
+    Instead of asking the LLM to generate a complex ISO 8601 string
+    or parse natural language like "Late afternoon, spring equinox",
+    we use constrained integer fields that are validated individually.
+
+    Example:
+        >>> ts = StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30)
+        >>> ts.to_datetime()
+        datetime(1347, 9, 15, 16, 30, 0, tzinfo=timezone.utc)
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    year: int = Field(..., ge=1, le=9999, description="Year (1-9999; clamp to datetime range)")
+    month: int = Field(..., ge=1, le=12, description="Month (1-12)")
+    day: int = Field(..., ge=1, le=31, description="Day of month (1-31)")
+    hour: int = Field(..., ge=0, le=23, description="Hour in 24h format (0-23)")
+    minute: int = Field(..., ge=0, le=59, description="Minute (0-59)")
+
+    @model_validator(mode="after")
+    def validate_date(self) -> "StoryTimestamp":
+        """Validate day is valid for the given month/year."""
+        import calendar
+
+        max_day = calendar.monthrange(self.year, self.month)[1]
+        if self.day > max_day:
+            raise ValueError(
+                f"Day {self.day} is invalid for month {self.month} (max: {max_day})"
+            )
+        return self
+
+    def to_datetime(self, tz: timezone = timezone.utc) -> datetime:
+        """Convert to datetime object with seconds=0."""
+        return datetime(
+            year=self.year,
+            month=self.month,
+            day=self.day,
+            hour=self.hour,
+            minute=self.minute,
+            second=0,
+            tzinfo=tz,
+        )
 
 
 class StorySeedType(str, Enum):
@@ -286,7 +347,10 @@ class StorySeed(BaseModel):
 
     # Setting details
     starting_location: str = Field(..., description="Where the story begins")
-    time_of_day: str = Field(..., description="When the scene takes place")
+    base_timestamp: StoryTimestamp = Field(
+        ...,
+        description="When the story begins - provide year, month, day, hour, minute",
+    )
     weather: Optional[str] = Field(None, description="Weather conditions if relevant")
 
     # Initial elements
@@ -307,6 +371,10 @@ class StorySeed(BaseModel):
     potential_obstacles: List[str] = Field(
         ..., min_items=1, description="Initial challenges"
     )
+
+    def get_base_datetime(self, tz: timezone = timezone.utc) -> datetime:
+        """Get base_timestamp as a datetime object."""
+        return self.base_timestamp.to_datetime(tz)
 
 
 class LayerType(str, Enum):
@@ -618,11 +686,11 @@ class TransitionData(BaseModel):
                 and self.character.appearance
             )
 
-            location_ready = (
+            location_ready = bool(
                 self.location.name and self.location.summary and self.zone.name
             )
 
-            self.validated = character_ready and location_ready
+            self.validated = bool(character_ready and location_ready)
             self.ready_for_transition = self.validated
 
         return self.ready_for_transition
@@ -663,9 +731,8 @@ with the genre and tone selected.
 CHARACTER_SHEET_SCHEMA_PROMPT = """
 Create a CharacterSheet with:
 - Core identity fields: name, summary, appearance, background, personality
-- 1-5 of 10 optional traits (see attached Trait Reference)
+- Exactly 3 of 10 optional traits (see attached Trait Reference)
 - Required wildcard trait (wildcard_name + wildcard_description)
-- A diegetic_artifact narrative portrait
 
 The output must be valid JSON conforming to the CharacterSheet schema.
 """

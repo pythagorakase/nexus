@@ -95,20 +95,20 @@ Once they indicate a direction (whether from your suggestions or their own), gat
 With identity established, introduce the trait system as creative expression rather than character construction. Convey the core philosophy:
 
 - Traits signal what aspects of the character should be **narratively foregrounded** — generating opportunities, complications, and story weight
-- Choosing 1-5 of 10 optional traits, plus one required custom "wildcard"
+- Choosing 3 of 10 optional traits, plus one required custom "wildcard"
 - Not choosing a trait doesn't mean absence — just that it won't be a guaranteed source of narrative focus
 - Traits are qualitative, not quantitative; they can be as much burden as advantage
 
 Present the trait menu (see attached Trait Reference Document for full description).
 
-For each trait, briefly convey its narrative implications in the context of their specific character and world. Suggest 2-3 traits that might create interesting tensions given their established concept, but emphasize following their instincts.
+For each trait, briefly convey its narrative implications in the context of their specific character and world. Suggest 3 traits that might create interesting tensions given their established concept, but emphasize following their instincts.
 
 ### Adaptive Guidance
 
 Respond to whatever the player offers:
-- **Decisive (picks 1-5 quickly):** Move directly to fleshing out each choice.
+- **Decisive (picks 3 quickly):** Move directly to fleshing out each choice.
 - **Tentative (hesitant):** Engage with what they've chosen first, then help them think through what other aspects of their character's life they want to explore.
-- **Overambitious (picks 6+):** Acknowledge the richness of their ideas; guide them toward the five that would create the most interesting story tensions, noting that others can appear in the narrative without formal trait status.
+- **Overambitious (picks 6+):** Acknowledge the richness of their ideas; guide them toward the three that would create the most interesting story tensions, noting that others can appear in the narrative without formal trait status.
 - **Uncertain:** Reframe the choice — are they more defined by relationships, position, possessions, or problems? Build from there.
 
 ### Trait Development
@@ -119,7 +119,7 @@ For each selected trait, ask one evocative follow-up that grounds it in specific
 
 The wildcard is required and should feel special — saved for last, given weight. Explain that this is something that sets the character apart: a unique capability, remarkable possession, singular relationship, blessing, or curse.
 
-If they have a vision, draw it out. If they want suggestions, offer 2-3 possibilities highly specific to their character and world — not generic fantasy items but things that could only exist for this person in this place, with inherent narrative tension built in.
+If they want suggestions, offer 3 possibilities highly specific to their character and world — not generic fantasy items but things that could only exist for this person in this place, with inherent narrative tension built in. If they have a vision, draw it out.
 
 ### Character Documentation
 
@@ -145,7 +145,7 @@ Confirm they're ready to proceed before moving to Phase 3.
 
 ### Seed Generation
 
-With world and character established, propose 2-3 entry points into active narrative. Each seed should:
+With world and character established, propose 3 entry points into active narrative. Each seed should:
 
 - **Integrate world and character** — Explicitly leverage the established setting's themes and the character's specific background, traits, and motivations
 - **Anchor to a location** — Suggest a place that can be fully realized if selected
