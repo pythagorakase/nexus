@@ -16,6 +16,7 @@ from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
     StorySeed,
+    StoryTimestamp,
     LayerDefinition,
     LayerType,
     ZoneDefinition,
@@ -24,7 +25,6 @@ from nexus.api.new_story_schemas import (
     TransitionData,
     Genre,
     TechLevel,
-    CharacterBackground,
     StorySeedType,
     PlaceCategory,
     ZoneType,
@@ -51,7 +51,10 @@ class TestNewStorySchemas:
             tone="balanced",
             themes=["redemption", "sacrifice", "corruption"],
             cultural_notes="Honor-based society with strict magical laws",
-            geographic_scope="regional"
+            geographic_scope="regional",
+            diegetic_artifact="From the Chronicles of the Twilight Age: In the realm of Aethermoor, "
+                             "where ley lines pulse with elemental power, the great kingdoms stand vigilant "
+                             "against the creeping Shadow Plague from the frozen north...",
         )
 
         assert setting.world_name == "Aethermoor"
@@ -64,42 +67,36 @@ class TestNewStorySchemas:
         assert "Aethermoor" in json_data
 
     def test_character_sheet_creation(self):
-        """Test creating a valid CharacterSheet."""
+        """Test creating a valid CharacterSheet with Mind's Eye Theatre traits."""
         character = CharacterSheet(
             name="Lyra Shadowheart",
-            age=27,
-            gender="female",
-            species="half-elf",
-            background=CharacterBackground.SCHOLAR,
-            occupation="Arcane Investigator",
-            faction="Order of the Silver Eye",
-            height="5 feet 8 inches",
-            build="athletic",
-            appearance="Tall half-elf with silver hair and violet eyes, bearing arcane tattoos",
-            distinguishing_features=["Glowing tattoos", "Heterochromia"],
-            personality="Cautious and analytical, with a dry sense of humor",
-            motivations=["Uncover the truth about her parents", "Master forbidden magic"],
-            fears=["Losing control of her power", "Being abandoned"],
-            skills=["Arcane investigation", "Ancient languages", "Swordplay", "Alchemy"],
-            weaknesses=["Overconfident", "Haunted by visions"],
-            special_abilities=["Shadow manipulation", "Detect magic"],
-            backstory="Orphaned at a young age when her parents vanished during a magical experiment. "
-                     "Raised by the Order, she now investigates arcane crimes while searching for answers.",
-            family="Parents missing, presumed dead",
-            possessions=["Enchanted sword", "Spellbook", "Investigation kit"],
-            wealth_level="modest",
-            allies=["Master Aldric"],
-            enemies=["The Crimson Hand cult"],
-            growth_areas=["Learning to trust others", "Accepting her heritage"]
+            summary="A half-elf arcane investigator searching for her missing parents",
+            appearance="Tall half-elf with silver hair and violet eyes, bearing arcane tattoos that glow faintly",
+            background="Orphaned at a young age when her parents vanished during a magical experiment. "
+                       "Raised by the Order of the Silver Eye, she now investigates arcane crimes.",
+            personality="Cautious and analytical, with a dry sense of humor. She keeps people at arm's length "
+                       "but fiercely protects those she allows into her circle.",
+            # Exactly 3 of 10 optional traits
+            allies="Master Aldric, her mentor and father figure within the Order",
+            reputation="Known as the 'Shadow Seer' for solving impossible cases",
+            enemies="The Crimson Hand cult who may know what happened to her parents",
+            # Required wildcard trait
+            wildcard_name="Arcane Tattoos",
+            wildcard_description="Mystical tattoos that glow when magic is near, granting her "
+                                "supernatural perception but marking her as unusual",
         )
 
         assert character.name == "Lyra Shadowheart"
-        assert character.age == 27
-        assert len(character.skills) == 4
-        assert character.wealth_level == "modest"
+        assert "half-elf" in character.summary
+        assert character.allies is not None
+        assert character.reputation is not None
+        assert character.enemies is not None
+        # Traits not selected should be None
+        assert character.patron is None
+        assert character.resources is None
 
     def test_story_seed_creation(self):
-        """Test creating a valid StorySeed."""
+        """Test creating a valid StorySeed with atomized timestamp."""
         seed = StorySeed(
             seed_type=StorySeedType.MYSTERY,
             title="The Vanishing Merchants",
@@ -110,7 +107,7 @@ class TestNewStorySchemas:
             stakes="More disappearances could cripple trade and starve the region",
             tension_source="Time pressure - another caravan departs tomorrow",
             starting_location="The Last Light Inn, final stop before the dangerous road",
-            time_of_day="Late afternoon",
+            base_timestamp=StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30),
             weather="Gathering storm clouds",
             key_npcs=["Innkeeper Gareth", "Caravan guard survivor"],
             initial_mystery="Strange blue flames were seen the night of each disappearance",
@@ -123,19 +120,29 @@ class TestNewStorySchemas:
         assert seed.seed_type == StorySeedType.MYSTERY
         assert len(seed.immediate_choices) == 4
         assert seed.initial_mystery is not None
+        # Test timestamp conversion
+        dt = seed.get_base_datetime()
+        assert dt.year == 1347
+        assert dt.month == 9
+        assert dt.hour == 16
+        assert dt.second == 0  # Seconds always 0
 
     def test_place_profile_creation(self):
         """Test creating a valid PlaceProfile."""
         place = PlaceProfile(
             name="The Last Light Inn",
+            place_type="fixed_location",
+            summary="A sturdy stone inn at the edge of civilization, serving as the final bastion "
+                   "of safety before the treacherous mountain passes.",
+            history="Built fifty years ago by a retired soldier who wanted a quiet life",
+            current_status="Busy with travelers fleeing the troubles to the north",
+            secrets="A hidden cellar contains evidence of smuggling operations",
+            inhabitants=["Innkeeper Gareth", "Serving staff", "Regular patrons"],
+            coordinates=[45.5231, -122.6765],  # Example coordinates (Portland, OR area)
             category=PlaceCategory.BUILDING,
-            description="A sturdy stone inn at the edge of civilization, serving as the final bastion "
-                       "of safety before the treacherous mountain passes.",
             atmosphere="Tense and watchful, with an undercurrent of fear",
             size="medium",
             population=30,
-            region="Westmarch Frontier",
-            coordinates=(45.5231, -122.6765),  # Example coordinates (Portland, OR area)
             nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
             notable_features=["Reinforced walls", "Hidden cellar", "Crow's nest lookout"],
             resources=["Food stores", "Basic weapons", "Healing herbs"],
@@ -182,29 +189,26 @@ class TestNewStorySchemas:
             world_name="Test World",
             time_period="Test Period",
             tech_level=TechLevel.MEDIEVAL,
-            political_structure="Test",
-            major_conflict="Test",
+            political_structure="Test political structure",
+            major_conflict="Test major conflict",
             themes=["test"],
-            cultural_notes="Test"
+            cultural_notes="Test cultural notes",
+            diegetic_artifact="A test diegetic artifact describing the world",
         )
 
         character = CharacterSheet(
             name="Test Character",
-            age=25,
-            gender="other",
-            background=CharacterBackground.COMMONER,
-            occupation="Test",
-            height="Average",
-            build="Average",
-            appearance="Test appearance with sufficient detail",
-            personality="Test personality that is complex enough",
-            motivations=["Test"],
-            fears=["Test"],
-            skills=["Test skill"],
-            weaknesses=["Test"],
-            backstory="Test backstory of sufficient length to meet requirements",
-            possessions=["Test item"],
-            growth_areas=["Test"]
+            summary="A test character for validation testing purposes",
+            appearance="Test appearance with sufficient detail for validation",
+            background="Test backstory of sufficient length to meet the minimum requirements for validation",
+            personality="Test personality that is complex enough for validation",
+            # Exactly 3 traits
+            allies="Test ally who helps the character",
+            contacts="Test contact for information",
+            resources="Test resources the character possesses",
+            # Wildcard trait
+            wildcard_name="Test Trait",
+            wildcard_description="A unique trait that sets this test character apart from others",
         )
 
         seed = StorySeed(
@@ -216,18 +220,22 @@ class TestNewStorySchemas:
             stakes="Test stakes",
             tension_source="Test tension",
             starting_location="Test location",
-            time_of_day="Morning",
+            base_timestamp=StoryTimestamp(year=2024, month=6, day=15, hour=9, minute=0),
             immediate_choices=["Choice 1", "Choice 2"],
             potential_obstacles=["Test obstacle"]
         )
 
         place = PlaceProfile(
             name="Test Place",
+            place_type="fixed_location",
+            summary="Test description that meets the minimum length requirement for validation",
+            history="Test history of the place with sufficient detail",
+            current_status="Test current status of the location",
+            secrets="Test secrets hidden within this place",
+            inhabitants=["Test inhabitant"],
+            coordinates=[40.7128, -74.0060],  # NYC coordinates for testing
             category=PlaceCategory.SETTLEMENT,
-            description="Test description that meets the minimum length requirement for validation",
             atmosphere="Test atmosphere",
-            region="Test region",
-            coordinates=(40.7128, -74.0060),  # NYC coordinates for testing
             notable_features=["Test feature"],
             culture="Test culture"
         )
@@ -274,22 +282,18 @@ class TestDatabaseMapper:
         """Create a sample character for testing."""
         return CharacterSheet(
             name="Test Hero",
-            age=30,
-            gender="male",
-            species="human",
-            background=CharacterBackground.SOLDIER,
-            occupation="Mercenary",
-            height="6 feet",
-            build="muscular",
-            appearance="Battle-scarred warrior with piercing blue eyes",
-            personality="Stoic and honorable",
-            motivations=["Protect the innocent"],
-            fears=["Failing those who depend on him"],
-            skills=["Swordsmanship", "Tactics", "Leadership"],
-            weaknesses=["Too trusting"],
-            backstory="A veteran of many wars, seeking redemption for past deeds in service of a tyrant",
-            possessions=["Sword", "Armor", "War medallion"],
-            growth_areas=["Learning to trust again"]
+            summary="A battle-hardened mercenary seeking redemption for past deeds",
+            appearance="Battle-scarred warrior with piercing blue eyes and a commanding presence",
+            background="A veteran of many wars, seeking redemption for past deeds in service of a tyrant. "
+                       "Now he fights for the innocent.",
+            personality="Stoic and honorable, with a fierce protective instinct",
+            # Exactly 3 traits
+            allies="A brotherhood of former soldiers who served with him",
+            reputation="Known as the 'Iron Shield' for never abandoning a charge",
+            obligations="Sworn to protect the village that took him in after the war",
+            # Wildcard
+            wildcard_name="Battle Scars",
+            wildcard_description="His scars tell stories - some recognize them and either fear or respect him",
         )
 
     @pytest.fixture
@@ -297,12 +301,17 @@ class TestDatabaseMapper:
         """Create a sample place for testing."""
         return PlaceProfile(
             name="Test Town",
+            place_type="fixed_location",
+            summary="A small frontier town struggling to survive in harsh lands and harsh times",
+            history="Founded by refugees fleeing the last war, built on hope and determination",
+            current_status="Preparing for winter with tension high due to recent bandit activity",
+            secrets="The town elder knows the location of an ancient cache of weapons",
+            inhabitants=["Mayor Thompson", "Blacksmith Greta", "Local militia"],
+            coordinates=[42.3601, -71.0589],
             category=PlaceCategory.SETTLEMENT,
-            description="A small frontier town struggling to survive in harsh lands",
             atmosphere="Determined but weary",
             size="small",
             population=500,
-            region="Borderlands",
             notable_features=["Wooden palisade", "Market square"],
             culture="Hardy frontier folk",
             economy="Agriculture and trade",
@@ -315,17 +324,8 @@ class TestDatabaseMapper:
     def sample_zone(self):
         """Create a sample zone for testing."""
         return ZoneDefinition(
-            name="Town Square",
-            zone_type=ZoneType.PUBLIC,
-            parent_place="Test Town",
-            description="The heart of the town where people gather",
-            purpose="Commerce and social gathering",
-            layout="Open square with market stalls",
-            sights="Market stalls, town well, bulletin board",
-            sounds="Merchant calls, conversations",
-            entrances=["Main street", "Side alleys"],
-            objects=["Market stalls", "Well", "Bulletin board"],
-            typical_activities=["Trading", "Socializing"]
+            name="Borderlands",
+            summary="A lawless frontier region where civilization meets the wilderness"
         )
 
     def test_character_mapping(self, mapper, sample_character):
@@ -337,12 +337,14 @@ class TestDatabaseMapper:
         assert "Battle-scarred warrior" in db_record["appearance"]
         assert "veteran of many wars" in db_record["background"]
 
-        # Check extra_data
+        # Check extra_data contains traits
         extra = db_record["extra_data"]
-        assert extra["age"] == 30
-        assert extra["gender"] == "male"
-        assert len(extra["skills"]) == 3
-        assert extra["wealth_level"] == "modest"
+        assert "allies" in extra
+        assert "reputation" in extra
+        assert "obligations" in extra
+        # Wildcard is stored as a nested object
+        assert "wildcard" in extra
+        assert extra["wildcard"]["name"] == "Battle Scars"
 
     def test_place_mapping(self, mapper, sample_place):
         """Test mapping PlaceProfile to database format."""
@@ -350,12 +352,12 @@ class TestDatabaseMapper:
 
         # Check core fields
         assert db_record["name"] == "Test Town"
-        assert db_record["type"] == "fixed_location"  # Mapped from settlement
+        assert db_record["type"] == "fixed_location"
         assert db_record["zone"] == 1
         assert "frontier town" in db_record["summary"]
 
         # Check inhabitants array
-        assert any("Population: 500" in i for i in db_record["inhabitants"])
+        assert len(db_record["inhabitants"]) > 0
 
         # Check extra_data
         extra = db_record["extra_data"]
@@ -364,10 +366,10 @@ class TestDatabaseMapper:
 
     def test_zone_mapping(self, mapper, sample_zone):
         """Test mapping ZoneDefinition to database format."""
-        db_record = mapper.map_zone_to_db(sample_zone)
+        db_record = mapper.map_zone_to_db(sample_zone, layer_id=1)
 
-        assert db_record["name"] == "Town Square"
-        assert "heart of the town" in db_record["summary"]
+        assert db_record["name"] == "Borderlands"
+        assert "frontier" in db_record["summary"]
         assert len(db_record["summary"]) <= 500  # Database constraint
 
 
@@ -401,7 +403,8 @@ class TestStructuredOutputIntegration:
             political_structure="Kingdoms",
             major_conflict="War",
             themes=["heroism"],
-            cultural_notes="Knights and honor"
+            cultural_notes="Knights and honor",
+            diegetic_artifact="A world of knights and honor where heroism defines the age.",
         )
 
         character = generator.generate_character_sheet(
@@ -411,8 +414,8 @@ class TestStructuredOutputIntegration:
 
         assert isinstance(character, CharacterSheet)
         assert character.name
-        assert character.age > 0
-        assert len(character.skills) > 0
+        assert character.summary
+        assert character.wildcard_name  # New required field
 
 
 if __name__ == "__main__":

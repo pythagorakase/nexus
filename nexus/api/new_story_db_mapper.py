@@ -663,9 +663,6 @@ class NewStoryDatabaseMapper:
             "description": character.wildcard_description,
         }
 
-        # Store diegetic artifact (narrative portrait)
-        extra_data["diegetic_artifact"] = character.diegetic_artifact
-
         return extra_data
 
     def _create_default_zone_boundary(
