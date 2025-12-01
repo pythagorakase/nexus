@@ -153,6 +153,30 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
         ]);
     };
 
+    const handleSubphaseCompletion = (artifactType: string, artifactData: any) => {
+        // Handle character creation sub-phase completion
+        setWizardData((prev: any) => {
+            const charState = prev.character_state || {};
+            if (artifactType === "submit_character_concept") {
+                return { ...prev, character_state: { ...charState, concept: artifactData } };
+            } else if (artifactType === "submit_trait_selection") {
+                setShowTraitSelector(false); // Close trait selector after confirmation
+                return { ...prev, character_state: { ...charState, trait_selection: artifactData } };
+            } else if (artifactType === "submit_wildcard_trait") {
+                return { ...prev, character_state: { ...charState, wildcard: artifactData } };
+            }
+            return prev;
+        });
+
+        // Show trait selector after concept is submitted
+        if (artifactType === "submit_character_concept") {
+            setShowTraitSelector(true);
+        }
+
+        // Continue conversation - request next sub-phase intro
+        addMessage("system", `[${artifactType} confirmed]`);
+    };
+
     const handleSend = async () => {
         if (!input.trim() || isLoading || !threadId) return;
 
@@ -182,32 +206,7 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 setPendingArtifact({ type: data.artifact_type, data: data.data });
                 setCurrentChoices(null);
             } else if (data.subphase_complete) {
-                // Handle character creation sub-phase completion
-                const artifactType = data.artifact_type;
-                const artifactData = data.data;
-
-                // Update character_state in wizardData
-                setWizardData((prev: any) => {
-                    const charState = prev.character_state || {};
-                    if (artifactType === "submit_character_concept") {
-                        return { ...prev, character_state: { ...charState, concept: artifactData } };
-                    } else if (artifactType === "submit_trait_selection") {
-                        setShowTraitSelector(false); // Close trait selector after confirmation
-                        return { ...prev, character_state: { ...charState, trait_selection: artifactData } };
-                    } else if (artifactType === "submit_wildcard_trait") {
-                        return { ...prev, character_state: { ...charState, wildcard: artifactData } };
-                    }
-                    return prev;
-                });
-
-                // Show trait selector after concept is submitted
-                if (artifactType === "submit_character_concept") {
-                    // Extract suggested traits if present in the next response
-                    setShowTraitSelector(true);
-                }
-
-                // Continue conversation - request next sub-phase intro
-                addMessage("system", `[${artifactType} confirmed]`);
+                handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
                 // Set choices if returned by backend
@@ -261,6 +260,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                 if (data.phase_complete) {
                     setPendingArtifact({ type: data.artifact_type, data: data.data });
                     setCurrentChoices(null);
+                } else if (data.subphase_complete) {
+                    handleSubphaseCompletion(data.artifact_type, data.data);
                 } else {
                     addMessage("assistant", data.message);
                     // Set choices if returned by backend
@@ -691,6 +692,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
 
                             if (data.phase_complete) {
                                 setPendingArtifact({ type: data.artifact_type, data: data.data });
+                            } else if (data.subphase_complete) {
+                                handleSubphaseCompletion(data.artifact_type, data.data);
                             } else {
                                 addMessage("assistant", data.message);
                                 if (data.choices && data.choices.length > 0) {
