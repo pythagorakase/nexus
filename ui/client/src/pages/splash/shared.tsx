@@ -98,7 +98,7 @@ export const SplashThemeMenu = () => {
   ];
 
   return (
-    <div style={{ position: 'absolute', top: 16, left: 16, zIndex: 50 }}>
+    <div style={{ position: 'absolute', top: 28, left: 28, zIndex: 50 }}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
