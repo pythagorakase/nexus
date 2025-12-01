@@ -3,5 +3,10 @@
   "python.terminal.activateEnvironment": true,
   "terminal.integrated.env.osx": {
     "PYTHONPATH": "${workspaceFolder}"
+  },
+  "piny.project_settings": {
+    "open-pages": [
+      "pinyfakepage.html"
+    ]
   }
 } 

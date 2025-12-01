@@ -280,14 +280,14 @@ html {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   CYBERPUNK THEME (LEGACY)
-   Green terminal aesthetic - activated via .theme-cyberpunk class
+   VECTOR THEME (LEGACY)
+   Green terminal aesthetic - activated via .theme-vector class
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Dual selector for robustness:
-   - .dark.theme-cyberpunk: both classes on same element (e.g., <body class="dark theme-cyberpunk">)
-   - .theme-cyberpunk .dark: .dark as descendant (e.g., nested theme contexts) */
-.dark.theme-cyberpunk,
-.theme-cyberpunk .dark {
+   - .dark.theme-vector: both classes on same element (e.g., <body class="dark theme-vector">)
+   - .theme-vector .dark: .dark as descendant (e.g., nested theme contexts) */
+.dark.theme-vector,
+.theme-vector .dark {
   --button-outline: rgba(0, 229, 255, .15);
   --badge-outline: rgba(0, 229, 255, .10);
 
@@ -370,6 +370,100 @@ html {
     0px 8px 10px -1px hsl(0 0% 0% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
 
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VEIL THEME (Art Nouveau)
+   Mystical coral/magenta aesthetic with ornamental frames
+   ═══════════════════════════════════════════════════════════════════════════ */
+.dark.theme-veil,
+.theme-veil .dark {
+  --button-outline: rgba(184, 61, 122, .15);
+  --badge-outline: rgba(184, 61, 122, .10);
+
+  --opaque-button-border-intensity: 12;
+
+  --elevate-1: rgba(184, 61, 122, 0.04);
+  --elevate-2: rgba(184, 61, 122, 0.08);
+
+  /* Deep Blue-Black Background */
+  --background: 220 40% 6%;
+  --foreground: 42 45% 77%;
+
+  /* Magenta Primary - the signature Veil color */
+  --primary: 320 55% 48%;
+  --primary-foreground: 42 45% 92%;
+
+  /* Coral Accent - warm complement */
+  --accent: 15 75% 60%;
+  --accent-foreground: 220 40% 6%;
+
+  /* Deep Violet Muted */
+  --muted: 270 40% 20%;
+  --muted-foreground: 42 30% 65%;
+
+  /* Copper Secondary */
+  --secondary: 27 45% 46%;
+  --secondary-foreground: 42 45% 90%;
+
+  /* Destructive */
+  --destructive: 0 65% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  /* Borders & Cards */
+  --border: 270 30% 25%;
+  --ring: 320 55% 48%;
+  --card: 220 35% 8%;
+  --card-foreground: 42 45% 77%;
+  --popover: 220 35% 8%;
+  --popover-foreground: 42 45% 77%;
+  --input: 270 30% 18%;
+
+  /* Chart Colors - magenta leads */
+  --chart-1: 320 55% 48%;
+  --chart-2: 15 75% 60%;
+  --chart-3: 27 45% 46%;
+  --chart-4: 270 40% 45%;
+  --chart-5: 42 45% 70%;
+
+  /* Sidebar */
+  --sidebar-background: 220 40% 5%;
+  --sidebar-foreground: 42 45% 77%;
+  --sidebar-primary: 320 55% 48%;
+  --sidebar-primary-foreground: 42 45% 92%;
+  --sidebar-accent: 15 75% 60%;
+  --sidebar-accent-foreground: 220 40% 6%;
+  --sidebar-border: 270 30% 20%;
+  --sidebar-ring: 320 55% 48%;
+
+  /* Typography - Spectral body, Cinzel display/menu */
+  --font-sans: 'Spectral', Georgia, serif;
+  --font-serif: 'Spectral', Georgia, serif;
+  --font-mono: 'Cinzel', serif;  /* Used for UI elements with small-caps */
+  --font-display: 'Cinzel', serif;
+  --radius: 0.25rem;
+
+  /* Shadows - warm magenta tint */
+  --shadow-sm: 0 1px 2px 0 hsl(320 45% 10% / 0.25);
+  --shadow: 0 1px 3px 0 hsl(320 45% 10% / 0.2), 0 1px 2px -1px hsl(320 45% 10% / 0.2);
+  --shadow-md: 0 4px 6px -1px hsl(320 45% 10% / 0.15), 0 2px 4px -2px hsl(320 45% 10% / 0.1);
+  --shadow-lg: 0 10px 15px -3px hsl(320 45% 10% / 0.15), 0 4px 6px -4px hsl(320 45% 10% / 0.1);
+
+  /* Computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(var(--sidebar-accent));
@@ -587,7 +681,7 @@ html {
   }
 
   /* Cyberpunk theme variant - green terminal scanlines */
-  .dark.theme-cyberpunk .terminal-loading::after {
+  .dark.theme-vector .terminal-loading::after {
     background-image: repeating-linear-gradient(0deg,
         rgba(16, 185, 129, 0.08),
         rgba(16, 185, 129, 0.08) 1px,
@@ -596,7 +690,7 @@ html {
   }
 
   /* Gilded theme - disable terminal loading effect */
-  .dark:not(.theme-cyberpunk) .terminal-loading::after {
+  .dark:not(.theme-vector) .terminal-loading::after {
     display: none;
   }
 
@@ -623,7 +717,7 @@ html {
   }
 
   /* Cyberpunk theme - green status bar loading */
-  .dark.theme-cyberpunk .status-bar-loading::after {
+  .dark.theme-vector .status-bar-loading::after {
     background-image: repeating-linear-gradient(0deg,
         rgba(16, 185, 129, 0.05),
         rgba(16, 185, 129, 0.05) 2px,
@@ -661,7 +755,7 @@ html {
   }
 
   /* Cyberpunk theme - green progress bar */
-  .dark.theme-cyberpunk .status-bar-progress-bar {
+  .dark.theme-vector .status-bar-progress-bar {
     background-image: linear-gradient(90deg,
         rgba(16, 185, 129, 0),
         rgba(16, 185, 129, 0.8),
@@ -687,7 +781,7 @@ html {
   }
 
   /* Cyberpunk theme - green progress label */
-  .dark.theme-cyberpunk .status-bar-progress-label {
+  .dark.theme-vector .status-bar-progress-label {
     color: rgba(16, 185, 129, 0.9);
     text-shadow:
       0 0 6px rgba(16, 185, 129, 0.4),
@@ -718,7 +812,7 @@ html {
   }
 
   /* Terminal generating - only in cyberpunk theme */
-  .dark.theme-cyberpunk .terminal-generating {
+  .dark.theme-vector .terminal-generating {
     position: relative;
     display: inline-block;
     color: rgba(34, 197, 94, 0.95);
@@ -727,7 +821,7 @@ html {
       0 0 12px rgba(34, 197, 94, 0.5);
   }
 
-  .dark.theme-cyberpunk .terminal-generating::after {
+  .dark.theme-vector .terminal-generating::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -745,20 +839,20 @@ html {
   }
 
   /* Ensure glow is still visible with shimmer by adding a wrapper glow */
-  .dark.theme-cyberpunk .terminal-generating-glow {
+  .dark.theme-vector .terminal-generating-glow {
     filter:
       drop-shadow(0 0 6px rgba(34, 197, 94, 0.5)) drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
   }
 
   /* Gilded theme - terminal-generating should be invisible (use deco-shimmer instead) */
-  .dark:not(.theme-cyberpunk) .terminal-generating,
-  .dark:not(.theme-cyberpunk) .terminal-generating-glow {
+  .dark:not(.theme-vector) .terminal-generating,
+  .dark:not(.theme-vector) .terminal-generating-glow {
     color: inherit;
     text-shadow: none;
     filter: none;
   }
 
-  .dark:not(.theme-cyberpunk) .terminal-generating::after {
+  .dark:not(.theme-vector) .terminal-generating::after {
     display: none;
   }
 
@@ -827,7 +921,7 @@ html {
   }
 
   /* Gilded theme status bar loading */
-  .dark:not(.theme-cyberpunk) .status-bar-loading::after {
+  .dark:not(.theme-vector) .status-bar-loading::after {
     background-image: repeating-linear-gradient(0deg,
         rgba(201, 162, 39, 0.03),
         rgba(201, 162, 39, 0.03) 2px,
@@ -839,7 +933,7 @@ html {
         rgba(201, 162, 39, 0));
   }
 
-  .dark:not(.theme-cyberpunk) .status-bar-progress-bar {
+  .dark:not(.theme-vector) .status-bar-progress-bar {
     background-image: linear-gradient(90deg,
         rgba(201, 162, 39, 0),
         rgba(201, 162, 39, 0.8),
@@ -849,7 +943,7 @@ html {
       0 0 16px rgba(201, 162, 39, 0.35);
   }
 
-  .dark:not(.theme-cyberpunk) .status-bar-progress-label {
+  .dark:not(.theme-vector) .status-bar-progress-label {
     color: rgba(201, 162, 39, 0.9);
     text-shadow:
       0 0 6px rgba(201, 162, 39, 0.4),
@@ -884,32 +978,32 @@ html {
      ═══════════════════════════════════════════════════════════════════════════ */
 
   /* Global Xanh Mono font adjustments when in Gilded theme */
-  .dark:not(.theme-cyberpunk) .font-mono,
-  .dark:not(.theme-cyberpunk) [style*="Xanh Mono"],
-  .dark:not(.theme-cyberpunk) [style*="Space Mono"] {
+  .dark:not(.theme-vector) .font-mono,
+  .dark:not(.theme-vector) [style*="Xanh Mono"],
+  .dark:not(.theme-vector) [style*="Space Mono"] {
     font-size: 1em;
     letter-spacing: 0.12em;
     font-weight: 400;
   }
 
   /* Status bar text in Gilded theme - larger and more spaced */
-  .dark:not(.theme-cyberpunk) [data-testid="text-chapter-info"],
-  .dark:not(.theme-cyberpunk) [data-testid="text-apex-status"],
-  .dark:not(.theme-cyberpunk) [data-testid="text-model-status"] {
+  .dark:not(.theme-vector) [data-testid="text-chapter-info"],
+  .dark:not(.theme-vector) [data-testid="text-apex-status"],
+  .dark:not(.theme-vector) [data-testid="text-model-status"] {
     font-size: 1.05rem;
     letter-spacing: 0.16em;
   }
 
   /* Tab triggers and menu items in Gilded theme */
-  .dark:not(.theme-cyberpunk) [role="tablist"] button,
-  .dark:not(.theme-cyberpunk) [role="menuitem"] {
+  .dark:not(.theme-vector) [role="tablist"] button,
+  .dark:not(.theme-vector) [role="menuitem"] {
     font-size: 1rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
 
   /* Dropdown menu items - better readability */
-  .dark:not(.theme-cyberpunk) [role="menu"] [role="menuitem"] {
+  .dark:not(.theme-vector) [role="menu"] [role="menuitem"] {
     font-size: 1rem;
     letter-spacing: 0.1em;
     padding-top: 0.75rem;
@@ -917,13 +1011,13 @@ html {
   }
 
   /* Card titles and labels in Gilded theme */
-  .dark:not(.theme-cyberpunk) .font-mono.text-sm {
+  .dark:not(.theme-vector) .font-mono.text-sm {
     font-size: 1rem;
     letter-spacing: 0.1em;
   }
 
   /* Small text adjustments */
-  .dark:not(.theme-cyberpunk) .font-mono.text-xs {
+  .dark:not(.theme-vector) .font-mono.text-xs {
     font-size: 0.875rem;
     letter-spacing: 0.12em;
   }

@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor } from 'lucide-react';
+import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor, Wand2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -33,19 +33,29 @@ const GILDED_MENU_FONTS = [
   'Space Mono',
 ];
 
-// Cyberpunk theme fonts - terminal/monospace options
-const CYBERPUNK_NARRATIVE_FONTS = [
+// Vector theme fonts - terminal/monospace options
+const VECTOR_NARRATIVE_FONTS = [
   'Source Code Pro',
   'JetBrains Mono',
   'Fira Code',
   'IBM Plex Mono',
 ];
 
-const CYBERPUNK_UI_FONTS = [
+const VECTOR_UI_FONTS = [
   'Source Code Pro',
   'Courier Prime',
   'Monaco',
   'Consolas',
+];
+
+// Veil theme fonts - Art Nouveau elegance
+const VEIL_BODY_FONTS = [
+  'Spectral',
+  'Cormorant Garamond',
+];
+
+const VEIL_UI_FONTS = [
+  'Cinzel',  // Used with small-caps; non-mono so layouts need fixed widths
 ];
 
 // Display fonts - decorative fonts for headings and large text
@@ -54,8 +64,12 @@ const GILDED_DISPLAY_FONTS = [
   'Major Mono Display',
 ];
 
-const CYBERPUNK_DISPLAY_FONTS = [
+const VECTOR_DISPLAY_FONTS = [
   'Sixtyfour',
+];
+
+const VEIL_DISPLAY_FONTS = [
+  'Cinzel',
 ];
 
 export function SettingsTab() {
@@ -72,9 +86,9 @@ export function SettingsTab() {
     currentMenuFont,
     currentDisplayFont,
   } = useFonts();
-  const { theme, setTheme, isGilded, isCyberpunk } = useTheme();
+  const { theme, setTheme, isGilded, isVector, isVeil } = useTheme();
   const queryClient = useQueryClient();
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const glowClass = isGilded ? "deco-glow" : isVeil ? "veil-glow" : "terminal-glow";
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -285,7 +299,7 @@ export function SettingsTab() {
             <RadioGroup
               value={theme}
               onValueChange={(value: Theme) => setTheme(value)}
-              className="grid grid-cols-2 gap-4"
+              className="grid grid-cols-3 gap-4"
             >
               <Label
                 htmlFor="theme-gilded"
@@ -302,17 +316,31 @@ export function SettingsTab() {
                 </span>
               </Label>
               <Label
-                htmlFor="theme-cyberpunk"
-                className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${isCyberpunk ? "border-primary bg-primary/5" : "border-muted"
+                htmlFor="theme-vector"
+                className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${isVector ? "border-primary bg-primary/5" : "border-muted"
                   }`}
               >
-                <RadioGroupItem value="cyberpunk" id="theme-cyberpunk" className="sr-only" />
-                <Monitor className={`mb-3 h-6 w-6 ${isCyberpunk ? "text-primary" : "text-muted-foreground"}`} />
-                <span className={`font-mono text-sm font-semibold ${isCyberpunk ? "text-primary" : ""}`}>
-                  Cyberpunk
+                <RadioGroupItem value="vector" id="theme-vector" className="sr-only" />
+                <Monitor className={`mb-3 h-6 w-6 ${isVector ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`font-mono text-sm font-semibold ${isVector ? "text-primary" : ""}`}>
+                  Vector
                 </span>
                 <span className="font-mono text-xs text-muted-foreground mt-1">
                   Terminal aesthetic
+                </span>
+              </Label>
+              <Label
+                htmlFor="theme-veil"
+                className={`flex flex-col items-center justify-between rounded-md border-2 p-4 cursor-pointer hover:bg-accent/10 transition-colors ${isVeil ? "border-primary bg-primary/5" : "border-muted"
+                  }`}
+              >
+                <RadioGroupItem value="veil" id="theme-veil" className="sr-only" />
+                <Wand2 className={`mb-3 h-6 w-6 ${isVeil ? "text-primary" : "text-muted-foreground"}`} />
+                <span className={`font-mono text-sm font-semibold ${isVeil ? "text-primary" : ""}`}>
+                  Veil
+                </span>
+                <span className="font-mono text-xs text-muted-foreground mt-1">
+                  Art Nouveau mystique
                 </span>
               </Label>
             </RadioGroup>
@@ -326,7 +354,9 @@ export function SettingsTab() {
             <CardDescription className="font-mono text-xs">
               {isGilded
                 ? "Elegant serif options for the Gilded theme"
-                : "Terminal fonts for the Cyberpunk aesthetic"
+                : isVeil
+                  ? "Art Nouveau typography for the Veil theme"
+                  : "Terminal fonts for the Vector aesthetic"
               }
             </CardDescription>
           </CardHeader>
@@ -423,22 +453,114 @@ export function SettingsTab() {
                   </p>
                 </div>
               </>
-            ) : (
+            ) : isVeil ? (
               <>
-                {/* Cyberpunk Narrative Font with inline preview */}
+                {/* Veil Body Font with inline preview */}
                 <div className="space-y-3">
-                  <Label htmlFor="cyber-narrative-font" className="font-mono text-sm">
-                    Narrative Text
+                  <Label htmlFor="veil-body-font" className="font-mono text-sm">
+                    Body Text
                   </Label>
                   <Select
-                    value={fonts.cyberpunkNarrativeFont}
-                    onValueChange={setCyberpunkNarrativeFont}
+                    value={fonts.gildedBodyFont}
+                    onValueChange={setGildedBodyFont}
                   >
-                    <SelectTrigger id="cyber-narrative-font" className="font-mono">
+                    <SelectTrigger id="veil-body-font" className="font-mono">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CYBERPUNK_NARRATIVE_FONTS.map((font) => (
+                      {VEIL_BODY_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm leading-relaxed border border-border"
+                    style={{ fontFamily: currentBodyFont }}
+                  >
+                    The night air shimmered with possibility as lanterns cast warm halos through the mist-laden gardens.
+                  </div>
+                </div>
+
+                {/* Veil Menu Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="veil-menu-font" className="font-mono text-sm">
+                    Menu &amp; Labels
+                  </Label>
+                  <Select
+                    value={fonts.gildedMenuFont}
+                    onValueChange={setGildedMenuFont}
+                  >
+                    <SelectTrigger id="veil-menu-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VEIL_UI_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview */}
+                  <div
+                    className="p-3 rounded-md bg-muted/50 text-sm border border-border tracking-wider"
+                    style={{ fontFamily: currentMenuFont, fontVariant: 'small-caps' }}
+                  >
+                    STATUS: READY // CHAPTER: S01-E01-S001
+                  </div>
+                </div>
+
+                {/* Veil Display Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="veil-display-font" className="font-mono text-sm">
+                    Display Text
+                  </Label>
+                  <Select
+                    value={fonts.gildedDisplayFont}
+                    onValueChange={setGildedDisplayFont}
+                  >
+                    <SelectTrigger id="veil-display-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VEIL_DISPLAY_FONTS.map((font) => (
+                        <SelectItem key={font} value={font} className="font-mono">
+                          <span style={{ fontFamily: font }}>{font}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Inline preview - larger text for display font */}
+                  <div
+                    className="p-4 rounded-md bg-muted/50 text-2xl text-center tracking-wider border border-border"
+                    style={{ fontFamily: currentDisplayFont }}
+                  >
+                    NEXUS IRIS
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    For decorative headings and large display text
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Vector Narrative Font with inline preview */}
+                <div className="space-y-3">
+                  <Label htmlFor="vector-narrative-font" className="font-mono text-sm">
+                    Narrative Text
+                  </Label>
+                  <Select
+                    value={fonts.vectorNarrativeFont}
+                    onValueChange={setCyberpunkNarrativeFont}
+                  >
+                    <SelectTrigger id="vector-narrative-font" className="font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VECTOR_NARRATIVE_FONTS.map((font) => (
                         <SelectItem key={font} value={font} className="font-mono">
                           <span style={{ fontFamily: font }}>{font}</span>
                         </SelectItem>
@@ -454,20 +576,20 @@ export function SettingsTab() {
                   </div>
                 </div>
 
-                {/* Cyberpunk UI Font with inline preview */}
+                {/* Vector UI Font with inline preview */}
                 <div className="space-y-3">
-                  <Label htmlFor="cyber-ui-font" className="font-mono text-sm">
+                  <Label htmlFor="vector-ui-font" className="font-mono text-sm">
                     UI Text
                   </Label>
                   <Select
-                    value={fonts.cyberpunkUIFont}
+                    value={fonts.vectorUIFont}
                     onValueChange={setCyberpunkUIFont}
                   >
-                    <SelectTrigger id="cyber-ui-font" className="font-mono">
+                    <SelectTrigger id="vector-ui-font" className="font-mono">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CYBERPUNK_UI_FONTS.map((font) => (
+                      {VECTOR_UI_FONTS.map((font) => (
                         <SelectItem key={font} value={font} className="font-mono">
                           <span style={{ fontFamily: font }}>{font}</span>
                         </SelectItem>
@@ -483,20 +605,20 @@ export function SettingsTab() {
                   </div>
                 </div>
 
-                {/* Cyberpunk Display Font with inline preview */}
+                {/* Vector Display Font with inline preview */}
                 <div className="space-y-3">
-                  <Label htmlFor="cyber-display-font" className="font-mono text-sm">
+                  <Label htmlFor="vector-display-font" className="font-mono text-sm">
                     Display Text
                   </Label>
                   <Select
-                    value={fonts.cyberpunkDisplayFont}
+                    value={fonts.vectorDisplayFont}
                     onValueChange={setCyberpunkDisplayFont}
                   >
-                    <SelectTrigger id="cyber-display-font" className="font-mono">
+                    <SelectTrigger id="vector-display-font" className="font-mono">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CYBERPUNK_DISPLAY_FONTS.map((font) => (
+                      {VECTOR_DISPLAY_FONTS.map((font) => (
                         <SelectItem key={font} value={font} className="font-mono">
                           <span style={{ fontFamily: font }}>{font}</span>
                         </SelectItem>

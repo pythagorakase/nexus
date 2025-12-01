@@ -12,7 +12,7 @@ import { MapTab } from "./MapTab";
 import { CharactersTab } from "./CharactersTab";
 import AuditionTab from "@/pages/AuditionTab";
 import { SettingsTab } from "@/pages/SettingsTab";
-import { FontProvider } from "@/contexts/FontContext";
+// FontProvider moved to App.tsx to wrap entire app
 import { useTheme } from "@/contexts/ThemeContext";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -380,7 +380,7 @@ export function NexusLayout() {
   const subtitle = narrative.generationParentChunk?.metadata?.slug || "Awaiting metadata";
 
   return (
-    <FontProvider>
+    <>
       <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in">
         <StatusBar
           model={currentModel}
@@ -628,6 +628,6 @@ export function NexusLayout() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </FontProvider>
+    </>
   );
 }

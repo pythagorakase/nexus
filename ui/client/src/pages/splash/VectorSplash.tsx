@@ -32,11 +32,20 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
 
   useEffect(() => {
     const intervals: Record<number, ReturnType<typeof setInterval>> = {};
-    const animatingIndices: number[] = [];
+    const activeSet = new Set(activeIndices);
+
+    // Clear any glyph states for indices that are no longer active
+    setGlyphStates(prev => {
+      const next: Record<number, string> = {};
+      // Only keep states for currently active indices
+      for (const idx of activeIndices) {
+        if (prev[idx]) next[idx] = prev[idx];
+      }
+      return next;
+    });
 
     activeIndices.forEach(idx => {
       if (idx < text.length && text[idx] !== ' ') {
-        animatingIndices.push(idx);
         let cycleCount = 0;
         const maxCycles = 7 + Math.floor(Math.random() * 3); // 7-9 cycles @ 60ms = ~480ms avg
 
@@ -60,7 +69,7 @@ const DecipherText = ({ text, style, activeIndices = [] }: DecipherTextProps) =>
     });
 
     return () => {
-      // Clear intervals - no need to reset state since component is unmounting
+      // Clear intervals on cleanup
       Object.values(intervals).forEach(clearInterval);
     };
   }, [activeIndices.join(','), text]);
@@ -327,7 +336,7 @@ const OctagonButton = ({ children, textId, activeIndices = [], primary = false, 
   );
 };
 
-export function CyberpunkSplash() {
+export function VectorSplash() {
   const { isExiting, handleContinue, handleLoad, handleSettings, getAnimationClass } = useSplashNavigation();
   const textItems = ['NEXUS', 'CONTINUE', 'LOAD', 'SETTINGS'];
   const activeTargets = useDecipherController(textItems);

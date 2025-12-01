@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Home, Settings, Sparkles } from "lucide-react";
+import { Menu, Home, Settings, Sparkles, Monitor, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast as showToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -46,7 +47,7 @@ export function StatusBar({
   onRefreshModelStatus,
   onNavigate,
 }: StatusBarProps) {
-  const { isGilded, isCyberpunk } = useTheme();
+  const { isGilded, isCyberpunk, theme, setTheme } = useTheme();
   const { currentDisplayFont } = useFonts();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
@@ -336,6 +337,28 @@ export function StatusBar({
             <div className="flex items-center gap-2 cursor-pointer">
               <Sparkles className="h-4 w-4" />
               <span>Audition</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => setTheme('gilded')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Sparkles className="h-4 w-4" />
+              <span>Gilded{theme === 'gilded' ? ' ✓' : ''}</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('vector')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Monitor className="h-4 w-4" />
+              <span>Vector{theme === 'vector' ? ' ✓' : ''}</span>
+            </div>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setTheme('veil')}>
+            <div className="flex items-center gap-2 cursor-pointer">
+              <Wand2 className="h-4 w-4" />
+              <span>Veil{theme === 'veil' ? ' ✓' : ''}</span>
             </div>
           </DropdownMenuItem>
         </DropdownMenuContent>

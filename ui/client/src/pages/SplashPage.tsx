@@ -1,12 +1,17 @@
 /**
  * Splash page router - Renders theme-appropriate splash variant.
- * Gilded theme gets Art Deco aesthetic, Cyberpunk gets terminal aesthetic.
+ * - Gilded: Art Deco aesthetic
+ * - Vector: Terminal/digital aesthetic
+ * - Veil: Art Nouveau aesthetic
  */
 import { useTheme } from '@/contexts/ThemeContext';
 import { GildedSplash } from './splash/GildedSplash';
-import { CyberpunkSplash } from './splash/CyberpunkSplash';
+import { VectorSplash } from './splash/VectorSplash';
+import { VeilSplash } from './splash/VeilSplash';
 
 export default function SplashPage() {
-  const { isCyberpunk } = useTheme();
-  return isCyberpunk ? <CyberpunkSplash /> : <GildedSplash />;
+  const { isVector, isVeil } = useTheme();
+  return isVeil ? <VeilSplash />
+       : isVector ? <VectorSplash />
+       : <GildedSplash />;
 }

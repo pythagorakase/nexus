@@ -1,12 +1,14 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type Theme = 'gilded' | 'cyberpunk';
+export type Theme = 'gilded' | 'vector' | 'veil';
 
 interface ThemeContextType {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  toggleTheme: () => void;
   isGilded: boolean;
+  isVector: boolean;
+  isVeil: boolean;
+  // Legacy aliases for backwards compatibility during transition
   isCyberpunk: boolean;
 }
 
@@ -18,30 +20,36 @@ const DEFAULT_THEME: Theme = 'gilded';
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return (stored === 'gilded' || stored === 'cyberpunk') ? stored : DEFAULT_THEME;
+    // Handle migration from old 'cyberpunk' to 'vector'
+    if (stored === 'cyberpunk') return 'vector';
+    return (stored === 'gilded' || stored === 'vector' || stored === 'veil') ? stored : DEFAULT_THEME;
   });
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('dark');
-    if (theme === 'cyberpunk') {
-      root.classList.add('theme-cyberpunk');
-    } else {
-      root.classList.remove('theme-cyberpunk');
+    // Remove all theme classes first
+    root.classList.remove('theme-vector', 'theme-veil');
+    // Add the appropriate theme class
+    if (theme === 'vector') {
+      root.classList.add('theme-vector');
+    } else if (theme === 'veil') {
+      root.classList.add('theme-veil');
     }
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
   const setTheme = (newTheme: Theme) => setThemeState(newTheme);
-  const toggleTheme = () => setThemeState(t => t === 'gilded' ? 'cyberpunk' : 'gilded');
 
   return (
     <ThemeContext.Provider value={{
       theme,
       setTheme,
-      toggleTheme,
       isGilded: theme === 'gilded',
-      isCyberpunk: theme === 'cyberpunk'
+      isVector: theme === 'vector',
+      isVeil: theme === 'veil',
+      // Legacy alias
+      isCyberpunk: theme === 'vector'
     }}>
       {children}
     </ThemeContext.Provider>
