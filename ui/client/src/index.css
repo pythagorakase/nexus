@@ -973,6 +973,46 @@ html {
   }
 
   /* ═══════════════════════════════════════════════════════════════════════════
+     ART NOUVEAU VEIL EFFECTS
+     Magenta glow and shimmer animations for Veil theme
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  /* Magenta glow effect - signature Veil aesthetic */
+  .veil-glow {
+    text-shadow: 0 0 8px hsl(320 55% 48% / 0.5), 0 0 16px hsl(320 55% 48% / 0.25);
+  }
+
+  /* Veil shimmer animation */
+  @keyframes veil-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .veil-shimmer {
+    position: relative;
+  }
+
+  .veil-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        transparent 30%,
+        hsl(320 55% 60% / 0.15) 50%,
+        transparent 70%,
+        transparent 100%);
+    background-size: 200% 100%;
+    animation: veil-shimmer 3s linear infinite;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
      XANH MONO READABILITY ENHANCEMENTS
      Improved size and spacing for small caps and status displays
      ═══════════════════════════════════════════════════════════════════════════ */

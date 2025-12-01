@@ -60,8 +60,7 @@ export function NarrativePane({
 }: NarrativePaneProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { currentBodyFont } = useFonts();
-  const { isGilded, isCyberpunk } = useTheme();
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const { glowClass, isVector } = useTheme();
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -73,7 +72,7 @@ export function NarrativePane({
   const typingChunkData = isTyping && typingChunk ? chunks.find((c) => c.id === typingChunk) : null;
 
   return (
-    <div className={`flex-1 flex flex-col bg-background overflow-hidden ${isCyberpunk ? "terminal-scanlines" : ""}`}>
+    <div className={`flex-1 flex flex-col bg-background overflow-hidden ${isVector ? "terminal-scanlines" : ""}`}>
       <ScrollArea className="flex-1" data-testid="scroll-narrative">
         <div
           ref={scrollRef}

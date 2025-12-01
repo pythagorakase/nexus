@@ -47,7 +47,7 @@ export function StatusBar({
   onRefreshModelStatus,
   onNavigate,
 }: StatusBarProps) {
-  const { isGilded, isCyberpunk, theme, setTheme } = useTheme();
+  const { isGilded, isVector, theme, setTheme, glowClass, generatingClass } = useTheme();
   const { currentDisplayFont } = useFonts();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
@@ -78,10 +78,6 @@ export function StatusBar({
       }
     };
   }, []);
-
-  // Theme-aware glow classes
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
-  const generatingClass = isGilded ? "deco-shimmer deco-glow" : "terminal-generating terminal-generating-glow";
 
   const modelVisualClasses = useMemo(() => {
     // In Gilded mode, force gold color for loaded/loading states to avoid green tint
@@ -284,7 +280,7 @@ export function StatusBar({
     <div
       className={cn(
         "relative h-10 md:h-12 border-b border-border bg-card flex items-center px-2 md:px-4 gap-2 md:gap-4 overflow-hidden flex-shrink-0",
-        isCyberpunk && "terminal-scanlines",
+        isVector && "terminal-scanlines",
         isBarLoading && "status-bar-loading"
       )}
     >

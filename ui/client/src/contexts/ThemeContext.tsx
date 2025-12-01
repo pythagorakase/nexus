@@ -8,6 +8,9 @@ interface ThemeContextType {
   isGilded: boolean;
   isVector: boolean;
   isVeil: boolean;
+  // Centralized glow classes to prevent theme drift
+  glowClass: string;
+  generatingClass: string;
   // Legacy aliases for backwards compatibility during transition
   isCyberpunk: boolean;
 }
@@ -41,15 +44,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = (newTheme: Theme) => setThemeState(newTheme);
 
+  const isGilded = theme === 'gilded';
+  const isVector = theme === 'vector';
+  const isVeil = theme === 'veil';
+
+  // Centralized glow classes - single source of truth for all components
+  const glowClass = isGilded ? "deco-glow" : isVeil ? "veil-glow" : "terminal-glow";
+  const generatingClass = isGilded
+    ? "deco-shimmer deco-glow"
+    : isVeil
+    ? "veil-shimmer veil-glow"
+    : "terminal-generating terminal-generating-glow";
+
   return (
     <ThemeContext.Provider value={{
       theme,
       setTheme,
-      isGilded: theme === 'gilded',
-      isVector: theme === 'vector',
-      isVeil: theme === 'veil',
+      isGilded,
+      isVector,
+      isVeil,
+      glowClass,
+      generatingClass,
       // Legacy alias
-      isCyberpunk: theme === 'vector'
+      isCyberpunk: isVector
     }}>
       {children}
     </ThemeContext.Provider>

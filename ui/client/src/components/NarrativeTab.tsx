@@ -306,8 +306,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
   const [initializedChunkId, setInitializedChunkId] = useState<number | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { currentBodyFont } = useFonts();
-  const { isCyberpunk, isGilded } = useTheme();
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const { glowClass, isVector } = useTheme();
   const queryClient = useQueryClient();
 
   const {
@@ -627,7 +626,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
         </ScrollArea>
       </div>
 
-      <div className={cn("flex-1 flex flex-col bg-background relative", isCyberpunk && "terminal-scanlines")}>
+      <div className={cn("flex-1 flex flex-col bg-background relative", isVector && "terminal-scanlines")}>
         <ScrollArea className="flex-1 h-full relative z-10">
           <div className="p-6 space-y-6">
             {selectedChunk ? (

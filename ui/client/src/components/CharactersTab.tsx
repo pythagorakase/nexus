@@ -77,8 +77,7 @@ const renderPsychologyField = (label: string, field: unknown, glowClass: string)
 };
 
 export function CharactersTab({ slot = null }: { slot?: number | null }) {
-  const { isGilded } = useTheme();
-  const glowClass = isGilded ? "deco-glow" : "terminal-glow";
+  const { glowClass } = useTheme();
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
   const [relationshipsOpen, setRelationshipsOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);

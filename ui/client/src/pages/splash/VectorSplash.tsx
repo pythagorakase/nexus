@@ -1,12 +1,12 @@
 /**
- * Cyberpunk theme splash page - Terminal-style home screen with glitch effects.
+ * Vector theme splash page - Terminal-style home screen with glitch effects.
  * Features animated grid background, deciphering text, and octagonal buttons.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSplashNavigation } from './shared';
 import { FrameCorners } from '@arwes/react-frames';
 
-// Cyberpunk color palette
+// Vector color palette
 const colors = {
   bg: '#000906',
   cyan: '#00f0ff',
