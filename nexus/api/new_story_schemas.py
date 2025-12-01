@@ -251,7 +251,7 @@ class StoryTimestamp(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    year: int = Field(..., description="Year (e.g., 1847, 2185, 10000)")
+    year: int = Field(..., ge=1, le=9999, description="Year (1-9999; clamp to datetime range)")
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")
     day: int = Field(..., ge=1, le=31, description="Day of month (1-31)")
     hour: int = Field(..., ge=0, le=23, description="Hour in 24h format (0-23)")

@@ -12,6 +12,8 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Any
 
+from pydantic import ValidationError
+
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -126,6 +128,11 @@ class TestNewStorySchemas:
         assert dt.month == 9
         assert dt.hour == 16
         assert dt.second == 0  # Seconds always 0
+
+    def test_story_timestamp_year_bounds(self):
+        """Year must fit within Python datetime bounds to avoid runtime errors."""
+        with pytest.raises(ValidationError):
+            StoryTimestamp(year=10000, month=1, day=1, hour=0, minute=0)
 
     def test_place_profile_creation(self):
         """Test creating a valid PlaceProfile."""
