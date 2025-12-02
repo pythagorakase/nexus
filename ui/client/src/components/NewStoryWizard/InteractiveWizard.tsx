@@ -25,6 +25,8 @@ interface InteractiveWizardProps {
     onPhaseChange: (phase: Phase) => void;
     wizardData: any;
     setWizardData: (data: any) => void;
+    resumeThreadId?: string | null;
+    initialPhase?: Phase;
 }
 
 type Phase = "setting" | "character" | "seed";
@@ -70,12 +72,21 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon }: Coll
     );
 }
 
-export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, wizardData, setWizardData }: InteractiveWizardProps) {
+export function InteractiveWizard({
+    slot,
+    onComplete,
+    onCancel,
+    onPhaseChange,
+    wizardData,
+    setWizardData,
+    resumeThreadId,
+    initialPhase,
+}: InteractiveWizardProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [threadId, setThreadId] = useState<string | null>(null);
-    const [currentPhase, setCurrentPhase] = useState<Phase>("setting");
+    const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
     const [welcomeChoices, setWelcomeChoices] = useState<string[] | null>(null);
     const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
@@ -94,6 +105,19 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
         const initChat = async () => {
             try {
                 setIsLoading(true);
+
+                // Reset local UI state when starting/resuming a session
+                setMessages([]);
+                setCurrentChoices(null);
+                setWelcomeChoices(null);
+                setPendingArtifact(null);
+                setShowTraitSelector(false);
+
+                if (resumeThreadId) {
+                    setThreadId(resumeThreadId);
+                    return;
+                }
+
                 const startRes = await fetch("/api/story/new/setup/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -123,7 +147,11 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
         };
 
         initChat();
-    }, [slot, toast]);
+    }, [slot, toast, resumeThreadId]);
+
+    useEffect(() => {
+        setCurrentPhase(initialPhase || "setting");
+    }, [initialPhase]);
 
     // Auto-scroll
     useEffect(() => {
