@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { StoryChoices, type ChoiceSelection } from "@/components/StoryChoices";
 
 interface Message {
     id: string;
@@ -25,6 +26,7 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [threadId, setThreadId] = useState<string | null>(null);
+    const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
@@ -95,12 +97,25 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
         ]);
     };
 
-    const handleSend = async () => {
-        if (!input.trim() || isLoading || !threadId) return;
+    const handleChoiceSelect = (selection: ChoiceSelection) => {
+        const text =
+            selection.label === "freeform"
+                ? selection.text
+                : typeof selection.label === "number"
+                ? `${selection.label}. ${selection.text}`
+                : selection.text;
+        setInput(text);
+        handleSend(text);
+    };
 
-        const userMsg = input.trim();
-        setInput("");
-        addMessage("user", userMsg);
+    const handleSend = async (overrideMessage?: string) => {
+        const outbound = (overrideMessage ?? input).trim();
+        if (!outbound || isLoading || !threadId) return;
+
+        if (!overrideMessage) {
+            setInput("");
+        }
+        addMessage("user", outbound);
         setIsLoading(true);
 
         try {
@@ -110,7 +125,7 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
                 body: JSON.stringify({
                     slot,
                     thread_id: threadId,
-                    message: userMsg
+                    message: outbound
                 }),
             });
 
@@ -118,6 +133,11 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
 
             const data = await res.json();
             addMessage("assistant", data.message);
+            if (data.choices && Array.isArray(data.choices) && data.choices.length >= 2) {
+                setCurrentChoices(data.choices);
+            } else {
+                setCurrentChoices(null);
+            }
 
             // Check if setup is complete
             if (data.is_complete) {
@@ -223,6 +243,11 @@ export function ExpressWizard({ slot, onComplete, onCancel }: ExpressWizardProps
                         <Send className="w-4 h-4" />
                     </Button>
                 </form>
+                {currentChoices && currentChoices.length >= 2 && !isLoading && (
+                    <div className="mt-3">
+                        <StoryChoices choices={currentChoices} onSelect={handleChoiceSelect} />
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -205,6 +205,24 @@ export function InteractiveWizard({
         addMessage("system", `[${artifactType} confirmed]`);
     };
 
+    const normalizeChoices = (choices: any): string[] | null => {
+        if (!choices || !Array.isArray(choices) || choices.length === 0) {
+            return null;
+        }
+        // Already string array
+        if (typeof choices[0] === "string") {
+            return (choices as string[]).map((c) => c.trim()).filter(Boolean);
+        }
+        // Handle structured {label, description}
+        if (choices[0]?.label && choices[0]?.description) {
+            return (choices as Array<{ label: string; description: string }>).map(
+                (c) => `${c.label}: ${c.description}`
+            );
+        }
+        // Fallback: coerce to strings
+        return (choices as Array<any>).map((c) => String(c).trim()).filter(Boolean);
+    };
+
     const handleSend = async () => {
         if (!input.trim() || isLoading || !threadId) return;
 
@@ -238,11 +256,7 @@ export function InteractiveWizard({
             } else {
                 addMessage("assistant", data.message);
                 // Set choices if returned by backend
-                if (data.choices && data.choices.length > 0) {
-                    setCurrentChoices(data.choices);
-                } else {
-                    setCurrentChoices(null);
-                }
+                setCurrentChoices(normalizeChoices(data.choices));
                 // Check if LLM is prompting for trait selection
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
@@ -293,9 +307,7 @@ export function InteractiveWizard({
                 } else {
                     addMessage("assistant", data.message);
                     // Set choices if returned by backend
-                    if (data.choices && data.choices.length > 0) {
-                        setCurrentChoices(data.choices);
-                    }
+                    setCurrentChoices(normalizeChoices(data.choices));
                     // Check if LLM is prompting for trait selection
                     if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                         setShowTraitSelector(true);

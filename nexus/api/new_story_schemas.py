@@ -937,3 +937,34 @@ STORY_SEEDS_SCHEMA_PROMPT = """
 Generate 3 unique StorySeed options based on the setting and character. Each should offer
 a different type of opening with clear player agency. Return a JSON array of 3 StorySeed objects.
 """
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WIZARD RESPONSE ENVELOPE
+# Enforces structured choices on every Skald response via OpenAI response_format
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class WizardResponse(BaseModel):
+    """
+    Structured response envelope for all wizard interactions.
+
+    Every Skald response MUST include 2-4 short choice strings.
+    The backend/UI handles numbering/labeling. This schema is enforced
+    via OpenAI response_format with strict=True.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    message: str = Field(
+        ...,
+        min_length=10,
+        description="Skald's narrative response to the user. Should be engaging and "
+        "guide the conversation forward.",
+    )
+    choices: List[str] = Field(
+        ...,
+        min_length=2,
+        max_length=4,
+        description="2-4 concise choices for the user to select from. Do not include numbering or markdown formatting.",
+    )
