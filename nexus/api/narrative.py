@@ -941,9 +941,10 @@ async def select_slot_endpoint(request: SelectSlotRequest):
 
 @app.get("/api/story/new/slots")
 async def get_slots_status_endpoint():
-    """Get status of all save slots"""
+    """Get status of all save slots with wizard state"""
     from nexus.api.slot_utils import all_slots, slot_dbname
     from nexus.api.save_slots import list_slots
+    from nexus.api.new_story_cache import read_cache
 
     results = []
     for slot in all_slots():
@@ -955,13 +956,21 @@ async def get_slots_status_endpoint():
             slot_data = next((s for s in slots_data if s["slot_number"] == slot), None)
 
             if slot_data:
+                # Check if wizard is in progress
+                cache = read_cache(dbname)
+                if cache:
+                    slot_data["wizard_in_progress"] = True
+                    slot_data["wizard_thread_id"] = cache.get("thread_id")
+                    slot_data["wizard_phase"] = cache.get("current_phase", "setting")
+                else:
+                    slot_data["wizard_in_progress"] = False
                 results.append(slot_data)
             else:
-                results.append({"slot_number": slot, "is_active": False})
+                results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
         except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
             # Expected: DB doesn't exist or connection failed
             logger.warning(f"Could not connect to slot {slot} database: {e}")
-            results.append({"slot_number": slot, "is_active": False})
+            results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
         except Exception as e:
             # Unexpected errors should surface during development
             logger.error(f"Unexpected error fetching slot {slot}: {e}")
@@ -993,6 +1002,7 @@ class ChatRequest(BaseModel):
     message: str
     current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
+    accept_fate: bool = False  # Force tool call without adding user message
 
 
 @app.post("/api/story/new/chat")
@@ -1042,8 +1052,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             # Thread is empty, prepend welcome message
             client.add_message(request.thread_id, "assistant", welcome_message)
 
-        # Add user message
-        client.add_message(request.thread_id, "user", request.message)
+        # Add user message (skip when accept_fate to avoid polluting thread)
+        if not request.accept_fate:
+            client.add_message(request.thread_id, "user", request.message)
 
         # Define tools based on current phase
         tools = []
@@ -1172,11 +1183,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
         provider = OpenAIProvider(model=model)
         openai_client = openai.OpenAI(api_key=provider.api_key)
 
+        # Use tool_choice="required" for accept_fate to force artifact generation
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages,
             tools=tools if tools else None,
-            tool_choice="auto",
+            tool_choice="required" if request.accept_fate and tools else "auto",
         )
 
         message = response.choices[0].message

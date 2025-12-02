@@ -669,9 +669,8 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                     size="sm"
                     onClick={async () => {
                         if (!threadId || isLoading) return;
-                        // Send "Accept Fate" instruction to LLM
-                        const fateMessage = `[ACCEPT FATE] I choose to let destiny guide my path. Please make creative choices for all remaining decisions in this phase and immediately finalize with the appropriate submission.`;
-                        addMessage("user", "I accept fate — surprise me.");
+                        // Accept Fate: Backend forces tool call via tool_choice="required"
+                        // No user message added to keep conversation clean
                         setIsLoading(true);
 
                         try {
@@ -681,9 +680,10 @@ export function InteractiveWizard({ slot, onComplete, onCancel, onPhaseChange, w
                                 body: JSON.stringify({
                                     slot,
                                     thread_id: threadId,
-                                    message: fateMessage,
+                                    message: "",  // No message needed
                                     current_phase: currentPhase,
-                                    context_data: wizardData
+                                    context_data: wizardData,
+                                    accept_fate: true,  // Backend forces tool call
                                 }),
                             });
 
