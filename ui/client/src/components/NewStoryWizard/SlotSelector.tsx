@@ -17,6 +17,10 @@ interface SlotData {
     target_slot?: number;
     is_active?: boolean;
     last_updated?: string;
+    // Wizard resume state
+    wizard_in_progress?: boolean;
+    wizard_thread_id?: string;
+    wizard_phase?: "setting" | "character" | "seed";
 }
 
 // Subtle corner accent for Art Deco framing
@@ -38,7 +42,7 @@ const SlotFrameCorner = ({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) 
 
 interface SlotSelectorProps {
     onSlotSelected: (slot: number) => void;
-    onSlotResumed: (slot: number) => void;
+    onSlotResumed: (slotData: SlotData) => void;
 }
 
 export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProps) {
@@ -58,7 +62,11 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                 slot: slot.slot_number,
                 is_active: slot.is_active,
                 character_name: slot.character_name,
-                last_played: slot.last_played
+                last_played: slot.last_played,
+                // Wizard resume state
+                wizard_in_progress: slot.wizard_in_progress,
+                wizard_thread_id: slot.wizard_thread_id,
+                wizard_phase: slot.wizard_phase,
             }));
         },
     });
@@ -95,9 +103,9 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
         onSlotSelected(slot);
     };
 
-    const handleResume = (e: React.MouseEvent, slot: number) => {
+    const handleResume = (e: React.MouseEvent, slotData: SlotData) => {
         e.stopPropagation();
-        onSlotResumed(slot);
+        onSlotResumed(slotData);
     };
 
     const handleReset = (e: React.MouseEvent, slot: number) => {
@@ -189,7 +197,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                         <Button
                                             variant="default"
                                             className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 terminal-glow"
-                                            onClick={(e) => handleResume(e, slotData.slot)}
+                                            onClick={(e) => handleResume(e, slotData)}
                                         >
                                             RESUME
                                         </Button>

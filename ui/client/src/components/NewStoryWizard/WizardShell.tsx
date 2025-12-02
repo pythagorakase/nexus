@@ -48,9 +48,23 @@ export function NewStoryWizard() {
         setCurrentPhase(phase);
     };
 
-    const handleSlotResumed = (slot: number) => {
-        localStorage.setItem("activeSlot", slot.toString());
-        window.location.href = "/nexus";
+    const handleSlotResumed = (slotData: {
+        slot: number;
+        wizard_in_progress?: boolean;
+        wizard_thread_id?: string;
+        wizard_phase?: "setting" | "character" | "seed";
+    }) => {
+        localStorage.setItem("activeSlot", slotData.slot.toString());
+
+        if (slotData.wizard_in_progress && slotData.wizard_thread_id) {
+            // Resume wizard: stay in wizard shell, restore state
+            setSelectedSlot(slotData.slot);
+            setCurrentPhase(slotData.wizard_phase || "setting");
+            // Thread ID will be fetched by InteractiveWizard via /api/story/new/setup/resume
+        } else {
+            // Story complete - go to NexusLayout
+            window.location.href = "/nexus";
+        }
     };
 
     const handleComplete = () => {
