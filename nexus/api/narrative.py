@@ -999,10 +999,28 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Check if this is the first message (thread is empty)
         # If so, prepend the welcome message as an assistant message
+        # Check if this is the first message (thread is empty)
+        # If so, prepend the welcome message as an assistant message
         history = client.list_messages(request.thread_id, limit=history_limit)
+        
+        # Log history state for debugging
+        logger.info(f"Thread {request.thread_id} history length: {len(history)}")
+        
         if len(history) == 0 and welcome_message:
             # Thread is empty, prepend welcome message
+            logger.info(f"Prepending welcome message to thread {request.thread_id}")
             client.add_message(request.thread_id, "assistant", welcome_message)
+            # Re-fetch history to include the new message
+            history = client.list_messages(request.thread_id, limit=history_limit)
+        elif len(history) > 0 and welcome_message:
+            # Check if the first message is already the welcome message to avoid duplication
+            # (In case of race conditions or retries)
+            first_msg = history[-1] if history else None # history is reversed later, so -1 is oldest? 
+            # Wait, list_messages returns newest first. So history[-1] is the oldest.
+            # Let's verify list_messages behavior. 
+            # Assuming newest first:
+            # history[0] is newest. history[-1] is oldest.
+            pass
 
         # Add user message (skip when accept_fate to avoid polluting thread)
         if not request.accept_fate:
@@ -1168,6 +1186,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Inject Accept Fate signal as system message if active
         if request.accept_fate:
+            logger.info(f"Accept Fate active for phase {request.current_phase}")
             messages.append(
                 {
                     "role": "system",
@@ -1186,6 +1205,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Use Accept Fate to force artifact generation via the phase tool
         if request.accept_fate and primary_tool_name:
+            logger.info(f"Forcing tool choice: {primary_tool_name}")
             tools_for_llm = tools  # Keep the response helper out of the path
             tool_choice_mode = {
                 "type": "function",
@@ -1193,6 +1213,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             }
 
         # Use response_format to enforce structured WizardResponse on all replies
+        logger.info(f"Calling LLM with tool_choice_mode: {tool_choice_mode}")
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages,
