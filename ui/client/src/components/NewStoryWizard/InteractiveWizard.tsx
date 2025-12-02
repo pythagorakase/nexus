@@ -92,6 +92,7 @@ export function InteractiveWizard({
     const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
+    const [isInitialWelcome, setIsInitialWelcome] = useState(true);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
@@ -110,6 +111,7 @@ export function InteractiveWizard({
                 setMessages([]);
                 setCurrentChoices(null);
                 setWelcomeChoices(null);
+                setIsInitialWelcome(true);
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
 
@@ -280,6 +282,7 @@ export function InteractiveWizard({
         setInput("");
         addMessage("user", userMsg);
         setWelcomeChoices(null);
+        setIsInitialWelcome(false);
         setIsLoading(true);
 
         try {
@@ -333,6 +336,7 @@ export function InteractiveWizard({
         // Clear all choices and send the selected text
         setWelcomeChoices(null);
         setCurrentChoices(null);
+        setIsInitialWelcome(false);
         const inputToSend = selection.text;
         addMessage("user", inputToSend);
         setIsLoading(true);
@@ -572,6 +576,7 @@ export function InteractiveWizard({
 
             // Clear previous choices
             setWelcomeChoices(null);
+            setIsInitialWelcome(false);
 
             // Set new choices if returned
             if (data.choices) {
@@ -800,6 +805,7 @@ export function InteractiveWizard({
                             } else {
                                 addMessage("assistant", data.message);
                                 setWelcomeChoices(null);
+                                setIsInitialWelcome(false);
                                 if (data.choices && data.choices.length > 0) {
                                     setCurrentChoices(normalizeChoices(data.choices));
                                 }
@@ -864,14 +870,14 @@ export function InteractiveWizard({
                                 ))}
                             </AnimatePresence>
                             {/* Structured choices - shown for welcome message or any LLM response with choices */}
-                            {((welcomeChoices && messages.length === 1) || currentChoices) && !isLoading && (
+                            {((isInitialWelcome && welcomeChoices) || currentChoices) && !isLoading && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     className="mt-4"
                                 >
                                     <StoryChoices
-                                        choices={welcomeChoices || currentChoices || []}
+                                        choices={(isInitialWelcome ? welcomeChoices : currentChoices) || []}
                                         onSelect={handleChoiceSelect}
                                         disabled={isLoading}
                                     />

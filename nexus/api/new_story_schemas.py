@@ -968,3 +968,11 @@ class WizardResponse(BaseModel):
         max_length=4,
         description="2-4 concise choices for the user to select from. Do not include numbering or markdown formatting.",
     )
+
+    @field_validator("choices")
+    @classmethod
+    def validate_choice_content(cls, v: List[str]) -> List[str]:
+        """Ensure all choices are non-empty strings."""
+        if not all(isinstance(c, str) and c.strip() for c in v):
+            raise ValueError("All choices must be non-empty strings")
+        return [c.strip() for c in v]
