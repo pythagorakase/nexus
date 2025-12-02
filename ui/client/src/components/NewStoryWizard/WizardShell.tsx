@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CornerSunburst } from "@/components/deco";
+import { useToast } from "@/hooks/use-toast";
 
 type WizardPhase = "slot" | "setting" | "character" | "seed";
 
@@ -27,8 +28,10 @@ const PHASES: { id: WizardPhase; label: string }[] = [
 export function NewStoryWizard() {
     const [currentPhase, setCurrentPhase] = useState<WizardPhase>("slot");
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+    const [resumeThreadId, setResumeThreadId] = useState<string | null>(null);
     const [_, setLocation] = useLocation();
     const { isGilded, isVector, theme, setTheme, glowClass } = useTheme();
+    const { toast } = useToast();
 
     // State for data collected across phases
     const [wizardData, setWizardData] = useState({
@@ -42,15 +45,63 @@ export function NewStoryWizard() {
     const handleSlotSelected = (slot: number) => {
         setSelectedSlot(slot);
         setCurrentPhase("setting");
+        setResumeThreadId(null);
+        setWizardData({
+            slot,
+            setting: null,
+            character: null,
+            seed: null,
+            location: null,
+        });
     };
 
     const handleInteractivePhaseChange = (phase: "setting" | "character" | "seed") => {
         setCurrentPhase(phase);
     };
 
-    const handleSlotResumed = (slot: number) => {
-        localStorage.setItem("activeSlot", slot.toString());
-        window.location.href = "/nexus";
+    const handleSlotResumed = async (slotData: {
+        slot: number;
+        wizard_in_progress?: boolean;
+        wizard_thread_id?: string;
+        wizard_phase?: "setting" | "character" | "seed";
+    }) => {
+        localStorage.setItem("activeSlot", slotData.slot.toString());
+
+        if (slotData.wizard_in_progress && slotData.wizard_thread_id) {
+            try {
+                const resumeRes = await fetch(`/api/story/new/setup/resume?slot=${slotData.slot}`);
+                if (!resumeRes.ok) {
+                    throw new Error("Failed to resume wizard session");
+                }
+
+                const resumeData = await resumeRes.json();
+                const inferredPhase: WizardPhase =
+                    slotData.wizard_phase || resumeData.current_phase ||
+                    (resumeData.selected_seed ? "seed" : resumeData.character_draft ? "character" : "setting");
+
+                setResumeThreadId(resumeData.thread_id ?? null);
+                setWizardData({
+                    slot: slotData.slot,
+                    setting: resumeData.setting_draft ?? null,
+                    character: resumeData.character_draft ?? null,
+                    seed: resumeData.selected_seed ?? null,
+                    location: resumeData.initial_location ?? null,
+                });
+
+                setSelectedSlot(slotData.slot);
+                setCurrentPhase(inferredPhase);
+            } catch (error) {
+                console.error("Failed to resume wizard:", error);
+                toast({
+                    title: "Resume Failed",
+                    description: "Could not resume your in-progress wizard. Please try again.",
+                    variant: "destructive",
+                });
+            }
+        } else {
+            // Story complete - go to NexusLayout
+            window.location.href = "/nexus";
+        }
     };
 
     const handleComplete = () => {
@@ -221,6 +272,8 @@ export function NewStoryWizard() {
                             onPhaseChange={handleInteractivePhaseChange}
                             wizardData={wizardData}
                             setWizardData={setWizardData}
+                            resumeThreadId={resumeThreadId}
+                            initialPhase={currentPhase as "setting" | "character" | "seed"}
                         />
                     </div>
                 )}

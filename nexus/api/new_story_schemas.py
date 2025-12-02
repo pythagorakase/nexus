@@ -261,6 +261,198 @@ class CharacterSheet(BaseModel):
         }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CHARACTER CREATION SUB-PHASE SCHEMAS
+# These enable gated progression through character creation with separate tools
+# ═══════════════════════════════════════════════════════════════════════════════
+
+VALID_TRAIT_NAMES = {
+    "allies",
+    "contacts",
+    "patron",
+    "dependents",
+    "status",
+    "reputation",
+    "resources",
+    "domain",
+    "enemies",
+    "obligations",
+}
+
+
+class CharacterConcept(BaseModel):
+    """
+    Sub-phase 1: Core character concept.
+
+    Captures archetype, background, name, and appearance before moving to trait selection.
+    This establishes the foundation that informs trait choices.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    archetype: str = Field(
+        ...,
+        min_length=5,
+        description="Character archetype/concept (e.g., 'reluctant hero', 'cunning merchant')",
+    )
+    background: str = Field(
+        ...,
+        min_length=30,
+        description="Character's history, origin, and what shaped them",
+    )
+    name: str = Field(
+        ..., min_length=1, max_length=50, description="Character's full name"
+    )
+    appearance: str = Field(
+        ...,
+        min_length=30,
+        description="Physical description and how they present themselves",
+    )
+
+
+class TraitSelection(BaseModel):
+    """
+    Sub-phase 2: Trait selection with rationale.
+
+    Captures the 3 selected traits from the 10 optional traits,
+    along with rationales explaining why each fits the character.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    selected_traits: List[str] = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="Exactly 3 trait names from: allies, contacts, patron, dependents, status, reputation, resources, domain, enemies, obligations",
+    )
+    trait_rationales: Dict[str, str] = Field(
+        ...,
+        description="Map of trait name to brief rationale explaining why it fits this character",
+    )
+    suggested_by_llm: List[str] = Field(
+        default_factory=list,
+        description="The 3 traits Skald pre-selected as fitting for this character",
+    )
+
+    @field_validator("selected_traits")
+    @classmethod
+    def validate_trait_names(cls, v: List[str]) -> List[str]:
+        """Ensure all trait names are valid."""
+        normalized = [t.lower().strip() for t in v]
+        for trait in normalized:
+            if trait not in VALID_TRAIT_NAMES:
+                raise ValueError(
+                    f"Invalid trait: '{trait}'. Must be one of: {', '.join(sorted(VALID_TRAIT_NAMES))}"
+                )
+        if len(set(normalized)) != 3:
+            raise ValueError("Must select exactly 3 unique traits")
+        return normalized
+
+
+class WildcardTrait(BaseModel):
+    """
+    Sub-phase 3: Custom wildcard trait.
+
+    The wildcard is a required custom trait that sets the character apart -
+    something unique that can't be found in the standard trait menu.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    wildcard_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Name of the unique custom trait",
+    )
+    wildcard_description: str = Field(
+        ...,
+        min_length=20,
+        description="What this trait means - capability, possession, relationship, blessing, or curse",
+    )
+
+
+class CharacterCreationState(BaseModel):
+    """
+    Accumulator for character creation sub-phases.
+
+    Tracks progress through the three sub-phases and provides methods
+    to assemble the complete CharacterSheet when all phases are done.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    concept: Optional[CharacterConcept] = None
+    trait_selection: Optional[TraitSelection] = None
+    wildcard: Optional[WildcardTrait] = None
+
+    # Fleshed-out trait descriptions (filled in during trait development dialog)
+    trait_details: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Map of trait name to fleshed-out description from dialog",
+    )
+
+    # Additional fields gathered during conversation
+    summary: Optional[str] = Field(None, description="Brief character summary")
+    personality: Optional[str] = Field(None, description="Personality description")
+
+    def current_subphase(self) -> Literal["concept", "traits", "wildcard", "complete"]:
+        """Determine which sub-phase we're currently in."""
+        if self.concept is None:
+            return "concept"
+        if self.trait_selection is None:
+            return "traits"
+        if self.wildcard is None:
+            return "wildcard"
+        return "complete"
+
+    def is_complete(self) -> bool:
+        """Check if all sub-phases are complete."""
+        return all([self.concept, self.trait_selection, self.wildcard])
+
+    def to_character_sheet(self) -> "CharacterSheet":
+        """
+        Assemble complete CharacterSheet from sub-phase data.
+
+        Raises:
+            ValueError: If any required sub-phase data is missing
+        """
+        if not self.is_complete():
+            missing = []
+            if not self.concept:
+                missing.append("concept")
+            if not self.trait_selection:
+                missing.append("trait_selection")
+            if not self.wildcard:
+                missing.append("wildcard")
+            raise ValueError(f"Cannot assemble CharacterSheet - missing: {missing}")
+
+        # Build trait kwargs
+        trait_kwargs: Dict[str, Any] = {}
+        for trait_name in self.trait_selection.selected_traits:
+            # Use fleshed-out description if available, otherwise use rationale
+            if trait_name in self.trait_details:
+                trait_kwargs[trait_name] = self.trait_details[trait_name]
+            elif trait_name in self.trait_selection.trait_rationales:
+                trait_kwargs[trait_name] = self.trait_selection.trait_rationales[
+                    trait_name
+                ]
+            else:
+                trait_kwargs[trait_name] = f"Selected during character creation"
+
+        return CharacterSheet(
+            name=self.concept.name,
+            summary=self.summary or f"A {self.concept.archetype}",
+            appearance=self.concept.appearance,
+            background=self.concept.background,
+            personality=self.personality or "To be developed through play",
+            wildcard_name=self.wildcard.wildcard_name,
+            wildcard_description=self.wildcard.wildcard_description,
+            **trait_kwargs,
+        )
+
+
 class StoryTimestamp(BaseModel):
     """
     Atomized timestamp for story start - LLM-friendly integer fields.
@@ -361,15 +553,19 @@ class StorySeed(BaseModel):
         None, description="Mystery or question to explore"
     )
 
-    # Player agency
-    immediate_choices: List[str] = Field(
-        ..., min_items=2, max_items=4, description="Initial choices available"
-    )
+    # Allies and obstacles
     potential_allies: List[str] = Field(
         default_factory=list, description="Potential allies nearby"
     )
     potential_obstacles: List[str] = Field(
-        ..., min_items=1, description="Initial challenges"
+        default_factory=list, description="Initial challenges"
+    )
+
+    # Secret channel content (LLM-to-LLM, user never sees)
+    secrets: str = Field(
+        ...,
+        min_length=50,
+        description="Hidden plot information: NPC hidden agendas, twists, complications waiting to emerge. User never sees this - LLM-to-LLM channel for dramatic irony.",
     )
 
     def get_base_datetime(self, tz: timezone = timezone.utc) -> datetime:
@@ -741,3 +937,42 @@ STORY_SEEDS_SCHEMA_PROMPT = """
 Generate 3 unique StorySeed options based on the setting and character. Each should offer
 a different type of opening with clear player agency. Return a JSON array of 3 StorySeed objects.
 """
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WIZARD RESPONSE ENVELOPE
+# Enforces structured choices on every Skald response via OpenAI response_format
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class WizardResponse(BaseModel):
+    """
+    Structured response envelope for all wizard interactions.
+
+    Every Skald response MUST include 2-4 short choice strings.
+    The backend/UI handles numbering/labeling. This schema is enforced
+    via OpenAI response_format with strict=True.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    message: str = Field(
+        ...,
+        min_length=10,
+        description="Skald's narrative response to the user. Should be engaging and "
+        "guide the conversation forward.",
+    )
+    choices: List[str] = Field(
+        ...,
+        min_length=2,
+        max_length=4,
+        description="2-4 concise choices for the user to select from. Do not include numbering or markdown formatting.",
+    )
+
+    @field_validator("choices")
+    @classmethod
+    def validate_choice_content(cls, v: List[str]) -> List[str]:
+        """Ensure all choices are non-empty strings."""
+        if not all(isinstance(c, str) and c.strip() for c in v):
+            raise ValueError("All choices must be non-empty strings")
+        return [c.strip() for c in v]

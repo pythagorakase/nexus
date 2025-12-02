@@ -137,55 +137,6 @@ def get_new_story_model() -> str:
     return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
-import re
-
-
-def extract_choices_from_text(text: str) -> List[str]:
-    """
-    Extract structured choices from LLM response text.
-
-    Looks for numbered lists like:
-    1. **Science Fiction** - description
-    2. **Fantasy** - description
-
-    Or simple numbered items:
-    1. Option A
-    2. Option B
-
-    Returns list of choice strings (2-4 items), or empty list if no pattern found.
-    """
-    if not text:
-        return []
-
-    # Pattern: numbered items (1. 2. 3. etc) optionally with bold text
-    # Match: "1. **Title** - description" or "1. Title - description" or "1. Title"
-    pattern = r'^\s*(\d+)\.\s+(?:\*\*([^*]+)\*\*\s*[-–—]?\s*(.*)|(.*))$'
-
-    choices = []
-    for line in text.split('\n'):
-        match = re.match(pattern, line.strip())
-        if match:
-            num = match.group(1)
-            if match.group(2):  # Bold format: **Title** - description
-                title = match.group(2).strip()
-                desc = match.group(3).strip() if match.group(3) else ""
-                if desc:
-                    choices.append(f"{title} — {desc}")
-                else:
-                    choices.append(title)
-            elif match.group(4):  # Simple format: just the text after number
-                choices.append(match.group(4).strip())
-
-    # Only return if we found 2-4 sequential choices starting from 1
-    if len(choices) >= 2 and len(choices) <= 4:
-        logger.debug(f"Extracted {len(choices)} choices from LLM response")
-        return choices
-
-    if choices:
-        logger.debug(f"Choice extraction found {len(choices)} items, expected 2-4. Returning empty list.")
-    return []
-
-
 # Request/Response models
 class ContinueNarrativeRequest(BaseModel):
     """Request to continue narrative from a chunk"""
@@ -941,9 +892,10 @@ async def select_slot_endpoint(request: SelectSlotRequest):
 
 @app.get("/api/story/new/slots")
 async def get_slots_status_endpoint():
-    """Get status of all save slots"""
+    """Get status of all save slots with wizard state"""
     from nexus.api.slot_utils import all_slots, slot_dbname
     from nexus.api.save_slots import list_slots
+    from nexus.api.new_story_cache import read_cache
 
     results = []
     for slot in all_slots():
@@ -955,13 +907,21 @@ async def get_slots_status_endpoint():
             slot_data = next((s for s in slots_data if s["slot_number"] == slot), None)
 
             if slot_data:
+                # Check if wizard is in progress
+                cache = read_cache(dbname)
+                if cache:
+                    slot_data["wizard_in_progress"] = True
+                    slot_data["wizard_thread_id"] = cache.get("thread_id")
+                    slot_data["wizard_phase"] = cache.get("current_phase", "setting")
+                else:
+                    slot_data["wizard_in_progress"] = False
                 results.append(slot_data)
             else:
-                results.append({"slot_number": slot, "is_active": False})
+                results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
         except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
             # Expected: DB doesn't exist or connection failed
             logger.warning(f"Could not connect to slot {slot} database: {e}")
-            results.append({"slot_number": slot, "is_active": False})
+            results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
         except Exception as e:
             # Unexpected errors should surface during development
             logger.error(f"Unexpected error fetching slot {slot}: {e}")
@@ -977,7 +937,15 @@ from nexus.api.new_story_schemas import (
     LayerDefinition,
     ZoneDefinition,
     PlaceProfile,
+    CharacterConcept,
+    TraitSelection,
+    WildcardTrait,
+    CharacterCreationState,
+    TransitionData,
+    WizardResponse,
 )
+from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
+from nexus.api.new_story_cache import read_cache
 
 
 class ChatRequest(BaseModel):
@@ -986,6 +954,7 @@ class ChatRequest(BaseModel):
     message: str
     current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
+    accept_fate: bool = False  # Force tool call without adding user message
 
 
 @app.post("/api/story/new/chat")
@@ -1030,16 +999,36 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Check if this is the first message (thread is empty)
         # If so, prepend the welcome message as an assistant message
+        # Check if this is the first message (thread is empty)
+        # If so, prepend the welcome message as an assistant message
         history = client.list_messages(request.thread_id, limit=history_limit)
+        
+        # Log history state for debugging
+        logger.info(f"Thread {request.thread_id} history length: {len(history)}")
+        
         if len(history) == 0 and welcome_message:
             # Thread is empty, prepend welcome message
+            logger.info(f"Prepending welcome message to thread {request.thread_id}")
             client.add_message(request.thread_id, "assistant", welcome_message)
+            # Re-fetch history to include the new message
+            history = client.list_messages(request.thread_id, limit=history_limit)
+        elif len(history) > 0 and welcome_message:
+            # Check if the first message is already the welcome message to avoid duplication
+            # (In case of race conditions or retries)
+            first_msg = history[-1] if history else None # history is reversed later, so -1 is oldest? 
+            # Wait, list_messages returns newest first. So history[-1] is the oldest.
+            # Let's verify list_messages behavior. 
+            # Assuming newest first:
+            # history[0] is newest. history[-1] is oldest.
+            pass
 
-        # Add user message
-        client.add_message(request.thread_id, "user", request.message)
+        # Add user message (skip when accept_fate to avoid polluting thread)
+        if not request.accept_fate:
+            client.add_message(request.thread_id, "user", request.message)
 
         # Define tools based on current phase
         tools = []
+        primary_tool_name: Optional[str] = None
         if request.current_phase == "setting":
             tools.append(
                 {
@@ -1051,17 +1040,66 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     },
                 }
             )
+            primary_tool_name = "submit_world_document"
         elif request.current_phase == "character":
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "submit_character_sheet",
-                        "description": "Submit the finalized character sheet when the user agrees.",
-                        "parameters": CharacterSheet.model_json_schema(),
-                    },
-                }
-            )
+            # Determine sub-phase based on character_state in context_data
+            char_state = (request.context_data or {}).get("character_state", {})
+            has_concept = char_state.get("concept") is not None
+            has_traits = char_state.get("trait_selection") is not None
+            has_wildcard = char_state.get("wildcard") is not None
+
+            if not has_concept:
+                # Sub-phase 1: Gather archetype, background, name, appearance
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_character_concept",
+                            "description": "Submit the character's core concept (archetype, background, name, appearance) when established.",
+                            "parameters": CharacterConcept.model_json_schema(),
+                        },
+                    }
+                )
+                primary_tool_name = "submit_character_concept"
+            elif not has_traits:
+                # Sub-phase 2: Select 3 traits from the 10 optional traits
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_trait_selection",
+                            "description": "Submit the 3 selected traits with rationales when the user confirms their choices.",
+                            "parameters": TraitSelection.model_json_schema(),
+                        },
+                    }
+                )
+                primary_tool_name = "submit_trait_selection"
+            elif not has_wildcard:
+                # Sub-phase 3: Define the custom wildcard trait
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_wildcard_trait",
+                            "description": "Submit the unique wildcard trait when defined.",
+                            "parameters": WildcardTrait.model_json_schema(),
+                        },
+                    }
+                )
+                primary_tool_name = "submit_wildcard_trait"
+            else:
+                # All sub-phases complete - offer final character sheet assembly
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_character_sheet",
+                            "description": "Submit the finalized character sheet when the user agrees.",
+                            "parameters": CharacterSheet.model_json_schema(),
+                        },
+                    }
+                )
+                primary_tool_name = "submit_character_sheet"
         elif request.current_phase == "seed":
             tools.append(
                 {
@@ -1082,6 +1120,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     },
                 }
             )
+            primary_tool_name = "submit_starting_scenario"
 
         # Fetch updated history (now includes welcome + user message if first interaction)
         # Note: list_messages returns newest first, so we reverse it
@@ -1113,37 +1152,118 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "Use the available tool to submit the artifact when the user confirms."
         )
 
+        structured_choices_instruction = (
+            "Use tools for every reply. Call `respond_with_choices` to deliver your "
+            "narrative message plus 2-4 actionable choice strings (no numbering/markdown). "
+            "Call a submission tool only when you are ready to commit that artifact. "
+            "Do not send freeform text outside tool calls. Do not repeat the choices inside "
+            "your message body; keep options only in the choices array."
+        )
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "system", "content": phase_instruction},
+            {"role": "system", "content": structured_choices_instruction},
         ] + history
 
         provider = OpenAIProvider(model=model)
         openai_client = openai.OpenAI(api_key=provider.api_key)
 
+        # Build WizardResponse schema for structured output
+        wizard_schema = WizardResponse.model_json_schema()
+        wizard_response_tool = {
+            "type": "function",
+            "function": {
+                "name": "respond_with_choices",
+                "description": (
+                    "Respond to the user with a narrative message and 2-4 short choice "
+                    "strings (no numbering/markdown) to guide the next step. Do NOT list the "
+                    "choices inside the message; only in the choices array."
+                ),
+                "parameters": wizard_schema,
+            },
+        }
+
+        # Inject Accept Fate signal as system message if active
+        if request.accept_fate:
+            logger.info(f"Accept Fate active for phase {request.current_phase}")
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[ACCEPT FATE ACTIVE] Follow the '### Accept Fate Protocol' in your instructions. "
+                        "Make bold, concrete choices immediately."
+                    ),
+                }
+            )
+
+        # Build final toolset. When not forcing Accept Fate, require a tool call and
+        # expose the respond_with_choices helper to keep outputs structured while
+        # still allowing spontaneous submission calls.
+        tools_for_llm = tools + [wizard_response_tool]
+        tool_choice_mode: Any = "required"
+
+        # Use Accept Fate to force artifact generation via the phase tool
+        if request.accept_fate and primary_tool_name:
+            logger.info(f"Forcing tool choice: {primary_tool_name}")
+            tools_for_llm = tools  # Keep the response helper out of the path
+            tool_choice_mode = {
+                "type": "function",
+                "function": {"name": primary_tool_name},
+            }
+
+        # Use response_format to enforce structured WizardResponse on normal runs.
+        # When Accept Fate forces a tool call, drop the schema so the model isn't
+        # forced to emit both a JSON payload and the required function call.
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "wizard_response",
+                "strict": True,
+                "schema": wizard_schema,
+            },
+        }
+
+        if request.accept_fate and primary_tool_name:
+            response_format = None
+
+        logger.info(f"Calling LLM with tool_choice_mode: {tool_choice_mode}")
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages,
-            tools=tools if tools else None,
-            tool_choice="auto",
+            tools=tools_for_llm if tools_for_llm else None,
+            tool_choice=tool_choice_mode,
+            response_format=response_format,
         )
 
         message = response.choices[0].message
 
-        # Check for tool calls
-        if message.tool_calls:
-            tool_call = message.tool_calls[0]
-            function_name = tool_call.function.name
+        tool_calls = message.tool_calls or []
 
-            # Parse tool arguments
+        # Prioritize submission tools; fall back to structured response helper
+        submission_call = next(
+            (tc for tc in tool_calls if tc.function.name != "respond_with_choices"),
+            None,
+        )
+        response_call = next(
+            (tc for tc in tool_calls if tc.function.name == "respond_with_choices"),
+            None,
+        )
+
+        def parse_tool_arguments(raw_args: str) -> Dict[str, Any]:
             try:
-                arguments = json.loads(tool_call.function.arguments)
+                return json.loads(raw_args)
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse tool call arguments: {e}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Invalid tool call arguments from LLM: {str(e)}",
                 )
+
+        # Handle artifact submissions
+        if submission_call:
+            function_name = submission_call.function.name
+            arguments = parse_tool_arguments(submission_call.function.arguments)
 
             # Persist the artifact to the setup cache
             try:
@@ -1160,32 +1280,211 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         zone=arguments.get("zone"),
                         location=arguments.get("location"),
                     )
+                # Character creation sub-phase tools don't persist to DB cache
+                # They return to frontend to update local state
             except Exception as e:
                 logger.error(f"Failed to persist artifact for {function_name}: {e}")
                 # We continue anyway to show the UI, but log the error
 
+            # Determine if this completes the entire phase or just a sub-phase
+            is_subphase_tool = function_name in [
+                "submit_character_concept",
+                "submit_trait_selection",
+                "submit_wildcard_trait",
+            ]
+
             # Return the structured data to frontend
+            # phase_complete: True when entire phase (world/character/seed) is done
+            # subphase_complete: True for character sub-phases (concept/traits/wildcard)
+            #                    Frontend uses this to update character_state and
+            #                    trigger next sub-phase tool availability
             return {
                 "message": "Generating artifact...",
-                "phase_complete": True,
+                "phase_complete": not is_subphase_tool,
+                "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
                 "data": arguments,
             }
 
-        reply = message.content
+        # Handle structured conversational responses via helper tool
+        def prepare_choices_for_ui(raw_choices: List[str]) -> List[str]:
+            return [c.strip() for c in raw_choices if isinstance(c, str) and c.strip()]
 
-        # Save assistant reply to thread
-        client.add_message(request.thread_id, "assistant", reply)
+        if response_call:
+            try:
+                wizard_response = WizardResponse.model_validate(
+                    parse_tool_arguments(response_call.function.arguments)
+                )
+            except Exception as e:
+                logger.error(f"Failed to parse respond_with_choices payload: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"LLM returned invalid WizardResponse via tool call: {str(e)}",
+                )
+            client.add_message(request.thread_id, "assistant", wizard_response.message)
+            logger.info(
+                "respond_with_choices: message_len=%d choices=%s",
+                len(wizard_response.message or ""),
+                prepare_choices_for_ui(wizard_response.choices),
+            )
 
-        # Extract structured choices from LLM response if present
-        choices = extract_choices_from_text(reply)
+            return {
+                "message": wizard_response.message,
+                "choices": prepare_choices_for_ui(wizard_response.choices),
+                "phase_complete": False,
+                "thread_id": request.thread_id,
+            }
 
-        return {"message": reply, "phase_complete": False, "choices": choices}
+        # Parse structured WizardResponse (guaranteed valid by response_format)
+        try:
+            wizard_response = WizardResponse.model_validate_json(message.content)
+        except Exception as e:
+            logger.error(f"Failed to parse WizardResponse: {e}")
+            logger.error(f"Raw content: {message.content[:500] if message.content else 'None'}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"LLM returned invalid WizardResponse: {str(e)}",
+            )
+
+        # Save assistant message to thread (just the narrative text, not JSON)
+        client.add_message(request.thread_id, "assistant", wizard_response.message)
+        logger.info(
+            "respond_with_choices (content path): message_len=%d choices=%s",
+            len(wizard_response.message or ""),
+            prepare_choices_for_ui(wizard_response.choices),
+        )
+
+        return {
+            "message": wizard_response.message,
+            "choices": prepare_choices_for_ui(wizard_response.choices),
+            "phase_complete": False,
+            "thread_id": request.thread_id,
+        }
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class TransitionRequest(BaseModel):
+    """Request to transition from wizard setup to narrative mode."""
+    slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
+
+
+class TransitionResponse(BaseModel):
+    """Response from successful transition."""
+    status: str
+    character_id: int
+    place_id: int
+    layer_id: int
+    zone_id: int
+    message: str
+
+
+@app.post("/api/story/new/transition", response_model=TransitionResponse)
+async def transition_to_narrative_endpoint(request: TransitionRequest):
+    """
+    Transition from wizard setup to narrative mode.
+
+    Reads from assets.new_story_creator cache, validates completeness,
+    and calls perform_transition() to populate public schema atomically.
+
+    This is the final step that:
+    1. Moves all wizard data to the game database
+    2. Creates the character, location hierarchy
+    3. Sets new_story=false to enable narrative mode
+    4. Clears the setup cache
+    """
+    from datetime import datetime, timezone
+    from pydantic import ValidationError
+
+    dbname = slot_dbname(request.slot)
+
+    # Read the setup cache
+    cache = read_cache(dbname)
+    if not cache:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No setup data found for slot {request.slot}. Complete the wizard first."
+        )
+
+    # Validate required fields exist in cache
+    required_fields = ["setting_draft", "character_draft", "selected_seed", "layer_draft", "zone_draft", "initial_location"]
+    missing = [f for f in required_fields if not cache.get(f)]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Incomplete setup data. Missing: {', '.join(missing)}"
+        )
+
+    # Build TransitionData from cache
+    try:
+        # Parse timestamps from seed's base_timestamp
+        seed_data = cache["selected_seed"]
+        base_ts_data = seed_data.get("base_timestamp", {})
+        if isinstance(base_ts_data, dict):
+            # StoryTimestamp atomized format
+            base_timestamp = datetime(
+                year=base_ts_data.get("year", 2024),
+                month=base_ts_data.get("month", 1),
+                day=base_ts_data.get("day", 1),
+                hour=base_ts_data.get("hour", 12),
+                minute=base_ts_data.get("minute", 0),
+                tzinfo=timezone.utc
+            )
+        elif cache.get("base_timestamp"):
+            base_timestamp = datetime.fromisoformat(cache["base_timestamp"])
+        else:
+            base_timestamp = datetime.now(timezone.utc)
+
+        # Handle legacy vs sub-phase character_draft format
+        # Legacy: direct CharacterSheet dict (name, summary, traits, etc.)
+        # Sub-phase: CharacterCreationState dict (concept, trait_selection, wildcard)
+        char_draft = cache["character_draft"]
+        if "concept" in char_draft or "trait_selection" in char_draft:
+            # Sub-phase format - assemble from CharacterCreationState
+            state = CharacterCreationState(**char_draft)
+            char_draft = state.to_character_sheet().model_dump()
+
+        transition_data = TransitionData(
+            setting=SettingCard(**cache["setting_draft"]),
+            character=CharacterSheet(**char_draft),
+            seed=StorySeed(**cache["selected_seed"]),
+            layer=LayerDefinition(**cache["layer_draft"]),
+            zone=ZoneDefinition(**cache["zone_draft"]),
+            location=PlaceProfile(**cache["initial_location"]),
+            base_timestamp=base_timestamp,
+            thread_id=cache.get("thread_id", ""),
+        )
+    except ValidationError as e:
+        # Fail loudly per user directive
+        logger.error(f"Validation error building TransitionData: {e}")
+        raise HTTPException(
+            status_code=422,
+            detail=f"Setup data validation failed: {e.errors()}"
+        )
+
+    # Perform atomic transition
+    mapper = NewStoryDatabaseMapper(dbname=dbname)
+    try:
+        result = mapper.perform_transition(transition_data)
+        logger.info(f"Transition complete for slot {request.slot}: {result}")
+
+        return TransitionResponse(
+            status="transitioned",
+            character_id=result["character_id"],
+            place_id=result["place_id"],
+            layer_id=result["layer_id"],
+            zone_id=result["zone_id"],
+            message=f"Welcome to {transition_data.setting.world_name}. Your story begins."
+        )
+    except ValueError as e:
+        logger.error(f"Transition validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Transition failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Transition failed: {str(e)}")
 
 
 if __name__ == "__main__":
