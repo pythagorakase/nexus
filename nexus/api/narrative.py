@@ -137,55 +137,6 @@ def get_new_story_model() -> str:
     return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
-import re
-
-
-def extract_choices_from_text(text: str) -> List[str]:
-    """
-    Extract structured choices from LLM response text.
-
-    Looks for numbered lists like:
-    1. **Science Fiction** - description
-    2. **Fantasy** - description
-
-    Or simple numbered items:
-    1. Option A
-    2. Option B
-
-    Returns list of choice strings (2-4 items), or empty list if no pattern found.
-    """
-    if not text:
-        return []
-
-    # Pattern: numbered items (1. 2. 3. etc) optionally with bold text
-    # Match: "1. **Title** - description" or "1. Title - description" or "1. Title"
-    pattern = r'^\s*(\d+)\.\s+(?:\*\*([^*]+)\*\*\s*[-–—]?\s*(.*)|(.*))$'
-
-    choices = []
-    for line in text.split('\n'):
-        match = re.match(pattern, line.strip())
-        if match:
-            num = match.group(1)
-            if match.group(2):  # Bold format: **Title** - description
-                title = match.group(2).strip()
-                desc = match.group(3).strip() if match.group(3) else ""
-                if desc:
-                    choices.append(f"{title} — {desc}")
-                else:
-                    choices.append(title)
-            elif match.group(4):  # Simple format: just the text after number
-                choices.append(match.group(4).strip())
-
-    # Only return if we found 2-4 sequential choices starting from 1
-    if len(choices) >= 2 and len(choices) <= 4:
-        logger.debug(f"Extracted {len(choices)} choices from LLM response")
-        return choices
-
-    if choices:
-        logger.debug(f"Choice extraction found {len(choices)} items, expected 2-4. Returning empty list.")
-    return []
-
-
 # Request/Response models
 class ContinueNarrativeRequest(BaseModel):
     """Request to continue narrative from a chunk"""
@@ -991,6 +942,7 @@ from nexus.api.new_story_schemas import (
     WildcardTrait,
     CharacterCreationState,
     TransitionData,
+    WizardResponse,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_cache import read_cache
@@ -1047,10 +999,28 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Check if this is the first message (thread is empty)
         # If so, prepend the welcome message as an assistant message
+        # Check if this is the first message (thread is empty)
+        # If so, prepend the welcome message as an assistant message
         history = client.list_messages(request.thread_id, limit=history_limit)
+        
+        # Log history state for debugging
+        logger.info(f"Thread {request.thread_id} history length: {len(history)}")
+        
         if len(history) == 0 and welcome_message:
             # Thread is empty, prepend welcome message
+            logger.info(f"Prepending welcome message to thread {request.thread_id}")
             client.add_message(request.thread_id, "assistant", welcome_message)
+            # Re-fetch history to include the new message
+            history = client.list_messages(request.thread_id, limit=history_limit)
+        elif len(history) > 0 and welcome_message:
+            # Check if the first message is already the welcome message to avoid duplication
+            # (In case of race conditions or retries)
+            first_msg = history[-1] if history else None # history is reversed later, so -1 is oldest? 
+            # Wait, list_messages returns newest first. So history[-1] is the oldest.
+            # Let's verify list_messages behavior. 
+            # Assuming newest first:
+            # history[0] is newest. history[-1] is oldest.
+            pass
 
         # Add user message (skip when accept_fate to avoid polluting thread)
         if not request.accept_fate:
@@ -1058,6 +1028,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Define tools based on current phase
         tools = []
+        primary_tool_name: Optional[str] = None
         if request.current_phase == "setting":
             tools.append(
                 {
@@ -1069,6 +1040,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     },
                 }
             )
+            primary_tool_name = "submit_world_document"
         elif request.current_phase == "character":
             # Determine sub-phase based on character_state in context_data
             char_state = (request.context_data or {}).get("character_state", {})
@@ -1088,6 +1060,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         },
                     }
                 )
+                primary_tool_name = "submit_character_concept"
             elif not has_traits:
                 # Sub-phase 2: Select 3 traits from the 10 optional traits
                 tools.append(
@@ -1100,6 +1073,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         },
                     }
                 )
+                primary_tool_name = "submit_trait_selection"
             elif not has_wildcard:
                 # Sub-phase 3: Define the custom wildcard trait
                 tools.append(
@@ -1112,6 +1086,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         },
                     }
                 )
+                primary_tool_name = "submit_wildcard_trait"
             else:
                 # All sub-phases complete - offer final character sheet assembly
                 tools.append(
@@ -1124,6 +1099,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         },
                     }
                 )
+                primary_tool_name = "submit_character_sheet"
         elif request.current_phase == "seed":
             tools.append(
                 {
@@ -1144,6 +1120,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     },
                 }
             )
+            primary_tool_name = "submit_starting_scenario"
 
         # Fetch updated history (now includes welcome + user message if first interaction)
         # Note: list_messages returns newest first, so we reverse it
@@ -1175,38 +1152,118 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "Use the available tool to submit the artifact when the user confirms."
         )
 
+        structured_choices_instruction = (
+            "Use tools for every reply. Call `respond_with_choices` to deliver your "
+            "narrative message plus 2-4 actionable choice strings (no numbering/markdown). "
+            "Call a submission tool only when you are ready to commit that artifact. "
+            "Do not send freeform text outside tool calls. Do not repeat the choices inside "
+            "your message body; keep options only in the choices array."
+        )
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "system", "content": phase_instruction},
+            {"role": "system", "content": structured_choices_instruction},
         ] + history
 
         provider = OpenAIProvider(model=model)
         openai_client = openai.OpenAI(api_key=provider.api_key)
 
-        # Use tool_choice="required" for accept_fate to force artifact generation
+        # Build WizardResponse schema for structured output
+        wizard_schema = WizardResponse.model_json_schema()
+        wizard_response_tool = {
+            "type": "function",
+            "function": {
+                "name": "respond_with_choices",
+                "description": (
+                    "Respond to the user with a narrative message and 2-4 short choice "
+                    "strings (no numbering/markdown) to guide the next step. Do NOT list the "
+                    "choices inside the message; only in the choices array."
+                ),
+                "parameters": wizard_schema,
+            },
+        }
+
+        # Inject Accept Fate signal as system message if active
+        if request.accept_fate:
+            logger.info(f"Accept Fate active for phase {request.current_phase}")
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "[ACCEPT FATE ACTIVE] Follow the '### Accept Fate Protocol' in your instructions. "
+                        "Make bold, concrete choices immediately."
+                    ),
+                }
+            )
+
+        # Build final toolset. When not forcing Accept Fate, require a tool call and
+        # expose the respond_with_choices helper to keep outputs structured while
+        # still allowing spontaneous submission calls.
+        tools_for_llm = tools + [wizard_response_tool]
+        tool_choice_mode: Any = "required"
+
+        # Use Accept Fate to force artifact generation via the phase tool
+        if request.accept_fate and primary_tool_name:
+            logger.info(f"Forcing tool choice: {primary_tool_name}")
+            tools_for_llm = tools  # Keep the response helper out of the path
+            tool_choice_mode = {
+                "type": "function",
+                "function": {"name": primary_tool_name},
+            }
+
+        # Use response_format to enforce structured WizardResponse on normal runs.
+        # When Accept Fate forces a tool call, drop the schema so the model isn't
+        # forced to emit both a JSON payload and the required function call.
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "wizard_response",
+                "strict": True,
+                "schema": wizard_schema,
+            },
+        }
+
+        if request.accept_fate and primary_tool_name:
+            response_format = None
+
+        logger.info(f"Calling LLM with tool_choice_mode: {tool_choice_mode}")
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages,
-            tools=tools if tools else None,
-            tool_choice="required" if request.accept_fate and tools else "auto",
+            tools=tools_for_llm if tools_for_llm else None,
+            tool_choice=tool_choice_mode,
+            response_format=response_format,
         )
 
         message = response.choices[0].message
 
-        # Check for tool calls
-        if message.tool_calls:
-            tool_call = message.tool_calls[0]
-            function_name = tool_call.function.name
+        tool_calls = message.tool_calls or []
 
-            # Parse tool arguments
+        # Prioritize submission tools; fall back to structured response helper
+        submission_call = next(
+            (tc for tc in tool_calls if tc.function.name != "respond_with_choices"),
+            None,
+        )
+        response_call = next(
+            (tc for tc in tool_calls if tc.function.name == "respond_with_choices"),
+            None,
+        )
+
+        def parse_tool_arguments(raw_args: str) -> Dict[str, Any]:
             try:
-                arguments = json.loads(tool_call.function.arguments)
+                return json.loads(raw_args)
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse tool call arguments: {e}")
                 raise HTTPException(
                     status_code=500,
                     detail=f"Invalid tool call arguments from LLM: {str(e)}",
                 )
+
+        # Handle artifact submissions
+        if submission_call:
+            function_name = submission_call.function.name
+            arguments = parse_tool_arguments(submission_call.function.arguments)
 
             # Persist the artifact to the setup cache
             try:
@@ -1250,15 +1307,60 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "data": arguments,
             }
 
-        reply = message.content
+        # Handle structured conversational responses via helper tool
+        def prepare_choices_for_ui(raw_choices: List[str]) -> List[str]:
+            return [c.strip() for c in raw_choices if isinstance(c, str) and c.strip()]
 
-        # Save assistant reply to thread
-        client.add_message(request.thread_id, "assistant", reply)
+        if response_call:
+            try:
+                wizard_response = WizardResponse.model_validate(
+                    parse_tool_arguments(response_call.function.arguments)
+                )
+            except Exception as e:
+                logger.error(f"Failed to parse respond_with_choices payload: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"LLM returned invalid WizardResponse via tool call: {str(e)}",
+                )
+            client.add_message(request.thread_id, "assistant", wizard_response.message)
+            logger.info(
+                "respond_with_choices: message_len=%d choices=%s",
+                len(wizard_response.message or ""),
+                prepare_choices_for_ui(wizard_response.choices),
+            )
 
-        # Extract structured choices from LLM response if present
-        choices = extract_choices_from_text(reply)
+            return {
+                "message": wizard_response.message,
+                "choices": prepare_choices_for_ui(wizard_response.choices),
+                "phase_complete": False,
+                "thread_id": request.thread_id,
+            }
 
-        return {"message": reply, "phase_complete": False, "choices": choices}
+        # Parse structured WizardResponse (guaranteed valid by response_format)
+        try:
+            wizard_response = WizardResponse.model_validate_json(message.content)
+        except Exception as e:
+            logger.error(f"Failed to parse WizardResponse: {e}")
+            logger.error(f"Raw content: {message.content[:500] if message.content else 'None'}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"LLM returned invalid WizardResponse: {str(e)}",
+            )
+
+        # Save assistant message to thread (just the narrative text, not JSON)
+        client.add_message(request.thread_id, "assistant", wizard_response.message)
+        logger.info(
+            "respond_with_choices (content path): message_len=%d choices=%s",
+            len(wizard_response.message or ""),
+            prepare_choices_for_ui(wizard_response.choices),
+        )
+
+        return {
+            "message": wizard_response.message,
+            "choices": prepare_choices_for_ui(wizard_response.choices),
+            "phase_complete": False,
+            "thread_id": request.thread_id,
+        }
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")

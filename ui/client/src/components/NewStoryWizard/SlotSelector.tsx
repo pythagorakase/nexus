@@ -5,6 +5,16 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface SlotData {
     slot: number;
@@ -108,12 +118,18 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
         onSlotResumed(slotData);
     };
 
+    const [slotToDelete, setSlotToDelete] = useState<number | null>(null);
+
     const handleReset = (e: React.MouseEvent, slot: number) => {
         e.stopPropagation();
         if (slot === 1) return;
+        setSlotToDelete(slot);
+    };
 
-        if (confirm(`Are you sure you want to clear Slot ${slot}? This cannot be undone.`)) {
-            resetMutation.mutate(slot);
+    const confirmReset = () => {
+        if (slotToDelete) {
+            resetMutation.mutate(slotToDelete);
+            setSlotToDelete(null);
         }
     };
 
@@ -146,79 +162,104 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                 slotData.slot === 1 && "opacity-80 cursor-not-allowed hover:border-destructive/50 hover:bg-destructive/5"
                             )}
                         >
-                        {/* Scanline effect */}
-                        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0 bg-[length:100%_2px,3px_100%] opacity-20" />
+                            {/* Scanline effect */}
+                            <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-0 bg-[length:100%_2px,3px_100%] opacity-20" />
 
-                        <div className="relative z-10 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={cn(
-                                    "h-12 w-12 rounded-sm flex items-center justify-center font-mono text-lg font-bold border",
-                                    slotData.slot === 1
-                                        ? "border-destructive/50 text-destructive bg-destructive/10"
-                                        : slotData.is_active
-                                            ? "border-primary text-primary bg-primary/10 terminal-glow"
-                                            : "border-muted text-muted-foreground bg-muted/10"
-                                )}>
-                                    {slotData.slot}
+                            <div className="relative z-10 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className={cn(
+                                        "h-12 w-12 rounded-sm flex items-center justify-center font-mono text-lg font-bold border",
+                                        slotData.slot === 1
+                                            ? "border-destructive/50 text-destructive bg-destructive/10"
+                                            : slotData.is_active
+                                                ? "border-primary text-primary bg-primary/10 terminal-glow"
+                                                : "border-muted text-muted-foreground bg-muted/10"
+                                    )}>
+                                        {slotData.slot}
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <span className={cn(
+                                            "font-mono text-sm font-bold",
+                                            slotData.slot === 1 ? "text-destructive" : "text-foreground"
+                                        )}>
+                                            {slotData.slot === 1 ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
+                                        </span>
+                                        {slotData.is_active && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-mono">
+                                                ACTIVE
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    <span className={cn(
-                                        "font-mono text-sm font-bold",
-                                        slotData.slot === 1 ? "text-destructive" : "text-foreground"
-                                    )}>
-                                        {slotData.slot === 1 ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
-                                    </span>
-                                    {slotData.is_active && (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-mono">
-                                            ACTIVE
-                                        </span>
+                                <div className="flex items-center gap-2 ml-auto">
+                                    {slotData.slot === 1 ? (
+                                        <div className="flex items-center gap-2 text-destructive text-xs font-mono px-3 py-1.5 border border-destructive/30 bg-destructive/5 rounded">
+                                            <AlertTriangle className="h-3 w-3" />
+                                            LOCKED
+                                        </div>
+                                    ) : slotData.is_active ? (
+                                        <>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => handleReset(e, slotData.slot)}
+                                                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
+                                            >
+                                                <Trash2 className="h-3 w-3 mr-2" />
+                                                CLEAR
+                                            </Button>
+                                            <Button
+                                                variant="default"
+                                                className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 terminal-glow"
+                                                onClick={(e) => handleResume(e, slotData)}
+                                            >
+                                                RESUME
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <Button
+                                            variant="ghost"
+                                            className={cn(
+                                                "font-mono text-xs border border-transparent group-hover:border-primary/30",
+                                                selectedSlot === slotData.slot && "bg-primary text-primary-foreground hover:bg-primary/90"
+                                            )}
+                                        >
+                                            INITIALIZE
+                                        </Button>
                                     )}
                                 </div>
                             </div>
-
-                            <div className="flex items-center gap-2 ml-auto">
-                                {slotData.slot === 1 ? (
-                                    <div className="flex items-center gap-2 text-destructive text-xs font-mono px-3 py-1.5 border border-destructive/30 bg-destructive/5 rounded">
-                                        <AlertTriangle className="h-3 w-3" />
-                                        LOCKED
-                                    </div>
-                                ) : slotData.is_active ? (
-                                    <>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={(e) => handleReset(e, slotData.slot)}
-                                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
-                                        >
-                                            <Trash2 className="h-3 w-3 mr-2" />
-                                            CLEAR
-                                        </Button>
-                                        <Button
-                                            variant="default"
-                                            className="font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 terminal-glow"
-                                            onClick={(e) => handleResume(e, slotData)}
-                                        >
-                                            RESUME
-                                        </Button>
-                                    </>
-                                ) : (
-                                    <Button
-                                        variant="ghost"
-                                        className={cn(
-                                            "font-mono text-xs border border-transparent group-hover:border-primary/30",
-                                            selectedSlot === slotData.slot && "bg-primary text-primary-foreground hover:bg-primary/90"
-                                        )}
-                                    >
-                                        INITIALIZE
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                    </Card>
+                        </Card>
                     ))}
                 </div>
             </div>
+
+            <AlertDialog open={!!slotToDelete} onOpenChange={(open) => !open && setSlotToDelete(null)}>
+                <AlertDialogContent className="border-destructive/50 bg-background/95 backdrop-blur-xl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-destructive font-mono uppercase tracking-wider flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5" />
+                            Confirm Deletion
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-muted-foreground font-mono">
+                            Are you sure you want to clear Memory Slot {slotToDelete}? This action cannot be undone and all progress will be lost.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="font-mono">CANCEL</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmReset}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-mono"
+                        >
+                            DELETE DATA
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
+
+
