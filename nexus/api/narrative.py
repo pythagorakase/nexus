@@ -1212,21 +1212,28 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "function": {"name": primary_tool_name},
             }
 
-        # Use response_format to enforce structured WizardResponse on all replies
+        # Use response_format to enforce structured WizardResponse on normal runs.
+        # When Accept Fate forces a tool call, drop the schema so the model isn't
+        # forced to emit both a JSON payload and the required function call.
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "wizard_response",
+                "strict": True,
+                "schema": wizard_schema,
+            },
+        }
+
+        if request.accept_fate and primary_tool_name:
+            response_format = None
+
         logger.info(f"Calling LLM with tool_choice_mode: {tool_choice_mode}")
         response = openai_client.chat.completions.create(
             model=model,
             messages=messages,
             tools=tools_for_llm if tools_for_llm else None,
             tool_choice=tool_choice_mode,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "wizard_response",
-                    "strict": True,
-                    "schema": wizard_schema,
-                },
-            },
+            response_format=response_format,
         )
 
         message = response.choices[0].message
