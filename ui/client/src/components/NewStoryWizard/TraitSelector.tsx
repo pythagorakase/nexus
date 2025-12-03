@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -132,8 +132,15 @@ export function TraitSelector({
     disabled = false,
     suggestedTraits = [],
 }: TraitSelectorProps) {
-    const [selected, setSelected] = useState<Set<TraitName>>(new Set());
+    const [selected, setSelected] = useState<Set<TraitName>>(
+        () => new Set(suggestedTraits)
+    );
     const [hoveredTrait, setHoveredTrait] = useState<TraitName | null>(null);
+
+    // Sync selection when suggestedTraits prop changes (component may already be mounted)
+    useEffect(() => {
+        setSelected(new Set(suggestedTraits));
+    }, [suggestedTraits]);
 
     const toggleTrait = (trait: TraitName) => {
         if (disabled) return;

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +16,8 @@ interface Message {
     role: "user" | "assistant" | "system";
     content: string;
     timestamp: number;
+    artifactType?: string;    // e.g., "submit_character_concept"
+    artifactData?: any;       // The tool submission data (viewable via modal)
 }
 
 interface InteractiveWizardProps {
@@ -23,6 +25,7 @@ interface InteractiveWizardProps {
     onComplete: () => void;
     onCancel: () => void;
     onPhaseChange: (phase: Phase) => void;
+    onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
     setWizardData: (data: any) => void;
     resumeThreadId?: string | null;
@@ -31,6 +34,41 @@ interface InteractiveWizardProps {
 
 type Phase = "setting" | "character" | "seed";
 
+// Trait introduction text from storyteller_new.md YAML frontmatter
+// Used for client-side message when transitioning from 2.1 → 2.2 (skips API call)
+const TRAIT_INTRODUCTION = `Now we give your character weight.
+
+Traits are the parts of their life that demand narrative attention—the relationships that complicate, the positions that pressure, the secrets that fester. You'll choose three from the menu, plus one wildcard that's entirely yours to define.
+
+A trait isn't a bonus. It's a promise that this aspect of your character will matter—for better or worse. Not choosing a trait doesn't mean your character lacks it; it just won't be a guaranteed source of story.
+
+Based on what we've built so far, here's where I think the interesting tensions live:`;
+
+const buildTraitIntroMessage = (concept: {
+    suggested_traits?: string[];
+    trait_rationales?: Record<string, string>;
+}): string => {
+    const traits = concept.suggested_traits || [];
+    const rationales = concept.trait_rationales || {};
+
+    if (traits.length === 0) {
+        return `${TRAIT_INTRODUCTION}
+
+I'll let you explore the trait menu and choose what feels right for your character.`;
+    }
+
+    const traitLines = traits.map(trait => {
+        const rationale = rationales[trait] || "";
+        const displayName = trait.charAt(0).toUpperCase() + trait.slice(1);
+        return rationale
+            ? `**${displayName}** — ${rationale}`
+            : `**${displayName}**`;
+    });
+
+    return `${TRAIT_INTRODUCTION}
+
+${traitLines.join("\n\n")}`;
+};
 
 interface CollapsibleSectionProps {
     title: string;
@@ -77,6 +115,7 @@ export function InteractiveWizard({
     onComplete,
     onCancel,
     onPhaseChange,
+    onArtifactConfirmed,
     wizardData,
     setWizardData,
     resumeThreadId,
@@ -88,11 +127,10 @@ export function InteractiveWizard({
     const [threadId, setThreadId] = useState<string | null>(null);
     const [currentPhase, setCurrentPhase] = useState<Phase>(initialPhase || "setting");
     const [pendingArtifact, setPendingArtifact] = useState<any>(null);
-    const [welcomeChoices, setWelcomeChoices] = useState<string[] | null>(null);
-    const [currentChoices, setCurrentChoices] = useState<string[] | null>(null);
+    const [displayChoices, setDisplayChoices] = useState<string[] | null>(null);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
-    const [isInitialWelcome, setIsInitialWelcome] = useState(true);
+    const [viewingArtifact, setViewingArtifact] = useState<{ type: string; data: any } | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
@@ -109,9 +147,7 @@ export function InteractiveWizard({
 
                 // Reset local UI state when starting/resuming a session
                 setMessages([]);
-                setCurrentChoices(null);
-                setWelcomeChoices(null);
-                setIsInitialWelcome(true);
+                setDisplayChoices(null);
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
 
@@ -134,7 +170,7 @@ export function InteractiveWizard({
                     addMessage("assistant", welcome_message);
                 }
                 if (welcome_choices && welcome_choices.length > 0) {
-                    setWelcomeChoices(welcome_choices);
+                    setDisplayChoices(welcome_choices);
                 }
             } catch (error) {
                 console.error("Failed to init chat:", error);
@@ -169,9 +205,13 @@ export function InteractiveWizard({
                 }
             }, 150);
         }
-    }, [messages, isLoading, pendingArtifact, currentChoices, welcomeChoices]);
+    }, [messages, isLoading, pendingArtifact, displayChoices]);
 
-    const addMessage = (role: Message["role"], content: string) => {
+    const addMessage = (
+        role: Message["role"],
+        content: string,
+        artifact?: { type: string; data: any }
+    ) => {
         setMessages((prev) => [
             ...prev,
             {
@@ -179,12 +219,14 @@ export function InteractiveWizard({
                 role,
                 content,
                 timestamp: Date.now(),
+                ...(artifact && { artifactType: artifact.type, artifactData: artifact.data }),
             },
         ]);
     };
 
     const triggerSubphaseContinuation = async (artifactType: string, contextData: any) => {
         setIsLoading(true);
+        setDisplayChoices(null);  // Clear stale choices immediately to prevent flash
         try {
             const res = await fetch("/api/story/new/chat", {
                 method: "POST",
@@ -203,15 +245,12 @@ export function InteractiveWizard({
 
             if (data.phase_complete) {
                 setPendingArtifact({ type: data.artifact_type, data: data.data });
-                setCurrentChoices(null);
+                setDisplayChoices(null);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
-                if (data.choices) {
-                    console.log("Received choices:", data.choices);
-                    setCurrentChoices(normalizeChoices(data.choices));
-                }
+                setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
                     extractSuggestedTraits(data.message);
@@ -247,13 +286,30 @@ export function InteractiveWizard({
 
         // Show trait selector after concept is submitted
         if (artifactType === "submit_character_concept") {
+            // Pre-select LLM's suggested traits from schema-validated data
+            if (artifactData.suggested_traits && Array.isArray(artifactData.suggested_traits)) {
+                setSuggestedTraits(artifactData.suggested_traits);
+            }
             setShowTraitSelector(true);
+
+            // Add clickable system message to view concept data
+            addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: artifactData });
+
+            // Build client-side intro message with rationales (SKIP API CALL)
+            // This eliminates latency and ensures message is synced with pre-selection
+            try {
+                const introMessage = buildTraitIntroMessage(artifactData);
+                addMessage("assistant", introMessage);
+            } catch (error) {
+                console.error("Failed to build trait intro message:", error);
+                addMessage("assistant", TRAIT_INTRODUCTION + "\n\nPlease select your traits from the menu.");
+            }
+            setDisplayChoices(null);  // No structured choices - TraitSelector handles it
+            return;  // Early return - no API call needed
         }
 
-        // Continue conversation - request next sub-phase intro
-        addMessage("system", `[${artifactType} confirmed]`);
-
-        // Trigger continuation with updated context
+        // For other subphases, continue with API call
+        addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: artifactData });
         triggerSubphaseContinuation(artifactType, updatedWizardData);
     };
 
@@ -281,8 +337,7 @@ export function InteractiveWizard({
         const userMsg = input.trim();
         setInput("");
         addMessage("user", userMsg);
-        setWelcomeChoices(null);
-        setIsInitialWelcome(false);
+        setDisplayChoices(null);  // Clear choices while loading
         setIsLoading(true);
 
         try {
@@ -304,14 +359,13 @@ export function InteractiveWizard({
 
             if (data.phase_complete) {
                 setPendingArtifact({ type: data.artifact_type, data: data.data });
-                setCurrentChoices(null);
+                setDisplayChoices(null);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
             } else {
                 addMessage("assistant", data.message);
                 // Set choices if returned by backend
-                console.log("Received choices:", data.choices);
-                setCurrentChoices(normalizeChoices(data.choices));
+                setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
                 // Check if LLM is prompting for trait selection
                 if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                     setShowTraitSelector(true);
@@ -333,10 +387,8 @@ export function InteractiveWizard({
     };
 
     const handleChoiceSelect = (selection: ChoiceSelection) => {
-        // Clear all choices and send the selected text
-        setWelcomeChoices(null);
-        setCurrentChoices(null);
-        setIsInitialWelcome(false);
+        // Clear choices while loading
+        setDisplayChoices(null);
         const inputToSend = selection.text;
         addMessage("user", inputToSend);
         setIsLoading(true);
@@ -357,13 +409,13 @@ export function InteractiveWizard({
                 const data = await res.json();
                 if (data.phase_complete) {
                     setPendingArtifact({ type: data.artifact_type, data: data.data });
-                    setCurrentChoices(null);
+                    setDisplayChoices(null);
                 } else if (data.subphase_complete) {
                     handleSubphaseCompletion(data.artifact_type, data.data);
                 } else {
                     addMessage("assistant", data.message);
                     // Set choices if returned by backend
-                    setCurrentChoices(normalizeChoices(data.choices));
+                    setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
                     // Check if LLM is prompting for trait selection
                     if (currentPhase === "character" && shouldShowTraitSelector(data.message)) {
                         setShowTraitSelector(true);
@@ -426,6 +478,7 @@ export function InteractiveWizard({
         const traitMessage = `I'll take: ${traits.join(", ")}`;
         setInput("");
         addMessage("user", traitMessage);
+        setDisplayChoices(null);  // Clear choices while loading
         setIsLoading(true);
 
         fetch("/api/story/new/chat", {
@@ -444,8 +497,12 @@ export function InteractiveWizard({
                 const data = await res.json();
                 if (data.phase_complete) {
                     setPendingArtifact({ type: data.artifact_type, data: data.data });
+                    setDisplayChoices(null);
+                } else if (data.subphase_complete) {
+                    handleSubphaseCompletion(data.artifact_type, data.data);
                 } else {
                     addMessage("assistant", data.message);
+                    setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
                 }
             })
             .catch((error) => {
@@ -502,18 +559,21 @@ export function InteractiveWizard({
         // Determine next phase or completion
         if (currentPhase === "setting") {
             setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
+            onArtifactConfirmed?.("setting", pendingArtifact.data);
             updatePhase("character");
             setPendingArtifact(null);
             // Trigger next phase prompt
             triggerNextPhase("character");
         } else if (currentPhase === "character") {
             setWizardData((prev: any) => ({ ...prev, character: pendingArtifact.data }));
+            onArtifactConfirmed?.("character", pendingArtifact.data);
             updatePhase("seed");
             setPendingArtifact(null);
             // Trigger next phase prompt
             triggerNextPhase("seed");
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
+            onArtifactConfirmed?.("seed", pendingArtifact.data);
             setPendingArtifact(null);
             setIsLoading(true);
 
@@ -574,17 +634,8 @@ export function InteractiveWizard({
             const data = await res.json();
             addMessage("assistant", data.message);
 
-            // Clear previous choices
-            setWelcomeChoices(null);
-            setIsInitialWelcome(false);
-
-            // Set new choices if returned
-            if (data.choices) {
-                console.log("Received choices (next phase):", data.choices);
-                setCurrentChoices(normalizeChoices(data.choices));
-            } else {
-                setCurrentChoices(null);
-            }
+            // Set new choices (or clear if none)
+            setDisplayChoices(data.choices ? normalizeChoices(data.choices) : null);
         } catch (error) {
             console.error("Next phase trigger error:", error);
         } finally {
@@ -616,31 +667,97 @@ export function InteractiveWizard({
                         <div className="space-y-4 font-mono text-sm text-muted-foreground">
                             {type === "submit_world_document" && (
                                 <div className="space-y-4">
+                                    {/* Header */}
                                     <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <h4 className="text-xl text-white font-bold mb-2">{data.world_name}</h4>
-                                        <p className="text-primary text-sm uppercase tracking-wider">{data.genre} // {data.time_period}</p>
+                                        <div className="flex items-baseline gap-2 mb-1">
+                                            <span className="text-primary text-xs uppercase">World</span>
+                                            <h4 className="text-xl text-white font-bold">{data.world_name}</h4>
+                                        </div>
                                     </div>
 
-                                    <CollapsibleSection title="World Overview" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
-                                        <div className="prose prose-invert prose-sm max-w-none">
-                                            <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
-                                                {data.diegetic_artifact || data.cultural_notes}
-                                            </p>
+                                    {/* Quick Reference Grid */}
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Genre</span>
+                                            <span className="text-white capitalize">{data.genre}{data.secondary_genres?.length > 0 && ` (+${data.secondary_genres.join(", ")})`}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Era</span>
+                                            <span className="text-white">{data.time_period}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Tone</span>
+                                            <span className="text-white capitalize">{data.tone}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Tech Level</span>
+                                            <span className="text-white capitalize">{data.tech_level?.replace(/_/g, " ")}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Scope</span>
+                                            <span className="text-white capitalize">{data.geographic_scope}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Magic</span>
+                                            <span className="text-white">{data.magic_exists ? "Present" : "None"}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Magic Description (if exists) */}
+                                    {data.magic_exists && data.magic_description && (
+                                        <CollapsibleSection title="Magic System" defaultOpen={true} icon={<Wand2 className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed">{data.magic_description}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Narrative Elements */}
+                                    <CollapsibleSection title="World Context" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <span className="text-primary block text-xs uppercase mb-1">Political Structure</span>
+                                                <p className="text-sm text-white/80">{data.political_structure}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-primary block text-xs uppercase mb-1">Major Conflict</span>
+                                                <p className="text-sm text-white/80">{data.major_conflict}</p>
+                                            </div>
+                                            {data.themes?.length > 0 && (
+                                                <div>
+                                                    <span className="text-primary block text-xs uppercase mb-1">Themes</span>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {data.themes.map((theme: string, i: number) => (
+                                                            <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{theme}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </CollapsibleSection>
 
-                                    <CollapsibleSection title="System Parameters" icon={<Sparkles className="w-4 h-4 text-primary" />}>
-                                        <div className="grid grid-cols-2 gap-4 text-xs">
-                                            <div>
-                                                <span className="text-primary block uppercase">Tone</span>
-                                                <span className="text-white">{data.tone}</span>
+                                    {/* Cultural Notes */}
+                                    {data.cultural_notes && (
+                                        <CollapsibleSection title="Cultural Notes" icon={<Scroll className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{data.cultural_notes}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Language Notes (if present) */}
+                                    {data.language_notes && (
+                                        <CollapsibleSection title="Language & Naming" icon={<Languages className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed">{data.language_notes}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Diegetic Artifact - collapsed by default */}
+                                    {data.diegetic_artifact && (
+                                        <CollapsibleSection title="In-World Document" icon={<FileText className="w-4 h-4 text-primary" />}>
+                                            <div className="prose prose-invert prose-sm max-w-none">
+                                                <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
+                                                    {data.diegetic_artifact}
+                                                </p>
                                             </div>
-                                            <div>
-                                                <span className="text-primary block uppercase">Tech Level</span>
-                                                <span className="text-white">{data.tech_level}</span>
-                                            </div>
-                                        </div>
-                                    </CollapsibleSection>
+                                        </CollapsibleSection>
+                                    )}
                                 </div>
                             )}
 
@@ -760,9 +877,124 @@ export function InteractiveWizard({
         );
     };
 
+    const renderArtifactViewer = () => {
+        if (!viewingArtifact) return null;
+
+        const { type, data } = viewingArtifact;
+
+        // Format artifact type for display
+        const formatTypeName = (t: string) => t.replace("submit_", "").replace(/_/g, " ");
+
+        return (
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+                onClick={(e) => e.target === e.currentTarget && setViewingArtifact(null)}
+            >
+                <Card className="w-full max-w-2xl bg-card border border-primary/50 p-6 space-y-6 shadow-lg">
+                    <div className="flex items-center gap-3 border-b border-primary/30 pb-4">
+                        <Eye className="w-6 h-6 text-primary" />
+                        <h3 className="text-xl font-mono text-primary uppercase tracking-widest">
+                            {formatTypeName(type)}
+                        </h3>
+                    </div>
+
+                    <ScrollArea className="h-[400px] pr-4">
+                        <div className="space-y-4 font-mono text-sm text-muted-foreground">
+                            {type === "submit_character_concept" && (
+                                <div className="space-y-4">
+                                    {/* Character Header */}
+                                    <div className="border-l-2 border-primary pl-4 mb-6">
+                                        <div className="flex items-baseline gap-2 mb-1">
+                                            <span className="text-primary text-xs uppercase">Character</span>
+                                            <h4 className="text-xl text-white font-bold">{data.name}</h4>
+                                        </div>
+                                        <p className="text-primary/80 italic">{data.archetype}</p>
+                                    </div>
+
+                                    {/* Core Details */}
+                                    <div className="space-y-3">
+                                        <div>
+                                            <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
+                                            <p className="text-sm text-white/80">{data.appearance}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-primary block text-xs uppercase mb-1">Background</span>
+                                            <p className="text-sm text-white/80">{data.background}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Suggested Traits */}
+                                    {data.suggested_traits && data.suggested_traits.length > 0 && (
+                                        <CollapsibleSection title="Suggested Traits" defaultOpen={true} icon={<Tag className="w-4 h-4 text-primary" />}>
+                                            <div className="space-y-3">
+                                                {data.suggested_traits.map((trait: string) => (
+                                                    <div key={trait} className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                        <span className="text-primary text-xs uppercase block mb-1 capitalize">{trait}</span>
+                                                        {data.trait_rationales?.[trait] && (
+                                                            <p className="text-xs text-white/80">{data.trait_rationales[trait]}</p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </CollapsibleSection>
+                                    )}
+                                </div>
+                            )}
+
+                            {type === "submit_trait_selection" && (
+                                <div className="space-y-4">
+                                    <div className="border-l-2 border-primary pl-4 mb-6">
+                                        <span className="text-primary text-xs uppercase">Selected Traits</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {data.traits?.map((trait: string) => (
+                                            <div key={trait} className="bg-primary/5 border border-primary/20 p-3 rounded">
+                                                <span className="text-primary text-sm uppercase capitalize">{trait}</span>
+                                                {data.trait_details?.[trait] && (
+                                                    <p className="text-xs text-white/80 mt-1">{data.trait_details[trait]}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {type === "submit_wildcard_trait" && (
+                                <div className="space-y-4">
+                                    <div className="border-l-2 border-primary pl-4 mb-6">
+                                        <div className="flex items-baseline gap-2 mb-1">
+                                            <span className="text-primary text-xs uppercase">Wildcard</span>
+                                            <h4 className="text-xl text-white font-bold">{data.name}</h4>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <span className="text-primary block text-xs uppercase mb-1">Description</span>
+                                        <p className="text-sm text-white/80 leading-relaxed">{data.description}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </ScrollArea>
+
+                    <div className="flex justify-end pt-4 border-t border-primary/30">
+                        <Button
+                            onClick={() => setViewingArtifact(null)}
+                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30"
+                        >
+                            CLOSE
+                        </Button>
+                    </div>
+                </Card>
+            </motion.div>
+        );
+    };
+
     return (
         <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
             {renderArtifactConfirmation()}
+            {renderArtifactViewer()}
 
             {/* Header */}
             <div className="p-4 border-b border-primary/30 bg-background/60 flex justify-between items-center">
@@ -804,11 +1036,7 @@ export function InteractiveWizard({
                                 handleSubphaseCompletion(data.artifact_type, data.data);
                             } else {
                                 addMessage("assistant", data.message);
-                                setWelcomeChoices(null);
-                                setIsInitialWelcome(false);
-                                if (data.choices && data.choices.length > 0) {
-                                    setCurrentChoices(normalizeChoices(data.choices));
-                                }
+                                setDisplayChoices(data.choices?.length > 0 ? normalizeChoices(data.choices) : null);
                             }
                         } catch (e) {
                             console.error(e);
@@ -862,6 +1090,14 @@ export function InteractiveWizard({
                                                         </ReactMarkdown>
                                                     </div>
                                                 </div>
+                                            ) : msg.role === "system" && msg.artifactData ? (
+                                                <button
+                                                    onClick={() => setViewingArtifact({ type: msg.artifactType!, data: msg.artifactData })}
+                                                    className="flex items-center gap-2 text-primary/60 hover:text-primary transition-colors group"
+                                                >
+                                                    <Eye className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                                    <span className="underline underline-offset-2">{msg.content}</span>
+                                                </button>
                                             ) : (
                                                 <div className="whitespace-pre-wrap">{msg.content}</div>
                                             )}
@@ -869,15 +1105,15 @@ export function InteractiveWizard({
                                     </motion.div>
                                 ))}
                             </AnimatePresence>
-                            {/* Structured choices - shown for welcome message or any LLM response with choices */}
-                            {((isInitialWelcome && welcomeChoices) || currentChoices) && !isLoading && (
+                            {/* Structured choices */}
+                            {displayChoices && displayChoices.length > 0 && !isLoading && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     className="mt-4"
                                 >
                                     <StoryChoices
-                                        choices={(isInitialWelcome ? welcomeChoices : currentChoices) || []}
+                                        choices={displayChoices}
                                         onSelect={handleChoiceSelect}
                                         disabled={isLoading}
                                     />

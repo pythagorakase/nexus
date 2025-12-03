@@ -957,6 +957,29 @@ class ChatRequest(BaseModel):
     accept_fate: bool = False  # Force tool call without adding user message
 
 
+def validate_subphase_tool(function_name: str, arguments: dict) -> dict:
+    """Validate subphase tool arguments against Pydantic schemas.
+
+    This ensures required fields (like trait_rationales) are present.
+    Returns validated and normalized data, or raises HTTPException on failure.
+    """
+    schema_map = {
+        "submit_character_concept": CharacterConcept,
+        "submit_trait_selection": TraitSelection,
+        "submit_wildcard_trait": WildcardTrait,
+    }
+    if schema := schema_map.get(function_name):
+        try:
+            return schema.model_validate(arguments).model_dump()
+        except Exception as e:
+            logger.error(f"{schema.__name__} validation failed: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"LLM returned invalid {schema.__name__}: {str(e)}",
+            )
+    return arguments
+
+
 @app.post("/api/story/new/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling"""
@@ -1175,6 +1198,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "type": "function",
             "function": {
                 "name": "respond_with_choices",
+                "strict": True,  # Enforce schema constraints including maxItems on choices
                 "description": (
                     "Respond to the user with a narrative message and 2-4 short choice "
                     "strings (no numbering/markdown) to guide the next step. Do NOT list the "
@@ -1293,6 +1317,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "submit_wildcard_trait",
             ]
 
+            # Validate subphase tool arguments against Pydantic schemas
+            validated_data = validate_subphase_tool(function_name, arguments)
+
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
             # subphase_complete: True for character sub-phases (concept/traits/wildcard)
@@ -1304,7 +1331,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
-                "data": arguments,
+                "data": validated_data,
             }
 
         # Handle structured conversational responses via helper tool
@@ -1362,6 +1389,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "thread_id": request.thread_id,
         }
 
+    except HTTPException:
+        # Preserve explicit HTTP errors such as validation failures
+        raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
