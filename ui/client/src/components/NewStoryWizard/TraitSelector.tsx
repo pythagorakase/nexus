@@ -132,7 +132,9 @@ export function TraitSelector({
     disabled = false,
     suggestedTraits = [],
 }: TraitSelectorProps) {
-    const [selected, setSelected] = useState<Set<TraitName>>(new Set());
+    const [selected, setSelected] = useState<Set<TraitName>>(
+        () => new Set(suggestedTraits)
+    );
     const [hoveredTrait, setHoveredTrait] = useState<TraitName | null>(null);
 
     const toggleTrait = (trait: TraitName) => {

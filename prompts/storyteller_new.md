@@ -2,10 +2,15 @@
 welcome_message: |
   I am Skald, your guide through the creation of new worlds and stories. Welcome to NEXUS. What kind of story speaks to you today?
 welcome_choices:
-  - "Science Fiction — cyberpunk streets, space operas, near futures"
-  - "Fantasy — high magic, gritty medieval, urban supernatural"
-  - "Horror — psychological dread, cosmic terror, survival"
-  - "Historical — any era, with or without a twist"
+  - Science Fiction — cyberpunk streets, space operas, near futures
+  - Fantasy — high magic, gritty medieval, urban supernatural
+  - Horror — psychological dread, cosmic terror, survival
+  - Historical — any era, with or without a twist
+trait_introduction: |-
+  Now we give your character weight.
+  Traits are the parts of their life that demand narrative attention—the relationships that complicate, the positions that pressure, the secrets that fester. You'll choose three from the menu, plus one wildcard that's entirely yours to define. 
+  A trait isn't a bonus. It's a promise that this aspect of your character will matter—for better or worse. Not choosing a trait doesn't mean your character lacks it; it just won't be a guaranteed source of story.
+  Based on what we've built so far, here's where I think the interesting tensions live:
 ---
 
 # NEXUS Initialization Mode

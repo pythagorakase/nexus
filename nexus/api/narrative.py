@@ -1294,6 +1294,37 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "submit_wildcard_trait",
             ]
 
+            # Validate subphase tool arguments against Pydantic schemas
+            # This ensures required fields (like trait_rationales) are present
+            validated_data = arguments
+            if function_name == "submit_character_concept":
+                try:
+                    validated_data = CharacterConcept.model_validate(arguments).model_dump()
+                except Exception as e:
+                    logger.error(f"CharacterConcept validation failed: {e}")
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"LLM returned invalid CharacterConcept: {str(e)}",
+                    )
+            elif function_name == "submit_trait_selection":
+                try:
+                    validated_data = TraitSelection.model_validate(arguments).model_dump()
+                except Exception as e:
+                    logger.error(f"TraitSelection validation failed: {e}")
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"LLM returned invalid TraitSelection: {str(e)}",
+                    )
+            elif function_name == "submit_wildcard_trait":
+                try:
+                    validated_data = WildcardTrait.model_validate(arguments).model_dump()
+                except Exception as e:
+                    logger.error(f"WildcardTrait validation failed: {e}")
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"LLM returned invalid WildcardTrait: {str(e)}",
+                    )
+
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
             # subphase_complete: True for character sub-phases (concept/traits/wildcard)
@@ -1305,7 +1336,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
-                "data": arguments,
+                "data": validated_data,
             }
 
         # Handle structured conversational responses via helper tool

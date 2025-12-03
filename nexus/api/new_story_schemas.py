@@ -266,6 +266,13 @@ class CharacterSheet(BaseModel):
 # These enable gated progression through character creation with separate tools
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Trait name type for schema validation
+TraitName = Literal[
+    "allies", "contacts", "patron", "dependents",
+    "status", "reputation", "resources", "domain",
+    "enemies", "obligations"
+]
+
 VALID_TRAIT_NAMES = {
     "allies",
     "contacts",
@@ -308,6 +315,34 @@ class CharacterConcept(BaseModel):
         min_length=30,
         description="Physical description and how they present themselves",
     )
+
+    # Pre-selected trait suggestions for phase 2.2
+    suggested_traits: List[TraitName] = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="3 trait names that would create interesting story tensions for this character",
+    )
+    trait_rationales: Dict[str, str] = Field(
+        ...,
+        description="Map of each suggested trait name to a brief rationale explaining why it fits this character",
+    )
+
+    @field_validator("suggested_traits")
+    @classmethod
+    def validate_unique_traits(cls, v: List[str]) -> List[str]:
+        """Ensure exactly 3 unique traits."""
+        if len(set(v)) != 3:
+            raise ValueError("Must suggest exactly 3 unique traits")
+        return v
+
+    @model_validator(mode="after")
+    def validate_rationales_match_traits(self) -> "CharacterConcept":
+        """Ensure rationales exist for all suggested traits."""
+        for trait in self.suggested_traits:
+            if trait not in self.trait_rationales:
+                raise ValueError(f"Missing rationale for suggested trait: {trait}")
+        return self
 
 
 class TraitSelection(BaseModel):
