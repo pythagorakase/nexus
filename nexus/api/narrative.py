@@ -1175,6 +1175,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "type": "function",
             "function": {
                 "name": "respond_with_choices",
+                "strict": True,  # Enforce schema constraints including maxItems on choices
                 "description": (
                     "Respond to the user with a narrative message and 2-4 short choice "
                     "strings (no numbering/markdown) to guide the next step. Do NOT list the "
