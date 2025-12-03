@@ -261,8 +261,7 @@ See the detailed documentation in [docs/vector_embeddings.md](docs/vector_embedd
    └─────────────────┘   └─────────────────┘   └─────────────────┘
 ```
 
-Details:
-[[turn_flow_sequence]]
+Details: [Turn Flow Sequence](docs/turn_flow_sequence.md)
 
 ## 4.2 Context Assembly Process
 
@@ -307,8 +306,13 @@ NEXUS features a modern React/TypeScript web interface built with Vite and shadc
 
 **Key Features**:
 - **Theme System**: Multiple visual themes (Vector, Veil, Gilded) with consistent styling
-- **New Story Wizard**: Guided flow for creating new stories with setting, character, and location phases
-- **Save Slot System**: 5-slot save system for managing multiple narrative sessions
+- **New Story Wizard**: Conversational LLM-guided flow for creating new stories:
+  - **Slot Selection**: Choose from save slots 2-5 (slot 1 protected)
+  - **Setting Phase**: Genre, tech level, magic system, themes, diegetic artifact
+  - **Character Phase**: Three sub-phases—concept definition, trait selection (3 of 10 options), wildcard trait
+  - **Seed Phase**: Story opening type, location hierarchy, timestamp, secrets channel
+- **Wizard Features**: "Accept Fate" button for autonomous Skald progression, structured choice system (2-4 options per response), interactive trait selector
+- **Save Slot System**: 5-slot save system for managing multiple narrative sessions (slot 1 protected)
 - **Status Bar**: Real-time display of model status, APEX connectivity, and generation state
 - **Responsive Layout**: Adapts to different screen sizes with collapsible panels
 
