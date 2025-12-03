@@ -71,7 +71,7 @@ NEXUS is built on a single-agent orchestration architecture implemented entirely
 │  User   ├───────────────────────────────────┤ Apex AI │
 └─────────┘                                   └─────────┘
                           │
-                     ┌────┴────┐ 
+                     ┌────┴────┐
                      │  LORE   │
                      │ (Agent) │
                      └────┬────┘
@@ -79,23 +79,19 @@ NEXUS is built on a single-agent orchestration architecture implemented entirely
             ┌─────────────┴─────────────┐
             │      Utility Modules      │
             ├───────────────────────────┤
-            │ PSYCHE │ GAIA │ MEMNON   │
-            │ NEMESIS│ LOGON│           │
+            │    MEMNON  │  LOGON       │
             └─────────────┬─────────────┘
-                          │                          
+                          │
        ┌──────────────────┴───────────────────┐
-       │ vector     ¦    PSQL    ¦      chunk │ 
-       │ embeddings ¦  database  ¦   metadata │ 
+       │ vector     ¦    PSQL    ¦      chunk │
+       │ embeddings ¦  database  ¦   metadata │
        └──────────────────────────────────────┘
 ```
 
 ### Agent & Utility Modules
-- **LORE (Agent)**: Primary orchestration agent that coordinates all utilities and manages the turn cycle
-- **LOGON (Utility)**: Handles all API traffic with Apex AI, delivers new narrative
-- **PSYCHE (Utility)**: Profiles/analyzes characters and relationships
-- **GAIA (Utility)**: Tracks/updates world state
-- **MEMNON (Utility)**: Provides unified access for queries to system memory, memory management
-- **NEMESIS (Utility)**: Analyzes threats and narrative tension
+- **LORE (Agent)**: Primary orchestration agent that coordinates utilities and manages the turn cycle
+- **MEMNON (Utility)**: Headless information retrieval system with multi-strategy search and cross-encoder reranking
+- **LOGON (Utility)**: Handles API traffic with Apex AI, delivers new narrative
 
 ### AI Role Summary
 The system employs two tiers of AI:
@@ -105,7 +101,6 @@ The system employs two tiers of AI:
 - Update hidden information
 **Local LLMs** (Llama)
 - LORE agent reasoning and orchestration
-- Utility functions (analysis, retrieval, coordination)
 - Preparation for new narrative
 - Post-generation processing and integration
 
@@ -123,63 +118,11 @@ Data flows through a unified PostgreSQL database with vector extensions that sto
 - Thematic Connection: Identifies recurring themes, motifs, and narrative patterns.
 - Plot Structure Awareness: Recognizes story beat progression, tension arcs, and narrative pacing.
 - Causal Tracking: Understands how past events connect to present situations.
-- Metadata Enhancement: Adds rich contextual metadata to narrative chunks for improved future retrieval.
 
-Module Specifications:
-[[blueprint_lore]]
-
-### PSYCHE (Utility Module)
-`Character Psychology Analysis`
-- Tracks psychological states and emotional arcs of characters
-- Analyzes interpersonal dynamics between characters
-- Predicts character reactions based on established personality traits
-- Identifies psychological inconsistencies in narrative development
-- Provides character-focused annotations for narrative generation
-
-Module Specifications:
-[[blueprint_psyche]]
-
-### GAIA (Utility Module)
-`World State Tracking`
-- Provides access to current entity states (character emotions, faction power levels, location conditions)
-- Retrieves historical timelines of how entities have changed
-- Tracks relationship dynamics between characters
-- Answers questions like "How did Alex feel about Emilia during Episode 3?" or "Which factions controlled Downtown during Season 1?"
-- Implements state changes explicitly ordered by AI after API call (e.g., updates to user-invisible variables)
-- Analyzes narrative text to identify state changes
-- Extracts entity mentions and their new conditions
-- Writes these updated states to the database
-- Records new relationships or modifications to existing ones
-- Maintains database consistency and resolves conflicts
-
-Module Specifications:
-[[blueprint_gaia]]
-
-### NEMESIS (Utility Module)
-`Threat Analysis & Narrative Tension`
-- Identifies both explicit and potential threats across multiple domains: physical, interpersonal, and environmental.
-- Assesses identified threats along axes of probability and magnitude of impact.
-- For each threat, identifies potential user courses of action that could escalate or deescalate them.
-- Generates per-turn threat assessment report for Apex AI.
-
-Module Specifications:
-[[blueprint_nemesis]]
-
-### LOGON (Utility Module)
-`API Communication Handler`
-- Model: API call to Claude 3.5 / GPT-4o
-- Take the assembled context from the `ContextManager`
-- Make the single API call to generate narrative text
-- Handle API response parsing and error recovery
-
-Module Specifications:
-[[blueprint_logon]]
-
-### MEMNON (Utility Module - Fully Operational)
+### MEMNON (IR System)
 `Memory Access & Retrieval System`
 
-**Production-Ready Implementation**:
-MEMNON is a sophisticated, fully operational information retrieval system that serves as LORE's primary interface to the narrative database. It implements advanced IR techniques specifically optimized for narrative intelligence.
+MEMNON is a headless information retrieval system that serves as LORE's primary interface to the narrative database. It implements advanced IR techniques specifically optimized for narrative intelligence.
 
 **Multi-Model Embedding Architecture**:
 - Manages 3 active embedding models with weighted fusion:
@@ -205,34 +148,27 @@ MEMNON is a sophisticated, fully operational information retrieval system that s
 
 Implementation: `nexus/agents/memnon/`
 
-### Auxiliary Modules
+### LOGON (Utility Module)
+`API Communication Handler`
+- Handles API calls to Claude / GPT models
+- Takes the assembled context from LORE
+- Makes the API call to generate narrative text
+- Handles API response parsing and error recovery
 
-#### Agent Runtime Helpers
-Lightweight utilities inside `nexus/agents/` provide agent lifecycle hooks, message formatting, and shared services without relying on external frameworks.
-
-#### `narrative_learner.py` Learning Engine
-For future implementation. Would allow for user feedback to train LLMs for better contextual retrievals.
-
-## 2.3 Agent Runtime Evolution
-NEXUS originally launched on top of the open-source Letta project (formerly MemGPT), but the dependency created coordination overhead and brittle local paths. The current architecture ships with a custom, embedded agent runtime that preserves the same high-level abstractions—turn cycles, tool execution, and structured memory—but is purpose-built for the narrative intelligence stack. This eliminates submodules, stabilizes packaging, and keeps all execution-critical code under first-party control.
-
-
-## 2.4 Technical Dependencies
+## 2.3 Technical Dependencies
 
 ### Software
 - **PostgreSQL with pgvector**: Powers the vectorized database for semantic search and embedding storage
-- **SQLAlchemy**: Object-relational mapper for database interaction and query building
-- **Alembic**: Database migration tool for versioning and evolving the database schema
-- **Pydantic**: Data validation and settings management library
-- **Sentence-Transformers**: Powers the triple-embedding strategy using models like BGE and E5
-- **Transformers**: Hugging Face's transformers library for accessing and using embedding models
-- **pgvector**: PostgreSQL extension enabling vector similarity operations for semantic search
-- **OpenAI API**: Interface for new narrative generation with frontier LLMs
-- **Anthropic API**: Alternative interface for narrative generation with Claude models
-- **FastAPI and Uvicorn**: Web framework and ASGI server for potential API endpoints
-- **NumPy**: Scientific computing library for array operations and embedding manipulation
-- **Tiktoken**: Token counting library for managing context window constraints
-- **Requests**: HTTP library for API interactions
+- **SQLAlchemy + Alembic**: ORM for database interaction and migration management
+- **Pydantic**: Data validation and settings management
+- **Sentence-Transformers + Transformers**: Powers the triple-embedding strategy using models like BGE and E5
+- **OpenAI / Anthropic APIs**: Interfaces for narrative generation with frontier LLMs
+- **FastAPI + Uvicorn**: Web framework and ASGI server for API endpoints
+- **LM Studio SDK**: Local LLM inference for LORE agent operations
+- **llama-cpp-python**: Direct local model inference support
+- **PyTorch + Accelerate**: ML framework for embedding models and cross-encoder reranking
+- **Tiktoken**: Token counting for managing context window constraints
+- **React + TypeScript**: Modern frontend UI framework
 
 ### Hardware
 Performance quality and latency will depend on the user's ability to run a capable local LLM.
@@ -264,10 +200,7 @@ Development Hardware:
     - Accessed through similarity search
     - Contains the actual narrative text with rich metadata
 
-## 3.2 Database Schema
-See `NEXUS_schema.sql`
-
-## 3.3 Embedding Strategy
+## 3.2 Embedding Strategy
 
 ### Semantic Embedding
 Models:
@@ -295,30 +228,6 @@ The system includes utilities that automatically route queries to the correct ta
 7. **Cross-Encoder Reranking**: Using Naver TREC-DL22 model for final result refinement
 
 See the detailed documentation in [docs/vector_embeddings.md](docs/vector_embeddings.md) for more information.
-
-### Metadata Tagging
-See:
-`narrative_metadata_schema_2.json`
-and
-`batch_metadata_processing.py`
-
-## 3.4 Cross-Reference System
-- Entity-to-Narrative
-	- character profile --> every scene where they appear
-	- location --> descriptions and local events
-	- objects/items --> passages where used or mentioned
-- Entity Relationships
-	- character <--> character
-	- character <--> location
-	- faction <--> territory
-- Temporal Cross-References
-	- story clock --> events occurring then
-	- narrative order --> place in story progression
-	- character timeline = person-specific chronology
-- Thematic Links
-	- themes (e.g., "transhumanism") --> scenes exploring this theme
-	- motifs --> each appearance of motif
-	- emotional tones --> passages with specific moods
 
 # 4. Core Workflows
 ## 4.1 Turn Cycle Sequence
@@ -356,44 +265,28 @@ Details:
 [[turn_flow_sequence]]
 
 ## 4.2 Context Assembly Process
-1. `LORE` dynamically calculates a context budget based on Apex AI TPM limits, assigning percentage shares for warm slice, historical passage quotes, and structured information.
-2. Local LLM generates 3-5 targeted retrieval queries based on narrative context analysis (replacing PSYCHE query formulation).
-3. Programmatic entity queries retrieve characters, locations, relationships, active events, and threats from the database based on `entity_inclusion` settings (warm slice chunk references, status filters, configurable limits).
-4. `LORE` uses `MEMNON` utility to retrieve broad pool of candidate chunks using multi-model embeddings, with intermediate filtering and cross-encoder reranking for final selections.
 
-## 4.3 Query Framework
-The Query Framework serves as the communication backbone of NEXUS, enabling structured information exchange between LORE and its utility modules. It expands the native MEMNON query stack with narrative-specific enhancements tailored to our schema and retrieval strategies.
+LORE orchestrates context assembly through a two-phase retrieval process:
 
-- **Specialized Query Types**: Purpose-built queries for different narrative needs:
-    - Character queries (psychology, relationships, development)
-    - World state queries (locations, factions, objects, conditions)
-    - Narrative context queries (themes, plot continuity, motifs)
-    - Multi-domain synthesis queries (complex historical analysis)
-- **Two-Phase Retrieval Process**:
-    - Phase 1: Broad retrieval across memory types using multi-model embeddings
-    - Phase 2: Cross-encoder reranking for final result refinement
-- **Cross-Reference System**: Core innovation that connects:
-    - Entity-to-narrative links (characters/locations → relevant passages)
-    - Temporal indexing (story time + narrative order)
-    - Thematic tagging (themes, motifs, emotional tones)
-    - State change tracking (entity changes linked to causal moments)
+**Phase 1: Broad Retrieval**
+1. LORE dynamically calculates a context budget based on Apex AI token limits
+2. Local LLM generates targeted retrieval queries based on narrative context analysis
+3. MEMNON executes multi-strategy search:
+   - Vector similarity search using triple-embedding fusion (inf-retriever, E5, BGE)
+   - IDF-weighted full-text search for keyword matching
+   - Hybrid scoring with query-type-specific weights
 
-This framework enables LORE to coordinate its utilities to access precisely the right information at the right time, ensuring narrative coherence across unlimited storytelling length and maintaining consistent character and world development even for off-screen elements.
+**Phase 2: Cross-Encoder Reranking**
+4. MEMNON applies cross-encoder reranking (Naver TREC-DL22) for semantic refinement
+5. Final results are selected based on combined original and reranker scores
+6. LORE assembles the context payload with warm slice, historical excerpts, and entity state
 
-Detailed:
-[[query_framework]]
-
-## 4.4 Error Recovery
+## 4.3 Error Recovery
 
 ### API Failures
 - **Temporary Outage**: Retry strategy with exponential backoff (3 attempts)
 - **Content Moderation Rejection**: Alternative prompt formulation
 - **Rate Limiting**: Queue system with delayed retry
-
-### Narrative Consistency Issues
-- **Character Inconsistency**: `PSYCHE` flags contradictions for correction
-- **World State Conflict**: `GAIA` resolves conflicts using confidence scoring
-- **Timeline Paradox**: System enforces chronological consistency
 
 ### User Interaction
 - **Narrative Rejection**: User can request regeneration with modifications
@@ -402,59 +295,26 @@ Detailed:
 # 5. Interface Design
 
 ## 5.1 User Interface
-NEXUS is textual, from front-end to back-end. The UI will serve the centrality and primacy of engaging with high-quality text by presenting a simple, retro terminal-based experience.
 
-Readability will be enhanced by markdown formatting, and a simple retro color scheme.
+NEXUS features a modern React/TypeScript web interface built with Vite and shadcn/ui components.
 
-Design Details:
-[[ui_design]]
+**Main Navigation Tabs**:
+- **Narrative**: Primary story view with markdown rendering, accept/reject controls for new generations, and command input
+- **Map**: Geographic visualization of story locations
+- **Characters**: Character profiles and relationship tracking
+- **Audition**: Model comparison tool for evaluating different LLM outputs
+- **Settings**: Configuration for models, themes, and system behavior
 
-## 5.2 Command System
-- simple parsing with either numbered options or standardized commands for (default) user narrative input, accepting/rejecting new AI-generated content, adjusting settings, etc
+**Key Features**:
+- **Theme System**: Multiple visual themes (Vector, Veil, Gilded) with consistent styling
+- **New Story Wizard**: Guided flow for creating new stories with setting, character, and location phases
+- **Save Slot System**: 5-slot save system for managing multiple narrative sessions
+- **Status Bar**: Real-time display of model status, APEX connectivity, and generation state
+- **Responsive Layout**: Adapts to different screen sizes with collapsible panels
 
-# 6 Development Roadmap
+## 5.2 Development Server
 
-## 6.1 Current Status
-User is taking Python and SQL courses in order to better understand and guide the development process and its products.
-
-## 6.2 Next Steps
-
-### General
-- [x] import legacy SQLite database and develop PSQL schema
-
-### Per Turn Sequence
-#### 01 User Input
-- [ ] UI displays X last chunks in order
-- [ ] UI renders markdown
-- [ ] enable input with parsing (narrative vs commands)
-#### 02 Warm Analysis
-- [ ] develop structured local LLM prompt for rapidly identifying entities 
-- [ ] develop lightweight message/query format to rapidly query whether identified entities are known vs novel
-- [ ] develop structured local LLM prompt for parsing which entities are salient enough for queries
-#### 03 World State Report
-
-#### 04 Deep Queries
-- [ ] develop structured prompts for query formation
-- [ ] find balance between structured vs open-ended in query-forming prompts
-
-#### 05 Cold Distillation
-- [ ] use performance benchmarking to choose model/quantization with best balance of speed vs accuracy for intermediate filtering
-- [ ] determine filtering limits at each stage (`top_k` vs maximum characters)
-#### 06 Payload Assembly
-- [ ] finesse local AI prompt to encourage spending as much as possible under token limits, rather than being "frugal"
-- [ ] develop prompt to encourage Apex AI to consider "hidden" variables and provide appropriate updates
-
-#### 07 Apex AI Generation
-
-
-#### 08 Narrative Integration
-- [ ] develop design for time tracking
-
-#### 09 Idle State
-
-
-## 6.3 Future Extensions
-- [x] World Clock: stored and validated by `GAIA` as a database value, updated by soliciting `time_delta` from Apex AI during narrative generation (accounting for in-scene times as well as skips for sleeping, travel, montages)
-- [ ] Chronological Non-Linearity: timestamp independent of narrative order tag could allow for flashbacks without breaking system (maybe?)
-- [ ] Add system prompts for starting a saga in other genres
-- [ ] Limited (1-2 slots) save system
+The `./iris` script orchestrates all services:
+- Vite/Express dev server (default port 5001)
+- Audition FastAPI app (port 8000, proxied via `/api/audition`)
+- Core FastAPI model manager (port 8001, exposed via `/api/models` + `/api/health`)
