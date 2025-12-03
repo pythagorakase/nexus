@@ -1553,7 +1553,7 @@ async def get_user_character(slot: Optional[int] = None):
                 row = cur.fetchone()
                 if row:
                     return {"name": row[0]}
-                return None
+                return {"name": None}
     except psycopg2.Error as e:
         logger.error(f"Database error fetching user character: {e}")
         raise HTTPException(status_code=500, detail="Database error")

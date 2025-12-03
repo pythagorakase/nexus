@@ -365,10 +365,10 @@ export function StatusBar({
       </DropdownMenu>
 
       {/* Left side: Slot indicator */}
-      {activeSlot !== undefined && (
+      {activeSlot !== undefined && userCharacterName && (
         <div className="hidden md:flex items-center gap-1 text-xs font-mono z-10 text-muted-foreground">
           <span className="text-primary/70">SLOT {activeSlot}:</span>
-          <span className={`${glowClass}`}>{userCharacterName || ""}</span>
+          <span className={`${glowClass}`}>{userCharacterName}</span>
         </div>
       )}
 

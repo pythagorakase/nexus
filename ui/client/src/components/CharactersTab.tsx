@@ -723,7 +723,9 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
       <main className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
         {selectedCharacter ? (
           <>
-            {/* Portrait background - anchored to top-right */}
+            {/* Portrait background - anchored to top-right
+                Double gradient mask: fades left (50%→transparent) AND fades up (bottom 30%)
+                using mask-composite: intersect to combine both fade directions */}
             <div className="absolute top-0 right-0 w-80 h-[28rem] pointer-events-none z-0">
               {mainImage ? (
                 <img
