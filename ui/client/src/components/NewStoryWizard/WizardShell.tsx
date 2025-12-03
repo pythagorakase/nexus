@@ -274,7 +274,7 @@ export function NewStoryWizard() {
                                             {isCompleted ? <Check className="w-4 h-4" /> : <span className="text-xs">{index + 1}</span>}
                                         </button>
                                         <span className={cn(
-                                            "text-[10px] font-bold tracking-wider transition-colors duration-300",
+                                            "text-xs font-bold tracking-wider transition-colors duration-300",
                                             isActive ? `text-primary ${glowClass}` : "text-muted-foreground"
                                         )}>
                                             {phase.label}

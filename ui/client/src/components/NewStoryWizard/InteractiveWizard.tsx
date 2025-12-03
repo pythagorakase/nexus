@@ -1084,7 +1084,7 @@ export function InteractiveWizard({
                                                         <Sparkles className="w-3 h-3 text-primary" />
                                                         <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
                                                     </div>
-                                                    <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10">
+                                                    <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10">
                                                         <ReactMarkdown>
                                                             {msg.content}
                                                         </ReactMarkdown>
