@@ -1394,6 +1394,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
             "thread_id": request.thread_id,
         }
 
+    except HTTPException:
+        # Preserve explicit HTTP errors such as validation failures
+        raise
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
