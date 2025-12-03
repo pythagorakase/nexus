@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Core package lives in `nexus/`. Agents in `nexus/agents`: `lore` orchestrates the turn cycle, `memnon` handles retrieval, `gaia` tracks world state, and `psyche` analyzes characters. Custom two-pass memory lives in `nexus/memory/` (`manager.py`, `context_state.py`, `divergence.py`). Shared models sit in `nexus/models`. Tooling scripts stay under `scripts/`; reference material under `docs/`. Tests currently target LORE in `tests/test_lore/`. Runtime settings, including memory budgets and model defaults, live in top-level `settings.json`.
+Core package lives in `nexus/`. Active agents in `nexus/agents`: `lore` orchestrates the turn cycle, `memnon` handles retrieval, and `logon` manages Skald API calls. Planned modules with blueprints in `docs/`: `gaia` (world state), `psyche` (character analysis), `nemesis` (threat analysis). Custom two-pass memory lives in `nexus/memory/` (`manager.py`, `context_state.py`, `divergence.py`). Shared models sit in `nexus/models`. Tooling scripts stay under `scripts/`; reference material under `docs/`. Tests currently target LORE in `tests/test_lore/`. Runtime settings, including memory budgets and model defaults, live in top-level `settings.json`.
 
 ## Build, Test, and Development Commands
 Bootstrap with `poetry install`. Run the suite using `poetry run pytest`; narrow scope with `poetry run pytest tests/test_lore/test_context_validation.py::test_sql_restoration`. Format via `poetry run black .`; type-check `poetry run mypy .`; lint `poetry run flake8`. Exercise MEMNON alone through `poetry run python run_memnon.py`.
