@@ -31,11 +31,11 @@ There are already numerous rogue-like dungeon-crawlers with satisfyingly deep ru
 Real-time functionality is neither needed nor desired. The system is intentionally and strictly turn-based. In accordance with the overriding emphasis on quality latency is not just acceptable—it is expected.
 
 ## 1.3 Key Concepts
-- **Apex AI**: Frontier LLM (Claude/GPT/Grok) that generates narrative content
+- **Skald (Apex AI)**: Frontier LLM (Claude/GPT/Grok) that generates narrative content
 - **Memory Tiers**: The three-part memory architecture (Strategic, Entity, Narrative)
 - **Warm Slice**: Most recent narrative chunks plus new user input
 - **Cold Distillation**: The process of retrieving and filtering narrative memory
-- **Context Payload**: The assembled package of information sent to the Apex AI
+- **Context Payload**: The assembled package of information sent to Skald
 - **Turn Cycle**: The step-by-step sequence from user input to new narrative
 - **Entity State**: Character emotions, location conditions, faction status, etc.
 - **Chunk**: A discrete piece of narrative text, typically a single scene or interaction
@@ -68,7 +68,7 @@ NEXUS is built on a single-agent orchestration architecture implemented entirely
 
 ```
 ┌─────────┐                                   ┌─────────┐
-│  User   ├───────────────────────────────────┤ Apex AI │
+│  User   ├───────────────────────────────────┤  Skald  │
 └─────────┘                                   └─────────┘
                           │
                      ┌────┴────┐
@@ -91,16 +91,16 @@ NEXUS is built on a single-agent orchestration architecture implemented entirely
 ### Agent & Utility Modules
 - **LORE (Agent)**: Primary orchestration agent that coordinates utilities and manages the turn cycle
 - **MEMNON (Utility)**: Headless information retrieval system with multi-strategy search and cross-encoder reranking
-- **LOGON (Utility)**: Handles API traffic with Apex AI, delivers new narrative
+- **LOGON (Utility)**: Handles API traffic with Skald, delivers new narrative
 
 ### AI Role Summary
 The system employs two tiers of AI:
-**Frontier LLMs** ("Apex AI" = GPT/Claude/Grok)
-- Generate new narrative to continue from last user input
-- Updates to world state variables
-- Update hidden information
-**Local LLMs** (Llama)
-- LORE agent reasoning and orchestration
+**Skald** (Frontier LLM: Claude/GPT/Grok)
+- Generates new narrative to continue from last user input
+- Updates world state variables
+- Updates hidden information
+**LORE** (Local LLM: Llama)
+- Agent reasoning and orchestration
 - Preparation for new narrative
 - Post-generation processing and integration
 
@@ -269,7 +269,7 @@ Details:
 LORE orchestrates context assembly through a two-phase retrieval process:
 
 **Phase 1: Broad Retrieval**
-1. LORE dynamically calculates a context budget based on Apex AI token limits
+1. LORE dynamically calculates a context budget based on Skald token limits
 2. Local LLM generates targeted retrieval queries based on narrative context analysis
 3. MEMNON executes multi-strategy search:
    - Vector similarity search using triple-embedding fusion (inf-retriever, E5, BGE)
