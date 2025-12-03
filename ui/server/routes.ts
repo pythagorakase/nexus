@@ -70,6 +70,9 @@ export function registerProxyRoutes(app: Express): void {
     pathRewrite: (path) => `/api/chunks${path}`,
   }));
 
+  // Proxy for user-character endpoint (fetches protagonist name from global_variables)
+  app.use("/api/user-character", createProxyMiddleware(narrativeProxyOptions));
+
   app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
 }
 

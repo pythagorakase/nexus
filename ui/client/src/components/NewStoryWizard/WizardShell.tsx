@@ -220,16 +220,20 @@ export function NewStoryWizard() {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <div className="flex-1 flex items-center justify-center">
+                {/* Centered NEXUS title - absolutely positioned for true window centering */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
                     <span className={`font-display text-2xl md:text-4xl text-primary ${glowClass} tracking-wider`}>
                         NEXUS
                     </span>
                 </div>
 
+                {/* Spacer to push abort button to right */}
+                <div className="flex-1" />
+
                 <Button
                     variant="ghost"
                     size="sm"
-                    className="text-muted-foreground hover:text-foreground text-xs md:text-sm"
+                    className="z-10 text-muted-foreground hover:text-foreground text-xs md:text-sm"
                     onClick={handleAbort}
                 >
                     {isGilded ? "EXIT" : "[ABORT]"}
@@ -238,22 +242,23 @@ export function NewStoryWizard() {
 
             {/* Stepper Header - Only show when not in slot selection phase */}
             {currentPhase !== "slot" && (
-                <div className="border-b border-border bg-card/50 p-4 shrink-0 z-10">
-                    <div className="max-w-5xl mx-auto">
+                <div className="border-b border-border bg-card/50 py-4 shrink-0 z-10">
+                    {/* Grid with 3 equal columns ensures middle item is truly centered */}
+                    <div className="grid grid-cols-3 place-items-center relative px-8 max-w-2xl mx-auto">
+                        {/* Progress Bar Background */}
+                        <div className="absolute left-8 right-8 top-4 h-0.5 bg-border -z-10" />
 
-                        <div className="flex items-start justify-between relative">
-                            {/* Progress Bar Background */}
-                            <div className="absolute left-0 top-4 w-full h-0.5 bg-border -z-10" />
+                        {/* Progress Bar Fill */}
+                        <div
+                            className="absolute left-8 top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
+                            style={{
+                              width: `calc((100% - 4rem) * ${currentPhaseIndex / (PHASES.length - 1)})`,
+                            }}
+                        />
 
-                            {/* Progress Bar Fill */}
-                            <div
-                                className="absolute left-0 top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
-                                style={{ width: `${(currentPhaseIndex / (PHASES.length - 1)) * 100}%` }}
-                            />
-
-                            {PHASES.map((phase, index) => {
-                                const isActive = index === currentPhaseIndex;
-                                const isCompleted = index < currentPhaseIndex;
+                        {PHASES.map((phase, index) => {
+                            const isActive = index === currentPhaseIndex;
+                            const isCompleted = index < currentPhaseIndex;
                                 const artifactKey = phase.id as ArtifactType;
                                 const hasArtifact = isCompleted && confirmedArtifacts[artifactKey];
 
@@ -282,7 +287,6 @@ export function NewStoryWizard() {
                                     </div>
                                 );
                             })}
-                        </div>
                     </div>
                 </div>
             )}

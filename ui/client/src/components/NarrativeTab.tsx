@@ -673,7 +673,7 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                 )}
 
                 <div
-                  className="text-foreground text-base leading-relaxed"
+                  className="text-foreground text-base leading-relaxed font-narrative"
                   style={{ fontFamily: currentBodyFont }}
                 >
                   <ReactMarkdown components={markdownComponents}>

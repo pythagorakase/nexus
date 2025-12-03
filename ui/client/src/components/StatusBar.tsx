@@ -26,6 +26,8 @@ interface StatusBarProps {
   isStoryMode: boolean;
   isTestModeEnabled?: boolean;
   modelStatus?: "unloaded" | "loading" | "loaded" | "generating";
+  activeSlot?: number;
+  userCharacterName?: string;
   onHamburgerClick?: () => void;
   onModelStatusChange?: (status: "unloaded" | "loading" | "loaded" | "generating") => void;
   onRefreshModelStatus?: () => Promise<void> | void;
@@ -42,6 +44,8 @@ export function StatusBar({
   isStoryMode,
   isTestModeEnabled = false,
   modelStatus = "unloaded",
+  activeSlot,
+  userCharacterName,
   onHamburgerClick,
   onModelStatusChange,
   onRefreshModelStatus,
@@ -360,49 +364,60 @@ export function StatusBar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Left side: MODEL status */}
-      <div className="hidden md:flex items-center gap-2 text-sm md:text-base font-mono z-10" data-testid="text-model-status">
-        <span className="text-primary/70">MODEL:</span>
-        <div
-          className="relative cursor-pointer text-base md:text-lg tracking-wide"
-          onMouseEnter={() => setIsModelHovered(true)}
-          onMouseLeave={() => setIsModelHovered(false)}
-          onClick={handleModelClick}
-        >
-          <span className={`relative inline-block min-w-[3rem] px-0.5 transition-colors duration-300 ${modelVisualClasses}`}>
-            {model}
-          </span>
-          {/* Hover overlay */}
-          {modelError && (
-            <span className={`absolute inset-0 flex items-center justify-center bg-background/95 text-destructive ${glowClass} font-bold text-[0.6rem] md:text-xs px-2 text-center leading-snug`}>
-              {modelError}
-            </span>
-          )}
-          {isModelHovered && !isModelOperating && !modelError && modelStatus !== "loading" && modelStatus !== "generating" && (
-            <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-primary ${glowClass} font-bold`}>
-              {modelStatus === "unloaded" ? "LOAD" : "UNLOAD"}
-            </span>
-          )}
-          {/* Operating state */}
-          {isModelOperating && !modelError && (
-            <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-accent ${glowClass} font-bold`}>
-              ...
-            </span>
-          )}
+      {/* Left side: Slot indicator */}
+      {activeSlot !== undefined && (
+        <div className="hidden md:flex items-center gap-1 text-xs font-mono z-10 text-muted-foreground">
+          <span className="text-primary/70">SLOT {activeSlot}:</span>
+          <span className={`${glowClass}`}>{userCharacterName || ""}</span>
         </div>
-      </div>
+      )}
 
       {/* Spacer to push right-side elements */}
       <div className="flex-1" />
 
-      {/* Right side: APEX status and TEST MODE badge */}
+      {/* Right side: MODEL status, SKALD status, and TEST MODE badge */}
       <div className="flex items-center gap-2 md:gap-4 text-sm md:text-base font-mono z-10">
+        {/* MODEL status */}
+        <div className="hidden md:flex items-center gap-2" data-testid="text-model-status">
+          <span className="text-primary/70 text-xs">MODEL:</span>
+          <div
+            className="relative cursor-pointer text-sm tracking-wide"
+            onMouseEnter={() => setIsModelHovered(true)}
+            onMouseLeave={() => setIsModelHovered(false)}
+            onClick={handleModelClick}
+          >
+            <span className={`relative inline-block min-w-[3rem] px-0.5 transition-colors duration-300 ${modelVisualClasses}`}>
+              {model}
+            </span>
+            {/* Hover overlay */}
+            {modelError && (
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/95 text-destructive ${glowClass} font-bold text-[0.6rem] px-2 text-center leading-snug`}>
+                {modelError}
+              </span>
+            )}
+            {isModelHovered && !isModelOperating && !modelError && modelStatus !== "loading" && modelStatus !== "generating" && (
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-primary ${glowClass} font-bold text-xs`}>
+                {modelStatus === "unloaded" ? "LOAD" : "UNLOAD"}
+              </span>
+            )}
+            {/* Operating state */}
+            {isModelOperating && !modelError && (
+              <span className={`absolute inset-0 flex items-center justify-center bg-background/90 text-accent ${glowClass} font-bold`}>
+                ...
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* SKALD status */}
         {isStoryMode && (
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-apex-status">
-            <span className="text-primary/70 hidden sm:inline">APEX:</span>
+            <span className="text-primary/70 hidden sm:inline">SKALD:</span>
             <span className={`${getStatusColor()} ${glowClass} text-sm md:text-base`}>{apexStatus}</span>
           </div>
         )}
+
+        {/* TEST MODE badge */}
         {isTestModeEnabled && (
           <div className="flex items-center gap-1 md:gap-2" data-testid="text-test-mode">
             <span className="px-2 py-1 rounded-sm border border-destructive/40 bg-destructive/10 text-[10px] md:text-xs font-semibold tracking-wide text-destructive">

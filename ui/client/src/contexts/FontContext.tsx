@@ -58,7 +58,7 @@ const DEFAULT_FONTS: FontPreferences = {
   vectorDisplayFont: 'Sixtyfour',
   // Gilded theme
   gildedBodyFont: 'Cormorant Garamond',
-  gildedMenuFont: 'Xanh Mono',
+  gildedMenuFont: 'Space Mono',
   gildedDisplayFont: 'Monoton',
   // Veil theme (Art Nouveau)
   veilBodyFont: 'Spectral',

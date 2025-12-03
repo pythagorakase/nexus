@@ -1072,7 +1072,7 @@ export function InteractiveWizard({
                                     >
                                         <div
                                             className={cn(
-                                                "max-w-[85%] p-4 rounded-lg font-mono text-sm leading-relaxed shadow-lg",
+                                                "max-w-[85%] p-4 rounded-lg font-serif text-sm leading-relaxed shadow-lg",
                                                 msg.role === "user"
                                                     ? "bg-primary/20 border border-primary/30 text-foreground"
                                                     : "bg-background/80 border border-border text-foreground"

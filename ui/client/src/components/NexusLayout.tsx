@@ -206,6 +206,19 @@ export function NexusLayout() {
     refetchInterval: TIMEOUTS.LATEST_CHUNK_REFETCH,
   });
 
+  // Fetch user character name from global_variables
+  const { data: userCharacter } = useQuery<{ name: string } | null>({
+    queryKey: ["/api/user-character", activeSlot],
+    queryFn: async () => {
+      if (!activeSlot) return null;
+      const res = await fetch(`/api/user-character?slot=${activeSlot}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!activeSlot,
+    staleTime: 60000, // Cache for 1 minute
+  });
+
   // Narrative generation hook - encapsulates WebSocket, state management, and approval flow
   const narrative = useNarrativeGeneration({
     allowedChunkId: latestChunk?.id ?? null,
@@ -391,6 +404,8 @@ export function NexusLayout() {
           isStoryMode={isStoryMode}
           isTestModeEnabled={isTestModeEnabled}
           modelStatus={modelStatus}
+          activeSlot={activeSlot ?? undefined}
+          userCharacterName={userCharacter?.name}
           onModelStatusChange={setModelStatus}
           onRefreshModelStatus={refreshModelStatus}
           onNavigate={setActiveTab}
