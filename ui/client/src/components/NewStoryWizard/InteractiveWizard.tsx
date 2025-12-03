@@ -297,8 +297,13 @@ export function InteractiveWizard({
 
             // Build client-side intro message with rationales (SKIP API CALL)
             // This eliminates latency and ensures message is synced with pre-selection
-            const introMessage = buildTraitIntroMessage(artifactData);
-            addMessage("assistant", introMessage);
+            try {
+                const introMessage = buildTraitIntroMessage(artifactData);
+                addMessage("assistant", introMessage);
+            } catch (error) {
+                console.error("Failed to build trait intro message:", error);
+                addMessage("assistant", TRAIT_INTRODUCTION + "\n\nPlease select your traits from the menu.");
+            }
             setDisplayChoices(null);  // No structured choices - TraitSelector handles it
             return;  // Early return - no API call needed
         }

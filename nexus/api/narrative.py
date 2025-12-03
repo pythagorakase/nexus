@@ -957,6 +957,29 @@ class ChatRequest(BaseModel):
     accept_fate: bool = False  # Force tool call without adding user message
 
 
+def validate_subphase_tool(function_name: str, arguments: dict) -> dict:
+    """Validate subphase tool arguments against Pydantic schemas.
+
+    This ensures required fields (like trait_rationales) are present.
+    Returns validated and normalized data, or raises HTTPException on failure.
+    """
+    schema_map = {
+        "submit_character_concept": CharacterConcept,
+        "submit_trait_selection": TraitSelection,
+        "submit_wildcard_trait": WildcardTrait,
+    }
+    if schema := schema_map.get(function_name):
+        try:
+            return schema.model_validate(arguments).model_dump()
+        except Exception as e:
+            logger.error(f"{schema.__name__} validation failed: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"LLM returned invalid {schema.__name__}: {str(e)}",
+            )
+    return arguments
+
+
 @app.post("/api/story/new/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling"""
@@ -1295,35 +1318,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             ]
 
             # Validate subphase tool arguments against Pydantic schemas
-            # This ensures required fields (like trait_rationales) are present
-            validated_data = arguments
-            if function_name == "submit_character_concept":
-                try:
-                    validated_data = CharacterConcept.model_validate(arguments).model_dump()
-                except Exception as e:
-                    logger.error(f"CharacterConcept validation failed: {e}")
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"LLM returned invalid CharacterConcept: {str(e)}",
-                    )
-            elif function_name == "submit_trait_selection":
-                try:
-                    validated_data = TraitSelection.model_validate(arguments).model_dump()
-                except Exception as e:
-                    logger.error(f"TraitSelection validation failed: {e}")
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"LLM returned invalid TraitSelection: {str(e)}",
-                    )
-            elif function_name == "submit_wildcard_trait":
-                try:
-                    validated_data = WildcardTrait.model_validate(arguments).model_dump()
-                except Exception as e:
-                    logger.error(f"WildcardTrait validation failed: {e}")
-                    raise HTTPException(
-                        status_code=422,
-                        detail=f"LLM returned invalid WildcardTrait: {str(e)}",
-                    )
+            validated_data = validate_subphase_tool(function_name, arguments)
 
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
