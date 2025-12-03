@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight } from "lucide-react";
+import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +23,7 @@ interface InteractiveWizardProps {
     onComplete: () => void;
     onCancel: () => void;
     onPhaseChange: (phase: Phase) => void;
+    onArtifactConfirmed?: (type: "setting" | "character" | "seed", data: any) => void;
     wizardData: any;
     setWizardData: (data: any) => void;
     resumeThreadId?: string | null;
@@ -77,6 +78,7 @@ export function InteractiveWizard({
     onComplete,
     onCancel,
     onPhaseChange,
+    onArtifactConfirmed,
     wizardData,
     setWizardData,
     resumeThreadId,
@@ -502,18 +504,21 @@ export function InteractiveWizard({
         // Determine next phase or completion
         if (currentPhase === "setting") {
             setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
+            onArtifactConfirmed?.("setting", pendingArtifact.data);
             updatePhase("character");
             setPendingArtifact(null);
             // Trigger next phase prompt
             triggerNextPhase("character");
         } else if (currentPhase === "character") {
             setWizardData((prev: any) => ({ ...prev, character: pendingArtifact.data }));
+            onArtifactConfirmed?.("character", pendingArtifact.data);
             updatePhase("seed");
             setPendingArtifact(null);
             // Trigger next phase prompt
             triggerNextPhase("seed");
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
+            onArtifactConfirmed?.("seed", pendingArtifact.data);
             setPendingArtifact(null);
             setIsLoading(true);
 
@@ -616,31 +621,97 @@ export function InteractiveWizard({
                         <div className="space-y-4 font-mono text-sm text-muted-foreground">
                             {type === "submit_world_document" && (
                                 <div className="space-y-4">
+                                    {/* Header */}
                                     <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <h4 className="text-xl text-white font-bold mb-2">{data.world_name}</h4>
-                                        <p className="text-primary text-sm uppercase tracking-wider">{data.genre} // {data.time_period}</p>
+                                        <div className="flex items-baseline gap-2 mb-1">
+                                            <span className="text-primary text-xs uppercase">World</span>
+                                            <h4 className="text-xl text-white font-bold">{data.world_name}</h4>
+                                        </div>
                                     </div>
 
-                                    <CollapsibleSection title="World Overview" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
-                                        <div className="prose prose-invert prose-sm max-w-none">
-                                            <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
-                                                {data.diegetic_artifact || data.cultural_notes}
-                                            </p>
+                                    {/* Quick Reference Grid */}
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Genre</span>
+                                            <span className="text-white capitalize">{data.genre}{data.secondary_genres?.length > 0 && ` (+${data.secondary_genres.join(", ")})`}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Era</span>
+                                            <span className="text-white">{data.time_period}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Tone</span>
+                                            <span className="text-white capitalize">{data.tone}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Tech Level</span>
+                                            <span className="text-white capitalize">{data.tech_level?.replace(/_/g, " ")}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Scope</span>
+                                            <span className="text-white capitalize">{data.geographic_scope}</span>
+                                        </div>
+                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                            <span className="text-primary block uppercase mb-1">Magic</span>
+                                            <span className="text-white">{data.magic_exists ? "Present" : "None"}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Magic Description (if exists) */}
+                                    {data.magic_exists && data.magic_description && (
+                                        <CollapsibleSection title="Magic System" defaultOpen={true} icon={<Wand2 className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed">{data.magic_description}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Narrative Elements */}
+                                    <CollapsibleSection title="World Context" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <span className="text-primary block text-xs uppercase mb-1">Political Structure</span>
+                                                <p className="text-sm text-white/80">{data.political_structure}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-primary block text-xs uppercase mb-1">Major Conflict</span>
+                                                <p className="text-sm text-white/80">{data.major_conflict}</p>
+                                            </div>
+                                            {data.themes?.length > 0 && (
+                                                <div>
+                                                    <span className="text-primary block text-xs uppercase mb-1">Themes</span>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {data.themes.map((theme: string, i: number) => (
+                                                            <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{theme}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </CollapsibleSection>
 
-                                    <CollapsibleSection title="System Parameters" icon={<Sparkles className="w-4 h-4 text-primary" />}>
-                                        <div className="grid grid-cols-2 gap-4 text-xs">
-                                            <div>
-                                                <span className="text-primary block uppercase">Tone</span>
-                                                <span className="text-white">{data.tone}</span>
+                                    {/* Cultural Notes */}
+                                    {data.cultural_notes && (
+                                        <CollapsibleSection title="Cultural Notes" icon={<Scroll className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{data.cultural_notes}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Language Notes (if present) */}
+                                    {data.language_notes && (
+                                        <CollapsibleSection title="Language & Naming" icon={<Languages className="w-4 h-4 text-primary" />}>
+                                            <p className="text-sm text-white/80 leading-relaxed">{data.language_notes}</p>
+                                        </CollapsibleSection>
+                                    )}
+
+                                    {/* Diegetic Artifact - collapsed by default */}
+                                    {data.diegetic_artifact && (
+                                        <CollapsibleSection title="In-World Document" icon={<FileText className="w-4 h-4 text-primary" />}>
+                                            <div className="prose prose-invert prose-sm max-w-none">
+                                                <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
+                                                    {data.diegetic_artifact}
+                                                </p>
                                             </div>
-                                            <div>
-                                                <span className="text-primary block uppercase">Tech Level</span>
-                                                <span className="text-white">{data.tech_level}</span>
-                                            </div>
-                                        </div>
-                                    </CollapsibleSection>
+                                        </CollapsibleSection>
+                                    )}
                                 </div>
                             )}
 

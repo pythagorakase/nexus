@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Menu, Home, Settings, Sparkles, Monitor, Wand2 } from "lucide-react";
+import { Check, Menu, Home, Settings, Sparkles, Monitor, Wand2, X, Globe, User, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
@@ -16,6 +16,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CornerSunburst } from "@/components/deco";
 import { useToast } from "@/hooks/use-toast";
+import { Card } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Types for confirmed artifacts
+type ArtifactType = "setting" | "character" | "seed";
+interface ConfirmedArtifacts {
+    setting?: any;
+    character?: any;
+    seed?: any;
+}
 
 type WizardPhase = "slot" | "setting" | "character" | "seed";
 
@@ -42,6 +53,14 @@ export function NewStoryWizard() {
         location: null,
     });
 
+    // Confirmed artifacts for phase breadcrumb access
+    const [confirmedArtifacts, setConfirmedArtifacts] = useState<ConfirmedArtifacts>({});
+    const [viewingArtifact, setViewingArtifact] = useState<ArtifactType | null>(null);
+
+    const handleArtifactConfirmed = (type: ArtifactType, data: any) => {
+        setConfirmedArtifacts(prev => ({ ...prev, [type]: data }));
+    };
+
     const handleSlotSelected = (slot: number) => {
         setSelectedSlot(slot);
         setCurrentPhase("setting");
@@ -53,6 +72,7 @@ export function NewStoryWizard() {
             seed: null,
             location: null,
         });
+        setConfirmedArtifacts({});
     };
 
     const handleInteractivePhaseChange = (phase: "setting" | "character" | "seed") => {
@@ -86,6 +106,13 @@ export function NewStoryWizard() {
                     character: resumeData.character_draft ?? null,
                     seed: resumeData.selected_seed ?? null,
                     location: resumeData.initial_location ?? null,
+                });
+
+                // Restore confirmed artifacts from resumed data
+                setConfirmedArtifacts({
+                    setting: resumeData.setting_draft ?? undefined,
+                    character: resumeData.character_draft ?? undefined,
+                    seed: resumeData.selected_seed ?? undefined,
                 });
 
                 setSelectedSlot(slotData.slot);
@@ -227,17 +254,25 @@ export function NewStoryWizard() {
                             {PHASES.map((phase, index) => {
                                 const isActive = index === currentPhaseIndex;
                                 const isCompleted = index < currentPhaseIndex;
+                                const artifactKey = phase.id as ArtifactType;
+                                const hasArtifact = isCompleted && confirmedArtifacts[artifactKey];
 
                                 return (
                                     <div key={phase.id} className="flex flex-col items-center gap-2">
-                                        <div className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300",
-                                            isActive && `border-primary bg-background text-primary ${glowClass} scale-110`,
-                                            isCompleted && "border-primary bg-primary text-primary-foreground",
-                                            !isActive && !isCompleted && "border-muted text-muted-foreground bg-card"
-                                        )}>
+                                        <button
+                                            onClick={() => hasArtifact && setViewingArtifact(artifactKey)}
+                                            disabled={!hasArtifact}
+                                            className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300",
+                                                isActive && `border-primary bg-background text-primary ${glowClass} scale-110`,
+                                                isCompleted && "border-primary bg-primary text-primary-foreground",
+                                                !isActive && !isCompleted && "border-muted text-muted-foreground bg-card",
+                                                hasArtifact && "cursor-pointer hover:scale-110 hover:shadow-lg hover:shadow-primary/30"
+                                            )}
+                                            title={hasArtifact ? `View ${phase.label} details` : undefined}
+                                        >
                                             {isCompleted ? <Check className="w-4 h-4" /> : <span className="text-xs">{index + 1}</span>}
-                                        </div>
+                                        </button>
                                         <span className={cn(
                                             "text-[10px] font-bold tracking-wider transition-colors duration-300",
                                             isActive ? `text-primary ${glowClass}` : "text-muted-foreground"
@@ -270,6 +305,7 @@ export function NewStoryWizard() {
                             onComplete={handleComplete}
                             onCancel={handleAbort}
                             onPhaseChange={handleInteractivePhaseChange}
+                            onArtifactConfirmed={handleArtifactConfirmed}
                             wizardData={wizardData}
                             setWizardData={setWizardData}
                             resumeThreadId={resumeThreadId}
@@ -278,6 +314,138 @@ export function NewStoryWizard() {
                     </div>
                 )}
             </div>
+
+            {/* Artifact View Modal */}
+            <AnimatePresence>
+                {viewingArtifact && confirmedArtifacts[viewingArtifact] && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+                        onClick={() => setViewingArtifact(null)}
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Card className="w-full max-w-2xl bg-card border border-primary/50 p-6 space-y-4 shadow-lg">
+                                <div className="flex items-center justify-between border-b border-primary/30 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        {viewingArtifact === "setting" && <Globe className="w-6 h-6 text-primary" />}
+                                        {viewingArtifact === "character" && <User className="w-6 h-6 text-primary" />}
+                                        {viewingArtifact === "seed" && <MapPin className="w-6 h-6 text-primary" />}
+                                        <h3 className="text-xl font-mono text-primary uppercase tracking-widest">
+                                            {viewingArtifact === "setting" && "World Setting"}
+                                            {viewingArtifact === "character" && "Character"}
+                                            {viewingArtifact === "seed" && "Introduction"}
+                                        </h3>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setViewingArtifact(null)}
+                                        className="text-muted-foreground hover:text-foreground"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </Button>
+                                </div>
+
+                                <ScrollArea className="h-[400px] pr-4">
+                                    {/* Setting Artifact */}
+                                    {viewingArtifact === "setting" && (
+                                        <div className="space-y-4 font-mono text-sm">
+                                            <div className="border-l-2 border-primary pl-4">
+                                                <div className="flex items-baseline gap-2 mb-1">
+                                                    <span className="text-primary text-xs uppercase">World</span>
+                                                    <h4 className="text-xl text-white font-bold">{confirmedArtifacts.setting?.world_name}</h4>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                                <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                    <span className="text-primary block uppercase mb-1">Genre</span>
+                                                    <span className="text-white capitalize">{confirmedArtifacts.setting?.genre}</span>
+                                                </div>
+                                                <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                    <span className="text-primary block uppercase mb-1">Era</span>
+                                                    <span className="text-white">{confirmedArtifacts.setting?.time_period}</span>
+                                                </div>
+                                                <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                    <span className="text-primary block uppercase mb-1">Tone</span>
+                                                    <span className="text-white capitalize">{confirmedArtifacts.setting?.tone}</span>
+                                                </div>
+                                                <div className="bg-primary/5 border border-primary/20 p-2 rounded">
+                                                    <span className="text-primary block uppercase mb-1">Tech Level</span>
+                                                    <span className="text-white capitalize">{confirmedArtifacts.setting?.tech_level?.replace(/_/g, " ")}</span>
+                                                </div>
+                                            </div>
+                                            {confirmedArtifacts.setting?.diegetic_artifact && (
+                                                <div className="pt-4 border-t border-primary/20">
+                                                    <span className="text-primary block text-xs uppercase mb-2">In-World Document</span>
+                                                    <p className="text-muted-foreground italic leading-relaxed whitespace-pre-wrap text-xs">
+                                                        {confirmedArtifacts.setting.diegetic_artifact}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Character Artifact */}
+                                    {viewingArtifact === "character" && (
+                                        <div className="space-y-4 font-mono text-sm">
+                                            <div className="flex items-center gap-4 mb-4">
+                                                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center border border-primary/30 shrink-0">
+                                                    <User className="w-8 h-8 text-primary" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-2xl text-white font-bold">{confirmedArtifacts.character?.name}</h4>
+                                                    <p className="text-primary text-sm">{confirmedArtifacts.character?.summary}</p>
+                                                </div>
+                                            </div>
+                                            {confirmedArtifacts.character?.diegetic_artifact && (
+                                                <div>
+                                                    <span className="text-primary block text-xs uppercase mb-2">Narrative Portrait</span>
+                                                    <p className="text-muted-foreground italic leading-relaxed text-xs whitespace-pre-wrap">
+                                                        {confirmedArtifacts.character.diegetic_artifact}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {confirmedArtifacts.character?.wildcard_name && (
+                                                <div className="pt-4 border-t border-primary/20">
+                                                    <span className="text-primary block text-xs uppercase mb-1">{confirmedArtifacts.character.wildcard_name}</span>
+                                                    <p className="text-sm text-white/90">{confirmedArtifacts.character.wildcard_description}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Seed/Introduction Artifact */}
+                                    {viewingArtifact === "seed" && (
+                                        <div className="space-y-4 font-mono text-sm">
+                                            <div className="border-l-2 border-primary pl-4">
+                                                <span className="text-primary block text-xs uppercase mb-1">Starting Scenario</span>
+                                                <h4 className="text-xl text-white font-bold mb-2">{confirmedArtifacts.seed?.seed?.title}</h4>
+                                                <p className="italic text-muted-foreground/60">{confirmedArtifacts.seed?.seed?.hook}</p>
+                                            </div>
+                                            {confirmedArtifacts.seed?.location && (
+                                                <div className="pt-4">
+                                                    <span className="text-primary block text-xs uppercase mb-2">Location</span>
+                                                    <p className="text-white">{confirmedArtifacts.seed.location.name}</p>
+                                                    <p className="text-muted-foreground text-xs mt-1">
+                                                        {confirmedArtifacts.seed.location.description?.substring(0, 200)}...
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </ScrollArea>
+                            </Card>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
