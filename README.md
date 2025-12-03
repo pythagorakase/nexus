@@ -265,20 +265,22 @@ Details: [Turn Flow Sequence](docs/turn_flow_sequence.md)
 
 ## 4.2 Context Assembly Process
 
-LORE orchestrates context assembly through a two-phase retrieval process:
+LORE orchestrates context assembly through a two-pass memory system:
 
-**Phase 1: Broad Retrieval**
-1. LORE dynamically calculates a context budget based on Skald token limits
-2. Local LLM generates targeted retrieval queries based on narrative context analysis
-3. MEMNON executes multi-strategy search:
-   - Vector similarity search using triple-embedding fusion (inf-retriever, E5, BGE)
-   - IDF-weighted full-text search for keyword matching
-   - Hybrid scoring with query-type-specific weights
+**Pass 1: Baseline Assembly** (triggered by Skald's narrative generation)
+1. LORE calculates a context budget based on Skald token limits
+2. Local LLM generates targeted retrieval queries based on narrative context
+3. MEMNON executes multi-strategy search (vector + text + hybrid scoring)
+4. Cross-encoder reranking refines results for semantic relevance
+5. LORE assembles the baseline context package: warm slice, historical excerpts, entity state
 
-**Phase 2: Cross-Encoder Reranking**
-4. MEMNON applies cross-encoder reranking (Naver TREC-DL22) for semantic refinement
-5. Final results are selected based on combined original and reranker scores
-6. LORE assembles the context payload with warm slice, historical excerpts, and entity state
+**Pass 2: Divergence Detection** (triggered by user input)
+1. When user completes a chunk with their input, LORE analyzes for divergence
+2. LLM-based detector checks if user references entities/events NOT in the baseline
+3. If divergence detected, additional targeted retrieval fills the gaps
+4. Updated context ensures Skald has full awareness of user-referenced elements
+
+This two-pass approach ensures continuity: Pass 1 provides context for generation, Pass 2 catches novel user references that need historical grounding.
 
 ## 4.3 Error Recovery
 
