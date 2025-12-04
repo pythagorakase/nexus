@@ -943,6 +943,7 @@ from nexus.api.new_story_schemas import (
     CharacterCreationState,
     TransitionData,
     WizardResponse,
+    make_openai_strict_schema,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_cache import read_cache
@@ -1078,8 +1079,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_character_concept",
+                            "strict": True,
                             "description": "Submit the character's core concept (archetype, background, name, appearance) when established.",
-                            "parameters": CharacterConcept.model_json_schema(),
+                            "parameters": make_openai_strict_schema(CharacterConcept.model_json_schema()),
                         },
                     }
                 )
@@ -1091,8 +1093,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_trait_selection",
+                            "strict": True,
                             "description": "Submit the 3 selected traits with rationales when the user confirms their choices.",
-                            "parameters": TraitSelection.model_json_schema(),
+                            "parameters": make_openai_strict_schema(TraitSelection.model_json_schema()),
                         },
                     }
                 )
@@ -1104,25 +1107,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_wildcard_trait",
+                            "strict": True,
                             "description": "Submit the unique wildcard trait when defined.",
-                            "parameters": WildcardTrait.model_json_schema(),
+                            "parameters": make_openai_strict_schema(WildcardTrait.model_json_schema()),
                         },
                     }
                 )
                 primary_tool_name = "submit_wildcard_trait"
-            else:
-                # All sub-phases complete - offer final character sheet assembly
-                tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "submit_character_sheet",
-                            "description": "Submit the finalized character sheet when the user agrees.",
-                            "parameters": CharacterSheet.model_json_schema(),
-                        },
-                    }
-                )
-                primary_tool_name = "submit_character_sheet"
+            # else: All sub-phases complete - character phase is done, no tool needed.
+            # The CharacterSheet is assembled from accumulated state via to_character_sheet().
         elif request.current_phase == "seed":
             tools.append(
                 {
