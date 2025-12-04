@@ -1313,6 +1313,38 @@ async def new_story_chat_endpoint(request: ChatRequest):
             # Validate subphase tool arguments against Pydantic schemas
             validated_data = validate_subphase_tool(function_name, arguments)
 
+            # Track character creation progress and assemble final sheet when complete
+            phase_complete = not is_subphase_tool
+            response_data: Dict[str, Any] = validated_data
+
+            if is_subphase_tool:
+                # Merge the newly submitted sub-phase data with the accumulated state
+                char_state_data = (request.context_data or {}).get("character_state", {})
+
+                if function_name == "submit_character_concept":
+                    char_state_updates = {"concept": validated_data}
+                elif function_name == "submit_trait_selection":
+                    char_state_updates = {"trait_selection": validated_data}
+                else:
+                    char_state_updates = {"wildcard": validated_data}
+
+                creation_state = CharacterCreationState.model_validate(
+                    {**char_state_data, **char_state_updates}
+                )
+
+                response_data = {"character_state": creation_state.model_dump()}
+                phase_complete = creation_state.is_complete()
+
+                if phase_complete:
+                    try:
+                        character_sheet = creation_state.to_character_sheet().model_dump()
+                        record_drafts(request.slot, character=creation_state.model_dump())
+                        response_data.update({"character_sheet": character_sheet})
+                    except Exception as e:
+                        logger.error(
+                            "Failed to finalize character creation state: %s", e
+                        )
+
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
             # subphase_complete: True for character sub-phases (concept/traits/wildcard)
@@ -1320,11 +1352,11 @@ async def new_story_chat_endpoint(request: ChatRequest):
             #                    trigger next sub-phase tool availability
             return {
                 "message": "Generating artifact...",
-                "phase_complete": not is_subphase_tool,
+                "phase_complete": phase_complete,
                 "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
-                "data": validated_data,
+                "data": response_data,
             }
 
         # Handle structured conversational responses via helper tool
