@@ -110,6 +110,35 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon }: Coll
     );
 }
 
+interface ExpandableTextProps {
+    text: string;
+    maxLength?: number;
+    className?: string;
+}
+
+function ExpandableText({ text, maxLength = 200, className = "" }: ExpandableTextProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const needsExpansion = text.length > maxLength;
+
+    if (!needsExpansion) {
+        return <p className={className}>{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className={className}>
+                {isExpanded ? text : `${text.substring(0, maxLength)}...`}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-primary text-xs mt-1 hover:underline focus:outline-none"
+            >
+                {isExpanded ? "show less" : "show more"}
+            </button>
+        </div>
+    );
+}
+
 export function InteractiveWizard({
     slot,
     onComplete,
@@ -868,7 +897,11 @@ export function InteractiveWizard({
                                             </div>
                                             <div className="pt-2">
                                                 <span className="text-primary block text-xs uppercase mb-1">Description</span>
-                                                <p className="text-sm text-white/80">{(data.location.summary || "").substring(0, 200)}...</p>
+                                                <ExpandableText
+                                                    text={data.location.summary || ""}
+                                                    maxLength={200}
+                                                    className="text-sm text-white/80"
+                                                />
                                             </div>
                                         </div>
                                     </CollapsibleSection>
