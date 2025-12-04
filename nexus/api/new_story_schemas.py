@@ -550,7 +550,7 @@ class CharacterCreationState(BaseModel):
             summary=self.summary or f"A {self.concept.archetype}",
             appearance=self.concept.appearance,
             background=self.concept.background,
-            personality=self.personality or "To be developed through play",
+            personality=self.personality or "Personality to be revealed through play.",
             wildcard_name=self.wildcard.wildcard_name,
             wildcard_description=self.wildcard.wildcard_description,
             **trait_kwargs,

@@ -163,10 +163,10 @@ interface TraitCardProps {
 function TraitCard({ trait, isSelected, onSelect, onHoverStart, onHoverEnd, column, disabled }: TraitCardProps) {
   const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const side = column === 0 ? "left" : "right";
-    const x = side === "left" ? rect.left - 10 : rect.right + 10;
-    onHoverStart(trait, { x, y: rect.top - 10 }, side);
-  }, [column, trait, onHoverStart]);
+    // Always show tooltip on left since panel is on right side of screen
+    const x = rect.left - 10;
+    onHoverStart(trait, { x, y: rect.top }, "left");
+  }, [trait, onHoverStart]);
 
   return (
     <button
