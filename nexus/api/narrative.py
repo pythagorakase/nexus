@@ -1117,22 +1117,26 @@ async def new_story_chat_endpoint(request: ChatRequest):
             # else: All sub-phases complete - character phase is done, no tool needed.
             # The CharacterSheet is assembled from accumulated state via to_character_sheet().
         elif request.current_phase == "seed":
+            # Build strict-compatible combined schema for all seed components
+            seed_params = {
+                "type": "object",
+                "properties": {
+                    "seed": make_openai_strict_schema(StorySeed.model_json_schema()),
+                    "layer": make_openai_strict_schema(LayerDefinition.model_json_schema()),
+                    "zone": make_openai_strict_schema(ZoneDefinition.model_json_schema()),
+                    "location": make_openai_strict_schema(PlaceProfile.model_json_schema()),
+                },
+                "required": ["seed", "layer", "zone", "location"],
+                "additionalProperties": False,
+            }
             tools.append(
                 {
                     "type": "function",
                     "function": {
                         "name": "submit_starting_scenario",
+                        "strict": True,
                         "description": "Submit the chosen story seed and starting location details.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "seed": StorySeed.model_json_schema(),
-                                "layer": LayerDefinition.model_json_schema(),
-                                "zone": ZoneDefinition.model_json_schema(),
-                                "location": PlaceProfile.model_json_schema(),
-                            },
-                            "required": ["seed", "layer", "zone", "location"],
-                        },
+                        "parameters": seed_params,
                     },
                 }
             )
