@@ -937,6 +937,7 @@ from nexus.api.new_story_schemas import (
     LayerDefinition,
     ZoneDefinition,
     PlaceProfile,
+    StartingScenario,
     CharacterConcept,
     TraitSelection,
     WildcardTrait,
@@ -1117,18 +1118,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             # else: All sub-phases complete - character phase is done, no tool needed.
             # The CharacterSheet is assembled from accumulated state via to_character_sheet().
         elif request.current_phase == "seed":
-            # Build strict-compatible combined schema for all seed components
-            seed_params = {
-                "type": "object",
-                "properties": {
-                    "seed": make_openai_strict_schema(StorySeed.model_json_schema()),
-                    "layer": make_openai_strict_schema(LayerDefinition.model_json_schema()),
-                    "zone": make_openai_strict_schema(ZoneDefinition.model_json_schema()),
-                    "location": make_openai_strict_schema(PlaceProfile.model_json_schema()),
-                },
-                "required": ["seed", "layer", "zone", "location"],
-                "additionalProperties": False,
-            }
+            # Use unified StartingScenario model - Pydantic hoists all $defs to root level
             tools.append(
                 {
                     "type": "function",
@@ -1136,7 +1126,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "name": "submit_starting_scenario",
                         "strict": True,
                         "description": "Submit the chosen story seed and starting location details.",
-                        "parameters": seed_params,
+                        "parameters": make_openai_strict_schema(StartingScenario.model_json_schema()),
                     },
                 }
             )

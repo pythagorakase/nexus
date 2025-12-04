@@ -861,6 +861,23 @@ class ZoneDefinition(BaseModel):
     # For now, we just need the zone to exist in the hierarchy
 
 
+class StartingScenario(BaseModel):
+    """
+    Combined wrapper for seed phase submission.
+
+    This model wraps all 4 components needed for starting a new story,
+    ensuring Pydantic generates a unified JSON schema with all $defs
+    hoisted to the root level (required for OpenAI strict mode).
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    seed: StorySeed
+    layer: LayerDefinition
+    zone: ZoneDefinition
+    location: PlaceProfile
+
+
 class SpecificLocation(BaseModel):
     """
     A specific location within a place where scenes occur.
