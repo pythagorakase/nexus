@@ -723,20 +723,17 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
       <main className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
         {selectedCharacter ? (
           <>
-            {/* Portrait background - anchored to top-right
-                Double gradient mask: fades left (50%→transparent) AND fades up (bottom 30%)
-                using mask-composite: intersect to combine both fade directions */}
-            <div className="absolute top-0 right-0 w-80 h-[28rem] pointer-events-none z-0">
+            {/* Portrait background - fills container, minimal gradient for text readability
+                Uses object-contain to preserve full image including ornamental borders */}
+            <div className="absolute inset-0 pointer-events-none z-0 flex items-start justify-end">
               {mainImage ? (
                 <img
                   src={mainImage.filePath}
                   alt={selectedCharacter.name}
-                  className="w-full h-full object-cover object-top"
+                  className="max-w-full max-h-full object-contain object-right-top"
                   style={{
-                    maskImage: "linear-gradient(to left, black 50%, transparent 100%), linear-gradient(to top, transparent 0%, black 30%)",
-                    WebkitMaskImage: "linear-gradient(to left, black 50%, transparent 100%), linear-gradient(to top, transparent 0%, black 30%)",
-                    maskComposite: "intersect",
-                    WebkitMaskComposite: "source-in",
+                    maskImage: "linear-gradient(to left, black 85%, transparent 100%)",
+                    WebkitMaskImage: "linear-gradient(to left, black 85%, transparent 100%)",
                   }}
                 />
               ) : (
