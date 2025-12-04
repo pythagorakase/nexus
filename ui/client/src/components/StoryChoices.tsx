@@ -123,7 +123,7 @@ function ChoiceItem({
           document.execCommand('insertText', false, text);
         }}
         className={cn(
-          "flex-1 text-sm leading-relaxed outline-none min-h-[1.6em]",
+          "flex-1 text-sm leading-relaxed outline-none min-h-[1.6em] font-serif",
           "transition-colors duration-150",
           isActive ? "text-foreground" : "text-muted-foreground",
           isEditing && "cursor-text",
@@ -260,7 +260,7 @@ function FreeformChoice({ onSend, disabled = false }: FreeformChoiceProps) {
           }}
           data-placeholder="Describe your action..."
           className={cn(
-            "text-sm leading-relaxed text-foreground outline-none min-h-[1.6em] mb-2",
+            "text-sm leading-relaxed text-foreground outline-none min-h-[1.6em] mb-2 font-serif",
             "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
           )}
         />

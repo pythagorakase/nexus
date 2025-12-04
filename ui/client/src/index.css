@@ -480,6 +480,21 @@ html {
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+/* Veil theme font variants: small-caps for mono, uppercase for display */
+.dark.theme-veil .font-mono {
+  font-variant: small-caps;
+}
+.dark.theme-veil .font-display {
+  text-transform: uppercase;
+}
+/* Reset inherited small-caps on body text classes */
+.dark.theme-veil .font-serif,
+.dark.theme-veil .font-sans,
+.dark.theme-veil .font-narrative {
+  font-variant: normal;
+  text-transform: none;
+}
+
 .font-narrative {
   font-family: var(--font-narrative);
 }

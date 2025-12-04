@@ -1014,24 +1014,24 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
                   </div>
 
                   {/* Details section */}
-                  <div className="space-y-4 font-mono text-sm">
+                  <div className="space-y-4 font-serif text-sm">
                     {place.type && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Type</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Type</div>
                         <div className="text-foreground">{place.type}</div>
                       </div>
                     )}
 
                     {zone && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Zone</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Zone</div>
                         <div className="text-foreground">{zone.name}</div>
                       </div>
                     )}
 
                     {coords && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Coordinates</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Coordinates</div>
                         <div className="text-foreground">
                           {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)}
                         </div>
@@ -1040,14 +1040,14 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
 
                     {place.summary && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Summary</div>
                         <div className="text-foreground whitespace-pre-wrap leading-relaxed">{place.summary}</div>
                       </div>
                     )}
 
                     {historyParagraphs.length > 0 && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">History</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">History</div>
                         <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
                           {historyParagraphs.map((paragraph, index) => (
                             <p key={`history-${index}`}>{paragraph}</p>
@@ -1058,7 +1058,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
 
                     {statusParagraphs.length > 0 && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Current Status</div>
                         <div className="space-y-3 text-foreground whitespace-pre-wrap leading-relaxed">
                           {statusParagraphs.map((paragraph, index) => (
                             <p key={`status-${index}`}>{paragraph}</p>
@@ -1069,7 +1069,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
 
                     {inhabitantsList.length > 0 && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Inhabitants</div>
                         <ul className="list-disc pl-4 space-y-1 text-foreground whitespace-pre-wrap">
                           {inhabitantsList.map((name, index) => (
                             <li key={`inhabitant-${index}`}>{name}</li>
@@ -1080,7 +1080,7 @@ export function MapTab({ currentChunkLocation = null, slot = null }: MapTabProps
 
                     {secretsParagraphs.length > 0 && (
                       <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
+                        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">Secrets</div>
                         <div className="space-y-3 text-foreground italic whitespace-pre-wrap leading-relaxed">
                           {secretsParagraphs.map((paragraph, index) => (
                             <p key={`secret-${index}`}>{paragraph}</p>

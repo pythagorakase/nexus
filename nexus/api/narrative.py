@@ -1517,6 +1517,51 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
         raise HTTPException(status_code=500, detail=f"Transition failed: {str(e)}")
 
 
+@app.get("/api/user-character")
+async def get_user_character(slot: Optional[int] = None):
+    """
+    Get the user's character name for the active slot.
+
+    Returns the character name from global_variables.user_character joined with characters.name.
+
+    Args:
+        slot: Save slot number (1-5). If not provided, uses NEXUS_SLOT env var.
+
+    Returns:
+        {"name": character_name} or null if no user character is set
+    """
+    try:
+        dbname = require_slot_dbname(slot=slot)
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get("PGHOST", "localhost"),
+            database=dbname,
+            user=os.environ.get("PGUSER", "pythagor"),
+            port=os.environ.get("PGPORT", "5432"),
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT c.name
+                    FROM global_variables gv
+                    JOIN characters c ON c.id = gv.user_character
+                    WHERE gv.id = TRUE
+                """)
+                row = cur.fetchone()
+                if row:
+                    return {"name": row[0]}
+                return {"name": None}
+    except psycopg2.Error as e:
+        logger.error(f"Database error fetching user character: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+
 if __name__ == "__main__":
     import uvicorn
 

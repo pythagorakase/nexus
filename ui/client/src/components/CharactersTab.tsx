@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Users, Brain, Loader2, ChevronRight, ChevronDown, Upload, Image as ImageIcon } from "lucide-react";
+import { Users, Brain, Loader2, ChevronRight, ChevronDown, Upload, Image as ImageIcon, Circle, CircleDot, MapPin, Activity, User, ScrollText, Heart, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Character, CharacterRelationship, CharacterPsychology } from "@shared/schema";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { ImageGalleryModal, type ImageData } from "@/components/ImageGalleryModal";
 import { useTheme } from "@/contexts/ThemeContext";
+import { cn } from "@/lib/utils";
 
 interface NormalizedRelationship {
   character1Id: number;
@@ -28,6 +23,62 @@ interface RelationshipPair {
   fromSelected?: NormalizedRelationship;
   toSelected?: NormalizedRelationship;
 }
+
+interface Place {
+  id: number;
+  name: string;
+}
+
+// Section definitions for the outline column
+type SectionId = "summary" | "background" | "personality" | "currentActivity" | "currentLocation" | "psychology" | "relationships";
+
+interface SectionDef {
+  id: SectionId;
+  label: string;
+  icon: React.ReactNode;
+  collapsible?: boolean;
+}
+
+const SECTIONS: SectionDef[] = [
+  { id: "summary", label: "Summary", icon: <ScrollText className="h-3 w-3" /> },
+  { id: "background", label: "Background", icon: <User className="h-3 w-3" /> },
+  { id: "personality", label: "Personality", icon: <Sparkles className="h-3 w-3" /> },
+  { id: "currentActivity", label: "Current Activity", icon: <Activity className="h-3 w-3" /> },
+  { id: "currentLocation", label: "Current Location", icon: <MapPin className="h-3 w-3" /> },
+  { id: "psychology", label: "Psychology", icon: <Brain className="h-3 w-3" />, collapsible: true },
+  { id: "relationships", label: "Relationships", icon: <Heart className="h-3 w-3" />, collapsible: true },
+];
+
+// Psychology field definitions for nested subsections
+type PsychologyFieldId = "selfConcept" | "behavior" | "cognitiveFramework" | "temperament" | "relationalStyle" | "defenseMechanisms" | "characterArc" | "secrets";
+
+const PSYCHOLOGY_FIELDS: { id: PsychologyFieldId; label: string }[] = [
+  { id: "selfConcept", label: "Self Concept" },
+  { id: "behavior", label: "Behavior" },
+  { id: "cognitiveFramework", label: "Cognitive Framework" },
+  { id: "temperament", label: "Temperament" },
+  { id: "relationalStyle", label: "Relational Style" },
+  { id: "defenseMechanisms", label: "Defense Mechanisms" },
+  { id: "characterArc", label: "Character Arc" },
+  { id: "secrets", label: "Secrets" },
+];
+
+// Convert camelCase or snake_case to Chicago Title Case
+const toChicagoTitle = (str: string): string => {
+  // Replace underscores with spaces first, then insert space before capitals
+  const withSpaces = str.replace(/_/g, " ");
+  const words = withSpaces.replace(/([A-Z])/g, " $1").trim().split(/\s+/);
+  const minorWords = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "nor", "of", "on", "or", "so", "the", "to", "up", "with", "yet"]);
+
+  return words.map((word, i) => {
+    const lower = word.toLowerCase();
+    // Capitalize first word, last word, and major words
+    if (i === 0 || i === words.length - 1 || !minorWords.has(lower)) {
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }
+    return lower;
+  }).join(" ");
+};
 
 const normalizeRelationship = (
   rel: CharacterRelationship & {
@@ -52,39 +103,20 @@ const formatValence = (value: string | null | undefined): string => {
   return value.includes("|") ? value.replace("|", " | ") : value;
 };
 
-const renderPsychologyField = (label: string, field: unknown, glowClass: string) => {
-  if (!field) return null;
-  const renderValue = (value: any) => {
-    if (Array.isArray(value)) {
-      return value.join(", ");
-    }
-    if (typeof value === "object" && value !== null) {
-      return Object.entries(value)
-        .map(([key, nested]) => `${key}: ${Array.isArray(nested) ? nested.join(", ") : String(nested)}`)
-        .join("\n");
-    }
-    return String(value);
-  };
-
-  return (
-    <div className="space-y-1">
-      <h4 className={`text-xs font-mono text-primary ${glowClass} uppercase`}>{label}</h4>
-      <pre className="whitespace-pre-wrap text-xs text-foreground/90 leading-relaxed">
-        {renderValue(field)}
-      </pre>
-    </div>
-  );
-};
-
 export function CharactersTab({ slot = null }: { slot?: number | null }) {
   const { glowClass } = useTheme();
   const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
-  const [relationshipsOpen, setRelationshipsOpen] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<SectionId | null>(null);
+  const [psychologyExpanded, setPsychologyExpanded] = useState(false);
+  const [relationshipsExpanded, setRelationshipsExpanded] = useState(false);
+  const [selectedPsychologyField, setSelectedPsychologyField] = useState<PsychologyFieldId | null>(null);
+  const [selectedRelationshipId, setSelectedRelationshipId] = useState<number | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
+  // Fetch characters
   const {
     data: characters = [],
     isLoading: charactersLoading,
@@ -100,6 +132,22 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     select: (data) => [...data].sort((a, b) => a.id - b.id),
   });
 
+  // Fetch places for location name lookup
+  const { data: places = [] } = useQuery<Place[]>({
+    queryKey: ["/api/places", slot],
+    queryFn: async () => {
+      const res = await fetch(`/api/places${slot ? `?slot=${slot}` : ""}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const placeNameById = useMemo(() => {
+    const lookup = new Map<number, string>();
+    places.forEach(p => lookup.set(p.id, p.name));
+    return lookup;
+  }, [places]);
+
   useEffect(() => {
     if (!selectedCharacterId && characters.length > 0) {
       setSelectedCharacterId(characters[0].id);
@@ -110,10 +158,16 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     return characters.find((character) => character.id === selectedCharacterId) ?? null;
   }, [characters, selectedCharacterId]);
 
+  // Reset section when character changes - start with portrait-only view
   useEffect(() => {
-    setRelationshipsOpen(false);
+    setSelectedSection(null);
+    setPsychologyExpanded(false);
+    setRelationshipsExpanded(false);
+    setSelectedPsychologyField(null);
+    setSelectedRelationshipId(null);
   }, [selectedCharacterId]);
 
+  // Fetch relationships
   const {
     data: relationships = [],
     isLoading: relationshipsLoading,
@@ -124,12 +178,8 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     queryFn: async () => {
       if (!selectedCharacter) return [];
       const response = await fetch(`/api/characters/${selectedCharacter.id}/relationships${slot ? `?slot=${slot}` : ""}`);
-      if (response.status === 404) {
-        return [];
-      }
-      if (!response.ok) {
-        throw new Error("Failed to load relationships");
-      }
+      if (response.status === 404) return [];
+      if (!response.ok) throw new Error("Failed to load relationships");
       return response.json();
     },
     enabled: !!selectedCharacter,
@@ -160,6 +210,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
       .sort((a, b) => a.counterpartId - b.counterpartId);
   }, [normalizedRelationships, selectedCharacter]);
 
+  // Fetch psychology
   const {
     data: psychologyRecord,
     isLoading: psychologyLoading,
@@ -170,28 +221,22 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     queryFn: async () => {
       if (!selectedCharacter) return null;
       const response = await fetch(`/api/characters/${selectedCharacter.id}/psychology${slot ? `?slot=${slot}` : ""}`);
-      if (response.status === 404) {
-        return null;
-      }
-      if (!response.ok) {
-        throw new Error("Failed to load psychology");
-      }
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error("Failed to load psychology");
       return response.json();
     },
     enabled: !!selectedCharacter,
   });
 
+  // Fetch character images
   const {
     data: characterImages = [],
-    isLoading: imagesLoading,
   } = useQuery<ImageData[]>({
     queryKey: ["/api/characters", selectedCharacter?.id, "images", slot],
     queryFn: async () => {
       if (!selectedCharacter) return [];
       const response = await fetch(`/api/characters/${selectedCharacter.id}/images${slot ? `?slot=${slot}` : ""}`);
-      if (!response.ok) {
-        throw new Error("Failed to load images");
-      }
+      if (!response.ok) throw new Error("Failed to load images");
       return response.json();
     },
     enabled: !!selectedCharacter,
@@ -208,9 +253,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to upload images");
-      }
+      if (!response.ok) throw new Error("Failed to upload images");
       return response.json();
     },
     onSuccess: () => {
@@ -224,9 +267,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
       const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}/main${slot ? `?slot=${slot}` : ""}`, {
         method: "PUT",
       });
-      if (!response.ok) {
-        throw new Error("Failed to set main image");
-      }
+      if (!response.ok) throw new Error("Failed to set main image");
       return response.json();
     },
     onSuccess: () => {
@@ -240,9 +281,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
       const response = await fetch(`/api/characters/${selectedCharacter.id}/images/${imageId}${slot ? `?slot=${slot}` : ""}`, {
         method: "DELETE",
       });
-      if (!response.ok) {
-        throw new Error("Failed to delete image");
-      }
+      if (!response.ok) throw new Error("Failed to delete image");
       return response.json();
     },
     onSuccess: () => {
@@ -250,10 +289,9 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     },
   });
 
-  const getPortrait = (_character: Character) => {
-    const mainImage = characterImages.find((img) => img.isMain === 1);
-    return mainImage?.filePath || null;
-  };
+  const mainImage = useMemo(() => {
+    return characterImages.find((img) => img.isMain === 1) || characterImages[0] || null;
+  }, [characterImages]);
 
   const handleQuickUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -274,10 +312,50 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     return characters.find((character) => character.id === id)?.name ?? `Character ${id}`;
   };
 
-  const renderRelationshipPerspective = (
-    heading: string,
-    rel: NormalizedRelationship | undefined,
-  ) => {
+  // Check if section has content
+  const sectionHasContent = (sectionId: SectionId): boolean => {
+    if (!selectedCharacter) return false;
+    switch (sectionId) {
+      case "summary": return !!selectedCharacter.summary;
+      case "background": return !!selectedCharacter.background;
+      case "personality": return !!selectedCharacter.personality;
+      case "currentActivity": return !!selectedCharacter.currentActivity;
+      case "currentLocation": return selectedCharacter.currentLocation !== null && selectedCharacter.currentLocation !== undefined;
+      case "psychology": return !!psychologyRecord;
+      case "relationships": return relationshipPairs.length > 0;
+      default: return false;
+    }
+  };
+
+  // Render psychology field with Chicago title case
+  const renderPsychologyField = (key: string, value: unknown) => {
+    if (!value) return null;
+    const label = toChicagoTitle(key);
+
+    const renderValue = (val: any): string => {
+      if (Array.isArray(val)) {
+        return val.join(", ");
+      }
+      if (typeof val === "object" && val !== null) {
+        return Object.entries(val)
+          .map(([k, nested]) => `${toChicagoTitle(k)}: ${Array.isArray(nested) ? nested.join(", ") : String(nested)}`)
+          .join("\n");
+      }
+      return String(val);
+    };
+
+    return (
+      <div key={key} className="space-y-1">
+        <h4 className={`text-xs font-mono text-primary ${glowClass} uppercase`}>{label}</h4>
+        <pre className="whitespace-pre-wrap font-serif text-sm text-foreground/90 leading-relaxed">
+          {renderValue(value)}
+        </pre>
+      </div>
+    );
+  };
+
+  // Render relationship perspective
+  const renderRelationshipPerspective = (heading: string, rel: NormalizedRelationship | undefined) => {
     if (!rel) {
       return (
         <div className="space-y-2">
@@ -290,31 +368,31 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     return (
       <div className="space-y-2">
         <h4 className="text-xs font-mono text-primary uppercase tracking-wide">{heading}</h4>
-        <div className="space-y-2 text-xs text-foreground/90">
+        <div className="space-y-2 text-sm text-foreground/90">
           <div className="flex items-start gap-2">
-            <span className="w-24 text-muted-foreground uppercase tracking-wide">Type</span>
-            <span className="flex-1">{rel.relationshipType}</span>
+            <span className="w-24 text-xs text-muted-foreground uppercase tracking-wide">Type</span>
+            <span className="flex-1 font-serif">{rel.relationshipType}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="w-24 text-muted-foreground uppercase tracking-wide">Valence</span>
-            <span className="flex-1 font-sans">{formatValence(rel.emotionalValence)}</span>
+            <span className="w-24 text-xs text-muted-foreground uppercase tracking-wide">Valence</span>
+            <span className="flex-1 font-serif">{formatValence(rel.emotionalValence)}</span>
           </div>
           {rel.dynamic && (
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Dynamic</div>
-              <p className="whitespace-pre-wrap leading-relaxed font-sans">{rel.dynamic}</p>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Dynamic</div>
+              <p className="whitespace-pre-wrap leading-relaxed font-serif">{rel.dynamic}</p>
             </div>
           )}
           {rel.recentEvents && (
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Recent Events</div>
-              <p className="whitespace-pre-wrap leading-relaxed font-sans">{rel.recentEvents}</p>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Recent Events</div>
+              <p className="whitespace-pre-wrap leading-relaxed font-serif">{rel.recentEvents}</p>
             </div>
           )}
           {rel.history && (
             <div>
-              <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">History</div>
-              <p className="whitespace-pre-wrap leading-relaxed text-foreground font-sans">{rel.history}</p>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">History</div>
+              <p className="whitespace-pre-wrap leading-relaxed font-serif">{rel.history}</p>
             </div>
           )}
         </div>
@@ -322,12 +400,147 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
     );
   };
 
+  // Render section content
+  const renderSectionContent = () => {
+    if (!selectedCharacter) return null;
+    if (!selectedSection) return null; // Portrait-only view
+
+    switch (selectedSection) {
+      case "summary":
+        return selectedCharacter.summary ? (
+          <p className="font-serif text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.summary}</p>
+        ) : (
+          <p className="text-muted-foreground italic text-sm">No summary recorded.</p>
+        );
+
+      case "background":
+        return selectedCharacter.background ? (
+          <p className="font-serif text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.background}</p>
+        ) : (
+          <p className="text-muted-foreground italic text-sm">No background recorded.</p>
+        );
+
+      case "personality":
+        return selectedCharacter.personality ? (
+          <p className="font-serif text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.personality}</p>
+        ) : (
+          <p className="text-muted-foreground italic text-sm">No personality recorded.</p>
+        );
+
+      case "currentActivity":
+        return selectedCharacter.currentActivity ? (
+          <p className="font-serif text-foreground/90 leading-relaxed whitespace-pre-wrap">{selectedCharacter.currentActivity}</p>
+        ) : (
+          <p className="text-muted-foreground italic text-sm">No current activity recorded.</p>
+        );
+
+      case "currentLocation":
+        const locationId = selectedCharacter.currentLocation;
+        if (locationId === null || locationId === undefined) {
+          return <p className="text-muted-foreground italic text-sm">No current location set.</p>;
+        }
+        const locationName = placeNameById.get(Number(locationId)) || `Unknown location (ID: ${locationId})`;
+        return (
+          <div className="space-y-2">
+            <p className={`font-serif text-lg text-primary ${glowClass}`}>{locationName}</p>
+          </div>
+        );
+
+      case "psychology":
+        if (psychologyLoading) {
+          return (
+            <div className="flex items-center justify-center h-32 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          );
+        }
+        if (psychologyError) {
+          return (
+            <p className="text-xs text-destructive">
+              Failed to load psychology: {psychologyErrorData instanceof Error ? psychologyErrorData.message : "Unknown error"}
+            </p>
+          );
+        }
+        if (!psychologyRecord) {
+          return <p className="text-muted-foreground italic text-sm">No psychology profile recorded.</p>;
+        }
+        // If a specific field is selected, show only that field
+        if (selectedPsychologyField) {
+          return (
+            <div className="space-y-4">
+              {renderPsychologyField(selectedPsychologyField, psychologyRecord[selectedPsychologyField])}
+            </div>
+          );
+        }
+        // Otherwise show all fields
+        return (
+          <div className="space-y-4">
+            {renderPsychologyField("selfConcept", psychologyRecord.selfConcept)}
+            {renderPsychologyField("behavior", psychologyRecord.behavior)}
+            {renderPsychologyField("cognitiveFramework", psychologyRecord.cognitiveFramework)}
+            {renderPsychologyField("temperament", psychologyRecord.temperament)}
+            {renderPsychologyField("relationalStyle", psychologyRecord.relationalStyle)}
+            {renderPsychologyField("defenseMechanisms", psychologyRecord.defenseMechanisms)}
+            {renderPsychologyField("characterArc", psychologyRecord.characterArc)}
+            {renderPsychologyField("secrets", psychologyRecord.secrets)}
+          </div>
+        );
+
+      case "relationships":
+        if (relationshipsLoading) {
+          return (
+            <div className="flex items-center justify-center h-32 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          );
+        }
+        if (relationshipsError) {
+          return (
+            <p className="text-xs text-destructive">
+              Failed to load relationships: {relationshipsErrorData instanceof Error ? relationshipsErrorData.message : "Unknown error"}
+            </p>
+          );
+        }
+        if (relationshipPairs.length === 0) {
+          return <p className="text-muted-foreground italic text-sm">No relationships documented.</p>;
+        }
+        // If a specific relationship is selected, show only that one
+        const pairsToShow = selectedRelationshipId
+          ? relationshipPairs.filter((p) => p.counterpartId === selectedRelationshipId)
+          : relationshipPairs;
+        return (
+          <div className="space-y-4">
+            {pairsToShow.map((pair) => {
+              const counterpartName = characterNameById(pair.counterpartId);
+              return (
+                <div
+                  key={pair.counterpartId}
+                  className="border border-border/40 rounded-md bg-background/70 p-4 space-y-4"
+                >
+                  <div className={`text-sm font-mono text-primary ${glowClass}`}>
+                    {counterpartName}
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {renderRelationshipPerspective(selectedCharacter.name, pair.fromSelected)}
+                    {renderRelationshipPerspective(counterpartName, pair.toSelected)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 w-full bg-background">
-      <aside className="w-72 border-r border-border bg-card/40 flex flex-col">
-        <div className="px-4 py-3 border-b border-border">
-          <h2 className={`text-sm font-mono text-primary ${glowClass}`}>[CHARACTER INDEX]</h2>
-          <p className="text-xs text-muted-foreground">Sorted by ID</p>
+      {/* Column 1: Character Index */}
+      <aside className="w-48 border-r border-border bg-card/40 flex flex-col flex-shrink-0">
+        <div className="px-3 py-3 border-b border-border">
+          <h2 className={`text-sm font-mono text-primary ${glowClass}`}>[INDEX]</h2>
         </div>
         <ScrollArea className="flex-1">
           {charactersLoading ? (
@@ -335,28 +548,26 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           ) : charactersError ? (
-            <div className="p-4 text-xs text-destructive font-mono">
-              Failed to load characters: {charactersErrorData instanceof Error ? charactersErrorData.message : "Unknown error"}
+            <div className="p-3 text-xs text-destructive font-mono">
+              {charactersErrorData instanceof Error ? charactersErrorData.message : "Error"}
             </div>
           ) : (
-            <div className="divide-y divide-border">
+            <div className="py-1">
               {characters.map((character) => {
                 const isActive = character.id === selectedCharacterId;
                 return (
                   <button
                     key={character.id}
                     type="button"
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 font-mono text-xs transition-colors ${isActive ? "bg-primary/10 text-primary" : "hover:bg-card/70 text-foreground"
-                      }`}
-                    onClick={() => {
-                      setSelectedCharacterId(character.id);
-                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 font-mono text-sm transition-colors",
+                      isActive
+                        ? `bg-primary/10 text-primary ${glowClass}`
+                        : "hover:bg-card/70 text-foreground/80"
+                    )}
+                    onClick={() => setSelectedCharacterId(character.id)}
                   >
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/20 text-primary">
-                      {character.id}
-                    </span>
-                    <span className="truncate flex-1">{character.name}</span>
-                    {isActive && <ChevronRight className="h-3 w-3" />}
+                    <span className="truncate block">{character.name}</span>
                   </button>
                 );
               })}
@@ -365,206 +576,238 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
         </ScrollArea>
       </aside>
 
-      <main className="flex-1 min-h-0 overflow-hidden">
-        {selectedCharacter ? (
-          <div className="h-full overflow-auto p-6 space-y-6">
-            <Card className="bg-card/70 border-border">
-              <CardHeader className="flex flex-row items-start gap-4">
-                <div className="flex-shrink-0">
-                  <button
-                    onClick={() => setGalleryOpen(true)}
-                    className="w-32 max-h-40 rounded-md overflow-hidden border border-border bg-muted/40 flex items-center justify-center hover:border-primary/50 transition-colors cursor-pointer group"
-                  >
-                    {getPortrait(selectedCharacter) ? (
-                      <img
-                        src={getPortrait(selectedCharacter)!}
-                        alt={selectedCharacter.name}
-                        className="max-w-full max-h-40 object-contain group-hover:opacity-80 transition-opacity"
-                      />
-                    ) : (
-                      <div className="w-32 h-32 flex items-center justify-center text-muted-foreground/60 group-hover:text-muted-foreground">
-                        <Users className="h-8 w-8" />
-                      </div>
-                    )}
-                  </button>
-                  <div className="mt-2 flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="font-mono text-xs px-2 py-1 h-auto"
-                    >
-                      {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setGalleryOpen(true)}
-                      className="font-mono text-xs px-2 py-1 h-auto"
-                    >
-                      <ImageIcon className="h-3 w-3" />
-                    </Button>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg"
-                    multiple
-                    onChange={handleQuickUpload}
-                    className="hidden"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <CardTitle className={`text-lg font-mono text-primary ${glowClass}`}>
-                    {selectedCharacter.name}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">ID: {selectedCharacter.id}</p>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm font-mono">
-                {selectedCharacter.summary && (
-                  <section>
-                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Summary</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.summary}</p>
-                  </section>
-                )}
-                {selectedCharacter.background && (
-                  <section>
-                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Background</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.background}</p>
-                  </section>
-                )}
-                {selectedCharacter.personality && (
-                  <section>
-                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Personality</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.personality}</p>
-                  </section>
-                )}
-                {selectedCharacter.currentActivity && (
-                  <section>
-                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Activity</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.currentActivity}</p>
-                  </section>
-                )}
-                {selectedCharacter.currentLocation && (
-                  <section>
-                    <h3 className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Location</h3>
-                    <p className="text-foreground/90 leading-relaxed whitespace-pre-wrap font-narrative">{selectedCharacter.currentLocation}</p>
-                  </section>
-                )}
-              </CardContent>
-            </Card>
-
-            {psychologyLoading ? (
-              <Card className="bg-card/60 border-border">
-                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
-                  <Brain className="h-4 w-4" />
-                  Psychology
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center h-16 text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  </div>
-                </CardContent>
-              </Card>
-            ) : psychologyError ? (
-              <Card className="bg-card/60 border-border">
-                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
-                  <Brain className="h-4 w-4" />
-                  Psychology
-                </CardHeader>
-                <CardContent>
-                  <p className="text-xs text-destructive">
-                    Failed to load psychology: {psychologyErrorData instanceof Error ? psychologyErrorData.message : "Unknown error"}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : psychologyRecord ? (
-              <Card className="bg-card/60 border-border">
-                <CardHeader className="flex flex-row items-center gap-2 text-sm font-mono text-primary">
-                  <Brain className="h-4 w-4" />
-                  Psychology
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {renderPsychologyField("Self Concept", psychologyRecord.selfConcept, glowClass)}
-                  {renderPsychologyField("Behavior", psychologyRecord.behavior, glowClass)}
-                  {renderPsychologyField("Cognitive Framework", psychologyRecord.cognitiveFramework, glowClass)}
-                  {renderPsychologyField("Temperament", psychologyRecord.temperament, glowClass)}
-                  {renderPsychologyField("Relational Style", psychologyRecord.relationalStyle, glowClass)}
-                  {renderPsychologyField("Defense Mechanisms", psychologyRecord.defenseMechanisms, glowClass)}
-                  {renderPsychologyField("Character Arc", psychologyRecord.characterArc, glowClass)}
-                  {renderPsychologyField("Secrets", psychologyRecord.secrets, glowClass)}
-                </CardContent>
-              </Card>
-            ) : null}
-
-            <Card className="bg-card/60 border-border">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div className="flex items-center gap-2 text-sm font-mono text-primary">
-                  <Users className="h-4 w-4" />
-                  Relationships
-                </div>
-                {normalizedRelationships.length > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    {normalizedRelationships.length} records
-                  </span>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {relationshipsLoading ? (
-                  <div className="flex items-center justify-center h-16 text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  </div>
-                ) : relationshipsError ? (
-                  <p className="text-xs text-destructive">
-                    Failed to load relationships: {relationshipsErrorData instanceof Error ? relationshipsErrorData.message : "Unknown error"}
-                  </p>
-                ) : relationshipPairs.length > 0 ? (
-                  <Collapsible open={relationshipsOpen} onOpenChange={setRelationshipsOpen}>
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-between px-3 py-2 text-xs font-mono hover:bg-card/70"
-                      >
-                        <span className="flex items-center gap-2">
-                          {relationshipsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                          {relationshipsOpen ? "Hide relationship matrix" : "Show relationship matrix"}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {relationshipPairs.length} counterpart{relationshipPairs.length === 1 ? "" : "s"}
-                        </span>
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="space-y-3 pt-3">
-                      {relationshipPairs.map((pair) => {
-                        const counterpartName = characterNameById(pair.counterpartId);
-                        return (
-                          <div
-                            key={pair.counterpartId}
-                            className="border border-border/40 rounded-md bg-background/70 p-4 space-y-4"
-                          >
-                            <div className={`flex items-center justify-between text-sm font-mono text-primary ${glowClass}`}>
-                              <span>{counterpartName}</span>
-                              <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                                ID {pair.counterpartId}
-                              </span>
-                            </div>
-                            <div className="grid gap-4 md:grid-cols-2">
-                              {renderRelationshipPerspective(selectedCharacter.name, pair.fromSelected)}
-                              {renderRelationshipPerspective(counterpartName, pair.toSelected)}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </CollapsibleContent>
-                  </Collapsible>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No relationships documented.</p>
-                )}
-              </CardContent>
-            </Card>
+      {/* Column 2: Section Outline */}
+      {selectedCharacter && (
+        <aside className="w-52 border-r border-border bg-card/20 flex flex-col flex-shrink-0">
+          <div className="px-3 py-3 border-b border-border">
+            <h2 className={`text-sm font-mono text-primary ${glowClass} truncate`}>{selectedCharacter.name}</h2>
           </div>
+          <ScrollArea className="flex-1">
+            <div className="py-1">
+              {SECTIONS.map((section) => {
+                const hasContent = sectionHasContent(section.id);
+                const isSelected = selectedSection === section.id;
+                const isCollapsible = section.collapsible;
+                const isExpanded = section.id === "psychology" ? psychologyExpanded :
+                                   section.id === "relationships" ? relationshipsExpanded : true;
+
+                if (isCollapsible) {
+                  return (
+                    <div key={section.id}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full text-left px-3 py-2 flex items-center gap-2 font-mono text-xs transition-colors",
+                          isSelected && !selectedPsychologyField && !selectedRelationshipId
+                            ? `bg-primary/10 text-primary ${glowClass}`
+                            : hasContent
+                              ? "hover:bg-card/70 text-foreground/80"
+                              : "text-muted-foreground/50"
+                        )}
+                        onClick={() => {
+                          if (section.id === "psychology") {
+                            setPsychologyExpanded(!psychologyExpanded);
+                            if (!psychologyExpanded) {
+                              setSelectedSection("psychology");
+                              setSelectedPsychologyField(null);
+                            }
+                          } else if (section.id === "relationships") {
+                            setRelationshipsExpanded(!relationshipsExpanded);
+                            if (!relationshipsExpanded) {
+                              setSelectedSection("relationships");
+                              setSelectedRelationshipId(null);
+                            }
+                          }
+                        }}
+                      >
+                        {isExpanded ? <ChevronDown className="h-3 w-3 flex-shrink-0" /> : <ChevronRight className="h-3 w-3 flex-shrink-0" />}
+                        {section.icon}
+                        <span className="flex-1 truncate">{section.label}</span>
+                        {isSelected && !selectedPsychologyField && !selectedRelationshipId && (
+                          <CircleDot className="h-3 w-3 text-primary flex-shrink-0" />
+                        )}
+                      </button>
+
+                      {/* Nested Psychology subsections */}
+                      {section.id === "psychology" && isExpanded && psychologyRecord && (
+                        <div className="ml-4 border-l border-border/30">
+                          {PSYCHOLOGY_FIELDS.map((field) => {
+                            const fieldValue = psychologyRecord[field.id];
+                            if (!fieldValue) return null;
+                            const isFieldSelected = selectedSection === "psychology" && selectedPsychologyField === field.id;
+                            return (
+                              <button
+                                key={field.id}
+                                type="button"
+                                className={cn(
+                                  "w-full text-left px-3 py-1.5 flex items-center gap-2 font-mono text-[11px] transition-colors",
+                                  isFieldSelected
+                                    ? `bg-primary/10 text-primary ${glowClass}`
+                                    : "hover:bg-card/70 text-foreground/60"
+                                )}
+                                onClick={() => {
+                                  setSelectedSection("psychology");
+                                  setSelectedPsychologyField(field.id);
+                                }}
+                              >
+                                <Circle className="h-2 w-2 flex-shrink-0" />
+                                <span className="truncate">{field.label}</span>
+                                {isFieldSelected && <CircleDot className="h-2.5 w-2.5 text-primary flex-shrink-0 ml-auto" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Nested Relationships subsections */}
+                      {section.id === "relationships" && isExpanded && relationshipPairs.length > 0 && (
+                        <div className="ml-4 border-l border-border/30">
+                          {relationshipPairs.map((pair) => {
+                            const counterpartName = characterNameById(pair.counterpartId);
+                            const isRelSelected = selectedSection === "relationships" && selectedRelationshipId === pair.counterpartId;
+                            return (
+                              <button
+                                key={pair.counterpartId}
+                                type="button"
+                                className={cn(
+                                  "w-full text-left px-3 py-1.5 flex items-center gap-2 font-mono text-[11px] transition-colors",
+                                  isRelSelected
+                                    ? `bg-primary/10 text-primary ${glowClass}`
+                                    : "hover:bg-card/70 text-foreground/60"
+                                )}
+                                onClick={() => {
+                                  setSelectedSection("relationships");
+                                  setSelectedRelationshipId(pair.counterpartId);
+                                }}
+                              >
+                                <Circle className="h-2 w-2 flex-shrink-0" />
+                                <span className="truncate">{counterpartName}</span>
+                                {isRelSelected && <CircleDot className="h-2.5 w-2.5 text-primary flex-shrink-0 ml-auto" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={cn(
+                      "w-full text-left px-3 py-2 flex items-center gap-2 font-mono text-xs transition-colors",
+                      isSelected
+                        ? `bg-primary/10 text-primary ${glowClass}`
+                        : hasContent
+                          ? "hover:bg-card/70 text-foreground/80"
+                          : "text-muted-foreground/50"
+                    )}
+                    onClick={() => setSelectedSection(section.id)}
+                    disabled={!hasContent}
+                  >
+                    <span className="w-3 flex-shrink-0" /> {/* Spacer for alignment */}
+                    {section.icon}
+                    <span className="flex-1 truncate">{section.label}</span>
+                    {isSelected && <CircleDot className="h-3 w-3 text-primary flex-shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </aside>
+      )}
+
+      {/* Column 3: Content - Portrait as background element */}
+      <main className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+        {selectedCharacter ? (
+          <>
+            {/* Portrait background - fills container, minimal gradient for text readability
+                Uses object-contain to preserve full image including ornamental borders */}
+            <div className="absolute inset-0 pointer-events-none z-0 flex items-start justify-end">
+              {mainImage ? (
+                <img
+                  src={mainImage.filePath}
+                  alt={selectedCharacter.name}
+                  className="max-w-full max-h-full object-contain object-right-top"
+                  style={{
+                    maskImage: "linear-gradient(to left, black 85%, transparent 100%)",
+                    WebkitMaskImage: "linear-gradient(to left, black 85%, transparent 100%)",
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                  <Users className="h-24 w-24 text-muted-foreground/30" />
+                </div>
+              )}
+            </div>
+
+            {/* Portrait-only view: just character name and upload controls */}
+            {!selectedSection ? (
+              <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+                <h1 className={`text-3xl font-mono text-primary ${glowClass} mb-4`}>{selectedCharacter.name}</h1>
+                <p className="text-sm text-muted-foreground font-mono mb-6">Select a section to view details</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="font-mono text-xs"
+                  >
+                    {uploading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Upload className="h-3 w-3 mr-1" />}
+                    Upload Portrait
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setGalleryOpen(true)}
+                    className="font-mono text-xs"
+                  >
+                    <ImageIcon className="h-3 w-3 mr-1" />
+                    Gallery
+                  </Button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  multiple
+                  onChange={handleQuickUpload}
+                  className="hidden"
+                />
+              </div>
+            ) : (
+              /* Content overlay view */
+              <ScrollArea className="flex-1 relative z-10">
+                <div className="p-6 pr-24">
+                  {/* Gradient overlay for readability over portrait */}
+                  <div
+                    className="absolute inset-0 pointer-events-none z-0"
+                    style={{
+                      background: "linear-gradient(to right, hsl(var(--background)) 60%, transparent 100%)",
+                    }}
+                  />
+                  <div className="relative z-10">
+                    <div className="mb-4">
+                      <h1 className={`text-xl font-mono text-primary ${glowClass}`}>{selectedCharacter.name}</h1>
+                      <p className="text-xs text-muted-foreground font-mono mt-1">
+                        {selectedPsychologyField
+                          ? PSYCHOLOGY_FIELDS.find(f => f.id === selectedPsychologyField)?.label
+                          : selectedRelationshipId
+                            ? characterNameById(selectedRelationshipId)
+                            : SECTIONS.find(s => s.id === selectedSection)?.label || ""}
+                      </p>
+                    </div>
+                    <div className="prose prose-sm max-w-2xl">
+                      {renderSectionContent()}
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            )}
+          </>
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground font-mono">
             Select a character to view details.
@@ -572,6 +815,7 @@ export function CharactersTab({ slot = null }: { slot?: number | null }) {
         )}
       </main>
 
+      {/* Image Gallery Modal */}
       {selectedCharacter && (
         <ImageGalleryModal
           open={galleryOpen}

@@ -17,7 +17,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor, Wand2 } from 'lucide-react';
+import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor, Wand2, Palette } from 'lucide-react';
+import { PaletteComparison } from '@/components/PaletteComparison';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -96,6 +97,7 @@ export function SettingsTab() {
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Backend settings state
   const [apexContextWindow, setApexContextWindow] = useState<number>(100000);
@@ -276,6 +278,7 @@ export function SettingsTab() {
   const hasUnsavedChanges = apexContextWindow !== originalApexContextWindow;
 
   return (
+  <>
     <ScrollArea className="h-full min-h-0 w-full">
       <div className="container max-w-4xl py-8 px-6 space-y-6">
         <div className="space-y-2">
@@ -293,10 +296,23 @@ export function SettingsTab() {
         {/* Theme Selection */}
         <Card>
           <CardHeader>
-            <CardTitle className="font-mono">Theme</CardTitle>
-            <CardDescription className="font-mono text-xs">
-              Choose the visual style for the interface
-            </CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="font-mono">Theme</CardTitle>
+                <CardDescription className="font-mono text-xs">
+                  Choose the visual style for the interface
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 -mt-1 text-muted-foreground hover:text-primary"
+                onClick={() => setPaletteOpen(true)}
+                title="View palette comparison"
+              >
+                <Palette className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <RadioGroup
@@ -863,5 +879,8 @@ export function SettingsTab() {
 
       </div>
     </ScrollArea>
+
+    <PaletteComparison open={paletteOpen} onOpenChange={setPaletteOpen} />
+  </>
   );
 }
