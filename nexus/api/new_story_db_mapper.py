@@ -188,12 +188,7 @@ class NewStoryDatabaseMapper:
             # Use provided cursor (part of larger transaction)
             try:
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('setting', %s::jsonb)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
+                    "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                     (setting_json,),
                 )
                 logger.info(f"Saved setting to global_variables: {setting.world_name}")
@@ -206,12 +201,7 @@ class NewStoryDatabaseMapper:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('setting', %s::jsonb)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
+                            "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                             (setting_json,),
                         )
                         logger.info(
@@ -223,7 +213,9 @@ class NewStoryDatabaseMapper:
 
     def save_story_seed(self, seed: StorySeed, cursor=None) -> None:
         """
-        Save chosen story seed to global_variables.
+        Save chosen story seed to global_variables by merging into setting JSONB.
+
+        The story_seed contains AI-to-AI secrets channel data that should persist.
 
         Args:
             seed: Selected StorySeed
@@ -232,21 +224,21 @@ class NewStoryDatabaseMapper:
         Raises:
             Exception: If database operation fails
         """
-        seed_json = json.dumps(seed.model_dump())
+        seed_data = seed.model_dump()
 
         if cursor:
             # Use provided cursor (part of larger transaction)
             try:
+                # Read existing setting, merge story_seed, save back
+                cursor.execute("SELECT setting FROM global_variables WHERE id = true")
+                row = cursor.fetchone()
+                setting = row[0] if row and row[0] else {}
+                setting["story_seed"] = seed_data
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('story_seed', %s::jsonb)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
-                    (seed_json,),
+                    "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
+                    (json.dumps(setting),),
                 )
-                logger.info(f"Saved story seed: {seed.title}")
+                logger.info(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
                 raise
@@ -255,16 +247,16 @@ class NewStoryDatabaseMapper:
             try:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
+                        # Read existing setting, merge story_seed, save back
+                        cur.execute("SELECT setting FROM global_variables WHERE id = true")
+                        row = cur.fetchone()
+                        setting = row[0] if row and row[0] else {}
+                        setting["story_seed"] = seed_data
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('story_seed', %s::jsonb)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
-                            (seed_json,),
+                            "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
+                            (json.dumps(setting),),
                         )
-                        logger.info(f"Saved story seed: {seed.title}")
+                        logger.info(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
                 raise
@@ -307,12 +299,7 @@ class NewStoryDatabaseMapper:
 
                 # Update global_variables to point to this character
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('user_character', %s)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
+                    "UPDATE global_variables SET user_character = %s WHERE id = true",
                     (character_id,),
                 )
 
@@ -348,12 +335,7 @@ class NewStoryDatabaseMapper:
 
                         # Update global_variables to point to this character
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('user_character', %s)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
+                            "UPDATE global_variables SET user_character = %s WHERE id = true",
                             (character_id,),
                         )
 
@@ -583,22 +565,13 @@ class NewStoryDatabaseMapper:
 
                     # Set base timestamp
                     cur.execute(
-                        """
-                        INSERT INTO global_variables (key, value)
-                        VALUES ('base_timestamp', %s)
-                        ON CONFLICT (key) DO UPDATE
-                        SET value = EXCLUDED.value
-                    """,
-                        (transition_data.base_timestamp.isoformat(),),
+                        "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                        (transition_data.base_timestamp.to_datetime(),),
                     )
 
                     # Finally, set new_story = false to transition to narrative mode
                     cur.execute(
-                        """
-                        UPDATE global_variables
-                        SET value = 'false'
-                        WHERE key = 'new_story'
-                    """
+                        "UPDATE global_variables SET new_story = false WHERE id = true"
                     )
 
                 # Transaction commits automatically on successful context exit
