@@ -1329,6 +1329,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     char_state_updates = {"wildcard": validated_data}
 
                 # Second validation: merge into accumulated state and validate cross-field constraints
+                logger.debug("Merging char_state_data keys: %s", list(char_state_data.keys()))
+                logger.debug("Merging char_state_updates keys: %s", list(char_state_updates.keys()))
                 creation_state = CharacterCreationState.model_validate(
                     {**char_state_data, **char_state_updates}
                 )
@@ -1337,14 +1339,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 phase_complete = creation_state.is_complete()
 
                 if phase_complete:
-                    try:
-                        character_sheet = creation_state.to_character_sheet().model_dump()
-                        record_drafts(request.slot, character=creation_state.model_dump())
-                        response_data.update({"character_sheet": character_sheet})
-                    except ValueError as e:
-                        logger.error("Character sheet validation failed: %s", e)
-                    except Exception as e:
-                        logger.error("Unexpected error finalizing character: %s", e)
+                    # Always save the creation state to cache first
+                    logger.info("Character phase complete - saving draft and building sheet")
+                    logger.debug("Creation state: %s", creation_state.model_dump())
+                    record_drafts(request.slot, character=creation_state.model_dump())
+                    # Then build the character sheet (fail loudly per user directive)
+                    character_sheet = creation_state.to_character_sheet().model_dump()
+                    response_data.update({"character_sheet": character_sheet})
+                    logger.info("Character sheet built successfully")
 
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
