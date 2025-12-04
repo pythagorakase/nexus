@@ -45,18 +45,25 @@ class NewStoryDatabaseMapper:
         """
         self.dbname = dbname
 
-    def map_character_to_db(self, character: CharacterSheet) -> Dict[str, Any]:
+    def map_character_to_db(
+        self,
+        character: CharacterSheet,
+        emotional_state: Optional[str] = None,
+        current_activity: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Map CharacterSheet to characters table format.
 
         Database columns:
         - name, summary, appearance, background, personality (text fields)
-        - emotional_state, current_activity (will be set during story seed)
+        - emotional_state, current_activity (from story seed context)
         - current_location (set after place is created)
         - extra_data (JSONB for everything else)
 
         Args:
             character: CharacterSheet from structured output
+            emotional_state: Initial emotional state (from seed stakes/tension)
+            current_activity: What character is doing (from seed immediate_goal)
 
         Returns:
             Dictionary ready for database insertion
@@ -68,8 +75,8 @@ class NewStoryDatabaseMapper:
             "appearance": character.appearance,
             "background": character.background,
             "personality": character.personality,
-            "emotional_state": None,  # Will be set during story seed selection
-            "current_activity": None,  # Will be set during story seed selection
+            "emotional_state": emotional_state,
+            "current_activity": current_activity,
             # current_location will be set after place is created
         }
 
@@ -261,13 +268,21 @@ class NewStoryDatabaseMapper:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
                 raise
 
-    def create_protagonist(self, character: CharacterSheet, cursor=None) -> int:
+    def create_protagonist(
+        self,
+        character: CharacterSheet,
+        cursor=None,
+        emotional_state: Optional[str] = None,
+        current_activity: Optional[str] = None,
+    ) -> int:
         """
         Create the protagonist in the characters table.
 
         Args:
             character: CharacterSheet to insert
             cursor: Optional database cursor for transactional operations
+            emotional_state: Initial emotional state (from seed stakes/tension)
+            current_activity: What character is doing (from seed immediate_goal)
 
         Returns:
             The character ID
@@ -275,7 +290,11 @@ class NewStoryDatabaseMapper:
         Raises:
             Exception: If database operation fails (transaction will be rolled back)
         """
-        db_record = self.map_character_to_db(character)
+        db_record = self.map_character_to_db(
+            character,
+            emotional_state=emotional_state,
+            current_activity=current_activity,
+        )
 
         if cursor:
             # Use provided cursor (part of larger transaction)
@@ -547,9 +566,21 @@ class NewStoryDatabaseMapper:
                     self.save_story_seed(transition_data.seed, cursor=cur)
                     logger.debug("Saved story seed to global_variables")
 
+                    # Derive character's initial state from seed context
+                    # - current_activity: What they're trying to do (immediate goal)
+                    # - emotional_state: How they feel given the stakes/tension
+                    seed = transition_data.seed
+                    initial_activity = seed.immediate_goal
+                    initial_emotional_state = (
+                        f"Facing {seed.tension_source.lower()}; {seed.stakes.lower()}"
+                    )
+
                     # Create protagonist (using shared cursor)
                     character_id = self.create_protagonist(
-                        transition_data.character, cursor=cur
+                        transition_data.character,
+                        cursor=cur,
+                        emotional_state=initial_emotional_state,
+                        current_activity=initial_activity,
                     )
                     logger.debug(f"Created protagonist with ID {character_id}")
 
