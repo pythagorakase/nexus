@@ -943,6 +943,7 @@ from nexus.api.new_story_schemas import (
     CharacterCreationState,
     TransitionData,
     WizardResponse,
+    make_openai_strict_schema,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_cache import read_cache
@@ -1078,8 +1079,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_character_concept",
+                            "strict": True,
                             "description": "Submit the character's core concept (archetype, background, name, appearance) when established.",
-                            "parameters": CharacterConcept.model_json_schema(),
+                            "parameters": make_openai_strict_schema(CharacterConcept.model_json_schema()),
                         },
                     }
                 )
@@ -1091,8 +1093,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_trait_selection",
+                            "strict": True,
                             "description": "Submit the 3 selected traits with rationales when the user confirms their choices.",
-                            "parameters": TraitSelection.model_json_schema(),
+                            "parameters": make_openai_strict_schema(TraitSelection.model_json_schema()),
                         },
                     }
                 )
@@ -1104,25 +1107,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         "type": "function",
                         "function": {
                             "name": "submit_wildcard_trait",
+                            "strict": True,
                             "description": "Submit the unique wildcard trait when defined.",
-                            "parameters": WildcardTrait.model_json_schema(),
+                            "parameters": make_openai_strict_schema(WildcardTrait.model_json_schema()),
                         },
                     }
                 )
                 primary_tool_name = "submit_wildcard_trait"
-            else:
-                # All sub-phases complete - offer final character sheet assembly
-                tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "submit_character_sheet",
-                            "description": "Submit the finalized character sheet when the user agrees.",
-                            "parameters": CharacterSheet.model_json_schema(),
-                        },
-                    }
-                )
-                primary_tool_name = "submit_character_sheet"
+            # else: All sub-phases complete - character phase is done, no tool needed.
+            # The CharacterSheet is assembled from accumulated state via to_character_sheet().
         elif request.current_phase == "seed":
             tools.append(
                 {
@@ -1317,8 +1310,41 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "submit_wildcard_trait",
             ]
 
-            # Validate subphase tool arguments against Pydantic schemas
+            # First validation: check individual sub-phase data against its Pydantic schema
             validated_data = validate_subphase_tool(function_name, arguments)
+
+            # Track character creation progress and assemble final sheet when complete
+            phase_complete = not is_subphase_tool
+            response_data: Dict[str, Any] = validated_data
+
+            if is_subphase_tool:
+                # Merge the newly submitted sub-phase data with the accumulated state
+                char_state_data = (request.context_data or {}).get("character_state", {})
+
+                if function_name == "submit_character_concept":
+                    char_state_updates = {"concept": validated_data}
+                elif function_name == "submit_trait_selection":
+                    char_state_updates = {"trait_selection": validated_data}
+                else:
+                    char_state_updates = {"wildcard": validated_data}
+
+                # Second validation: merge into accumulated state and validate cross-field constraints
+                creation_state = CharacterCreationState.model_validate(
+                    {**char_state_data, **char_state_updates}
+                )
+
+                response_data = {"character_state": creation_state.model_dump()}
+                phase_complete = creation_state.is_complete()
+
+                if phase_complete:
+                    try:
+                        character_sheet = creation_state.to_character_sheet().model_dump()
+                        record_drafts(request.slot, character=creation_state.model_dump())
+                        response_data.update({"character_sheet": character_sheet})
+                    except ValueError as e:
+                        logger.error("Character sheet validation failed: %s", e)
+                    except Exception as e:
+                        logger.error("Unexpected error finalizing character: %s", e)
 
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
@@ -1327,11 +1353,11 @@ async def new_story_chat_endpoint(request: ChatRequest):
             #                    trigger next sub-phase tool availability
             return {
                 "message": "Generating artifact...",
-                "phase_complete": not is_subphase_tool,
+                "phase_complete": phase_complete,
                 "subphase_complete": is_subphase_tool,
                 "phase": request.current_phase,
                 "artifact_type": function_name,
-                "data": validated_data,
+                "data": response_data,
             }
 
         # Handle structured conversational responses via helper tool

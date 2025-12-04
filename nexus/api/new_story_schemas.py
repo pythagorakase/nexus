@@ -14,6 +14,49 @@ from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
+def make_openai_strict_schema(schema: dict) -> dict:
+    """
+    Transform a Pydantic JSON schema to be OpenAI strict-mode compatible.
+
+    OpenAI strict mode requires:
+    1. additionalProperties: false on ALL objects
+    2. ALL properties listed in required array (optional = allows null, not missing from required)
+    3. $ref cannot have sibling keywords (like description)
+
+    This recursively processes the schema and any $defs.
+    Returns a new dict to avoid mutating the input schema.
+    """
+    import copy
+    schema = copy.deepcopy(schema)
+
+    def process_object(obj: dict) -> dict:
+        if obj.get("type") != "object":
+            return obj
+
+        # Ensure additionalProperties is false
+        obj["additionalProperties"] = False
+
+        # Add all properties to required
+        if "properties" in obj:
+            obj["required"] = list(obj["properties"].keys())
+
+            # Clean $ref properties - remove sibling keywords
+            for prop_name, prop_schema in obj["properties"].items():
+                if "$ref" in prop_schema:
+                    # Keep only the $ref, remove description and other siblings
+                    obj["properties"][prop_name] = {"$ref": prop_schema["$ref"]}
+
+        return obj
+
+    # Process $defs (nested model definitions)
+    if "$defs" in schema:
+        for def_name, def_schema in schema["$defs"].items():
+            schema["$defs"][def_name] = process_object(def_schema)
+
+    # Process root object
+    return process_object(schema)
+
+
 class Genre(str, Enum):
     """Supported story genres."""
 
@@ -287,6 +330,32 @@ VALID_TRAIT_NAMES = {
 }
 
 
+class TraitRationales(BaseModel):
+    """
+    Rationales for suggested traits - explicit properties for OpenAI strict mode.
+
+    Only the 3 suggested traits need rationales filled in; others remain None.
+    Using extra="forbid" generates additionalProperties: false in JSON schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    allies: Optional[str] = Field(None, description="Why allies trait fits this character")
+    contacts: Optional[str] = Field(None, description="Why contacts trait fits this character")
+    patron: Optional[str] = Field(None, description="Why patron trait fits this character")
+    dependents: Optional[str] = Field(None, description="Why dependents trait fits this character")
+    status: Optional[str] = Field(None, description="Why status trait fits this character")
+    reputation: Optional[str] = Field(None, description="Why reputation trait fits this character")
+    resources: Optional[str] = Field(None, description="Why resources trait fits this character")
+    domain: Optional[str] = Field(None, description="Why domain trait fits this character")
+    enemies: Optional[str] = Field(None, description="Why enemies trait fits this character")
+    obligations: Optional[str] = Field(None, description="Why obligations trait fits this character")
+
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dict with only non-None values."""
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
 class CharacterConcept(BaseModel):
     """
     Sub-phase 1: Core character concept.
@@ -295,7 +364,7 @@ class CharacterConcept(BaseModel):
     This establishes the foundation that informs trait choices.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     archetype: str = Field(
         ...,
@@ -323,9 +392,9 @@ class CharacterConcept(BaseModel):
         max_length=3,
         description="3 trait names that would create interesting story tensions for this character",
     )
-    trait_rationales: Dict[str, str] = Field(
+    trait_rationales: TraitRationales = Field(
         ...,
-        description="Map of each suggested trait name to a brief rationale explaining why it fits this character",
+        description="Rationales for each suggested trait explaining why it fits this character",
     )
 
     @field_validator("suggested_traits")
@@ -339,8 +408,9 @@ class CharacterConcept(BaseModel):
     @model_validator(mode="after")
     def validate_rationales_match_traits(self) -> "CharacterConcept":
         """Ensure rationales exist for all suggested traits."""
+        rationales_dict = self.trait_rationales.to_dict()
         for trait in self.suggested_traits:
-            if trait not in self.trait_rationales:
+            if trait not in rationales_dict:
                 raise ValueError(f"Missing rationale for suggested trait: {trait}")
         return self
 
@@ -353,7 +423,7 @@ class TraitSelection(BaseModel):
     along with rationales explaining why each fits the character.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     selected_traits: List[str] = Field(
         ...,
@@ -361,9 +431,9 @@ class TraitSelection(BaseModel):
         max_length=3,
         description="Exactly 3 trait names from: allies, contacts, patron, dependents, status, reputation, resources, domain, enemies, obligations",
     )
-    trait_rationales: Dict[str, str] = Field(
+    trait_rationales: TraitRationales = Field(
         ...,
-        description="Map of trait name to brief rationale explaining why it fits this character",
+        description="Rationales for each selected trait explaining why it fits this character",
     )
     suggested_by_llm: List[str] = Field(
         default_factory=list,
@@ -393,7 +463,7 @@ class WildcardTrait(BaseModel):
     something unique that can't be found in the standard trait menu.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     wildcard_name: str = Field(
         ...,
@@ -465,14 +535,13 @@ class CharacterCreationState(BaseModel):
 
         # Build trait kwargs
         trait_kwargs: Dict[str, Any] = {}
+        rationales = self.trait_selection.trait_rationales.to_dict()
         for trait_name in self.trait_selection.selected_traits:
             # Use fleshed-out description if available, otherwise use rationale
             if trait_name in self.trait_details:
                 trait_kwargs[trait_name] = self.trait_details[trait_name]
-            elif trait_name in self.trait_selection.trait_rationales:
-                trait_kwargs[trait_name] = self.trait_selection.trait_rationales[
-                    trait_name
-                ]
+            elif trait_name in rationales:
+                trait_kwargs[trait_name] = rationales[trait_name]
             else:
                 trait_kwargs[trait_name] = f"Selected during character creation"
 
