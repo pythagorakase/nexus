@@ -75,7 +75,7 @@ class NewStoryDatabaseMapper:
 
         # Build extra_data from Mind's Eye Theatre traits
         extra_data = self._build_character_extra_data(character)
-        db_record["extra_data"] = extra_data
+        db_record["extra_data"] = json.dumps(extra_data)
 
         return db_record
 
@@ -127,7 +127,7 @@ class NewStoryDatabaseMapper:
             "rumors": place.rumors or [],
         }
 
-        db_record["extra_data"] = extra_data
+        db_record["extra_data"] = json.dumps(extra_data)
 
         return db_record
 
