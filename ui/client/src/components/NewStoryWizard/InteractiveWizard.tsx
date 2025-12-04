@@ -1172,7 +1172,7 @@ export function InteractiveWizard({
                                         handleSend();
                                     }
                                 }}
-                                placeholder={`Input for ${currentPhase} phase...`}
+                                placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
                                 className="flex-1 bg-background/40 border border-primary/30 text-foreground focus:border-primary font-mono min-h-[48px] max-h-[200px] p-3 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                                 disabled={isLoading || !!pendingArtifact}
                                 rows={1}
