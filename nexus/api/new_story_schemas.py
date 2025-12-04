@@ -24,7 +24,10 @@ def make_openai_strict_schema(schema: dict) -> dict:
     3. $ref cannot have sibling keywords (like description)
 
     This recursively processes the schema and any $defs.
+    Returns a new dict to avoid mutating the input schema.
     """
+    import copy
+    schema = copy.deepcopy(schema)
 
     def process_object(obj: dict) -> dict:
         if obj.get("type") != "object":

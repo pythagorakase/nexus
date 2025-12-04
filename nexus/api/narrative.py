@@ -1310,7 +1310,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "submit_wildcard_trait",
             ]
 
-            # Validate subphase tool arguments against Pydantic schemas
+            # First validation: check individual sub-phase data against its Pydantic schema
             validated_data = validate_subphase_tool(function_name, arguments)
 
             # Track character creation progress and assemble final sheet when complete
@@ -1328,6 +1328,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 else:
                     char_state_updates = {"wildcard": validated_data}
 
+                # Second validation: merge into accumulated state and validate cross-field constraints
                 creation_state = CharacterCreationState.model_validate(
                     {**char_state_data, **char_state_updates}
                 )
@@ -1340,10 +1341,10 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         character_sheet = creation_state.to_character_sheet().model_dump()
                         record_drafts(request.slot, character=creation_state.model_dump())
                         response_data.update({"character_sheet": character_sheet})
+                    except ValueError as e:
+                        logger.error("Character sheet validation failed: %s", e)
                     except Exception as e:
-                        logger.error(
-                            "Failed to finalize character creation state: %s", e
-                        )
+                        logger.error("Unexpected error finalizing character: %s", e)
 
             # Return the structured data to frontend
             # phase_complete: True when entire phase (world/character/seed) is done
