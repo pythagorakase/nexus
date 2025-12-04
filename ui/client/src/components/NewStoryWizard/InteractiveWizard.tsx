@@ -490,7 +490,7 @@ export function InteractiveWizard({
     };
 
     const handleTraitConfirm = (traits: string[]) => {
-        setShowTraitSelector(false);
+        // Don't close selector yet - keep it open with spinner while processing
         const traitMessage = `I'll take: ${traits.join(", ")}`;
         setInput("");
         addMessage("user", traitMessage);
@@ -511,6 +511,8 @@ export function InteractiveWizard({
             .then(async (res) => {
                 if (!res.ok) throw new Error("Failed to send message");
                 const data = await res.json();
+                // Close selector AFTER successful response
+                setShowTraitSelector(false);
                 if (data.phase_complete) {
                     setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                     setDisplayChoices(null);
@@ -523,6 +525,8 @@ export function InteractiveWizard({
             })
             .catch((error) => {
                 console.error("Chat error:", error);
+                // Also close on error so user can retry
+                setShowTraitSelector(false);
                 toast({
                     title: "Transmission Error",
                     description: "Failed to send message. Please try again.",

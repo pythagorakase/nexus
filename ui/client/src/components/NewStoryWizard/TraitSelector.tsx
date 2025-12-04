@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -281,27 +282,35 @@ export function TraitSelector({
         <IndicatorLights count={count} />
       </div>
 
-      {/* Confirm button */}
+      {/* Confirm button - shows spinner when disabled after valid selection */}
       <button
         onClick={handleConfirm}
         disabled={disabled || count === 0}
         className={cn(
           "w-[226px] py-2.5 rounded font-display font-normal text-sm tracking-[0.2em] small-caps",
           "border cursor-pointer transition-all duration-300",
-          isComplete
+          "flex items-center justify-center gap-2",
+          isComplete && !disabled
             ? "bg-gradient-to-b from-emerald-500/95 via-emerald-500/60 to-emerald-500/75 text-background border-emerald-500/90"
             : "bg-gradient-to-b from-secondary/95 via-muted/80 to-secondary/90 text-muted-foreground border-border/50",
-          (disabled || count === 0) && "opacity-50 cursor-not-allowed"
+          (disabled || count === 0) && "opacity-70 cursor-not-allowed"
         )}
         style={{
-          borderTopColor: isComplete ? "rgba(16, 185, 129, 0.8)" : "rgba(166, 138, 106, 0.3)",
-          borderBottomColor: isComplete ? "rgba(16, 185, 129, 0.6)" : "rgba(0, 0, 0, 0.3)",
-          boxShadow: isComplete
+          borderTopColor: isComplete && !disabled ? "rgba(16, 185, 129, 0.8)" : "rgba(166, 138, 106, 0.3)",
+          borderBottomColor: isComplete && !disabled ? "rgba(16, 185, 129, 0.6)" : "rgba(0, 0, 0, 0.3)",
+          boxShadow: isComplete && !disabled
             ? "inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 2px rgba(0,0,0,0.15), 0 0 16px rgba(16, 185, 129, 0.5), 0 2px 4px rgba(0,0,0,0.3)"
             : "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.25)",
         }}
       >
-        Confirm
+        {disabled && isComplete ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Confirming...</span>
+          </>
+        ) : (
+          "Confirm"
+        )}
       </button>
 
       {/* Helper text for invalid confirm */}
