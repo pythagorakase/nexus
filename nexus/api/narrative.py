@@ -139,9 +139,12 @@ def get_new_story_model() -> str:
 
 # Request/Response models
 class ContinueNarrativeRequest(BaseModel):
-    """Request to continue narrative from a chunk"""
+    """Request to continue narrative from a chunk, or bootstrap a new story"""
 
-    chunk_id: int = Field(description="Parent chunk ID to continue from")
+    chunk_id: Optional[int] = Field(
+        default=None,
+        description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk)."
+    )
     user_text: str = Field(description="User's completion text")
     test_mode: Optional[bool] = Field(
         default=None, description="Override test mode setting"
@@ -216,12 +219,23 @@ async def continue_narrative(
     request: ContinueNarrativeRequest, background_tasks: BackgroundTasks
 ):
     """
-    Continue narrative from a given chunk
-    Initiates async generation and returns session_id for tracking
+    Continue narrative from a given chunk, or bootstrap a new story.
+
+    Bootstrap mode: When chunk_id is None or 0, generates the first chunk
+    using the story seed and setting from global_variables.
+
+    Initiates async generation and returns session_id for tracking.
     """
     session_id = str(uuid.uuid4())
 
-    logger.info(f"Starting narrative continuation for chunk {request.chunk_id}")
+    # Normalize chunk_id: None and 0 both mean bootstrap
+    parent_chunk_id = request.chunk_id if request.chunk_id else 0
+    is_bootstrap = parent_chunk_id == 0
+
+    if is_bootstrap:
+        logger.info("Starting narrative bootstrap (first chunk)")
+    else:
+        logger.info(f"Starting narrative continuation for chunk {parent_chunk_id}")
     logger.info(f"Session ID: {session_id}")
     logger.info(f"User text: {request.user_text[:100]}...")
 
@@ -229,23 +243,24 @@ async def continue_narrative(
     await manager.send_progress(
         session_id,
         "initiated",
-        {"chunk_id": request.chunk_id, "parent_chunk_id": request.chunk_id},
+        {"chunk_id": parent_chunk_id, "parent_chunk_id": parent_chunk_id, "is_bootstrap": is_bootstrap},
     )
 
     # Start async generation in background
     background_tasks.add_task(
         generate_narrative_async,
         session_id,
-        request.chunk_id,
+        parent_chunk_id,
         request.user_text,
         request.test_mode,
         request.slot,
     )
 
+    message = "Narrative bootstrap started" if is_bootstrap else f"Narrative generation started for chunk {parent_chunk_id}"
     return ContinueNarrativeResponse(
         session_id=session_id,
         status="processing",
-        message=f"Narrative generation started for chunk {request.chunk_id}",
+        message=message,
     )
 
 
@@ -257,10 +272,15 @@ async def generate_narrative_async(
     slot: Optional[int] = None,
 ):
     """
-    Async function to generate narrative
-    Sends progress updates via WebSocket
+    Async function to generate narrative.
+    Sends progress updates via WebSocket.
+
+    For bootstrap (parent_chunk_id=0), generates the first chunk using
+    story seed and setting from global_variables.
     """
     conn = None
+    is_bootstrap = parent_chunk_id == 0
+
     try:
         # Connect to database
         conn = get_db_connection(slot)
@@ -268,8 +288,17 @@ async def generate_narrative_async(
         # Send progress: loading chunk
         await manager.send_progress(session_id, "loading_chunk")
 
-        # Get parent chunk info
-        chunk_info = await get_chunk_info(conn, parent_chunk_id)
+        # Get parent chunk info (or bootstrap info)
+        if is_bootstrap:
+            # For bootstrap, use placeholder info - LORE will build context from global state
+            chunk_info = {
+                "season": 1,
+                "episode": 1,
+                "place_name": "Starting Location",
+            }
+            logger.info("Bootstrap mode: skipping parent chunk load, using global state")
+        else:
+            chunk_info = await get_chunk_info(conn, parent_chunk_id)
 
         # Send progress: building context
         await manager.send_progress(
@@ -280,7 +309,8 @@ async def generate_narrative_async(
                     "season": chunk_info["season"],
                     "episode": chunk_info["episode"],
                     "place": chunk_info["place_name"],
-                }
+                },
+                "is_bootstrap": is_bootstrap,
             },
         )
 
@@ -331,8 +361,26 @@ async def generate_narrative_async(
                 "status": "provisional",
             }
 
+        elif is_bootstrap:
+            # Bootstrap mode: Generate first chunk using story seed directly
+            # Skip LORE entirely (requires warm slice and local LLM)
+            logger.info("Bootstrap mode: calling apex AI directly with story seed context")
+
+            # Send progress: calling LLM
+            await manager.send_progress(session_id, "calling_llm")
+
+            try:
+                incubator_data = await generate_bootstrap_narrative(
+                    conn, session_id, user_text
+                )
+                logger.info(f"Bootstrap narrative generated for session {session_id}")
+            except Exception as e:
+                logger.error(f"Bootstrap generation failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"Failed to generate bootstrap narrative: {str(e)}"
+                )
         else:
-            # Real LORE integration
+            # Real LORE integration for continuation
             logger.info("Initializing LORE for narrative generation")
 
             # Initialize LORE with LOGON enabled for API calls
@@ -468,6 +516,156 @@ layer to the complex puzzle they're trying to solve.
 
 Sullivan, now officially part of the crew, watches from his perch with an air of feline wisdom,
 as if he too understands the gravity of what's about to unfold."""
+
+
+async def generate_bootstrap_narrative(
+    conn, session_id: str, user_text: str
+) -> Dict[str, Any]:
+    """
+    Generate the opening narrative for a new story.
+
+    Bypasses LORE entirely - loads context from global_variables and calls
+    apex AI directly with a bootstrap-specific prompt.
+
+    Args:
+        conn: Database connection
+        session_id: Session ID for tracking
+        user_text: User's bootstrap request (e.g., "Begin the story.")
+
+    Returns:
+        Incubator data ready for storage
+    """
+    from nexus.agents.lore.logon_utility import LOGON
+    from psycopg2.extras import RealDictCursor
+
+    # Load story context from global_variables
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute("SELECT setting, user_character FROM global_variables WHERE id = true")
+        row = cur.fetchone()
+        if not row or not row["setting"]:
+            raise ValueError("No setting found in global_variables - transition may not have completed")
+
+        setting_data = row["setting"]
+        character_id = row["user_character"]
+
+        # Get character details
+        cur.execute(
+            "SELECT name, appearance, background FROM characters WHERE id = %s",
+            (character_id,)
+        )
+        char_row = cur.fetchone()
+        character_name = char_row["name"] if char_row else "Unknown"
+        character_appearance = char_row.get("appearance", "") if char_row else ""
+        character_background = char_row.get("background", "") if char_row else ""
+
+        # Get starting location
+        cur.execute(
+            """SELECT p.name, p.summary, p.atmosphere, p.notable_features
+               FROM places p
+               JOIN global_variables g ON p.id = g.starting_place_id
+               WHERE g.id = true"""
+        )
+        place_row = cur.fetchone()
+        location_name = place_row["name"] if place_row else "Unknown Location"
+        location_summary = place_row.get("summary", "") if place_row else ""
+        location_atmosphere = place_row.get("atmosphere", "") if place_row else ""
+
+    # Extract story seed from setting
+    story_seed = setting_data.get("story_seed", {})
+
+    # Build bootstrap context payload for LOGON
+    bootstrap_context = {
+        "user_input": user_text,
+        "is_bootstrap": True,
+        "warm_slice": {
+            "chunks": [],  # No prior chunks for bootstrap
+            "token_count": 0
+        },
+        "bootstrap_data": {
+            "setting": {
+                "world_name": setting_data.get("world_name", "Unknown World"),
+                "tone": setting_data.get("tone", ""),
+                "genre": setting_data.get("genre", ""),
+                "themes": setting_data.get("themes", []),
+                "magic_exists": setting_data.get("magic_exists", False),
+                "magic_description": setting_data.get("magic_description", ""),
+            },
+            "story_seed": {
+                "title": story_seed.get("title", ""),
+                "seed_type": story_seed.get("seed_type", ""),
+                "situation": story_seed.get("situation", ""),
+                "hook": story_seed.get("hook", ""),
+                "immediate_goal": story_seed.get("immediate_goal", ""),
+                "stakes": story_seed.get("stakes", ""),
+                "tension_source": story_seed.get("tension_source", ""),
+                "weather": story_seed.get("weather", ""),
+                "initial_mystery": story_seed.get("initial_mystery", ""),
+                "key_npcs": story_seed.get("key_npcs", []),
+            },
+            "protagonist": {
+                "name": character_name,
+                "appearance": character_appearance,
+                "background": character_background,
+            },
+            "location": {
+                "name": location_name,
+                "summary": location_summary,
+                "atmosphere": location_atmosphere,
+            },
+        },
+        "entity_data": {},  # No entity data for bootstrap
+        "retrieved_passages": {"results": [], "token_count": 0},
+        "metadata": {
+            "is_bootstrap": True,
+            "session_id": session_id,
+        },
+        "memory_state": {},
+    }
+
+    # Initialize LOGON and generate narrative
+    logon = LOGON()
+    story_response = logon.generate_narrative(bootstrap_context)
+
+    # Extract narrative text
+    narrative_text = story_response.narrative if hasattr(story_response, 'narrative') else str(story_response)
+
+    # Build incubator data
+    incubator_data = {
+        "chunk_id": 1,  # First chunk
+        "parent_chunk_id": 0,  # No parent
+        "user_text": user_text,
+        "storyteller_text": narrative_text,
+        "choice_object": None,  # Will be populated if response includes choices
+        "choice_text": None,
+        "metadata_updates": {
+            "chronology": {
+                "episode_transition": "begin",
+                "time_delta_minutes": 0,
+                "time_delta_hours": None,
+                "time_delta_days": None,
+                "time_delta_description": "Story begins",
+            },
+            "world_layer": "primary",
+        },
+        "entity_updates": {},
+        "reference_updates": {
+            "characters": [{"character_id": character_id, "reference_type": "present"}] if character_id else [],
+            "places": [],
+            "factions": [],
+        },
+        "session_id": session_id,
+        "llm_response_id": f"bootstrap_{uuid.uuid4().hex[:8]}",
+        "status": "provisional",
+    }
+
+    # Extract choices if present
+    if hasattr(story_response, 'choices') and story_response.choices:
+        incubator_data["choice_object"] = {
+            "choices": story_response.choices,
+            "selected": None,
+        }
+
+    return incubator_data
 
 
 @app.get("/api/narrative/status/{session_id}", response_model=NarrativeStatus)
