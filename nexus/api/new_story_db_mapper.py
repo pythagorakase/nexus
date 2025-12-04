@@ -563,10 +563,10 @@ class NewStoryDatabaseMapper:
                     )
                     logger.debug(f"Created location hierarchy: {location_ids}")
 
-                    # Set base timestamp
+                    # Set base timestamp (already a datetime from TransitionData)
                     cur.execute(
                         "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
-                        (transition_data.base_timestamp.to_datetime(),),
+                        (transition_data.base_timestamp,),
                     )
 
                     # Finally, set new_story = false to transition to narrative mode

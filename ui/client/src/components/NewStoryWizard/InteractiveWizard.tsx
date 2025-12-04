@@ -864,7 +864,7 @@ export function InteractiveWizard({
                                             </div>
                                             <div className="pt-2">
                                                 <span className="text-primary block text-xs uppercase mb-1">Description</span>
-                                                <p className="text-sm text-white/80">{(data.location.description || "").substring(0, 200)}...</p>
+                                                <p className="text-sm text-white/80">{(data.location.summary || "").substring(0, 200)}...</p>
                                             </div>
                                         </div>
                                     </CollapsibleSection>

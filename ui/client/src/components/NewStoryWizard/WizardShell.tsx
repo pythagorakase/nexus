@@ -438,7 +438,7 @@ export function NewStoryWizard() {
                                                     <span className="text-primary block text-xs uppercase mb-2">Location</span>
                                                     <p className="text-white">{confirmedArtifacts.seed.location.name}</p>
                                                     <p className="text-muted-foreground text-xs mt-1">
-                                                        {confirmedArtifacts.seed.location.description?.substring(0, 200)}...
+                                                        {confirmedArtifacts.seed.location.summary?.substring(0, 200)}...
                                                     </p>
                                                 </div>
                                             )}
