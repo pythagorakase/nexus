@@ -53,10 +53,22 @@ export function registerProxyRoutes(app: Express): void {
     changeOrigin: true,
   };
 
-  app.use("/api/narrative/continue", createProxyMiddleware(narrativeProxyOptions));
-  app.use("/api/narrative/status", createProxyMiddleware(narrativeProxyOptions));
-  app.use("/api/narrative/incubator", createProxyMiddleware(narrativeProxyOptions));
-  app.use("/api/narrative/approve", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/api/narrative/continue", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/narrative/continue${path}`,
+  }));
+  app.use("/api/narrative/status", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/narrative/status${path}`,
+  }));
+  app.use("/api/narrative/incubator", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/narrative/incubator${path}`,
+  }));
+  app.use("/api/narrative/approve", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/narrative/approve${path}`,
+  }));
 
   // Proxy for Story Wizard endpoints
   app.use("/api/story", createProxyMiddleware({
@@ -71,7 +83,10 @@ export function registerProxyRoutes(app: Express): void {
   }));
 
   // Proxy for user-character endpoint (fetches protagonist name from global_variables)
-  app.use("/api/user-character", createProxyMiddleware(narrativeProxyOptions));
+  app.use("/api/user-character", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/user-character${path}`,
+  }));
 
   app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
 }
