@@ -242,6 +242,10 @@ export function NexusLayout() {
   // Auto-trigger bootstrap for new stories (no chunks but character exists)
   const bootstrapTriggeredRef = useRef(false);
   useEffect(() => {
+    // Allow bootstrap to run for each slot independently
+    bootstrapTriggeredRef.current = false;
+  }, [activeSlot]);
+  useEffect(() => {
     // Check if we need to bootstrap:
     // 1. No chunks yet (latestChunk is null, not loading, no error)
     // 2. User character exists (transition completed)
