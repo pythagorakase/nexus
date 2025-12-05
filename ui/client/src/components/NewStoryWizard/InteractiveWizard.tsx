@@ -263,6 +263,7 @@ export function InteractiveWizard({
     };
 
     const triggerSubphaseContinuation = async (artifactType: string, contextData: any) => {
+        if (isLoading) return;
         setIsLoading(true);
         setDisplayChoices(null);  // Clear stale choices immediately to prevent flash
         try {
@@ -614,9 +615,15 @@ export function InteractiveWizard({
         if (!pendingArtifact) return;
 
         // Validate artifact matches expected phase to prevent race condition issues
-        // If we're in seed phase but receive a stale character artifact (from double-click), ignore it
-        if (currentPhase === "seed" && pendingArtifact.type !== "submit_starting_scenario") {
-            console.warn("Ignoring stale artifact from previous phase:", pendingArtifact.type);
+        const expectedArtifactTypes: Record<Phase, string> = {
+            setting: "submit_world_document",
+            character: "submit_character_sheet",
+            seed: "submit_starting_scenario",
+        };
+
+        const expectedType = expectedArtifactTypes[currentPhase];
+        if (expectedType && pendingArtifact.type !== expectedType) {
+            console.warn(`Phase mismatch: expected ${expectedType} for ${currentPhase} phase, got ${pendingArtifact.type}`);
             setPendingArtifact(null);
             return;
         }
@@ -930,7 +937,8 @@ export function InteractiveWizard({
                         <Button
                             variant="outline"
                             onClick={() => setPendingArtifact(null)}
-                            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                            disabled={isLoading}
+                            className="border-destructive/50 text-destructive hover:bg-destructive/10 disabled:opacity-50"
                         >
                             REVISE
                         </Button>
