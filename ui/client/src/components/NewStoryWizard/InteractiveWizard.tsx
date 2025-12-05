@@ -519,6 +519,9 @@ export function InteractiveWizard({
     };
 
     const handleTraitConfirm = (traits: string[]) => {
+        // Guard against double-clicks - prevent duplicate API calls
+        if (isLoading) return;
+
         // Don't close selector yet - keep it open with spinner while processing
         const traitMessage = `I'll take: ${traits.join(", ")}`;
         setInput("");
@@ -605,6 +608,16 @@ export function InteractiveWizard({
     };
 
     const handleArtifactConfirm = async () => {
+        if (!pendingArtifact) return;
+
+        // Validate artifact matches expected phase to prevent race condition issues
+        // If we're in seed phase but receive a stale character artifact (from double-click), ignore it
+        if (currentPhase === "seed" && pendingArtifact.type !== "submit_starting_scenario") {
+            console.warn("Ignoring stale artifact from previous phase:", pendingArtifact.type);
+            setPendingArtifact(null);
+            return;
+        }
+
         // Determine next phase or completion
         if (currentPhase === "setting") {
             setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
