@@ -47,6 +47,168 @@ logger = logging.getLogger("nexus.logon.apex_schema")
 
 
 # ============================================================================
+# Structured Data Models (for OpenAI strict mode compatibility)
+# ============================================================================
+# These replace bare Dict[str, Any] fields which cause schema validation errors.
+# OpenAI strict mode requires additionalProperties: false, but bare Dicts emit
+# additionalProperties: true, causing a mismatch when the field is in 'required'.
+
+class Coordinates(BaseModel):
+    """
+    Earth-based lat/lon coordinates.
+
+    All worlds in NEXUS share Earth's physical geography—same size, same
+    continental shapes, same coastlines. Choose coordinates that make sense
+    for the location's described characteristics (climate, terrain, proximity
+    to water).
+    """
+    lat: float = Field(description="Latitude (-90 to 90)")
+    lon: float = Field(description="Longitude (-180 to 180)")
+
+    class Config:
+        extra = "forbid"
+
+
+class CharacterTraits(BaseModel):
+    """
+    Character traits following Mind's Eye Theatre philosophy.
+
+    Exactly 3 of the 10 optional traits must be provided, plus the required
+    wildcard. Traits signal narrative focus - what aspects of the character
+    should be foregrounded in the story.
+    """
+    # Social Network (choose if narratively significant)
+    allies: Optional[str] = Field(
+        default=None, description="Who will actively help and take risks for you"
+    )
+    contacts: Optional[str] = Field(
+        default=None, description="Information/favor sources - limited risk-taking"
+    )
+    patron: Optional[str] = Field(
+        default=None, description="Powerful mentor/sponsor with their own agenda"
+    )
+    dependents: Optional[str] = Field(
+        default=None, description="Those who rely on you for support or protection"
+    )
+
+    # Power & Position
+    status: Optional[str] = Field(
+        default=None, description="Formal standing recognized by an institution"
+    )
+    reputation: Optional[str] = Field(
+        default=None, description="How widely known you are, what for"
+    )
+
+    # Assets & Territory
+    resources: Optional[str] = Field(
+        default=None, description="Material wealth, equipment, supplies"
+    )
+    domain: Optional[str] = Field(
+        default=None, description="Place or area you control or claim"
+    )
+
+    # Liabilities
+    enemies: Optional[str] = Field(
+        default=None, description="Those actively opposed who will expend energy to thwart you"
+    )
+    obligations: Optional[str] = Field(
+        default=None, description="Debts, oaths, or duties you must honor"
+    )
+
+    # Required wildcard - unique trait that sets this character apart
+    wildcard_name: str = Field(description="Name of the unique custom trait")
+    wildcard_description: str = Field(
+        description="What this trait means - capability, possession, relationship, or curse"
+    )
+
+    class Config:
+        extra = "forbid"
+
+
+class PlaceDetails(BaseModel):
+    """
+    Additional place attributes stored in extra_data JSONB.
+
+    These provide rich world-building details beyond the core place fields.
+    """
+    category: Optional[str] = Field(
+        default=None, description="Narrative category: settlement, wilderness, dungeon, building, district, landmark, road, border"
+    )
+    size: Optional[str] = Field(
+        default=None, description="Relative size: tiny, small, medium, large, huge, massive"
+    )
+    population: Optional[int] = Field(
+        default=None, ge=0, description="Population if applicable"
+    )
+    atmosphere: Optional[str] = Field(
+        default=None, description="Mood and feeling of the place"
+    )
+    notable_features: List[str] = Field(
+        default_factory=list, description="Distinctive physical features (max 8)"
+    )
+    resources: List[str] = Field(
+        default_factory=list, description="Available resources (max 5)"
+    )
+    dangers: List[str] = Field(
+        default_factory=list, description="Known threats or hazards (max 5)"
+    )
+    ruler: Optional[str] = Field(
+        default=None, description="Who controls or governs this place"
+    )
+    factions: List[str] = Field(
+        default_factory=list, description="Active factions or groups (max 5)"
+    )
+    culture: Optional[str] = Field(
+        default=None, description="Cultural characteristics and customs"
+    )
+    economy: Optional[str] = Field(
+        default=None, description="Economic base and activities"
+    )
+    trade_goods: List[str] = Field(
+        default_factory=list, description="Goods produced or traded (max 5)"
+    )
+    nearby_landmarks: List[str] = Field(
+        default_factory=list, description="Nearby notable locations (max 5)"
+    )
+    current_events: List[str] = Field(
+        default_factory=list, description="Ongoing events (max 3)"
+    )
+    rumors: List[str] = Field(
+        default_factory=list, description="Current rumors or gossip (max 3)"
+    )
+
+    class Config:
+        extra = "forbid"
+
+
+class FactionDetails(BaseModel):
+    """
+    Additional faction attributes stored in extra_data JSONB.
+    """
+    leader: Optional[str] = Field(
+        default=None, description="Name of faction leader"
+    )
+    notable_members: List[str] = Field(
+        default_factory=list, description="Other notable members"
+    )
+    allies: List[str] = Field(
+        default_factory=list, description="Allied factions or groups"
+    )
+    rivals: List[str] = Field(
+        default_factory=list, description="Rival factions or groups"
+    )
+    symbols: Optional[str] = Field(
+        default=None, description="Faction symbols, colors, or identifying marks"
+    )
+    traditions: Optional[str] = Field(
+        default=None, description="Key traditions or rituals"
+    )
+
+    class Config:
+        extra = "forbid"
+
+
+# ============================================================================
 # New Entity Creation
 # ============================================================================
 
@@ -78,8 +240,8 @@ class NewCharacter(BaseModel):
         max_length=500,
         description="Brief character description (max 500 chars)"
     )
-    extra_data: Dict[str, Any] = Field(
-        description="Additional character details (structured data, can be {} if nothing additional)"
+    extra_data: CharacterTraits = Field(
+        description="Character traits (3 of 10 optional traits + required wildcard)"
     )
 
 
@@ -105,15 +267,15 @@ class NewPlace(BaseModel):
     secrets: str = Field(
         description="Hidden information, plot hooks, and narrative opportunities (REQUIRED - invaluable for storytelling)"
     )
-    coordinates: Dict[str, float] = Field(
-        description="Geographic coordinates {lat, lon} for real-world or {x, y, z} for virtual locations. Zone calculated from this."
+    coordinates: Coordinates = Field(
+        description="Geographic coordinates (lat/lon on Earth-shaped planet). Zone calculated from this."
     )
     inhabitants: Optional[List[int]] = Field(
         default_factory=list,
         description="Character IDs of inhabitants (usually empty for newly introduced places)"
     )
-    extra_data: Dict[str, Any] = Field(
-        description="Additional structured data (can be {} if nothing additional)"
+    extra_data: PlaceDetails = Field(
+        description="Additional place attributes (atmosphere, features, dangers, etc.)"
     )
 
 
@@ -154,8 +316,8 @@ class NewFaction(BaseModel):
     primary_location: int = Field(
         description="Place ID of faction headquarters/primary base (FK to places.id)"
     )
-    extra_data: Dict[str, Any] = Field(
-        description="Additional structured data including leader info: {'leader': 'Name'} (can be {} if nothing additional)"
+    extra_data: FactionDetails = Field(
+        description="Additional faction attributes (leader, members, allies, rivals, etc.)"
     )
 
 

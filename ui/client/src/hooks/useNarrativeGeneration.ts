@@ -101,12 +101,16 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         return;
       }
       setIncubatorData(payload as IncubatorViewPayload);
+      // Set the session ID so approval can work (critical for resume flow)
+      if (payload.session_id) {
+        setActiveNarrativeSession(payload.session_id);
+      }
       setShowApprovalModal(true);
     } catch (error) {
       console.error("Unable to load incubator data:", error);
       setGenerationError(error instanceof Error ? error.message : "Unable to load incubator");
     }
-  }, []);
+  }, [slot]);
 
   const handleNarrativeProgress = useCallback(
     (payload: NarrativeProgressPayload) => {

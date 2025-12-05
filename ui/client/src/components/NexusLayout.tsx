@@ -239,6 +239,22 @@ export function NexusLayout() {
     },
   });
 
+  // Check for existing incubator data on mount (handles resume + bootstrap completion)
+  const incubatorCheckedRef = useRef(false);
+  useEffect(() => {
+    // Reset check flag when slot changes
+    incubatorCheckedRef.current = false;
+  }, [activeSlot]);
+  useEffect(() => {
+    // Only check incubator for new stories (no committed chunks yet)
+    // This prevents showing stale modal for slots that already have narrative
+    if (activeSlot && !incubatorCheckedRef.current && !narrative.isMidGeneration && latestChunk === null && !isLoadingChunk) {
+      incubatorCheckedRef.current = true;
+      console.log("[NexusLayout] New story - checking for existing incubator data...");
+      narrative.fetchIncubatorData();
+    }
+  }, [activeSlot, narrative.isMidGeneration, narrative.fetchIncubatorData, latestChunk, isLoadingChunk]);
+
   // Auto-trigger bootstrap for new stories (no chunks but character exists)
   const bootstrapTriggeredRef = useRef(false);
   useEffect(() => {
@@ -250,13 +266,15 @@ export function NexusLayout() {
     // 1. No chunks yet (latestChunk is null, not loading, no error)
     // 2. User character exists (transition completed)
     // 3. Not already generating
-    // 4. Haven't already triggered bootstrap this session
+    // 4. No pending approval (incubator data exists)
+    // 5. Haven't already triggered bootstrap this session
     const needsBootstrap =
       latestChunk === null &&
       !isLoadingChunk &&
       !chunkError &&
       userCharacter !== null &&
       !narrative.isMidGeneration &&
+      !narrative.showApprovalModal &&
       !bootstrapTriggeredRef.current;
 
     if (needsBootstrap) {
@@ -264,7 +282,7 @@ export function NexusLayout() {
       bootstrapTriggeredRef.current = true;
       narrative.triggerBootstrap("Begin the story.");
     }
-  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.triggerBootstrap]);
+  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.showApprovalModal, narrative.triggerBootstrap]);
 
   // Parse model name from settings
   useEffect(() => {

@@ -371,7 +371,7 @@ async def generate_narrative_async(
 
             try:
                 incubator_data = await generate_bootstrap_narrative(
-                    conn, session_id, user_text
+                    conn, session_id, user_text, slot=slot
                 )
                 logger.info(f"Bootstrap narrative generated for session {session_id}")
             except Exception as e:
@@ -519,7 +519,7 @@ as if he too understands the gravity of what's about to unfold."""
 
 
 async def generate_bootstrap_narrative(
-    conn, session_id: str, user_text: str
+    conn, session_id: str, user_text: str, slot: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Generate the opening narrative for a new story.
@@ -531,11 +531,13 @@ async def generate_bootstrap_narrative(
         conn: Database connection
         session_id: Session ID for tracking
         user_text: User's bootstrap request (e.g., "Begin the story.")
+        slot: Save slot number (1-5) for database name resolution
 
     Returns:
         Incubator data ready for storage
     """
-    from nexus.agents.lore.logon_utility import LOGON
+    from nexus.agents.lore.logon_utility import LogonUtility
+    from nexus.api.slot_utils import require_slot_dbname
     from psycopg2.extras import RealDictCursor
 
     # Load story context from global_variables
@@ -558,11 +560,16 @@ async def generate_bootstrap_narrative(
         character_appearance = char_row.get("appearance", "") if char_row else ""
         character_background = char_row.get("background", "") if char_row else ""
 
-        # Get starting location
+        # Get starting location via FK chain:
+        # global_variables.user_character → characters.current_location → places.id
+        # Note: atmosphere and notable_features are in extra_data JSONB
         cur.execute(
-            """SELECT p.name, p.summary, p.atmosphere, p.notable_features
-               FROM places p
-               JOIN global_variables g ON p.id = g.starting_place_id
+            """SELECT p.name, p.summary,
+                      p.extra_data->>'atmosphere' as atmosphere,
+                      p.extra_data->'notable_features' as notable_features
+               FROM global_variables g
+               JOIN characters c ON c.id = g.user_character
+               JOIN places p ON p.id = c.current_location
                WHERE g.id = true"""
         )
         place_row = cur.fetchone()
@@ -623,7 +630,9 @@ async def generate_bootstrap_narrative(
     }
 
     # Initialize LOGON and generate narrative
-    logon = LOGON()
+    settings = load_settings()
+    dbname = require_slot_dbname(slot=slot)
+    logon = LogonUtility(settings, dbname=dbname)
     story_response = logon.generate_narrative(bootstrap_context)
 
     # Extract narrative text
@@ -659,9 +668,10 @@ async def generate_bootstrap_narrative(
     }
 
     # Extract choices if present
+    # NOTE: Key must be "presented" to match schema used by select_choice() and lore_adapter
     if hasattr(story_response, 'choices') and story_response.choices:
         incubator_data["choice_object"] = {
-            "choices": story_response.choices,
+            "presented": story_response.choices,
             "selected": None,
         }
 

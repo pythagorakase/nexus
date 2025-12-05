@@ -273,6 +273,10 @@ The location should:
 
 Generate comprehensive location data: physical layout and atmosphere, current inhabitants and power dynamics, secrets and hidden elements, sensory texture, technological or magical characteristics, social customs. This location joins a persistent database — make it detailed enough to support return visits and evolution over time.
 
+**Geographic Constraint:** All worlds in NEXUS share Earth's physical geography—same size, same continental shapes, same coastlines. A cyberpunk megacity might rise where Tokyo stands; a fantasy kingdom might spread across Western Europe's footprint; an alien world's spaceport might sit at the coordinates of modern-day Dubai. This is a deliberate design choice: You already have intuitions about Earth's geography from training, and we're leveraging that. When you specify coordinates, you're placing the location on an Earth-shaped planet, regardless of what that world is called or how its history diverged.
+
+Choose coordinates that make sense for the location's described characteristics—climate, terrain, proximity to water. A humid port city shouldn't land in the Sahara; a frozen research outpost shouldn't appear on the equator.
+
 #### Ephemeral Character State
 
 The selected seed also establishes the character's initial ephemeral state:
