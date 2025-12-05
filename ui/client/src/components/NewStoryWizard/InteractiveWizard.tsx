@@ -572,6 +572,9 @@ export function InteractiveWizard({
 
     // Handle invalid trait selection (≠3 traits) - sends to LLM for dialog, UI stays open
     const handleInvalidTraitConfirm = (traits: string[], count: number) => {
+        // Guard against double-clicks
+        if (isLoading) return;
+
         // UI stays open for continued adjustment
         const direction = count < 3 ? "add more" : "narrow down";
         const traitMessage = `I've selected ${count} trait${count !== 1 ? "s" : ""}: ${traits.join(", ")}. I need to ${direction} my selection.`;
@@ -933,9 +936,10 @@ export function InteractiveWizard({
                         </Button>
                         <Button
                             onClick={handleArtifactConfirm}
-                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30"
+                            disabled={isLoading}
+                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30 disabled:opacity-50"
                         >
-                            CONFIRM & PROCEED
+                            {isLoading ? "Processing..." : "CONFIRM & PROCEED"}
                         </Button>
                     </div>
                 </Card>
