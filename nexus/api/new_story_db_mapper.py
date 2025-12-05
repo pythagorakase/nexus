@@ -45,18 +45,25 @@ class NewStoryDatabaseMapper:
         """
         self.dbname = dbname
 
-    def map_character_to_db(self, character: CharacterSheet) -> Dict[str, Any]:
+    def map_character_to_db(
+        self,
+        character: CharacterSheet,
+        emotional_state: Optional[str] = None,
+        current_activity: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Map CharacterSheet to characters table format.
 
         Database columns:
         - name, summary, appearance, background, personality (text fields)
-        - emotional_state, current_activity (will be set during story seed)
+        - emotional_state, current_activity (from story seed context)
         - current_location (set after place is created)
         - extra_data (JSONB for everything else)
 
         Args:
             character: CharacterSheet from structured output
+            emotional_state: Initial emotional state (from seed stakes/tension)
+            current_activity: What character is doing (from seed immediate_goal)
 
         Returns:
             Dictionary ready for database insertion
@@ -68,14 +75,14 @@ class NewStoryDatabaseMapper:
             "appearance": character.appearance,
             "background": character.background,
             "personality": character.personality,
-            "emotional_state": None,  # Will be set during story seed selection
-            "current_activity": None,  # Will be set during story seed selection
+            "emotional_state": emotional_state,
+            "current_activity": current_activity,
             # current_location will be set after place is created
         }
 
         # Build extra_data from Mind's Eye Theatre traits
         extra_data = self._build_character_extra_data(character)
-        db_record["extra_data"] = extra_data
+        db_record["extra_data"] = json.dumps(extra_data)
 
         return db_record
 
@@ -127,7 +134,7 @@ class NewStoryDatabaseMapper:
             "rumors": place.rumors or [],
         }
 
-        db_record["extra_data"] = extra_data
+        db_record["extra_data"] = json.dumps(extra_data)
 
         return db_record
 
@@ -188,12 +195,7 @@ class NewStoryDatabaseMapper:
             # Use provided cursor (part of larger transaction)
             try:
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('setting', %s::jsonb)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
+                    "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                     (setting_json,),
                 )
                 logger.info(f"Saved setting to global_variables: {setting.world_name}")
@@ -206,12 +208,7 @@ class NewStoryDatabaseMapper:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('setting', %s::jsonb)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
+                            "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
                             (setting_json,),
                         )
                         logger.info(
@@ -223,7 +220,9 @@ class NewStoryDatabaseMapper:
 
     def save_story_seed(self, seed: StorySeed, cursor=None) -> None:
         """
-        Save chosen story seed to global_variables.
+        Save chosen story seed to global_variables by merging into setting JSONB.
+
+        The story_seed contains AI-to-AI secrets channel data that should persist.
 
         Args:
             seed: Selected StorySeed
@@ -232,21 +231,21 @@ class NewStoryDatabaseMapper:
         Raises:
             Exception: If database operation fails
         """
-        seed_json = json.dumps(seed.model_dump())
+        seed_data = seed.model_dump()
 
         if cursor:
             # Use provided cursor (part of larger transaction)
             try:
+                # Read existing setting, merge story_seed, save back
+                cursor.execute("SELECT setting FROM global_variables WHERE id = true")
+                row = cursor.fetchone()
+                setting = row[0] if row and row[0] else {}
+                setting["story_seed"] = seed_data
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('story_seed', %s::jsonb)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
-                    (seed_json,),
+                    "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
+                    (json.dumps(setting),),
                 )
-                logger.info(f"Saved story seed: {seed.title}")
+                logger.info(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
                 raise
@@ -255,27 +254,35 @@ class NewStoryDatabaseMapper:
             try:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
+                        # Read existing setting, merge story_seed, save back
+                        cur.execute("SELECT setting FROM global_variables WHERE id = true")
+                        row = cur.fetchone()
+                        setting = row[0] if row and row[0] else {}
+                        setting["story_seed"] = seed_data
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('story_seed', %s::jsonb)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
-                            (seed_json,),
+                            "UPDATE global_variables SET setting = %s::jsonb WHERE id = true",
+                            (json.dumps(setting),),
                         )
-                        logger.info(f"Saved story seed: {seed.title}")
+                        logger.info(f"Saved story seed to setting: {seed.title}")
             except Exception as e:
                 logger.error(f"Failed to save story seed {seed.title}: {e}")
                 raise
 
-    def create_protagonist(self, character: CharacterSheet, cursor=None) -> int:
+    def create_protagonist(
+        self,
+        character: CharacterSheet,
+        cursor=None,
+        emotional_state: Optional[str] = None,
+        current_activity: Optional[str] = None,
+    ) -> int:
         """
         Create the protagonist in the characters table.
 
         Args:
             character: CharacterSheet to insert
             cursor: Optional database cursor for transactional operations
+            emotional_state: Initial emotional state (from seed stakes/tension)
+            current_activity: What character is doing (from seed immediate_goal)
 
         Returns:
             The character ID
@@ -283,7 +290,11 @@ class NewStoryDatabaseMapper:
         Raises:
             Exception: If database operation fails (transaction will be rolled back)
         """
-        db_record = self.map_character_to_db(character)
+        db_record = self.map_character_to_db(
+            character,
+            emotional_state=emotional_state,
+            current_activity=current_activity,
+        )
 
         if cursor:
             # Use provided cursor (part of larger transaction)
@@ -307,12 +318,7 @@ class NewStoryDatabaseMapper:
 
                 # Update global_variables to point to this character
                 cursor.execute(
-                    """
-                    INSERT INTO global_variables (key, value)
-                    VALUES ('user_character', %s)
-                    ON CONFLICT (key) DO UPDATE
-                    SET value = EXCLUDED.value
-                """,
+                    "UPDATE global_variables SET user_character = %s WHERE id = true",
                     (character_id,),
                 )
 
@@ -348,12 +354,7 @@ class NewStoryDatabaseMapper:
 
                         # Update global_variables to point to this character
                         cur.execute(
-                            """
-                            INSERT INTO global_variables (key, value)
-                            VALUES ('user_character', %s)
-                            ON CONFLICT (key) DO UPDATE
-                            SET value = EXCLUDED.value
-                        """,
+                            "UPDATE global_variables SET user_character = %s WHERE id = true",
                             (character_id,),
                         )
 
@@ -565,9 +566,21 @@ class NewStoryDatabaseMapper:
                     self.save_story_seed(transition_data.seed, cursor=cur)
                     logger.debug("Saved story seed to global_variables")
 
+                    # Derive character's initial state from seed context
+                    # - current_activity: What they're trying to do (immediate goal)
+                    # - emotional_state: How they feel given the stakes/tension
+                    seed = transition_data.seed
+                    initial_activity = seed.immediate_goal
+                    initial_emotional_state = (
+                        f"Facing {seed.tension_source.lower()}; {seed.stakes.lower()}"
+                    )
+
                     # Create protagonist (using shared cursor)
                     character_id = self.create_protagonist(
-                        transition_data.character, cursor=cur
+                        transition_data.character,
+                        cursor=cur,
+                        emotional_state=initial_emotional_state,
+                        current_activity=initial_activity,
                     )
                     logger.debug(f"Created protagonist with ID {character_id}")
 
@@ -581,24 +594,15 @@ class NewStoryDatabaseMapper:
                     )
                     logger.debug(f"Created location hierarchy: {location_ids}")
 
-                    # Set base timestamp
+                    # Set base timestamp (already a datetime from TransitionData)
                     cur.execute(
-                        """
-                        INSERT INTO global_variables (key, value)
-                        VALUES ('base_timestamp', %s)
-                        ON CONFLICT (key) DO UPDATE
-                        SET value = EXCLUDED.value
-                    """,
-                        (transition_data.base_timestamp.isoformat(),),
+                        "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
+                        (transition_data.base_timestamp,),
                     )
 
                     # Finally, set new_story = false to transition to narrative mode
                     cur.execute(
-                        """
-                        UPDATE global_variables
-                        SET value = 'false'
-                        WHERE key = 'new_story'
-                    """
+                        "UPDATE global_variables SET new_story = false WHERE id = true"
                     )
 
                 # Transaction commits automatically on successful context exit

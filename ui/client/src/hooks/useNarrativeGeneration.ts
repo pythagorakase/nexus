@@ -380,6 +380,80 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     stopElapsedTimer();
   }, [stopElapsedTimer]);
 
+  /**
+   * Trigger bootstrap generation for a new story (no existing chunks).
+   * Calls the continue endpoint with chunk_id=0 to generate the first chunk.
+   */
+  const triggerBootstrap = useCallback(
+    async (userInput: string = "Begin the story.") => {
+      // Prevent concurrent generations
+      if (
+        activeNarrativeSessionRef.current &&
+        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+          narrativePhase ?? "",
+        )
+      ) {
+        toast({
+          title: "Generation in progress",
+          description: "Wait for the current turn to finish before starting another.",
+        });
+        return;
+      }
+
+      const trimmedInput = userInput.trim() || "Begin the story.";
+      setLastUserInput(trimmedInput);
+      setGenerationParentChunk(null); // No parent chunk for bootstrap
+      setNarrativePhase("initiated");
+      setGenerationError(null);
+      setIncubatorData(null);
+      setShowApprovalModal(false);
+      setActiveNarrativeSession(null);
+
+      const startedAt = Date.now();
+      startElapsedTimer(startedAt);
+      onPhaseChange?.("initiated");
+
+      try {
+        const response = await fetch("/api/narrative/continue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chunk_id: 0, // Signal bootstrap
+            user_text: trimmedInput,
+            slot: slot,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(error || "Failed to start narrative bootstrap");
+        }
+
+        const result = await response.json();
+        setActiveNarrativeSession(result.session_id);
+
+        toast({
+          title: "Story beginning",
+          description: "Generating opening narrative...",
+        });
+      } catch (error) {
+        stopElapsedTimer();
+        const errorMessage = error instanceof Error ? error.message : "Failed to start narrative bootstrap";
+        setGenerationError(errorMessage);
+        setNarrativePhase("error");
+        onPhaseChange?.(null);
+        onError?.();
+
+        toast({
+          title: "Bootstrap failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    },
+    [narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer, slot],
+  );
+
   return {
     // State
     activeNarrativeSession,
@@ -393,6 +467,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
 
     // Actions
     triggerNarrativeTurn,
+    triggerBootstrap,
     handleApprove,
     handleRegenerate,
     handleCancel,

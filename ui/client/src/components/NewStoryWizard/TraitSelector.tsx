@@ -1,371 +1,324 @@
-import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect, useCallback } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface TraitInfo {
-    name: string;
-    description: string[];
-    examples: string[];
+  id: string;
+  name: string;
+  desc: string[];
+  ex: string[];
 }
 
 interface TraitSelectorProps {
-    onConfirm: (selected: string[]) => void;
-    onInvalidConfirm?: (selected: string[], count: number) => void;
-    disabled?: boolean;
-    suggestedTraits?: string[]; // LLM's pre-selected recommendations
+  onConfirm: (selected: string[]) => void;
+  onInvalidConfirm?: (selected: string[], count: number) => void;
+  disabled?: boolean;
+  suggestedTraits?: string[]; // Used for initial selection state only
 }
 
-// Exactly 3 traits required
-const REQUIRED_TRAIT_COUNT = 3;
+interface TooltipState {
+  trait: TraitInfo | null;
+  position: { x: number; y: number } | null;
+  side: "left" | "right";
+}
 
-// Canonical trait data baked from traits.json
-const TRAIT_DATA: Record<string, Record<string, TraitInfo>> = {
-    "Social Network": {
-        allies: {
-            name: "Allies",
-            description: [
-                "will help you when it matters",
-                "will take risks for you",
-                "highly-aligned goals",
-            ],
-            examples: ["family ties", "resistance cells", "fellow veteran"],
-        },
-        contacts: {
-            name: "Contacts",
-            description: [
-                "can be tapped for information, favors, or access",
-                "limited willingness to take risks for you",
-                "relationship may be transactional or arms-length",
-            ],
-            examples: ["bartender", "information broker", "journalist"],
-        },
-        patron: {
-            name: "Patron",
-            description: [
-                "powerful figure who mentors, sponsors, protects, or guides you",
-                "has own position to protect",
-                "may have own agenda",
-            ],
-            examples: ["noble patron", "archmage mentor", "Sith master"],
-        },
-        dependents: {
-            name: "Dependents",
-            description: [
-                "very high willingness to do what you want",
-                "lower status/power relative to you",
-                "may be capable, but limited ability to act effectively without guidance",
-            ],
-            examples: ["child", "employee", "subordinate"],
-        },
-    },
-    "Power & Position": {
-        status: {
-            name: "Status",
-            description: [
-                "formal standing",
-                "recognized by specific institution or social structure",
-            ],
-            examples: [
-                "military officer commission",
-                "guild journeyman",
-                "corporate board seat",
-            ],
-        },
-        reputation: {
-            name: "Reputation",
-            description: [
-                "how widely you're known, for better or worse",
-                "may or may not confer influence",
-            ],
-            examples: ["celebrity", "local legend", "pariah"],
-        },
-    },
-    "Assets & Territory": {
-        resources: {
-            name: "Resources",
-            description: [
-                "material wealth, equipment, supplies",
-                "may represent access or availability rather than literal possession",
-            ],
-            examples: [
-                "liquid assets",
-                "excellent credit",
-                "harvest tithes from a village",
-            ],
-        },
-        domain: {
-            name: "Domain",
-            description: ["structure or area", "controlled or claimed by you"],
-            examples: ["condominium", "uncontested turf", "wizard's tower"],
-        },
-    },
-    Liabilities: {
-        enemies: {
-            name: "Enemies",
-            description: [
-                "actively opposed to you",
-                "will expend energy and take risks to thwart you",
-                "goals may be limited or unlimited",
-            ],
-            examples: [
-                "jealous colleague who wants to humiliate you",
-                "kin of slain enemy sworn to mortal vengeance",
-            ],
-        },
-        obligations: {
-            name: "Obligations",
-            description: [
-                "can be to individuals, groups, concepts",
-                "may be static or dischargeable",
-            ],
-            examples: ["retainer to a house", "on parole", "filial piety"],
-        },
-    },
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REQUIRED = 3;
+const TOTAL_TRAITS = 10;
+
+const TRAITS: Record<string, TraitInfo[]> = {
+  "Social Network": [
+    { id: "allies", name: "Allies", desc: ["will help you when it matters", "will take risks for you", "highly-aligned goals"], ex: ["family ties", "resistance cells", "fellow veteran"] },
+    { id: "contacts", name: "Contacts", desc: ["can be tapped for information, favors, or access", "limited willingness to take risks for you", "relationship may be transactional or arms-length"], ex: ["bartender", "information broker", "journalist"] },
+    { id: "patron", name: "Patron", desc: ["powerful figure who mentors, sponsors, protects, or guides you", "has own position to protect", "may have own agenda"], ex: ["noble patron", "archmage mentor", "Sith master"] },
+    { id: "dependents", name: "Dependents", desc: ["very high willingness to do what you want", "lower status/power relative to you", "may be capable, but limited ability to act effectively without guidance"], ex: ["child", "employee", "subordinate"] },
+  ],
+  "Power & Position": [
+    { id: "status", name: "Status", desc: ["formal standing", "recognized by specific institution or social structure"], ex: ["military officer commission", "guild journeyman", "corporate board seat"] },
+    { id: "reputation", name: "Reputation", desc: ["how widely you're known, for better or worse", "may or may not confer influence"], ex: ["celebrity", "local legend", "pariah"] },
+  ],
+  "Assets & Territory": [
+    { id: "resources", name: "Resources", desc: ["material wealth, equipment, supplies", "may represent access or availability rather than literal possession"], ex: ["liquid assets", "excellent credit", "harvest tithes from a village"] },
+    { id: "domain", name: "Domain", desc: ["structure or area", "controlled or claimed by you"], ex: ["condominium", "uncontested turf", "wizard's tower"] },
+  ],
+  "Liabilities": [
+    { id: "enemies", name: "Enemies", desc: ["actively opposed to you", "will expend energy and take risks to thwart you", "goals may be limited or unlimited"], ex: ["jealous colleague who wants to humiliate you", "kin of slain enemy sworn to mortal vengeance"] },
+    { id: "obligations", name: "Obligations", desc: ["can be to individuals, groups, concepts", "may be static or dischargeable"], ex: ["retainer to a house", "on parole", "filial piety"] },
+  ],
 };
 
-type TraitName = string;
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal Components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function IndicatorLights({ count }: { count: number }) {
+  const isComplete = count === REQUIRED;
+  const isOver = count > REQUIRED;
+
+  return (
+    <div className="flex justify-between w-full">
+      {[...Array(TOTAL_TRAITS)].map((_, i) => {
+        const isFilled = i < count;
+
+        let colorClasses = "bg-muted border-muted-foreground/30";
+        let glowStyle = {};
+
+        if (isComplete && isFilled) {
+          colorClasses = "bg-emerald-500 border-transparent";
+          glowStyle = { boxShadow: "0 0 8px rgba(16, 185, 129, 0.7), 0 0 16px rgba(16, 185, 129, 0.4)" };
+        } else if (isFilled) {
+          const color = isOver ? "accent" : "primary";
+          colorClasses = `bg-${color} border-transparent`;
+          glowStyle = isOver
+            ? { boxShadow: "0 0 6px rgba(232, 106, 74, 0.6), 0 0 12px rgba(232, 106, 74, 0.3)" }
+            : { boxShadow: "0 0 6px hsl(var(--primary) / 0.6), 0 0 12px hsl(var(--primary) / 0.3)" };
+        }
+
+        return (
+          <div
+            key={i}
+            className={cn("w-2.5 h-2.5 rounded-full border transition-all duration-250", colorClasses)}
+            style={glowStyle}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function Chip({ children, variant = "desc" }: { children: React.ReactNode; variant?: "desc" | "example" }) {
+  const isExample = variant === "example";
+  return (
+    <span
+      className={cn(
+        "inline-block px-3 py-1.5 m-0.5 rounded-xl text-[13px] leading-snug border",
+        isExample
+          ? "bg-secondary text-muted-foreground border-border/60 italic"
+          : "bg-primary/20 text-foreground border-primary/40"
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Tooltip({ trait, position, side }: TooltipState) {
+  if (!trait || !position) return null;
+
+  const isLeft = side === "left";
+
+  // Clamp vertical position to stay within viewport (with padding)
+  const tooltipHeight = 180; // Approximate max height
+  const padding = 16;
+  const maxTop = window.innerHeight - tooltipHeight - padding;
+  const clampedTop = Math.max(padding, Math.min(position.y, maxTop));
+
+  return (
+    <div
+      className="fixed max-w-[280px] p-3 rounded-md border border-primary/60 bg-background z-[1000] pointer-events-none"
+      style={{
+        left: isLeft ? "auto" : position.x,
+        right: isLeft ? `calc(100vw - ${position.x}px)` : "auto",
+        top: clampedTop,
+        boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)",
+        textAlign: isLeft ? "right" : "left",
+      }}
+    >
+      {/* Description chips */}
+      <div className="mb-2">
+        {trait.desc.map((d, i) => (
+          <Chip key={i} variant="desc">{d}</Chip>
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div className="h-px bg-border/50 my-2" />
+
+      {/* Example chips */}
+      <div>
+        {trait.ex.map((e, i) => (
+          <Chip key={i} variant="example">{e}</Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface TraitCardProps {
+  trait: TraitInfo;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+  onHoverStart: (trait: TraitInfo, position: { x: number; y: number }, side: "left" | "right") => void;
+  onHoverEnd: () => void;
+  column: number;
+  disabled?: boolean;
+}
+
+function TraitCard({ trait, isSelected, onSelect, onHoverStart, onHoverEnd, column, disabled }: TraitCardProps) {
+  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Always show tooltip on left since panel is on right side of screen
+    const x = rect.left - 10;
+    onHoverStart(trait, { x, y: rect.top }, "left");
+  }, [trait, onHoverStart]);
+
+  return (
+    <button
+      onClick={() => !disabled && onSelect(trait.id)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={onHoverEnd}
+      disabled={disabled}
+      className={cn(
+        "w-[110px] h-9 font-display font-normal text-sm tracking-wide rounded border",
+        "flex items-center justify-center cursor-pointer transition-all duration-150",
+        "small-caps",
+        isSelected
+          ? "bg-gradient-to-b from-muted/95 to-secondary/60 border-primary/80 text-foreground"
+          : "bg-gradient-to-b from-primary/15 to-primary/5 border-border/50 text-muted-foreground hover:border-border",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}
+      style={{
+        boxShadow: isSelected
+          ? "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.25), 0 0 8px hsl(var(--primary) / 0.4), 0 1px 3px rgba(0,0,0,0.3)"
+          : "inset 0 1px 0 hsl(var(--primary) / 0.1), inset 0 -1px 0 rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.1)",
+        textShadow: isSelected ? "0 0 6px hsl(var(--primary) / 0.6)" : "none",
+      }}
+    >
+      {trait.name}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function TraitSelector({
-    onConfirm,
-    onInvalidConfirm,
-    disabled = false,
-    suggestedTraits = [],
+  onConfirm,
+  onInvalidConfirm,
+  disabled = false,
+  suggestedTraits = [],
 }: TraitSelectorProps) {
-    const [selected, setSelected] = useState<Set<TraitName>>(
-        () => new Set(suggestedTraits)
-    );
-    const [hoveredTrait, setHoveredTrait] = useState<TraitName | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(suggestedTraits));
+  const [tooltip, setTooltip] = useState<TooltipState>({ trait: null, position: null, side: "right" });
 
-    // Sync selection when suggestedTraits prop changes (component may already be mounted)
-    useEffect(() => {
-        setSelected(new Set(suggestedTraits));
-    }, [suggestedTraits]);
+  // Sync selection when suggestedTraits prop changes
+  useEffect(() => {
+    setSelected(new Set(suggestedTraits));
+  }, [suggestedTraits]);
 
-    const toggleTrait = (trait: TraitName) => {
-        if (disabled) return;
+  const count = selected.size;
+  const isComplete = count === REQUIRED;
 
-        setSelected((prev) => {
-            const next = new Set(prev);
-            if (next.has(trait)) {
-                next.delete(trait);
-            } else {
-                // Allow selecting beyond 3 so user can adjust, but warn visually
-                next.add(trait);
-            }
-            return next;
-        });
-    };
+  const toggle = useCallback((id: string) => {
+    if (disabled) return;
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, [disabled]);
 
-    const isExactlyThree = selected.size === REQUIRED_TRAIT_COUNT;
+  const showTooltip = useCallback((trait: TraitInfo, position: { x: number; y: number }, side: "left" | "right") => {
+    setTooltip({ trait, position, side });
+  }, []);
 
-    const handleConfirm = () => {
-        if (isExactlyThree) {
-            onConfirm(Array.from(selected));
-        } else if (onInvalidConfirm) {
-            // Send to LLM for dialog - UI stays open
-            onInvalidConfirm(Array.from(selected), selected.size);
-        }
-    };
+  const hideTooltip = useCallback(() => {
+    setTooltip({ trait: null, position: null, side: "right" });
+  }, []);
 
-    // Get trait info by key
-    const getTraitInfo = (traitKey: string): TraitInfo | null => {
-        for (const category of Object.values(TRAIT_DATA)) {
-            if (traitKey in category) {
-                return category[traitKey];
-            }
-        }
-        return null;
-    };
+  const handleConfirm = useCallback(() => {
+    if (isComplete) {
+      onConfirm(Array.from(selected));
+    } else if (onInvalidConfirm) {
+      onInvalidConfirm(Array.from(selected), selected.size);
+    }
+  }, [isComplete, onConfirm, onInvalidConfirm, selected]);
 
-    return (
-        <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="border-b border-primary/30 pb-3 mb-4">
-                <h3 className="font-mono text-primary text-sm uppercase tracking-wider">
-                    Trait Selection ({selected.size}/{REQUIRED_TRAIT_COUNT})
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                    Select exactly {REQUIRED_TRAIT_COUNT} traits
-                </p>
-            </div>
+  return (
+    <div className="flex flex-col items-center py-2 font-serif">
+      <Tooltip trait={tooltip.trait} position={tooltip.position} side={tooltip.side} />
 
-            {/* Categories */}
-            <div className="flex-1 space-y-4 overflow-y-auto">
-                {Object.entries(TRAIT_DATA).map(([category, traits]) => (
-                    <div key={category}>
-                        <h4 className="font-mono text-xs text-primary/80 uppercase tracking-wider mb-2">
-                            {category}
-                        </h4>
-                        <div className="space-y-1">
-                            {Object.entries(traits).map(([traitKey, traitInfo]) => {
-                                const isSelected = selected.has(traitKey);
-                                const isSuggested = suggestedTraits.includes(traitKey);
-                                const isHovered = hoveredTrait === traitKey;
-                                const showDetails = isSelected || isHovered;
+      {/* Header */}
+      <h2 className="font-display font-normal text-xl tracking-widest text-teal-400 mb-4 text-center small-caps"
+        style={{ textShadow: "0 0 20px rgba(45, 212, 191, 0.4)" }}
+      >
+        Trait Selection
+      </h2>
 
-                                return (
-                                    <div key={traitKey} className="relative">
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleTrait(traitKey)}
-                                            onMouseEnter={() => setHoveredTrait(traitKey)}
-                                            onMouseLeave={() => setHoveredTrait(null)}
-                                            disabled={disabled}
-                                            className={cn(
-                                                "w-full flex items-center justify-between px-3 py-2 rounded text-left transition-colors",
-                                                "border font-mono text-sm",
-                                                isSelected
-                                                    ? "bg-primary/20 border-primary text-primary"
-                                                    : isSuggested
-                                                      ? "bg-amber-500/10 border-amber-500/40 text-foreground/90 hover:border-amber-500/60"
-                                                      : "bg-background/40 border-primary/20 text-foreground/80 hover:border-primary/40",
-                                                disabled && "opacity-50 cursor-not-allowed"
-                                            )}
-                                        >
-                                            <span className="flex items-center gap-2">
-                                                <span
-                                                    className={cn(
-                                                        "w-4 h-4 border rounded-sm flex items-center justify-center",
-                                                        isSelected
-                                                            ? "border-primary bg-primary"
-                                                            : "border-primary/40"
-                                                    )}
-                                                >
-                                                    {isSelected && (
-                                                        <svg
-                                                            className="w-3 h-3 text-background"
-                                                            fill="none"
-                                                            stroke="currentColor"
-                                                            viewBox="0 0 24 24"
-                                                        >
-                                                            <path
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                                strokeWidth={3}
-                                                                d="M5 13l4 4L19 7"
-                                                            />
-                                                        </svg>
-                                                    )}
-                                                </span>
-                                                <span className="capitalize">{traitInfo.name}</span>
-                                                {isSuggested && !isSelected && (
-                                                    <span className="text-[10px] uppercase tracking-wider text-amber-500/80 ml-1">
-                                                        suggested
-                                                    </span>
-                                                )}
-                                            </span>
-                                            {isSelected && (
-                                                <span className="text-xs uppercase tracking-wider text-primary/80">
-                                                    Selected
-                                                </span>
-                                            )}
-                                        </button>
-
-                                        {/* Progressive Disclosure - Details on hover/select */}
-                                        <AnimatePresence>
-                                            {showDetails && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, height: 0 }}
-                                                    animate={{ opacity: 1, height: "auto" }}
-                                                    exit={{ opacity: 0, height: 0 }}
-                                                    transition={{ duration: 0.15 }}
-                                                    className="overflow-hidden"
-                                                >
-                                                    <div className="px-3 py-2 ml-6 text-xs text-muted-foreground border-l border-primary/20">
-                                                        <ul className="list-disc list-inside space-y-0.5">
-                                                            {traitInfo.description.map((desc, i) => (
-                                                                <li key={i}>{desc}</li>
-                                                            ))}
-                                                        </ul>
-                                                        <div className="mt-1.5 text-primary/60 italic">
-                                                            e.g., {traitInfo.examples.join(", ")}
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Traits Selected Summary Panel */}
-            <AnimatePresence>
-                {selected.size > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                    >
-                        <div className="pt-3 mt-3 border-t border-primary/20">
-                            <h4 className="font-mono text-xs text-primary/80 uppercase tracking-wider mb-2">
-                                Selected Traits
-                            </h4>
-                            <div className="space-y-2 max-h-32 overflow-y-auto">
-                                <AnimatePresence mode="popLayout">
-                                    {Array.from(selected).map((traitKey) => {
-                                        const info = getTraitInfo(traitKey);
-                                        if (!info) return null;
-                                        return (
-                                            <motion.div
-                                                key={traitKey}
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                exit={{ opacity: 0, x: 10 }}
-                                                layout
-                                                className="bg-primary/10 rounded px-2 py-1.5 text-xs"
-                                            >
-                                                <div className="font-mono text-primary capitalize">
-                                                    {info.name}
-                                                </div>
-                                                <div className="text-muted-foreground mt-0.5">
-                                                    {info.description[0]}
-                                                </div>
-                                            </motion.div>
-                                        );
-                                    })}
-                                </AnimatePresence>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Selection Status Warning */}
-            {selected.size > 0 && selected.size !== REQUIRED_TRAIT_COUNT && (
-                <div className="mt-2 text-xs text-amber-500/80 font-mono">
-                    {selected.size < REQUIRED_TRAIT_COUNT
-                        ? `Select ${REQUIRED_TRAIT_COUNT - selected.size} more trait${REQUIRED_TRAIT_COUNT - selected.size > 1 ? "s" : ""}`
-                        : `Remove ${selected.size - REQUIRED_TRAIT_COUNT} trait${selected.size - REQUIRED_TRAIT_COUNT > 1 ? "s" : ""}`}
-                </div>
-            )}
-
-            {/* Confirm Button */}
-            <div className="pt-4 mt-4 border-t border-primary/30">
-                <Button
-                    onClick={handleConfirm}
-                    disabled={disabled || selected.size === 0}
-                    className={cn(
-                        "w-full border font-mono uppercase tracking-wider transition-colors",
-                        isExactlyThree
-                            ? "bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-700"
-                            : "bg-primary/20 border-primary/40 text-primary/80 hover:bg-primary/30"
-                    )}
-                >
-                    CONFIRM
-                </Button>
-                {!isExactlyThree && selected.size > 0 && onInvalidConfirm && (
-                    <p className="text-[10px] text-muted-foreground text-center mt-1">
-                        Click to discuss selection with Skald
-                    </p>
-                )}
-            </div>
+      {/* Trait grid */}
+      {Object.entries(TRAITS).map(([category, traits]) => (
+        <div key={category} className="mb-2.5 w-[226px]">
+          <h3 className="font-display font-normal text-base tracking-wide text-primary/80 mb-2 text-center small-caps">
+            {category}
+          </h3>
+          <div className="grid grid-cols-2 gap-1.5 justify-center">
+            {traits.map((trait, idx) => (
+              <TraitCard
+                key={trait.id}
+                trait={trait}
+                isSelected={selected.has(trait.id)}
+                onSelect={toggle}
+                onHoverStart={showTooltip}
+                onHoverEnd={hideTooltip}
+                column={idx % 2}
+                disabled={disabled}
+              />
+            ))}
+          </div>
         </div>
-    );
+      ))}
+
+      {/* Indicator lights */}
+      <div className="py-3 w-[226px]">
+        <IndicatorLights count={count} />
+      </div>
+
+      {/* Confirm button - shows spinner when disabled after valid selection */}
+      <button
+        onClick={handleConfirm}
+        disabled={disabled || count === 0}
+        className={cn(
+          "w-[226px] py-2.5 rounded font-display font-normal text-sm tracking-[0.2em] small-caps",
+          "border cursor-pointer transition-all duration-300",
+          "flex items-center justify-center gap-2",
+          isComplete && !disabled
+            ? "bg-gradient-to-b from-emerald-500/95 via-emerald-500/60 to-emerald-500/75 text-background border-emerald-500/90"
+            : "bg-gradient-to-b from-secondary/95 via-muted/80 to-secondary/90 text-muted-foreground border-border/50",
+          (disabled || count === 0) && "opacity-70 cursor-not-allowed"
+        )}
+        style={{
+          borderTopColor: isComplete && !disabled ? "rgba(16, 185, 129, 0.8)" : "rgba(166, 138, 106, 0.3)",
+          borderBottomColor: isComplete && !disabled ? "rgba(16, 185, 129, 0.6)" : "rgba(0, 0, 0, 0.3)",
+          boxShadow: isComplete && !disabled
+            ? "inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 2px rgba(0,0,0,0.15), 0 0 16px rgba(16, 185, 129, 0.5), 0 2px 4px rgba(0,0,0,0.3)"
+            : "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.2), 0 2px 4px rgba(0,0,0,0.25)",
+        }}
+      >
+        {disabled && isComplete ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Confirming...</span>
+          </>
+        ) : (
+          "Confirm"
+        )}
+      </button>
+
+      {/* Helper text for invalid confirm */}
+      {!isComplete && count > 0 && onInvalidConfirm && (
+        <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+          Click to discuss selection with Skald
+        </p>
+      )}
+    </div>
+  );
 }

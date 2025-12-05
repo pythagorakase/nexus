@@ -550,7 +550,7 @@ class CharacterCreationState(BaseModel):
             summary=self.summary or f"A {self.concept.archetype}",
             appearance=self.concept.appearance,
             background=self.concept.background,
-            personality=self.personality or "To be developed through play",
+            personality=self.personality or "Personality to be revealed through play.",
             wildcard_name=self.wildcard.wildcard_name,
             wildcard_description=self.wildcard.wildcard_description,
             **trait_kwargs,
@@ -859,6 +859,23 @@ class ZoneDefinition(BaseModel):
 
     # Note: actual PostGIS boundary polygon will be added later if needed
     # For now, we just need the zone to exist in the hierarchy
+
+
+class StartingScenario(BaseModel):
+    """
+    Combined wrapper for seed phase submission.
+
+    This model wraps all 4 components needed for starting a new story,
+    ensuring Pydantic generates a unified JSON schema with all $defs
+    hoisted to the root level (required for OpenAI strict mode).
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    seed: StorySeed
+    layer: LayerDefinition
+    zone: ZoneDefinition
+    location: PlaceProfile
 
 
 class SpecificLocation(BaseModel):

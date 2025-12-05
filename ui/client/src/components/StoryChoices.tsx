@@ -197,134 +197,14 @@ function ChoiceItem({
   );
 }
 
-interface FreeformChoiceProps {
-  onSend: (text: string) => void;
-  disabled?: boolean;
-}
-
-function FreeformChoice({ onSend, disabled = false }: FreeformChoiceProps) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [inputText, setInputText] = useState("");
-  const textRef = useRef<HTMLDivElement>(null);
-
-  const handleClick = useCallback(() => {
-    if (disabled) return;
-    setIsEditing(true);
-    setTimeout(() => textRef.current?.focus(), 0);
-  }, [disabled]);
-
-  const handleSend = useCallback(() => {
-    if (inputText.trim()) {
-      onSend(inputText.trim());
-      setIsEditing(false);
-      setInputText("");
-    }
-  }, [inputText, onSend]);
-
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setInputText("");
-  }, []);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      } else if (e.key === "Escape") {
-        handleCancel();
-      }
-    },
-    [handleSend, handleCancel]
-  );
-
-  if (isEditing) {
-    return (
-      <div
-        className={cn(
-          "px-4 py-3 bg-secondary/30 border-l-2 border-l-accent",
-          "border border-accent"
-        )}
-      >
-        <div
-          ref={textRef}
-          contentEditable
-          onInput={(e) => setInputText(e.currentTarget.textContent || "")}
-          onKeyDown={handleKeyDown}
-          onPaste={(e) => {
-            // P2: Strip HTML on paste to prevent XSS
-            e.preventDefault();
-            const text = e.clipboardData.getData('text/plain');
-            document.execCommand('insertText', false, text);
-          }}
-          data-placeholder="Describe your action..."
-          className={cn(
-            "text-sm leading-relaxed text-foreground outline-none min-h-[1.6em] mb-2 font-serif",
-            "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
-          )}
-        />
-        <div className="flex justify-end gap-1.5">
-          <button
-            onClick={handleCancel}
-            className={cn(
-              "w-6 h-6 flex items-center justify-center",
-              "bg-transparent border border-muted-foreground/30",
-              "hover:border-primary hover:text-foreground",
-              "transition-all duration-150 text-muted-foreground"
-            )}
-            title="Cancel (Esc)"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={!inputText.trim()}
-            className={cn(
-              "w-6 h-6 flex items-center justify-center",
-              "border-none transition-all duration-150",
-              inputText.trim()
-                ? "bg-primary text-primary-foreground cursor-pointer"
-                : "bg-muted-foreground text-muted cursor-default"
-            )}
-            title="Send (Enter)"
-          >
-            <Check className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      onClick={handleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      disabled={disabled}
-      className={cn(
-        "block w-full px-4 py-2.5 text-left transition-all duration-150",
-        "bg-transparent border border-dashed",
-        "text-[13px] italic",
-        isHovered
-          ? "border-muted-foreground/60 text-muted-foreground"
-          : "border-muted-foreground/30 text-muted-foreground/70",
-        disabled && "opacity-50 cursor-not-allowed"
-      )}
-    >
-      Or something else?
-    </button>
-  );
-}
-
 /**
  * StoryChoices - Presents narrative choices to the player
  *
  * Features:
  * - 2-4 choices displayed as selectable items with hover reveal
  * - Edit-before-send: click to edit, Enter to send, Escape to cancel
- * - Freeform option always available
  * - Previous selection highlighted for regeneration UX
+ * - Freeform input handled by parent component's input field
  *
  * @example
  * <StoryChoices
@@ -349,17 +229,6 @@ export function StoryChoices({
     [onSelect]
   );
 
-  const handleFreeformSelect = useCallback(
-    (text: string) => {
-      onSelect({
-        label: "freeform",
-        text,
-        edited: false, // Freeform is never "edited" - it's always custom
-      });
-    },
-    [onSelect]
-  );
-
   if (!choices || choices.length < 2) {
     return null; // Don't render if no valid choices
   }
@@ -379,7 +248,6 @@ export function StoryChoices({
           disabled={disabled}
         />
       ))}
-      <FreeformChoice onSend={handleFreeformSelect} disabled={disabled} />
     </div>
   );
 }

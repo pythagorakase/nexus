@@ -110,6 +110,35 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon }: Coll
     );
 }
 
+interface ExpandableTextProps {
+    text: string;
+    maxLength?: number;
+    className?: string;
+}
+
+function ExpandableText({ text, maxLength = 200, className = "" }: ExpandableTextProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const needsExpansion = text.length > maxLength;
+
+    if (!needsExpansion) {
+        return <p className={className}>{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className={className}>
+                {isExpanded ? text : `${text.substring(0, maxLength)}...`}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-primary text-xs mt-1 hover:underline focus:outline-none"
+            >
+                {isExpanded ? "show less" : "show more"}
+            </button>
+        </div>
+    );
+}
+
 export function InteractiveWizard({
     slot,
     onComplete,
@@ -224,6 +253,15 @@ export function InteractiveWizard({
         ]);
     };
 
+    // Normalize artifact data for confirmation modal
+    // When character phase completes, extract character_sheet from nested response
+    const normalizePendingArtifact = (phase: string, artifactType: string, responseData: any) => {
+        if (phase === "character" && responseData.character_sheet) {
+            return { type: "submit_character_sheet", data: responseData.character_sheet };
+        }
+        return { type: artifactType, data: responseData };
+    };
+
     const triggerSubphaseContinuation = async (artifactType: string, contextData: any) => {
         setIsLoading(true);
         setDisplayChoices(null);  // Clear stale choices immediately to prevent flash
@@ -244,7 +282,7 @@ export function InteractiveWizard({
             const data = await res.json();
 
             if (data.phase_complete) {
-                setPendingArtifact({ type: data.artifact_type, data: data.data });
+                setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 setDisplayChoices(null);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
@@ -272,12 +310,16 @@ export function InteractiveWizard({
             let newState = prev;
 
             if (artifactType === "submit_character_concept") {
-                newState = { ...prev, character_state: { ...charState, concept: artifactData } };
+                // Extract from wrapper - backend returns {"character_state": {...}}
+                const concept = artifactData.character_state?.concept || artifactData;
+                newState = { ...prev, character_state: { ...charState, concept } };
             } else if (artifactType === "submit_trait_selection") {
                 setShowTraitSelector(false); // Close trait selector after confirmation
-                newState = { ...prev, character_state: { ...charState, trait_selection: artifactData } };
+                const traitSelection = artifactData.character_state?.trait_selection || artifactData;
+                newState = { ...prev, character_state: { ...charState, trait_selection: traitSelection } };
             } else if (artifactType === "submit_wildcard_trait") {
-                newState = { ...prev, character_state: { ...charState, wildcard: artifactData } };
+                const wildcard = artifactData.character_state?.wildcard || artifactData;
+                newState = { ...prev, character_state: { ...charState, wildcard } };
             }
 
             updatedWizardData = newState;
@@ -286,19 +328,22 @@ export function InteractiveWizard({
 
         // Show trait selector after concept is submitted
         if (artifactType === "submit_character_concept") {
+            // Extract concept from character_state wrapper (backend returns nested structure)
+            const conceptData = artifactData.character_state?.concept || artifactData;
+
             // Pre-select LLM's suggested traits from schema-validated data
-            if (artifactData.suggested_traits && Array.isArray(artifactData.suggested_traits)) {
-                setSuggestedTraits(artifactData.suggested_traits);
+            if (conceptData.suggested_traits && Array.isArray(conceptData.suggested_traits)) {
+                setSuggestedTraits(conceptData.suggested_traits);
             }
             setShowTraitSelector(true);
 
             // Add clickable system message to view concept data
-            addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: artifactData });
+            addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: conceptData });
 
             // Build client-side intro message with rationales (SKIP API CALL)
             // This eliminates latency and ensures message is synced with pre-selection
             try {
-                const introMessage = buildTraitIntroMessage(artifactData);
+                const introMessage = buildTraitIntroMessage(conceptData);
                 addMessage("assistant", introMessage);
             } catch (error) {
                 console.error("Failed to build trait intro message:", error);
@@ -358,7 +403,7 @@ export function InteractiveWizard({
             const data = await res.json();
 
             if (data.phase_complete) {
-                setPendingArtifact({ type: data.artifact_type, data: data.data });
+                setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                 setDisplayChoices(null);
             } else if (data.subphase_complete) {
                 handleSubphaseCompletion(data.artifact_type, data.data);
@@ -408,7 +453,7 @@ export function InteractiveWizard({
                 if (!res.ok) throw new Error("Failed to send message");
                 const data = await res.json();
                 if (data.phase_complete) {
-                    setPendingArtifact({ type: data.artifact_type, data: data.data });
+                    setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                     setDisplayChoices(null);
                 } else if (data.subphase_complete) {
                     handleSubphaseCompletion(data.artifact_type, data.data);
@@ -474,7 +519,7 @@ export function InteractiveWizard({
     };
 
     const handleTraitConfirm = (traits: string[]) => {
-        setShowTraitSelector(false);
+        // Don't close selector yet - keep it open with spinner while processing
         const traitMessage = `I'll take: ${traits.join(", ")}`;
         setInput("");
         addMessage("user", traitMessage);
@@ -495,8 +540,10 @@ export function InteractiveWizard({
             .then(async (res) => {
                 if (!res.ok) throw new Error("Failed to send message");
                 const data = await res.json();
+                // Close selector AFTER successful response
+                setShowTraitSelector(false);
                 if (data.phase_complete) {
-                    setPendingArtifact({ type: data.artifact_type, data: data.data });
+                    setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                     setDisplayChoices(null);
                 } else if (data.subphase_complete) {
                     handleSubphaseCompletion(data.artifact_type, data.data);
@@ -507,6 +554,8 @@ export function InteractiveWizard({
             })
             .catch((error) => {
                 console.error("Chat error:", error);
+                // Also close on error so user can retry
+                setShowTraitSelector(false);
                 toast({
                     title: "Transmission Error",
                     description: "Failed to send message. Please try again.",
@@ -848,7 +897,11 @@ export function InteractiveWizard({
                                             </div>
                                             <div className="pt-2">
                                                 <span className="text-primary block text-xs uppercase mb-1">Description</span>
-                                                <p className="text-sm text-white/80">{(data.location.description || "").substring(0, 200)}...</p>
+                                                <ExpandableText
+                                                    text={data.location.summary || ""}
+                                                    maxLength={200}
+                                                    className="text-sm text-white/80"
+                                                />
                                             </div>
                                         </div>
                                     </CollapsibleSection>
@@ -1031,7 +1084,7 @@ export function InteractiveWizard({
                             const data = await res.json();
 
                             if (data.phase_complete) {
-                                setPendingArtifact({ type: data.artifact_type, data: data.data });
+                                setPendingArtifact(normalizePendingArtifact(data.phase, data.artifact_type, data.data));
                             } else if (data.subphase_complete) {
                                 handleSubphaseCompletion(data.artifact_type, data.data);
                             } else {
@@ -1156,7 +1209,7 @@ export function InteractiveWizard({
                                         handleSend();
                                     }
                                 }}
-                                placeholder={`Input for ${currentPhase} phase...`}
+                                placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
                                 className="flex-1 bg-background/40 border border-primary/30 text-foreground focus:border-primary font-mono min-h-[48px] max-h-[200px] p-3 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                                 disabled={isLoading || !!pendingArtifact}
                                 rows={1}

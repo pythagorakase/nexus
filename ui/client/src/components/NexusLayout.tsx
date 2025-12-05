@@ -185,7 +185,8 @@ export function NexusLayout() {
   }, [clearTimeoutRef]);
 
   // Fetch latest chunk for chapter info
-  const { data: latestChunk } = useQuery<{
+  // Returns null for new stories (no chunks yet) - triggers bootstrap
+  const { data: latestChunk, isLoading: isLoadingChunk, isError: chunkError } = useQuery<{
     id: number;
     rawText: string;
     createdAt: string;
@@ -194,11 +195,15 @@ export function NexusLayout() {
       episode: number | null;
       scene: number | null;
     };
-  }>({
+  } | null>({
     queryKey: ["/api/narrative/latest-chunk", activeSlot],
     queryFn: async () => {
       if (!activeSlot) return null;
       const res = await fetch(`/api/narrative/latest-chunk?slot=${activeSlot}`);
+      if (res.status === 404) {
+        // No chunks yet - this is a new story needing bootstrap
+        return null;
+      }
       if (!res.ok) throw new Error("Failed to fetch latest chunk");
       return res.json();
     },
@@ -233,6 +238,33 @@ export function NexusLayout() {
       setApexStatus("OFFLINE");
     },
   });
+
+  // Auto-trigger bootstrap for new stories (no chunks but character exists)
+  const bootstrapTriggeredRef = useRef(false);
+  useEffect(() => {
+    // Allow bootstrap to run for each slot independently
+    bootstrapTriggeredRef.current = false;
+  }, [activeSlot]);
+  useEffect(() => {
+    // Check if we need to bootstrap:
+    // 1. No chunks yet (latestChunk is null, not loading, no error)
+    // 2. User character exists (transition completed)
+    // 3. Not already generating
+    // 4. Haven't already triggered bootstrap this session
+    const needsBootstrap =
+      latestChunk === null &&
+      !isLoadingChunk &&
+      !chunkError &&
+      userCharacter !== null &&
+      !narrative.isMidGeneration &&
+      !bootstrapTriggeredRef.current;
+
+    if (needsBootstrap) {
+      console.log("[NexusLayout] New story detected - triggering bootstrap");
+      bootstrapTriggeredRef.current = true;
+      narrative.triggerBootstrap("Begin the story.");
+    }
+  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.triggerBootstrap]);
 
   // Parse model name from settings
   useEffect(() => {

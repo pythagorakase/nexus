@@ -28,6 +28,29 @@ interface ConfirmedArtifacts {
     seed?: any;
 }
 
+// Simple expandable text component for long descriptions
+function ExpandableText({ text, maxLength = 200, className = "" }: { text: string; maxLength?: number; className?: string }) {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const needsExpansion = text && text.length > maxLength;
+
+    if (!text) return null;
+    if (!needsExpansion) return <p className={className}>{text}</p>;
+
+    return (
+        <div>
+            <p className={className}>
+                {isExpanded ? text : `${text.substring(0, maxLength)}...`}
+            </p>
+            <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-primary text-xs mt-1 hover:underline focus:outline-none"
+            >
+                {isExpanded ? "show less" : "show more"}
+            </button>
+        </div>
+    );
+}
+
 type WizardPhase = "slot" | "setting" | "character" | "seed";
 
 const PHASES: { id: WizardPhase; label: string }[] = [
@@ -437,9 +460,11 @@ export function NewStoryWizard() {
                                                 <div className="pt-4">
                                                     <span className="text-primary block text-xs uppercase mb-2">Location</span>
                                                     <p className="text-white">{confirmedArtifacts.seed.location.name}</p>
-                                                    <p className="text-muted-foreground text-xs mt-1">
-                                                        {confirmedArtifacts.seed.location.description?.substring(0, 200)}...
-                                                    </p>
+                                                    <ExpandableText
+                                                        text={confirmedArtifacts.seed.location.summary || ""}
+                                                        maxLength={200}
+                                                        className="text-muted-foreground text-xs mt-1"
+                                                    />
                                                 </div>
                                             )}
                                         </div>
