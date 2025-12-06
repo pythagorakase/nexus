@@ -330,14 +330,20 @@ export function InteractiveWizard({
 
         } catch (e: any) {
             if (e.name === "AbortError") {
-                // User cancelled - don't show error, allow retry
+                // User cancelled via handleWaitScreenCancel - reset state for retry
+                // Note: processingRef is also reset in handleWaitScreenCancel, but we reset here too
+                // for the edge case where abort happens before cancel handler runs
                 processingRef.current = false;
                 setWaitScreenActive(false);
                 setIsLoading(false);
+                toast({
+                    title: "Operation cancelled",
+                    description: "You can restart when ready.",
+                });
                 return;
             }
             console.error("Transition/bootstrap error:", e);
-            // Reset guard to allow retry
+            // Reset guard to allow retry after error
             processingRef.current = false;
             setWaitScreenError(e.message || "Failed to initialize story");
             // Keep wait screen active with error state for retry

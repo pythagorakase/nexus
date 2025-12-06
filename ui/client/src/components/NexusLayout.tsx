@@ -38,6 +38,7 @@ const TIMEOUTS = {
 } as const;
 
 const PENDING_BOOTSTRAP_KEY = "pendingBootstrapSession";
+const PENDING_BOOTSTRAP_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour - discard stale bootstrap sessions
 
 interface SettingsPayload {
   ["Agent Settings"]?: {
@@ -260,13 +261,25 @@ export function NexusLayout() {
     if (pending) {
       try {
         const parsed = JSON.parse(pending);
-        if (parsed?.slot === activeSlot && typeof parsed.sessionId === "string") {
+        // Validate slot match, sessionId presence, and freshness
+        if (
+          parsed?.slot === activeSlot &&
+          typeof parsed.sessionId === "string" &&
+          typeof parsed.createdAt === "number" &&
+          Date.now() - parsed.createdAt < PENDING_BOOTSTRAP_MAX_AGE_MS
+        ) {
           setPendingBootstrapSessionId(parsed.sessionId);
           bootstrapTriggeredRef.current = true;
           return;
         }
+        // Stale or invalid session - clean up
+        if (parsed?.createdAt && Date.now() - parsed.createdAt >= PENDING_BOOTSTRAP_MAX_AGE_MS) {
+          console.log("[NexusLayout] Discarding stale pending bootstrap session");
+          localStorage.removeItem(PENDING_BOOTSTRAP_KEY);
+        }
       } catch (error) {
         console.error("[NexusLayout] Failed to parse pending bootstrap session", error);
+        localStorage.removeItem(PENDING_BOOTSTRAP_KEY);
       }
     }
 

@@ -15,6 +15,15 @@ import type { ChunkWithMetadata } from "../components/NarrativeTab";
 import type { IncubatorViewPayload, NarrativeProgressPayload, NarrativePhase } from "../types/narrative";
 import { toast } from "./use-toast";
 
+/** Phases that indicate generation is actively in progress */
+const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
+  "initiated",
+  "loading_chunk",
+  "building_context",
+  "calling_llm",
+  "processing_response",
+];
+
 interface UseNarrativeGenerationOptions {
   onPhaseChange?: (phase: NarrativePhase | null) => void;
   onComplete?: () => void;
@@ -258,7 +267,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+        ACTIVE_GENERATION_PHASES.includes(
           narrativePhase ?? "",
         )
       ) {
@@ -410,7 +419,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+        ACTIVE_GENERATION_PHASES.includes(
           narrativePhase ?? "",
         )
       ) {
@@ -495,7 +504,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     fetchIncubatorData,
 
     // Computed
-    isMidGeneration: ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+    isMidGeneration: ACTIVE_GENERATION_PHASES.includes(
       narrativePhase ?? "",
     ),
   };
