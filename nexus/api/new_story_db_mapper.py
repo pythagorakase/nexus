@@ -558,6 +558,50 @@ class NewStoryDatabaseMapper:
         with get_connection(self.dbname) as conn:
             try:
                 with conn.cursor() as cur:
+                    # Ensure global_variables row exists (may have been deleted by previous CASCADE)
+                    cur.execute("""
+                        INSERT INTO global_variables (id, new_story)
+                        VALUES (true, true)
+                        ON CONFLICT (id) DO NOTHING
+                    """)
+
+                    # Clean slate: DELETE all entity data and reset sequences
+                    # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
+                    # and PostgreSQL blocks TRUNCATE on tables with inbound FK references.
+                    # DELETE respects ON DELETE SET NULL and works with FK constraints.
+                    cur.execute(
+                        "UPDATE global_variables SET user_character = NULL WHERE id = true"
+                    )
+
+                    # Delete in reverse dependency order (children before parents)
+                    cur.execute("""
+                        DELETE FROM chunk_character_references;
+                        DELETE FROM chunk_faction_references;
+                        DELETE FROM place_chunk_references;
+                        DELETE FROM character_aliases;
+                        DELETE FROM character_psychology;
+                        DELETE FROM character_relationships;
+                        DELETE FROM faction_relationships;
+                        DELETE FROM faction_character_relationships;
+                        DELETE FROM items;
+                        DELETE FROM factions;
+                        DELETE FROM characters;
+                        DELETE FROM places;
+                        DELETE FROM zones;
+                        DELETE FROM layers;
+                    """)
+
+                    # Reset identity sequences so protagonist gets ID=1
+                    cur.execute("""
+                        ALTER SEQUENCE characters_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE places_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE zones_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE layers_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE items_id_seq RESTART WITH 1;
+                        ALTER SEQUENCE character_relationships_id_seq RESTART WITH 1;
+                    """)
+                    logger.info("Truncated entity tables for clean slate")
+
                     # Save setting (using shared cursor)
                     self.save_setting_to_globals(transition_data.setting, cursor=cur)
                     logger.debug("Saved setting to global_variables")

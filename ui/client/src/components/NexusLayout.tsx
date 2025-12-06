@@ -37,6 +37,9 @@ const TIMEOUTS = {
   LATEST_CHUNK_REFETCH: 30000,      // Refetch latest chunk every 30 seconds (optimized - use WebSocket for real-time updates)
 } as const;
 
+const PENDING_BOOTSTRAP_KEY = "pendingBootstrapSession";
+const PENDING_BOOTSTRAP_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour - discard stale bootstrap sessions
+
 interface SettingsPayload {
   ["Agent Settings"]?: {
     global?: {
@@ -88,6 +91,7 @@ export function NexusLayout() {
     const storedSlot = localStorage.getItem("activeSlot");
     return storedSlot ? parseInt(storedSlot, 10) : null;
   });
+  const [pendingBootstrapSessionId, setPendingBootstrapSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;
@@ -228,6 +232,7 @@ export function NexusLayout() {
   const narrative = useNarrativeGeneration({
     allowedChunkId: latestChunk?.id ?? null,
     slot: activeSlot,
+    initialSessionId: pendingBootstrapSessionId,
     onPhaseChange: (phase) => {
       handlePhaseEvent(phase);
     },
@@ -238,6 +243,71 @@ export function NexusLayout() {
       setApexStatus("OFFLINE");
     },
   });
+
+  // Check for existing incubator data on mount (handles resume + bootstrap completion)
+  const incubatorCheckedRef = useRef(false);
+  useEffect(() => {
+    // Reset check flag when slot changes
+    incubatorCheckedRef.current = false;
+  }, [activeSlot]);
+  useEffect(() => {
+    if (!activeSlot) {
+      setPendingBootstrapSessionId(null);
+      return;
+    }
+
+    const pending = localStorage.getItem(PENDING_BOOTSTRAP_KEY);
+
+    if (pending) {
+      try {
+        const parsed = JSON.parse(pending);
+        // Validate slot match, sessionId presence, and freshness
+        if (
+          parsed?.slot === activeSlot &&
+          typeof parsed.sessionId === "string" &&
+          typeof parsed.createdAt === "number" &&
+          Date.now() - parsed.createdAt < PENDING_BOOTSTRAP_MAX_AGE_MS
+        ) {
+          setPendingBootstrapSessionId(parsed.sessionId);
+          bootstrapTriggeredRef.current = true;
+          return;
+        }
+        // Stale or invalid session - clean up
+        if (parsed?.createdAt && Date.now() - parsed.createdAt >= PENDING_BOOTSTRAP_MAX_AGE_MS) {
+          console.log("[NexusLayout] Discarding stale pending bootstrap session");
+          localStorage.removeItem(PENDING_BOOTSTRAP_KEY);
+        }
+      } catch (error) {
+        console.error("[NexusLayout] Failed to parse pending bootstrap session", error);
+        localStorage.removeItem(PENDING_BOOTSTRAP_KEY);
+      }
+    }
+
+    setPendingBootstrapSessionId(null);
+  }, [activeSlot]);
+
+  useEffect(() => {
+    if (!pendingBootstrapSessionId) {
+      return;
+    }
+
+    const bootstrapComplete =
+      narrative.narrativePhase === "complete" || latestChunk !== null || narrative.showApprovalModal;
+
+    if (bootstrapComplete) {
+      localStorage.removeItem(PENDING_BOOTSTRAP_KEY);
+      setPendingBootstrapSessionId(null);
+    }
+  }, [pendingBootstrapSessionId, narrative.narrativePhase, narrative.showApprovalModal, latestChunk]);
+  useEffect(() => {
+    // Only check incubator for new stories (no committed chunks yet)
+    // This prevents showing stale modal for slots that already have narrative
+    if (activeSlot && !incubatorCheckedRef.current && !narrative.isMidGeneration && latestChunk === null && !isLoadingChunk) {
+      incubatorCheckedRef.current = true;
+      console.log("[NexusLayout] New story - checking for existing incubator data...");
+      narrative.fetchIncubatorData();
+    }
+  }, [activeSlot, narrative.isMidGeneration, narrative.fetchIncubatorData, latestChunk, isLoadingChunk]);
 
   // Auto-trigger bootstrap for new stories (no chunks but character exists)
   const bootstrapTriggeredRef = useRef(false);
@@ -250,21 +320,24 @@ export function NexusLayout() {
     // 1. No chunks yet (latestChunk is null, not loading, no error)
     // 2. User character exists (transition completed)
     // 3. Not already generating
-    // 4. Haven't already triggered bootstrap this session
+    // 4. No pending approval (incubator data exists)
+    // 5. Haven't already triggered bootstrap this session
     const needsBootstrap =
       latestChunk === null &&
       !isLoadingChunk &&
       !chunkError &&
       userCharacter !== null &&
       !narrative.isMidGeneration &&
-      !bootstrapTriggeredRef.current;
+      !narrative.showApprovalModal &&
+      !bootstrapTriggeredRef.current &&
+      !pendingBootstrapSessionId;
 
     if (needsBootstrap) {
       console.log("[NexusLayout] New story detected - triggering bootstrap");
       bootstrapTriggeredRef.current = true;
       narrative.triggerBootstrap("Begin the story.");
     }
-  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.triggerBootstrap]);
+  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.showApprovalModal, narrative.triggerBootstrap]);
 
   // Parse model name from settings
   useEffect(() => {

@@ -30,7 +30,8 @@ DB_USER = _db_settings.get("user", "pythagor")
 DB_HOST = _db_settings.get("host", "localhost")
 
 TEMPLATE_DB = "NEXUS_template"
-TARGET_DBS = ["NEXUS", "save_01", "save_02", "save_03", "save_04", "save_05"]
+# Note: NEXUS database intentionally excluded - kept as backup
+TARGET_DBS = ["save_01", "save_02", "save_03", "save_04", "save_05"]
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 

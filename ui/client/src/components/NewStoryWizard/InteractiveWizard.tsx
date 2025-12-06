@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
 import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
 import { TraitSelector } from "./TraitSelector";
+import { WaitScreen } from "./WaitScreen";
 
 interface Message {
     id: string;
@@ -163,6 +164,17 @@ export function InteractiveWizard({
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
 
+    // Ref-based guard for synchronous double-click prevention
+    // React state updates are async, so fast double-clicks can slip through state-based guards
+    const processingRef = useRef(false);
+
+    // Wait screen state for long-running transition + bootstrap
+    const [waitScreenActive, setWaitScreenActive] = useState(false);
+    const [waitScreenElapsed, setWaitScreenElapsed] = useState(0);
+    const [waitScreenError, setWaitScreenError] = useState<string | null>(null);
+    const [waitScreenStatusText, setWaitScreenStatusText] = useState("Initializing your world...");
+    const transitionAbortRef = useRef<AbortController | null>(null);
+
     const updatePhase = (newPhase: Phase) => {
         setCurrentPhase(newPhase);
         onPhaseChange(newPhase);
@@ -236,6 +248,130 @@ export function InteractiveWizard({
         }
     }, [messages, isLoading, pendingArtifact, displayChoices]);
 
+    // Timer for wait screen - counts up every second while active
+    useEffect(() => {
+        if (!waitScreenActive) {
+            return;
+        }
+        const interval = setInterval(() => {
+            setWaitScreenElapsed((prev) => prev + 1);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [waitScreenActive]);
+
+    // Transition handler - performs transition + triggers bootstrap, then navigates
+    // NexusLayout handles detecting incubator data and showing approval modal
+    const performTransition = useCallback(async () => {
+        // Reset state on start/retry
+        setWaitScreenError(null);
+        setWaitScreenElapsed(0);
+        setWaitScreenStatusText("Initializing your world...");
+        setWaitScreenActive(true);
+
+        // Create abort controller for cancellation
+        const abortController = new AbortController();
+        transitionAbortRef.current = abortController;
+
+        try {
+            // Step 1: Transition (write entities to database)
+            const transitionRes = await fetch("/api/story/new/transition", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ slot }),
+                signal: abortController.signal,
+            });
+
+            if (!transitionRes.ok) {
+                const error = await transitionRes.json();
+                throw new Error(error.detail || "Transition failed");
+            }
+
+            await transitionRes.json(); // consume response
+
+            // Step 2: Trigger bootstrap (generate first narrative chunk)
+            setWaitScreenStatusText("Starting narrative generation...");
+
+            const bootstrapRes = await fetch("/api/narrative/continue", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    chunk_id: 0,  // Bootstrap signal
+                    slot,
+                    user_text: "Begin the story.",
+                }),
+                signal: abortController.signal,
+            });
+
+            if (!bootstrapRes.ok) {
+                const error = await bootstrapRes.json();
+                throw new Error(error.detail || error.error || "Bootstrap failed");
+            }
+
+            const bootstrapData = await bootstrapRes.json();
+            console.log("[Wizard] Bootstrap triggered, session:", bootstrapData.session_id);
+
+            localStorage.setItem(
+                "pendingBootstrapSession",
+                JSON.stringify({ slot, sessionId: bootstrapData.session_id, createdAt: Date.now() }),
+            );
+
+            // Step 3: Navigate to NexusLayout immediately
+            // NexusLayout will:
+            // - Connect to WebSocket for real-time updates
+            // - Detect incubator data when generation completes
+            // - Show approval modal automatically
+            setWaitScreenActive(false);
+            toast({
+                title: "Generation Started",
+                description: "Your story is being created...",
+            });
+            localStorage.setItem("activeSlot", slot.toString());
+            onComplete();
+
+        } catch (e: any) {
+            if (e.name === "AbortError") {
+                // User cancelled via handleWaitScreenCancel - reset state for retry
+                // Note: processingRef is also reset in handleWaitScreenCancel, but we reset here too
+                // for the edge case where abort happens before cancel handler runs
+                processingRef.current = false;
+                setWaitScreenActive(false);
+                setIsLoading(false);
+                toast({
+                    title: "Operation cancelled",
+                    description: "You can restart when ready.",
+                });
+                return;
+            }
+            console.error("Transition/bootstrap error:", e);
+            // Reset guard to allow retry after error
+            processingRef.current = false;
+            setWaitScreenError(e.message || "Failed to initialize story");
+            // Keep wait screen active with error state for retry
+        }
+    }, [slot, toast, onComplete]);
+
+    // Cancel wait screen and return to artifact review
+    const handleWaitScreenCancel = useCallback(() => {
+        // Abort any in-flight request
+        if (transitionAbortRef.current) {
+            transitionAbortRef.current.abort();
+        }
+        // Reset guard to allow re-confirming after cancel
+        processingRef.current = false;
+        setWaitScreenActive(false);
+        setWaitScreenError(null);
+        setWaitScreenElapsed(0);
+        setWaitScreenStatusText("Initializing your world...");
+        setIsLoading(false);
+        // Re-show the pending artifact for editing
+        // (pendingArtifact is still set from before)
+    }, []);
+
+    // Retry transition from wait screen
+    const handleWaitScreenRetry = useCallback(() => {
+        performTransition();
+    }, [performTransition]);
+
     const addMessage = (
         role: Message["role"],
         content: string,
@@ -263,6 +399,7 @@ export function InteractiveWizard({
     };
 
     const triggerSubphaseContinuation = async (artifactType: string, contextData: any) => {
+        if (isLoading) return;
         setIsLoading(true);
         setDisplayChoices(null);  // Clear stale choices immediately to prevent flash
         try {
@@ -297,6 +434,7 @@ export function InteractiveWizard({
         } catch (error) {
             console.error("Continuation error:", error);
         } finally {
+            processingRef.current = false;
             setIsLoading(false);
         }
     };
@@ -377,7 +515,9 @@ export function InteractiveWizard({
     };
 
     const handleSend = async () => {
-        if (!input.trim() || isLoading || !threadId) return;
+        // Synchronous ref-based guard for double-click prevention
+        if (processingRef.current || !input.trim() || isLoading || !threadId) return;
+        processingRef.current = true;
 
         const userMsg = input.trim();
         setInput("");
@@ -427,11 +567,16 @@ export function InteractiveWizard({
                 variant: "destructive",
             });
         } finally {
+            processingRef.current = false;
             setIsLoading(false);
         }
     };
 
     const handleChoiceSelect = (selection: ChoiceSelection) => {
+        // Synchronous ref-based guard for double-click prevention
+        if (processingRef.current || isLoading) return;
+        processingRef.current = true;
+
         // Clear choices while loading
         setDisplayChoices(null);
         const inputToSend = selection.text;
@@ -476,6 +621,7 @@ export function InteractiveWizard({
                 });
             })
             .finally(() => {
+                processingRef.current = false;
                 setIsLoading(false);
             });
     };
@@ -519,6 +665,10 @@ export function InteractiveWizard({
     };
 
     const handleTraitConfirm = (traits: string[]) => {
+        // Synchronous ref-based guard for double-click prevention
+        if (processingRef.current || isLoading) return;
+        processingRef.current = true;
+
         // Don't close selector yet - keep it open with spinner while processing
         const traitMessage = `I'll take: ${traits.join(", ")}`;
         setInput("");
@@ -563,12 +713,17 @@ export function InteractiveWizard({
                 });
             })
             .finally(() => {
+                processingRef.current = false;
                 setIsLoading(false);
             });
     };
 
     // Handle invalid trait selection (≠3 traits) - sends to LLM for dialog, UI stays open
     const handleInvalidTraitConfirm = (traits: string[], count: number) => {
+        // Synchronous ref-based guard for double-click prevention
+        if (processingRef.current || isLoading) return;
+        processingRef.current = true;
+
         // UI stays open for continued adjustment
         const direction = count < 3 ? "add more" : "narrow down";
         const traitMessage = `I've selected ${count} trait${count !== 1 ? "s" : ""}: ${traits.join(", ")}. I need to ${direction} my selection.`;
@@ -600,11 +755,31 @@ export function InteractiveWizard({
                 });
             })
             .finally(() => {
+                processingRef.current = false;
                 setIsLoading(false);
             });
     };
 
     const handleArtifactConfirm = async () => {
+        // Synchronous ref-based guard for double-click prevention
+        if (processingRef.current || !pendingArtifact || isLoading) return;
+        processingRef.current = true;
+
+        // Validate artifact matches expected phase to prevent race condition issues
+        const expectedArtifactTypes: Record<Phase, string> = {
+            setting: "submit_world_document",
+            character: "submit_character_sheet",
+            seed: "submit_starting_scenario",
+        };
+
+        const expectedType = expectedArtifactTypes[currentPhase];
+        if (expectedType && pendingArtifact.type !== expectedType) {
+            console.warn(`Phase mismatch: expected ${expectedType} for ${currentPhase} phase, got ${pendingArtifact.type}`);
+            processingRef.current = false;
+            setPendingArtifact(null);
+            return;
+        }
+
         // Determine next phase or completion
         if (currentPhase === "setting") {
             setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
@@ -623,44 +798,12 @@ export function InteractiveWizard({
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
             onArtifactConfirmed?.("seed", pendingArtifact.data);
-            setPendingArtifact(null);
+            // Keep pendingArtifact set so cancel can return to editing
             setIsLoading(true);
 
-            // Call transition endpoint to finalize and populate database
-            try {
-                const res = await fetch("/api/story/new/transition", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ slot }),
-                });
-
-                if (!res.ok) {
-                    const error = await res.json();
-                    throw new Error(error.detail || "Transition failed");
-                }
-
-                const result = await res.json();
-
-                toast({
-                    title: "Initialization Complete",
-                    description: result.message || "Entering simulation...",
-                });
-
-                // Navigate to game after successful transition
-                setTimeout(() => {
-                    localStorage.setItem("activeSlot", slot.toString());
-                    onComplete();
-                }, 1000);
-            } catch (e: any) {
-                console.error("Transition error:", e);
-                toast({
-                    title: "Transition Error",
-                    description: e.message || "Failed to initialize story. Please try again.",
-                    variant: "destructive",
-                });
-                setIsLoading(false);
-                // Don't navigate - stay on wizard for retry
-            }
+            // Show wait screen and start transition
+            // This can take up to 10 minutes with reasoning models
+            performTransition();
         }
     };
 
@@ -688,6 +831,7 @@ export function InteractiveWizard({
         } catch (error) {
             console.error("Next phase trigger error:", error);
         } finally {
+            processingRef.current = false;
             setIsLoading(false);
         }
     };
@@ -914,15 +1058,17 @@ export function InteractiveWizard({
                         <Button
                             variant="outline"
                             onClick={() => setPendingArtifact(null)}
-                            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                            disabled={isLoading}
+                            className="border-destructive/50 text-destructive hover:bg-destructive/10 disabled:opacity-50"
                         >
                             REVISE
                         </Button>
                         <Button
                             onClick={handleArtifactConfirm}
-                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30"
+                            disabled={isLoading}
+                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30 disabled:opacity-50"
                         >
-                            CONFIRM & PROCEED
+                            {isLoading ? "Processing..." : "CONFIRM & PROCEED"}
                         </Button>
                     </div>
                 </Card>
@@ -1048,6 +1194,19 @@ export function InteractiveWizard({
         <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
             {renderArtifactConfirmation()}
             {renderArtifactViewer()}
+
+            {/* Wait screen for long-running transition + bootstrap operations */}
+            {waitScreenActive && (
+                <WaitScreen
+                    statusText={waitScreenStatusText}
+                    elapsedSeconds={waitScreenElapsed}
+                    maxSeconds={600}
+                    onRetry={handleWaitScreenRetry}
+                    onCancel={handleWaitScreenCancel}
+                    hasError={!!waitScreenError}
+                    errorMessage={waitScreenError || undefined}
+                />
+            )}
 
             {/* Header */}
             <div className="p-4 border-b border-primary/30 bg-background/60 flex justify-between items-center">

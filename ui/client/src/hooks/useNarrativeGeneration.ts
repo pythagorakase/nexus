@@ -15,22 +15,38 @@ import type { ChunkWithMetadata } from "../components/NarrativeTab";
 import type { IncubatorViewPayload, NarrativeProgressPayload, NarrativePhase } from "../types/narrative";
 import { toast } from "./use-toast";
 
+/** Phases that indicate generation is actively in progress */
+const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
+  "initiated",
+  "loading_chunk",
+  "building_context",
+  "calling_llm",
+  "processing_response",
+];
+
 interface UseNarrativeGenerationOptions {
   onPhaseChange?: (phase: NarrativePhase | null) => void;
   onComplete?: () => void;
   onError?: () => void;
   allowedChunkId?: number | null;
   slot?: number | null;
+  /**
+   * Optional session to seed the hook with when a generation was started
+   * outside this hook (e.g., InteractiveWizard bootstrap).
+   */
+  initialSessionId?: string | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot, initialSessionId = null } = options;
   const queryClient = useQueryClient();
 
   // Session state
-  const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
+  const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(initialSessionId);
   const activeNarrativeSessionRef = useRef<string | null>(null);
-  const [narrativePhase, setNarrativePhase] = useState<NarrativePhase | null>(null);
+  const [narrativePhase, setNarrativePhase] = useState<NarrativePhase | null>(
+    initialSessionId ? "initiated" : null,
+  );
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [lastUserInput, setLastUserInput] = useState<string>("Continue.");
   const [generationParentChunk, setGenerationParentChunk] = useState<ChunkWithMetadata | null>(null);
@@ -52,6 +68,16 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
   useEffect(() => {
     activeNarrativeSessionRef.current = activeNarrativeSession;
   }, [activeNarrativeSession]);
+
+  // Sync externally provided session IDs (e.g., started by wizard) into local state
+  useEffect(() => {
+    if (!initialSessionId) {
+      return;
+    }
+
+    setActiveNarrativeSession(initialSessionId);
+    setNarrativePhase((prev) => prev ?? "initiated");
+  }, [initialSessionId]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -101,12 +127,16 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         return;
       }
       setIncubatorData(payload as IncubatorViewPayload);
+      // Set the session ID so approval can work (critical for resume flow)
+      if (payload.session_id) {
+        setActiveNarrativeSession(payload.session_id);
+      }
       setShowApprovalModal(true);
     } catch (error) {
       console.error("Unable to load incubator data:", error);
       setGenerationError(error instanceof Error ? error.message : "Unable to load incubator");
     }
-  }, []);
+  }, [slot]);
 
   const handleNarrativeProgress = useCallback(
     (payload: NarrativeProgressPayload) => {
@@ -237,7 +267,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+        ACTIVE_GENERATION_PHASES.includes(
           narrativePhase ?? "",
         )
       ) {
@@ -389,7 +419,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+        ACTIVE_GENERATION_PHASES.includes(
           narrativePhase ?? "",
         )
       ) {
@@ -474,7 +504,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     fetchIncubatorData,
 
     // Computed
-    isMidGeneration: ["initiated", "loading_chunk", "building_context", "calling_llm", "processing_response"].includes(
+    isMidGeneration: ACTIVE_GENERATION_PHASES.includes(
       narrativePhase ?? "",
     ),
   };
