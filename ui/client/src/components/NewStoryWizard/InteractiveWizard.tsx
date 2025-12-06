@@ -310,6 +310,11 @@ export function InteractiveWizard({
             const bootstrapData = await bootstrapRes.json();
             console.log("[Wizard] Bootstrap triggered, session:", bootstrapData.session_id);
 
+            localStorage.setItem(
+                "pendingBootstrapSession",
+                JSON.stringify({ slot, sessionId: bootstrapData.session_id, createdAt: Date.now() }),
+            );
+
             // Step 3: Navigate to NexusLayout immediately
             // NexusLayout will:
             // - Connect to WebSocket for real-time updates

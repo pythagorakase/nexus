@@ -21,16 +21,23 @@ interface UseNarrativeGenerationOptions {
   onError?: () => void;
   allowedChunkId?: number | null;
   slot?: number | null;
+  /**
+   * Optional session to seed the hook with when a generation was started
+   * outside this hook (e.g., InteractiveWizard bootstrap).
+   */
+  initialSessionId?: string | null;
 }
 
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
-  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot } = options;
+  const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot, initialSessionId = null } = options;
   const queryClient = useQueryClient();
 
   // Session state
-  const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(null);
+  const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(initialSessionId);
   const activeNarrativeSessionRef = useRef<string | null>(null);
-  const [narrativePhase, setNarrativePhase] = useState<NarrativePhase | null>(null);
+  const [narrativePhase, setNarrativePhase] = useState<NarrativePhase | null>(
+    initialSessionId ? "initiated" : null,
+  );
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [lastUserInput, setLastUserInput] = useState<string>("Continue.");
   const [generationParentChunk, setGenerationParentChunk] = useState<ChunkWithMetadata | null>(null);
@@ -52,6 +59,16 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
   useEffect(() => {
     activeNarrativeSessionRef.current = activeNarrativeSession;
   }, [activeNarrativeSession]);
+
+  // Sync externally provided session IDs (e.g., started by wizard) into local state
+  useEffect(() => {
+    if (!initialSessionId) {
+      return;
+    }
+
+    setActiveNarrativeSession(initialSessionId);
+    setNarrativePhase((prev) => prev ?? "initiated");
+  }, [initialSessionId]);
 
   // Cleanup on unmount
   useEffect(() => {
