@@ -23,6 +23,8 @@ import { Book, Map, Users, Settings } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { useNarrativeGeneration } from "@/hooks/useNarrativeGeneration";
 import type { EntityChanges } from "@/types/narrative";
+import { selectChoice } from "@/lib/api";
+import type { ChoiceSelection } from "@/components/StoryChoices";
 
 // Timing constants for APEX status transitions and UI updates
 const TIMEOUTS = {
@@ -92,6 +94,8 @@ export function NexusLayout() {
     return storedSlot ? parseInt(storedSlot, 10) : null;
   });
   const [pendingBootstrapSessionId, setPendingBootstrapSessionId] = useState<string | null>(null);
+  // Track whether incubator check has completed (not just started)
+  const [incubatorCheckComplete, setIncubatorCheckComplete] = useState(false);
 
   useEffect(() => {
     apexStatusRef.current = apexStatus;
@@ -247,8 +251,9 @@ export function NexusLayout() {
   // Check for existing incubator data on mount (handles resume + bootstrap completion)
   const incubatorCheckedRef = useRef(false);
   useEffect(() => {
-    // Reset check flag when slot changes
+    // Reset check flags when slot changes
     incubatorCheckedRef.current = false;
+    setIncubatorCheckComplete(false);
   }, [activeSlot]);
   useEffect(() => {
     if (!activeSlot) {
@@ -305,7 +310,11 @@ export function NexusLayout() {
     if (activeSlot && !incubatorCheckedRef.current && !narrative.isMidGeneration && latestChunk === null && !isLoadingChunk) {
       incubatorCheckedRef.current = true;
       console.log("[NexusLayout] New story - checking for existing incubator data...");
-      narrative.fetchIncubatorData();
+      // Chain .finally() to mark check complete regardless of success/failure
+      narrative.fetchIncubatorData().finally(() => {
+        setIncubatorCheckComplete(true);
+        console.log("[NexusLayout] Incubator check complete");
+      });
     }
   }, [activeSlot, narrative.isMidGeneration, narrative.fetchIncubatorData, latestChunk, isLoadingChunk]);
 
@@ -322,6 +331,7 @@ export function NexusLayout() {
     // 3. Not already generating
     // 4. No pending approval (incubator data exists)
     // 5. Haven't already triggered bootstrap this session
+    // 6. Incubator check has completed (race condition fix)
     const needsBootstrap =
       latestChunk === null &&
       !isLoadingChunk &&
@@ -329,6 +339,8 @@ export function NexusLayout() {
       userCharacter !== null &&
       !narrative.isMidGeneration &&
       !narrative.showApprovalModal &&
+      !narrative.incubatorData &&
+      incubatorCheckComplete &&  // Only bootstrap after incubator check completes
       !bootstrapTriggeredRef.current &&
       !pendingBootstrapSessionId;
 
@@ -337,7 +349,35 @@ export function NexusLayout() {
       bootstrapTriggeredRef.current = true;
       narrative.triggerBootstrap("Begin the story.");
     }
-  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.showApprovalModal, narrative.triggerBootstrap]);
+  }, [latestChunk, isLoadingChunk, chunkError, userCharacter, narrative.isMidGeneration, narrative.showApprovalModal, narrative.incubatorData, incubatorCheckComplete, narrative.triggerBootstrap]);
+
+  // Handle choice selection for incubator inline display
+  const handleIncubatorChoiceSelect = useCallback(
+    async (selection: ChoiceSelection) => {
+      const chunkId = narrative.incubatorData?.chunk_id;
+      if (!chunkId) {
+        toast({
+          title: "No incubator data",
+          description: "Cannot select choice without active incubator content.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        await selectChoice(chunkId, selection, activeSlot);
+        // Refresh incubator data to show the selected choice
+        await narrative.fetchIncubatorData();
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to record choice",
+          variant: "destructive",
+        });
+      }
+    },
+    [narrative.incubatorData?.chunk_id, narrative.fetchIncubatorData, activeSlot],
+  );
 
   // Parse model name from settings
   useEffect(() => {
@@ -473,28 +513,8 @@ export function NexusLayout() {
   const showElapsed = narrative.elapsedMs > TIMEOUTS.ELAPSED_DISPLAY_THRESHOLD;
   const canContinue = latestChunkId !== null && selectedChunk?.id === latestChunkId;
   const continueDisabled = !canContinue || (narrative.narrativePhase !== null && narrative.narrativePhase !== "error");
-  const approvalOpen = narrative.showApprovalModal && !!narrative.incubatorData;
-  const entityChanges: EntityChanges = narrative.incubatorData?.entity_changes || {};
-  const referenceChanges = narrative.incubatorData?.references || [];
-  const characterChanges = Array.isArray(entityChanges?.characters) ? entityChanges.characters : [];
-  const locationChanges = Array.isArray(entityChanges?.locations) ? entityChanges.locations : [];
-  const factionChanges = Array.isArray(entityChanges?.factions) ? entityChanges.factions : [];
-  const referencedCharacters = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'character') : [];
-  const referencedPlaces = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'place') : [];
-  const referencedFactions = Array.isArray(referenceChanges) ? referenceChanges.filter((r) => r.entityType === 'faction') : [];
+  // Dialog-related variables removed - incubator now displays inline in NarrativeTab
   const tabContentClass = "flex-1 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden";
-  const chunkLabel =
-    narrative.generationParentChunk?.metadata?.season !== null &&
-      narrative.generationParentChunk?.metadata?.season !== undefined &&
-      narrative.generationParentChunk?.metadata?.episode !== null &&
-      narrative.generationParentChunk?.metadata?.episode !== undefined
-      ? `S${String(narrative.generationParentChunk.metadata.season).padStart(2, "0")}E${String(
-        narrative.generationParentChunk.metadata.episode,
-      ).padStart(2, "0")}`
-      : narrative.incubatorData?.parent_chunk_id
-        ? `Chunk ${narrative.incubatorData.parent_chunk_id}`
-        : "Narrative turn";
-  const subtitle = narrative.generationParentChunk?.metadata?.slug || "Awaiting metadata";
 
   return (
     <>
@@ -569,6 +589,13 @@ export function NexusLayout() {
               onChunkSelected={handleChunkSelection}
               sessionId={narrative.activeNarrativeSession ?? undefined}
               slot={activeSlot}
+              // Incubator inline display props
+              incubatorData={narrative.incubatorData}
+              onIncubatorChoiceSelect={handleIncubatorChoiceSelect}
+              onIncubatorApprove={narrative.handleApprove}
+              onIncubatorCancel={narrative.handleCancel}
+              onIncubatorRegenerate={narrative.handleRegenerate}
+              isIncubatorProcessing={narrative.isMidGeneration}
             />
           </TabsContent>
 
@@ -618,135 +645,7 @@ export function NexusLayout() {
         )}
       </div>
 
-      <Dialog open={approvalOpen} onOpenChange={(open) => !open && narrative.handleCancel()}>
-        <DialogContent className="max-w-5xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Review generated narrative</span>
-              <div className="flex items-center gap-2">
-                {isTestModeEnabled && <Badge variant="destructive">TEST MODE</Badge>}
-                {narrative.activeNarrativeSession && (
-                  <Badge variant="outline">Session {narrative.activeNarrativeSession.slice(0, 8)}</Badge>
-                )}
-              </div>
-            </DialogTitle>
-            <DialogDescription className="font-mono text-xs">
-              {chunkLabel} {'->'} proposed chunk {narrative.incubatorData?.chunk_id ?? "pending"}
-            </DialogDescription>
-          </DialogHeader>
-
-          {narrative.incubatorData && (
-            <div className="grid gap-4 md:grid-cols-3 text-sm">
-              <div className="md:col-span-2 space-y-3">
-                <div className="space-y-1">
-                  <div className={`text-primary ${glowClass} font-mono text-sm`}>{chunkLabel}</div>
-                  <div className="text-muted-foreground italic text-xs">{subtitle}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {narrative.incubatorData.time_delta || "Time delta pending"}
-                  </div>
-                </div>
-                <ScrollArea className="h-72 rounded border border-border bg-card/70 p-4">
-                  <div className="whitespace-pre-wrap leading-relaxed text-foreground">
-                    {narrative.incubatorData.storyteller_text || "No narrative captured"}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-muted-foreground">Entity changes</span>
-                  <Badge variant="outline">{narrative.incubatorData.entity_update_count ?? 0}</Badge>
-                </div>
-                <div className="rounded border border-border bg-card/60 p-3 space-y-3 text-xs text-foreground">
-                  {characterChanges.length > 0 ? (
-                    <div>
-                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Characters</div>
-                      <ul className="space-y-1 list-disc list-inside">
-                        {characterChanges.map((change: any, idx: number) => (
-                          <li key={`char-${idx}`} className="leading-relaxed">
-                            #{change.character_id ?? "?"}: {change.character_name ?? "Unknown"}
-                            {change.emotional_state ? ` - ${change.emotional_state}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">No character updates</div>
-                  )}
-
-                  {locationChanges.length > 0 && (
-                    <div>
-                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Locations</div>
-                      <ul className="space-y-1 list-disc list-inside">
-                        {locationChanges.map((change: any, idx: number) => (
-                          <li key={`loc-${idx}`} className="leading-relaxed">
-                            #{change.place_id ?? "?"}: {change.place_name ?? "Unknown"}
-                            {change.current_status ? ` - ${change.current_status}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {factionChanges.length > 0 && (
-                    <div>
-                      <div className="font-mono text-[11px] text-muted-foreground mb-1">Factions</div>
-                      <ul className="space-y-1 list-disc list-inside">
-                        {factionChanges.map((change: any, idx: number) => (
-                          <li key={`faction-${idx}`} className="leading-relaxed">
-                            #{change.faction_id ?? "?"}: {change.faction_name ?? "Unknown"}
-                            {change.current_activity ? ` - ${change.current_activity}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {(referencedCharacters.length > 0 ||
-                    referencedPlaces.length > 0 ||
-                    referencedFactions.length > 0) && (
-                      <div>
-                        <div className="font-mono text-[11px] text-muted-foreground mb-1">References</div>
-                        <ul className="space-y-1 list-disc list-inside">
-                          {referencedCharacters.map((ref: any, idx: number) => (
-                            <li key={`ref-char-${idx}`}>
-                              #{ref.character_id ?? "?"}: {ref.character_name ?? "Unknown"}{" "}
-                              {ref.reference_type ? `(${ref.reference_type})` : ""}
-                            </li>
-                          ))}
-                          {referencedPlaces.map((ref: any, idx: number) => (
-                            <li key={`ref-place-${idx}`}>
-                              #{ref.place_id ?? "?"}: {ref.place_name ?? "Unknown"}{" "}
-                              {ref.reference_type ? `(${ref.reference_type})` : ""}
-                            </li>
-                          ))}
-                          {referencedFactions.map((ref: any, idx: number) => (
-                            <li key={`ref-faction-${idx}`}>
-                              #{ref.faction_id ?? "?"}: {ref.faction_name ?? "Unknown"}{" "}
-                              {ref.reference_type ? `(${ref.reference_type})` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={narrative.handleCancel}>
-              Cancel
-            </Button>
-            <Button variant="outline" onClick={narrative.handleRegenerate} disabled={narrative.isMidGeneration}>
-              Regenerate
-            </Button>
-            <Button onClick={narrative.handleApprove} disabled={!narrative.activeNarrativeSession}>
-              Approve &amp; Commit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog modal removed - incubator now displays inline in NarrativeTab */}
     </>
   );
 }
