@@ -268,14 +268,15 @@ export function NewStoryWizard() {
                 <div className="border-b border-border bg-card/50 py-4 shrink-0 z-10">
                     {/* Grid with 3 equal columns ensures middle item is truly centered */}
                     <div className="grid grid-cols-3 place-items-center relative px-8 max-w-2xl mx-auto">
-                        {/* Progress Bar Background */}
-                        <div className="absolute left-8 right-8 top-4 h-0.5 bg-border -z-10" />
+                        {/* Progress Bar Background - proportional positioning to align with circle centers */}
+                        <div className="absolute left-[16.667%] right-[16.667%] top-4 h-0.5 bg-border -z-10" />
 
                         {/* Progress Bar Fill */}
                         <div
-                            className="absolute left-8 top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
+                            className="absolute top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
                             style={{
-                              width: `calc((100% - 4rem) * ${currentPhaseIndex / (PHASES.length - 1)})`,
+                              left: '16.667%',
+                              width: `calc(66.666% * ${currentPhaseIndex / (PHASES.length - 1)})`,
                             }}
                         />
 
@@ -411,7 +412,7 @@ export function NewStoryWizard() {
                                             {confirmedArtifacts.setting?.diegetic_artifact && (
                                                 <div className="pt-4 border-t border-primary/20">
                                                     <span className="text-primary block text-xs uppercase mb-2">In-World Document</span>
-                                                    <p className="text-muted-foreground italic leading-relaxed whitespace-pre-wrap text-xs">
+                                                    <p className="text-muted-foreground italic leading-relaxed whitespace-pre-wrap text-xs font-narrative">
                                                         {confirmedArtifacts.setting.diegetic_artifact}
                                                     </p>
                                                 </div>
@@ -434,7 +435,7 @@ export function NewStoryWizard() {
                                             {confirmedArtifacts.character?.diegetic_artifact && (
                                                 <div>
                                                     <span className="text-primary block text-xs uppercase mb-2">Narrative Portrait</span>
-                                                    <p className="text-muted-foreground italic leading-relaxed text-xs whitespace-pre-wrap">
+                                                    <p className="text-muted-foreground italic leading-relaxed text-xs whitespace-pre-wrap font-narrative">
                                                         {confirmedArtifacts.character.diegetic_artifact}
                                                     </p>
                                                 </div>
@@ -442,7 +443,7 @@ export function NewStoryWizard() {
                                             {confirmedArtifacts.character?.wildcard_name && (
                                                 <div className="pt-4 border-t border-primary/20">
                                                     <span className="text-primary block text-xs uppercase mb-1">{confirmedArtifacts.character.wildcard_name}</span>
-                                                    <p className="text-sm text-white/90">{confirmedArtifacts.character.wildcard_description}</p>
+                                                    <p className="text-sm text-white/90 font-narrative">{confirmedArtifacts.character.wildcard_description}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -454,7 +455,7 @@ export function NewStoryWizard() {
                                             <div className="border-l-2 border-primary pl-4">
                                                 <span className="text-primary block text-xs uppercase mb-1">Starting Scenario</span>
                                                 <h4 className="text-xl text-white font-bold mb-2">{confirmedArtifacts.seed?.seed?.title}</h4>
-                                                <p className="italic text-muted-foreground/60">{confirmedArtifacts.seed?.seed?.hook}</p>
+                                                <p className="italic text-muted-foreground/60 font-narrative">{confirmedArtifacts.seed?.seed?.hook}</p>
                                             </div>
                                             {confirmedArtifacts.seed?.location && (
                                                 <div className="pt-4">
