@@ -69,6 +69,10 @@ export function registerProxyRoutes(app: Express): void {
     ...narrativeProxyOptions,
     pathRewrite: (path) => `/api/narrative/approve${path}`,
   }));
+  app.use("/api/narrative/select-choice", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/narrative/select-choice${path}`,
+  }));
 
   // Proxy for Story Wizard endpoints
   app.use("/api/story", createProxyMiddleware({

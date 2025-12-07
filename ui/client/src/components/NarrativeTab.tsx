@@ -19,6 +19,7 @@ import { StoryChoices, type ChoiceSelection } from "./StoryChoices";
 import { acceptChunk, rejectChunk, editChunkInput, getChunkStates, selectChoice, type ChunkState } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import type { IncubatorViewPayload } from "@/types/narrative";
 
 /**
  * Choice object structure from database JSONB column
@@ -297,9 +298,26 @@ interface NarrativeTabProps {
   onChunkSelected?: (chunk: ChunkWithMetadata | null) => void;
   sessionId?: string;
   slot?: number | null;
+  // Incubator display props
+  incubatorData?: IncubatorViewPayload | null;
+  onIncubatorChoiceSelect?: (selection: ChoiceSelection) => void;
+  onIncubatorApprove?: () => void;
+  onIncubatorCancel?: () => void;
+  onIncubatorRegenerate?: () => void;
+  isIncubatorProcessing?: boolean;
 }
 
-export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabProps = {}) {
+export function NarrativeTab({
+  onChunkSelected,
+  sessionId,
+  slot,
+  incubatorData,
+  onIncubatorChoiceSelect,
+  onIncubatorApprove,
+  onIncubatorCancel,
+  onIncubatorRegenerate,
+  isIncubatorProcessing = false,
+}: NarrativeTabProps = {}) {
   const [openSeasons, setOpenSeasons] = useState<number[]>([]);
   const [openEpisodes, setOpenEpisodes] = useState<string[]>([]);
   const [selectedChunk, setSelectedChunk] = useState<ChunkWithMetadata | null>(null);
@@ -730,6 +748,102 @@ export function NarrativeTab({ onChunkSelected, sessionId, slot }: NarrativeTabP
                     Next
                     <ChevronRight className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+            ) : incubatorData ? (
+              /* ─────────────────────────────────────────────────────────────────
+               * Incubator Display: Shows pending narrative + choices inline
+               * ───────────────────────────────────────────────────────────────── */
+              <div className="space-y-6">
+                {/* Header: Incubator status */}
+                <div className="border border-primary/40 p-4 rounded-md bg-primary/5">
+                  <div className="flex items-center gap-3 text-xs font-mono">
+                    <span className={`text-primary ${glowClass}`}>
+                      [PENDING NARRATIVE]
+                    </span>
+                    <span className="text-muted-foreground">
+                      Chunk {incubatorData.chunk_id} → from {incubatorData.parent_chunk_id || "bootstrap"}
+                    </span>
+                    {incubatorData.time_delta && (
+                      <span className="text-muted-foreground/70">
+                        {incubatorData.time_delta}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Storyteller text */}
+                <div
+                  className="text-foreground text-base leading-relaxed font-narrative"
+                  style={{ fontFamily: currentBodyFont }}
+                >
+                  <ReactMarkdown components={markdownComponents}>
+                    {incubatorData.storyteller_text || ""}
+                  </ReactMarkdown>
+                </div>
+
+                {/* Structured choices - only show if presented and not yet selected */}
+                {incubatorData.choice_object?.presented &&
+                  incubatorData.choice_object.presented.length >= 2 &&
+                  !incubatorData.choice_object.selected && (
+                    <StoryChoices
+                      choices={incubatorData.choice_object.presented}
+                      onSelect={(selection) => onIncubatorChoiceSelect?.(selection)}
+                      disabled={isIncubatorProcessing}
+                    />
+                  )}
+
+                {/* Show selected choice if already chosen */}
+                {incubatorData.choice_object?.selected && (
+                  <div className="px-4 py-3 border-l-2 border-l-accent bg-secondary/20">
+                    <span className="text-sm text-foreground">
+                      <span className="font-semibold text-accent">You chose: </span>
+                      {incubatorData.choice_object.selected.text}
+                    </span>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex justify-end gap-2 pt-4 border-t border-border">
+                  {onIncubatorCancel && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onIncubatorCancel}
+                      disabled={isIncubatorProcessing || incubatorData.parent_chunk_id === 0}
+                      className="font-mono text-xs"
+                    >
+                      Undo
+                    </Button>
+                  )}
+                  {onIncubatorRegenerate && incubatorData.parent_chunk_id !== 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onIncubatorRegenerate}
+                      disabled={isIncubatorProcessing}
+                      className="font-mono text-xs"
+                    >
+                      Regenerate
+                    </Button>
+                  )}
+                  {onIncubatorApprove && (
+                    <Button
+                      size="sm"
+                      onClick={onIncubatorApprove}
+                      disabled={isIncubatorProcessing || !sessionId}
+                      className="font-mono text-xs"
+                    >
+                      {isIncubatorProcessing ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin mr-2" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Submit"
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (

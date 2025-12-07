@@ -27,6 +27,7 @@ from nexus.api.summary_triggers import (
     plan_summary_tasks,
     schedule_summary_generation
 )
+from nexus.api.lore_adapter import compute_raw_text, format_choice_text
 
 logger = logging.getLogger("nexus.api.commit_handler_sync")
 
@@ -310,7 +311,21 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
             # Step 5: Insert narrative chunk
-            # Initially raw_text = storyteller_text (user selection updates it later)
+            # Compute finalized text based on any choice selection made in the incubator
+            choice_object = incubator.get("choice_object")
+            storyteller_text = incubator.get("storyteller_text") or ""
+            raw_text = storyteller_text
+            choice_text: Optional[str] = None
+
+            if choice_object:
+                if isinstance(choice_object, str):
+                    choice_object = json.loads(choice_object)
+
+                raw_text = compute_raw_text(storyteller_text, choice_object)
+
+                if choice_object.get("selected"):
+                    choice_text = format_choice_text(choice_object, include_selection=True)
+
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO narrative_chunks (
@@ -320,10 +335,10 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
                     VALUES (%s, %s, %s, %s, %s, %s)
                     RETURNING id
                 """, (
-                    incubator["storyteller_text"],  # raw_text starts as storyteller_text
-                    incubator["storyteller_text"],  # storyteller_text (pure prose)
-                    json.dumps(incubator.get("choice_object")) if incubator.get("choice_object") else None,
-                    None,  # choice_text populated when user selects
+                    raw_text,
+                    storyteller_text,
+                    json.dumps(choice_object) if choice_object else None,
+                    choice_text,
                     db_meta["season"],
                     db_meta["episode"]
                 ))

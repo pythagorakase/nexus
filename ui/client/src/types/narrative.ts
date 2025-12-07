@@ -28,12 +28,27 @@ export interface ReferenceUpdate {
   referenceType?: string;
 }
 
+/**
+ * Choice object structure from incubator JSONB column.
+ * presented: Array of choice strings from Skald
+ * selected: User's selection (populated after choice is made)
+ */
+export interface IncubatorChoiceObject {
+  presented: string[];
+  selected?: {
+    label: number | "freeform";
+    text: string;
+    edited: boolean;
+  };
+}
+
 export interface IncubatorViewPayload {
   chunk_id: number;
   parent_chunk_id: number;
   parent_chunk_text?: string | null;
   user_text?: string | null;
   storyteller_text?: string | null;
+  choice_object?: IncubatorChoiceObject | null;
   episode_transition?: string | null;
   time_delta?: string | null;
   world_layer?: string | null;

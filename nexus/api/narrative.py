@@ -718,7 +718,7 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
 
 
 @app.post("/api/narrative/approve/{session_id}")
-async def approve_narrative(session_id: str, request: ApproveNarrativeRequest, slot: Optional[int] = None):
+async def approve_narrative(session_id: str, request: Optional[ApproveNarrativeRequest] = None, slot: Optional[int] = None):
     """
     Approve narrative and optionally commit to database
     """
@@ -734,7 +734,9 @@ async def approve_narrative(session_id: str, request: ApproveNarrativeRequest, s
                 status_code=404, detail=f"Session {session_id} not found"
             )
 
-        if request.commit:
+        # Default to commit=True if no request body provided
+        should_commit = request.commit if request else True
+        if should_commit:
             # Import synchronous commit function
             from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
@@ -773,17 +775,30 @@ async def select_choice(request: SelectChoiceRequest):
     1. Storyteller generates narrative with choices → stored with choice_object
     2. User selects a choice → this endpoint updates choice_object.selected,
        generates choice_text, and computes final raw_text for embeddings
+
+    Supports both committed chunks (narrative_chunks) and incubator chunks.
     """
     conn = get_db_connection(request.slot)
+    is_incubator = False
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Get current chunk data
+            # First try narrative_chunks
             cur.execute("""
                 SELECT id, storyteller_text, choice_object
                 FROM narrative_chunks
                 WHERE id = %s
             """, (request.chunk_id,))
             chunk = cur.fetchone()
+
+            # Fall back to incubator if not found in narrative_chunks
+            if not chunk:
+                cur.execute("""
+                    SELECT chunk_id as id, storyteller_text, choice_object
+                    FROM incubator
+                    WHERE chunk_id = %s
+                """, (request.chunk_id,))
+                chunk = cur.fetchone()
+                is_incubator = True
 
             if not chunk:
                 raise HTTPException(
@@ -839,25 +854,38 @@ async def select_choice(request: SelectChoiceRequest):
             storyteller_text = chunk.get("storyteller_text") or ""
             raw_text = compute_raw_text(storyteller_text, choice_object)
 
-            # Update the chunk
-            cur.execute("""
-                UPDATE narrative_chunks
-                SET choice_object = %s,
-                    choice_text = %s,
-                    raw_text = %s
-                WHERE id = %s
-            """, (
-                json.dumps(choice_object),
-                choice_text,
-                raw_text,
-                request.chunk_id
-            ))
+            # Update the chunk in the appropriate table
+            if is_incubator:
+                # For incubator, only update choice_object (raw_text computed at commit)
+                cur.execute("""
+                    UPDATE incubator
+                    SET choice_object = %s
+                    WHERE chunk_id = %s
+                """, (
+                    json.dumps(choice_object),
+                    request.chunk_id
+                ))
+                logger.info(f"Recorded choice selection for incubator chunk {request.chunk_id}")
+            else:
+                # For committed chunks, update all fields
+                cur.execute("""
+                    UPDATE narrative_chunks
+                    SET choice_object = %s,
+                        choice_text = %s,
+                        raw_text = %s
+                    WHERE id = %s
+                """, (
+                    json.dumps(choice_object),
+                    choice_text,
+                    raw_text,
+                    request.chunk_id
+                ))
+                logger.info(f"Finalized choice selection for chunk {request.chunk_id}")
 
         conn.commit()
-        logger.info(f"Finalized choice selection for chunk {request.chunk_id}")
 
         return SelectChoiceResponse(
-            status="finalized",
+            status="pending" if is_incubator else "finalized",
             chunk_id=request.chunk_id,
             raw_text=raw_text
         )
