@@ -810,13 +810,13 @@ export function NarrativeTab({
                       variant="ghost"
                       size="sm"
                       onClick={onIncubatorCancel}
-                      disabled={isIncubatorProcessing || !incubatorData.parent_chunk_id}
+                      disabled={isIncubatorProcessing || incubatorData.parent_chunk_id === 0}
                       className="font-mono text-xs"
                     >
                       Undo
                     </Button>
                   )}
-                  {onIncubatorRegenerate && incubatorData.parent_chunk_id && (
+                  {onIncubatorRegenerate && incubatorData.parent_chunk_id !== 0 && (
                     <Button
                       variant="outline"
                       size="sm"
