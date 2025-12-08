@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag, Eye } from "lucide-react";
+import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag, Eye, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +12,7 @@ import ReactMarkdown from "react-markdown";
 import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
 import { TraitSelector } from "./TraitSelector";
 import { WaitScreen } from "./WaitScreen";
+import { useModel } from "@/contexts/ModelContext";
 
 interface Message {
     id: string;
@@ -163,6 +165,7 @@ export function InteractiveWizard({
     const [viewingArtifact, setViewingArtifact] = useState<{ type: string; data: any } | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
+    const { model, setModel, availableModels, isTestMode } = useModel();
 
     // Ref-based guard for synchronous double-click prevention
     // React state updates are async, so fast double-clicks can slip through state-based guards
@@ -410,6 +413,7 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: `[SYSTEM] Artifact ${artifactType} confirmed. Proceed to next step.`,
+                    model,
                     current_phase: currentPhase,
                     context_data: contextData
                 }),
@@ -539,6 +543,7 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: userMsg,
+                    model,
                     current_phase: currentPhase,
                     context_data: wizardData
                 }),
@@ -596,6 +601,7 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: inputToSend,
+                model,
                 current_phase: currentPhase,
                 context_data: wizardData
             }),
@@ -689,6 +695,7 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: traitMessage,
+                model,
                 current_phase: currentPhase,
                 context_data: wizardData
             }),
@@ -743,6 +750,7 @@ export function InteractiveWizard({
                 slot,
                 thread_id: threadId,
                 message: traitMessage,
+                model,
                 current_phase: currentPhase,
                 context_data: wizardData
             }),
@@ -839,6 +847,7 @@ export function InteractiveWizard({
                     slot,
                     thread_id: threadId,
                     message: `[SYSTEM] Phase ${currentPhase} complete. Proceeding to ${nextPhase}. Please introduce the next phase.`,
+                    model,
                     current_phase: nextPhase,
                     context_data: wizardData
                 }),
@@ -1257,6 +1266,7 @@ export function InteractiveWizard({
                                     slot,
                                     thread_id: threadId,
                                     message: "",  // No message needed
+                                    model,
                                     current_phase: currentPhase,
                                     context_data: wizardData,
                                     accept_fate: true,  // Backend forces tool call
@@ -1379,6 +1389,25 @@ export function InteractiveWizard({
                             }}
                             className="flex gap-2 items-end"
                         >
+                            {/* Model Picker */}
+                            <Select value={model} onValueChange={(value) => setModel(value as any)}>
+                                <SelectTrigger className="w-[100px] h-12 bg-background/40 border-primary/30 text-primary font-mono text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                        <Cpu className="w-3 h-3" />
+                                        <SelectValue />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {availableModels.map((m) => (
+                                        <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
+                                            <div className="flex flex-col">
+                                                <span>{m.label}</span>
+                                                <span className="text-muted-foreground text-[10px]">{m.description}</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             <textarea
                                 value={input}
                                 onChange={(e) => {

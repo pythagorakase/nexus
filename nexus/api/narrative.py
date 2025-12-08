@@ -1190,9 +1190,25 @@ class ChatRequest(BaseModel):
     slot: int
     thread_id: str
     message: str
+    model: str = "gpt-5.1"  # Model selection: gpt-5.1, TEST, or claude
     current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
+
+
+def get_base_url_for_model(model: str) -> Optional[str]:
+    """Get API base URL based on model selection.
+
+    Args:
+        model: Model identifier (gpt-5.1, TEST, claude)
+
+    Returns:
+        Base URL for the model's API, or None to use default OpenAI
+    """
+    if model == "TEST":
+        return "http://localhost:5102/v1"
+    # Future: route Claude models to Anthropic API
+    return None  # Use default OpenAI
 
 
 def validate_subphase_tool(function_name: str, arguments: dict) -> dict:
@@ -1412,8 +1428,16 @@ async def new_story_chat_endpoint(request: ChatRequest):
             {"role": "system", "content": structured_choices_instruction},
         ] + history
 
-        provider = OpenAIProvider(model=model)
-        openai_client = openai.OpenAI(api_key=provider.api_key)
+        # Use model from request if specified, otherwise fall back to config
+        selected_model = request.model if request.model else model
+        base_url = get_base_url_for_model(selected_model)
+
+        provider = OpenAIProvider(model=selected_model)
+        client_kwargs = {"api_key": provider.api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+            logger.info(f"Routing to mock server: {base_url}")
+        openai_client = openai.OpenAI(**client_kwargs)
 
         # Build WizardResponse schema for structured output
         wizard_schema = WizardResponse.model_json_schema()

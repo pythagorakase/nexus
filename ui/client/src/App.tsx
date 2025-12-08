@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { FontProvider } from "@/contexts/FontContext";
+import { ModelProvider } from "@/contexts/ModelContext";
 import { NexusLayout } from "@/components/NexusLayout";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
@@ -26,14 +27,16 @@ function App() {
   return (
     <ThemeProvider>
       <FontProvider>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <ErrorBoundary>
-              <Toaster />
-              <Router />
-            </ErrorBoundary>
-          </TooltipProvider>
-        </QueryClientProvider>
+        <ModelProvider>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <ErrorBoundary>
+                <Toaster />
+                <Router />
+              </ErrorBoundary>
+            </TooltipProvider>
+          </QueryClientProvider>
+        </ModelProvider>
       </FontProvider>
     </ThemeProvider>
   );
