@@ -1412,19 +1412,16 @@ export function InteractiveWizard({
                                 <PromptInputTools>
                                     {/* Model Picker */}
                                     <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
-                                        <PromptInputModelSelectTrigger className="w-[100px] font-mono text-xs">
-                                            <div className="flex items-center gap-1.5 overflow-hidden">
+                                        <PromptInputModelSelectTrigger className="w-[90px] font-mono text-xs">
+                                            <div className="flex items-center gap-1.5">
                                                 <Cpu className="w-3 h-3 shrink-0" />
-                                                <span className="truncate"><PromptInputModelSelectValue /></span>
+                                                <PromptInputModelSelectValue />
                                             </div>
                                         </PromptInputModelSelectTrigger>
                                         <PromptInputModelSelectContent>
                                             {availableModels.map((m) => (
                                                 <PromptInputModelSelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                                                    <div className="flex flex-col">
-                                                        <span>{m.label}</span>
-                                                        <span className="text-muted-foreground text-[10px]">{m.description}</span>
-                                                    </div>
+                                                    {m.label}
                                                 </PromptInputModelSelectItem>
                                             ))}
                                         </PromptInputModelSelectContent>
