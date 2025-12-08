@@ -164,15 +164,23 @@ async def chat_completions(request: ChatCompletionRequest):
         finish_reason = "tool_calls" if message.get("tool_calls") else "stop"
     except Exception as e:
         logger.error(f"[MOCK] Error building response: {e}")
-        # Return a fallback conversational response
+        # Return a fallback tool_calls response (matches wizard expected format)
         message = {
             "role": "assistant",
-            "content": json.dumps({
-                "message": f"[TEST MODE] Error loading cache: {str(e)}",
-                "choices": ["Retry", "Skip"],
-            }),
+            "content": None,
+            "tool_calls": [{
+                "id": f"call_error_{uuid.uuid4().hex[:8]}",
+                "type": "function",
+                "function": {
+                    "name": "respond_with_choices",
+                    "arguments": json.dumps({
+                        "message": f"[TEST MODE] Error loading cache: {str(e)}",
+                        "choices": ["Retry", "Skip"],
+                    }),
+                },
+            }],
         }
-        finish_reason = "stop"
+        finish_reason = "tool_calls"
 
     return {
         "id": f"chatcmpl-mock-{uuid.uuid4().hex[:8]}",

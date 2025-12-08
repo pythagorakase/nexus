@@ -1190,7 +1190,7 @@ class ChatRequest(BaseModel):
     slot: int
     thread_id: str
     message: str
-    model: str = "gpt-5.1"  # Model selection: gpt-5.1, TEST, or claude
+    model: Literal["gpt-5.1", "TEST", "claude"] = "gpt-5.1"  # Model selection
     current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message

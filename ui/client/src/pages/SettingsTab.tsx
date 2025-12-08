@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFonts } from '@/contexts/FontContext';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
-import { useModel } from '@/contexts/ModelContext';
+import { useModel, Model } from '@/contexts/ModelContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -722,7 +722,7 @@ export function SettingsTab() {
               <Label htmlFor="default-model" className="font-mono text-sm">
                 Default Model
               </Label>
-              <Select value={model} onValueChange={(value) => setModel(value as any)}>
+              <Select value={model} onValueChange={(value) => setModel(value as Model)}>
                 <SelectTrigger id="default-model" className="font-mono">
                   <div className="flex items-center gap-2">
                     <Cpu className="w-4 h-4" />
