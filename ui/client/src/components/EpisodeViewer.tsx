@@ -172,10 +172,18 @@ export function EpisodeViewer({
   }
 
   if (isError) {
+    // Sanitize error messages to avoid leaking sensitive backend details
+    const safeErrorMessage = error instanceof Error &&
+      !error.message.includes('stack') &&
+      !error.message.includes('SQL') &&
+      error.message.length < 200
+        ? error.message
+        : "Unable to load episode. Please try again.";
+
     return (
       <div className={cn("flex items-center justify-center h-full", className)}>
         <div className="text-sm text-destructive font-mono">
-          Failed to load episode: {error instanceof Error ? error.message : "Unknown error"}
+          Failed to load episode: {safeErrorMessage}
         </div>
       </div>
     );

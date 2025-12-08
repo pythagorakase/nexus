@@ -291,8 +291,8 @@ export const Response = memo(
         {...props}
       >
         <HardenedMarkdown
-          allowedImagePrefixes={['*']}
-          allowedLinkPrefixes={['*']}
+          allowedImagePrefixes={['https://', 'http://', '/']}
+          allowedLinkPrefixes={['https://', 'http://', '/', 'mailto:']}
           components={components}
           rehypePlugins={[rehypeKatex]}
           remarkPlugins={[remarkGfm, remarkMath]}
@@ -303,7 +303,10 @@ export const Response = memo(
       </div>
     );
   },
-  (prevProps, nextProps) => prevProps.children === nextProps.children
+  (prevProps, nextProps) =>
+    prevProps.children === nextProps.children &&
+    prevProps.parseIncompleteMarkdown === nextProps.parseIncompleteMarkdown &&
+    prevProps.options === nextProps.options
 );
 
 Response.displayName = 'Response';

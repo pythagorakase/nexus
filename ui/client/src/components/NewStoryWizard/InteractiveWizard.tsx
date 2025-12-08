@@ -796,12 +796,25 @@ export function InteractiveWizard({
 
         // Determine next phase or completion
         if (currentPhase === "setting") {
-            setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
-            onArtifactConfirmed?.("setting", pendingArtifact.data);
-            updatePhase("character");
-            setPendingArtifact(null);
-            // Trigger next phase prompt
-            triggerNextPhase("character");
+            setIsLoading(true);
+            try {
+                setWizardData((prev: any) => ({ ...prev, setting: pendingArtifact.data }));
+                onArtifactConfirmed?.("setting", pendingArtifact.data);
+                updatePhase("character");
+                // Await next phase to ensure proper sequencing
+                await triggerNextPhase("character");
+            } catch (error) {
+                console.error("Error transitioning to character phase:", error);
+                toast({
+                    title: "Transition Error",
+                    description: "Failed to proceed. Please try again.",
+                    variant: "destructive",
+                });
+            } finally {
+                setPendingArtifact(null);
+                processingRef.current = false;
+                setIsLoading(false);
+            }
         } else if (currentPhase === "character") {
             // Issue #6: Close trait selector when leaving character phase
             setShowTraitSelector(false);
