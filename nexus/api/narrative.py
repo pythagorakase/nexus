@@ -1053,8 +1053,9 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
 
         # Seed welcome message if exists (without choices - UI renders those)
         if welcome_message:
-            model = get_new_story_model()
-            client = ConversationsClient(model=model)
+            # Use request model (enables TEST mode) or fall back to settings
+            model_to_use = request.model or get_new_story_model()
+            client = ConversationsClient(model=model_to_use)
             client.add_message(thread_id, "assistant", welcome_message)
 
         return {
@@ -1245,7 +1246,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
         import json
 
         # Load settings for new story workflow
-        model = get_new_story_model()
+        settings_model = get_new_story_model()
         settings = load_settings()
         history_limit = (
             settings.get("API Settings", {})
@@ -1253,8 +1254,12 @@ async def new_story_chat_endpoint(request: ChatRequest):
             .get("message_history_limit", 20)
         )
 
-        # Initialize client
-        client = ConversationsClient(model=model)
+        # Use request model if specified (enables TEST mode), otherwise fall back to settings
+        selected_model = request.model if request.model else settings_model
+
+        # Initialize client with user's selected model
+        # TEST mode uses in-memory storage, avoiding 1Password biometric auth
+        client = ConversationsClient(model=selected_model)
 
         # Load prompt and extract welcome message from frontmatter
         prompt_path = (
@@ -1428,15 +1433,19 @@ async def new_story_chat_endpoint(request: ChatRequest):
             {"role": "system", "content": structured_choices_instruction},
         ] + history
 
-        # Use model from request if specified, otherwise fall back to config
-        selected_model = request.model if request.model else model
+        # selected_model already defined at top of function from request.model
         base_url = get_base_url_for_model(selected_model)
 
-        provider = OpenAIProvider(model=selected_model)
-        client_kwargs = {"api_key": provider.api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-            logger.info(f"Routing to mock server: {base_url}")
+        # For TEST mode, use dummy API key to avoid 1Password biometric auth
+        if selected_model == "TEST":
+            client_kwargs = {"api_key": "test-dummy-key", "base_url": base_url}
+            logger.info(f"TEST mode: routing to mock server at {base_url}")
+        else:
+            provider = OpenAIProvider(model=selected_model)
+            client_kwargs = {"api_key": provider.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+                logger.info(f"Routing to: {base_url}")
         openai_client = openai.OpenAI(**client_kwargs)
 
         # Build WizardResponse schema for structured output
