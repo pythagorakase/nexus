@@ -8,6 +8,27 @@ API latency during UI debugging.
 Usage: Select "TEST" model in the UI model picker. The backend
 routes TEST model requests to the mock OpenAI server, which calls
 these functions to return cached wizard data.
+
+Expected cache file structure (temp/test_cache_wizard.json):
+    {
+        "setting_draft": {
+            "world": { ... },
+            "layer": { ... },
+            "zones": [ ... ]
+        },
+        "character_draft": {
+            "concept": { "name": "...", "archetype": "...", ... },
+            "trait_selection": { "positive": [...], "negative": [...], ... },
+            "wildcard": { ... }
+        },
+        "selected_seed": { ... },
+        "layer_draft": { ... },
+        "zone_draft": { ... },
+        "initial_location": { ... }
+    }
+
+Note: Fields may be JSON-encoded strings (double-encoded from database export).
+The loader handles this automatically by parsing string values that start with '{'.
 """
 
 import json
@@ -53,6 +74,18 @@ def load_cache() -> Dict[str, Any]:
 
     logger.info("[TEST MODE] Loaded wizard cache from %s", CACHE_FILE)
     return _cache
+
+
+def reload_cache() -> Dict[str, Any]:
+    """
+    Force reload the cache from disk.
+
+    Use during development when test data changes without restarting the server.
+    """
+    global _cache
+    _cache = None
+    logger.info("[TEST MODE] Cache invalidated, will reload on next access")
+    return load_cache()
 
 
 def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dict[str, Any]:
