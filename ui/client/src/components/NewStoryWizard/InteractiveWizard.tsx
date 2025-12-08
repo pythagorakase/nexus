@@ -1,18 +1,33 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Sparkles, Loader2, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Swords, Crown, Tag, Eye, Cpu } from "lucide-react";
+import { Sparkles, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Crown, Tag, Eye, Cpu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area"; // Still used for artifact confirmation modals
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import ReactMarkdown from "react-markdown";
 import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
 import { TraitSelector } from "./TraitSelector";
 import { WaitScreen } from "./WaitScreen";
 import { useModel } from "@/contexts/ModelContext";
+import {
+    Conversation,
+    ConversationContent,
+    ConversationScrollButton,
+    PromptInput,
+    PromptInputTextarea,
+    PromptInputToolbar,
+    PromptInputTools,
+    PromptInputSubmit,
+    PromptInputModelSelect,
+    PromptInputModelSelectTrigger,
+    PromptInputModelSelectContent,
+    PromptInputModelSelectItem,
+    PromptInputModelSelectValue,
+    Loader,
+    Response,
+} from "@/components/ai";
 
 interface Message {
     id: string;
@@ -163,7 +178,6 @@ export function InteractiveWizard({
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [viewingArtifact, setViewingArtifact] = useState<{ type: string; data: any } | null>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
     const { toast } = useToast();
     const { model, setModel, availableModels, isTestMode } = useModel();
 
@@ -235,21 +249,7 @@ export function InteractiveWizard({
         setCurrentPhase(initialPhase || "setting");
     }, [initialPhase]);
 
-    // Auto-scroll
-    useEffect(() => {
-        if (scrollRef.current) {
-            // Use a small timeout to ensure DOM is updated and animations start
-            setTimeout(() => {
-                const scrollElement = scrollRef.current;
-                if (scrollElement) {
-                    const scrollContainer = scrollElement.querySelector('[data-radix-scroll-area-viewport]');
-                    if (scrollContainer) {
-                        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-                    }
-                }
-            }, 150);
-        }
-    }, [messages, isLoading, pendingArtifact, displayChoices]);
+    // Note: Auto-scroll is now handled by the Conversation component (use-stick-to-bottom)
 
     // Timer for wait screen - counts up every second while active
     useEffect(() => {
@@ -1302,9 +1302,9 @@ export function InteractiveWizard({
             <div className="flex flex-1 overflow-hidden">
                 {/* Chat column */}
                 <div className="flex-1 flex flex-col min-w-0">
-                    {/* Chat Area */}
-                    <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-                        <div className="space-y-6">
+                    {/* Chat Area - shadcn AI Conversation with auto-scroll */}
+                    <Conversation className="flex-1">
+                        <ConversationContent className="p-4 space-y-6">
                             <AnimatePresence initial={false}>
                                 {messages.map((msg) => (
                                     <motion.div
@@ -1330,10 +1330,8 @@ export function InteractiveWizard({
                                                         <Sparkles className="w-3 h-3 text-primary" />
                                                         <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
                                                     </div>
-                                                    <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10">
-                                                        <ReactMarkdown>
-                                                            {msg.content}
-                                                        </ReactMarkdown>
+                                                    <div className="prose prose-invert max-w-none prose-p:leading-relaxed">
+                                                        <Response>{msg.content}</Response>
                                                     </div>
                                                 </div>
                                             ) : msg.role === "system" && msg.artifactData ? (
@@ -1372,68 +1370,60 @@ export function InteractiveWizard({
                                     className="flex justify-start"
                                 >
                                     <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg flex items-center gap-2">
-                                        <Loader2 className="w-4 h-4 text-accent animate-spin" />
+                                        <Loader size={16} className="text-accent" />
                                         <span className="text-xs text-muted-foreground font-mono">PROCESSING...</span>
                                     </div>
                                 </motion.div>
                             )}
-                        </div>
-                    </ScrollArea>
+                        </ConversationContent>
+                        <ConversationScrollButton />
+                    </Conversation>
 
-                    {/* Input Area */}
+                    {/* Input Area - shadcn AI PromptInput */}
                     <div className="p-4 border-t border-primary/30 bg-background/60">
-                        <form
+                        <PromptInput
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 handleSend();
                             }}
-                            className="flex gap-2 items-end"
+                            className="border-primary/30 bg-background/40"
                         >
-                            {/* Model Picker */}
-                            <Select value={model} onValueChange={(value) => setModel(value as any)}>
-                                <SelectTrigger className="w-[100px] h-12 bg-background/40 border-primary/30 text-primary font-mono text-xs">
-                                    <div className="flex items-center gap-1.5">
-                                        <Cpu className="w-3 h-3" />
-                                        <SelectValue />
-                                    </div>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableModels.map((m) => (
-                                        <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                                            <div className="flex flex-col">
-                                                <span>{m.label}</span>
-                                                <span className="text-muted-foreground text-[10px]">{m.description}</span>
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <textarea
+                            <PromptInputTextarea
                                 value={input}
-                                onChange={(e) => {
-                                    setInput(e.target.value);
-                                    e.target.style.height = 'auto';
-                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handleSend();
-                                    }
-                                }}
+                                onChange={(e) => setInput(e.target.value)}
                                 placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
-                                className="flex-1 bg-background/40 border border-primary/30 text-foreground focus:border-primary font-mono min-h-[48px] max-h-[200px] p-3 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                                 disabled={isLoading || !!pendingArtifact}
-                                rows={1}
+                                className="font-mono bg-transparent"
                             />
-                            <Button
-                                type="submit"
-                                disabled={isLoading || !input.trim() || !!pendingArtifact}
-                                className="h-12 px-6 bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
-                            >
-                                <Send className="w-5 h-5" />
-                            </Button>
-                        </form>
+                            <PromptInputToolbar>
+                                <PromptInputTools>
+                                    {/* Model Picker */}
+                                    <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
+                                        <PromptInputModelSelectTrigger className="w-[100px] font-mono text-xs">
+                                            <div className="flex items-center gap-1.5">
+                                                <Cpu className="w-3 h-3" />
+                                                <PromptInputModelSelectValue />
+                                            </div>
+                                        </PromptInputModelSelectTrigger>
+                                        <PromptInputModelSelectContent>
+                                            {availableModels.map((m) => (
+                                                <PromptInputModelSelectItem key={m.id} value={m.id} className="font-mono text-xs">
+                                                    <div className="flex flex-col">
+                                                        <span>{m.label}</span>
+                                                        <span className="text-muted-foreground text-[10px]">{m.description}</span>
+                                                    </div>
+                                                </PromptInputModelSelectItem>
+                                            ))}
+                                        </PromptInputModelSelectContent>
+                                    </PromptInputModelSelect>
+                                </PromptInputTools>
+                                <PromptInputSubmit
+                                    disabled={isLoading || !input.trim() || !!pendingArtifact}
+                                    status={isLoading ? "submitted" : "ready"}
+                                    className="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
+                                />
+                            </PromptInputToolbar>
+                        </PromptInput>
                     </div>
                 </div>
 
