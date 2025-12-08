@@ -1500,7 +1500,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         logger.info(f"Calling LLM with tool_choice_mode: {tool_choice_mode}")
         response = openai_client.chat.completions.create(
-            model=model,
+            model=selected_model,
             messages=messages,
             tools=tools_for_llm if tools_for_llm else None,
             tool_choice=tool_choice_mode,
