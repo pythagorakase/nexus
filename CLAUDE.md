@@ -65,7 +65,7 @@ Use functions from `nexus/api/slot_utils.py`:
 For detailed key management workflows, see the `update-1password-keys` skill in `.claude/skills/`.
 
 ## User Directives
-- Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `settings.json`, following the established format there, and write your code to pull configurable values from that file.
+- Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `nexus.toml`, following the established format there, and write your code to pull configurable values from that file.
 - Do not build graceful fallbacks into your code unless the user requests it or explicitly gives permission. While in development, I prefer that errors surface visibly and unmistakebly. If that means a screeching traceback, so be it!
 
 ## Task-Specific Workflows (Claude Code Skills)

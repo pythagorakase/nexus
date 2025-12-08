@@ -1413,9 +1413,9 @@ export function InteractiveWizard({
                                     {/* Model Picker */}
                                     <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
                                         <PromptInputModelSelectTrigger className="w-[100px] font-mono text-xs">
-                                            <div className="flex items-center gap-1.5">
-                                                <Cpu className="w-3 h-3" />
-                                                <PromptInputModelSelectValue />
+                                            <div className="flex items-center gap-1.5 overflow-hidden">
+                                                <Cpu className="w-3 h-3 shrink-0" />
+                                                <span className="truncate"><PromptInputModelSelectValue /></span>
                                             </div>
                                         </PromptInputModelSelectTrigger>
                                         <PromptInputModelSelectContent>

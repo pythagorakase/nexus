@@ -291,6 +291,7 @@ export const Response = memo(
         {...props}
       >
         <HardenedMarkdown
+          defaultOrigin={window.location.origin}
           allowedImagePrefixes={['https://', 'http://', '/']}
           allowedLinkPrefixes={['https://', 'http://', '/', 'mailto:']}
           components={components}
