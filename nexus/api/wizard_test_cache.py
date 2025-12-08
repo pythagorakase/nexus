@@ -15,6 +15,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from nexus.api.new_story_schemas import CharacterCreationState
+
 logger = logging.getLogger("nexus.api.wizard_test_cache")
 
 CACHE_FILE = Path(__file__).parent.parent.parent / "temp" / "test_cache_wizard.json"
@@ -95,11 +97,18 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
             }
 
         elif subphase == "wildcard":
+            creation_state = CharacterCreationState.model_validate(char)
+            character_sheet = creation_state.to_character_sheet().model_dump()
+
             return {
                 "phase_complete": True,
-                "artifact_type": "submit_wildcard_trait",
-                "data": {"character_state": {"wildcard": char["wildcard"]}},
-                "message": "[TEST MODE] Wildcard loaded from cache.",
+                "subphase_complete": True,
+                "artifact_type": "submit_character_sheet",
+                "data": {
+                    "character_state": creation_state.model_dump(),
+                    "character_sheet": character_sheet,
+                },
+                "message": "[TEST MODE] Character sheet loaded from cache.",
             }
 
     elif phase == "seed":
