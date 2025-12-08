@@ -29,7 +29,7 @@ temperature = 0.8      # Sampling temperature for generation
 max_tokens = 2048      # Maximum tokens to generate per request
 
 [global.narrative]
-# Test mode settings for development
+# Test mode settings for development (legacy - prefer model picker with TEST model)
 test_mode = false
 test_database_suffix = "_test"
 
