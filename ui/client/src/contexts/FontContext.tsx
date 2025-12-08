@@ -53,7 +53,7 @@ const FontContext = createContext<FontContextType | undefined>(undefined);
 
 const DEFAULT_FONTS: FontPreferences = {
   // Vector (Cyberpunk) theme
-  vectorNarrativeFont: 'Source Code Pro',
+  vectorNarrativeFont: 'Rajdhani',
   vectorUIFont: 'Source Code Pro',
   vectorDisplayFont: 'Sixtyfour',
   // Gilded theme
@@ -63,7 +63,7 @@ const DEFAULT_FONTS: FontPreferences = {
   // Veil theme (Art Nouveau)
   veilBodyFont: 'Spectral',
   veilMenuFont: 'Cinzel',
-  veilDisplayFont: 'Cinzel',
+  veilDisplayFont: 'Megrim',
 };
 
 const STORAGE_KEY = 'nexus-font-preferences-v4';

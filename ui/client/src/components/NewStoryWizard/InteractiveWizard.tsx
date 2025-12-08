@@ -492,7 +492,13 @@ export function InteractiveWizard({
         }
 
         // For other subphases, continue with API call
-        addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: artifactData });
+        // Unwrap nested data for trait artifacts so modal displays correctly
+        const displayData = artifactType === "submit_trait_selection"
+            ? (artifactData.character_state?.trait_selection || artifactData)
+            : artifactType === "submit_wildcard_trait"
+            ? (artifactData.character_state?.wildcard || artifactData)
+            : artifactData;
+        addMessage("system", `[${artifactType} confirmed]`, { type: artifactType, data: displayData });
         triggerSubphaseContinuation(artifactType, updatedWizardData);
     };
 
@@ -789,12 +795,28 @@ export function InteractiveWizard({
             // Trigger next phase prompt
             triggerNextPhase("character");
         } else if (currentPhase === "character") {
-            setWizardData((prev: any) => ({ ...prev, character: pendingArtifact.data }));
-            onArtifactConfirmed?.("character", pendingArtifact.data);
-            updatePhase("seed");
-            setPendingArtifact(null);
-            // Trigger next phase prompt
-            triggerNextPhase("seed");
+            // Issue #6: Close trait selector when leaving character phase
+            setShowTraitSelector(false);
+            // Issue #8: Show loading indicator during transition
+            setIsLoading(true);
+            try {
+                setWizardData((prev: any) => ({ ...prev, character: pendingArtifact.data }));
+                onArtifactConfirmed?.("character", pendingArtifact.data);
+                updatePhase("seed");
+                // Await next phase to keep modal visible with "Processing..." state
+                await triggerNextPhase("seed");
+            } catch (error) {
+                console.error("Error transitioning to seed phase:", error);
+                toast({
+                    title: "Transition Error",
+                    description: "Failed to proceed. Please try again.",
+                    variant: "destructive",
+                });
+            } finally {
+                setPendingArtifact(null);
+                processingRef.current = false;
+                setIsLoading(false);
+            }
         } else if (currentPhase === "seed") {
             setWizardData((prev: any) => ({ ...prev, seed: pendingArtifact.data }));
             onArtifactConfirmed?.("seed", pendingArtifact.data);
@@ -899,7 +921,7 @@ export function InteractiveWizard({
                                     {/* Magic Description (if exists) */}
                                     {data.magic_exists && data.magic_description && (
                                         <CollapsibleSection title="Magic System" defaultOpen={true} icon={<Wand2 className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed">{data.magic_description}</p>
+                                            <p className="text-sm text-white/80 leading-relaxed font-narrative">{data.magic_description}</p>
                                         </CollapsibleSection>
                                     )}
 
@@ -908,11 +930,11 @@ export function InteractiveWizard({
                                         <div className="space-y-3">
                                             <div>
                                                 <span className="text-primary block text-xs uppercase mb-1">Political Structure</span>
-                                                <p className="text-sm text-white/80">{data.political_structure}</p>
+                                                <p className="text-sm text-white/80 font-narrative">{data.political_structure}</p>
                                             </div>
                                             <div>
                                                 <span className="text-primary block text-xs uppercase mb-1">Major Conflict</span>
-                                                <p className="text-sm text-white/80">{data.major_conflict}</p>
+                                                <p className="text-sm text-white/80 font-narrative">{data.major_conflict}</p>
                                             </div>
                                             {data.themes?.length > 0 && (
                                                 <div>
@@ -930,14 +952,14 @@ export function InteractiveWizard({
                                     {/* Cultural Notes */}
                                     {data.cultural_notes && (
                                         <CollapsibleSection title="Cultural Notes" icon={<Scroll className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{data.cultural_notes}</p>
+                                            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap font-narrative">{data.cultural_notes}</p>
                                         </CollapsibleSection>
                                     )}
 
                                     {/* Language Notes (if present) */}
                                     {data.language_notes && (
                                         <CollapsibleSection title="Language & Naming" icon={<Languages className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed">{data.language_notes}</p>
+                                            <p className="text-sm text-white/80 leading-relaxed font-narrative">{data.language_notes}</p>
                                         </CollapsibleSection>
                                     )}
 
@@ -945,7 +967,7 @@ export function InteractiveWizard({
                                     {data.diegetic_artifact && (
                                         <CollapsibleSection title="In-World Document" icon={<FileText className="w-4 h-4 text-primary" />}>
                                             <div className="prose prose-invert prose-sm max-w-none">
-                                                <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed">
+                                                <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed font-narrative">
                                                     {data.diegetic_artifact}
                                                 </p>
                                             </div>
@@ -967,15 +989,15 @@ export function InteractiveWizard({
                                     </div>
 
                                     <CollapsibleSection title="Narrative Portrait" defaultOpen={true} icon={<FileText className="w-4 h-4 text-primary" />}>
-                                        <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed text-sm">
-                                            {data.diegetic_artifact}
+                                        <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed text-sm font-narrative">
+                                            {data.summary}
                                         </p>
                                     </CollapsibleSection>
 
                                     <CollapsibleSection title="Wildcard" defaultOpen={true} icon={<Sparkles className="w-4 h-4 text-primary" />}>
                                         <div>
                                             <span className="text-primary block text-xs uppercase mb-1">{data.wildcard_name}</span>
-                                            <p className="text-sm text-white/90">{data.wildcard_description}</p>
+                                            <p className="text-sm text-white/90 font-narrative">{data.wildcard_description}</p>
                                         </div>
                                     </CollapsibleSection>
 
@@ -984,12 +1006,14 @@ export function InteractiveWizard({
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
                                                     <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
-                                                    <p className="text-sm text-white/80">{data.appearance}</p>
+                                                    <p className="text-sm text-white/80 font-narrative">{data.appearance}</p>
                                                 </div>
-                                                <div>
-                                                    <span className="text-primary block text-xs uppercase mb-1">Personality</span>
-                                                    <p className="text-sm text-white/80">{data.personality}</p>
-                                                </div>
+                                                {data.personality && (
+                                                    <div>
+                                                        <span className="text-primary block text-xs uppercase mb-1">Personality</span>
+                                                        <p className="text-sm text-white/80 font-narrative">{data.personality}</p>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div>
@@ -1004,7 +1028,7 @@ export function InteractiveWizard({
                                                             return (
                                                                 <div key={trait} className="bg-primary/5 border border-primary/20 p-2 rounded">
                                                                     <span className="text-primary text-xs uppercase block mb-1">{trait}</span>
-                                                                    <p className="text-xs text-white/80">{data[trait]}</p>
+                                                                    <p className="text-xs text-white/80 font-narrative">{data[trait]}</p>
                                                                 </div>
                                                             );
                                                         }

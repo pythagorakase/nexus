@@ -30,16 +30,13 @@ const GILDED_BODY_FONTS = [
 ];
 
 const GILDED_MENU_FONTS = [
-  'Xanh Mono',
   'Space Mono',
 ];
 
-// Vector theme fonts - terminal/monospace options
+// Vector theme fonts - body text options (sans-serif for readability)
 const VECTOR_NARRATIVE_FONTS = [
-  'Source Code Pro',
-  'JetBrains Mono',
-  'Fira Code',
-  'IBM Plex Mono',
+  'Rajdhani',
+  'Jura',
 ];
 
 const VECTOR_UI_FONTS = [
@@ -70,7 +67,7 @@ const VECTOR_DISPLAY_FONTS = [
 ];
 
 const VEIL_DISPLAY_FONTS = [
-  'Cinzel',
+  'Megrim',
 ];
 
 export function SettingsTab() {

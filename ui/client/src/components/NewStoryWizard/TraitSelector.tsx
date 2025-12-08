@@ -120,16 +120,26 @@ function Tooltip({ trait, position, side }: TooltipState) {
   const maxTop = window.innerHeight - tooltipHeight - padding;
   const clampedTop = Math.max(padding, Math.min(position.y, maxTop));
 
+  // Build style object with transform-based positioning for cleaner alignment
+  const style: React.CSSProperties = {
+    top: clampedTop,
+    boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)",
+    textAlign: isLeft ? "right" : "left",
+    position: "fixed",
+    zIndex: 1000,
+  };
+
+  if (isLeft) {
+    style.left = position.x;
+    style.transform = "translateX(-100%)";
+  } else {
+    style.left = position.x;
+  }
+
   return (
     <div
-      className="fixed max-w-[280px] p-3 rounded-md border border-primary/60 bg-background z-[1000] pointer-events-none"
-      style={{
-        left: isLeft ? "auto" : position.x,
-        right: isLeft ? `calc(100vw - ${position.x}px)` : "auto",
-        top: clampedTop,
-        boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)",
-        textAlign: isLeft ? "right" : "left",
-      }}
+      className="max-w-[280px] p-3 rounded-md border border-primary/60 bg-background pointer-events-none"
+      style={style}
     >
       {/* Description chips */}
       <div className="mb-2">
@@ -176,7 +186,7 @@ function TraitCard({ trait, isSelected, onSelect, onHoverStart, onHoverEnd, colu
       onMouseLeave={onHoverEnd}
       disabled={disabled}
       className={cn(
-        "w-[110px] h-9 font-display font-normal text-sm tracking-wide rounded border",
+        "w-[110px] h-9 font-mono font-normal text-sm tracking-wide rounded border",
         "flex items-center justify-center cursor-pointer transition-all duration-150",
         "small-caps",
         isSelected
@@ -248,7 +258,7 @@ export function TraitSelector({
       <Tooltip trait={tooltip.trait} position={tooltip.position} side={tooltip.side} />
 
       {/* Header */}
-      <h2 className="font-display font-normal text-xl tracking-widest text-teal-400 mb-4 text-center small-caps"
+      <h2 className="font-mono font-normal text-xl tracking-widest text-teal-400 mb-4 text-center small-caps"
         style={{ textShadow: "0 0 20px rgba(45, 212, 191, 0.4)" }}
       >
         Trait Selection
@@ -257,7 +267,7 @@ export function TraitSelector({
       {/* Trait grid */}
       {Object.entries(TRAITS).map(([category, traits]) => (
         <div key={category} className="mb-2.5 w-[226px]">
-          <h3 className="font-display font-normal text-base tracking-wide text-primary/80 mb-2 text-center small-caps">
+          <h3 className="font-mono font-normal text-base tracking-wide text-primary/80 mb-2 text-center small-caps">
             {category}
           </h3>
           <div className="grid grid-cols-2 gap-1.5 justify-center">
@@ -287,7 +297,7 @@ export function TraitSelector({
         onClick={handleConfirm}
         disabled={disabled || count === 0}
         className={cn(
-          "w-[226px] py-2.5 rounded font-display font-normal text-sm tracking-[0.2em] small-caps",
+          "w-[226px] py-2.5 rounded font-mono font-normal text-sm tracking-[0.2em] small-caps",
           "border cursor-pointer transition-all duration-300",
           "flex items-center justify-center gap-2",
           isComplete && !disabled

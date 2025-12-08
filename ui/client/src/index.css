@@ -27,6 +27,30 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Rajdhani';
+  src: url('/fonts/Rajdhani-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Jura';
+  src: url('/fonts/Jura-VariableFont_wght.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Megrim';
+  src: url('/fonts/Megrim-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
