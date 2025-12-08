@@ -1,6 +1,16 @@
 /**
  * Response component - Streaming-aware markdown renderer for AI responses
- * Based on shadcn AI components, simplified without code block handling
+ *
+ * Based on shadcn/ui (https://ui.shadcn.com/)
+ * Copyright (c) 2024 shadcn
+ * Licensed under the Apache License, Version 2.0
+ * See: ui/licenses/SHADCN-AI-LICENSE
+ *
+ * Modifications for NEXUS:
+ * - Removed 'use client' directive (not using Next.js)
+ * - Adapted import paths for NEXUS project structure
+ * - Removed CodeBlock component dependency (not needed for NEXUS)
+ * - Added inline code and pre block styling
  */
 
 import { cn } from '@/lib/utils';

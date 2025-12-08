@@ -1,6 +1,15 @@
 /**
  * PromptInput component - Chat input with model picker integration
- * Based on shadcn AI components
+ *
+ * Based on shadcn/ui (https://ui.shadcn.com/)
+ * Copyright (c) 2024 shadcn
+ * Licensed under the Apache License, Version 2.0
+ * See: ui/licenses/SHADCN-AI-LICENSE
+ *
+ * Modifications for NEXUS:
+ * - Removed 'use client' directive (not using Next.js)
+ * - Adapted import paths for NEXUS project structure
+ * - Removed file upload and voice input buttons (not needed for NEXUS)
  */
 
 import { Button } from '@/components/ui/button';

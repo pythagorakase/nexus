@@ -1,11 +1,17 @@
 /**
- * AI Components - shadcn-based chat UI components for NEXUS
+ * AI Components - Chat UI components for NEXUS
  *
- * Conversation: Auto-scrolling container with StickToBottom
- * Message: User/assistant chat message bubbles
- * PromptInput: Chat input with model picker integration
- * Response: Streaming-aware markdown renderer
- * Loader: Spinning loader icon
+ * Based on shadcn/ui (https://ui.shadcn.com/)
+ * Copyright (c) 2024 shadcn
+ * Licensed under the Apache License, Version 2.0
+ * See: ui/licenses/SHADCN-AI-LICENSE
+ *
+ * Components:
+ * - Conversation: Auto-scrolling container with StickToBottom
+ * - Message: User/assistant chat message bubbles
+ * - PromptInput: Chat input with model picker integration
+ * - Response: Streaming-aware markdown renderer
+ * - Loader: Spinning loader icon
  */
 
 export {
