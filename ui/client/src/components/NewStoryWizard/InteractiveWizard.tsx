@@ -217,7 +217,7 @@ export function InteractiveWizard({
                 const startRes = await fetch("/api/story/new/setup/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ slot }),
+                    body: JSON.stringify({ slot, model }),  // Include model for TEST mode support
                 });
 
                 if (!startRes.ok) throw new Error("Failed to start setup");

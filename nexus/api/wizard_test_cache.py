@@ -81,18 +81,20 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
         char = cache["character_draft"]
 
         if subphase == "concept" or not subphase:
+            # Return CharacterConcept fields directly (matches Pydantic schema)
             return {
                 "subphase_complete": True,
                 "artifact_type": "submit_character_concept",
-                "data": {"character_state": {"concept": char["concept"]}},
+                "data": char["concept"],  # Direct fields: archetype, background, name, etc.
                 "message": "[TEST MODE] Character concept loaded from cache.",
             }
 
         elif subphase == "traits":
+            # Return TraitSelection fields directly
             return {
                 "subphase_complete": True,
                 "artifact_type": "submit_trait_selection",
-                "data": {"character_state": {"trait_selection": char["trait_selection"]}},
+                "data": char["trait_selection"],  # Direct fields: traits, trait_details
                 "message": "[TEST MODE] Trait selection loaded from cache.",
             }
 
