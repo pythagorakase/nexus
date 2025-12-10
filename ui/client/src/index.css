@@ -1137,4 +1137,15 @@ html {
   .animate-fade-in {
     animation: fadeIn 0.5s ease-out;
   }
+
+  @keyframes slow-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.6;
+      transform: scale(0.95);
+    }
+  }
 }
