@@ -14,6 +14,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -33,11 +39,6 @@ interface TraitSelectorGridProps {
   onSelectionChange?: (traits: string[]) => void;
   traitRationales?: Record<string, string>;
   maxTraits: number;
-}
-
-interface TooltipState {
-  trait: TraitInfo | null;
-  position: { x: number; y: number } | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,40 +131,22 @@ function Chip({ children, variant = "desc" }: { children: React.ReactNode; varia
   );
 }
 
-function Tooltip({ trait, position }: TooltipState) {
-  if (!trait || !position) return null;
-
-  // Clamp vertical position to keep tooltip within viewport
-  // tooltipHeight: estimated max height of tooltip content (desc chips + divider + example chips)
-  // padding: minimum distance from viewport edges to prevent clipping
-  const tooltipHeight = 160;
-  const padding = 16;
-  const maxTop = window.innerHeight - tooltipHeight - padding;
-  const clampedTop = Math.max(padding, Math.min(position.y, maxTop));
-
+/** Tooltip content for trait buttons - renders description and example chips */
+function TraitTooltipContent({ trait }: { trait: TraitInfo }) {
   return (
-    <div
-      className="fixed max-w-[260px] p-3 rounded-md border border-primary/60 bg-background pointer-events-none z-[100]"
-      style={{
-        top: clampedTop,
-        left: position.x,
-        transform: "translateX(-100%)",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)",
-        textAlign: "right",
-      }}
-    >
+    <div className="max-w-[280px] space-y-2">
       {/* Description chips */}
-      <div className="mb-2">
+      <div className="flex flex-wrap">
         {trait.desc.map((d, i) => (
           <Chip key={i} variant="desc">{d}</Chip>
         ))}
       </div>
 
       {/* Divider */}
-      <div className="h-px bg-border/50 my-2" />
+      <div className="h-px bg-border/50" />
 
       {/* Example chips */}
-      <div>
+      <div className="flex flex-wrap">
         {trait.ex.map((e, i) => (
           <Chip key={i} variant="example">{e}</Chip>
         ))}
@@ -177,39 +160,41 @@ interface TraitButtonProps {
   isSelected: boolean;
   isSuggested: boolean;
   onSelect: (id: string) => void;
-  onHoverStart: (trait: TraitInfo, position: { x: number; y: number }) => void;
-  onHoverEnd: () => void;
 }
 
-function TraitButton({ trait, isSelected, isSuggested, onSelect, onHoverStart, onHoverEnd }: TraitButtonProps) {
-  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    // Tooltip appears to the left (flush against drawer border)
-    onHoverStart(trait, { x: rect.left - 8, y: rect.top });
-  }, [trait, onHoverStart]);
-
+function TraitButton({ trait, isSelected, isSuggested, onSelect }: TraitButtonProps) {
   return (
-    <button
-      onClick={() => onSelect(trait.id)}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={onHoverEnd}
-      className={cn(
-        "w-full h-9 font-mono text-sm tracking-wide rounded border",
-        "flex items-center justify-center cursor-pointer transition-all duration-150",
-        isSelected
-          ? "bg-gradient-to-b from-muted/95 to-secondary/60 border-primary/80 text-foreground"
-          : "bg-gradient-to-b from-primary/15 to-primary/5 border-border/50 text-muted-foreground hover:border-border",
-        isSuggested && !isSelected && "ring-1 ring-primary/30"
-      )}
-      style={{
-        boxShadow: isSelected
-          ? "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.25), 0 0 8px hsl(var(--primary) / 0.4)"
-          : "inset 0 1px 0 hsl(var(--primary) / 0.1), inset 0 -1px 0 rgba(0,0,0,0.1)",
-        textShadow: isSelected ? "0 0 6px hsl(var(--primary) / 0.6)" : "none",
-      }}
-    >
-      {trait.name}
-    </button>
+    <Tooltip delayDuration={300}>
+      <TooltipTrigger asChild>
+        <button
+          onClick={() => onSelect(trait.id)}
+          className={cn(
+            "w-full h-9 font-mono text-sm tracking-wide rounded border",
+            "flex items-center justify-center cursor-pointer transition-all duration-150",
+            isSelected
+              ? "bg-gradient-to-b from-muted/95 to-secondary/60 border-primary/80 text-foreground"
+              : "bg-gradient-to-b from-primary/15 to-primary/5 border-border/50 text-muted-foreground hover:border-border",
+            isSuggested && !isSelected && "ring-1 ring-primary/30"
+          )}
+          style={{
+            boxShadow: isSelected
+              ? "inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -1px 0 rgba(0,0,0,0.25), 0 0 8px hsl(var(--primary) / 0.4)"
+              : "inset 0 1px 0 hsl(var(--primary) / 0.1), inset 0 -1px 0 rgba(0,0,0,0.1)",
+            textShadow: isSelected ? "0 0 6px hsl(var(--primary) / 0.6)" : "none",
+          }}
+        >
+          {trait.name}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="left"
+        align="start"
+        className="border-primary/60 bg-background shadow-lg"
+        style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)" }}
+      >
+        <TraitTooltipContent trait={trait} />
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -222,7 +207,6 @@ function SelectMode({
   selectedTraits: string[];
   onSelectionChange: (traits: string[]) => void;
 }) {
-  const [tooltip, setTooltip] = useState<TooltipState>({ trait: null, position: null });
   const selectedSet = new Set(selectedTraits);
   const suggestedSet = new Set(suggestedTraits);
 
@@ -236,48 +220,38 @@ function SelectMode({
     onSelectionChange(Array.from(next));
   }, [selectedSet, onSelectionChange]);
 
-  const showTooltip = useCallback((trait: TraitInfo, position: { x: number; y: number }) => {
-    setTooltip({ trait, position });
-  }, []);
-
-  const hideTooltip = useCallback(() => {
-    setTooltip({ trait: null, position: null });
-  }, []);
-
   return (
-    <div className="space-y-4">
-      <Tooltip trait={tooltip.trait} position={tooltip.position} />
-
-      {/* Trait grid by category */}
-      {Object.entries(TRAITS).map(([category, traits]) => (
-        <div key={category}>
-          <h4 className="font-mono text-xs tracking-wide text-primary/80 mb-2 text-center uppercase">
-            {category}
-          </h4>
-          <div className="grid grid-cols-2 gap-1.5">
-            {traits.map((trait) => (
-              <TraitButton
-                key={trait.id}
-                trait={trait}
-                isSelected={selectedSet.has(trait.id)}
-                isSuggested={suggestedSet.has(trait.id)}
-                onSelect={toggle}
-                onHoverStart={showTooltip}
-                onHoverEnd={hideTooltip}
-              />
-            ))}
+    <TooltipProvider disableHoverableContent>
+      <div className="space-y-4">
+        {/* Trait grid by category */}
+        {Object.entries(TRAITS).map(([category, traits]) => (
+          <div key={category}>
+            <h4 className="font-mono text-xs tracking-wide text-primary/80 mb-2 text-center uppercase">
+              {category}
+            </h4>
+            <div className="grid grid-cols-2 gap-1.5">
+              {traits.map((trait) => (
+                <TraitButton
+                  key={trait.id}
+                  trait={trait}
+                  isSelected={selectedSet.has(trait.id)}
+                  isSuggested={suggestedSet.has(trait.id)}
+                  onSelect={toggle}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
 
-      {/* Indicator dots */}
-      <div className="pt-2">
-        <IndicatorDots count={selectedTraits.length} />
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Select {REQUIRED} traits (currently {selectedTraits.length})
-        </p>
+        {/* Indicator dots */}
+        <div className="pt-2">
+          <IndicatorDots count={selectedTraits.length} />
+          <p className="text-xs text-muted-foreground text-center mt-2">
+            Select {REQUIRED} traits (currently {selectedTraits.length})
+          </p>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
