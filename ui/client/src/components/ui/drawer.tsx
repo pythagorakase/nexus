@@ -5,12 +5,22 @@ import { Drawer as DrawerPrimitive } from "vaul"
 
 import { cn } from "@/lib/utils"
 
+type DrawerDirection = "top" | "bottom" | "left" | "right"
+
+type DrawerProps = React.PropsWithChildren<
+  React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Root> & {
+    direction?: DrawerDirection
+  }
+>
+
 const Drawer = ({
   shouldScaleBackground = true,
+  direction = "bottom",
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
+}: DrawerProps) => (
   <DrawerPrimitive.Root
     shouldScaleBackground={shouldScaleBackground}
+    direction={direction}
     {...props}
   />
 )
@@ -28,27 +38,48 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    className={cn("fixed inset-0 z-50 bg-black/80", className)}
+    className={cn("fixed inset-0 z-50 bg-transparent", className)}
     {...props}
   />
 ))
 DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName
 
+interface DrawerContentProps
+  extends React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content> {
+  /** Override direction for styling (vaul handles the actual direction) */
+  direction?: DrawerDirection
+}
+
 const DrawerContent = React.forwardRef<
   React.ElementRef<typeof DrawerPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  DrawerContentProps
+>(({ className, children, direction = "bottom", ...props }, ref) => (
   <DrawerPortal>
     <DrawerOverlay />
     <DrawerPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border bg-background",
+        "fixed z-50 flex flex-col bg-background",
+        // Bottom drawer (default)
+        direction === "bottom" &&
+          "inset-x-0 bottom-0 mt-24 h-auto max-h-[96vh] rounded-t-[10px] border-t",
+        // Top drawer
+        direction === "top" &&
+          "inset-x-0 top-0 mb-24 h-auto max-h-[96vh] rounded-b-[10px] border-b",
+        // Right drawer
+        direction === "right" &&
+          "inset-y-0 right-0 h-full w-[400px] max-w-[90vw] border-l",
+        // Left drawer
+        direction === "left" &&
+          "inset-y-0 left-0 h-full w-[400px] max-w-[90vw] border-r",
         className
       )}
       {...props}
     >
-      <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+      {/* Handle bar - only show for bottom/top drawers */}
+      {(direction === "bottom" || direction === "top") && (
+        <div className="mx-auto mt-4 h-2 w-[100px] rounded-full bg-muted" />
+      )}
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

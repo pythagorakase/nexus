@@ -1,15 +1,13 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, CheckCircle, FileText, MapPin, User, Globe, ChevronDown, ChevronRight, Wand2, Scroll, Languages, Crown, Tag, Eye, Cpu, Loader2 } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Sparkles, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area"; // Still used for artifact confirmation modals
-import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
-import { TraitSelector } from "./TraitSelector";
 import { WaitScreen } from "./WaitScreen";
+import { PhaseDock } from "./PhaseDock";
+import { ArtifactDrawer } from "./ArtifactDrawer";
 import { useModel } from "@/contexts/ModelContext";
 import {
     Conversation,
@@ -88,75 +86,6 @@ I'll let you explore the trait menu and choose what feels right for your charact
 ${traitLines.join("\n\n")}`;
 };
 
-interface CollapsibleSectionProps {
-    title: string;
-    children: React.ReactNode;
-    defaultOpen?: boolean;
-    icon?: React.ReactNode;
-}
-
-function CollapsibleSection({ title, children, defaultOpen = false, icon }: CollapsibleSectionProps) {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    return (
-        <div className="border border-primary/20 rounded-md overflow-hidden bg-background/40">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-3 bg-primary/10 hover:bg-primary/20 transition-colors"
-            >
-                <div className="flex items-center gap-2">
-                    {icon}
-                    <span className="text-primary font-mono text-sm uppercase tracking-wider">{title}</span>
-                </div>
-                {isOpen ? <ChevronDown className="w-4 h-4 text-primary" /> : <ChevronRight className="w-4 h-4 text-primary" />}
-            </button>
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                    >
-                        <div className="p-4 border-t border-primary/20">
-                            {children}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-}
-
-interface ExpandableTextProps {
-    text: string;
-    maxLength?: number;
-    className?: string;
-}
-
-function ExpandableText({ text, maxLength = 200, className = "" }: ExpandableTextProps) {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const needsExpansion = text.length > maxLength;
-
-    if (!needsExpansion) {
-        return <p className={className}>{text}</p>;
-    }
-
-    return (
-        <div>
-            <p className={className}>
-                {isExpanded ? text : `${text.substring(0, maxLength)}...`}
-            </p>
-            <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="text-primary text-xs mt-1 hover:underline focus:outline-none"
-            >
-                {isExpanded ? "show less" : "show more"}
-            </button>
-        </div>
-    );
-}
-
 export function InteractiveWizard({
     slot,
     onComplete,
@@ -177,9 +106,22 @@ export function InteractiveWizard({
     const [displayChoices, setDisplayChoices] = useState<string[] | null>(null);
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
-    const [viewingArtifact, setViewingArtifact] = useState<{ type: string; data: any } | null>(null);
+    const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
     const { toast } = useToast();
     const { model, setModel, availableModels, isTestMode } = useModel();
+
+    // Drawer state
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [drawerMode, setDrawerMode] = useState<"confirm" | "view">("confirm");
+
+    // Compute completed phases based on wizard data
+    const completedPhases = useMemo(() => {
+        const completed = new Set<Phase>();
+        if (wizardData.setting) completed.add("setting");
+        if (wizardData.character) completed.add("character");
+        if (wizardData.seed) completed.add("seed");
+        return completed;
+    }, [wizardData]);
 
     // Ref-based guard for synchronous double-click prevention
     // React state updates are async, so fast double-clicks can slip through state-based guards
@@ -262,6 +204,66 @@ export function InteractiveWizard({
         return () => clearInterval(interval);
     }, [waitScreenActive]);
 
+    // Auto-open drawer when pendingArtifact arrives
+    useEffect(() => {
+        if (pendingArtifact) {
+            setDrawerMode("confirm");
+            setDrawerOpen(true);
+        }
+    }, [pendingArtifact]);
+
+    // Auto-open drawer when trait selector should show
+    useEffect(() => {
+        if (showTraitSelector) {
+            setDrawerMode("confirm");
+            setDrawerOpen(true);
+        }
+    }, [showTraitSelector]);
+
+    // Initialize selected traits from suggested when trait selector opens
+    useEffect(() => {
+        if (showTraitSelector && suggestedTraits.length > 0 && selectedTraits.length === 0) {
+            setSelectedTraits(suggestedTraits);
+        }
+    }, [showTraitSelector, suggestedTraits, selectedTraits.length]);
+
+    // Handle phase click from dock - opens drawer in view mode
+    const handlePhaseClick = useCallback((phase: Phase) => {
+        if (completedPhases.has(phase)) {
+            setDrawerMode("view");
+            setDrawerOpen(true);
+        }
+    }, [completedPhases]);
+
+    // Handle drawer close
+    const handleDrawerClose = useCallback((open: boolean) => {
+        setDrawerOpen(open);
+        // If closing and was in confirm mode with pending artifact, don't clear it
+        // User can reopen by clicking Accept Fate or phase dock
+    }, []);
+
+    // Handle revise from drawer
+    const handleRevise = useCallback(() => {
+        setDrawerOpen(false);
+        setPendingArtifact(null);
+    }, []);
+
+    // Handle trait selection change from drawer
+    const handleTraitSelectionChange = useCallback((traits: string[]) => {
+        setSelectedTraits(traits);
+    }, []);
+
+    // Wrapper for drawer Confirm button - routes to appropriate handler
+    const handleDrawerConfirm = useCallback(() => {
+        if (pendingArtifact) {
+            // Phase-level artifact confirmation
+            handleArtifactConfirm();
+        } else if (showTraitSelector && selectedTraits.length > 0) {
+            // Trait selection confirmation - route to existing handler
+            handleTraitConfirm(selectedTraits);
+        }
+    }, [pendingArtifact, showTraitSelector, selectedTraits]);
+
     // Transition handler - performs transition + triggers bootstrap, then navigates
     // NexusLayout handles detecting incubator data and showing approval modal
     const performTransition = useCallback(async () => {
@@ -301,6 +303,7 @@ export function InteractiveWizard({
                     chunk_id: 0,  // Bootstrap signal
                     slot,
                     user_text: "Begin the story.",
+                    test_mode: isTestMode,  // Pass TEST mode for mock bootstrap
                 }),
                 signal: abortController.signal,
             });
@@ -880,367 +883,8 @@ export function InteractiveWizard({
         }
     };
 
-    const renderArtifactConfirmation = () => {
-        if (!pendingArtifact) return null;
-
-        const { type, data } = pendingArtifact;
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
-            >
-
-                <Card className="w-full max-w-2xl bg-card border border-primary/50 p-6 space-y-6 shadow-lg">
-                    <div className="flex items-center gap-3 border-b border-primary/30 pb-4">
-                        <CheckCircle className="w-6 h-6 text-primary" />
-                        <h3 className="text-xl font-mono text-primary uppercase tracking-widest">
-                            Confirm {currentPhase}
-                        </h3>
-                    </div>
-
-                    <ScrollArea className="h-[400px] pr-4">
-                        <div className="space-y-4 font-mono text-sm text-muted-foreground">
-                            {type === "submit_world_document" && (
-                                <div className="space-y-4">
-                                    {/* Header */}
-                                    <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <div className="flex items-baseline gap-2 mb-1">
-                                            <span className="text-primary text-xs uppercase">World</span>
-                                            <h4 className="text-xl text-white font-bold">{data.world_name}</h4>
-                                        </div>
-                                    </div>
-
-                                    {/* Quick Reference Grid */}
-                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Genre</span>
-                                            <span className="text-white capitalize">{data.genre}{data.secondary_genres?.length > 0 && ` (+${data.secondary_genres.join(", ")})`}</span>
-                                        </div>
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Era</span>
-                                            <span className="text-white">{data.time_period}</span>
-                                        </div>
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Tone</span>
-                                            <span className="text-white capitalize">{data.tone}</span>
-                                        </div>
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Tech Level</span>
-                                            <span className="text-white capitalize">{data.tech_level?.replace(/_/g, " ")}</span>
-                                        </div>
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Scope</span>
-                                            <span className="text-white capitalize">{data.geographic_scope}</span>
-                                        </div>
-                                        <div className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                            <span className="text-primary block uppercase mb-1">Magic</span>
-                                            <span className="text-white">{data.magic_exists ? "Present" : "None"}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Magic Description (if exists) */}
-                                    {data.magic_exists && data.magic_description && (
-                                        <CollapsibleSection title="Magic System" defaultOpen={true} icon={<Wand2 className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed font-narrative">{data.magic_description}</p>
-                                        </CollapsibleSection>
-                                    )}
-
-                                    {/* Narrative Elements */}
-                                    <CollapsibleSection title="World Context" defaultOpen={true} icon={<Globe className="w-4 h-4 text-primary" />}>
-                                        <div className="space-y-3">
-                                            <div>
-                                                <span className="text-primary block text-xs uppercase mb-1">Political Structure</span>
-                                                <p className="text-sm text-white/80 font-narrative">{data.political_structure}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-primary block text-xs uppercase mb-1">Major Conflict</span>
-                                                <p className="text-sm text-white/80 font-narrative">{data.major_conflict}</p>
-                                            </div>
-                                            {data.themes?.length > 0 && (
-                                                <div>
-                                                    <span className="text-primary block text-xs uppercase mb-1">Themes</span>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {data.themes.map((theme: string, i: number) => (
-                                                            <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">{theme}</span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </CollapsibleSection>
-
-                                    {/* Cultural Notes */}
-                                    {data.cultural_notes && (
-                                        <CollapsibleSection title="Cultural Notes" icon={<Scroll className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap font-narrative">{data.cultural_notes}</p>
-                                        </CollapsibleSection>
-                                    )}
-
-                                    {/* Language Notes (if present) */}
-                                    {data.language_notes && (
-                                        <CollapsibleSection title="Language & Naming" icon={<Languages className="w-4 h-4 text-primary" />}>
-                                            <p className="text-sm text-white/80 leading-relaxed font-narrative">{data.language_notes}</p>
-                                        </CollapsibleSection>
-                                    )}
-
-                                    {/* Diegetic Artifact - collapsed by default */}
-                                    {data.diegetic_artifact && (
-                                        <CollapsibleSection title="In-World Document" icon={<FileText className="w-4 h-4 text-primary" />}>
-                                            <div className="prose prose-invert prose-sm max-w-none">
-                                                <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed font-narrative">
-                                                    {data.diegetic_artifact}
-                                                </p>
-                                            </div>
-                                        </CollapsibleSection>
-                                    )}
-                                </div>
-                            )}
-
-                            {type === "submit_character_sheet" && (
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-4 mb-6">
-                                        <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center border border-primary/30 shrink-0">
-                                            <User className="w-8 h-8 text-primary" />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-2xl text-white font-bold">{data.name}</h4>
-                                            <p className="text-primary text-sm">{data.summary}</p>
-                                        </div>
-                                    </div>
-
-                                    <CollapsibleSection title="Narrative Portrait" defaultOpen={true} icon={<FileText className="w-4 h-4 text-primary" />}>
-                                        <p className="whitespace-pre-wrap text-muted-foreground italic leading-relaxed text-sm font-narrative">
-                                            {data.summary}
-                                        </p>
-                                    </CollapsibleSection>
-
-                                    <CollapsibleSection title="Wildcard" defaultOpen={true} icon={<Sparkles className="w-4 h-4 text-primary" />}>
-                                        <div>
-                                            <span className="text-primary block text-xs uppercase mb-1">{data.wildcard_name}</span>
-                                            <p className="text-sm text-white/90 font-narrative">{data.wildcard_description}</p>
-                                        </div>
-                                    </CollapsibleSection>
-
-                                    <CollapsibleSection title="Attributes & Traits" icon={<User className="w-4 h-4 text-primary" />}>
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
-                                                    <p className="text-sm text-white/80 font-narrative">{data.appearance}</p>
-                                                </div>
-                                                {data.personality && (
-                                                    <div>
-                                                        <span className="text-primary block text-xs uppercase mb-1">Personality</span>
-                                                        <p className="text-sm text-white/80 font-narrative">{data.personality}</p>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div>
-                                                <span className="text-primary block text-xs uppercase mb-2">Traits</span>
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {[
-                                                        "allies", "contacts", "patron", "dependents",
-                                                        "status", "reputation", "resources", "domain",
-                                                        "enemies", "obligations"
-                                                    ].map(trait => {
-                                                        if (data[trait]) {
-                                                            return (
-                                                                <div key={trait} className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                                                    <span className="text-primary text-xs uppercase block mb-1">{trait}</span>
-                                                                    <p className="text-xs text-white/80 font-narrative">{data[trait]}</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    })}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </CollapsibleSection>
-                                </div>
-                            )}
-
-                            {type === "submit_starting_scenario" && (
-                                <div className="space-y-4">
-                                    <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <span className="text-primary block text-xs uppercase mb-1">Starting Scenario</span>
-                                        <h4 className="text-xl text-white font-bold mb-2">{data.seed.title}</h4>
-                                        <p className="italic text-muted-foreground/60">{data.seed.hook}</p>
-                                    </div>
-
-                                    <CollapsibleSection title="Location Details" defaultOpen={true} icon={<MapPin className="w-4 h-4 text-primary" />}>
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-primary">Region (Layer)</span>
-                                                <span className="text-white text-right">{data.layer.name}</span>
-                                            </div>
-                                            <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-primary">Zone</span>
-                                                <span className="text-white text-right">{data.zone.name}</span>
-                                            </div>
-                                            <div className="flex justify-between border-b border-white/10 py-2">
-                                                <span className="text-primary">Specific Location</span>
-                                                <span className="text-white text-right">{data.location.name}</span>
-                                            </div>
-                                            <div className="pt-2">
-                                                <span className="text-primary block text-xs uppercase mb-1">Description</span>
-                                                <ExpandableText
-                                                    text={data.location.summary || ""}
-                                                    maxLength={200}
-                                                    className="text-sm text-white/80"
-                                                />
-                                            </div>
-                                        </div>
-                                    </CollapsibleSection>
-                                </div>
-                            )}
-                        </div>
-                    </ScrollArea>
-
-                    <div className="flex justify-end gap-3 pt-4 border-t border-primary/30">
-                        <Button
-                            variant="outline"
-                            onClick={() => setPendingArtifact(null)}
-                            disabled={isLoading}
-                            className="border-destructive/50 text-destructive hover:bg-destructive/10 disabled:opacity-50"
-                        >
-                            REVISE
-                        </Button>
-                        <Button
-                            onClick={handleArtifactConfirm}
-                            disabled={isLoading}
-                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30 disabled:opacity-50"
-                        >
-                            {isLoading ? "Processing..." : "CONFIRM & PROCEED"}
-                        </Button>
-                    </div>
-                </Card>
-            </motion.div>
-        );
-    };
-
-    const renderArtifactViewer = () => {
-        if (!viewingArtifact) return null;
-
-        const { type, data } = viewingArtifact;
-
-        // Format artifact type for display
-        const formatTypeName = (t: string) => t.replace("submit_", "").replace(/_/g, " ");
-
-        return (
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
-                onClick={(e) => e.target === e.currentTarget && setViewingArtifact(null)}
-            >
-                <Card className="w-full max-w-2xl bg-card border border-primary/50 p-6 space-y-6 shadow-lg">
-                    <div className="flex items-center gap-3 border-b border-primary/30 pb-4">
-                        <Eye className="w-6 h-6 text-primary" />
-                        <h3 className="text-xl font-mono text-primary uppercase tracking-widest">
-                            {formatTypeName(type)}
-                        </h3>
-                    </div>
-
-                    <ScrollArea className="h-[400px] pr-4">
-                        <div className="space-y-4 font-mono text-sm text-muted-foreground">
-                            {type === "submit_character_concept" && (
-                                <div className="space-y-4">
-                                    {/* Character Header */}
-                                    <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <div className="flex items-baseline gap-2 mb-1">
-                                            <span className="text-primary text-xs uppercase">Character</span>
-                                            <h4 className="text-xl text-white font-bold">{data.name}</h4>
-                                        </div>
-                                        <p className="text-primary/80 italic">{data.archetype}</p>
-                                    </div>
-
-                                    {/* Core Details */}
-                                    <div className="space-y-3">
-                                        <div>
-                                            <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
-                                            <p className="text-sm text-white/80">{data.appearance}</p>
-                                        </div>
-                                        <div>
-                                            <span className="text-primary block text-xs uppercase mb-1">Background</span>
-                                            <p className="text-sm text-white/80">{data.background}</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Suggested Traits */}
-                                    {data.suggested_traits && data.suggested_traits.length > 0 && (
-                                        <CollapsibleSection title="Suggested Traits" defaultOpen={true} icon={<Tag className="w-4 h-4 text-primary" />}>
-                                            <div className="space-y-3">
-                                                {data.suggested_traits.map((trait: string) => (
-                                                    <div key={trait} className="bg-primary/5 border border-primary/20 p-2 rounded">
-                                                        <span className="text-primary text-xs uppercase block mb-1 capitalize">{trait}</span>
-                                                        {data.trait_rationales?.[trait] && (
-                                                            <p className="text-xs text-white/80">{data.trait_rationales[trait]}</p>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </CollapsibleSection>
-                                    )}
-                                </div>
-                            )}
-
-                            {type === "submit_trait_selection" && (
-                                <div className="space-y-4">
-                                    <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <span className="text-primary text-xs uppercase">Selected Traits</span>
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        {data.traits?.map((trait: string) => (
-                                            <div key={trait} className="bg-primary/5 border border-primary/20 p-3 rounded">
-                                                <span className="text-primary text-sm uppercase capitalize">{trait}</span>
-                                                {data.trait_details?.[trait] && (
-                                                    <p className="text-xs text-white/80 mt-1">{data.trait_details[trait]}</p>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {type === "submit_wildcard_trait" && (
-                                <div className="space-y-4">
-                                    <div className="border-l-2 border-primary pl-4 mb-6">
-                                        <div className="flex items-baseline gap-2 mb-1">
-                                            <span className="text-primary text-xs uppercase">Wildcard</span>
-                                            <h4 className="text-xl text-white font-bold">{data.name}</h4>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <span className="text-primary block text-xs uppercase mb-1">Description</span>
-                                        <p className="text-sm text-white/80 leading-relaxed">{data.description}</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </ScrollArea>
-
-                    <div className="flex justify-end pt-4 border-t border-primary/30">
-                        <Button
-                            onClick={() => setViewingArtifact(null)}
-                            className="bg-primary/20 border border-primary text-primary hover:bg-primary/30"
-                        >
-                            CLOSE
-                        </Button>
-                    </div>
-                </Card>
-            </motion.div>
-        );
-    };
-
     return (
         <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
-            {renderArtifactConfirmation()}
-            {renderArtifactViewer()}
-
             {/* Wait screen for long-running transition + bootstrap operations */}
             {waitScreenActive && (
                 <WaitScreen
@@ -1254,6 +898,24 @@ export function InteractiveWizard({
                 />
             )}
 
+            {/* Artifact Drawer - slides from right */}
+            <ArtifactDrawer
+                open={drawerOpen}
+                onOpenChange={handleDrawerClose}
+                mode={drawerMode}
+                wizardData={wizardData}
+                currentPhase={currentPhase}
+                pendingArtifact={pendingArtifact}
+                onConfirm={handleDrawerConfirm}
+                onRevise={handleRevise}
+                isLoading={isLoading}
+                showTraitSelector={showTraitSelector && !pendingArtifact}
+                suggestedTraits={suggestedTraits}
+                selectedTraits={selectedTraits}
+                onTraitSelectionChange={handleTraitSelectionChange}
+                traitRationales={wizardData.character_state?.concept?.trait_rationales}
+            />
+
             {/* Header */}
             <div className="p-4 border-b border-primary/30 bg-background/60 flex justify-between items-center">
                 <div className="flex items-center gap-2">
@@ -1266,9 +928,10 @@ export function InteractiveWizard({
                     variant="ghost"
                     size="sm"
                     onClick={async () => {
-                        if (!threadId || isLoading) return;
+                        if (!threadId || isLoading || processingRef.current) return;
                         // Accept Fate: Backend forces tool call via tool_choice="required"
                         // No user message added to keep conversation clean
+                        processingRef.current = true;
                         setIsLoading(true);
 
                         try {
@@ -1301,6 +964,7 @@ export function InteractiveWizard({
                             console.error(e);
                             toast({ title: "Transmission Error", variant: "destructive" });
                         } finally {
+                            processingRef.current = false;
                             setIsLoading(false);
                         }
                     }}
@@ -1311,7 +975,7 @@ export function InteractiveWizard({
                 </Button>
             </div>
 
-            {/* Main content area with optional sidebar */}
+            {/* Main content area with phase dock */}
             <div className="flex flex-1 overflow-hidden">
                 {/* Chat column */}
                 <div className="flex-1 flex flex-col min-w-0">
@@ -1349,10 +1013,14 @@ export function InteractiveWizard({
                                                 </div>
                                             ) : msg.role === "system" && msg.artifactData ? (
                                                 <button
-                                                    onClick={() => setViewingArtifact({ type: msg.artifactType!, data: msg.artifactData })}
+                                                    onClick={() => {
+                                                        // Open drawer in view mode to see artifact
+                                                        setDrawerMode("view");
+                                                        setDrawerOpen(true);
+                                                    }}
                                                     className="flex items-center gap-2 text-primary/60 hover:text-primary transition-colors group"
                                                 >
-                                                    <Eye className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                                    <Sparkles className="w-3 h-3 opacity-60 group-hover:opacity-100" />
                                                     <span className="underline underline-offset-2">{msg.content}</span>
                                                 </button>
                                             ) : (
@@ -1437,23 +1105,14 @@ export function InteractiveWizard({
                     </div>
                 </div>
 
-                {/* Trait Selection Sidebar */}
-                {showTraitSelector && (
-                    <motion.div
-                        initial={{ width: 0, opacity: 0 }}
-                        animate={{ width: 280, opacity: 1 }}
-                        exit={{ width: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-l border-primary/30 bg-background/80 p-4 overflow-hidden"
-                    >
-                        <TraitSelector
-                            onConfirm={handleTraitConfirm}
-                            onInvalidConfirm={handleInvalidTraitConfirm}
-                            disabled={isLoading}
-                            suggestedTraits={suggestedTraits}
-                        />
-                    </motion.div>
-                )}
+                {/* Phase Dock - vertical progress indicator */}
+                <div className="w-20 border-l border-primary/30 bg-background/60">
+                    <PhaseDock
+                        currentPhase={currentPhase}
+                        completedPhases={completedPhases}
+                        onPhaseClick={handlePhaseClick}
+                    />
+                </div>
             </div>
         </div >
     );
