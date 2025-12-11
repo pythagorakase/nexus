@@ -133,23 +133,34 @@ function Chip({ children, variant = "desc" }: { children: React.ReactNode; varia
 function Tooltip({ trait, position }: TooltipState) {
   if (!trait || !position) return null;
 
-  // Clamp vertical position to keep tooltip within viewport
-  // tooltipHeight: estimated max height of tooltip content (desc chips + divider + example chips)
-  // padding: minimum distance from viewport edges to prevent clipping
-  const tooltipHeight = 160;
-  const padding = 16;
+  // Tooltip dimensions and padding constants
+  const tooltipHeight = 160; // Estimated max height of tooltip content
+  const tooltipWidth = 260;  // max-w-[260px] from className
+  const padding = 16;        // Minimum distance from viewport edges
+  const gapFromButton = 8;   // Gap between button and tooltip edge
+
+  // Vertical clamping: keep tooltip within viewport height
   const maxTop = window.innerHeight - tooltipHeight - padding;
   const clampedTop = Math.max(padding, Math.min(position.y, maxTop));
+
+  // Horizontal positioning: prefer left side, flip to right if not enough space
+  // position.x is the left edge of the button
+  const spaceOnLeft = position.x - gapFromButton;
+  const showOnRight = spaceOnLeft < tooltipWidth + padding;
+
+  // Calculate horizontal position based on which side we're showing
+  const horizontalStyle = showOnRight
+    ? { left: position.x + gapFromButton } // Show on right, no transform needed
+    : { left: position.x - gapFromButton, transform: "translateX(-100%)" }; // Show on left
 
   return (
     <div
       className="fixed max-w-[260px] p-3 rounded-md border border-primary/60 bg-background pointer-events-none z-[100]"
       style={{
         top: clampedTop,
-        left: position.x,
-        transform: "translateX(-100%)",
+        ...horizontalStyle,
         boxShadow: "0 4px 24px rgba(0,0,0,0.6), 0 0 20px hsl(var(--primary) / 0.1)",
-        textAlign: "right",
+        textAlign: showOnRight ? "left" : "right",
       }}
     >
       {/* Description chips */}

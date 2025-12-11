@@ -28,18 +28,135 @@ import {
 } from "@/components/ui/collapsible";
 import { TraitSelectorGrid } from "./TraitSelectorGrid";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Type Definitions
+// ─────────────────────────────────────────────────────────────────────────────
+
 type Phase = "setting" | "character" | "seed";
 
+/** Setting artifact data from submit_world_document */
+interface SettingData {
+  world_name?: string;
+  genre?: string;
+  secondary_genres?: string[];
+  time_period?: string;
+  tone?: string;
+  tech_level?: string;
+  political_structure?: string;
+  major_conflict?: string;
+  themes?: string[];
+  cultural_notes?: string;
+}
+
+/** Character concept from submit_character_concept (subphase 1) */
+interface CharacterConcept {
+  name: string;
+  archetype: string;
+  background?: string;
+  suggested_traits?: string[];
+  trait_rationales?: Record<string, string>;
+}
+
+/** Trait selection from submit_trait_selection (subphase 2) */
+interface TraitSelection {
+  selected_traits: string[];
+  trait_rationales?: Record<string, string>;
+}
+
+/** Wildcard from submit_wildcard_trait (subphase 3) */
+interface WildcardTrait {
+  name: string;
+  description: string;
+  mechanical_effect?: string;
+}
+
+/** Character data during subphase creation (nested structure) */
+interface CharacterInProgress {
+  concept?: CharacterConcept;
+  trait_selection?: TraitSelection;
+  wildcard?: WildcardTrait;
+}
+
+/** Complete character sheet from submit_character_sheet (flat structure) */
+interface CharacterComplete {
+  name: string;
+  archetype: string;
+  summary: string;
+  background?: string;
+  traits?: string[];
+  trait_rationales?: Record<string, string>;
+  wildcard_name?: string;
+  wildcard_description?: string;
+  wildcard_effect?: string;
+}
+
+/** Seed artifact data from submit_starting_scenario */
+interface SeedData {
+  seed?: {
+    title?: string;
+    hook?: string;
+  };
+  layer?: {
+    name?: string;
+  };
+  zone?: {
+    name?: string;
+  };
+  location?: {
+    name?: string;
+    summary?: string;
+  };
+}
+
+/** Type guard to check if character data is complete (has summary) */
+function isCharacterComplete(data: CharacterInProgress | CharacterComplete | null | undefined): data is CharacterComplete {
+  return Boolean(data && 'summary' in data && data.summary);
+}
+
+/** Normalize character data to extract viewable parts */
+function getCharacterView(data: CharacterInProgress | CharacterComplete | null | undefined): {
+  concept: CharacterConcept | null;
+  traitSelection: TraitSelection | null;
+  wildcard: WildcardTrait | null;
+  isComplete: boolean;
+  completeSheet: CharacterComplete | null;
+} {
+  if (!data) {
+    return { concept: null, traitSelection: null, wildcard: null, isComplete: false, completeSheet: null };
+  }
+
+  if (isCharacterComplete(data)) {
+    // Complete sheet - extract concept-like data for display
+    return {
+      concept: { name: data.name, archetype: data.archetype, background: data.background },
+      traitSelection: data.traits ? { selected_traits: data.traits, trait_rationales: data.trait_rationales } : null,
+      wildcard: data.wildcard_name ? { name: data.wildcard_name, description: data.wildcard_description || '', mechanical_effect: data.wildcard_effect } : null,
+      isComplete: true,
+      completeSheet: data,
+    };
+  }
+
+  // In-progress structure
+  const inProgress = data as CharacterInProgress;
+  return {
+    concept: inProgress.concept || null,
+    traitSelection: inProgress.trait_selection || null,
+    wildcard: inProgress.wildcard || null,
+    isComplete: false,
+    completeSheet: null,
+  };
+}
+
 interface WizardData {
-  setting?: any;
-  character?: any;
-  character_state?: any;  // Nested structure during creation: { concept, trait_selection, wildcard }
-  seed?: any;
+  setting?: SettingData;
+  character?: CharacterComplete;
+  character_state?: CharacterInProgress;
+  seed?: SeedData;
 }
 
 interface Artifact {
   type: string;
-  data: any;
+  data: SettingData | CharacterConcept | TraitSelection | WildcardTrait | CharacterComplete | SeedData;
 }
 
 interface ArtifactDrawerProps {
@@ -162,7 +279,7 @@ function ExpandableText({ text, maxLength = 200 }: { text: string; maxLength?: n
 }
 
 // Setting section content
-function SettingContent({ data }: { data: any }) {
+function SettingContent({ data }: { data: SettingData | null | undefined }) {
   if (!data) return null;
 
   return (
@@ -181,7 +298,7 @@ function SettingContent({ data }: { data: any }) {
           <span className="text-primary block uppercase mb-1">Genre</span>
           <span className="text-white capitalize">
             {data.genre}
-            {data.secondary_genres?.length > 0 && ` (+${data.secondary_genres.join(", ")})`}
+            {(data.secondary_genres?.length ?? 0) > 0 && ` (+${data.secondary_genres!.join(", ")})`}
           </span>
         </div>
         <div className="bg-primary/5 border border-primary/20 p-2 rounded">
@@ -215,11 +332,11 @@ function SettingContent({ data }: { data: any }) {
       )}
 
       {/* Themes */}
-      {data.themes?.length > 0 && (
+      {(data.themes?.length ?? 0) > 0 && (
         <div>
           <span className="text-primary block text-xs uppercase mb-1">Themes</span>
           <div className="flex flex-wrap gap-1">
-            {data.themes.map((theme: string, i: number) => (
+            {data.themes!.map((theme: string, i: number) => (
               <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
                 {theme}
               </span>
@@ -248,22 +365,21 @@ function CharacterContent({
   onTraitSelectionChange,
   traitRationales,
 }: {
-  data: any;
+  data: CharacterInProgress | CharacterComplete | null | undefined;
   showTraitSelector?: boolean;
   suggestedTraits?: string[];
   selectedTraits?: string[];
   onTraitSelectionChange?: (traits: string[]) => void;
   traitRationales?: Record<string, string>;
 }) {
-  // Handle character_state structure: { concept, trait_selection, wildcard }
-  // vs flat character sheet: { name, summary, traits, ... }
-  const concept = data?.concept || (data?.name && !data?.summary ? data : null);
-  const isCompleteSheet = data?.name && data?.summary;
+  // Use normalization helper to handle both in-progress and complete data structures
+  const charView = getCharacterView(data);
+  const { concept, traitSelection, wildcard, isComplete, completeSheet } = charView;
 
   if (!data && !showTraitSelector) return null;
 
-  // If we have a complete character sheet (flat structure with summary)
-  if (isCompleteSheet) {
+  // If we have a complete character sheet (has summary)
+  if (isComplete && completeSheet) {
     return (
       <div className="space-y-4">
         {/* Character Header */}
@@ -272,37 +388,37 @@ function CharacterContent({
             <User className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h4 className="text-lg text-white font-bold">{data.name}</h4>
-            <p className="text-primary text-xs">{data.archetype}</p>
+            <h4 className="text-lg text-white font-bold">{completeSheet.name}</h4>
+            <p className="text-primary text-xs">{completeSheet.archetype}</p>
           </div>
         </div>
 
         {/* Summary */}
-        {data.summary && (
+        {completeSheet.summary && (
           <div>
             <span className="text-primary block text-xs uppercase mb-1">Summary</span>
-            <ExpandableText text={data.summary} maxLength={200} />
+            <ExpandableText text={completeSheet.summary} maxLength={200} />
           </div>
         )}
 
         {/* Wildcard */}
-        {data.wildcard_name && (
+        {wildcard && (
           <div className="bg-primary/5 border border-primary/20 p-3 rounded">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-primary text-xs uppercase">{data.wildcard_name}</span>
+              <span className="text-primary text-xs uppercase">{wildcard.name}</span>
             </div>
-            <p className="text-sm text-white/80 font-narrative">{data.wildcard_description}</p>
+            <p className="text-sm text-white/80 font-narrative">{wildcard.description}</p>
           </div>
         )}
 
         {/* Selected Traits (display mode) */}
-        {data.traits && data.traits.length > 0 && (
+        {traitSelection && traitSelection.selected_traits.length > 0 && (
           <TraitSelectorGrid
             mode="display"
             suggestedTraits={[]}
-            selectedTraits={data.traits}
-            traitRationales={data.trait_rationales || traitRationales}
+            selectedTraits={traitSelection.selected_traits}
+            traitRationales={traitSelection.trait_rationales || traitRationales}
             maxTraits={10}
           />
         )}
@@ -310,7 +426,7 @@ function CharacterContent({
     );
   }
 
-  // Show concept data first if available, then trait selector below
+  // Show concept data first if available, then trait selector below (in-progress state)
   return (
     <div className="space-y-4">
       {/* Concept data */}
@@ -325,13 +441,6 @@ function CharacterContent({
               <p className="text-primary/80 italic text-sm">{concept.archetype}</p>
             )}
           </div>
-
-          {concept.appearance && (
-            <div>
-              <span className="text-primary block text-xs uppercase mb-1">Appearance</span>
-              <p className="text-sm text-white/80 font-narrative">{concept.appearance}</p>
-            </div>
-          )}
 
           {concept.background && (
             <div>
@@ -360,7 +469,7 @@ function CharacterContent({
 }
 
 // Seed section content
-function SeedContent({ data }: { data: any }) {
+function SeedContent({ data }: { data: SeedData | null | undefined }) {
   if (!data) return null;
 
   return (
@@ -489,7 +598,7 @@ export function ArtifactDrawer({
               hasContent={!!getDisplayData("setting")}
               defaultOpen={currentPhase === "setting" || !!wizardData.setting}
             >
-              <SettingContent data={getDisplayData("setting")} />
+              <SettingContent data={getDisplayData("setting") as SettingData | null | undefined} />
             </AccordionSection>
 
             {/* Character Section */}
@@ -502,7 +611,7 @@ export function ArtifactDrawer({
               defaultOpen={currentPhase === "character"}
             >
               <CharacterContent
-                data={getDisplayData("character")}
+                data={getDisplayData("character") as CharacterInProgress | CharacterComplete | null | undefined}
                 showTraitSelector={showTraitSelector}
                 suggestedTraits={suggestedTraits}
                 selectedTraits={selectedTraits}
@@ -520,7 +629,7 @@ export function ArtifactDrawer({
               hasContent={!!getDisplayData("seed")}
               defaultOpen={currentPhase === "seed"}
             >
-              <SeedContent data={getDisplayData("seed")} />
+              <SeedContent data={getDisplayData("seed") as SeedData | null | undefined} />
             </AccordionSection>
           </div>
         </ScrollArea>
