@@ -457,6 +457,10 @@ export function ArtifactDrawer({
     return wizardData[phase];
   };
 
+  const shouldShowFooter = mode === "confirm" && (pendingArtifact || showTraitSelector);
+  const isConfirmDisabled =
+    isLoading || (showTraitSelector ? (selectedTraits?.length ?? 0) === 0 : false);
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent direction="right" className="w-[420px]">
@@ -522,7 +526,7 @@ export function ArtifactDrawer({
         </ScrollArea>
 
         {/* Footer with action buttons (only in confirm mode) */}
-        {mode === "confirm" && pendingArtifact && (
+        {shouldShowFooter && (
           <DrawerFooter className="border-t border-primary/30">
             <div className="flex gap-3">
               <Button
@@ -535,7 +539,7 @@ export function ArtifactDrawer({
               </Button>
               <Button
                 onClick={onConfirm}
-                disabled={isLoading}
+                disabled={isConfirmDisabled}
                 className="flex-1 bg-primary/20 border border-primary text-primary hover:bg-primary/30 font-sans uppercase tracking-wide"
               >
                 {isLoading ? "Processing..." : "Confirm"}
