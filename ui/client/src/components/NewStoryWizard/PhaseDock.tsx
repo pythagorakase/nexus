@@ -26,6 +26,10 @@ const PHASE_CONFIG: { id: Phase; label: string; icon: typeof Globe }[] = [
   { id: "seed", label: "Seed", icon: Sparkles },
 ];
 
+// Animation timing constants (in seconds)
+const BEAM_DURATION = 8; // How long the gradient takes to traverse the beam
+const PULSE_DURATION = 4; // Active phase indicator pulse cycle
+
 export function PhaseDock({
   currentPhase,
   completedPhases,
@@ -79,7 +83,7 @@ export function PhaseDock({
         pathOpacity={0.4}
         gradientStartColor="hsl(var(--primary))"
         gradientStopColor="hsl(var(--primary) / 0.5)"
-        duration={8}
+        duration={BEAM_DURATION}
         curvature={0}
         startYOffset={16}
         endYOffset={-16}
@@ -96,7 +100,7 @@ export function PhaseDock({
         pathOpacity={0.4}
         gradientStartColor="hsl(var(--primary))"
         gradientStopColor="hsl(var(--primary) / 0.5)"
-        duration={8}
+        duration={BEAM_DURATION}
         curvature={0}
         startYOffset={16}
         endYOffset={-16}
@@ -139,7 +143,7 @@ export function PhaseDock({
                 locked && "border-muted-foreground/30 bg-muted/20 text-muted-foreground/50"
               )}
               style={active && !completed ? {
-                animation: "slow-pulse 4s ease-in-out infinite"
+                animation: `slow-pulse ${PULSE_DURATION}s ease-in-out infinite`
               } : undefined}
             >
               <Icon className="w-5 h-5" />

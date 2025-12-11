@@ -133,7 +133,9 @@ function Chip({ children, variant = "desc" }: { children: React.ReactNode; varia
 function Tooltip({ trait, position }: TooltipState) {
   if (!trait || !position) return null;
 
-  // Clamp vertical position
+  // Clamp vertical position to keep tooltip within viewport
+  // tooltipHeight: estimated max height of tooltip content (desc chips + divider + example chips)
+  // padding: minimum distance from viewport edges to prevent clipping
   const tooltipHeight = 160;
   const padding = 16;
   const maxTop = window.innerHeight - tooltipHeight - padding;

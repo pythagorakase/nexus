@@ -928,9 +928,10 @@ export function InteractiveWizard({
                     variant="ghost"
                     size="sm"
                     onClick={async () => {
-                        if (!threadId || isLoading) return;
+                        if (!threadId || isLoading || processingRef.current) return;
                         // Accept Fate: Backend forces tool call via tool_choice="required"
                         // No user message added to keep conversation clean
+                        processingRef.current = true;
                         setIsLoading(true);
 
                         try {
@@ -963,6 +964,7 @@ export function InteractiveWizard({
                             console.error(e);
                             toast({ title: "Transmission Error", variant: "destructive" });
                         } finally {
+                            processingRef.current = false;
                             setIsLoading(false);
                         }
                     }}
