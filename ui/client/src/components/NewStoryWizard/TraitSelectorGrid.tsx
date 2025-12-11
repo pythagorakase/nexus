@@ -221,7 +221,7 @@ function SelectMode({
   }, [selectedSet, onSelectionChange]);
 
   return (
-    <TooltipProvider>
+    <TooltipProvider disableHoverableContent>
       <div className="space-y-4">
         {/* Trait grid by category */}
         {Object.entries(TRAITS).map(([category, traits]) => (
