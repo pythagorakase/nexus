@@ -6,9 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { StoryChoices, ChoiceSelection } from "@/components/StoryChoices";
 import { WaitScreen } from "./WaitScreen";
-import { PhaseDock } from "./PhaseDock";
-import { ArtifactDrawer } from "./ArtifactDrawer";
+import { ArtifactSidePanel } from "./ArtifactSidePanel";
 import { useModel } from "@/contexts/ModelContext";
+import {
+    ResizablePanelGroup,
+    ResizablePanel,
+    ResizableHandle,
+} from "@/components/ui/resizable";
 import {
     Conversation,
     ConversationContent,
@@ -110,9 +114,9 @@ export function InteractiveWizard({
     const { toast } = useToast();
     const { model, setModel, availableModels, isTestMode } = useModel();
 
-    // Drawer state
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const [drawerMode, setDrawerMode] = useState<"confirm" | "view">("confirm");
+    // Side panel state
+    const [panelExpanded, setPanelExpanded] = useState(false);
+    const [panelMode, setPanelMode] = useState<"confirm" | "view">("confirm");
 
     // Compute completed phases based on wizard data
     const completedPhases = useMemo(() => {
@@ -204,19 +208,19 @@ export function InteractiveWizard({
         return () => clearInterval(interval);
     }, [waitScreenActive]);
 
-    // Auto-open drawer when pendingArtifact arrives
+    // Auto-expand panel when pendingArtifact arrives
     useEffect(() => {
         if (pendingArtifact) {
-            setDrawerMode("confirm");
-            setDrawerOpen(true);
+            setPanelMode("confirm");
+            setPanelExpanded(true);
         }
     }, [pendingArtifact]);
 
-    // Auto-open drawer when trait selector should show
+    // Auto-expand panel when trait selector should show
     useEffect(() => {
         if (showTraitSelector) {
-            setDrawerMode("confirm");
-            setDrawerOpen(true);
+            setPanelMode("confirm");
+            setPanelExpanded(true);
         }
     }, [showTraitSelector]);
 
@@ -227,34 +231,34 @@ export function InteractiveWizard({
         }
     }, [showTraitSelector, suggestedTraits, selectedTraits.length]);
 
-    // Handle phase click from dock - opens drawer in view mode
+    // Handle phase click from dock - expands panel in view mode
     const handlePhaseClick = useCallback((phase: Phase) => {
         if (completedPhases.has(phase)) {
-            setDrawerMode("view");
-            setDrawerOpen(true);
+            setPanelMode("view");
+            setPanelExpanded(true);
         }
     }, [completedPhases]);
 
-    // Handle drawer close
-    const handleDrawerClose = useCallback((open: boolean) => {
-        setDrawerOpen(open);
-        // If closing and was in confirm mode with pending artifact, don't clear it
-        // User can reopen by clicking Accept Fate or phase dock
+    // Handle panel expand/collapse
+    const handlePanelExpandedChange = useCallback((expanded: boolean) => {
+        setPanelExpanded(expanded);
+        // If collapsing and was in confirm mode with pending artifact, don't clear it
+        // User can reopen by clicking Accept Fate or phase icons
     }, []);
 
-    // Handle revise from drawer
+    // Handle revise from panel
     const handleRevise = useCallback(() => {
-        setDrawerOpen(false);
+        setPanelExpanded(false);
         setPendingArtifact(null);
     }, []);
 
-    // Handle trait selection change from drawer
+    // Handle trait selection change from panel
     const handleTraitSelectionChange = useCallback((traits: string[]) => {
         setSelectedTraits(traits);
     }, []);
 
-    // Wrapper for drawer Confirm button - routes to appropriate handler
-    const handleDrawerConfirm = useCallback(() => {
+    // Wrapper for panel Confirm button - routes to appropriate handler
+    const handlePanelConfirm = useCallback(() => {
         if (pendingArtifact) {
             // Phase-level artifact confirmation
             handleArtifactConfirm();
@@ -883,10 +887,36 @@ export function InteractiveWizard({
         }
     };
 
+    // Determine if panel is collapsed based on size (< 10% = collapsed)
+    const [sidePanelSize, setSidePanelSize] = useState(panelExpanded ? 30 : 5);
+    const isPanelCollapsed = sidePanelSize < 10;
+
+    const handleToggleCollapse = useCallback(() => {
+        if (isPanelCollapsed) {
+            setSidePanelSize(30);
+            setPanelExpanded(true);
+        } else {
+            setSidePanelSize(5);
+            setPanelExpanded(false);
+        }
+    }, [isPanelCollapsed]);
+
+    // Sync panelExpanded state when size changes via drag
+    const handlePanelResize = useCallback((size: number) => {
+        setSidePanelSize(size);
+        setPanelExpanded(size >= 10);
+    }, []);
+
     return (
-        <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
-            {/* Wait screen for long-running transition + bootstrap operations */}
-            {waitScreenActive && (
+        <ResizablePanelGroup
+            direction="horizontal"
+            className="h-full w-full"
+        >
+            {/* Main wizard panel */}
+            <ResizablePanel defaultSize={panelExpanded ? 70 : 95} minSize={50}>
+                <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
+                {/* Wait screen for long-running transition + bootstrap operations */}
+                {waitScreenActive && (
                 <WaitScreen
                     statusText={waitScreenStatusText}
                     elapsedSeconds={waitScreenElapsed}
@@ -897,24 +927,6 @@ export function InteractiveWizard({
                     errorMessage={waitScreenError || undefined}
                 />
             )}
-
-            {/* Artifact Drawer - slides from right */}
-            <ArtifactDrawer
-                open={drawerOpen}
-                onOpenChange={handleDrawerClose}
-                mode={drawerMode}
-                wizardData={wizardData}
-                currentPhase={currentPhase}
-                pendingArtifact={pendingArtifact}
-                onConfirm={handleDrawerConfirm}
-                onRevise={handleRevise}
-                isLoading={isLoading}
-                showTraitSelector={showTraitSelector && !pendingArtifact}
-                suggestedTraits={suggestedTraits}
-                selectedTraits={selectedTraits}
-                onTraitSelectionChange={handleTraitSelectionChange}
-                traitRationales={wizardData.character_state?.concept?.trait_rationales}
-            />
 
             {/* Header */}
             <div className="p-4 border-b border-primary/30 bg-background/60 flex justify-between items-center">
@@ -975,145 +987,165 @@ export function InteractiveWizard({
                 </Button>
             </div>
 
-            {/* Main content area with phase dock */}
-            <div className="flex flex-1 overflow-hidden">
-                {/* Chat column */}
-                <div className="flex-1 flex flex-col min-w-0">
-                    {/* Chat Area - shadcn AI Conversation with auto-scroll */}
-                    <Conversation className="flex-1">
-                        <ConversationContent className="p-4 space-y-6">
-                            <AnimatePresence initial={false}>
-                                {messages.map((msg) => (
-                                    <motion.div
-                                        key={msg.id}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className={cn(
-                                            "flex w-full",
-                                            msg.role === "user" ? "justify-end" : "justify-start"
-                                        )}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "max-w-[85%] p-4 rounded-lg font-serif text-sm leading-relaxed shadow-lg",
-                                                msg.role === "user"
-                                                    ? "bg-primary/20 border border-primary/30 text-foreground"
-                                                    : "bg-background/80 border border-border text-foreground"
-                                            )}
-                                        >
-                                            {msg.role === "assistant" ? (
-                                                <div>
-                                                    <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-primary/20">
-                                                        <Sparkles className="w-3 h-3 text-primary" />
-                                                        <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
-                                                    </div>
-                                                    <div className="prose prose-invert max-w-none prose-p:leading-relaxed">
-                                                        <Response>{msg.content}</Response>
-                                                    </div>
-                                                </div>
-                                            ) : msg.role === "system" && msg.artifactData ? (
-                                                <button
-                                                    onClick={() => {
-                                                        // Open drawer in view mode to see artifact
-                                                        setDrawerMode("view");
-                                                        setDrawerOpen(true);
-                                                    }}
-                                                    className="flex items-center gap-2 text-primary/60 hover:text-primary transition-colors group"
-                                                >
-                                                    <Sparkles className="w-3 h-3 opacity-60 group-hover:opacity-100" />
-                                                    <span className="underline underline-offset-2">{msg.content}</span>
-                                                </button>
-                                            ) : (
-                                                <div className="whitespace-pre-wrap">{msg.content}</div>
-                                            )}
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                            {/* Structured choices */}
-                            {displayChoices && displayChoices.length > 0 && !isLoading && (
+            {/* Main chat content area */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                {/* Chat Area - shadcn AI Conversation with auto-scroll */}
+                <Conversation className="flex-1">
+                    <ConversationContent className="p-4 space-y-6">
+                        <AnimatePresence initial={false}>
+                            {messages.map((msg) => (
                                 <motion.div
+                                    key={msg.id}
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="mt-4"
+                                    className={cn(
+                                        "flex w-full",
+                                        msg.role === "user" ? "justify-end" : "justify-start"
+                                    )}
                                 >
-                                    <StoryChoices
-                                        choices={displayChoices}
-                                        onSelect={handleChoiceSelect}
-                                        disabled={isLoading}
-                                    />
-                                </motion.div>
-                            )}
-                            {isLoading && (
-                                <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="flex justify-start"
-                                >
-                                    <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg flex items-center gap-2">
-                                        <Loader size={16} className="text-accent" />
-                                        <span className="text-xs text-muted-foreground font-mono">PROCESSING...</span>
+                                    <div
+                                        className={cn(
+                                            "max-w-[85%] p-4 rounded-lg font-serif text-sm leading-relaxed shadow-lg",
+                                            msg.role === "user"
+                                                ? "bg-primary/20 border border-primary/30 text-foreground"
+                                                : "bg-background/80 border border-border text-foreground"
+                                        )}
+                                    >
+                                        {msg.role === "assistant" ? (
+                                            <div>
+                                                <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-primary/20">
+                                                    <Sparkles className="w-3 h-3 text-primary" />
+                                                    <span className="text-[10px] font-mono text-primary uppercase tracking-widest">Skald</span>
+                                                </div>
+                                                <div className="prose prose-invert max-w-none prose-p:leading-relaxed">
+                                                    <Response>{msg.content}</Response>
+                                                </div>
+                                            </div>
+                                        ) : msg.role === "system" && msg.artifactData ? (
+                                            <button
+                                                onClick={() => {
+                                                    // Expand panel in view mode to see artifact
+                                                    setPanelMode("view");
+                                                    setPanelExpanded(true);
+                                                }}
+                                                className="flex items-center gap-2 text-primary/60 hover:text-primary transition-colors group"
+                                            >
+                                                <Sparkles className="w-3 h-3 opacity-60 group-hover:opacity-100" />
+                                                <span className="underline underline-offset-2">{msg.content}</span>
+                                            </button>
+                                        ) : (
+                                            <div className="whitespace-pre-wrap">{msg.content}</div>
+                                        )}
                                     </div>
                                 </motion.div>
-                            )}
-                        </ConversationContent>
-                        <ConversationScrollButton />
-                    </Conversation>
-
-                    {/* Input Area - shadcn AI PromptInput */}
-                    <div className="p-4 border-t border-primary/30 bg-background/60">
-                        <PromptInput
-                            onSubmit={(e) => {
-                                e.preventDefault();
-                                handleSend();
-                            }}
-                            className="border-primary/30 bg-background/40"
-                        >
-                            <PromptInputTextarea
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
-                                disabled={isLoading || !!pendingArtifact}
-                                className="font-mono bg-transparent"
-                            />
-                            <PromptInputToolbar>
-                                <PromptInputTools>
-                                    {/* Model Picker */}
-                                    <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
-                                        <PromptInputModelSelectTrigger className="w-auto font-mono text-xs">
-                                            <div className="flex items-center gap-1.5">
-                                                <Cpu className="w-3 h-3 shrink-0" />
-                                                <PromptInputModelSelectValue />
-                                            </div>
-                                        </PromptInputModelSelectTrigger>
-                                        <PromptInputModelSelectContent>
-                                            {availableModels.map((m) => (
-                                                <PromptInputModelSelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                                                    {m.label}
-                                                </PromptInputModelSelectItem>
-                                            ))}
-                                        </PromptInputModelSelectContent>
-                                    </PromptInputModelSelect>
-                                </PromptInputTools>
-                                <PromptInputSubmit
-                                    disabled={isLoading || !input.trim() || !!pendingArtifact}
-                                    status={isLoading ? "submitted" : "ready"}
-                                    className="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
+                            ))}
+                        </AnimatePresence>
+                        {/* Structured choices */}
+                        {displayChoices && displayChoices.length > 0 && !isLoading && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-4"
+                            >
+                                <StoryChoices
+                                    choices={displayChoices}
+                                    onSelect={handleChoiceSelect}
+                                    disabled={isLoading}
                                 />
-                            </PromptInputToolbar>
-                        </PromptInput>
-                    </div>
-                </div>
+                            </motion.div>
+                        )}
+                        {isLoading && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="flex justify-start"
+                            >
+                                <div className="bg-muted/60 border border-accent/30 p-3 rounded-lg flex items-center gap-2">
+                                    <Loader size={16} className="text-accent" />
+                                    <span className="text-xs text-muted-foreground font-mono">PROCESSING...</span>
+                                </div>
+                            </motion.div>
+                        )}
+                    </ConversationContent>
+                    <ConversationScrollButton />
+                </Conversation>
 
-                {/* Phase Dock - vertical progress indicator */}
-                <div className="w-20 border-l border-primary/30 bg-background/60">
-                    <PhaseDock
-                        currentPhase={currentPhase}
-                        completedPhases={completedPhases}
-                        onPhaseClick={handlePhaseClick}
-                    />
+                {/* Input Area - shadcn AI PromptInput */}
+                <div className="p-4 border-t border-primary/30 bg-background/60">
+                    <PromptInput
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSend();
+                        }}
+                        className="border-primary/30 bg-background/40"
+                    >
+                        <PromptInputTextarea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder={displayChoices && displayChoices.length > 0 ? "or something else?" : `Input for ${currentPhase} phase...`}
+                            disabled={isLoading || !!pendingArtifact}
+                            className="font-mono bg-transparent"
+                        />
+                        <PromptInputToolbar>
+                            <PromptInputTools>
+                                {/* Model Picker */}
+                                <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
+                                    <PromptInputModelSelectTrigger className="w-auto font-mono text-xs">
+                                        <div className="flex items-center gap-1.5">
+                                            <Cpu className="w-3 h-3 shrink-0" />
+                                            <PromptInputModelSelectValue />
+                                        </div>
+                                    </PromptInputModelSelectTrigger>
+                                    <PromptInputModelSelectContent>
+                                        {availableModels.map((m) => (
+                                            <PromptInputModelSelectItem key={m.id} value={m.id} className="font-mono text-xs">
+                                                {m.label}
+                                            </PromptInputModelSelectItem>
+                                        ))}
+                                    </PromptInputModelSelectContent>
+                                </PromptInputModelSelect>
+                            </PromptInputTools>
+                            <PromptInputSubmit
+                                disabled={isLoading || !input.trim() || !!pendingArtifact}
+                                status={isLoading ? "submitted" : "ready"}
+                                className="bg-primary/20 border border-primary/50 text-primary hover:bg-primary/30"
+                            />
+                        </PromptInputToolbar>
+                    </PromptInput>
                 </div>
             </div>
-        </div >
+        </div>
+            </ResizablePanel>
+
+            {/* Resize handle */}
+            <ResizableHandle withHandle className="bg-primary/20 hover:bg-primary/40 transition-colors" />
+
+            {/* Artifact Side Panel */}
+            <ResizablePanel
+                defaultSize={panelExpanded ? 30 : 5}
+                minSize={5}
+                maxSize={50}
+                onResize={handlePanelResize}
+            >
+                <ArtifactSidePanel
+                    isCollapsed={isPanelCollapsed}
+                    onToggleCollapse={handleToggleCollapse}
+                    mode={panelMode}
+                    wizardData={wizardData}
+                    currentPhase={currentPhase}
+                    completedPhases={completedPhases}
+                    pendingArtifact={pendingArtifact}
+                    onPhaseClick={handlePhaseClick}
+                    onConfirm={handlePanelConfirm}
+                    onRevise={handleRevise}
+                    isLoading={isLoading}
+                    showTraitSelector={showTraitSelector && !pendingArtifact}
+                    suggestedTraits={suggestedTraits}
+                    selectedTraits={selectedTraits}
+                    onTraitSelectionChange={handleTraitSelectionChange}
+                    traitRationales={wizardData.character_state?.concept?.trait_rationales}
+                />
+            </ResizablePanel>
+        </ResizablePanelGroup>
     );
 }
