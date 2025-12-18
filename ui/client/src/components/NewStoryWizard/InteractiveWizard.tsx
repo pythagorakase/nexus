@@ -213,6 +213,7 @@ export function InteractiveWizard({
         if (pendingArtifact) {
             setPanelMode("confirm");
             setPanelExpanded(true);
+            setSidePanelSize((size) => (size < 30 ? 30 : size));
         }
     }, [pendingArtifact]);
 
@@ -221,6 +222,7 @@ export function InteractiveWizard({
         if (showTraitSelector) {
             setPanelMode("confirm");
             setPanelExpanded(true);
+            setSidePanelSize((size) => (size < 30 ? 30 : size));
         }
     }, [showTraitSelector]);
 
@@ -889,6 +891,7 @@ export function InteractiveWizard({
 
     // Determine if panel is collapsed based on size (< 10% = collapsed)
     const [sidePanelSize, setSidePanelSize] = useState(panelExpanded ? 30 : 5);
+    const panelLayout = useMemo(() => [100 - sidePanelSize, sidePanelSize], [sidePanelSize]);
     const isPanelCollapsed = sidePanelSize < 10;
 
     const handleToggleCollapse = useCallback(() => {
@@ -901,8 +904,9 @@ export function InteractiveWizard({
         }
     }, [isPanelCollapsed]);
 
-    // Sync panelExpanded state when size changes via drag
-    const handlePanelResize = useCallback((size: number) => {
+    // Sync panelExpanded state when size changes via drag/layout updates
+    const handlePanelLayout = useCallback((sizes: number[]) => {
+        const size = sizes[1];
         setSidePanelSize(size);
         setPanelExpanded(size >= 10);
     }, []);
@@ -911,6 +915,8 @@ export function InteractiveWizard({
         <ResizablePanelGroup
             direction="horizontal"
             className="h-full w-full"
+            layout={panelLayout}
+            onLayout={handlePanelLayout}
         >
             {/* Main wizard panel */}
             <ResizablePanel defaultSize={panelExpanded ? 70 : 95} minSize={50}>
@@ -1125,7 +1131,6 @@ export function InteractiveWizard({
                 defaultSize={panelExpanded ? 30 : 5}
                 minSize={5}
                 maxSize={50}
-                onResize={handlePanelResize}
             >
                 <ArtifactSidePanel
                     isCollapsed={isPanelCollapsed}
