@@ -13,6 +13,7 @@ import {
     ResizablePanel,
     ResizableHandle,
 } from "@/components/ui/resizable";
+import type { ImperativePanelGroupHandle } from "react-resizable-panels";
 import {
     Conversation,
     ConversationContent,
@@ -53,6 +54,14 @@ interface InteractiveWizardProps {
 }
 
 type Phase = "setting" | "character" | "seed";
+
+// Panel size constants (percentages of container width)
+const PANEL_SIZE_COLLAPSED = 5;
+const PANEL_SIZE_EXPANDED_DEFAULT = 30;
+const PANEL_COLLAPSE_THRESHOLD = 10;
+const PANEL_SIZE_MIN = 5;
+const PANEL_SIZE_MAX = 50;
+const MAIN_PANEL_MIN = 50;
 
 // Trait introduction text from storyteller_new.md YAML frontmatter
 // Used for client-side message when transitioning from 2.1 → 2.2 (skips API call)
@@ -213,7 +222,7 @@ export function InteractiveWizard({
         if (pendingArtifact) {
             setPanelMode("confirm");
             setPanelExpanded(true);
-            setSidePanelSize((size) => (size < 30 ? 30 : size));
+            setSidePanelSize((size) => (size < PANEL_SIZE_EXPANDED_DEFAULT ? PANEL_SIZE_EXPANDED_DEFAULT : size));
         }
     }, [pendingArtifact]);
 
@@ -222,7 +231,7 @@ export function InteractiveWizard({
         if (showTraitSelector) {
             setPanelMode("confirm");
             setPanelExpanded(true);
-            setSidePanelSize((size) => (size < 30 ? 30 : size));
+            setSidePanelSize((size) => (size < PANEL_SIZE_EXPANDED_DEFAULT ? PANEL_SIZE_EXPANDED_DEFAULT : size));
         }
     }, [showTraitSelector]);
 
@@ -889,37 +898,44 @@ export function InteractiveWizard({
         }
     };
 
+    // Panel group ref for imperative layout control
+    const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
+
     // Determine if panel is collapsed based on size (< 10% = collapsed)
-    const [sidePanelSize, setSidePanelSize] = useState(panelExpanded ? 30 : 5);
-    const panelLayout = useMemo(() => [100 - sidePanelSize, sidePanelSize], [sidePanelSize]);
-    const isPanelCollapsed = sidePanelSize < 10;
+    const [sidePanelSize, setSidePanelSize] = useState(panelExpanded ? PANEL_SIZE_EXPANDED_DEFAULT : PANEL_SIZE_COLLAPSED);
+    const isPanelCollapsed = sidePanelSize < PANEL_COLLAPSE_THRESHOLD;
+
+    // Sync layout imperatively when sidePanelSize changes programmatically
+    useEffect(() => {
+        panelGroupRef.current?.setLayout([100 - sidePanelSize, sidePanelSize]);
+    }, [sidePanelSize]);
 
     const handleToggleCollapse = useCallback(() => {
         if (isPanelCollapsed) {
-            setSidePanelSize(30);
+            setSidePanelSize(PANEL_SIZE_EXPANDED_DEFAULT);
             setPanelExpanded(true);
         } else {
-            setSidePanelSize(5);
+            setSidePanelSize(PANEL_SIZE_COLLAPSED);
             setPanelExpanded(false);
         }
     }, [isPanelCollapsed]);
 
-    // Sync panelExpanded state when size changes via drag/layout updates
+    // Sync panelExpanded state when size changes via drag
     const handlePanelLayout = useCallback((sizes: number[]) => {
         const size = sizes[1];
         setSidePanelSize(size);
-        setPanelExpanded(size >= 10);
+        setPanelExpanded(size >= PANEL_COLLAPSE_THRESHOLD);
     }, []);
 
     return (
         <ResizablePanelGroup
+            ref={panelGroupRef}
             direction="horizontal"
             className="h-full w-full"
-            layout={panelLayout}
             onLayout={handlePanelLayout}
         >
             {/* Main wizard panel */}
-            <ResizablePanel defaultSize={panelExpanded ? 70 : 95} minSize={50}>
+            <ResizablePanel minSize={MAIN_PANEL_MIN}>
                 <div className="flex flex-col h-full w-full max-w-5xl mx-auto bg-background/40 border border-primary/30 rounded-lg overflow-hidden backdrop-blur-sm relative">
                 {/* Wait screen for long-running transition + bootstrap operations */}
                 {waitScreenActive && (
@@ -1128,9 +1144,8 @@ export function InteractiveWizard({
 
             {/* Artifact Side Panel */}
             <ResizablePanel
-                defaultSize={panelExpanded ? 30 : 5}
-                minSize={5}
-                maxSize={50}
+                minSize={PANEL_SIZE_MIN}
+                maxSize={PANEL_SIZE_MAX}
             >
                 <ArtifactSidePanel
                     isCollapsed={isPanelCollapsed}

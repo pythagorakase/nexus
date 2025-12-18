@@ -215,6 +215,23 @@ const PHASE_CONFIG: { id: Phase; label: string; icon: typeof Globe }[] = [
 
 const BEAM_DURATION = 8;
 
+// Phase order for index calculations
+const PHASES: Phase[] = ["setting", "character", "seed"];
+const getPhaseIndex = (phase: Phase): number => PHASES.indexOf(phase);
+
+// AnimatedBeam shared configuration (L4: deduplicate beam props)
+const BEAM_CONFIG = {
+  pathColor: "hsl(var(--primary) / 0.3)",
+  pathWidth: 2,
+  pathOpacity: 0.4,
+  gradientStartColor: "hsl(var(--primary))",
+  gradientStopColor: "hsl(var(--primary) / 0.5)",
+  duration: BEAM_DURATION,
+  curvature: 0,
+  startYOffset: 16,
+  endYOffset: -16,
+} as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-components
 // ─────────────────────────────────────────────────────────────────────────────
@@ -440,6 +457,15 @@ function CharacterContent({
 
   if (!data && !showTraitSelector) return null;
 
+  // M3: Fallback when trait selector is shown but no character concept exists yet
+  if (!data && showTraitSelector) {
+    return (
+      <div className="text-muted-foreground text-sm italic">
+        Waiting for character concept...
+      </div>
+    );
+  }
+
   if (isComplete && completeSheet) {
     return (
       <div className="space-y-4">
@@ -646,11 +672,6 @@ function PhaseIcons({
   const phase2Ref = useRef<HTMLButtonElement>(null);
   const phase3Ref = useRef<HTMLButtonElement>(null);
   const phaseRefs = [phase1Ref, phase2Ref, phase3Ref];
-
-  const getPhaseIndex = (phase: Phase): number => {
-    return PHASE_CONFIG.findIndex((p) => p.id === phase);
-  };
-
   const currentPhaseIndex = getPhaseIndex(currentPhase);
 
   const handleClick = (phase: Phase) => {
@@ -669,30 +690,14 @@ function PhaseIcons({
           fromRef={phase1Ref}
           toRef={phase2Ref}
           animated={currentPhaseIndex === 0}
-          pathColor="hsl(var(--primary) / 0.3)"
-          pathWidth={2}
-          pathOpacity={0.4}
-          gradientStartColor="hsl(var(--primary))"
-          gradientStopColor="hsl(var(--primary) / 0.5)"
-          duration={BEAM_DURATION}
-          curvature={0}
-          startYOffset={16}
-          endYOffset={-16}
+          {...BEAM_CONFIG}
         />
         <AnimatedBeam
           containerRef={containerRef}
           fromRef={phase2Ref}
           toRef={phase3Ref}
           animated={currentPhaseIndex === 1}
-          pathColor="hsl(var(--primary) / 0.3)"
-          pathWidth={2}
-          pathOpacity={0.4}
-          gradientStartColor="hsl(var(--primary))"
-          gradientStopColor="hsl(var(--primary) / 0.5)"
-          duration={BEAM_DURATION}
-          curvature={0}
-          startYOffset={16}
-          endYOffset={-16}
+          {...BEAM_CONFIG}
         />
 
         {PHASE_CONFIG.map((phase, index) => {
@@ -768,11 +773,6 @@ export function ArtifactSidePanel({
   onTraitSelectionChange,
   traitRationales,
 }: ArtifactSidePanelProps) {
-  const getPhaseIndex = (phase: Phase): number => {
-    const phases: Phase[] = ["setting", "character", "seed"];
-    return phases.indexOf(phase);
-  };
-
   const currentPhaseIndex = getPhaseIndex(currentPhase);
 
   const isPhaseCompleted = (phase: Phase) => completedPhases.has(phase);
