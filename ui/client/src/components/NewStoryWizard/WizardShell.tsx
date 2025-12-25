@@ -263,57 +263,7 @@ export function NewStoryWizard() {
                 </Button>
             </div>
 
-            {/* Stepper Header - Only show when not in slot selection phase */}
-            {currentPhase !== "slot" && (
-                <div className="border-b border-border bg-card/50 py-4 shrink-0 z-10">
-                    {/* Grid with 3 equal columns ensures middle item is truly centered */}
-                    <div className="grid grid-cols-3 place-items-center relative px-8 max-w-2xl mx-auto">
-                        {/* Progress Bar Background - proportional positioning to align with circle centers */}
-                        <div className="absolute left-[16.667%] right-[16.667%] top-4 h-0.5 bg-border -z-10" />
-
-                        {/* Progress Bar Fill */}
-                        <div
-                            className="absolute top-4 h-0.5 bg-primary transition-all duration-500 -z-10"
-                            style={{
-                              left: '16.667%',
-                              width: `calc(66.666% * ${currentPhaseIndex / (PHASES.length - 1)})`,
-                            }}
-                        />
-
-                        {PHASES.map((phase, index) => {
-                            const isActive = index === currentPhaseIndex;
-                            const isCompleted = index < currentPhaseIndex;
-                                const artifactKey = phase.id as ArtifactType;
-                                const hasArtifact = isCompleted && confirmedArtifacts[artifactKey];
-
-                                return (
-                                    <div key={phase.id} className="flex flex-col items-center gap-2">
-                                        <button
-                                            onClick={() => hasArtifact && setViewingArtifact(artifactKey)}
-                                            disabled={!hasArtifact}
-                                            className={cn(
-                                                "w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300",
-                                                isActive && `border-primary bg-background text-primary ${glowClass} scale-110`,
-                                                isCompleted && "border-primary bg-primary text-primary-foreground",
-                                                !isActive && !isCompleted && "border-muted text-muted-foreground bg-card",
-                                                hasArtifact && "cursor-pointer hover:scale-110 hover:shadow-lg hover:shadow-primary/30"
-                                            )}
-                                            title={hasArtifact ? `View ${phase.label} details` : undefined}
-                                        >
-                                            {isCompleted ? <Check className="w-4 h-4" /> : <span className="text-xs">{index + 1}</span>}
-                                        </button>
-                                        <span className={cn(
-                                            "text-xs font-bold tracking-wider transition-colors duration-300",
-                                            isActive ? `text-primary ${glowClass}` : "text-muted-foreground"
-                                        )}>
-                                            {phase.label}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                    </div>
-                </div>
-            )}
+            {/* Phase progress is now shown in the ArtifactSidePanel */}
 
             {/* Main Content */}
             <div className="flex-1 overflow-hidden relative">
