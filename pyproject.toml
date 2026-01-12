@@ -38,6 +38,9 @@ dependencies = [
     "python-frontmatter (>=1.1.0,<2.0.0)"
 ]
 
+[project.scripts]
+nexus = "nexus.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "black>=25.1.0,<26.0.0",
@@ -57,4 +60,3 @@ huggingface-hub = "^0.30.2"
 textual-dev = "^1.7.0"
 pytest-asyncio = "^1.2.0"
 asyncpg = "^0.30.0"
-
