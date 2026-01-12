@@ -19,6 +19,10 @@ class ModelConfig(BaseModel):
 
     default_model: str = Field(..., description="Default model to load")
     possible_values: List[str] = Field(..., description="Available model options")
+    available_models: List[str] = Field(
+        default=["gpt-5.1", "TEST", "claude"],
+        description="Available API models for UI picker and CLI"
+    )
 
 
 class LLMConfig(BaseModel):
