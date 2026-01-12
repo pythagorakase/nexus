@@ -104,8 +104,11 @@ def fetch_incubator_payload(
 
 async def run_wizard_chat(args: argparse.Namespace) -> Dict[str, Any]:
     """Run a wizard chat step using the existing new story flow."""
-    context_data = parse_optional_json(args.context_json) or load_json_file(
-        args.context_file
+    # Use explicit None check to preserve empty dicts ({})
+    context_data = (
+        parse_optional_json(args.context_json)
+        if args.context_json is not None
+        else load_json_file(args.context_file)
     )
     request = ChatRequest(
         slot=args.slot,
@@ -133,14 +136,14 @@ async def run_narrative_generate(args: argparse.Namespace) -> Dict[str, Any]:
     request = ContinueNarrativeRequest(
         chunk_id=args.chunk_id,
         user_text=args.user_text,
-        test_mode=args.test_mode,
+        model=args.model,
         slot=args.slot,
     )
     await generate_narrative_async(
         session_id=session_id,
         parent_chunk_id=request.chunk_id or 0,
         user_text=request.user_text,
-        test_mode=request.test_mode,
+        model=request.model,
         slot=request.slot,
     )
     status = await get_narrative_status(session_id, slot=args.slot)
@@ -195,7 +198,7 @@ def build_parser(settings: Dict[str, Any], settings_path: str) -> argparse.Argum
     parser.add_argument(
         "--settings",
         default=settings_path,
-        help="Path to settings.json (default: settings.json)",
+        help="Path to settings file (default: nexus.toml)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -256,13 +259,11 @@ def build_parser(settings: Dict[str, Any], settings_path: str) -> argparse.Argum
     )
     narrative_generate.add_argument("--user-text", required=True)
     narrative_generate.add_argument(
-        "--test-mode",
-        action="store_true",
-        default=settings.get("Agent Settings", {})
-        .get("global", {})
-        .get("narrative", {})
-        .get("use_mock_mode", False),
-        help="Use mock narrative generation",
+        "--model",
+        default=settings.get("global", {})
+        .get("model", {})
+        .get("default_model", "gpt-5.1"),
+        help="Model to use for generation (e.g., gpt-5.1, TEST, claude)",
     )
 
     narrative_status = narrative_sub.add_parser(
@@ -295,7 +296,7 @@ def build_parser(settings: Dict[str, Any], settings_path: str) -> argparse.Argum
 def main() -> int:
     """Entry point for the NEXUS CLI."""
     pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument("--settings", default="settings.json")
+    pre_parser.add_argument("--settings", default="nexus.toml")
     pre_args, _ = pre_parser.parse_known_args()
 
     settings_path = Path(pre_args.settings)

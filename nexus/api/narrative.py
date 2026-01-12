@@ -146,8 +146,8 @@ class ContinueNarrativeRequest(BaseModel):
         description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk)."
     )
     user_text: str = Field(description="User's completion text")
-    test_mode: Optional[bool] = Field(
-        default=None, description="Override test mode setting"
+    model: Optional[str] = Field(
+        default=None, description="Model to use for generation (e.g., gpt-5.1, TEST, claude)"
     )
     slot: Optional[int] = Field(default=None, description="Active save slot")
 
@@ -252,7 +252,7 @@ async def continue_narrative(
         session_id,
         parent_chunk_id,
         request.user_text,
-        request.test_mode,
+        request.model,
         request.slot,
     )
 
@@ -268,7 +268,7 @@ async def generate_narrative_async(
     session_id: str,
     parent_chunk_id: int,
     user_text: str,
-    test_mode: Optional[bool] = None,
+    model: Optional[str] = None,
     slot: Optional[int] = None,
 ):
     """
@@ -277,6 +277,9 @@ async def generate_narrative_async(
 
     For bootstrap (parent_chunk_id=0), generates the first chunk using
     story seed and setting from global_variables.
+
+    Args:
+        model: Model to use for generation. When "TEST", uses mock responses.
     """
     conn = None
     is_bootstrap = parent_chunk_id == 0
@@ -314,8 +317,8 @@ async def generate_narrative_async(
             },
         )
 
-        # Check if we should use mock mode (for testing without LLM)
-        use_mock = test_mode is True  # Explicit True means use mock
+        # Check if we should use mock mode (TEST model selected)
+        use_mock = model == "TEST"
 
         if use_mock and is_bootstrap:
             # Mock bootstrap mode for TEST model

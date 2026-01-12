@@ -672,19 +672,19 @@ export function SettingsTab() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="font-mono">Narrative Mode</CardTitle>
+            <CardTitle className="font-mono">Developer Options</CardTitle>
             <CardDescription className="font-mono text-xs">
-              Toggle test routing for live narrative turns.
+              Control visibility of development and debugging features.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1">
                 <Label htmlFor="test-mode-toggle" className="font-mono text-sm">
-                  Test Narrative Mode
+                  Show TEST Model
                 </Label>
                 <p className="text-xs text-muted-foreground font-mono">
-                  Writes provisional turns to tables suffixed with <span className="text-primary">{testDatabaseSuffix}</span> so production data stays untouched.
+                  When enabled, the <span className="text-primary">TEST</span> model appears in the model picker for development/debugging.
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -702,7 +702,7 @@ export function SettingsTab() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="font-mono text-xs">
-                  TEST MODE ON - new narrative turns will go to the isolated test tables until you switch back.
+                  TEST model visible - select it in the model picker to use mock server responses.
                 </AlertDescription>
               </Alert>
             )}

@@ -318,7 +318,7 @@ export function InteractiveWizard({
                     chunk_id: 0,  // Bootstrap signal
                     slot,
                     user_text: "Begin the story.",
-                    test_mode: isTestMode,  // Pass TEST mode for mock bootstrap
+                    model,  // Pass selected model (TEST triggers mock bootstrap)
                 }),
                 signal: abortController.signal,
             });
