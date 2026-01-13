@@ -8,6 +8,11 @@
 [global.model]
 # Default LLM model to load for local inference (via LM Studio)
 default_model = "nexveridian/gpt-oss-120b"
+
+# Available API models for UI picker and CLI (not local inference)
+# These are the model endpoints available in the system
+available_models = ["gpt-5.1", "TEST", "claude"]
+
 possible_values = [
     "nousresearch/hermes-4-70b",
     "unsloth-gpt-oss-120b-hi-mlx",

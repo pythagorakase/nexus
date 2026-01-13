@@ -48,6 +48,7 @@ from nexus.api.new_story_flow import (
     activate_slot,
 )
 from nexus.api.slot_utils import all_slots, slot_dbname, require_slot_dbname
+from nexus.api.db_pool import get_connection
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -335,6 +336,14 @@ async def generate_narrative_async(
                 "parent_chunk_id": 0,
                 "user_text": user_text,
                 "storyteller_text": storyteller_text,
+                "choice_object": {
+                    "presented": [
+                        "Examine the satchel more closely",
+                        "Check the tram's route display",
+                        "Study the other passengers",
+                    ],
+                    "selected": None,
+                },
                 "metadata_updates": {
                     "chronology": {
                         "episode_transition": "begin",
@@ -1262,6 +1271,547 @@ async def get_slots_status_endpoint():
     return results
 
 
+# ============================================================================
+# Simplified Slot State Endpoints (for CLI)
+# ============================================================================
+
+
+class SlotStateResponse(BaseModel):
+    """Response model for slot state endpoint."""
+
+    slot: int
+    is_empty: bool
+    is_wizard_mode: bool
+    phase: Optional[str] = None  # Wizard phase if in wizard mode
+    thread_id: Optional[str] = None  # Wizard thread ID
+    current_chunk_id: Optional[int] = None  # Narrative chunk ID
+    has_pending: bool = False  # True if incubator has pending content
+    storyteller_text: Optional[str] = None
+    choices: List[str] = []
+    model: Optional[str] = None
+
+
+@app.get("/api/slot/{slot}/state", response_model=SlotStateResponse)
+async def get_slot_state_endpoint(slot: int):
+    """
+    Get complete state for a save slot.
+
+    Returns everything needed to display current position and available actions:
+    - Whether in wizard or narrative mode
+    - Current wizard phase or narrative chunk
+    - Available choices
+    - Current model setting
+    """
+    from nexus.api.slot_state import get_slot_state
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        state = get_slot_state(slot)
+
+        if state.is_empty:
+            return SlotStateResponse(
+                slot=slot,
+                is_empty=True,
+                is_wizard_mode=False,
+                model=state.model,
+            )
+
+        if state.is_wizard_mode and state.wizard_state:
+            return SlotStateResponse(
+                slot=slot,
+                is_empty=False,
+                is_wizard_mode=True,
+                phase=state.wizard_state.phase,
+                thread_id=state.wizard_state.thread_id,
+                model=state.model,
+            )
+
+        if state.narrative_state:
+            return SlotStateResponse(
+                slot=slot,
+                is_empty=False,
+                is_wizard_mode=False,
+                current_chunk_id=state.narrative_state.current_chunk_id,
+                has_pending=state.narrative_state.has_pending,
+                storyteller_text=state.narrative_state.storyteller_text,
+                choices=state.narrative_state.choices,
+                model=state.model,
+            )
+
+        # Fallback for edge cases
+        return SlotStateResponse(
+            slot=slot,
+            is_empty=True,
+            is_wizard_mode=False,
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting slot state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SlotContinueRequest(BaseModel):
+    """Request model for unified continue endpoint."""
+
+    choice: Optional[int] = Field(
+        default=None, description="Structured choice number (1-indexed)"
+    )
+    user_text: Optional[str] = Field(
+        default=None, description="Freeform user input"
+    )
+    accept_fate: bool = Field(
+        default=False, description="Auto-advance (select first choice or trigger auto-generate)"
+    )
+    model: Optional[str] = Field(
+        default=None, description="Override model for this request"
+    )
+
+
+class SlotContinueResponse(BaseModel):
+    """Response from unified continue endpoint."""
+
+    success: bool
+    action: str  # "wizard_chat", "narrative_continue", "initialize"
+    session_id: Optional[str] = None
+    message: Optional[str] = None  # Assistant response or status
+    choices: List[str] = []  # Available choices for next turn
+    phase: Optional[str] = None  # Wizard phase if applicable
+    chunk_id: Optional[int] = None  # Narrative chunk ID if applicable
+    error: Optional[str] = None
+
+
+@app.post("/api/slot/{slot}/continue", response_model=SlotContinueResponse)
+async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
+    """
+    Unified continue endpoint for wizard or narrative mode.
+
+    Routes to wizard chat or narrative continuation based on current slot state.
+    Handles choice selection, freeform input, and accept-fate auto-advance.
+
+    The slot's current state determines the action:
+    - Empty slot: Initialize wizard
+    - Wizard mode: Route to wizard chat
+    - Narrative mode: Generate next chunk
+
+    If a previous incubator session exists, submitting a continue request
+    implicitly approves that pending content.
+    """
+    from nexus.api.slot_state import resolve_continue_action, get_slot_state
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        # Resolve what action to take
+        resolution = resolve_continue_action(
+            slot=slot,
+            choice=request.choice,
+            user_text=request.user_text,
+            accept_fate=request.accept_fate,
+        )
+
+        action = resolution["action"]
+        params = resolution["params"]
+
+        # Override model if specified in request
+        if request.model:
+            params["model"] = request.model
+
+        if action == "initialize":
+            # Initialize new wizard session for empty slot
+            from nexus.api.new_story_flow import start_setup
+
+            # start_setup returns thread_id string, not a dict
+            thread_id = start_setup(params["slot"])
+            return SlotContinueResponse(
+                success=True,
+                action="initialize",
+                message=f"Wizard initialized for slot {slot}. Ready to begin story creation.",
+                phase="setting",
+            )
+
+        elif action == "wizard_chat":
+            # Route to wizard chat flow
+            # Load character state from cache for character phase sub-tracking
+            context_data = None
+            current_phase = params.get("phase") or "setting"
+            if current_phase == "character":
+                from nexus.api.new_story_cache import read_cache
+                from nexus.api.slot_utils import slot_dbname
+
+                cache = read_cache(slot_dbname(slot))
+                if cache and cache.get("character_draft"):
+                    # character_draft stores in-progress character_state
+                    context_data = {"character_state": cache["character_draft"]}
+
+            chat_request = ChatRequest(
+                slot=params["slot"],
+                thread_id=params.get("thread_id") or "",
+                message=params.get("message") or "",
+                model=params.get("model") or "gpt-5.1",
+                current_phase=current_phase,
+                context_data=context_data,
+                accept_fate=params.get("accept_fate", False),
+            )
+
+            # Handle empty thread_id - need to start a new session
+            if not chat_request.thread_id:
+                from nexus.api.new_story_flow import start_setup
+
+                # start_setup returns thread_id string, not a dict
+                thread_id = start_setup(slot)
+                return SlotContinueResponse(
+                    success=True,
+                    action="wizard_chat",
+                    message=f"Wizard session started. Thread ID: {thread_id}",
+                    phase="setting",
+                )
+
+            # Call the existing chat endpoint logic
+            response = await new_story_chat_endpoint(chat_request)
+
+            return SlotContinueResponse(
+                success=True,
+                action="wizard_chat",
+                message=response.get("message"),
+                choices=response.get("choices", []),
+                phase=response.get("phase"),
+            )
+
+        elif action == "narrative_continue":
+            # Implicitly approve pending incubator if exists
+            pending_session = params.get("session_id")
+            if pending_session:
+                try:
+                    await approve_narrative(
+                        session_id=pending_session,
+                        request=ApproveNarrativeRequest(
+                            session_id=pending_session, commit=True
+                        ),
+                        slot=slot,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to approve pending session: {e}")
+
+            # Generate next narrative chunk
+            session_id = str(uuid.uuid4())
+            # Note: model override not implemented for narrative continuation
+            # ContinueNarrativeRequest only has: chunk_id, user_text, test_mode, slot
+            continue_request = ContinueNarrativeRequest(
+                chunk_id=params.get("chunk_id"),
+                user_text=params.get("user_text") or "",
+                slot=slot,
+            )
+
+            await generate_narrative_async(
+                session_id=session_id,
+                parent_chunk_id=continue_request.chunk_id or 0,
+                user_text=continue_request.user_text,
+                slot=slot,
+            )
+
+            # Get the result
+            status = await get_narrative_status(session_id, slot=slot)
+
+            # Fetch incubator data for choices
+            from nexus.api.slot_utils import slot_dbname
+
+            dbname = slot_dbname(slot)
+            with get_connection(dbname, dict_cursor=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT storyteller_text, choice_object FROM incubator WHERE session_id = %s",
+                        (session_id,),
+                    )
+                    incubator_row = cur.fetchone()
+
+            storyteller_text = None
+            choices = []
+            if incubator_row:
+                storyteller_text = incubator_row.get("storyteller_text")
+                choice_obj = incubator_row.get("choice_object")
+                if choice_obj:
+                    if isinstance(choice_obj, str):
+                        import json
+
+                        choice_obj = json.loads(choice_obj)
+                    choices = choice_obj.get("presented", [])
+
+            return SlotContinueResponse(
+                success=status.status == "completed",
+                action="narrative_continue",
+                session_id=session_id,
+                message=storyteller_text,
+                choices=choices,
+                chunk_id=status.chunk_id,
+                error=status.error,
+            )
+
+        else:
+            raise HTTPException(status_code=500, detail=f"Unknown action: {action}")
+
+    except ValueError as e:
+        return SlotContinueResponse(
+            success=False,
+            action="error",
+            error=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error in slot continue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SlotUndoResponse(BaseModel):
+    """Response from undo endpoint."""
+
+    success: bool
+    message: str
+    previous_state: Optional[str] = None  # "setting", "character", "seed", or chunk ID
+
+
+@app.post("/api/slot/{slot}/undo", response_model=SlotUndoResponse)
+async def slot_undo_endpoint(slot: int):
+    """
+    Undo the last action for a slot.
+
+    Behavior depends on current mode:
+    - Wizard mode: Clears the most recent draft, reverting to previous phase
+    - Narrative mode (pending): Deletes incubator content without committing
+    - Narrative mode (committed): Cannot undo committed chunks
+
+    Single-depth undo only - no multi-step rewind.
+    """
+    from nexus.api.slot_state import get_slot_state
+    from nexus.api.new_story_cache import write_cache, read_cache
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        state = get_slot_state(slot)
+        dbname = slot_dbname(slot)
+
+        if state.is_empty:
+            return SlotUndoResponse(
+                success=False,
+                message="Slot is empty - nothing to undo",
+            )
+
+        if state.is_wizard_mode and state.wizard_state:
+            wizard = state.wizard_state
+
+            # Determine what to clear based on current phase
+            if wizard.phase == "ready":
+                # Clear selected_seed to go back to seed phase
+                cache = read_cache(dbname)
+                if cache:
+                    write_cache(
+                        thread_id=cache.get("thread_id"),
+                        setting_draft=cache.get("setting_draft"),
+                        character_draft=cache.get("character_draft"),
+                        selected_seed=None,  # Clear seed
+                        layer_draft=cache.get("layer_draft"),
+                        zone_draft=cache.get("zone_draft"),
+                        initial_location=cache.get("initial_location"),
+                        base_timestamp=cache.get("base_timestamp"),
+                        target_slot=cache.get("target_slot"),
+                        dbname=dbname,
+                    )
+                return SlotUndoResponse(
+                    success=True,
+                    message="Reverted to seed phase",
+                    previous_state="seed",
+                )
+
+            elif wizard.phase == "seed":
+                # Clear character_draft to go back to character phase
+                cache = read_cache(dbname)
+                if cache:
+                    write_cache(
+                        thread_id=cache.get("thread_id"),
+                        setting_draft=cache.get("setting_draft"),
+                        character_draft=None,  # Clear character
+                        selected_seed=None,
+                        layer_draft=cache.get("layer_draft"),
+                        zone_draft=cache.get("zone_draft"),
+                        initial_location=cache.get("initial_location"),
+                        base_timestamp=cache.get("base_timestamp"),
+                        target_slot=cache.get("target_slot"),
+                        dbname=dbname,
+                    )
+                return SlotUndoResponse(
+                    success=True,
+                    message="Reverted to character phase",
+                    previous_state="character",
+                )
+
+            elif wizard.phase == "character":
+                # Clear setting_draft to go back to setting phase
+                cache = read_cache(dbname)
+                if cache:
+                    write_cache(
+                        thread_id=cache.get("thread_id"),
+                        setting_draft=None,  # Clear setting
+                        character_draft=None,
+                        selected_seed=None,
+                        layer_draft=None,
+                        zone_draft=None,
+                        initial_location=None,
+                        base_timestamp=cache.get("base_timestamp"),
+                        target_slot=cache.get("target_slot"),
+                        dbname=dbname,
+                    )
+                return SlotUndoResponse(
+                    success=True,
+                    message="Reverted to setting phase",
+                    previous_state="setting",
+                )
+
+            else:
+                # Already at setting phase - nothing to undo
+                return SlotUndoResponse(
+                    success=False,
+                    message="Already at beginning of wizard - nothing to undo",
+                )
+
+        elif state.narrative_state:
+            narrative = state.narrative_state
+
+            if narrative.has_pending and narrative.session_id:
+                # Delete pending incubator content
+                with get_connection(dbname) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "DELETE FROM incubator WHERE session_id = %s",
+                            (narrative.session_id,),
+                        )
+
+                return SlotUndoResponse(
+                    success=True,
+                    message="Deleted pending content",
+                    previous_state=str(narrative.current_chunk_id),
+                )
+
+            else:
+                # No pending content - cannot undo committed chunks
+                return SlotUndoResponse(
+                    success=False,
+                    message="Cannot undo committed chunks - only pending content can be undone",
+                )
+
+        return SlotUndoResponse(
+            success=False,
+            message="Unknown state - cannot undo",
+        )
+
+    except Exception as e:
+        logger.error(f"Error in slot undo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SlotModelRequest(BaseModel):
+    """Request model for setting slot model."""
+
+    model: str = Field(description="Model to set (e.g., gpt-5.1, TEST, claude)")
+
+
+class SlotModelResponse(BaseModel):
+    """Response from model endpoints."""
+
+    slot: int
+    model: Optional[str]
+    available_models: List[str] = []
+
+
+@app.get("/api/slot/{slot}/model", response_model=SlotModelResponse)
+async def get_slot_model_endpoint(slot: int):
+    """Get current model for a slot."""
+    from nexus.config import load_settings_as_dict
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        dbname = slot_dbname(slot)
+
+        # Get current model from save_slots
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT model FROM assets.save_slots WHERE slot_number = %s",
+                    (slot,),
+                )
+                row = cur.fetchone()
+                current_model = row.get("model") if row else None
+
+        # Get available models from config
+        settings = load_settings_as_dict()
+        available = settings.get("global", {}).get("model", {}).get(
+            "available_models", ["gpt-5.1", "TEST", "claude"]
+        )
+
+        return SlotModelResponse(
+            slot=slot,
+            model=current_model,
+            available_models=available,
+        )
+
+    except Exception as e:
+        logger.error(f"Error getting slot model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/slot/{slot}/model", response_model=SlotModelResponse)
+async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
+    """Set model for a slot."""
+    from nexus.config import load_settings_as_dict
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        dbname = slot_dbname(slot)
+
+        # Validate model against available models
+        settings = load_settings_as_dict()
+        available = settings.get("global", {}).get("model", {}).get(
+            "available_models", ["gpt-5.1", "TEST", "claude"]
+        )
+
+        if request.model not in available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid model '{request.model}'. Available: {', '.join(available)}",
+            )
+
+        # Update model in save_slots
+        with get_connection(dbname) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO assets.save_slots (slot_number, model)
+                    VALUES (%s, %s)
+                    ON CONFLICT (slot_number) DO UPDATE
+                    SET model = EXCLUDED.model
+                    """,
+                    (slot, request.model),
+                )
+
+        return SlotModelResponse(
+            slot=slot,
+            model=request.model,
+            available_models=available,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting slot model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -1696,11 +2246,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 response_data = {"character_state": creation_state.model_dump()}
                 phase_complete = creation_state.is_complete()
 
+                # Always save character state to cache (for CLI sub-phase continuity)
+                # This persists intermediate state so CLI can resume across requests
+                record_drafts(request.slot, character=creation_state.model_dump())
+                logger.debug("Saved character state to cache: %s", list(creation_state.model_dump().keys()))
+
                 if phase_complete:
-                    # Always save the creation state to cache first
-                    logger.info("Character phase complete - saving draft and building sheet")
-                    logger.debug("Creation state: %s", creation_state.model_dump())
-                    record_drafts(request.slot, character=creation_state.model_dump())
+                    # Character sheet is built when all sub-phases are complete
+                    logger.info("Character phase complete - building sheet")
                     # Then build the character sheet (fail loudly per user directive)
                     character_sheet = creation_state.to_character_sheet().model_dump()
                     response_data.update({"character_sheet": character_sheet})
