@@ -123,8 +123,28 @@ def get_slot_state(slot: int) -> SlotState:
             cur.execute("SELECT COUNT(*) as count FROM incubator")
             incubator_count = cur.fetchone().get("count", 0)
 
+            # Check global_variables for post-transition bootstrap state
+            cur.execute(
+                """
+                SELECT setting, user_character, base_timestamp
+                FROM global_variables
+                WHERE id = TRUE
+                """
+            )
+            global_row = cur.fetchone()
+            has_global_story = (
+                global_row is not None
+                and (
+                    global_row.get("setting") is not None
+                    or global_row.get("user_character") is not None
+                    or global_row.get("base_timestamp") is not None
+                )
+            )
+
             has_wizard_data = wizard_cache is not None
-            has_narrative_data = chunk_count > 0 or incubator_count > 0
+            has_narrative_data = (
+                chunk_count > 0 or incubator_count > 0 or has_global_story
+            )
 
             # Derive mode from data presence
             if has_wizard_data and not has_narrative_data:
