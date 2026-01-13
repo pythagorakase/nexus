@@ -1423,23 +1423,36 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
             # Initialize new wizard session for empty slot
             from nexus.api.new_story_flow import start_setup
 
-            result = start_setup(params["slot"])
+            # start_setup returns thread_id string, not a dict
+            thread_id = start_setup(params["slot"])
             return SlotContinueResponse(
                 success=True,
                 action="initialize",
-                message=result.get("assistant_message"),
+                message=f"Wizard initialized for slot {slot}. Ready to begin story creation.",
                 phase="setting",
             )
 
         elif action == "wizard_chat":
             # Route to wizard chat flow
+            # Load character state from cache for character phase sub-tracking
+            context_data = None
+            current_phase = params.get("phase") or "setting"
+            if current_phase == "character":
+                from nexus.api.new_story_cache import read_cache
+                from nexus.api.slot_utils import slot_dbname
+
+                cache = read_cache(slot_dbname(slot))
+                if cache and cache.get("character_draft"):
+                    # character_draft stores in-progress character_state
+                    context_data = {"character_state": cache["character_draft"]}
+
             chat_request = ChatRequest(
                 slot=params["slot"],
                 thread_id=params.get("thread_id") or "",
                 message=params.get("message") or "",
                 model=params.get("model") or "gpt-5.1",
-                current_phase=params.get("phase") or "setting",
-                context_data=None,
+                current_phase=current_phase,
+                context_data=context_data,
                 accept_fate=params.get("accept_fate", False),
             )
 
@@ -1447,11 +1460,12 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
             if not chat_request.thread_id:
                 from nexus.api.new_story_flow import start_setup
 
-                result = start_setup(slot)
+                # start_setup returns thread_id string, not a dict
+                thread_id = start_setup(slot)
                 return SlotContinueResponse(
                     success=True,
                     action="wizard_chat",
-                    message=result.get("assistant_message"),
+                    message=f"Wizard session started. Thread ID: {thread_id}",
                     phase="setting",
                 )
 
@@ -1483,10 +1497,11 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
 
             # Generate next narrative chunk
             session_id = str(uuid.uuid4())
+            # Note: model override not implemented for narrative continuation
+            # ContinueNarrativeRequest only has: chunk_id, user_text, test_mode, slot
             continue_request = ContinueNarrativeRequest(
                 chunk_id=params.get("chunk_id"),
                 user_text=params.get("user_text") or "",
-                model=params.get("model"),
                 slot=slot,
             )
 
@@ -2231,11 +2246,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 response_data = {"character_state": creation_state.model_dump()}
                 phase_complete = creation_state.is_complete()
 
+                # Always save character state to cache (for CLI sub-phase continuity)
+                # This persists intermediate state so CLI can resume across requests
+                record_drafts(request.slot, character=creation_state.model_dump())
+                logger.debug("Saved character state to cache: %s", list(creation_state.model_dump().keys()))
+
                 if phase_complete:
-                    # Always save the creation state to cache first
-                    logger.info("Character phase complete - saving draft and building sheet")
-                    logger.debug("Creation state: %s", creation_state.model_dump())
-                    record_drafts(request.slot, character=creation_state.model_dump())
+                    # Character sheet is built when all sub-phases are complete
+                    logger.info("Character phase complete - building sheet")
                     # Then build the character sheet (fail loudly per user directive)
                     character_sheet = creation_state.to_character_sheet().model_dump()
                     response_data.update({"character_sheet": character_sheet})

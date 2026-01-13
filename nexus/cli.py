@@ -91,12 +91,14 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
 
         if data.get("is_empty"):
             return {
+                "success": True,
                 "message": f"Slot {args.slot} is empty. Use 'nexus continue --slot {args.slot}' to initialize.",
                 "is_empty": True,
             }
 
         if data.get("is_wizard_mode"):
             return {
+                "success": True,
                 "message": f"Slot {args.slot} is in wizard mode.",
                 "phase": data.get("phase"),
                 "choices": [],
@@ -104,6 +106,7 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
 
         # Narrative mode
         return {
+            "success": True,
             "message": data.get("storyteller_text") or "No narrative text available.",
             "choices": data.get("choices", []),
             "chunk_id": data.get("current_chunk_id"),
@@ -111,11 +114,11 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {"error": f"Cannot connect to API server at {get_api_url()}"}
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
     except requests.exceptions.HTTPError as e:
-        return {"error": f"API error: {e.response.text}"}
+        return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
@@ -143,9 +146,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         data = response.json()
 
         if not data.get("success"):
-            return {"error": data.get("error", "Unknown error")}
+            return {"success": False, "error": data.get("error", "Unknown error")}
 
         result = {
+            "success": True,
             "message": data.get("message"),
             "choices": data.get("choices", []),
         }
@@ -158,11 +162,11 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         return result
 
     except requests.exceptions.ConnectionError:
-        return {"error": f"Cannot connect to API server at {get_api_url()}"}
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
     except requests.exceptions.HTTPError as e:
-        return {"error": f"API error: {e.response.text}"}
+        return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
@@ -179,16 +183,16 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
         data = response.json()
 
         return {
+            "success": data.get("success", True),
             "message": data.get("message"),
-            "success": data.get("success"),
         }
 
     except requests.exceptions.ConnectionError:
-        return {"error": f"Cannot connect to API server at {get_api_url()}"}
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
     except requests.exceptions.HTTPError as e:
-        return {"error": f"API error: {e.response.text}"}
+        return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 def run_model(args: argparse.Namespace) -> Dict[str, Any]:
@@ -197,19 +201,27 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
 
     Calls GET or POST /api/slot/{slot}/model.
     """
-    base_url = f"{get_api_url()}/api/slot/{args.slot}/model"
-
     try:
         if args.list:
-            # Just list available models
-            response = requests.get(base_url, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            models = data.get("available_models", [])
+            # List available models from config (no slot required)
+            try:
+                from nexus.config.loader import load_settings_as_dict
+
+                settings = load_settings_as_dict()
+                models = settings.get("global", {}).get("model", {}).get(
+                    "available_models", ["gpt-5.1", "TEST", "claude"]
+                )
+            except Exception:
+                # Fallback to hardcoded defaults if config unavailable
+                models = ["gpt-5.1", "TEST", "claude"]
             return {
+                "success": True,
                 "message": f"Available models: {', '.join(models)}",
                 "available_models": models,
             }
+
+        # Slot is required for get/set operations
+        base_url = f"{get_api_url()}/api/slot/{args.slot}/model"
 
         if args.set:
             # Set the model
@@ -217,6 +229,7 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
             response.raise_for_status()
             data = response.json()
             return {
+                "success": True,
                 "message": f"Model changed to {data.get('model')}",
                 "model": data.get("model"),
             }
@@ -228,17 +241,18 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
         current = data.get("model") or "(default)"
         available = data.get("available_models", [])
         return {
+            "success": True,
             "message": f"Current model: {current}\nAvailable: {', '.join(available)}",
             "model": data.get("model"),
             "available_models": available,
         }
 
     except requests.exceptions.ConnectionError:
-        return {"error": f"Cannot connect to API server at {get_api_url()}"}
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
     except requests.exceptions.HTTPError as e:
-        return {"error": f"API error: {e.response.text}"}
+        return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"success": False, "error": str(e)}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -334,9 +348,9 @@ def main() -> int:
         emit_error(f"Unknown command: {args.command}", args.json)
         return 2
 
-    # Check for errors
-    if result.get("error"):
-        emit_error(result["error"], args.json)
+    # Check for errors (consistent format: success=False with error message)
+    if not result.get("success", True) or result.get("error"):
+        emit_error(result.get("error", "Unknown error"), args.json)
         return 1
 
     emit_output(result, args.json)
