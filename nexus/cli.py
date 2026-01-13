@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from typing import Any, Dict, Optional
 
 import requests
@@ -125,41 +126,119 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Advance the story (wizard or narrative).
 
-    Calls POST /api/slot/{slot}/continue with the appropriate parameters.
+    Determines mode from slot state and calls the appropriate unified endpoint:
+    - Wizard mode: /api/story/new/chat
+    - Narrative mode: /api/narrative/continue
     """
-    url = f"{get_api_url()}/api/slot/{args.slot}/continue"
-
-    payload = {
-        "accept_fate": args.accept_fate,
-    }
-
-    if args.choice is not None:
-        payload["choice"] = args.choice
-    if args.user_text is not None:
-        payload["user_text"] = args.user_text
-    if args.model is not None:
-        payload["model"] = args.model
-
     try:
-        response = requests.post(url, json=payload, timeout=120)
-        response.raise_for_status()
-        data = response.json()
+        # First, get slot state to determine mode
+        state_url = f"{get_api_url()}/api/slot/{args.slot}/state"
+        state_response = requests.get(state_url, timeout=30)
+        state_response.raise_for_status()
+        state = state_response.json()
 
-        if not data.get("success"):
-            return {"success": False, "error": data.get("error", "Unknown error")}
+        if state.get("is_empty"):
+            # Initialize via setup endpoint, then call wizard chat
+            setup_url = f"{get_api_url()}/api/story/new/setup"
+            setup_response = requests.post(
+                setup_url,
+                json={"slot": args.slot},
+                timeout=30
+            )
+            if not setup_response.ok:
+                return {"success": False, "error": "Failed to initialize wizard"}
 
-        result = {
-            "success": True,
-            "message": data.get("message"),
-            "choices": data.get("choices", []),
-        }
+            return {
+                "success": True,
+                "message": f"Wizard initialized for slot {args.slot}. Ready to begin story creation.",
+                "phase": "setting",
+            }
 
-        if data.get("phase"):
-            result["phase"] = data["phase"]
-        if data.get("chunk_id"):
-            result["chunk_id"] = data["chunk_id"]
+        if state.get("is_wizard_mode"):
+            # Call wizard chat directly
+            url = f"{get_api_url()}/api/story/new/chat"
+            payload = {
+                "slot": args.slot,
+                "message": args.user_text or "",
+                "accept_fate": args.accept_fate,
+                # thread_id and current_phase resolved by backend
+            }
+            if args.model:
+                payload["model"] = args.model
 
-        return result
+            response = requests.post(url, json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+
+            return {
+                "success": True,
+                "message": data.get("message"),
+                "choices": data.get("choices", []),
+                "phase": data.get("phase"),
+            }
+
+        else:
+            # Narrative mode - call continue directly
+            # Resolve choice to user_text if provided
+            user_text = args.user_text or ""
+            if args.choice is not None and state.get("choices"):
+                choices = state.get("choices", [])
+                if 1 <= args.choice <= len(choices):
+                    user_text = choices[args.choice - 1]
+                else:
+                    return {"success": False, "error": f"Choice {args.choice} out of range (1-{len(choices)})"}
+
+            # Approve pending content if exists
+            if state.get("has_pending"):
+                approve_url = f"{get_api_url()}/api/narrative/approve"
+                approve_response = requests.post(
+                    approve_url,
+                    json={"slot": args.slot, "commit": True},
+                    timeout=30
+                )
+                # Log but don't fail if approve has issues
+                if not approve_response.ok:
+                    pass  # Continue anyway
+
+            url = f"{get_api_url()}/api/narrative/continue"
+            payload = {
+                "slot": args.slot,
+                "user_text": user_text,
+                # chunk_id resolved by backend
+            }
+
+            response = requests.post(url, json=payload, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+
+            # Wait for generation to complete and fetch result
+            session_id = data.get("session_id")
+            if session_id:
+                # Poll for completion (simplified - real implementation would use websocket)
+                for _ in range(60):  # Max 60 seconds
+                    status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
+                    status_response = requests.get(status_url, params={"slot": args.slot}, timeout=30)
+                    if status_response.ok:
+                        status = status_response.json()
+                        if status.get("status") == "completed":
+                            # Fetch incubator for result
+                            load_result = run_load(args)
+                            return {
+                                "success": True,
+                                "message": load_result.get("message"),
+                                "choices": load_result.get("choices", []),
+                                "chunk_id": status.get("chunk_id"),
+                            }
+                        elif status.get("status") == "error":
+                            return {"success": False, "error": status.get("error", "Generation failed")}
+                    time.sleep(1)
+                return {"success": False, "error": "Generation timed out"}
+
+            return {
+                "success": True,
+                "message": data.get("message"),
+                "session_id": session_id,
+            }
 
     except requests.exceptions.ConnectionError:
         return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}

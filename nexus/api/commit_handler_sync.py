@@ -262,24 +262,36 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
                 logger.info("Processing incubator session %s", session_id)
 
             # Step 2: Get parent context
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT season, episode, scene, world_layer, time_delta
-                    FROM chunk_metadata
-                    WHERE chunk_id = %s
-                """, (incubator["parent_chunk_id"],))
-                parent_meta = cur.fetchone()
+            # Bootstrap case: parent_chunk_id=0 has no metadata, use defaults
+            is_bootstrap = incubator["parent_chunk_id"] == 0
+            if is_bootstrap:
+                parent_meta = {
+                    "season": 1,
+                    "episode": 1,
+                    "scene": 0,  # Will be incremented to 1
+                    "world_layer": "primary",
+                    "time_delta": 0,
+                }
+                logger.info("Bootstrap chunk - using default metadata (S1E1 scene 1)")
+            else:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("""
+                        SELECT season, episode, scene, world_layer, time_delta
+                        FROM chunk_metadata
+                        WHERE chunk_id = %s
+                    """, (incubator["parent_chunk_id"],))
+                    parent_meta = cur.fetchone()
 
-                if not parent_meta:
-                    raise ValueError(f"No metadata found for parent chunk {incubator['parent_chunk_id']}")
+                    if not parent_meta:
+                        raise ValueError(f"No metadata found for parent chunk {incubator['parent_chunk_id']}")
 
-                logger.info(
-                    "Parent chunk %s: S%sE%s scene %s",
-                    incubator["parent_chunk_id"],
-                    parent_meta["season"],
-                    parent_meta["episode"],
-                    parent_meta["scene"],
-                )
+                    logger.info(
+                        "Parent chunk %s: S%sE%s scene %s",
+                        incubator["parent_chunk_id"],
+                        parent_meta["season"],
+                        parent_meta["episode"],
+                        parent_meta["scene"],
+                    )
 
             # Step 3: Resolve entity references
             # Parse referenced entities from JSONB
