@@ -1340,8 +1340,8 @@ async def get_slots_status_endpoint():
                 cache = read_cache(dbname)
                 if cache:
                     slot_data["wizard_in_progress"] = True
-                    slot_data["wizard_thread_id"] = cache.get("thread_id")
-                    slot_data["wizard_phase"] = cache.get("current_phase", "setting")
+                    slot_data["wizard_thread_id"] = cache.thread_id
+                    slot_data["wizard_phase"] = cache.current_phase()
                 else:
                     slot_data["wizard_in_progress"] = False
                 results.append(slot_data)
@@ -1533,9 +1533,41 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
                 from nexus.api.slot_utils import slot_dbname
 
                 cache = read_cache(slot_dbname(slot))
-                if cache and cache.get("character_draft"):
-                    # character_draft stores in-progress character_state
-                    context_data = {"character_state": cache["character_draft"]}
+                if cache:
+                    # Build character_state from normalized columns
+                    char_state = {}
+                    if cache.character.has_concept():
+                        # Build concept dict with suggestions from ephemeral table
+                        concept_dict = {
+                            "name": cache.character.name,
+                            "archetype": cache.character.archetype,
+                            "background": cache.character.background,
+                            "appearance": cache.character.appearance,
+                        }
+                        # Add suggestions if available (from suggested_traits table)
+                        if cache.character.suggested_traits:
+                            concept_dict["suggested_traits"] = [
+                                s.trait for s in cache.character.suggested_traits
+                            ]
+                            concept_dict["trait_rationales"] = {
+                                s.trait: s.rationale for s in cache.character.suggested_traits
+                            }
+                        char_state["concept"] = concept_dict
+                    if cache.character.has_traits():
+                        char_state["trait_selection"] = {
+                            "selected_traits": [
+                                cache.character.trait1,
+                                cache.character.trait2,
+                                cache.character.trait3,
+                            ]
+                        }
+                    if cache.character.has_wildcard():
+                        char_state["wildcard"] = {
+                            "wildcard_name": cache.character.wildcard_name,
+                            "wildcard_description": cache.character.wildcard_description,
+                        }
+                    if char_state:
+                        context_data = {"character_state": char_state}
 
             chat_request = ChatRequest(
                 slot=params["slot"],
@@ -1675,7 +1707,7 @@ async def slot_undo_endpoint(slot: int):
     Single-depth undo only - no multi-step rewind.
     """
     from nexus.api.slot_state import get_slot_state
-    from nexus.api.new_story_cache import write_cache, read_cache
+    from nexus.api.new_story_cache import clear_seed_phase, clear_character_phase, clear_setting_phase
 
     if slot < 1 or slot > 5:
         raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
@@ -1695,21 +1727,8 @@ async def slot_undo_endpoint(slot: int):
 
             # Determine what to clear based on current phase
             if wizard.phase == "ready":
-                # Clear selected_seed to go back to seed phase
-                cache = read_cache(dbname)
-                if cache:
-                    write_cache(
-                        thread_id=cache.get("thread_id"),
-                        setting_draft=cache.get("setting_draft"),
-                        character_draft=cache.get("character_draft"),
-                        selected_seed=None,  # Clear seed
-                        layer_draft=cache.get("layer_draft"),
-                        zone_draft=cache.get("zone_draft"),
-                        initial_location=cache.get("initial_location"),
-                        base_timestamp=cache.get("base_timestamp"),
-                        target_slot=cache.get("target_slot"),
-                        dbname=dbname,
-                    )
+                # Clear seed columns to go back to seed phase
+                clear_seed_phase(dbname)
                 return SlotUndoResponse(
                     success=True,
                     message="Reverted to seed phase",
@@ -1717,21 +1736,8 @@ async def slot_undo_endpoint(slot: int):
                 )
 
             elif wizard.phase == "seed":
-                # Clear character_draft to go back to character phase
-                cache = read_cache(dbname)
-                if cache:
-                    write_cache(
-                        thread_id=cache.get("thread_id"),
-                        setting_draft=cache.get("setting_draft"),
-                        character_draft=None,  # Clear character
-                        selected_seed=None,
-                        layer_draft=cache.get("layer_draft"),
-                        zone_draft=cache.get("zone_draft"),
-                        initial_location=cache.get("initial_location"),
-                        base_timestamp=cache.get("base_timestamp"),
-                        target_slot=cache.get("target_slot"),
-                        dbname=dbname,
-                    )
+                # Clear character columns to go back to character phase
+                clear_character_phase(dbname)
                 return SlotUndoResponse(
                     success=True,
                     message="Reverted to character phase",
@@ -1739,21 +1745,8 @@ async def slot_undo_endpoint(slot: int):
                 )
 
             elif wizard.phase == "character":
-                # Clear setting_draft to go back to setting phase
-                cache = read_cache(dbname)
-                if cache:
-                    write_cache(
-                        thread_id=cache.get("thread_id"),
-                        setting_draft=None,  # Clear setting
-                        character_draft=None,
-                        selected_seed=None,
-                        layer_draft=None,
-                        zone_draft=None,
-                        initial_location=None,
-                        base_timestamp=cache.get("base_timestamp"),
-                        target_slot=cache.get("target_slot"),
-                        dbname=dbname,
-                    )
+                # Clear setting columns to go back to setting phase
+                clear_setting_phase(dbname)
                 return SlotUndoResponse(
                     success=True,
                     message="Reverted to setting phase",
@@ -1903,6 +1896,56 @@ async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class SlotLockResponse(BaseModel):
+    """Response for slot lock/unlock operations."""
+
+    slot: int
+    is_locked: bool
+    message: str
+
+
+@app.post("/api/slot/{slot}/lock", response_model=SlotLockResponse)
+async def lock_slot_endpoint(slot: int):
+    """Lock a slot to prevent modifications."""
+    from nexus.api.save_slots import lock_slot
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        dbname = slot_dbname(slot)
+        lock_slot(slot, dbname)
+        return SlotLockResponse(
+            slot=slot,
+            is_locked=True,
+            message=f"Slot {slot} is now locked",
+        )
+    except Exception as e:
+        logger.error(f"Error locking slot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/slot/{slot}/unlock", response_model=SlotLockResponse)
+async def unlock_slot_endpoint(slot: int):
+    """Unlock a slot to allow modifications."""
+    from nexus.api.save_slots import unlock_slot
+
+    if slot < 1 or slot > 5:
+        raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
+
+    try:
+        dbname = slot_dbname(slot)
+        unlock_slot(slot, dbname)
+        return SlotLockResponse(
+            slot=slot,
+            is_locked=False,
+            message=f"Slot {slot} is now unlocked",
+        )
+    except Exception as e:
+        logger.error(f"Error unlocking slot: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -2003,13 +2046,51 @@ async def new_story_chat_endpoint(request: ChatRequest):
             if request.current_phase is None:
                 request.current_phase = state.wizard_state.phase
 
-            # Also load character_state from cache if in character phase
-            if request.current_phase == "character" and request.context_data is None:
-                from nexus.api.slot_utils import slot_dbname
+        # Load character_state from cache if in character phase (always, not just when resolving)
+        if request.current_phase == "character" and request.context_data is None:
+            from nexus.api.slot_utils import slot_dbname
 
-                cache = read_cache(slot_dbname(request.slot))
-                if cache and cache.get("character_draft"):
-                    request.context_data = {"character_state": cache["character_draft"]}
+            cache = read_cache(slot_dbname(request.slot))
+            if cache:
+                # Build character_state from normalized columns
+                char_state = {}
+                if cache.character.has_concept():
+                    # Build concept dict with suggestions from ephemeral table
+                    concept_dict = {
+                        "name": cache.character.name,
+                        "archetype": cache.character.archetype,
+                        "background": cache.character.background,
+                        "appearance": cache.character.appearance,
+                    }
+                    # Add suggestions if available, or placeholders if cleared
+                    # (suggestions are ephemeral - cleared after trait selection)
+                    if cache.character.suggested_traits:
+                        concept_dict["suggested_traits"] = [
+                            s.trait for s in cache.character.suggested_traits
+                        ]
+                        concept_dict["trait_rationales"] = {
+                            s.trait: s.rationale for s in cache.character.suggested_traits
+                        }
+                    elif cache.character.has_traits():
+                        # Suggestions cleared after trait selection - use selected traits as placeholders
+                        selected = [cache.character.trait1, cache.character.trait2, cache.character.trait3]
+                        concept_dict["suggested_traits"] = selected
+                        concept_dict["trait_rationales"] = {t: "Selected trait" for t in selected}
+                    char_state["concept"] = concept_dict
+                if cache.character.has_traits():
+                    selected = [cache.character.trait1, cache.character.trait2, cache.character.trait3]
+                    char_state["trait_selection"] = {
+                        "selected_traits": selected,
+                        # Provide placeholder rationales for validation
+                        "trait_rationales": {t: "Selected trait" for t in selected},
+                    }
+                if cache.character.has_wildcard():
+                    char_state["wildcard"] = {
+                        "wildcard_name": cache.character.wildcard_name,
+                        "wildcard_description": cache.character.wildcard_description,
+                    }
+                if char_state:
+                    request.context_data = {"character_state": char_state}
 
         # Load settings for new story workflow
         settings_model = get_new_story_model()
@@ -2352,8 +2433,21 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
                 if function_name == "submit_character_concept":
                     char_state_updates = {"concept": validated_data}
+                    # Persist suggested traits to ephemeral table
+                    if "suggested_traits" in validated_data and "trait_rationales" in validated_data:
+                        from nexus.api.new_story_cache import write_suggested_traits
+                        from nexus.api.slot_utils import slot_dbname
+                        suggestions = [
+                            {"trait": trait, "rationale": validated_data["trait_rationales"].get(trait, "")}
+                            for trait in validated_data["suggested_traits"]
+                        ]
+                        write_suggested_traits(slot_dbname(request.slot), suggestions)
                 elif function_name == "submit_trait_selection":
                     char_state_updates = {"trait_selection": validated_data}
+                    # Clear suggestions now that traits are selected
+                    from nexus.api.new_story_cache import clear_suggested_traits
+                    from nexus.api.slot_utils import slot_dbname
+                    clear_suggested_traits(slot_dbname(request.slot))
                 else:
                     char_state_updates = {"wildcard": validated_data}
 
@@ -2499,53 +2593,57 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             detail=f"No setup data found for slot {request.slot}. Complete the wizard first."
         )
 
-    # Validate required fields exist in cache
-    required_fields = ["setting_draft", "character_draft", "selected_seed", "layer_draft", "zone_draft", "initial_location"]
-    missing = [f for f in required_fields if not cache.get(f)]
-    if missing:
+    # Validate all phases are complete
+    if not cache.setting_complete():
         raise HTTPException(
             status_code=422,
-            detail=f"Incomplete setup data. Missing: {', '.join(missing)}"
+            detail="Incomplete setup data. Missing: setting"
+        )
+    if not cache.character_complete():
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: character"
+        )
+    if not cache.seed_complete():
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: seed"
+        )
+    if not cache.get_layer_dict():
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: layer"
+        )
+    if not cache.get_zone_dict():
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: zone"
+        )
+    if not cache.get_initial_location():
+        raise HTTPException(
+            status_code=422,
+            detail="Incomplete setup data. Missing: initial_location"
         )
 
     # Build TransitionData from cache
     try:
-        # Parse timestamps from seed's base_timestamp
-        seed_data = cache["selected_seed"]
-        base_ts_data = seed_data.get("base_timestamp", {})
-        if isinstance(base_ts_data, dict):
-            # StoryTimestamp atomized format
-            base_timestamp = datetime(
-                year=base_ts_data.get("year", 2024),
-                month=base_ts_data.get("month", 1),
-                day=base_ts_data.get("day", 1),
-                hour=base_ts_data.get("hour", 12),
-                minute=base_ts_data.get("minute", 0),
-                tzinfo=timezone.utc
-            )
-        elif cache.get("base_timestamp"):
-            base_timestamp = datetime.fromisoformat(cache["base_timestamp"])
-        else:
-            base_timestamp = datetime.now(timezone.utc)
+        # Get base_timestamp from cache
+        base_timestamp = cache.base_timestamp or datetime.now(timezone.utc)
 
-        # Handle legacy vs sub-phase character_draft format
-        # Legacy: direct CharacterSheet dict (name, summary, traits, etc.)
-        # Sub-phase: CharacterCreationState dict (concept, trait_selection, wildcard)
-        char_draft = cache["character_draft"]
-        if "concept" in char_draft or "trait_selection" in char_draft:
-            # Sub-phase format - assemble from CharacterCreationState
-            state = CharacterCreationState(**char_draft)
-            char_draft = state.to_character_sheet().model_dump()
+        # Get character dict and assemble CharacterSheet from CharacterCreationState
+        char_draft = cache.get_character_dict()
+        state = CharacterCreationState(**char_draft)
+        char_sheet = state.to_character_sheet().model_dump()
 
         transition_data = TransitionData(
-            setting=SettingCard(**cache["setting_draft"]),
-            character=CharacterSheet(**char_draft),
-            seed=StorySeed(**cache["selected_seed"]),
-            layer=LayerDefinition(**cache["layer_draft"]),
-            zone=ZoneDefinition(**cache["zone_draft"]),
-            location=PlaceProfile(**cache["initial_location"]),
+            setting=SettingCard(**cache.get_setting_dict()),
+            character=CharacterSheet(**char_sheet),
+            seed=StorySeed(**cache.get_seed_dict()),
+            layer=LayerDefinition(**cache.get_layer_dict()),
+            zone=ZoneDefinition(**cache.get_zone_dict()),
+            location=PlaceProfile(**cache.get_initial_location()),
             base_timestamp=base_timestamp,
-            thread_id=cache.get("thread_id", ""),
+            thread_id=cache.thread_id or "",
         )
     except ValidationError as e:
         # Fail loudly per user directive

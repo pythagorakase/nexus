@@ -517,8 +517,7 @@ class NewStoryDatabaseMapper:
         4. Creates protagonist character
         5. Creates complete location hierarchy (layer -> zone -> place)
         6. Sets base timestamp
-        7. Sets new_story = false to transition to narrative mode
-        8. Clears the cache
+        7. Clears the wizard cache (mode is derived from data presence)
 
         Args:
             transition_data: Complete transition data package
@@ -644,17 +643,13 @@ class NewStoryDatabaseMapper:
                         (transition_data.base_timestamp,),
                     )
 
-                    # Finally, set new_story = false to transition to narrative mode
-                    cur.execute(
-                        "UPDATE global_variables SET new_story = false WHERE id = true"
-                    )
-
                 # Transaction commits automatically on successful context exit
-                logger.info("Atomic transition complete: new_story set to false")
+                logger.info("Atomic transition complete")
 
-                # Clear the cache (safe to do after successful transaction commit)
+                # Clear the wizard cache - this is what transitions to narrative mode
+                # (mode is derived from data presence, not a flag)
                 clear_cache(self.dbname)
-                logger.debug("Cleared new story cache")
+                logger.debug("Cleared wizard cache, slot now in narrative mode")
 
                 return {
                     "character_id": character_id,

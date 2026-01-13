@@ -11,7 +11,7 @@ from typing import Dict, Optional
 import psycopg2
 
 from nexus.api.conversations import ConversationsClient
-from nexus.api.new_story_cache import read_cache, write_cache, clear_cache
+from nexus.api.new_story_cache import read_cache, write_cache, clear_cache, init_cache
 from nexus.api.save_slots import upsert_slot, clear_active
 from nexus.api.slot_utils import slot_dbname, all_slots
 from scripts.new_story_setup import create_slot_schema_only
@@ -61,7 +61,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     model_to_use = model or NEW_STORY_MODEL
     client = ConversationsClient(model=model_to_use)
     thread_id = client.create_thread()
-    write_cache(thread_id=thread_id, target_slot=slot_number, dbname=dbname)
+    init_cache(dbname, thread_id=thread_id, target_slot=slot_number)
     clear_active(dbname)
     upsert_slot(slot_number, is_active=True, dbname=dbname)
     logger.info("Started setup for slot %s with thread %s", slot_number, thread_id)
@@ -101,6 +101,9 @@ def record_drafts(
     """
     Persist current drafts to the slot cache.
 
+    Uses the legacy write_cache function which handles translation
+    from JSONB dict format to normalized columns.
+
     Args:
         slot_number: Target save slot (1-5)
         setting: Optional setting draft dictionary
@@ -112,16 +115,18 @@ def record_drafts(
         base_timestamp: Optional ISO timestamp string
     """
     dbname = slot_dbname(slot_number)
-    cache = read_cache(dbname) or {}
+    cache = read_cache(dbname)
+
+    # Build args for legacy write_cache, preserving existing data
     write_cache(
-        thread_id=cache.get("thread_id"),
-        setting_draft=setting or cache.get("setting_draft"),
-        character_draft=character or cache.get("character_draft"),
-        selected_seed=seed or cache.get("selected_seed"),
-        layer_draft=layer or cache.get("layer_draft"),
-        zone_draft=zone or cache.get("zone_draft"),
-        initial_location=location or cache.get("initial_location"),
-        base_timestamp=base_timestamp or cache.get("base_timestamp"),
+        thread_id=cache.thread_id if cache else None,
+        setting_draft=setting or (cache.get_setting_dict() if cache else None),
+        character_draft=character or (cache.get_character_dict() if cache else None),
+        selected_seed=seed or (cache.get_seed_dict() if cache else None),
+        layer_draft=layer or (cache.get_layer_dict() if cache else None),
+        zone_draft=zone or (cache.get_zone_dict() if cache else None),
+        initial_location=location or (cache.get_initial_location() if cache else None),
+        base_timestamp=base_timestamp or (str(cache.base_timestamp) if cache and cache.base_timestamp else None),
         target_slot=slot_number,
         dbname=dbname,
     )

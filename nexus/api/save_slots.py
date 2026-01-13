@@ -83,3 +83,73 @@ def clear_active(dbname: Optional[str] = None) -> None:
         with conn.cursor() as cur:
             cur.execute("UPDATE assets.save_slots SET is_active = FALSE")
     logger.info("Cleared active flag on all slots in %s", dbname or "(default slot)")
+
+
+def is_slot_locked(slot_number: int, dbname: Optional[str] = None) -> bool:
+    """
+    Check if a slot is locked.
+
+    Args:
+        slot_number: Slot number (1-5)
+        dbname: Optional database name (defaults to PGDATABASE env var)
+
+    Returns:
+        True if the slot is locked, False otherwise
+    """
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT is_locked FROM assets.save_slots WHERE slot_number = %s",
+                (slot_number,),
+            )
+            row = cur.fetchone()
+            return bool(row and row.get("is_locked"))
+
+
+def lock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
+    """
+    Lock a save slot to prevent modifications.
+
+    Args:
+        slot_number: Slot number (1-5)
+        dbname: Optional database name (defaults to PGDATABASE env var)
+    """
+    if slot_number < 1 or slot_number > 5:
+        raise ValueError("slot_number must be between 1 and 5")
+
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO assets.save_slots (slot_number, is_locked)
+                VALUES (%s, TRUE)
+                ON CONFLICT (slot_number) DO UPDATE
+                SET is_locked = TRUE
+                """,
+                (slot_number,),
+            )
+    logger.info("Locked slot %s in %s", slot_number, dbname or "(default slot)")
+
+
+def unlock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
+    """
+    Unlock a save slot to allow modifications.
+
+    Args:
+        slot_number: Slot number (1-5)
+        dbname: Optional database name (defaults to PGDATABASE env var)
+    """
+    if slot_number < 1 or slot_number > 5:
+        raise ValueError("slot_number must be between 1 and 5")
+
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.save_slots
+                SET is_locked = FALSE
+                WHERE slot_number = %s
+                """,
+                (slot_number,),
+            )
+    logger.info("Unlocked slot %s in %s", slot_number, dbname or "(default slot)")
