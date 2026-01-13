@@ -1494,7 +1494,6 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
                 session_id=session_id,
                 parent_chunk_id=continue_request.chunk_id or 0,
                 user_text=continue_request.user_text,
-                model=continue_request.model,
                 slot=slot,
             )
 
