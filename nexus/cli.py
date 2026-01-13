@@ -141,15 +141,19 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         state = state_response.json()
 
         if state.get("is_empty"):
-            # Initialize via setup endpoint, then call wizard chat
-            setup_url = f"{get_api_url()}/api/story/new/setup"
+            # Initialize via setup/start endpoint, then call wizard chat
+            # Pass model from slot state (e.g., TEST mode)
+            setup_url = f"{get_api_url()}/api/story/new/setup/start"
+            setup_payload = {"slot": args.slot}
+            if state.get("model"):
+                setup_payload["model"] = state["model"]
             setup_response = requests.post(
                 setup_url,
-                json={"slot": args.slot},
+                json=setup_payload,
                 timeout=30
             )
             if not setup_response.ok:
-                return {"success": False, "error": "Failed to initialize wizard"}
+                return {"success": False, "error": f"Failed to initialize wizard: {setup_response.text}"}
 
             return {
                 "success": True,
@@ -158,29 +162,54 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         if state.get("is_wizard_mode"):
-            # Call wizard chat directly
-            url = f"{get_api_url()}/api/story/new/chat"
-            payload = {
-                "slot": args.slot,
-                "message": args.user_text or "",
-                "accept_fate": args.accept_fate,
-                # thread_id and current_phase resolved by backend
-            }
-            if args.model:
-                payload["model"] = args.model
+            # Check if wizard is ready for transition to narrative
+            if state.get("phase") == "ready":
+                # Call transition endpoint, then bootstrap
+                transition_url = f"{get_api_url()}/api/story/new/transition"
+                transition_response = requests.post(
+                    transition_url,
+                    json={"slot": args.slot},
+                    timeout=60
+                )
+                if not transition_response.ok:
+                    return {"success": False, "error": f"Transition failed: {transition_response.text}"}
 
-            response = requests.post(url, json=payload, timeout=120)
-            response.raise_for_status()
-            data = response.json()
+                # Transition complete - refresh state and continue to narrative
+                state_response = requests.get(state_url, timeout=30)
+                state = state_response.json()
 
-            return {
-                "success": True,
-                "message": data.get("message"),
-                "choices": data.get("choices", []),
-                "phase": data.get("phase"),
-            }
+                if state.get("is_wizard_mode"):
+                    return {"success": False, "error": "Transition completed but still in wizard mode"}
 
-        else:
+                # Continue to narrative mode handling below (don't return here)
+            else:
+                # Call wizard chat directly
+                url = f"{get_api_url()}/api/story/new/chat"
+                # Use CLI override or slot's configured model (e.g., TEST mode)
+                model_to_use = args.model or state.get("model")
+                payload = {
+                    "slot": args.slot,
+                    "message": args.user_text or "",
+                    "accept_fate": args.accept_fate,
+                    # thread_id and current_phase resolved by backend
+                }
+                if model_to_use:
+                    payload["model"] = model_to_use
+
+                response = requests.post(url, json=payload, timeout=120)
+                response.raise_for_status()
+                data = response.json()
+
+                return {
+                    "success": True,
+                    "message": data.get("message"),
+                    "choices": data.get("choices", []),
+                    "phase": data.get("phase"),
+                }
+
+        # Narrative mode - call continue directly
+        # (Also reached after wizard transition above)
+        if not state.get("is_wizard_mode"):
             # Narrative mode - call continue directly
             # Resolve choice to user_text if provided
             user_text = args.user_text or ""
@@ -336,6 +365,72 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Clear a slot (reset wizard state).
+
+    Calls POST /api/story/new/setup/reset.
+    """
+    try:
+        url = f"{get_api_url()}/api/story/new/setup/reset"
+        response = requests.post(url, json={"slot": args.slot}, timeout=30)
+        response.raise_for_status()
+        return {
+            "success": True,
+            "message": f"Slot {args.slot} cleared",
+        }
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+    except requests.exceptions.HTTPError as e:
+        return {"success": False, "error": f"API error: {e.response.text}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Lock a slot to prevent modifications.
+
+    Calls POST /api/slot/{slot}/lock.
+    """
+    try:
+        url = f"{get_api_url()}/api/slot/{args.slot}/lock"
+        response = requests.post(url, timeout=30)
+        response.raise_for_status()
+        return {
+            "success": True,
+            "message": f"Slot {args.slot} locked",
+        }
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+    except requests.exceptions.HTTPError as e:
+        return {"success": False, "error": f"API error: {e.response.text}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Unlock a slot to allow modifications.
+
+    Calls POST /api/slot/{slot}/unlock.
+    """
+    try:
+        url = f"{get_api_url()}/api/slot/{args.slot}/unlock"
+        response = requests.post(url, timeout=30)
+        response.raise_for_status()
+        return {
+            "success": True,
+            "message": f"Slot {args.slot} unlocked",
+        }
+    except requests.exceptions.ConnectionError:
+        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+    except requests.exceptions.HTTPError as e:
+        return {"success": False, "error": f"API error: {e.response.text}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build CLI argument parser with subcommands."""
     parser = argparse.ArgumentParser(
@@ -352,6 +447,9 @@ Examples:
   nexus model --slot 5          Show current model
   nexus model --slot 5 --set TEST   Change to TEST model
   nexus model --list            List available models
+  nexus clear --slot 5          Clear slot (reset wizard state)
+  nexus lock --slot 1           Lock slot to prevent modifications
+  nexus unlock --slot 2         Unlock slot to allow modifications
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -394,6 +492,18 @@ Examples:
     model_parser.add_argument("--set", help="Set the model (e.g., gpt-5.1, TEST, claude)")
     model_parser.add_argument("--list", action="store_true", help="List available models")
 
+    # clear command
+    clear_parser = subparsers.add_parser("clear", help="Clear a slot (reset wizard state)")
+    clear_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+
+    # lock command
+    lock_parser = subparsers.add_parser("lock", help="Lock a slot to prevent modifications")
+    lock_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+
+    # unlock command
+    unlock_parser = subparsers.add_parser("unlock", help="Unlock a slot to allow modifications")
+    unlock_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+
     return parser
 
 
@@ -403,7 +513,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # Validate slot for commands that require it
-    if args.command in ("load", "continue", "undo"):
+    if args.command in ("load", "continue", "undo", "clear", "lock", "unlock"):
         if args.slot < 1 or args.slot > 5:
             emit_error("Slot must be between 1 and 5", args.json)
             return 1
@@ -425,6 +535,12 @@ def main() -> int:
         result = run_undo(args)
     elif args.command == "model":
         result = run_model(args)
+    elif args.command == "clear":
+        result = run_clear(args)
+    elif args.command == "lock":
+        result = run_lock(args)
+    elif args.command == "unlock":
+        result = run_unlock(args)
     else:
         emit_error(f"Unknown command: {args.command}", args.json)
         return 2

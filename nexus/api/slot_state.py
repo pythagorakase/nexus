@@ -4,11 +4,16 @@ Slot state resolution for the simplified CLI.
 This module provides functions to determine the current state of a save slot
 from just the slot number. The backend resolves all state internally:
 
-- Wizard vs Narrative mode: from global_variables.new_story
-- Current wizard phase: inferred from which drafts exist in new_story_creator
+- Wizard vs Narrative mode: derived from data presence
+- Current wizard phase: inferred from normalized column presence
 - Thread ID: from new_story_creator.thread_id
 - Current narrative chunk: MAX(id) from narrative_chunks or incubator
 - Available choices: from last response's choice_object
+
+Phase detection uses normalized columns (no JSON introspection):
+- Setting complete: setting_genre IS NOT NULL
+- Character complete: wildcard_name IS NOT NULL
+- Seed complete: seed_type IS NOT NULL
 """
 
 from __future__ import annotations
@@ -30,9 +35,10 @@ class WizardState:
 
     phase: str  # "setting", "character", "seed", or "ready"
     thread_id: Optional[str]
-    setting_draft: Optional[Dict[str, Any]]
-    character_draft: Optional[Dict[str, Any]]
-    selected_seed: Optional[Dict[str, Any]]
+    # Character subphase tracking
+    has_concept: bool = False
+    has_traits: bool = False
+    has_wildcard: bool = False
 
 
 @dataclass
@@ -73,6 +79,11 @@ def get_slot_state(slot: int) -> SlotState:
     - Current wizard phase or narrative position
     - Available choices
 
+    Mode is derived from data presence (not from a flag):
+    - Wizard mode: wizard cache exists in assets.new_story_creator
+    - Narrative mode: narrative_chunks exist
+    - Empty: neither exists
+
     Args:
         slot: Save slot number (1-5)
 
@@ -83,25 +94,6 @@ def get_slot_state(slot: int) -> SlotState:
 
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            # Check if global_variables exists and get new_story flag
-            cur.execute(
-                "SELECT new_story, setting, user_character FROM global_variables WHERE id = TRUE"
-            )
-            gv_row = cur.fetchone()
-
-            if gv_row is None:
-                # Slot is empty/uninitialized
-                return SlotState(
-                    slot=slot,
-                    is_empty=True,
-                    is_wizard_mode=False,
-                    wizard_state=None,
-                    narrative_state=None,
-                    model=None,
-                )
-
-            is_wizard_mode = bool(gv_row.get("new_story", True))
-
             # Get model from save_slots table
             cur.execute(
                 "SELECT model FROM assets.save_slots WHERE slot_number = %s", (slot,)
@@ -109,9 +101,55 @@ def get_slot_state(slot: int) -> SlotState:
             slot_row = cur.fetchone()
             current_model = slot_row.get("model") if slot_row else None
 
-            if is_wizard_mode:
-                # Get wizard state from new_story_creator
-                wizard_state = _get_wizard_state(cur)
+            # Check for wizard cache (derives wizard mode)
+            # Only select the columns we need for phase detection
+            cur.execute(
+                """
+                SELECT thread_id,
+                       setting_genre,
+                       character_name, character_trait1, wildcard_name,
+                       seed_type
+                FROM assets.new_story_creator
+                WHERE id = TRUE
+                """
+            )
+            wizard_cache = cur.fetchone()
+
+            # Check for narrative chunks (derives narrative mode)
+            cur.execute("SELECT COUNT(*) as count FROM narrative_chunks")
+            chunk_count = cur.fetchone().get("count", 0)
+
+            # Also check incubator for pending bootstrap
+            cur.execute("SELECT COUNT(*) as count FROM incubator")
+            incubator_count = cur.fetchone().get("count", 0)
+
+            # Check global_variables for post-transition bootstrap state
+            cur.execute(
+                """
+                SELECT setting, user_character, base_timestamp
+                FROM global_variables
+                WHERE id = TRUE
+                """
+            )
+            global_row = cur.fetchone()
+            has_global_story = (
+                global_row is not None
+                and (
+                    global_row.get("setting") is not None
+                    or global_row.get("user_character") is not None
+                    or global_row.get("base_timestamp") is not None
+                )
+            )
+
+            has_wizard_data = wizard_cache is not None
+            has_narrative_data = (
+                chunk_count > 0 or incubator_count > 0 or has_global_story
+            )
+
+            # Derive mode from data presence
+            if has_wizard_data and not has_narrative_data:
+                # Wizard mode: cache exists, no narrative yet
+                wizard_state = _get_wizard_state_from_row(wizard_cache)
                 return SlotState(
                     slot=slot,
                     is_empty=False,
@@ -120,8 +158,8 @@ def get_slot_state(slot: int) -> SlotState:
                     narrative_state=None,
                     model=current_model,
                 )
-            else:
-                # Get narrative state from incubator + narrative_chunks
+            elif has_narrative_data:
+                # Narrative mode: chunks or incubator exist
                 narrative_state = _get_narrative_state(cur)
                 return SlotState(
                     slot=slot,
@@ -131,41 +169,45 @@ def get_slot_state(slot: int) -> SlotState:
                     narrative_state=narrative_state,
                     model=current_model,
                 )
+            else:
+                # Empty slot: no wizard cache and no narrative
+                return SlotState(
+                    slot=slot,
+                    is_empty=True,
+                    is_wizard_mode=False,
+                    wizard_state=None,
+                    narrative_state=None,
+                    model=current_model,
+                )
 
 
-def _get_wizard_state(cur) -> WizardState:
+def _get_wizard_state_from_row(row: dict) -> WizardState:
     """
-    Get wizard state from new_story_creator cache.
+    Get wizard state from a new_story_creator row.
 
-    Phase is inferred from which drafts exist:
-    - No setting_draft → "setting" phase
-    - setting_draft but no character_draft → "character" phase
-    - Both but no selected_seed → "seed" phase
-    - All three exist → "ready" for bootstrap
+    Phase is inferred from normalized column nullability:
+    - setting_genre IS NULL → "setting" phase
+    - wildcard_name IS NULL → "character" phase (with subphase tracking)
+    - seed_type IS NULL → "seed" phase
+    - All non-null → "ready" for bootstrap
     """
-    cur.execute("SELECT * FROM assets.new_story_creator WHERE id = TRUE")
-    row = cur.fetchone()
+    # Direct column checks - no JSON parsing needed!
+    setting_complete = row.get("setting_genre") is not None
 
-    if row is None:
-        # No wizard cache - assume setting phase
-        return WizardState(
-            phase="setting",
-            thread_id=None,
-            setting_draft=None,
-            character_draft=None,
-            selected_seed=None,
-        )
+    # Character subphase tracking
+    has_concept = row.get("character_name") is not None
+    has_traits = row.get("character_trait1") is not None
+    has_wildcard = row.get("wildcard_name") is not None
+    character_complete = has_concept and has_traits and has_wildcard
 
-    setting_draft = _parse_json(row.get("setting_draft"))
-    character_draft = _parse_json(row.get("character_draft"))
-    selected_seed = _parse_json(row.get("selected_seed"))
+    seed_complete = row.get("seed_type") is not None
 
-    # Infer phase from draft presence
-    if setting_draft is None:
+    # Infer phase
+    if not setting_complete:
         phase = "setting"
-    elif character_draft is None:
+    elif not character_complete:
         phase = "character"
-    elif selected_seed is None:
+    elif not seed_complete:
         phase = "seed"
     else:
         phase = "ready"
@@ -173,10 +215,38 @@ def _get_wizard_state(cur) -> WizardState:
     return WizardState(
         phase=phase,
         thread_id=row.get("thread_id"),
-        setting_draft=setting_draft,
-        character_draft=character_draft,
-        selected_seed=selected_seed,
+        has_concept=has_concept,
+        has_traits=has_traits,
+        has_wildcard=has_wildcard,
     )
+
+
+def _get_wizard_state(cur) -> WizardState:
+    """
+    Get wizard state from new_story_creator cache.
+    """
+    cur.execute(
+        """
+        SELECT thread_id,
+               setting_genre,
+               character_name, character_trait1, wildcard_name,
+               seed_type
+        FROM assets.new_story_creator
+        WHERE id = TRUE
+        """
+    )
+    row = cur.fetchone()
+
+    if row is None:
+        return WizardState(
+            phase="setting",
+            thread_id=None,
+            has_concept=False,
+            has_traits=False,
+            has_wildcard=False,
+        )
+
+    return _get_wizard_state_from_row(row)
 
 
 def _get_narrative_state(cur) -> NarrativeState:

@@ -26,6 +26,7 @@ interface SlotData {
     base_timestamp?: string;
     target_slot?: number;
     is_active?: boolean;
+    is_locked?: boolean;
     last_updated?: string;
     // Wizard resume state
     wizard_in_progress?: boolean;
@@ -100,11 +101,11 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
         },
     });
 
-    const handleSelect = (slot: number) => {
-        if (slot === 1) {
+    const handleSelect = (slot: number, slotData: SlotData) => {
+        if (slotData.is_locked) {
             toast({
                 title: "Slot Locked",
-                description: "Save Slot 1 is protected and cannot be overwritten.",
+                description: `Save Slot ${slot} is protected and cannot be overwritten.`,
                 variant: "destructive",
             });
             return;
@@ -120,10 +121,10 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
 
     const [slotToDelete, setSlotToDelete] = useState<number | null>(null);
 
-    const handleReset = (e: React.MouseEvent, slot: number) => {
+    const handleReset = (e: React.MouseEvent, slotData: SlotData) => {
         e.stopPropagation();
-        if (slot === 1) return;
-        setSlotToDelete(slot);
+        if (slotData.is_locked) return;
+        setSlotToDelete(slotData.slot);
     };
 
     const confirmReset = () => {
@@ -155,11 +156,11 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                     {slots.map((slotData) => (
                         <Card
                             key={slotData.slot}
-                            onClick={() => handleSelect(slotData.slot)}
+                            onClick={() => handleSelect(slotData.slot, slotData)}
                             className={cn(
                                 "p-4 cursor-pointer transition-all duration-300 border-border bg-card/50 hover:bg-card hover:border-primary/50 group relative overflow-hidden",
                                 selectedSlot === slotData.slot && "border-primary bg-primary/5 ring-1 ring-primary",
-                                slotData.slot === 1 && "opacity-80 cursor-not-allowed hover:border-destructive/50 hover:bg-destructive/5"
+                                slotData.is_locked && "opacity-80 cursor-not-allowed hover:border-destructive/50 hover:bg-destructive/5"
                             )}
                         >
                             {/* Scanline effect */}
@@ -169,7 +170,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                 <div className="flex items-center gap-4">
                                     <div className={cn(
                                         "h-12 w-12 rounded-sm flex items-center justify-center font-mono text-lg font-bold border",
-                                        slotData.slot === 1
+                                        slotData.is_locked
                                             ? "border-destructive/50 text-destructive bg-destructive/10"
                                             : slotData.is_active
                                                 ? "border-primary text-primary bg-primary/10 terminal-glow"
@@ -181,9 +182,9 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                     <div className="flex items-center gap-2">
                                         <span className={cn(
                                             "font-mono text-sm font-bold",
-                                            slotData.slot === 1 ? "text-destructive" : "text-foreground"
+                                            slotData.is_locked ? "text-destructive" : "text-foreground"
                                         )}>
-                                            {slotData.slot === 1 ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
+                                            {slotData.is_locked ? "PROTECTED ARCHIVE" : `MEMORY SLOT ${slotData.slot}`}
                                         </span>
                                         {slotData.is_active && (
                                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-mono">
@@ -194,7 +195,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                 </div>
 
                                 <div className="flex items-center gap-2 ml-auto">
-                                    {slotData.slot === 1 ? (
+                                    {slotData.is_locked ? (
                                         <div className="flex items-center gap-2 text-destructive text-xs font-mono px-3 py-1.5 border border-destructive/30 bg-destructive/5 rounded">
                                             <AlertTriangle className="h-3 w-3" />
                                             LOCKED
@@ -204,7 +205,7 @@ export function SlotSelector({ onSlotSelected, onSlotResumed }: SlotSelectorProp
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                onClick={(e) => handleReset(e, slotData.slot)}
+                                                onClick={(e) => handleReset(e, slotData)}
                                                 className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 font-mono text-xs"
                                             >
                                                 <Trash2 className="h-3 w-3 mr-2" />
