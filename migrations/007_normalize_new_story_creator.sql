@@ -7,42 +7,58 @@
 -- ENUMS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
--- Setting phase enums
-CREATE TYPE genre AS ENUM (
-    'fantasy', 'scifi', 'horror', 'mystery', 'historical',
-    'contemporary', 'postapocalyptic', 'cyberpunk', 'steampunk',
-    'urban_fantasy', 'space_opera', 'noir', 'thriller'
-);
+-- Setting phase enums (all idempotent for re-runnable migrations)
+DO $$ BEGIN
+    CREATE TYPE genre AS ENUM (
+        'fantasy', 'scifi', 'horror', 'mystery', 'historical',
+        'contemporary', 'postapocalyptic', 'cyberpunk', 'steampunk',
+        'urban_fantasy', 'space_opera', 'noir', 'thriller'
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE tech_level AS ENUM (
-    'stone_age', 'bronze_age', 'iron_age', 'medieval', 'renaissance',
-    'industrial', 'modern', 'near_future', 'far_future', 'post_singularity'
-);
+DO $$ BEGIN
+    CREATE TYPE tech_level AS ENUM (
+        'stone_age', 'bronze_age', 'iron_age', 'medieval', 'renaissance',
+        'industrial', 'modern', 'near_future', 'far_future', 'post_singularity'
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE tone AS ENUM ('light', 'balanced', 'dark', 'grimdark');
+DO $$ BEGIN
+    CREATE TYPE tone AS ENUM ('light', 'balanced', 'dark', 'grimdark');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
-CREATE TYPE geographic_scope AS ENUM (
-    'local', 'regional', 'continental', 'global', 'interplanetary'
-);
+DO $$ BEGIN
+    CREATE TYPE geographic_scope AS ENUM (
+        'local', 'regional', 'continental', 'global', 'interplanetary'
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- Seed phase enums
-CREATE TYPE seed_type AS ENUM (
-    'in_medias_res', 'discovery', 'arrival', 'meeting',
-    'crisis', 'mystery', 'opportunity', 'loss', 'threat'
-);
+DO $$ BEGIN
+    CREATE TYPE seed_type AS ENUM (
+        'in_medias_res', 'discovery', 'arrival', 'meeting',
+        'crisis', 'mystery', 'opportunity', 'loss', 'threat'
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
--- layer_type may already exist from original schema
 DO $$ BEGIN
     CREATE TYPE layer_type AS ENUM ('planet', 'dimension');
-EXCEPTION
-    WHEN duplicate_object THEN null;
+EXCEPTION WHEN duplicate_object THEN null;
 END $$;
 
 -- Character trait enum
-CREATE TYPE trait AS ENUM (
-    'allies', 'contacts', 'patron', 'dependents', 'status',
-    'reputation', 'resources', 'domain', 'enemies', 'obligations'
-);
+DO $$ BEGIN
+    CREATE TYPE trait AS ENUM (
+        'allies', 'contacts', 'patron', 'dependents', 'status',
+        'reputation', 'resources', 'domain', 'enemies', 'obligations'
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- TABLE RECREATION

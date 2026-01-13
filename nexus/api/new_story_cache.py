@@ -14,12 +14,38 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from nexus.api.db_pool import get_connection
 
 logger = logging.getLogger("nexus.api.new_story_cache")
+
+# Valid trait enum values (must match PostgreSQL trait enum)
+VALID_TRAITS = frozenset({
+    'allies', 'contacts', 'patron', 'dependents', 'status',
+    'reputation', 'resources', 'domain', 'enemies', 'obligations'
+})
+
+
+def _parse_pg_array(value: Any) -> Optional[List[str]]:
+    """Parse PostgreSQL array literal to Python list.
+
+    psycopg2's RealDictCursor doesn't auto-convert array columns.
+    PostgreSQL returns arrays as strings like '{foo,bar}'.
+    """
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value  # Already a list
+    if isinstance(value, str):
+        # Parse PostgreSQL array format: {elem1,elem2,...}
+        if value.startswith('{') and value.endswith('}'):
+            inner = value[1:-1]
+            if not inner:
+                return []
+            return inner.split(',')
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -183,22 +209,29 @@ class WizardCache:
         }
 
     def get_character_dict(self) -> Optional[Dict[str, Any]]:
-        """Reconstruct character_draft dict from normalized columns."""
+        """Reconstruct character_draft dict from normalized columns.
+
+        Note: Includes placeholder values for transient fields (suggested_traits,
+        trait_rationales) that are required by CharacterCreationState but not
+        stored in the normalized schema.
+        """
         if not self.character_complete():
             return None
+        selected = [self.character.trait1, self.character.trait2, self.character.trait3]
         return {
             "concept": {
                 "name": self.character.name,
                 "archetype": self.character.archetype,
                 "background": self.character.background,
                 "appearance": self.character.appearance,
+                # Placeholder for transient fields (suggestions cleared after trait selection)
+                "suggested_traits": selected,
+                "trait_rationales": {t: "Selected trait" for t in selected},
             },
             "trait_selection": {
-                "selected_traits": [
-                    self.character.trait1,
-                    self.character.trait2,
-                    self.character.trait3,
-                ],
+                "selected_traits": selected,
+                # Placeholder for transient field
+                "trait_rationales": {t: "Selected trait" for t in selected},
             },
             "wildcard": {
                 "wildcard_name": self.character.wildcard_name,
@@ -207,9 +240,23 @@ class WizardCache:
         }
 
     def get_seed_dict(self) -> Optional[Dict[str, Any]]:
-        """Reconstruct selected_seed dict from normalized columns."""
+        """Reconstruct selected_seed dict from normalized columns.
+
+        Note: base_timestamp is included from cache-level storage since
+        StorySeed schema expects it as part of seed data. Defaults to
+        current UTC time if not set.
+        """
         if not self.seed_complete():
             return None
+        # Build base_timestamp dict for StoryTimestamp schema
+        ts = self.base_timestamp or datetime.now(timezone.utc)
+        base_timestamp_dict = {
+            "year": ts.year,
+            "month": ts.month,
+            "day": ts.day,
+            "hour": ts.hour,
+            "minute": ts.minute,
+        }
         return {
             "seed_type": self.seed.seed_type,
             "title": self.seed.title,
@@ -219,6 +266,7 @@ class WizardCache:
             "stakes": self.seed.stakes,
             "tension_source": self.seed.tension_source,
             "starting_location": self.seed.starting_location,
+            "base_timestamp": base_timestamp_dict,
             "weather": self.seed.weather,
             "key_npcs": self.seed.key_npcs or [],
             "initial_mystery": self.seed.initial_mystery,
@@ -314,7 +362,7 @@ def _row_to_cache(
         target_slot=row.get("target_slot"),
         setting=SettingData(
             genre=row.get("setting_genre"),
-            secondary_genres=row.get("setting_secondary_genres"),
+            secondary_genres=_parse_pg_array(row.get("setting_secondary_genres")),
             world_name=row.get("setting_world_name"),
             time_period=row.get("setting_time_period"),
             tech_level=row.get("setting_tech_level"),
@@ -323,7 +371,7 @@ def _row_to_cache(
             political_structure=row.get("setting_political_structure"),
             major_conflict=row.get("setting_major_conflict"),
             tone=row.get("setting_tone"),
-            themes=row.get("setting_themes"),
+            themes=_parse_pg_array(row.get("setting_themes")),
             cultural_notes=row.get("setting_cultural_notes"),
             language_notes=row.get("setting_language_notes"),
             geographic_scope=row.get("setting_geographic_scope"),
@@ -351,10 +399,10 @@ def _row_to_cache(
             tension_source=row.get("seed_tension_source"),
             starting_location=row.get("seed_starting_location"),
             weather=row.get("seed_weather"),
-            key_npcs=row.get("seed_key_npcs"),
+            key_npcs=_parse_pg_array(row.get("seed_key_npcs")),
             initial_mystery=row.get("seed_initial_mystery"),
-            potential_allies=row.get("seed_potential_allies"),
-            potential_obstacles=row.get("seed_potential_obstacles"),
+            potential_allies=_parse_pg_array(row.get("seed_potential_allies")),
+            potential_obstacles=_parse_pg_array(row.get("seed_potential_obstacles")),
             secrets=row.get("seed_secrets"),
             layer_name=row.get("layer_name"),
             layer_type=row.get("layer_type"),
@@ -473,6 +521,14 @@ def write_character_traits(
     trait3: str,
 ) -> None:
     """Write character traits (subphase 2) to cache."""
+    # Validate traits before database operation
+    traits = [trait1, trait2, trait3]
+    for trait in traits:
+        if trait not in VALID_TRAITS:
+            raise ValueError(f"Invalid trait: {trait}. Must be one of {sorted(VALID_TRAITS)}")
+    if len(set(traits)) != 3:
+        raise ValueError(f"Traits must be unique. Got: {trait1}, {trait2}, {trait3}")
+
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(

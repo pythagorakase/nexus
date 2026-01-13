@@ -174,16 +174,14 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 if not transition_response.ok:
                     return {"success": False, "error": f"Transition failed: {transition_response.text}"}
 
-                # Transition complete - now bootstrap the first chunk
-                # Re-check state to confirm we're now in narrative mode
+                # Transition complete - refresh state and continue to narrative
                 state_response = requests.get(state_url, timeout=30)
                 state = state_response.json()
 
                 if state.get("is_wizard_mode"):
                     return {"success": False, "error": "Transition completed but still in wizard mode"}
 
-                # Fall through to narrative mode handling below
-                pass
+                # Continue to narrative mode handling below (don't return here)
             else:
                 # Call wizard chat directly
                 url = f"{get_api_url()}/api/story/new/chat"
@@ -209,7 +207,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "phase": data.get("phase"),
                 }
 
-        else:
+        # Narrative mode - call continue directly
+        # (Also reached after wizard transition above)
+        if not state.get("is_wizard_mode"):
             # Narrative mode - call continue directly
             # Resolve choice to user_text if provided
             user_text = args.user_text or ""
