@@ -1,32 +1,33 @@
 """
 Mock OpenAI server for TEST model.
 
-Impersonates OpenAI API at /v1/chat/completions.
-Returns cached wizard data with proper conversation flow.
+Impersonates OpenAI API at /v1/chat/completions and /v1/responses.
+Queries mock database for test data - no inline caching.
 
-Handles the full wizard conversation:
-- Setting phase: artifact only (no intro conversation)
-- Character phase: archetype intro → concept → trait selector → wildcard intro → character sheet
-- Seed phase: seed intro → seed artifact
+The mock database mirrors save_* schemas and contains:
+- assets.new_story_creator: Wizard phase data
+- characters, layers, zones, places: Post-transition data
+- incubator: Bootstrap narrative
 
 Usage:
     poetry run uvicorn nexus.api.mock_openai:app --port 5102
 """
 
-import asyncio
 import json
 import logging
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from nexus.api.wizard_test_cache import get_cached_phase_response
-
 logger = logging.getLogger("nexus.api.mock_openai")
+
+MOCK_DB = "mock"
 
 app = FastAPI(title="NEXUS Mock OpenAI")
 
@@ -39,7 +40,201 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-RESPONSE_DELAY_MS = 1500
+
+def get_mock_connection():
+    """Get connection to mock database."""
+    return psycopg2.connect(
+        host="localhost",
+        database=MOCK_DB,
+        user="pythagor",
+        cursor_factory=RealDictCursor,
+    )
+
+
+def query_wizard_cache() -> Dict[str, Any]:
+    """Query wizard cache from mock.assets.new_story_creator."""
+    with get_mock_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    -- Setting
+                    setting_genre, setting_secondary_genres, setting_world_name,
+                    setting_tone, setting_themes, setting_diegetic_artifact,
+                    setting_tech_level, setting_magic_exists, setting_magic_description,
+                    setting_geographic_scope, setting_political_structure, setting_major_conflict,
+                    setting_cultural_notes, setting_language_notes, setting_time_period,
+                    -- Character
+                    character_name, character_archetype, character_background,
+                    character_appearance, character_trait1, character_trait2,
+                    character_trait3, wildcard_name, wildcard_description,
+                    -- Seed
+                    seed_type, seed_title, seed_situation, seed_hook,
+                    seed_immediate_goal, seed_stakes, seed_tension_source,
+                    seed_starting_location, seed_weather, seed_key_npcs,
+                    seed_initial_mystery, seed_potential_allies, seed_potential_obstacles,
+                    seed_secrets,
+                    -- Layer/Zone/Location
+                    layer_name, layer_type, layer_description,
+                    zone_name, zone_summary, zone_boundary_description, zone_approximate_area,
+                    initial_location
+                FROM assets.new_story_creator
+                WHERE id = TRUE
+            """)
+            return cur.fetchone() or {}
+
+
+def query_bootstrap_narrative() -> Dict[str, Any]:
+    """Query bootstrap narrative from mock.incubator."""
+    with get_mock_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT storyteller_text, choice_object, metadata_updates, reference_updates
+                FROM incubator
+                WHERE id = TRUE
+            """)
+            return cur.fetchone() or {}
+
+
+def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get cached response for a wizard phase from mock database.
+
+    Replaces JSON file-based caching with database queries.
+    """
+    cache = query_wizard_cache()
+
+    if phase == "setting":
+        return {
+            "phase_complete": True,
+            "artifact_type": "submit_world_document",
+            "data": {
+                "tone": cache.get("setting_tone"),
+                "genre": cache.get("setting_genre"),
+                "themes": cache.get("setting_themes") or [],
+                "tech_level": cache.get("setting_tech_level"),
+                "world_name": cache.get("setting_world_name"),
+                "time_period": cache.get("setting_time_period"),
+                "magic_exists": cache.get("setting_magic_exists", False),
+                "magic_description": cache.get("setting_magic_description"),
+                "cultural_notes": cache.get("setting_cultural_notes"),
+                "language_notes": cache.get("setting_language_notes"),
+                "major_conflict": cache.get("setting_major_conflict"),
+                "geographic_scope": cache.get("setting_geographic_scope"),
+                "secondary_genres": cache.get("setting_secondary_genres") or [],
+                "political_structure": cache.get("setting_political_structure"),
+                "diegetic_artifact": cache.get("setting_diegetic_artifact"),
+            },
+            "message": "[TEST MODE] World setting loaded from mock database.",
+        }
+
+    elif phase == "character":
+        if subphase == "concept":
+            return {
+                "phase_complete": False,
+                "artifact_type": "submit_character_concept",
+                "data": {
+                    "name": cache.get("character_name"),
+                    "archetype": cache.get("character_archetype"),
+                    "background": cache.get("character_background"),
+                    "appearance": cache.get("character_appearance"),
+                    "suggested_traits": [
+                        cache.get("character_trait1"),
+                        cache.get("character_trait2"),
+                        cache.get("character_trait3"),
+                    ],
+                    "trait_rationales": {
+                        cache.get("character_trait1"): "Selected trait",
+                        cache.get("character_trait2"): "Selected trait",
+                        cache.get("character_trait3"): "Selected trait",
+                    },
+                },
+                "message": "[TEST MODE] Character concept loaded from mock database.",
+            }
+        elif subphase == "traits":
+            return {
+                "phase_complete": False,
+                "artifact_type": "submit_trait_selection",
+                "data": {
+                    "selected_traits": [
+                        cache.get("character_trait1"),
+                        cache.get("character_trait2"),
+                        cache.get("character_trait3"),
+                    ],
+                    "trait_rationales": {
+                        cache.get("character_trait1"): "Selected trait",
+                        cache.get("character_trait2"): "Selected trait",
+                        cache.get("character_trait3"): "Selected trait",
+                    },
+                },
+                "message": "[TEST MODE] Traits loaded from mock database.",
+            }
+        elif subphase == "wildcard":
+            return {
+                "phase_complete": True,
+                "artifact_type": "submit_wildcard_trait",
+                "data": {
+                    "character_state": {
+                        "concept": {
+                            "name": cache.get("character_name"),
+                            "archetype": cache.get("character_archetype"),
+                            "background": cache.get("character_background"),
+                            "appearance": cache.get("character_appearance"),
+                        },
+                        "trait_selection": {
+                            "selected_traits": [
+                                cache.get("character_trait1"),
+                                cache.get("character_trait2"),
+                                cache.get("character_trait3"),
+                            ],
+                        },
+                        "wildcard": {
+                            "wildcard_name": cache.get("wildcard_name"),
+                            "wildcard_description": cache.get("wildcard_description"),
+                        },
+                    },
+                },
+                "message": "[TEST MODE] Wildcard loaded from mock database.",
+            }
+
+    elif phase == "seed":
+        location = cache.get("initial_location") or {}
+        return {
+            "phase_complete": True,
+            "artifact_type": "submit_starting_scenario",
+            "data": {
+                "selected_seed": {
+                    "seed_type": cache.get("seed_type"),
+                    "title": cache.get("seed_title"),
+                    "situation": cache.get("seed_situation"),
+                    "hook": cache.get("seed_hook"),
+                    "immediate_goal": cache.get("seed_immediate_goal"),
+                    "stakes": cache.get("seed_stakes"),
+                    "tension_source": cache.get("seed_tension_source"),
+                    "starting_location": cache.get("seed_starting_location"),
+                    "weather": cache.get("seed_weather"),
+                    "key_npcs": cache.get("seed_key_npcs") or [],
+                    "initial_mystery": cache.get("seed_initial_mystery"),
+                    "potential_allies": cache.get("seed_potential_allies") or [],
+                    "potential_obstacles": cache.get("seed_potential_obstacles") or [],
+                    "secrets": cache.get("seed_secrets"),
+                },
+                "layer_definition": {
+                    "name": cache.get("layer_name"),
+                    "layer_type": cache.get("layer_type"),
+                    "description": cache.get("layer_description"),
+                },
+                "zone_definition": {
+                    "name": cache.get("zone_name"),
+                    "summary": cache.get("zone_summary"),
+                    "boundary_description": cache.get("zone_boundary_description"),
+                    "approximate_area": cache.get("zone_approximate_area"),
+                },
+                "initial_location": location,
+            },
+            "message": "[TEST MODE] Seed loaded from mock database.",
+        }
+
+    return {"data": {}, "message": "[TEST MODE] Unknown phase"}
 
 # Archetype choices for character intro
 ARCHETYPE_CHOICES = [
@@ -243,9 +438,6 @@ async def chat_completions(request: ChatCompletionRequest):
     """
     logger.info(f"[MOCK] Received request for model: {request.model}")
 
-    # Simulate API latency
-    await asyncio.sleep(RESPONSE_DELAY_MS / 1000)
-
     # Detect phase from tools
     phase, subphase = detect_phase_from_tools(request.tools)
     user_msg = get_latest_user_message(request.messages) or ""
@@ -363,6 +555,180 @@ async def chat_completions(request: ChatCompletionRequest):
             "prompt_tokens": 100,
             "completion_tokens": 50,
             "total_tokens": 150,
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESPONSES API (for narrative generation via LogonUtility)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class ResponsesRequest(BaseModel):
+    """Request format for /v1/responses endpoint."""
+    model: str
+    input: List[Dict[str, Any]]
+    max_output_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    reasoning: Optional[Dict[str, Any]] = None
+    text_format: Optional[Any] = None  # Pydantic schema for structured output
+
+
+def get_cached_bootstrap_narrative() -> Dict[str, Any]:
+    """
+    Get bootstrap narrative from mock database.
+
+    Queries incubator and transforms to StorytellerResponseExtended format.
+    Must match the exact schema in nexus/agents/logon/apex_schema.py.
+    """
+    row = query_bootstrap_narrative()
+
+    if not row:
+        logger.warning("[MOCK] No bootstrap narrative found in mock.incubator")
+        return {"narrative": "[TEST MODE] No mock data available", "choices": ["Continue", "Wait"]}
+
+    # Extract choices from choice_object
+    choice_obj = row.get("choice_object") or {}
+    choices = choice_obj.get("presented", [])
+
+    # Extract metadata
+    metadata = row.get("metadata_updates") or {}
+    chronology = metadata.get("chronology", {})
+
+    # Extract references
+    refs = row.get("reference_updates") or {}
+
+    # Build response matching StorytellerResponseExtended schema exactly
+    return {
+        "narrative": row.get("storyteller_text", ""),
+        "choices": choices,
+        # ChunkMetadataUpdate: has chronology (nested) and world_layer
+        "chunk_metadata": {
+            "chronology": {
+                "episode_transition": chronology.get("episode_transition", "continue"),
+                "time_delta_minutes": chronology.get("time_delta_minutes"),
+                "time_delta_hours": chronology.get("time_delta_hours"),
+                "time_delta_days": chronology.get("time_delta_days"),
+                "time_delta_description": chronology.get("time_delta_description"),
+            },
+            "world_layer": metadata.get("world_layer", "primary"),
+        },
+        # ReferencedEntities: characters, places, factions (no items field!)
+        "referenced_entities": {
+            "characters": [
+                {
+                    "character_id": c.get("character_id"),
+                    "reference_type": "present",  # Valid: present, mentioned, protagonist, antagonist
+                }
+                for c in refs.get("characters", [])
+            ],
+            "places": [
+                {
+                    "place_id": p.get("place_id"),
+                    "reference_type": "setting",  # Valid: setting, mentioned, transit
+                }
+                for p in refs.get("places", [])
+            ],
+            "factions": [],
+        },
+        # StateUpdates: characters, relationships, locations, factions
+        "state_updates": {
+            "characters": [],
+            "relationships": [],
+            "locations": [],
+            "factions": [],
+        },
+        "operations": None,
+        "reasoning": "[TEST MODE] Returning cached bootstrap narrative"
+    }
+
+
+@app.post("/v1/responses")
+async def responses_create(request: ResponsesRequest):
+    """
+    Mock OpenAI responses endpoint for narrative generation.
+
+    This handles requests from LogonUtility.generate_narrative() which uses
+    the OpenAI responses API with structured output.
+    """
+    logger.info(f"[MOCK] Responses request for model: {request.model}")
+
+    # Check if this is a bootstrap/narrative request (vs wizard)
+    # by looking for storyteller-related content in the messages
+    input_text = ""
+    for msg in request.input:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            input_text += content
+
+    is_narrative = any(kw in input_text.lower() for kw in [
+        "narrative", "story", "protagonist", "bootstrap", "user input"
+    ])
+
+    if is_narrative:
+        logger.info("[MOCK] Detected narrative request, returning cached bootstrap")
+        cached = get_cached_bootstrap_narrative()
+        output_json = json.dumps(cached)
+
+        # Format as OpenAI responses API structured output
+        # content must be an array of content blocks, not a raw string
+        return {
+            "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
+            "object": "response",
+            "created_at": int(datetime.now().timestamp()),
+            "model": "TEST",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "id": f"msg-mock-{uuid.uuid4().hex[:8]}",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": output_json,
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ],
+            "output_text": output_json,
+            "usage": {
+                "input_tokens": 1000,
+                "output_tokens": 800,
+                "total_tokens": 1800,
+            },
+        }
+
+    # Default fallback for non-narrative requests
+    logger.warning(f"[MOCK] Unknown responses request type")
+    return {
+        "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
+        "object": "response",
+        "created_at": int(datetime.now().timestamp()),
+        "model": "TEST",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "id": f"msg-mock-{uuid.uuid4().hex[:8]}",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "[TEST MODE] Mock response",
+                        "annotations": [],
+                    }
+                ],
+            }
+        ],
+        "output_text": "[TEST MODE] Mock response",
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 10,
+            "total_tokens": 110,
         },
     }
 

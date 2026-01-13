@@ -29,7 +29,15 @@ logger = logging.getLogger("nexus.lore.logon")
 class LogonUtility:
     """Wrapper for Apex AI API calls using existing providers"""
 
-    def __init__(self, settings: Dict[str, Any], dbname: Optional[str] = None):
+    # Mock server URL for TEST model
+    TEST_MODEL_BASE_URL = "http://localhost:5102/v1"
+
+    def __init__(
+        self,
+        settings: Dict[str, Any],
+        dbname: Optional[str] = None,
+        model_override: Optional[str] = None,
+    ):
         """
         Initialize LOGON utility with configured provider.
 
@@ -37,9 +45,12 @@ class LogonUtility:
             settings: Application settings dictionary
             dbname: Database name (save_01 through save_05).
                     If not provided, uses NEXUS_SLOT env var.
+            model_override: Optional model to use instead of settings/slot config.
+                           If None, will check slot's configured model first.
         """
         self.settings = settings
         self.dbname = dbname
+        self.model_override = model_override
         self.provider: Optional[object] = None
         self._system_prompt: Optional[str] = None
 
@@ -90,11 +101,46 @@ class LogonUtility:
             if 'conn' in locals():
                 conn.close()
 
+    def _get_slot_model(self) -> Optional[str]:
+        """Get the model configured for the current slot."""
+        try:
+            db = require_slot_dbname(dbname=self.dbname)
+            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
+            try:
+                with conn.cursor() as cur:
+                    # Extract slot number from dbname (save_01 -> 1)
+                    slot_num = int(db.replace("save_", "").lstrip("0") or "0")
+                    cur.execute(
+                        "SELECT model FROM assets.save_slots WHERE slot_number = %s",
+                        (slot_num,),
+                    )
+                    result = cur.fetchone()
+                    return result[0] if result else None
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to get slot model: {e}")
+            return None
+
     def _initialize_provider(self) -> None:
-        """Initialize the appropriate API provider based on settings"""
+        """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
         provider_type = apex_settings.get("provider", "openai")
-        model = apex_settings.get("model", "gpt-4o")
+
+        # Model priority: override > slot config > settings
+        model = self.model_override
+        if not model:
+            model = self._get_slot_model()
+        if not model:
+            model = apex_settings.get("model", "gpt-4o")
+
+        # Determine base_url for TEST model routing
+        base_url = None
+        api_key = None
+        if model == "TEST":
+            base_url = self.TEST_MODEL_BASE_URL
+            api_key = "test-dummy-key"  # Avoid 1Password lookup for TEST
+            logger.info(f"TEST model: routing to mock server at {base_url}")
 
         # Load system prompt
         system_prompt = self._load_system_prompt()
@@ -105,7 +151,9 @@ class LogonUtility:
                 temperature=apex_settings.get("temperature", 0.7),
                 max_output_tokens=apex_settings.get("max_output_tokens", 25000),
                 reasoning_effort=apex_settings.get("reasoning_effort", "medium"),
-                system_prompt=system_prompt
+                system_prompt=system_prompt,
+                base_url=base_url,
+                api_key=api_key,
             )
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(

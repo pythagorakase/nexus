@@ -147,10 +147,8 @@ class ContinueNarrativeRequest(BaseModel):
         description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk)."
     )
     user_text: str = Field(description="User's completion text")
-    test_mode: Optional[bool] = Field(
-        default=None, description="Override test mode setting"
-    )
     slot: Optional[int] = Field(default=None, description="Active save slot")
+    # Note: test_mode removed - TEST model routing is now automatic via slot config
 
 
 class ContinueNarrativeResponse(BaseModel):
@@ -298,7 +296,6 @@ async def continue_narrative(
         session_id,
         parent_chunk_id,
         request.user_text,
-        request.test_mode,
         request.slot,
     )
 
@@ -314,7 +311,6 @@ async def generate_narrative_async(
     session_id: str,
     parent_chunk_id: int,
     user_text: str,
-    test_mode: Optional[bool] = None,
     slot: Optional[int] = None,
 ):
     """
@@ -323,6 +319,9 @@ async def generate_narrative_async(
 
     For bootstrap (parent_chunk_id=0), generates the first chunk using
     story seed and setting from global_variables.
+
+    Note: TEST model routing is handled automatically by LogonUtility,
+    which checks the slot's configured model and routes to the mock server.
     """
     conn = None
     is_bootstrap = parent_chunk_id == 0
@@ -360,101 +359,7 @@ async def generate_narrative_async(
             },
         )
 
-        # Check if we should use mock mode (for testing without LLM)
-        use_mock = test_mode is True  # Explicit True means use mock
-
-        if use_mock and is_bootstrap:
-            # Mock bootstrap mode for TEST model
-            logger.info("Using mock mode for bootstrap narrative generation")
-            await asyncio.sleep(1)  # Simulate processing
-
-            # Send progress: calling LLM
-            await manager.send_progress(session_id, "calling_llm")
-            await asyncio.sleep(2)  # Simulate LLM call
-
-            # Generate mock bootstrap narrative using cached story seed
-            storyteller_text = generate_mock_bootstrap_narrative(conn, slot)
-
-            # Prepare mock incubator data for bootstrap
-            incubator_data = {
-                "chunk_id": 1,  # First chunk
-                "parent_chunk_id": 0,
-                "user_text": user_text,
-                "storyteller_text": storyteller_text,
-                "choice_object": {
-                    "presented": [
-                        "Examine the satchel more closely",
-                        "Check the tram's route display",
-                        "Study the other passengers",
-                    ],
-                    "selected": None,
-                },
-                "metadata_updates": {
-                    "chronology": {
-                        "episode_transition": "begin",
-                        "time_delta_minutes": 0,
-                        "time_delta_hours": None,
-                        "time_delta_days": None,
-                        "time_delta_description": "Story begins",
-                    },
-                    "world_layer": "primary",
-                },
-                "entity_updates": {},
-                "reference_updates": {
-                    "characters": [{"character_id": 1, "reference_type": "present"}],
-                    "places": [{"place_id": 1, "reference_type": "setting", "evidence": None}],
-                    "factions": [],
-                },
-                "session_id": session_id,
-                "llm_response_id": f"mock_bootstrap_{uuid.uuid4().hex[:8]}",
-                "status": "provisional",
-            }
-
-        elif use_mock:
-            # Mock mode for testing continuation without real LLM calls
-            logger.info("Using mock mode for narrative continuation")
-            await asyncio.sleep(2)  # Simulate processing
-
-            # Send progress: calling LLM
-            await manager.send_progress(session_id, "calling_llm")
-            await asyncio.sleep(3)  # Simulate LLM call
-
-            storyteller_text = generate_mock_narrative(chunk_info, user_text)
-
-            # Prepare mock incubator data
-            incubator_data = {
-                "chunk_id": parent_chunk_id + 1,
-                "parent_chunk_id": parent_chunk_id,
-                "user_text": user_text,
-                "storyteller_text": storyteller_text,
-                "metadata_updates": {
-                    "chronology": {
-                        "episode_transition": "continue",
-                        "time_delta_minutes": 3,
-                        "time_delta_hours": None,
-                        "time_delta_days": None,
-                        "time_delta_description": "A few minutes later",
-                    },
-                    "world_layer": "primary",
-                },
-                "entity_updates": {},
-                "reference_updates": {
-                    "characters": [{"character_id": 1, "reference_type": "present"}],
-                    "places": [
-                        {
-                            "place_id": chunk_info.get("place", 1),
-                            "reference_type": "setting",
-                            "evidence": None,
-                        }
-                    ],
-                    "factions": [],
-                },
-                "session_id": session_id,
-                "llm_response_id": f"mock_{uuid.uuid4().hex[:8]}",
-                "status": "provisional",
-            }
-
-        elif is_bootstrap:
+        if is_bootstrap:
             # Bootstrap mode: Generate first chunk using story seed directly
             # Skip LORE entirely (requires warm slice and local LLM)
             logger.info("Bootstrap mode: calling apex AI directly with story seed context")
@@ -595,76 +500,6 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
         )
 
     conn.commit()
-
-
-def generate_mock_narrative(chunk_info: Dict, user_text: str) -> str:
-    """Generate mock narrative for testing"""
-    return f"""The scene continues from {chunk_info['place_name']}.
-
-{user_text}
-
-The morning stretches on, and with it comes a growing sense of purpose. The team's focus sharpens
-as they review the data streams flowing across their screens. Each piece of information adds another
-layer to the complex puzzle they're trying to solve.
-
-Sullivan, now officially part of the crew, watches from his perch with an air of feline wisdom,
-as if he too understands the gravity of what's about to unfold."""
-
-
-def generate_mock_bootstrap_narrative(conn, slot: Optional[int] = None) -> str:
-    """
-    Generate mock bootstrap narrative for TEST mode.
-
-    Uses data from the wizard test cache or generates generic opening.
-    """
-    try:
-        # Try to load from wizard test cache
-        from nexus.api.wizard_test_cache import load_cache
-        import json
-
-        cache = load_cache()
-        seed_data = cache.get("selected_seed", {})
-        if isinstance(seed_data, str):
-            seed_data = json.loads(seed_data)
-
-        location_data = cache.get("initial_location", {})
-        if isinstance(location_data, str):
-            location_data = json.loads(location_data)
-
-        character_data = cache.get("character_draft", {})
-        if isinstance(character_data, str):
-            character_data = json.loads(character_data)
-
-        # Extract key elements
-        situation = seed_data.get("situation", "The story begins.")
-        atmosphere = location_data.get("atmosphere", "The air is thick with tension.")
-        char_name = character_data.get("concept", {}).get("name", "the protagonist")
-
-        return f"""[TEST MODE - Mock Bootstrap Narrative]
-
-{situation}
-
-{atmosphere}
-
-{char_name} takes a moment to assess the situation, mind racing through possibilities. The weight of unknown history presses down, fragments of memories that might be real or might be implanted flickering at the edges of consciousness.
-
-What happens next is up to you.
-
----
-*This is a mock narrative generated for TEST mode. In production, this would be a rich, immersive opening scene generated by the AI storyteller.*"""
-
-    except Exception as e:
-        logger.warning(f"Failed to load wizard test cache for mock bootstrap: {e}")
-        return """[TEST MODE - Mock Bootstrap Narrative]
-
-The story begins in a moment of uncertainty. The protagonist finds themselves at a crossroads, the weight of decisions yet to be made hanging in the air.
-
-Around them, the world waits. Every shadow could hide a threat or an opportunity. Every face could belong to friend or foe.
-
-What happens next is up to you.
-
----
-*This is a mock narrative generated for TEST mode. In production, this would be a rich, immersive opening scene generated by the AI storyteller.*"""
 
 
 async def generate_bootstrap_narrative(
