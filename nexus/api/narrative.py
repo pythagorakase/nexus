@@ -164,7 +164,9 @@ class ContinueNarrativeResponse(BaseModel):
 class ApproveNarrativeRequest(BaseModel):
     """Request to approve and commit narrative"""
 
-    session_id: str = Field(description="Session ID of the narrative to approve")
+    # session_id is optional - resolved from incubator if not provided (requires slot)
+    session_id: Optional[str] = Field(default=None, description="Session ID of the narrative to approve")
+    slot: Optional[int] = Field(default=None, description="Slot to resolve session from")
     commit: bool = Field(default=True, description="Whether to commit to database")
 
 
@@ -225,8 +227,51 @@ async def continue_narrative(
     Bootstrap mode: When chunk_id is None or 0, generates the first chunk
     using the story seed and setting from global_variables.
 
+    If chunk_id is not provided but slot is, resolves current chunk from slot state.
+
     Initiates async generation and returns session_id for tracking.
     """
+    # Resolve chunk_id from slot state if not provided
+    if request.chunk_id is None and request.slot is not None:
+        from nexus.api.slot_state import get_slot_state
+
+        state = get_slot_state(request.slot)
+        if state.is_wizard_mode:
+            raise HTTPException(
+                status_code=400,
+                detail="Slot is in wizard mode. Use /api/story/new/chat for wizard."
+            )
+        if state.narrative_state is not None:
+            narrative_state = state.narrative_state
+            if narrative_state.has_pending:
+                if narrative_state.session_id is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Slot has pending incubator content that must be approved before continuing."
+                    )
+                logger.info(
+                    "Auto-approving pending incubator session %s for slot %s",
+                    narrative_state.session_id,
+                    request.slot,
+                )
+                approval = await approve_narrative(
+                    session_id=narrative_state.session_id,
+                    request=ApproveNarrativeRequest(
+                        session_id=narrative_state.session_id, commit=True
+                    ),
+                    slot=request.slot,
+                )
+                approved_chunk_id = approval.get("chunk_id") if approval else None
+                if not approved_chunk_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Pending incubator content must be approved before continuing."
+                    )
+                request.chunk_id = approved_chunk_id
+            else:
+                request.chunk_id = narrative_state.current_chunk_id
+            logger.info(f"Resolved chunk_id={request.chunk_id} from slot {request.slot}")
+
     session_id = str(uuid.uuid4())
 
     # Normalize chunk_id: None and 0 both mean bootstrap
@@ -821,11 +866,56 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
         conn.close()
 
 
+@app.post("/api/narrative/approve")
+async def approve_narrative_unified(request: ApproveNarrativeRequest):
+    """
+    Approve narrative and optionally commit to database.
+
+    If session_id is not provided, resolves from the most recent incubator entry for the slot.
+    """
+    session_id = request.session_id
+    slot = request.slot
+
+    # Resolve session_id from incubator if not provided
+    if session_id is None:
+        if slot is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Either session_id or slot must be provided"
+            )
+        from nexus.api.slot_utils import slot_dbname
+
+        dbname = slot_dbname(slot)
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT session_id FROM incubator ORDER BY created_at DESC LIMIT 1"
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="No pending session to approve in incubator"
+                    )
+                session_id = row["session_id"]
+                logger.info(f"Resolved session_id={session_id} from slot {slot} incubator")
+
+    # Now call the implementation
+    return await _approve_narrative_impl(session_id, request.commit, slot)
+
+
 @app.post("/api/narrative/approve/{session_id}")
 async def approve_narrative(session_id: str, request: Optional[ApproveNarrativeRequest] = None, slot: Optional[int] = None):
     """
-    Approve narrative and optionally commit to database
+    Approve narrative and optionally commit to database (path-based for backward compatibility).
     """
+    should_commit = request.commit if request else True
+    effective_slot = request.slot if request and request.slot else slot
+    return await _approve_narrative_impl(session_id, should_commit, effective_slot)
+
+
+async def _approve_narrative_impl(session_id: str, commit: bool, slot: Optional[int]):
+    """Internal implementation for approve narrative."""
     conn = get_db_connection(slot)
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -838,9 +928,7 @@ async def approve_narrative(session_id: str, request: Optional[ApproveNarrativeR
                 status_code=404, detail=f"Session {session_id} not found"
             )
 
-        # Default to commit=True if no request body provided
-        should_commit = request.commit if request else True
-        if should_commit:
+        if commit:
             # Import synchronous commit function
             from nexus.api.commit_handler_sync import commit_incubator_to_database_sync
 
@@ -1382,10 +1470,13 @@ class SlotContinueResponse(BaseModel):
     error: Optional[str] = None
 
 
-@app.post("/api/slot/{slot}/continue", response_model=SlotContinueResponse)
+@app.post("/api/slot/{slot}/continue", response_model=SlotContinueResponse, deprecated=True)
 async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
     """
     Unified continue endpoint for wizard or narrative mode.
+
+    DEPRECATED: Use /api/story/new/chat (wizard) or /api/narrative/continue (narrative) directly.
+    These endpoints now accept slot-only parameters and resolve state internally.
 
     Routes to wizard chat or narrative continuation based on current slot state.
     Handles choice selection, freeform input, and accept-fate auto-advance.
@@ -1834,10 +1925,11 @@ from nexus.api.new_story_cache import read_cache
 
 class ChatRequest(BaseModel):
     slot: int
-    thread_id: str
     message: str
+    # thread_id and current_phase are optional - resolved from slot state if not provided
+    thread_id: Optional[str] = None
+    current_phase: Optional[Literal["setting", "character", "seed"]] = None
     model: Literal["gpt-5.1", "TEST", "claude"] = "gpt-5.1"  # Model selection
-    current_phase: Literal["setting", "character", "seed"] = "setting"
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
 
@@ -1889,6 +1981,35 @@ async def new_story_chat_endpoint(request: ChatRequest):
         import openai
         from pathlib import Path
         import json
+
+        # Resolve thread_id and current_phase from slot state if not provided
+        if request.thread_id is None or request.current_phase is None:
+            from nexus.api.slot_state import get_slot_state
+
+            state = get_slot_state(request.slot)
+            if not state.is_wizard_mode:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Slot is not in wizard mode. Use /api/narrative/continue for narrative mode."
+                )
+            if state.wizard_state is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No wizard state found. Initialize with /api/story/new/setup first."
+                )
+
+            if request.thread_id is None:
+                request.thread_id = state.wizard_state.thread_id
+            if request.current_phase is None:
+                request.current_phase = state.wizard_state.phase
+
+            # Also load character_state from cache if in character phase
+            if request.current_phase == "character" and request.context_data is None:
+                from nexus.api.slot_utils import slot_dbname
+
+                cache = read_cache(slot_dbname(request.slot))
+                if cache and cache.get("character_draft"):
+                    request.context_data = {"character_state": cache["character_draft"]}
 
         # Load settings for new story workflow
         settings_model = get_new_story_model()
