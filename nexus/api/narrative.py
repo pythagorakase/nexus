@@ -242,7 +242,34 @@ async def continue_narrative(
                 detail="Slot is in wizard mode. Use /api/story/new/chat for wizard."
             )
         if state.narrative_state is not None:
-            request.chunk_id = state.narrative_state.current_chunk_id
+            narrative_state = state.narrative_state
+            if narrative_state.has_pending:
+                if narrative_state.session_id is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Slot has pending incubator content that must be approved before continuing."
+                    )
+                logger.info(
+                    "Auto-approving pending incubator session %s for slot %s",
+                    narrative_state.session_id,
+                    request.slot,
+                )
+                approval = await approve_narrative(
+                    session_id=narrative_state.session_id,
+                    request=ApproveNarrativeRequest(
+                        session_id=narrative_state.session_id, commit=True
+                    ),
+                    slot=request.slot,
+                )
+                approved_chunk_id = approval.get("chunk_id") if approval else None
+                if not approved_chunk_id:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Pending incubator content must be approved before continuing."
+                    )
+                request.chunk_id = approved_chunk_id
+            else:
+                request.chunk_id = narrative_state.current_chunk_id
             logger.info(f"Resolved chunk_id={request.chunk_id} from slot {request.slot}")
 
     session_id = str(uuid.uuid4())
