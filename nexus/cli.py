@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 import time
 from typing import Any, Dict, Optional
 
 import requests
+
+logger = logging.getLogger("nexus.cli")
 
 # Default API server URL
 DEFAULT_API_URL = "http://localhost:8000"
@@ -196,9 +199,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     json={"slot": args.slot, "commit": True},
                     timeout=30
                 )
-                # Log but don't fail if approve has issues
                 if not approve_response.ok:
-                    pass  # Continue anyway
+                    logger.warning("Auto-approve failed: %s", approve_response.text)
 
             url = f"{get_api_url()}/api/narrative/continue"
             payload = {
