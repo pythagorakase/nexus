@@ -113,7 +113,7 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
     Example:
         with get_connection("save_01", dict_cursor=True) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT * FROM assets.save_slots")
+                cur.execute("SELECT * FROM global_variables WHERE id = TRUE")
                 results = cur.fetchall()
     """
     conn_pool = _get_pool(dbname)

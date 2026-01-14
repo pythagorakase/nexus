@@ -331,15 +331,15 @@ Rain hammers against the hull above. Somewhere in the distance, the city's heart
 
 
 def populate_save_slot(conn):
-    """Ensure save_slots has a mock slot entry."""
+    """Set the mock database model to TEST in global_variables."""
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM assets.save_slots WHERE slot_number = 0")
+        # Ensure global_variables row exists and set model to TEST
         cur.execute("""
-            INSERT INTO assets.save_slots (slot_number, model, created_at)
-            VALUES (0, 'TEST', NOW())
-            ON CONFLICT (slot_number) DO UPDATE SET model = 'TEST'
+            INSERT INTO global_variables (id, model, new_story)
+            VALUES (TRUE, 'TEST', FALSE)
+            ON CONFLICT (id) DO UPDATE SET model = 'TEST'
         """)
-    print("✓ Configured mock save slot (slot 0)")
+    print("✓ Configured mock slot model (TEST)")
 
 
 def main():
