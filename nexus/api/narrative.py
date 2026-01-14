@@ -1655,13 +1655,10 @@ async def get_slot_model_endpoint(slot: int):
     try:
         dbname = slot_dbname(slot)
 
-        # Get current model from save_slots
+        # Get current model from global_variables
         with get_connection(dbname, dict_cursor=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT model FROM assets.save_slots WHERE slot_number = %s",
-                    (slot,),
-                )
+                cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
                 row = cur.fetchone()
                 current_model = row.get("model") if row else None
 
@@ -1705,17 +1702,12 @@ async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
                 detail=f"Invalid model '{request.model}'. Available: {', '.join(available)}",
             )
 
-        # Update model in save_slots
+        # Update model in global_variables
         with get_connection(dbname) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    INSERT INTO assets.save_slots (slot_number, model)
-                    VALUES (%s, %s)
-                    ON CONFLICT (slot_number) DO UPDATE
-                    SET model = EXCLUDED.model
-                    """,
-                    (slot, request.model),
+                    "UPDATE global_variables SET model = %s WHERE id = TRUE",
+                    (request.model,),
                 )
 
         return SlotModelResponse(

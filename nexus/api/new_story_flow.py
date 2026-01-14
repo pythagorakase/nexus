@@ -143,9 +143,19 @@ def reset_setup(slot_number: int) -> None:
 
     Args:
         slot_number: Target save slot (1-5)
+
+    Raises:
+        ValueError: If the slot is locked
     """
+    from nexus.api.save_slots import is_slot_locked
+
     dbname = slot_dbname(slot_number)
-    logger.info("Resetting slot %s by recreating from NEXUS template", slot_number)
+
+    # Check lock before any destructive operation
+    if is_slot_locked(slot_number, dbname=dbname):
+        raise ValueError(f"Slot {slot_number} is locked. Unlock it first with: nexus unlock --slot {slot_number}")
+
+    logger.info("Resetting slot %s by recreating from NEXUS_template", slot_number)
 
     # Drop and recreate from template - handles all tables automatically
     create_slot_schema_only(slot_number, source_db="NEXUS_template", force=True)

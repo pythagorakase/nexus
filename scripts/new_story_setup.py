@@ -129,12 +129,23 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
     target_db = f"save_{slot:02d}"
 
     if force:
-        # Use parameterized query to avoid SQL injection
-        with _connect("postgres") as conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
-                (target_db,)
-            )
+        # Terminate active connections before dropping
+        # Use raw psycopg2 for postgres admin DB (not in slot pool)
+        admin_conn = psycopg2.connect(
+            dbname="postgres",
+            user=os.environ.get("PGUSER", "pythagor"),
+            host=os.environ.get("PGHOST", "localhost"),
+            port=os.environ.get("PGPORT", "5432"),
+        )
+        try:
+            admin_conn.autocommit = True  # Required for pg_terminate_backend
+            with admin_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
+                    (target_db,)
+                )
+        finally:
+            admin_conn.close()
         subprocess.run(["dropdb", "--if-exists", target_db], check=False)
         LOG.warning("Dropped database %s if it existed", target_db)
 

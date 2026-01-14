@@ -102,18 +102,13 @@ class LogonUtility:
                 conn.close()
 
     def _get_slot_model(self) -> Optional[str]:
-        """Get the model configured for the current slot."""
+        """Get the model configured for the current slot from global_variables."""
         try:
             db = require_slot_dbname(dbname=self.dbname)
             conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
             try:
                 with conn.cursor() as cur:
-                    # Extract slot number from dbname (save_01 -> 1)
-                    slot_num = int(db.replace("save_", "").lstrip("0") or "0")
-                    cur.execute(
-                        "SELECT model FROM assets.save_slots WHERE slot_number = %s",
-                        (slot_num,),
-                    )
+                    cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
                     result = cur.fetchone()
                     return result[0] if result else None
             finally:
