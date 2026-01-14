@@ -632,7 +632,7 @@ async def generate_bootstrap_narrative(
         "choice_text": None,
         "metadata_updates": {
             "chronology": {
-                "episode_transition": "begin",
+                "episode_transition": "new_episode",  # Valid: continue, new_episode, new_season
                 "time_delta_minutes": 0,
                 "time_delta_hours": None,
                 "time_delta_days": None,
@@ -1938,6 +1938,13 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Use request model if specified (enables TEST mode), otherwise fall back to settings
         selected_model = request.model if request.model else settings_model
+
+        # Persist model to save_slots if explicitly provided (so it persists for future requests)
+        if request.model:
+            from nexus.api.save_slots import upsert_slot
+            from nexus.api.slot_utils import slot_dbname
+            upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
+            logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
         # Initialize client with user's selected model
         # TEST mode uses in-memory storage, avoiding 1Password biometric auth

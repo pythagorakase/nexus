@@ -29,6 +29,21 @@ logger = logging.getLogger("nexus.api.mock_openai")
 
 MOCK_DB = "mock"
 
+
+def _parse_pg_array(value: Any) -> List[str]:
+    """Parse PostgreSQL array literal to Python list.
+
+    psycopg2's RealDictCursor returns arrays as strings like '{foo,bar}'.
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
+        inner = value[1:-1]
+        return inner.split(',') if inner else []
+    return []
+
 app = FastAPI(title="NEXUS Mock OpenAI")
 
 # Configure CORS
@@ -110,7 +125,7 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
             "data": {
                 "tone": cache.get("setting_tone"),
                 "genre": cache.get("setting_genre"),
-                "themes": cache.get("setting_themes") or [],
+                "themes": _parse_pg_array(cache.get("setting_themes")),
                 "tech_level": cache.get("setting_tech_level"),
                 "world_name": cache.get("setting_world_name"),
                 "time_period": cache.get("setting_time_period"),
@@ -120,7 +135,7 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                 "language_notes": cache.get("setting_language_notes"),
                 "major_conflict": cache.get("setting_major_conflict"),
                 "geographic_scope": cache.get("setting_geographic_scope"),
-                "secondary_genres": cache.get("setting_secondary_genres") or [],
+                "secondary_genres": _parse_pg_array(cache.get("setting_secondary_genres")),
                 "political_structure": cache.get("setting_political_structure"),
                 "diegetic_artifact": cache.get("setting_diegetic_artifact"),
             },
@@ -198,11 +213,12 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
 
     elif phase == "seed":
         location = cache.get("initial_location") or {}
+        # Keys must match what narrative.py expects: seed, layer, zone, location
         return {
             "phase_complete": True,
             "artifact_type": "submit_starting_scenario",
             "data": {
-                "selected_seed": {
+                "seed": {
                     "seed_type": cache.get("seed_type"),
                     "title": cache.get("seed_title"),
                     "situation": cache.get("seed_situation"),
@@ -212,24 +228,24 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                     "tension_source": cache.get("seed_tension_source"),
                     "starting_location": cache.get("seed_starting_location"),
                     "weather": cache.get("seed_weather"),
-                    "key_npcs": cache.get("seed_key_npcs") or [],
+                    "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
                     "initial_mystery": cache.get("seed_initial_mystery"),
-                    "potential_allies": cache.get("seed_potential_allies") or [],
-                    "potential_obstacles": cache.get("seed_potential_obstacles") or [],
+                    "potential_allies": _parse_pg_array(cache.get("seed_potential_allies")),
+                    "potential_obstacles": _parse_pg_array(cache.get("seed_potential_obstacles")),
                     "secrets": cache.get("seed_secrets"),
                 },
-                "layer_definition": {
+                "layer": {
                     "name": cache.get("layer_name"),
-                    "layer_type": cache.get("layer_type"),
+                    "type": cache.get("layer_type"),  # Key must be "type" to match new_story_cache.py
                     "description": cache.get("layer_description"),
                 },
-                "zone_definition": {
+                "zone": {
                     "name": cache.get("zone_name"),
                     "summary": cache.get("zone_summary"),
                     "boundary_description": cache.get("zone_boundary_description"),
                     "approximate_area": cache.get("zone_approximate_area"),
                 },
-                "initial_location": location,
+                "location": location,
             },
             "message": "[TEST MODE] Seed loaded from mock database.",
         }

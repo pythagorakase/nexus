@@ -34,6 +34,7 @@ def upsert_slot(
     slot_number: int,
     character_name: Optional[str] = None,
     is_active: Optional[bool] = None,
+    model: Optional[str] = None,
     dbname: Optional[str] = None,
 ) -> None:
     """
@@ -43,6 +44,7 @@ def upsert_slot(
         slot_number: Slot number (1-5)
         character_name: Optional character name (max 50 chars, alphanumeric with spaces/hyphens/apostrophes/periods)
         is_active: Optional flag to mark slot as active
+        model: Optional model name (e.g., gpt-5.1, TEST, claude) for this slot
         dbname: Optional database name (defaults to PGDATABASE env var)
 
     Raises:
@@ -60,16 +62,17 @@ def upsert_slot(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO assets.save_slots (slot_number, character_name, last_played, is_active)
-                VALUES (%s, %s, now(), COALESCE(%s, FALSE))
+                INSERT INTO assets.save_slots (slot_number, character_name, last_played, is_active, model)
+                VALUES (%s, %s, now(), COALESCE(%s, FALSE), %s)
                 ON CONFLICT (slot_number) DO UPDATE
-                SET character_name = EXCLUDED.character_name,
+                SET character_name = COALESCE(EXCLUDED.character_name, assets.save_slots.character_name),
                     last_played = now(),
-                    is_active = COALESCE(%s, assets.save_slots.is_active)
+                    is_active = COALESCE(%s, assets.save_slots.is_active),
+                    model = COALESCE(EXCLUDED.model, assets.save_slots.model)
                 """,
-                (slot_number, character_name, is_active, is_active),
+                (slot_number, character_name, is_active, model, is_active),
             )
-    logger.info("Updated save slot %s in %s", slot_number, dbname or "(default slot)")
+    logger.info("Updated save slot %s in %s (model=%s)", slot_number, dbname or "(default slot)", model)
 
 
 def clear_active(dbname: Optional[str] = None) -> None:

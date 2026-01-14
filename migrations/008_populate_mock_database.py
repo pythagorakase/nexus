@@ -152,9 +152,9 @@ def populate_wizard_cache(conn, cache: dict):
             seed.get("potential_allies"),
             seed.get("potential_obstacles"),
             seed.get("secrets"),
-            # Layer/Zone
+            # Layer/Zone (cache uses "type" not "layer_type")
             layer.get("name"),
-            layer.get("layer_type"),
+            layer.get("type") or layer.get("layer_type", "planet"),
             layer.get("description"),
             zone.get("name"),
             zone.get("summary"),
@@ -191,7 +191,7 @@ def populate_post_transition_data(conn, cache: dict):
             VALUES (1, %s, %s::layer_type, %s)
         """, (
             layer.get("name", "Neon Palimpsest Earth"),
-            layer.get("layer_type", "planet"),
+            layer.get("type") or layer.get("layer_type", "planet"),
             layer.get("description"),
         ))
 

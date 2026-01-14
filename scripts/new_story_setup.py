@@ -116,14 +116,16 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
     Args:
         slot: Slot number (1-5)
         source_db: Source database to clone schema from.
-                   Defaults to "NEXUS" which is the schema template database.
-                   This is intentional - NEXUS serves as the empty schema template.
+                   Defaults to "NEXUS_template" which contains empty tables
+                   with the latest schema. Refresh it with:
+                   dropdb NEXUS_template && createdb NEXUS_template &&
+                   pg_dump -s -d save_01 | psql -d NEXUS_template
         force: If True, drop and recreate the target database.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    # NEXUS is the schema template database - intentional default for cloning
-    source_db = source_db or "NEXUS"
+    # NEXUS_template is the canonical schema template (empty tables, latest schema)
+    source_db = source_db or "NEXUS_template"
     target_db = f"save_{slot:02d}"
 
     if force:

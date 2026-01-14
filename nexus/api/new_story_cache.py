@@ -28,14 +28,16 @@ VALID_TRAITS = frozenset({
 })
 
 
-def _parse_pg_array(value: Any) -> Optional[List[str]]:
+def _parse_pg_array(value: Any) -> List[str]:
     """Parse PostgreSQL array literal to Python list.
 
     psycopg2's RealDictCursor doesn't auto-convert array columns.
     PostgreSQL returns arrays as strings like '{foo,bar}'.
+
+    Always returns a list (empty if null) for UI compatibility.
     """
     if value is None:
-        return None
+        return []
     if isinstance(value, list):
         return value  # Already a list
     if isinstance(value, str):
@@ -45,7 +47,7 @@ def _parse_pg_array(value: Any) -> Optional[List[str]]:
             if not inner:
                 return []
             return inner.split(',')
-    return None
+    return []
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -57,7 +59,7 @@ def _parse_pg_array(value: Any) -> Optional[List[str]]:
 class SettingData:
     """Setting phase data (normalized columns)."""
     genre: Optional[str] = None
-    secondary_genres: Optional[List[str]] = None
+    secondary_genres: List[str] = field(default_factory=list)  # Always array for UI
     world_name: Optional[str] = None
     time_period: Optional[str] = None
     tech_level: Optional[str] = None
@@ -66,7 +68,7 @@ class SettingData:
     political_structure: Optional[str] = None
     major_conflict: Optional[str] = None
     tone: Optional[str] = None
-    themes: Optional[List[str]] = None
+    themes: List[str] = field(default_factory=list)  # Always array for UI
     cultural_notes: Optional[str] = None
     language_notes: Optional[str] = None
     geographic_scope: Optional[str] = None
