@@ -90,21 +90,19 @@ async def fetch_chunk_metadata(
 async def insert_narrative_chunk(
     conn: asyncpg.Connection,
     raw_text: str,
-    season: int,
-    episode: int
 ) -> int:
     """
     Insert a new narrative chunk and return its ID.
+
+    Note: season/episode are stored in chunk_metadata, not narrative_chunks.
     """
     chunk_id = await conn.fetchval(
         """
-        INSERT INTO narrative_chunks (raw_text, season, episode)
-        VALUES ($1, $2, $3)
+        INSERT INTO narrative_chunks (raw_text)
+        VALUES ($1)
         RETURNING id
         """,
         raw_text,
-        season,
-        episode
     )
     logger.info(f"Created narrative chunk {chunk_id}")
     return chunk_id
@@ -396,8 +394,6 @@ async def commit_incubator_to_database(
             chunk_id = await insert_narrative_chunk(
                 conn,
                 raw_text=incubator["storyteller_text"],
-                season=db_meta["season"],
-                episode=db_meta["episode"]
             )
             if chunk_id is None:
                 raise ValueError("Failed to obtain chunk_id after insert")

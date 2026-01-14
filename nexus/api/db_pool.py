@@ -164,6 +164,25 @@ def close_all_pools():
     _pools.clear()
 
 
+def close_pool(dbname: Optional[str] = None) -> None:
+    """
+    Close and remove the connection pool for a specific database.
+
+    Args:
+        dbname: Database name (save_01 through save_05).
+                If not provided, uses NEXUS_SLOT env var.
+    """
+    db_key = require_slot_dbname(dbname=dbname)
+    conn_pool = _pools.pop(db_key, None)
+    if not conn_pool:
+        return
+    try:
+        conn_pool.closeall()
+        logger.info("Closed connection pool for database: %s", db_key)
+    except Exception as e:
+        logger.error("Error closing pool for %s: %s", db_key, e)
+
+
 # Compatibility function for gradual migration
 def _connect(dbname: Optional[str] = None):
     """

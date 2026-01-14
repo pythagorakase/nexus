@@ -94,12 +94,10 @@ def get_slot_state(slot: int) -> SlotState:
 
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            # Get model from save_slots table
-            cur.execute(
-                "SELECT model FROM assets.save_slots WHERE slot_number = %s", (slot,)
-            )
-            slot_row = cur.fetchone()
-            current_model = slot_row.get("model") if slot_row else None
+            # Get model from global_variables
+            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
+            gv_row = cur.fetchone()
+            current_model = gv_row.get("model") if gv_row else None
 
             # Check for wizard cache (derives wizard mode)
             # Only select the columns we need for phase detection

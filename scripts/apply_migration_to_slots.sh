@@ -43,7 +43,7 @@ SUCCESS_COUNT=0
 FAIL_COUNT=0
 
 # Apply migration to each slot database
-for slot in {01..05}; do
+for slot in 01 02 03 04 05; do
     DB_NAME="save_$slot"
     echo ""
     echo "Processing $DB_NAME..."

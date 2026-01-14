@@ -116,31 +116,45 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
     Args:
         slot: Slot number (1-5)
         source_db: Source database to clone schema from.
-                   Defaults to "NEXUS" which is the schema template database.
-                   This is intentional - NEXUS serves as the empty schema template.
+                   Defaults to "NEXUS_template" which contains empty tables
+                   with the latest schema. Refresh it with:
+                   dropdb NEXUS_template && createdb NEXUS_template &&
+                   pg_dump -s -d save_01 | psql -d NEXUS_template
         force: If True, drop and recreate the target database.
     """
     if slot < 1 or slot > 5:
         raise ValueError("Slot must be between 1 and 5 (inclusive)")
-    # NEXUS is the schema template database - intentional default for cloning
-    source_db = source_db or "NEXUS"
+    # NEXUS_template is the canonical schema template (empty tables, latest schema)
+    source_db = source_db or "NEXUS_template"
     target_db = f"save_{slot:02d}"
 
     if force:
-        # Use parameterized query to avoid SQL injection
-        with _connect("postgres") as conn, conn.cursor() as cur:
-            cur.execute(
-                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
-                (target_db,)
-            )
+        # Terminate active connections before dropping
+        # Use raw psycopg2 for postgres admin DB (not in slot pool)
+        admin_conn = psycopg2.connect(
+            dbname="postgres",
+            user=os.environ.get("PGUSER", "pythagor"),
+            host=os.environ.get("PGHOST", "localhost"),
+            port=os.environ.get("PGPORT", "5432"),
+        )
+        try:
+            admin_conn.autocommit = True  # Required for pg_terminate_backend
+            with admin_conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s",
+                    (target_db,)
+                )
+        finally:
+            admin_conn.close()
         subprocess.run(["dropdb", "--if-exists", target_db], check=False)
         LOG.warning("Dropped database %s if it existed", target_db)
 
     subprocess.run(["createdb", target_db], check=True)
     LOG.info("Created database %s", target_db)
 
-    dump_cmd = ["pg_dump", "-s", "-n", "public", source_db]
-    LOG.info("Dumping schema from %s", source_db)
+    # Dump both public and assets schemas from template
+    dump_cmd = ["pg_dump", "-s", "-n", "public", "-n", "assets", source_db]
+    LOG.info("Dumping schema (public + assets) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(dump_cmd, check=True, stdout=tmp)
         tmp_path = tmp.name
@@ -154,14 +168,18 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
             ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"], check=True
         )
 
-        # Strip CREATE/ALTER SCHEMA public lines to avoid noisy errors
+        # Strip CREATE/ALTER SCHEMA lines to avoid noisy errors
         with open(tmp_path, "r", encoding="utf-8") as f:
             sql_lines = [
                 line
                 for line in f
                 if not line.strip().startswith("CREATE SCHEMA public")
                 and not line.strip().startswith("ALTER SCHEMA public")
+                and not line.strip().startswith("CREATE SCHEMA assets")
+                and not line.strip().startswith("ALTER SCHEMA assets")
             ]
+        # Add CREATE SCHEMA assets (since we filter it out but need it)
+        sql_lines.insert(0, "CREATE SCHEMA IF NOT EXISTS assets;\n")
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.writelines(sql_lines)
 
@@ -173,8 +191,7 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
         except OSError:
             pass
 
-    # Create assets tables inside the slot DB
-    create_assets_tables(target_db)
+    # Ensure global_variables row exists
     ensure_global_variables(target_db)
     LOG.info("Slot %s ready (schema-only)", target_db)
 

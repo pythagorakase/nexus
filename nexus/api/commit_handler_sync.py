@@ -341,18 +341,15 @@ def commit_incubator_to_database_sync(conn, session_id: str, slot: Optional[int]
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO narrative_chunks (
-                        raw_text, storyteller_text, choice_object, choice_text,
-                        season, episode
+                        raw_text, storyteller_text, choice_object, choice_text
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s)
                     RETURNING id
                 """, (
                     raw_text,
                     storyteller_text,
                     json.dumps(choice_object) if choice_object else None,
                     choice_text,
-                    db_meta["season"],
-                    db_meta["episode"]
                 ))
                 chunk_id = cur.fetchone()[0]
                 if chunk_id is None:

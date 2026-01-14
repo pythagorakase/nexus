@@ -24,8 +24,8 @@ import requests
 
 logger = logging.getLogger("nexus.cli")
 
-# Default API server URL
-DEFAULT_API_URL = "http://localhost:8000"
+# Default API server URL (narrative API handles wizard + story endpoints)
+DEFAULT_API_URL = "http://localhost:8002"
 
 
 def get_api_url() -> str:

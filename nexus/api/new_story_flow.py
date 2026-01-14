@@ -52,9 +52,9 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
         conn.close()
     except psycopg2.OperationalError:
         logger.info("Database %s does not exist. Creating...", dbname)
-        # NEXUS is the schema template database (not for gameplay data).
-        # New slot databases are created by cloning the NEXUS schema structure.
-        create_slot_schema_only(slot_number, source_db="NEXUS")
+        # NEXUS_template is the schema template database (empty tables, latest schema).
+        # New slot databases are created by cloning this template's structure.
+        create_slot_schema_only(slot_number, source_db="NEXUS_template")
 
     clear_cache(dbname)
     # Use provided model or fall back to settings
@@ -63,8 +63,9 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
     thread_id = client.create_thread()
     init_cache(dbname, thread_id=thread_id, target_slot=slot_number)
     clear_active(dbname)
-    upsert_slot(slot_number, is_active=True, dbname=dbname)
-    logger.info("Started setup for slot %s with thread %s", slot_number, thread_id)
+    # Persist model to save_slots so bootstrap/narrative can use it
+    upsert_slot(slot_number, is_active=True, model=model_to_use, dbname=dbname)
+    logger.info("Started setup for slot %s with thread %s (model=%s)", slot_number, thread_id, model_to_use)
     return thread_id
 
 
@@ -135,15 +136,33 @@ def record_drafts(
 
 def reset_setup(slot_number: int) -> None:
     """
-    Clear cache and deactivate slot.
+    Clear all slot state for a completely fresh start.
+
+    Drops and recreates the slot database from the NEXUS template,
+    ensuring a clean schema with no leftover data.
 
     Args:
         slot_number: Target save slot (1-5)
+
+    Raises:
+        ValueError: If the slot is locked
     """
+    from nexus.api.save_slots import is_slot_locked
+
     dbname = slot_dbname(slot_number)
-    clear_cache(dbname)
+
+    # Check lock before any destructive operation
+    if is_slot_locked(slot_number, dbname=dbname):
+        raise ValueError(f"Slot {slot_number} is locked. Unlock it first with: nexus unlock --slot {slot_number}")
+
+    logger.info("Resetting slot %s by recreating from NEXUS_template", slot_number)
+
+    # Drop and recreate from template - handles all tables automatically
+    create_slot_schema_only(slot_number, source_db="NEXUS_template", force=True)
+
+    # Mark slot as inactive after reset
     upsert_slot(slot_number, is_active=False, dbname=dbname)
-    logger.info("Reset setup for slot %s", slot_number)
+    logger.info("Reset complete for slot %s", slot_number)
 
 
 def activate_slot(target_slot: int) -> Dict[str, str]:

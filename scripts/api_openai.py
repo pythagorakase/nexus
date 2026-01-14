@@ -255,7 +255,8 @@ class OpenAIProvider(LLMProvider):
                 max_tokens: int = 4000,
                 max_output_tokens: Optional[int] = None,
                 system_prompt: Optional[str] = None,
-                reasoning_effort: Optional[str] = None):
+                reasoning_effort: Optional[str] = None,
+                base_url: Optional[str] = None):
         """
         Initialize OpenAI provider with additional reasoning parameter.
 
@@ -269,9 +270,11 @@ class OpenAIProvider(LLMProvider):
             reasoning_effort: Optional reasoning effort level
                 - GPT-5: 'minimal', 'medium', 'high'
                 - o3: 'low', 'medium', 'high'
+            base_url: Optional base URL for API (e.g., for mock servers)
         """
         self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens or max_tokens
+        self.base_url = base_url
 
         # Validate reasoning effort if provided
         if reasoning_effort is not None and reasoning_effort not in self.VALID_REASONING_EFFORTS:
@@ -300,7 +303,12 @@ class OpenAIProvider(LLMProvider):
         self.is_reasoning_model = "gpt-5" in model_lower or model_lower == "o3" or model_lower.startswith("o3-")
         self.supports_temperature = not self.is_reasoning_model
 
-        self.client = openai.OpenAI(api_key=self.api_key)
+        # Create client with optional base_url for mock servers
+        client_kwargs = {"api_key": self.api_key}
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+            logger.info(f"Using custom base URL: {self.base_url}")
+        self.client = openai.OpenAI(**client_kwargs)
 
         # Log the model type
         if self.is_reasoning_model:
