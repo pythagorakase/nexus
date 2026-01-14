@@ -152,8 +152,9 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
     subprocess.run(["createdb", target_db], check=True)
     LOG.info("Created database %s", target_db)
 
-    dump_cmd = ["pg_dump", "-s", "-n", "public", source_db]
-    LOG.info("Dumping schema from %s", source_db)
+    # Dump both public and assets schemas from template
+    dump_cmd = ["pg_dump", "-s", "-n", "public", "-n", "assets", source_db]
+    LOG.info("Dumping schema (public + assets) from %s", source_db)
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(dump_cmd, check=True, stdout=tmp)
         tmp_path = tmp.name
@@ -167,14 +168,18 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
             ["psql", target_db, "-c", "CREATE EXTENSION IF NOT EXISTS postgis;"], check=True
         )
 
-        # Strip CREATE/ALTER SCHEMA public lines to avoid noisy errors
+        # Strip CREATE/ALTER SCHEMA lines to avoid noisy errors
         with open(tmp_path, "r", encoding="utf-8") as f:
             sql_lines = [
                 line
                 for line in f
                 if not line.strip().startswith("CREATE SCHEMA public")
                 and not line.strip().startswith("ALTER SCHEMA public")
+                and not line.strip().startswith("CREATE SCHEMA assets")
+                and not line.strip().startswith("ALTER SCHEMA assets")
             ]
+        # Add CREATE SCHEMA assets (since we filter it out but need it)
+        sql_lines.insert(0, "CREATE SCHEMA IF NOT EXISTS assets;\n")
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.writelines(sql_lines)
 
@@ -186,8 +191,7 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
         except OSError:
             pass
 
-    # Create assets tables inside the slot DB
-    create_assets_tables(target_db)
+    # Ensure global_variables row exists
     ensure_global_variables(target_db)
     LOG.info("Slot %s ready (schema-only)", target_db)
 
