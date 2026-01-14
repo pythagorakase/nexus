@@ -18,6 +18,66 @@ from nexus.api.slot_utils import slot_dbname
 logger = logging.getLogger("nexus.api.save_slots")
 
 
+def list_slots(dbname: Optional[str] = None) -> List[Dict]:
+    """
+    Retrieve slot metadata from global_variables and related tables.
+
+    Returns slot info including character name (via FK), model, and new_story flag.
+
+    Args:
+        dbname: Database name for a specific slot
+
+    Returns:
+        List with single dict containing slot metadata
+    """
+    from nexus.api.slot_utils import all_slots
+
+    # If specific dbname provided, query just that slot
+    if dbname:
+        slot_num = int(dbname.replace("save_", "").lstrip("0") or "0")
+        return [_get_slot_metadata(slot_num, dbname)]
+
+    # Otherwise query all slots
+    results = []
+    for slot in all_slots():
+        db = slot_dbname(slot)
+        try:
+            results.append(_get_slot_metadata(slot, db))
+        except Exception as e:
+            logger.warning(f"Could not get metadata for slot {slot}: {e}")
+            results.append({"slot_number": slot, "is_active": False})
+    return results
+
+
+def _get_slot_metadata(slot_number: int, dbname: str) -> Dict:
+    """Get metadata for a single slot from global_variables."""
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            # Join global_variables with characters to get character name
+            cur.execute("""
+                SELECT
+                    g.new_story,
+                    g.model,
+                    g.user_character,
+                    c.name as character_name
+                FROM global_variables g
+                LEFT JOIN characters c ON c.id = g.user_character
+                WHERE g.id = TRUE
+            """)
+            row = cur.fetchone()
+
+            if row:
+                return {
+                    "slot_number": slot_number,
+                    "character_name": row.get("character_name"),
+                    "model": row.get("model"),
+                    "is_active": not row.get("new_story", True),  # active if not in new_story mode
+                    "is_locked": is_slot_locked(slot_number, dbname),
+                }
+            else:
+                return {"slot_number": slot_number, "is_active": False}
+
+
 def _get_admin_connection():
     """Get connection to postgres admin database for ALTER DATABASE commands."""
     return psycopg2.connect(
