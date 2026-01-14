@@ -172,6 +172,8 @@ def unlock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
     Unlock a save slot database to allow write operations.
 
     Removes the default_transaction_read_only setting.
+    The local connection pool is closed to ensure new connections
+    are opened with writable access.
 
     Args:
         slot_number: Slot number (1-5)
@@ -193,6 +195,7 @@ def unlock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
     finally:
         conn.close()
 
+    close_pool(db)
     logger.info("Unlocked slot %s (%s) - database is now writable", slot_number, db)
 
 

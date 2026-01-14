@@ -7,12 +7,11 @@ from nexus.agents.logon.apex_schema import StorytellerResponseExtended
 
 
 def get_slot_model(dbname: str) -> str:
-    """Query slot model directly."""
+    """Query slot model directly from global_variables."""
     conn = psycopg2.connect(host="localhost", database=dbname, user="pythagor")
     try:
         with conn.cursor() as cur:
-            slot_num = int(dbname.replace("save_", "").lstrip("0") or "0")
-            cur.execute("SELECT model FROM assets.save_slots WHERE slot_number = %s", (slot_num,))
+            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
             result = cur.fetchone()
             return result[0] if result else None
     finally:
