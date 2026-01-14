@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import logging
 import os
-import psycopg2
 from typing import Dict, List, Optional
 
-from nexus.api.db_pool import get_connection
+import psycopg2
+
+from nexus.api.db_pool import close_pool, get_connection
 from nexus.api.slot_utils import slot_dbname
 
 logger = logging.getLogger("nexus.api.save_slots")
@@ -129,6 +130,8 @@ def lock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
     Uses PostgreSQL's default_transaction_read_only = on setting,
     which blocks INSERT, UPDATE, DELETE, DROP, etc. while still
     allowing SELECT queries.
+    Existing connections are terminated and the local pool is closed
+    to ensure the lock takes effect immediately.
 
     Args:
         slot_number: Slot number (1-5)
@@ -149,9 +152,18 @@ def lock_slot(slot_number: int, dbname: Optional[str] = None) -> None:
             # Use format string for database name (can't parameterize identifiers)
             # Safe because slot_dbname() only returns save_01 through save_05
             cur.execute(f"ALTER DATABASE {db} SET default_transaction_read_only = on")
+            cur.execute(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = %s AND pid <> pg_backend_pid()
+                """,
+                (db,),
+            )
     finally:
         conn.close()
 
+    close_pool(db)
     logger.info("Locked slot %s (%s) - database is now read-only", slot_number, db)
 
 
