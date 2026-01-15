@@ -23,6 +23,10 @@ class ModelConfig(BaseModel):
         default=["gpt-5.1", "TEST", "claude"],
         description="Available API models for UI picker and CLI"
     )
+    default_slot_model: str = Field(
+        default="TEST",
+        description="Default model for newly created/reset slots"
+    )
 
 
 class LLMConfig(BaseModel):

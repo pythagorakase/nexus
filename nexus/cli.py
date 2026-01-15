@@ -35,6 +35,75 @@ def get_api_url() -> str:
     return os.environ.get("NEXUS_API_URL", DEFAULT_API_URL)
 
 
+def _print_artifact(artifact_type: str, data: Dict[str, Any]) -> None:
+    """Pretty-print wizard artifact data."""
+    if artifact_type == "submit_world_document":
+        # Setting artifact
+        print(f"  World: {data.get('world_name', 'Unknown')}")
+        print(f"  Genre: {data.get('genre', 'Unknown')}")
+        if data.get('secondary_genres'):
+            print(f"  Secondary: {', '.join(data.get('secondary_genres', []))}")
+        print(f"  Tone: {data.get('tone', 'Unknown')}")
+        print(f"  Tech Level: {data.get('tech_level', 'Unknown')}")
+        if data.get('magic_exists'):
+            print(f"  Magic: {data.get('magic_description', 'Yes')}")
+        if data.get('themes'):
+            print(f"  Themes: {', '.join(data.get('themes', []))}")
+        if data.get('major_conflict'):
+            print(f"  Conflict: {data.get('major_conflict')}")
+
+    elif artifact_type == "submit_character_concept":
+        # Character concept - data may be nested under character_state.concept
+        concept = data.get('character_state', {}).get('concept', data)
+        print(f"  Name: {concept.get('name', 'Unknown')}")
+        print(f"  Archetype: {concept.get('archetype', 'Unknown')}")
+        if concept.get('background'):
+            bg = concept.get('background', '')
+            print(f"  Background: {bg[:100]}..." if len(bg) > 100 else f"  Background: {bg}")
+        if concept.get('appearance'):
+            app = concept.get('appearance', '')
+            print(f"  Appearance: {app[:100]}..." if len(app) > 100 else f"  Appearance: {app}")
+
+    elif artifact_type == "submit_trait_selection":
+        # Trait selection - may be nested under character_state.trait_selection
+        trait_data = data.get('character_state', {}).get('trait_selection', data)
+        traits = trait_data.get('selected_traits', [])
+        print(f"  Traits: {', '.join(traits) if traits else 'None selected'}")
+
+    elif artifact_type == "submit_wildcard_trait":
+        # Wildcard trait - may be nested under character_state.wildcard or at top level
+        wildcard = data.get('character_state', {}).get('wildcard', data)
+        name = wildcard.get('wildcard_name') or wildcard.get('name', 'Unknown')
+        desc = wildcard.get('wildcard_description') or wildcard.get('description', '')
+        print(f"  Wildcard: {name}")
+        if desc:
+            print(f"  Description: {desc[:150]}..." if len(desc) > 150 else f"  Description: {desc}")
+
+    elif artifact_type == "submit_starting_scenario":
+        # Starting scenario / seed - may have nested structure
+        seed = data.get('seed', data)
+        location = data.get('location', {})
+        print(f"  Title: {seed.get('title', 'Unknown')}")
+        print(f"  Type: {seed.get('seed_type', 'Unknown')}")
+        if location.get('name'):
+            print(f"  Location: {location.get('name')}")
+        if seed.get('situation'):
+            sit = seed.get('situation', '')
+            print(f"  Situation: {sit[:150]}..." if len(sit) > 150 else f"  Situation: {sit}")
+        if seed.get('hook'):
+            hook = seed.get('hook', '')
+            print(f"  Hook: {hook[:150]}..." if len(hook) > 150 else f"  Hook: {hook}")
+
+    else:
+        # Generic fallback - show keys
+        for key, value in data.items():
+            if value and not key.startswith('_'):
+                if isinstance(value, str) and len(value) > 100:
+                    print(f"  {key}: {value[:100]}...")
+                else:
+                    print(f"  {key}: {value}")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -60,10 +129,20 @@ def emit_output(payload: Dict[str, Any], as_json: bool) -> None:
             print(f"  {idx}. {choice}")
         print()
 
+    # Display artifact data if present (wizard mode)
+    artifact_type = payload.get("artifact_type")
+    artifact_data = payload.get("artifact_data")
+    if artifact_type and artifact_data:
+        print(f"=== {artifact_type.replace('submit_', '').replace('_', ' ').title()} ===")
+        _print_artifact(artifact_type, artifact_data)
+        print()
+
     # Display phase if in wizard mode
     phase = payload.get("phase")
     if phase:
-        print(f"[Wizard Phase: {phase}]")
+        phase_complete = payload.get("phase_complete")
+        status = " (complete)" if phase_complete else ""
+        print(f"[Wizard Phase: {phase}{status}]")
 
     # Display chunk ID if in narrative mode
     chunk_id = payload.get("chunk_id") or payload.get("current_chunk_id")
@@ -141,12 +220,13 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         state = state_response.json()
 
         if state.get("is_empty"):
-            # Initialize via setup/start endpoint, then call wizard chat
-            # Pass model from slot state (e.g., TEST mode)
+            # Initialize via setup/start endpoint
+            # Use CLI-provided model, slot's configured model, or let backend use default
             setup_url = f"{get_api_url()}/api/story/new/setup/start"
             setup_payload = {"slot": args.slot}
-            if state.get("model"):
-                setup_payload["model"] = state["model"]
+            model_to_use = getattr(args, 'model', None) or state.get("model")
+            if model_to_use:
+                setup_payload["model"] = model_to_use
             setup_response = requests.post(
                 setup_url,
                 json=setup_payload,
@@ -155,9 +235,12 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             if not setup_response.ok:
                 return {"success": False, "error": f"Failed to initialize wizard: {setup_response.text}"}
 
+            # Use the actual response from the backend
+            setup_data = setup_response.json()
             return {
                 "success": True,
-                "message": f"Wizard initialized for slot {args.slot}. Ready to begin story creation.",
+                "message": setup_data.get("welcome_message") or f"Wizard initialized for slot {args.slot}.",
+                "choices": setup_data.get("welcome_choices", []),
                 "phase": "setting",
             }
 
@@ -205,6 +288,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "message": data.get("message"),
                     "choices": data.get("choices", []),
                     "phase": data.get("phase"),
+                    "artifact_type": data.get("artifact_type"),
+                    "artifact_data": data.get("data"),
+                    "phase_complete": data.get("phase_complete"),
                 }
 
         # Narrative mode - call continue directly

@@ -13,6 +13,10 @@ default_model = "nexveridian/gpt-oss-120b"
 # These are the model endpoints available in the system
 available_models = ["gpt-5.1", "TEST", "claude"]
 
+# Default model for newly created/reset slots
+# Use "TEST" for development (mock responses, no API key needed)
+default_slot_model = "TEST"
+
 possible_values = [
     "nousresearch/hermes-4-70b",
     "unsloth-gpt-oss-120b-hi-mlx",

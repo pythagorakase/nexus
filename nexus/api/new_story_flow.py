@@ -147,6 +147,7 @@ def reset_setup(slot_number: int) -> None:
     Raises:
         ValueError: If the slot is locked
     """
+    from nexus.api.db_pool import close_pool
     from nexus.api.save_slots import is_slot_locked
 
     dbname = slot_dbname(slot_number)
@@ -156,6 +157,10 @@ def reset_setup(slot_number: int) -> None:
         raise ValueError(f"Slot {slot_number} is locked. Unlock it first with: nexus unlock --slot {slot_number}")
 
     logger.info("Resetting slot %s by recreating from NEXUS_template", slot_number)
+
+    # Close the connection pool BEFORE dropping the database
+    # Otherwise pg_terminate_backend kills connections but the pool reconnects immediately
+    close_pool(dbname)
 
     # Drop and recreate from template - handles all tables automatically
     create_slot_schema_only(slot_number, source_db="NEXUS_template", force=True)

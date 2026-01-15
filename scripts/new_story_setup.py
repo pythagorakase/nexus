@@ -77,14 +77,29 @@ def create_assets_tables(dbname: Optional[str] = None) -> None:
     LOG.info("Ensured assets tables exist in %s", dbname or os.environ.get("PGDATABASE", "(unspecified)"))
 
 
+def _get_default_slot_model() -> str:
+    """Get default model for new slots from config."""
+    try:
+        from nexus.config.loader import load_settings
+        settings = load_settings()
+        return settings.global_.model.default_slot_model
+    except Exception:
+        # Fallback if config not available
+        return "TEST"
+
+
 def ensure_global_variables(dbname: str) -> None:
-    """Ensure singleton row exists with new_story defaulted to true."""
+    """Ensure singleton row exists with new_story and default model."""
+    default_model = _get_default_slot_model()
     with _connect(dbname) as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM public.global_variables WHERE id = TRUE")
         exists = cur.fetchone() is not None
         if not exists:
-            cur.execute("INSERT INTO public.global_variables (id, new_story) VALUES (TRUE, TRUE)")
-            LOG.info("Inserted default global_variables row in %s", dbname)
+            cur.execute(
+                "INSERT INTO public.global_variables (id, new_story, model) VALUES (TRUE, TRUE, %s)",
+                (default_model,)
+            )
+            LOG.info("Inserted default global_variables row in %s (model=%s)", dbname, default_model)
 
 
 def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: bool = False) -> None:
