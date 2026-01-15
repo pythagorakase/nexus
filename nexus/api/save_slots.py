@@ -209,8 +209,7 @@ def clear_active(dbname: Optional[str] = None) -> None:
     Args:
         dbname: Optional database name (defaults to PGDATABASE env var)
     """
-    # Previously updated assets.save_slots.is_active
-    # Now a no-op - active state tracked externally or not at all
+    # No-op - active state tracked via global_variables.is_active per slot
     logger.debug("clear_active called for %s (no-op)", dbname or "(default slot)")
 
 

@@ -1,5 +1,10 @@
 -- Migration 006: Add model column to assets.save_slots table
 --
+-- OBSOLETE: This migration is superseded by 009_remove_assets_save_slots.sql
+-- which drops assets.save_slots entirely. Model is now stored in global_variables.model.
+-- Kept for historical record only.
+--
+-- Original description:
 -- Adds slot-level model selection support. Each save slot can have its own
 -- preferred model (gpt-5.1, TEST, claude). The model is stored as an ENUM
 -- for type safety, but defaults to NULL (inherit from global settings).

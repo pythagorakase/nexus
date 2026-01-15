@@ -3,7 +3,7 @@
 Utilities for new-story save slots.
 
 Actions:
-  - Create assets tables (`assets.new_story_creator`, `assets.save_slots`)
+  - Create assets tables (`assets.new_story_creator`)
   - Clone the public schema into a save slot schema (save_02 ... save_05) using pg_dump-based rewrite
 """
 
@@ -72,30 +72,8 @@ def create_assets_tables(dbname: Optional[str] = None) -> None:
         updated_at TIMESTAMPTZ DEFAULT NOW()
     );
     """
-    # Create model ENUM type if it doesn't exist
-    ddl_model_type = """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'model_type' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'assets')) THEN
-            CREATE TYPE assets.model_type AS ENUM ('gpt-5.1', 'TEST', 'claude');
-        END IF;
-    END
-    $$;
-    """
-    ddl_slots = """
-    CREATE TABLE IF NOT EXISTS assets.save_slots (
-        slot_number INTEGER PRIMARY KEY,
-        character_name TEXT,
-        last_played TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        is_active BOOLEAN DEFAULT FALSE,
-        model assets.model_type DEFAULT NULL
-    );
-    """
     with _connect(dbname) as conn, conn.cursor() as cur:
         cur.execute(ddl_creator)
-        cur.execute(ddl_model_type)
-        cur.execute(ddl_slots)
     LOG.info("Ensured assets tables exist in %s", dbname or os.environ.get("PGDATABASE", "(unspecified)"))
 
 
