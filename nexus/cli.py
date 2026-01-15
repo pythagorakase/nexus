@@ -35,76 +35,69 @@ def get_api_url() -> str:
     return os.environ.get("NEXUS_API_URL", DEFAULT_API_URL)
 
 
-def _print_artifact(artifact_type: str, data: Dict[str, Any]) -> None:
-    """Pretty-print wizard artifact data."""
-    if artifact_type == "submit_world_document":
-        # Setting artifact
-        print(f"  World: {data.get('world_name', 'Unknown')}")
-        print(f"  Genre: {data.get('genre', 'Unknown')}")
-        if data.get('secondary_genres'):
-            print(f"  Secondary: {', '.join(data.get('secondary_genres', []))}")
-        print(f"  Tone: {data.get('tone', 'Unknown')}")
-        print(f"  Tech Level: {data.get('tech_level', 'Unknown')}")
-        if data.get('magic_exists'):
-            print(f"  Magic: {data.get('magic_description', 'Yes')}")
-        if data.get('themes'):
-            print(f"  Themes: {', '.join(data.get('themes', []))}")
-        if data.get('major_conflict'):
-            print(f"  Conflict: {data.get('major_conflict')}")
+def _truncate_text(text: str, head: int = 10, tail: int = 10) -> str:
+    """Truncate text to head + tail lines with indicator."""
+    lines = text.split('\n')
+    if len(lines) <= head + tail:
+        return text
+    return '\n'.join(lines[:head] + [f'  [...{len(lines) - head - tail} lines omitted...]'] + lines[-tail:])
 
-    elif artifact_type == "submit_character_concept":
-        # Character concept - data may be nested under character_state.concept
-        concept = data.get('character_state', {}).get('concept', data)
-        print(f"  Name: {concept.get('name', 'Unknown')}")
-        print(f"  Archetype: {concept.get('archetype', 'Unknown')}")
-        if concept.get('background'):
-            bg = concept.get('background', '')
-            print(f"  Background: {bg[:100]}..." if len(bg) > 100 else f"  Background: {bg}")
-        if concept.get('appearance'):
-            app = concept.get('appearance', '')
-            print(f"  Appearance: {app[:100]}..." if len(app) > 100 else f"  Appearance: {app}")
 
-    elif artifact_type == "submit_trait_selection":
-        # Trait selection - may be nested under character_state.trait_selection
-        trait_data = data.get('character_state', {}).get('trait_selection', data)
-        traits = trait_data.get('selected_traits', [])
-        print(f"  Traits: {', '.join(traits) if traits else 'None selected'}")
+def _print_value(key: str, value: Any, indent: int = 2, truncate: bool = False) -> None:
+    """Print a single key-value pair with proper formatting."""
+    prefix = ' ' * indent
 
-    elif artifact_type == "submit_wildcard_trait":
-        # Wildcard trait - may be nested under character_state.wildcard or at top level
-        wildcard = data.get('character_state', {}).get('wildcard', data)
-        name = wildcard.get('wildcard_name') or wildcard.get('name', 'Unknown')
-        desc = wildcard.get('wildcard_description') or wildcard.get('description', '')
-        print(f"  Wildcard: {name}")
-        if desc:
-            print(f"  Description: {desc[:150]}..." if len(desc) > 150 else f"  Description: {desc}")
+    if value is None:
+        return
 
-    elif artifact_type == "submit_starting_scenario":
-        # Starting scenario / seed - may have nested structure
-        seed = data.get('seed', data)
-        location = data.get('location', {})
-        print(f"  Title: {seed.get('title', 'Unknown')}")
-        print(f"  Type: {seed.get('seed_type', 'Unknown')}")
-        if location.get('name'):
-            print(f"  Location: {location.get('name')}")
-        if seed.get('situation'):
-            sit = seed.get('situation', '')
-            print(f"  Situation: {sit[:150]}..." if len(sit) > 150 else f"  Situation: {sit}")
-        if seed.get('hook'):
-            hook = seed.get('hook', '')
-            print(f"  Hook: {hook[:150]}..." if len(hook) > 150 else f"  Hook: {hook}")
-
-    else:
-        # Generic fallback - show keys
-        for key, value in data.items():
-            if value and not key.startswith('_'):
-                if isinstance(value, str) and len(value) > 100:
-                    print(f"  {key}: {value[:100]}...")
+    if isinstance(value, dict):
+        print(f"{prefix}{key}:")
+        for k, v in value.items():
+            _print_value(k, v, indent + 2, truncate)
+    elif isinstance(value, list):
+        if not value:
+            return
+        if all(isinstance(item, str) for item in value):
+            # Simple string list - show inline or multiline based on length
+            joined = ', '.join(str(v) for v in value)
+            if len(joined) < 80:
+                print(f"{prefix}{key}: {joined}")
+            else:
+                print(f"{prefix}{key}:")
+                for item in value:
+                    print(f"{prefix}  - {item}")
+        else:
+            # Complex list - show each item
+            print(f"{prefix}{key}:")
+            for i, item in enumerate(value):
+                if isinstance(item, dict):
+                    print(f"{prefix}  [{i}]:")
+                    for k, v in item.items():
+                        _print_value(k, v, indent + 4, truncate)
                 else:
-                    print(f"  {key}: {value}")
+                    print(f"{prefix}  - {item}")
+    elif isinstance(value, str):
+        if '\n' in value or len(value) > 100:
+            # Multi-line or long text
+            text = _truncate_text(value) if truncate else value
+            print(f"{prefix}{key}:")
+            for line in text.split('\n'):
+                print(f"{prefix}  {line}")
+        else:
+            print(f"{prefix}{key}: {value}")
+    else:
+        print(f"{prefix}{key}: {value}")
 
 
-def emit_output(payload: Dict[str, Any], as_json: bool) -> None:
+def _print_artifact(artifact_type: str, data: Dict[str, Any], truncate: bool = False) -> None:
+    """Print full artifact data. Use truncate=True for abbreviated output."""
+    # Print all fields recursively
+    for key, value in data.items():
+        if not key.startswith('_'):
+            _print_value(key, value, indent=2, truncate=truncate)
+
+
+def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
         print(json.dumps(payload, indent=2, sort_keys=True))
@@ -134,7 +127,7 @@ def emit_output(payload: Dict[str, Any], as_json: bool) -> None:
     artifact_data = payload.get("artifact_data")
     if artifact_type and artifact_data:
         print(f"=== {artifact_type.replace('submit_', '').replace('_', ' ').title()} ===")
-        _print_artifact(artifact_type, artifact_data)
+        _print_artifact(artifact_type, artifact_data, truncate=truncate)
         print()
 
     # Display phase if in wizard mode
@@ -539,6 +532,7 @@ Examples:
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
+    parser.add_argument("--truncate", action="store_true", help="Truncate long text fields (head 10 + tail 10 lines)")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -636,7 +630,7 @@ def main() -> int:
         emit_error(result.get("error", "Unknown error"), args.json)
         return 1
 
-    emit_output(result, args.json)
+    emit_output(result, args.json, truncate=args.truncate)
     return 0
 
 
