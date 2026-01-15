@@ -86,7 +86,8 @@ def is_db_locked(dbname: str) -> bool:
                 return False
         finally:
             conn.close()
-    except psycopg2.Error:
+    except psycopg2.Error as e:
+        LOG.debug("Error checking lock status for %s: %s", dbname, e)
         return False
 
 

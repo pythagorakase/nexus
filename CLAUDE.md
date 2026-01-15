@@ -74,6 +74,10 @@ python scripts/new_story_setup.py --slot 5 --mode clone --source save_01 --force
 
 The setup script uses `pg_dump -s` to extract schema from `NEXUS_template`.
 
+**When to use each:**
+- **Migrations** → Schema changes to existing slots with data (non-destructive)
+- **Slot initialization** → Creating fresh slots or resetting test slots (destructive)
+
 #### Refreshing the Template
 
 To update `NEXUS_template` from a known-good slot:
@@ -115,6 +119,21 @@ For detailed key management workflows, see the `update-1password-keys` skill in 
 ## User Directives
 - Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `nexus.toml`, following the established format there, and write your code to pull configurable values from that file.
 - Do not build graceful fallbacks into your code unless the user requests it or explicitly gives permission. While in development, I prefer that errors surface visibly and unmistakebly. If that means a screeching traceback, so be it!
+
+## Testing with NEXUS CLI
+
+When developing features that affect the narrative/wizard flow:
+
+1. **Always test using the NEXUS CLI** before reporting back to the user (unless it's a UI-only feature)
+2. **Roleplay as a human user** - use simple, direct commands:
+   ```bash
+   nexus continue --slot 5 --choice 1
+   nexus load --slot 5
+   ```
+   Not Rube Goldberg constructions with bash/echo/cat/piping.
+3. **Expand the CLI** if it doesn't have syntax for your new feature yet - add the necessary commands to support testing
+
+For CLI command reference, see the `nexus-cli` skill in `.claude/skills/`.
 
 ## Task-Specific Workflows (Claude Code Skills)
 
