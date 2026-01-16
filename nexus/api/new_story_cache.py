@@ -2,9 +2,9 @@
 Helpers for persisting new-story setup state in assets.new_story_creator.
 
 The normalized schema stores wizard state in typed columns rather than JSONB blobs.
-Phase completion is determined by column nullability:
+Phase completion is determined by:
 - Setting complete: setting_genre IS NOT NULL
-- Character complete: wildcard_name IS NOT NULL (all 3 subphases done)
+- Character complete: 4 traits selected in assets.traits (3 + wildcard with rationale)
 - Seed complete: seed_type IS NOT NULL
 """
 
@@ -84,33 +84,37 @@ class SuggestedTrait:
 
 @dataclass
 class CharacterData:
-    """Character phase data (normalized columns)."""
-    # Concept subphase
+    """Character phase data.
+
+    Concept data is in new_story_creator columns.
+    Trait data is now in assets.traits table.
+    """
+    # Concept subphase (from new_story_creator)
     name: Optional[str] = None
     archetype: Optional[str] = None
     background: Optional[str] = None
     appearance: Optional[str] = None
-    # Ephemeral suggestions (from separate table)
+    # Ephemeral suggestions (from assets.traits where is_selected=TRUE)
     suggested_traits: List[SuggestedTrait] = field(default_factory=list)
-    # Trait selection subphase
-    trait1: Optional[str] = None
-    trait2: Optional[str] = None
-    trait3: Optional[str] = None
-    # Wildcard subphase
-    wildcard_name: Optional[str] = None
-    wildcard_description: Optional[str] = None
+    # Trait selection status (derived from assets.traits)
+    selected_trait_count: int = 0
+    # Explicit confirmation flag (from new_story_creator.traits_confirmed)
+    traits_confirmed: bool = False
+    # Wildcard status (derived from assets.traits id=11)
+    wildcard_name: Optional[str] = None  # from traits.name where id=11
+    wildcard_rationale: Optional[str] = None  # from traits.rationale where id=11
 
     def has_concept(self) -> bool:
         """Check if concept subphase is complete."""
         return self.name is not None
 
     def has_traits(self) -> bool:
-        """Check if trait selection subphase is complete."""
-        return self.trait1 is not None
+        """Check if trait selection subphase is complete (user confirmed with 3 selected)."""
+        return self.traits_confirmed
 
     def has_wildcard(self) -> bool:
-        """Check if wildcard subphase is complete."""
-        return self.wildcard_name is not None
+        """Check if wildcard subphase is complete (rationale is set)."""
+        return self.wildcard_rationale is not None
 
     def is_complete(self) -> bool:
         """Check if all character subphases are complete."""
@@ -211,33 +215,30 @@ class WizardCache:
         }
 
     def get_character_dict(self) -> Optional[Dict[str, Any]]:
-        """Reconstruct character_draft dict from normalized columns.
-
-        Note: Includes placeholder values for transient fields (suggested_traits,
-        trait_rationales) that are required by CharacterCreationState but not
-        stored in the normalized schema.
-        """
+        """Reconstruct character_draft dict from normalized columns + assets.traits."""
         if not self.character_complete():
             return None
-        selected = [self.character.trait1, self.character.trait2, self.character.trait3]
+
+        # Build trait data from suggested_traits (which are the selected ones)
+        selected = [st.trait for st in self.character.suggested_traits]
+        rationales = {st.trait: st.rationale for st in self.character.suggested_traits}
+
         return {
             "concept": {
                 "name": self.character.name,
                 "archetype": self.character.archetype,
                 "background": self.character.background,
                 "appearance": self.character.appearance,
-                # Placeholder for transient fields (suggestions cleared after trait selection)
                 "suggested_traits": selected,
-                "trait_rationales": {t: "Selected trait" for t in selected},
+                "trait_rationales": rationales,
             },
             "trait_selection": {
                 "selected_traits": selected,
-                # Placeholder for transient field
-                "trait_rationales": {t: "Selected trait" for t in selected},
+                "trait_rationales": rationales,
             },
             "wildcard": {
                 "wildcard_name": self.character.wildcard_name,
-                "wildcard_description": self.character.wildcard_description,
+                "wildcard_description": self.character.wildcard_rationale,
             },
         }
 
@@ -325,16 +326,32 @@ def read_cache(dbname: Optional[str] = None) -> Optional[WizardCache]:
             if row is None:
                 return None
 
-            # Also load suggested traits from ephemeral table
+            # Load trait data from assets.traits
             cur.execute(
-                "SELECT suggested_trait, rationale FROM assets.suggested_traits ORDER BY ordinal"
+                """
+                SELECT id, name, rationale, is_selected
+                FROM assets.traits
+                ORDER BY id
+                """
             )
-            suggestions = [
-                SuggestedTrait(trait=r["suggested_trait"], rationale=r["rationale"])
-                for r in cur.fetchall()
-            ]
+            traits_rows = cur.fetchall()
 
-            return _row_to_cache(dict(row), suggestions)
+            # Build trait info for CharacterData
+            selected_traits = [
+                SuggestedTrait(trait=r["name"], rationale=r["rationale"] or "")
+                for r in traits_rows
+                if r["is_selected"] and r["id"] <= 10
+            ]
+            selected_count = len(selected_traits)
+            wildcard_row = next((r for r in traits_rows if r["id"] == 11), None)
+
+            return _row_to_cache(
+                dict(row),
+                selected_traits,
+                selected_count,
+                row.get("traits_confirmed", False),
+                wildcard_row,
+            )
 
 
 def read_cache_raw(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -356,7 +373,10 @@ def read_cache_raw(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
 
 def _row_to_cache(
     row: Dict[str, Any],
-    suggestions: Optional[List[SuggestedTrait]] = None,
+    selected_traits: Optional[List[SuggestedTrait]] = None,
+    selected_trait_count: int = 0,
+    traits_confirmed: bool = False,
+    wildcard_row: Optional[Dict[str, Any]] = None,
 ) -> WizardCache:
     """Convert a database row to a WizardCache object."""
     return WizardCache(
@@ -384,12 +404,11 @@ def _row_to_cache(
             archetype=row.get("character_archetype"),
             background=row.get("character_background"),
             appearance=row.get("character_appearance"),
-            suggested_traits=suggestions or [],
-            trait1=row.get("character_trait1"),
-            trait2=row.get("character_trait2"),
-            trait3=row.get("character_trait3"),
-            wildcard_name=row.get("wildcard_name"),
-            wildcard_description=row.get("wildcard_description"),
+            suggested_traits=selected_traits or [],
+            selected_trait_count=selected_trait_count,
+            traits_confirmed=traits_confirmed,
+            wildcard_name=wildcard_row.get("name") if wildcard_row else None,
+            wildcard_rationale=wildcard_row.get("rationale") if wildcard_row else None,
         ),
         seed=SeedData(
             seed_type=row.get("seed_type"),
@@ -515,36 +534,108 @@ def write_character_concept(
     logger.info("Updated character concept in %s", dbname or os.environ.get("PGDATABASE"))
 
 
-def write_character_traits(
-    dbname: Optional[str],
-    *,
-    trait1: str,
-    trait2: str,
-    trait3: str,
-) -> None:
-    """Write character traits (subphase 2) to cache."""
-    # Validate traits before database operation
-    traits = [trait1, trait2, trait3]
-    for trait in traits:
-        if trait not in VALID_TRAITS:
-            raise ValueError(f"Invalid trait: {trait}. Must be one of {sorted(VALID_TRAITS)}")
-    if len(set(traits)) != 3:
-        raise ValueError(f"Traits must be unique. Got: {trait1}, {trait2}, {trait3}")
+def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
+    """Toggle a trait's is_selected state. Returns new state."""
+    if trait_name not in VALID_TRAITS:
+        raise ValueError(f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}")
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                UPDATE assets.new_story_creator SET
-                    character_trait1 = %s,
-                    character_trait2 = %s,
-                    character_trait3 = %s,
-                    updated_at = NOW()
-                WHERE id = TRUE
+                UPDATE assets.traits
+                SET is_selected = NOT is_selected
+                WHERE name = %s
+                RETURNING is_selected
                 """,
-                (trait1, trait2, trait3),
+                (trait_name,),
             )
-    logger.info("Updated character traits in %s", dbname or os.environ.get("PGDATABASE"))
+            result = cur.fetchone()
+            new_state = result[0] if result else False
+    logger.info("Toggled trait %s to %s in %s", trait_name, new_state, dbname)
+    return new_state
+
+
+def confirm_trait_selection(dbname: Optional[str]) -> List[str]:
+    """Confirm trait selection: validate exactly 3 optional traits selected, set confirmation flag.
+
+    Returns list of selected trait names.
+    Raises ValueError if not exactly 3 traits selected.
+    """
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            # Get selected optional traits (id 1-10, not wildcard)
+            cur.execute(
+                "SELECT name FROM assets.traits WHERE is_selected = TRUE AND id <= 10"
+            )
+            selected = [row[0] for row in cur.fetchall()]
+
+            if len(selected) != 3:
+                raise ValueError(
+                    f"Must have exactly 3 traits selected. Currently: {len(selected)}"
+                )
+
+            # Clear rationales for non-selected traits
+            cur.execute(
+                "UPDATE assets.traits SET rationale = NULL WHERE is_selected = FALSE AND id <= 10"
+            )
+
+            # Set confirmation flag in cache
+            cur.execute(
+                "UPDATE assets.new_story_creator SET traits_confirmed = TRUE WHERE id = TRUE"
+            )
+    logger.info("Confirmed trait selection in %s: %s", dbname, selected)
+    return selected
+
+
+@dataclass
+class TraitMenuItem:
+    """A trait for the selection menu."""
+    id: int
+    name: str
+    description: List[str]  # Bullet points
+    is_selected: bool
+    rationale: Optional[str]
+
+
+def get_trait_menu(dbname: Optional[str]) -> List[TraitMenuItem]:
+    """
+    Get all 10 optional traits for the selection menu.
+
+    Returns traits with their definitions, selection state, and rationales.
+    Used for rendering the interactive trait selection UI.
+    """
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, description, is_selected, rationale
+                FROM assets.traits
+                WHERE id <= 10
+                ORDER BY id
+                """
+            )
+            rows = cur.fetchall()
+            return [
+                TraitMenuItem(
+                    id=row["id"],
+                    name=row["name"],
+                    description=row["description"] or [],
+                    is_selected=row["is_selected"],
+                    rationale=row["rationale"],
+                )
+                for row in rows
+            ]
+
+
+def get_selected_trait_count(dbname: Optional[str]) -> int:
+    """Get count of selected optional traits (not including wildcard)."""
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND id <= 10"
+            )
+            return cur.fetchone()[0]
 
 
 def write_character_wildcard(
@@ -553,16 +644,15 @@ def write_character_wildcard(
     wildcard_name: str,
     wildcard_description: str,
 ) -> None:
-    """Write character wildcard (subphase 3) to cache."""
+    """Write character wildcard (subphase 3) to assets.traits row 11."""
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                UPDATE assets.new_story_creator SET
-                    wildcard_name = %s,
-                    wildcard_description = %s,
-                    updated_at = NOW()
-                WHERE id = TRUE
+                UPDATE assets.traits SET
+                    name = %s,
+                    rationale = %s
+                WHERE id = 11
                 """,
                 (wildcard_name, wildcard_description),
             )
@@ -574,7 +664,7 @@ def write_suggested_traits(
     suggestions: List[Dict[str, str]],
 ) -> None:
     """
-    Write LLM-suggested traits to the ephemeral suggestions table.
+    Write LLM-suggested traits to assets.traits (select them and set rationales).
 
     Args:
         dbname: Database name
@@ -585,17 +675,20 @@ def write_suggested_traits(
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            # Clear existing suggestions first
-            cur.execute("DELETE FROM assets.suggested_traits")
+            # First deselect all optional traits (not wildcard)
+            cur.execute(
+                "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
+            )
 
-            # Insert new suggestions
-            for ordinal, suggestion in enumerate(suggestions, start=1):
+            # Select and set rationale for each suggested trait
+            for suggestion in suggestions:
                 cur.execute(
                     """
-                    INSERT INTO assets.suggested_traits (ordinal, suggested_trait, rationale)
-                    VALUES (%s, %s::trait, %s)
+                    UPDATE assets.traits
+                    SET is_selected = TRUE, rationale = %s
+                    WHERE name = %s
                     """,
-                    (ordinal, suggestion["trait"], suggestion["rationale"]),
+                    (suggestion["rationale"], suggestion["trait"]),
                 )
     logger.info(
         "Wrote %d suggested traits to %s",
@@ -605,11 +698,13 @@ def write_suggested_traits(
 
 
 def clear_suggested_traits(dbname: Optional[str] = None) -> None:
-    """Clear the ephemeral suggested traits table."""
+    """Clear trait selections (deselect all optional traits, clear rationales)."""
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM assets.suggested_traits")
-    logger.info("Cleared suggested_traits in %s", dbname or os.environ.get("PGDATABASE"))
+            cur.execute(
+                "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
+            )
+    logger.info("Cleared trait selections in %s", dbname or os.environ.get("PGDATABASE"))
 
 
 def write_seed(
@@ -740,7 +835,13 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
-            cur.execute("DELETE FROM assets.suggested_traits")
+            # Reset traits: deselect optional traits, clear rationales, reset wildcard name
+            cur.execute(
+                "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
+            )
+            cur.execute(
+                "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
+            )
     logger.info("Cleared new_story_creator cache in %s", dbname or os.environ.get("PGDATABASE", "NEXUS"))
 
 
@@ -785,6 +886,7 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
     """Clear character and seed phase columns to revert to character phase."""
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
+            # Clear character concept columns
             cur.execute(
                 """
                 UPDATE assets.new_story_creator SET
@@ -793,11 +895,6 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                     character_archetype = NULL,
                     character_background = NULL,
                     character_appearance = NULL,
-                    character_trait1 = NULL,
-                    character_trait2 = NULL,
-                    character_trait3 = NULL,
-                    wildcard_name = NULL,
-                    wildcard_description = NULL,
                     -- Seed columns (also clear downstream)
                     seed_type = NULL,
                     seed_title = NULL,
@@ -826,8 +923,13 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                 WHERE id = TRUE
                 """
             )
-            # Also clear ephemeral suggestions
-            cur.execute("DELETE FROM assets.suggested_traits")
+            # Reset traits: deselect all (except wildcard), clear rationales, reset wildcard name
+            cur.execute(
+                """
+                UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10;
+                UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11;
+                """
+            )
     logger.info("Cleared character phase in %s", dbname or os.environ.get("PGDATABASE"))
 
 
@@ -859,11 +961,6 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                     character_archetype = NULL,
                     character_background = NULL,
                     character_appearance = NULL,
-                    character_trait1 = NULL,
-                    character_trait2 = NULL,
-                    character_trait3 = NULL,
-                    wildcard_name = NULL,
-                    wildcard_description = NULL,
                     -- Seed columns
                     seed_type = NULL,
                     seed_title = NULL,
@@ -892,8 +989,13 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                 WHERE id = TRUE
                 """
             )
-            # Also clear ephemeral suggestions
-            cur.execute("DELETE FROM assets.suggested_traits")
+            # Reset traits to defaults
+            cur.execute(
+                """
+                UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10;
+                UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11;
+                """
+            )
     logger.info("Cleared setting phase in %s", dbname or os.environ.get("PGDATABASE"))
 
 
@@ -992,28 +1094,33 @@ def write_cache(
                         concept.get("appearance"),
                     ])
 
+                # Traits are written to assets.traits table (using the existing cursor)
                 if traits:
                     selected = traits.get("selected_traits", [])
-                    updates.extend([
-                        "character_trait1 = %s::trait",
-                        "character_trait2 = %s::trait",
-                        "character_trait3 = %s::trait",
-                    ])
-                    params.extend([
-                        selected[0] if len(selected) > 0 else None,
-                        selected[1] if len(selected) > 1 else None,
-                        selected[2] if len(selected) > 2 else None,
-                    ])
+                    rationales = traits.get("trait_rationales", {})
+                    if len(selected) == 3:
+                        # Clear previous selections, then set new ones
+                        cur.execute(
+                            "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
+                        )
+                        for trait_name in selected:
+                            rationale = rationales.get(trait_name, "")
+                            cur.execute(
+                                """
+                                UPDATE assets.traits
+                                SET is_selected = TRUE, rationale = %s
+                                WHERE name = %s
+                                """,
+                                (rationale, trait_name),
+                            )
+                        logger.info("Wrote 3 selected traits to assets.traits in %s", dbname)
 
                 if wildcard:
-                    updates.extend([
-                        "wildcard_name = %s",
-                        "wildcard_description = %s",
-                    ])
-                    params.extend([
-                        wildcard.get("wildcard_name"),
-                        wildcard.get("wildcard_description"),
-                    ])
+                    write_character_wildcard(
+                        dbname,
+                        wildcard_name=wildcard.get("wildcard_name", "wildcard"),
+                        wildcard_description=wildcard.get("wildcard_description", ""),
+                    )
 
             if selected_seed is not None:
                 updates.extend([
