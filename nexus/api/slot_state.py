@@ -10,9 +10,12 @@ from just the slot number. The backend resolves all state internally:
 - Current narrative chunk: MAX(id) from narrative_chunks or incubator
 - Available choices: from last response's choice_object
 
-Phase detection uses normalized columns (no JSON introspection):
+Phase detection uses normalized columns and assets.traits:
 - Setting complete: setting_genre IS NOT NULL
-- Character complete: wildcard_name IS NOT NULL
+- Character subphases:
+  - has_concept: character_name IS NOT NULL
+  - has_traits: traits_confirmed = TRUE (explicit user confirmation)
+  - has_wildcard: traits.rationale WHERE id = 11 IS NOT NULL
 - Seed complete: seed_type IS NOT NULL
 """
 
@@ -103,12 +106,14 @@ def get_slot_state(slot: int) -> SlotState:
             # Only select the columns we need for phase detection
             cur.execute(
                 """
-                SELECT thread_id,
-                       setting_genre,
-                       character_name, character_trait1, wildcard_name,
-                       seed_type
-                FROM assets.new_story_creator
-                WHERE id = TRUE
+                SELECT nsc.thread_id,
+                       nsc.setting_genre,
+                       nsc.character_name,
+                       nsc.seed_type,
+                       nsc.traits_confirmed,
+                       (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
+                FROM assets.new_story_creator nsc
+                WHERE nsc.id = TRUE
                 """
             )
             wizard_cache = cur.fetchone()
@@ -181,21 +186,21 @@ def get_slot_state(slot: int) -> SlotState:
 
 def _get_wizard_state_from_row(row: dict) -> WizardState:
     """
-    Get wizard state from a new_story_creator row.
+    Get wizard state from a new_story_creator row with trait info.
 
-    Phase is inferred from normalized column nullability:
+    Phase is inferred from:
     - setting_genre IS NULL → "setting" phase
-    - wildcard_name IS NULL → "character" phase (with subphase tracking)
+    - traits_confirmed = FALSE or wildcard_rationale IS NULL → "character" phase
     - seed_type IS NULL → "seed" phase
-    - All non-null → "ready" for bootstrap
+    - All complete → "ready" for bootstrap
     """
-    # Direct column checks - no JSON parsing needed!
+    # Direct column checks
     setting_complete = row.get("setting_genre") is not None
 
-    # Character subphase tracking
+    # Character subphase tracking (now from assets.traits and traits_confirmed)
     has_concept = row.get("character_name") is not None
-    has_traits = row.get("character_trait1") is not None
-    has_wildcard = row.get("wildcard_name") is not None
+    has_traits = row.get("traits_confirmed", False)  # Explicit user confirmation
+    has_wildcard = row.get("wildcard_rationale") is not None
     character_complete = has_concept and has_traits and has_wildcard
 
     seed_complete = row.get("seed_type") is not None
@@ -221,16 +226,18 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
 
 def _get_wizard_state(cur) -> WizardState:
     """
-    Get wizard state from new_story_creator cache.
+    Get wizard state from new_story_creator cache and assets.traits.
     """
     cur.execute(
         """
-        SELECT thread_id,
-               setting_genre,
-               character_name, character_trait1, wildcard_name,
-               seed_type
-        FROM assets.new_story_creator
-        WHERE id = TRUE
+        SELECT nsc.thread_id,
+               nsc.setting_genre,
+               nsc.character_name,
+               nsc.seed_type,
+               nsc.traits_confirmed,
+               (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
+        FROM assets.new_story_creator nsc
+        WHERE nsc.id = TRUE
         """
     )
     row = cur.fetchone()

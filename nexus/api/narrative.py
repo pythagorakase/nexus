@@ -1199,6 +1199,15 @@ async def get_slots_status_endpoint():
 # ============================================================================
 
 
+class TraitMenuItemResponse(BaseModel):
+    """A trait in the selection menu."""
+    id: int
+    name: str
+    description: List[str]
+    is_selected: bool
+    rationale: Optional[str] = None
+
+
 class SlotStateResponse(BaseModel):
     """Response model for slot state endpoint."""
 
@@ -1206,12 +1215,16 @@ class SlotStateResponse(BaseModel):
     is_empty: bool
     is_wizard_mode: bool
     phase: Optional[str] = None  # Wizard phase if in wizard mode
+    subphase: Optional[str] = None  # Character subphase (concept/traits/wildcard)
     thread_id: Optional[str] = None  # Wizard thread ID
     current_chunk_id: Optional[int] = None  # Narrative chunk ID
     has_pending: bool = False  # True if incubator has pending content
     storyteller_text: Optional[str] = None
     choices: List[str] = []
     model: Optional[str] = None
+    # Trait selection menu (character phase, traits subphase)
+    trait_menu: Optional[List[TraitMenuItemResponse]] = None
+    can_confirm: bool = False  # True when exactly 3 traits selected
 
 
 @app.get("/api/slot/{slot}/state", response_model=SlotStateResponse)
@@ -1242,7 +1255,7 @@ async def get_slot_state_endpoint(slot: int):
             )
 
         if state.is_wizard_mode and state.wizard_state:
-            return SlotStateResponse(
+            response = SlotStateResponse(
                 slot=slot,
                 is_empty=False,
                 is_wizard_mode=True,
@@ -1250,6 +1263,36 @@ async def get_slot_state_endpoint(slot: int):
                 thread_id=state.wizard_state.thread_id,
                 model=state.model,
             )
+
+            # Add trait menu if in character phase, traits subphase
+            ws = state.wizard_state
+            if ws.phase == "character" and ws.has_concept and not ws.has_traits:
+                from nexus.api.new_story_cache import get_trait_menu, get_selected_trait_count
+                from nexus.api.slot_utils import slot_dbname
+                dbname = slot_dbname(slot)
+                trait_menu = get_trait_menu(dbname)
+                selected_count = get_selected_trait_count(dbname)
+                response.subphase = "traits"
+                response.trait_menu = [
+                    TraitMenuItemResponse(
+                        id=t.id,
+                        name=t.name,
+                        description=t.description,
+                        is_selected=t.is_selected,
+                        rationale=t.rationale,
+                    )
+                    for t in trait_menu
+                ]
+                response.can_confirm = selected_count == 3
+            elif ws.phase == "character":
+                if not ws.has_concept:
+                    response.subphase = "concept"
+                elif ws.has_traits and not ws.has_wildcard:
+                    response.subphase = "wildcard"
+                elif ws.has_wildcard:
+                    response.subphase = "complete"
+
+            return response
 
         if state.narrative_state:
             return SlotStateResponse(
@@ -1372,34 +1415,30 @@ async def slot_continue_endpoint(slot: int, request: SlotContinueRequest):
                     # Build character_state from normalized columns
                     char_state = {}
                     if cache.character.has_concept():
-                        # Build concept dict with suggestions from ephemeral table
+                        # Build concept dict with trait data from assets.traits
+                        selected = [st.trait for st in cache.character.suggested_traits]
+                        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
                         concept_dict = {
                             "name": cache.character.name,
                             "archetype": cache.character.archetype,
                             "background": cache.character.background,
                             "appearance": cache.character.appearance,
+                            # Always include traits (may be empty during early subphases)
+                            "suggested_traits": selected,
+                            "trait_rationales": rationales,
                         }
-                        # Add suggestions if available (from suggested_traits table)
-                        if cache.character.suggested_traits:
-                            concept_dict["suggested_traits"] = [
-                                s.trait for s in cache.character.suggested_traits
-                            ]
-                            concept_dict["trait_rationales"] = {
-                                s.trait: s.rationale for s in cache.character.suggested_traits
-                            }
                         char_state["concept"] = concept_dict
                     if cache.character.has_traits():
+                        selected = [st.trait for st in cache.character.suggested_traits]
+                        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
                         char_state["trait_selection"] = {
-                            "selected_traits": [
-                                cache.character.trait1,
-                                cache.character.trait2,
-                                cache.character.trait3,
-                            ]
+                            "selected_traits": selected,
+                            "trait_rationales": rationales,
                         }
                     if cache.character.has_wildcard():
                         char_state["wildcard"] = {
                             "wildcard_name": cache.character.wildcard_name,
-                            "wildcard_description": cache.character.wildcard_description,
+                            "wildcard_description": cache.character.wildcard_rationale,
                         }
                     if char_state:
                         context_data = {"character_state": char_state}
@@ -1802,6 +1841,9 @@ class ChatRequest(BaseModel):
     model: Literal["gpt-5.1", "TEST", "claude"] = "gpt-5.1"  # Model selection
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
+    # Trait selection operations (character phase, traits subphase)
+    # 0 = confirm selection, 1-10 = toggle trait by ID
+    trait_choice: Optional[int] = None
 
 
 def get_base_url_for_model(model: str) -> Optional[str]:
@@ -1882,42 +1924,97 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 # Build character_state from normalized columns
                 char_state = {}
                 if cache.character.has_concept():
-                    # Build concept dict with suggestions from ephemeral table
+                    # Build concept dict with trait data from assets.traits
+                    # (traits are selected into assets.traits, not a separate ephemeral table)
+                    selected = [st.trait for st in cache.character.suggested_traits]
+                    rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
                     concept_dict = {
                         "name": cache.character.name,
                         "archetype": cache.character.archetype,
                         "background": cache.character.background,
                         "appearance": cache.character.appearance,
+                        # Always include traits (may be empty during early subphases)
+                        "suggested_traits": selected,
+                        "trait_rationales": rationales,
                     }
-                    # Add suggestions if available, or placeholders if cleared
-                    # (suggestions are ephemeral - cleared after trait selection)
-                    if cache.character.suggested_traits:
-                        concept_dict["suggested_traits"] = [
-                            s.trait for s in cache.character.suggested_traits
-                        ]
-                        concept_dict["trait_rationales"] = {
-                            s.trait: s.rationale for s in cache.character.suggested_traits
-                        }
-                    elif cache.character.has_traits():
-                        # Suggestions cleared after trait selection - use selected traits as placeholders
-                        selected = [cache.character.trait1, cache.character.trait2, cache.character.trait3]
-                        concept_dict["suggested_traits"] = selected
-                        concept_dict["trait_rationales"] = {t: "Selected trait" for t in selected}
                     char_state["concept"] = concept_dict
                 if cache.character.has_traits():
-                    selected = [cache.character.trait1, cache.character.trait2, cache.character.trait3]
+                    selected = [st.trait for st in cache.character.suggested_traits]
+                    rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
                     char_state["trait_selection"] = {
                         "selected_traits": selected,
-                        # Provide placeholder rationales for validation
-                        "trait_rationales": {t: "Selected trait" for t in selected},
+                        "trait_rationales": rationales,
                     }
                 if cache.character.has_wildcard():
                     char_state["wildcard"] = {
                         "wildcard_name": cache.character.wildcard_name,
-                        "wildcard_description": cache.character.wildcard_description,
+                        "wildcard_description": cache.character.wildcard_rationale,
                     }
                 if char_state:
                     request.context_data = {"character_state": char_state}
+
+        # Handle trait toggle/confirm operations (no LLM call needed)
+        if request.trait_choice is not None and request.current_phase == "character":
+            from nexus.api.new_story_cache import (
+                get_trait_menu,
+                get_selected_trait_count,
+                toggle_trait,
+                confirm_trait_selection,
+            )
+            from nexus.api.slot_utils import slot_dbname
+
+            dbname = slot_dbname(request.slot)
+            cache = read_cache(dbname)
+
+            # Only handle if we're in traits subphase (has concept, not has_traits)
+            if cache and cache.character.has_concept() and not cache.character.has_traits():
+                if request.trait_choice == 0:
+                    # Confirm selection - validate and advance to wildcard
+                    selected_count = get_selected_trait_count(dbname)
+                    if selected_count != 3:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Must select exactly 3 traits. Currently: {selected_count}"
+                        )
+                    confirm_trait_selection(dbname)
+                    # Return success - CLI will request next phase
+                    return {
+                        "message": "Traits confirmed. Moving to wildcard definition.",
+                        "phase": "character",
+                        "subphase": "wildcard",
+                        "subphase_complete": True,
+                    }
+                elif 1 <= request.trait_choice <= 10:
+                    # Toggle trait by ID
+                    trait_menu = get_trait_menu(dbname)
+                    trait = trait_menu[request.trait_choice - 1]  # 0-indexed
+                    toggle_trait(dbname, trait.name)
+
+                    # Get updated menu
+                    trait_menu = get_trait_menu(dbname)
+                    selected_count = get_selected_trait_count(dbname)
+
+                    return {
+                        "message": "",  # No message needed for toggle
+                        "phase": "character",
+                        "subphase": "traits",
+                        "trait_menu": [
+                            {
+                                "id": t.id,
+                                "name": t.name,
+                                "description": t.description,
+                                "is_selected": t.is_selected,
+                                "rationale": t.rationale,
+                            }
+                            for t in trait_menu
+                        ],
+                        "can_confirm": selected_count == 3,
+                    }
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid trait_choice: {request.trait_choice}. Must be 0-10."
+                    )
 
         # Load settings for new story workflow
         settings_model = get_new_story_model()
@@ -2313,7 +2410,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
             # subphase_complete: True for character sub-phases (concept/traits/wildcard)
             #                    Frontend uses this to update character_state and
             #                    trigger next sub-phase tool availability
-            return {
+            result = {
                 "message": "Generating artifact...",
                 "phase_complete": phase_complete,
                 "subphase_complete": is_subphase_tool,
@@ -2321,6 +2418,28 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "artifact_type": function_name,
                 "data": response_data,
             }
+
+            # Add trait menu after concept submission (entering traits subphase)
+            if function_name == "submit_character_concept":
+                from nexus.api.new_story_cache import get_trait_menu, get_selected_trait_count
+                from nexus.api.slot_utils import slot_dbname
+                dbname = slot_dbname(request.slot)
+                trait_menu = get_trait_menu(dbname)
+                selected_count = get_selected_trait_count(dbname)
+                result["subphase"] = "traits"
+                result["trait_menu"] = [
+                    {
+                        "id": t.id,
+                        "name": t.name,
+                        "description": t.description,
+                        "is_selected": t.is_selected,
+                        "rationale": t.rationale,
+                    }
+                    for t in trait_menu
+                ]
+                result["can_confirm"] = selected_count == 3
+
+            return result
 
         # Handle structured conversational responses via helper tool
         def prepare_choices_for_ui(raw_choices: List[str]) -> List[str]:

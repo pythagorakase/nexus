@@ -45,6 +45,9 @@ dev = [
     "mypy>=1.15.0,<2.0.0"
 ]
 
+[project.scripts]
+nexus = "nexus.cli:main"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
