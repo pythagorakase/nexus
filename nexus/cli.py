@@ -35,6 +35,16 @@ def get_api_url() -> str:
     return os.environ.get("NEXUS_API_URL", DEFAULT_API_URL)
 
 
+def _get_next_phase(current_phase: str) -> Optional[str]:
+    """Get the next wizard phase after the current one."""
+    phase_order = ["setting", "character", "seed", "ready"]
+    try:
+        idx = phase_order.index(current_phase)
+        return phase_order[idx + 1] if idx + 1 < len(phase_order) else None
+    except ValueError:
+        return None
+
+
 def _truncate_text(text: str, head: int = 10, tail: int = 10) -> str:
     """Truncate text to head + tail lines with indicator."""
     lines = text.split('\n')
@@ -114,9 +124,32 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print(message)
         print()
 
-    # Display choices if available
+    # Get display elements
+    trait_menu = payload.get("trait_menu")
     choices = payload.get("choices", [])
-    if choices:
+    next_phase_intro = payload.get("next_phase_intro")
+
+    # Display choices now if no next_phase_intro (otherwise display after intro)
+    if trait_menu:
+        # Render interactive trait selection menu
+        can_confirm = payload.get("can_confirm", False)
+        print("**Select Three Traits**")
+        print()
+        if can_confirm:
+            print("0.  Confirm Current Selection")
+            print()
+        for trait in trait_menu:
+            checkbox = "[X]" if trait["is_selected"] else "[ ]"
+            print(f"{trait['id']:2d}. {checkbox} {trait['name'].title()}")
+            # Print definition bullets
+            for bullet in trait.get("description", []):
+                print(f"      • {bullet}")
+            # Print rationale if selected and present
+            if trait["is_selected"] and trait.get("rationale"):
+                print(f"      → {trait['rationale']}")
+            print()
+    elif choices and not next_phase_intro:
+        # Display choices here only if no phase intro (otherwise after intro)
         print("Choices:")
         for idx, choice in enumerate(choices, start=1):
             print(f"  {idx}. {choice}")
@@ -130,12 +163,23 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         _print_artifact(artifact_type, artifact_data, truncate=truncate)
         print()
 
+    # Display next phase intro if present (after artifact)
+    if next_phase_intro:
+        print("---")
+        print()
+        print(next_phase_intro)
+        print()
+        # Display choices after the intro message (where they belong contextually)
+        if choices:
+            print("Choices:")
+            for idx, choice in enumerate(choices, start=1):
+                print(f"  {idx}. {choice}")
+            print()
+
     # Display phase if in wizard mode
     phase = payload.get("phase")
     if phase:
-        phase_complete = payload.get("phase_complete")
-        status = " (complete)" if phase_complete else ""
-        print(f"[Wizard Phase: {phase}{status}]")
+        print(f"[Wizard Phase: {phase}]")
 
     # Display chunk ID if in narrative mode
     chunk_id = payload.get("chunk_id") or payload.get("current_chunk_id")
@@ -173,12 +217,18 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
         if data.get("is_wizard_mode"):
-            return {
+            result = {
                 "success": True,
                 "message": f"Slot {args.slot} is in wizard mode.",
                 "phase": data.get("phase"),
                 "choices": [],
             }
+            # Include trait menu if in traits subphase
+            if data.get("trait_menu"):
+                result["trait_menu"] = data.get("trait_menu")
+                result["can_confirm"] = data.get("can_confirm", False)
+                result["subphase"] = data.get("subphase")
+            return result
 
         # Narrative mode
         return {
@@ -263,9 +313,52 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 url = f"{get_api_url()}/api/story/new/chat"
                 # Use CLI override or slot's configured model (e.g., TEST mode)
                 model_to_use = args.model or state.get("model")
+
+                # Check if we're in trait selection mode
+                trait_menu = state.get("trait_menu")
+                if trait_menu and args.choice is not None:
+                    # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
+                    if args.choice == 0:
+                        if not state.get("can_confirm"):
+                            return {"success": False, "error": "Cannot confirm: must select exactly 3 traits"}
+                    elif not (1 <= args.choice <= 10):
+                        return {"success": False, "error": f"Choice {args.choice} out of range (0-10 for trait selection)"}
+
+                    payload = {
+                        "slot": args.slot,
+                        "message": "",
+                        "trait_choice": args.choice,
+                        "current_phase": "character",  # Required for trait toggle handler
+                    }
+                    if model_to_use:
+                        payload["model"] = model_to_use
+
+                    response = requests.post(url, json=payload, timeout=120)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    return {
+                        "success": True,
+                        "message": data.get("message", ""),
+                        "phase": data.get("phase"),
+                        "subphase": data.get("subphase"),
+                        "trait_menu": data.get("trait_menu"),
+                        "can_confirm": data.get("can_confirm", False),
+                        "subphase_complete": data.get("subphase_complete", False),
+                    }
+
+                # Resolve --choice to user text if provided (non-trait mode)
+                user_text = args.user_text or ""
+                if args.choice is not None and state.get("choices"):
+                    choices = state.get("choices", [])
+                    if 1 <= args.choice <= len(choices):
+                        user_text = choices[args.choice - 1]
+                    else:
+                        return {"success": False, "error": f"Choice {args.choice} out of range (1-{len(choices)})"}
+
                 payload = {
                     "slot": args.slot,
-                    "message": args.user_text or "",
+                    "message": user_text,
                     "accept_fate": args.accept_fate,
                     # thread_id and current_phase resolved by backend
                 }
@@ -276,7 +369,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 response.raise_for_status()
                 data = response.json()
 
-                return {
+                result = {
                     "success": True,
                     "message": data.get("message"),
                     "choices": data.get("choices", []),
@@ -284,7 +377,36 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "artifact_type": data.get("artifact_type"),
                     "artifact_data": data.get("data"),
                     "phase_complete": data.get("phase_complete"),
+                    # Trait menu fields (character subphase)
+                    "trait_menu": data.get("trait_menu"),
+                    "can_confirm": data.get("can_confirm", False),
+                    "subphase": data.get("subphase"),
                 }
+
+                # Auto-transition: if phase completed, trigger next phase intro
+                if data.get("phase_complete"):
+                    current_phase = data.get("phase")
+                    next_phase = _get_next_phase(current_phase)
+
+                    if next_phase and next_phase != "ready":
+                        # Send transition message to get next phase intro
+                        transition_payload = {
+                            "slot": args.slot,
+                            "message": f"[SYSTEM] Phase {current_phase} complete. Proceeding to {next_phase}. Please introduce the next phase.",
+                            "current_phase": next_phase,
+                        }
+                        if model_to_use:
+                            transition_payload["model"] = model_to_use
+
+                        intro_response = requests.post(url, json=transition_payload, timeout=120)
+                        if intro_response.ok:
+                            intro_data = intro_response.json()
+                            # Append intro to result (artifact stays, intro message added)
+                            result["next_phase_intro"] = intro_data.get("message")
+                            result["choices"] = intro_data.get("choices", [])
+                            result["phase"] = intro_data.get("phase") or next_phase
+
+                return result
 
         # Narrative mode - call continue directly
         # (Also reached after wizard transition above)

@@ -386,28 +386,30 @@ class CharacterConcept(BaseModel):
     )
 
     # Pre-selected trait suggestions for phase 2.2
+    # Optional with defaults for intermediate state; validated when submitting via LLM
     suggested_traits: List[TraitName] = Field(
-        ...,
-        min_length=3,
+        default_factory=list,
         max_length=3,
         description="3 trait names that would create interesting story tensions for this character",
     )
     trait_rationales: TraitRationales = Field(
-        ...,
+        default_factory=TraitRationales,
         description="Rationales for each suggested trait explaining why it fits this character",
     )
 
     @field_validator("suggested_traits")
     @classmethod
     def validate_unique_traits(cls, v: List[str]) -> List[str]:
-        """Ensure exactly 3 unique traits."""
-        if len(set(v)) != 3:
-            raise ValueError("Must suggest exactly 3 unique traits")
+        """Ensure unique traits (validation only applies when traits are present)."""
+        if v and len(set(v)) != len(v):
+            raise ValueError("Suggested traits must be unique")
         return v
 
     @model_validator(mode="after")
     def validate_rationales_match_traits(self) -> "CharacterConcept":
-        """Ensure rationales exist for all suggested traits."""
+        """Ensure rationales exist for all suggested traits (when present)."""
+        if not self.suggested_traits:
+            return self  # Skip validation during early subphases
         rationales_dict = self.trait_rationales.to_dict()
         for trait in self.suggested_traits:
             if trait not in rationales_dict:
