@@ -28,6 +28,13 @@ try:
 except ImportError:
     USE_POOL = False
 
+# Import migration runner for post-creation migration
+try:
+    from scripts.migrate import migrate_database
+    HAS_MIGRATE = True
+except ImportError:
+    HAS_MIGRATE = False
+
 
 def _connect(dbname: Optional[str] = None):
     """
@@ -186,7 +193,19 @@ def create_slot_schema_only(slot: int, source_db: Optional[str] = None, force: b
 
     # Ensure global_variables row exists
     ensure_global_variables(target_db)
-    LOG.info("Slot %s ready (schema-only)", target_db)
+
+    # Run migrations to populate seed data (e.g., assets.traits)
+    if HAS_MIGRATE:
+        LOG.info("Running migrations on %s...", target_db)
+        applied, failed = migrate_database(target_db, skip_locked=False)
+        if failed:
+            LOG.warning("Some migrations failed on %s", target_db)
+        else:
+            LOG.info("Applied %d migrations to %s", applied, target_db)
+    else:
+        LOG.warning("Migration runner not available - run 'python scripts/migrate.py --slot %d' manually", slot)
+
+    LOG.info("Slot %s ready", target_db)
 
 
 def clone_slot_with_data(slot: int, source_db: str, force: bool = False) -> None:

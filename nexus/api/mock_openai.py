@@ -78,10 +78,9 @@ def query_wizard_cache() -> Dict[str, Any]:
                     setting_tech_level, setting_magic_exists, setting_magic_description,
                     setting_geographic_scope, setting_political_structure, setting_major_conflict,
                     setting_cultural_notes, setting_language_notes, setting_time_period,
-                    -- Character
+                    -- Character (traits now in assets.traits table)
                     character_name, character_archetype, character_background,
-                    character_appearance, character_trait1, character_trait2,
-                    character_trait3, wildcard_name, wildcard_description,
+                    character_appearance,
                     -- Seed
                     seed_type, seed_title, seed_situation, seed_hook,
                     seed_immediate_goal, seed_stakes, seed_tension_source,
@@ -96,6 +95,18 @@ def query_wizard_cache() -> Dict[str, Any]:
                 WHERE id = TRUE
             """)
             return cur.fetchone() or {}
+
+
+def query_traits() -> List[Dict[str, Any]]:
+    """Query all traits from mock.assets.traits."""
+    with get_mock_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, name, description, is_selected, rationale
+                FROM assets.traits
+                ORDER BY id
+            """)
+            return list(cur.fetchall())
 
 
 def query_bootstrap_narrative() -> Dict[str, Any]:
@@ -143,7 +154,29 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
         }
 
     elif phase == "character":
+        # Query traits from assets.traits table
+        traits = query_traits()
+        selected_traits = [t for t in traits if t.get("is_selected") and t.get("id") <= 10]
+        wildcard = next((t for t in traits if t.get("id") == 11), None)
+
+        # Build trait names and rationales from selected traits
+        selected_names = [t.get("name") for t in selected_traits]
+        trait_rationales = {t.get("name"): t.get("rationale") for t in selected_traits if t.get("rationale")}
+
         if subphase == "concept":
+            # For concept submission, suggest 3 traits if none are selected yet
+            if not selected_names:
+                # Default suggestions based on typical character archetypes
+                suggested_names = ["status", "reputation", "obligations"]
+                suggested_rationales = {
+                    "status": "Given the character's background, their status in the world creates tension.",
+                    "reputation": "The character's reputation precedes them, opening some doors while slamming others.",
+                    "obligations": "Obligations pull the character into situations against their better judgment.",
+                }
+            else:
+                suggested_names = selected_names
+                suggested_rationales = trait_rationales
+
             return {
                 "phase_complete": False,
                 "artifact_type": "submit_character_concept",
@@ -152,16 +185,8 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                     "archetype": cache.get("character_archetype"),
                     "background": cache.get("character_background"),
                     "appearance": cache.get("character_appearance"),
-                    "suggested_traits": [
-                        cache.get("character_trait1"),
-                        cache.get("character_trait2"),
-                        cache.get("character_trait3"),
-                    ],
-                    "trait_rationales": {
-                        cache.get("character_trait1"): "Selected trait",
-                        cache.get("character_trait2"): "Selected trait",
-                        cache.get("character_trait3"): "Selected trait",
-                    },
+                    "suggested_traits": suggested_names,
+                    "trait_rationales": suggested_rationales,
                 },
                 "message": "[TEST MODE] Character concept loaded from mock database.",
             }
@@ -170,16 +195,8 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                 "phase_complete": False,
                 "artifact_type": "submit_trait_selection",
                 "data": {
-                    "selected_traits": [
-                        cache.get("character_trait1"),
-                        cache.get("character_trait2"),
-                        cache.get("character_trait3"),
-                    ],
-                    "trait_rationales": {
-                        cache.get("character_trait1"): "Selected trait",
-                        cache.get("character_trait2"): "Selected trait",
-                        cache.get("character_trait3"): "Selected trait",
-                    },
+                    "selected_traits": selected_names,
+                    "trait_rationales": trait_rationales,
                 },
                 "message": "[TEST MODE] Traits loaded from mock database.",
             }
@@ -196,15 +213,11 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                             "appearance": cache.get("character_appearance"),
                         },
                         "trait_selection": {
-                            "selected_traits": [
-                                cache.get("character_trait1"),
-                                cache.get("character_trait2"),
-                                cache.get("character_trait3"),
-                            ],
+                            "selected_traits": selected_names,
                         },
                         "wildcard": {
-                            "wildcard_name": cache.get("wildcard_name"),
-                            "wildcard_description": cache.get("wildcard_description"),
+                            "wildcard_name": wildcard.get("name") if wildcard else "wildcard",
+                            "wildcard_description": wildcard.get("rationale") if wildcard else None,
                         },
                     },
                 },
@@ -297,12 +310,6 @@ def get_latest_user_message(messages: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
-def contains_any(text: str, keywords: List[str]) -> bool:
-    """Check if text contains any of the keywords (case-insensitive)."""
-    text_lower = text.lower()
-    return any(kw.lower() in text_lower for kw in keywords)
-
-
 def is_phase_transition(content: str) -> bool:
     """Check if message is a phase transition system message."""
     return "[SYSTEM] Phase" in content and "Proceeding to" in content
@@ -390,50 +397,35 @@ def build_artifact_response(artifact_type: str, data: Dict[str, Any]) -> Dict[st
 
 def build_archetype_intro() -> Dict[str, Any]:
     """Build character phase introduction with archetype choices."""
-    message = """[TEST MODE] Welcome to the character phase! I'll help you create a protagonist for your story.
-
-Based on the world of Neon Palimpsest, here are three archetypal paths your character could follow:
-
-**The Amnesiac Courier** - Someone who wakes with no memory but dangerous skills, hunted by forces they don't remember crossing.
-
-**The Double Agent** - A figure walking the line between corporate authority and underground resistance, trusted by neither.
-
-**The Memory Architect** - A technician who can edit, erase, or fabricate identities, now running from their own creations.
-
-Which of these speaks to you?"""
-    return build_respond_with_choices(message, ARCHETYPE_CHOICES)
+    message = "[TEST MODE] Welcome to character creation. Based on the world of Neon Palimpsest, which archetypal path speaks to you?"
+    choices = [
+        "The Amnesiac Courier - Someone who wakes with no memory but dangerous skills, hunted by forces they don't remember crossing.",
+        "The Double Agent - A figure walking the line between corporate authority and underground resistance, trusted by neither.",
+        "The Memory Architect - A technician who can edit, erase, or fabricate identities, now running from their own creations.",
+    ]
+    return build_respond_with_choices(message, choices)
 
 
 def build_wildcard_intro() -> Dict[str, Any]:
     """Build wildcard selection introduction."""
-    message = """[TEST MODE] Your character's core is taking shape. Now let's add something unique—a wildcard element that sets them apart.
-
-Based on Kade's background as a data-smuggler with a burned-out neural mesh, here are three signature elements that could define their edge:
-
-**Ghostprint Key** - A pre-Council identity root hidden under their skin that can briefly assume anyone's credentials, but draws dangerous attention with each use.
-
-**Neural Echo** - Fragmented memories of their erased past that surface unpredictably, sometimes revealing crucial information, sometimes triggering buried protocols.
-
-**Dead Man's Archive** - A cached data-store of secrets they gathered before their memory was wiped, accessible only through specific emotional triggers.
-
-Which resonates with your vision for this character?"""
-    return build_respond_with_choices(message, WILDCARD_CHOICES)
+    message = "[TEST MODE] Your character's core is taking shape. Now add a wildcard element that sets them apart. Which resonates with your vision?"
+    choices = [
+        "Ghostprint Key - A pre-Council identity root hidden under their skin that can briefly assume anyone's credentials, but draws dangerous attention with each use.",
+        "Neural Echo - Fragmented memories of their erased past that surface unpredictably, sometimes revealing crucial information, sometimes triggering buried protocols.",
+        "Dead Man's Archive - A cached data-store of secrets they gathered before their memory was wiped, accessible only through specific emotional triggers.",
+    ]
+    return build_respond_with_choices(message, choices)
 
 
 def build_seed_intro() -> Dict[str, Any]:
     """Build seed phase introduction with scenario choices."""
-    message = """[TEST MODE] Your character is ready. Now let's craft the opening scene that will launch their story.
-
-Given Kade's nature as an amnesiac caught between Syndicates and Ghosts, here are three compelling ways to begin:
-
-**The Job You Already Took** - Kade wakes on a rattling tram in the Roots, a courier's satchel handcuffed to their wrist and no memory of accepting the job. The city's ledgers insist the delivery is already in breach.
-
-**The Message That Found You** - A ghost-frequency ping activates in Kade's burned neural mesh—coordinates and a single word: "Remember." Someone from their erased past wants to make contact.
-
-**The Face You Used to Wear** - Kade spots their own face on a wanted feed, but the name and crimes belong to someone they don't remember being. The bounty is high enough to turn every stranger into a threat.
-
-Which opening draws you in?"""
-    return build_respond_with_choices(message, SEED_CHOICES)
+    message = "[TEST MODE] Your character is ready. Now let's craft the opening scene. Which draws you in?"
+    choices = [
+        "The Job You Already Took - Kade wakes on a rattling tram, a courier's satchel handcuffed to their wrist and no memory of accepting the job. The city's ledgers insist the delivery is already in breach.",
+        "The Message That Found You - A ghost-frequency ping activates in Kade's burned neural mesh—coordinates and a single word: 'Remember.' Someone from their erased past wants to make contact.",
+        "The Face You Used to Wear - Kade spots their own face on a wanted feed, but the name and crimes belong to someone they don't remember being. The bounty is high enough to turn every stranger into a threat.",
+    ]
+    return build_respond_with_choices(message, choices)
 
 
 @app.get("/health")
@@ -479,24 +471,15 @@ async def chat_completions(request: ChatCompletionRequest):
 
         # Subphase: Concept (archetype selection)
         if subphase == "concept":
-            if forced_tool == "submit_character_concept":
-                # Accept Fate pressed - return concept artifact immediately
-                cached = get_cached_phase_response("character", "concept")
-                message = build_artifact_response("submit_character_concept", cached.get("data", {}))
-                logger.info("[MOCK] Returning character concept artifact (Accept Fate)")
-            elif is_phase_transition(user_msg):
+            if is_phase_transition(user_msg):
                 # Phase intro - show archetype choices
                 message = build_archetype_intro()
                 logger.info("[MOCK] Returning archetype intro")
-            elif contains_any(user_msg, ARCHETYPE_CHOICES):
-                # User selected archetype - return concept artifact
+            else:
+                # Any input (choice selection, accept_fate, or freeform) → advance
                 cached = get_cached_phase_response("character", "concept")
                 message = build_artifact_response("submit_character_concept", cached.get("data", {}))
                 logger.info("[MOCK] Returning character concept artifact")
-            else:
-                # Unknown state - default to showing archetype intro
-                message = build_archetype_intro()
-                logger.info("[MOCK] Returning archetype intro (default)")
 
         # Subphase: Traits
         elif subphase == "traits":
@@ -507,17 +490,16 @@ async def chat_completions(request: ChatCompletionRequest):
 
         # Subphase: Wildcard
         elif subphase == "wildcard":
-            # Check if Accept Fate is forcing the artifact
-            if forced_tool == "submit_wildcard_trait" or contains_any(user_msg, WILDCARD_CHOICES):
-                # User selected wildcard OR Accept Fate pressed - return wildcard artifact
+            if is_phase_transition(user_msg):
+                # Phase intro - show wildcard choices
+                message = build_wildcard_intro()
+                logger.info("[MOCK] Returning wildcard intro")
+            else:
+                # Any input (choice selection, accept_fate, or freeform) → advance
                 cached = get_cached_phase_response("character", "wildcard")
                 wildcard_data = cached.get("data", {}).get("character_state", {}).get("wildcard", {})
                 message = build_artifact_response("submit_wildcard_trait", wildcard_data)
                 logger.info("[MOCK] Returning wildcard trait artifact")
-            else:
-                # First request in wildcard subphase - show wildcard choices
-                message = build_wildcard_intro()
-                logger.info("[MOCK] Returning wildcard intro")
 
         # Subphase: Character Sheet (all subphases complete)
         elif subphase == "sheet":
@@ -528,24 +510,15 @@ async def chat_completions(request: ChatCompletionRequest):
 
     # === SEED PHASE ===
     elif phase == "seed":
-        if forced_tool == "submit_starting_scenario":
-            # Accept Fate pressed - return seed artifact immediately
-            cached = get_cached_phase_response("seed", None)
-            message = build_artifact_response("submit_starting_scenario", cached.get("data", {}))
-            logger.info("[MOCK] Returning seed artifact (Accept Fate)")
-        elif is_phase_transition(user_msg):
+        if is_phase_transition(user_msg):
             # Phase intro - show seed choices
             message = build_seed_intro()
             logger.info("[MOCK] Returning seed intro")
-        elif contains_any(user_msg, SEED_CHOICES):
-            # User selected seed - return seed artifact
+        else:
+            # Any input (choice selection, accept_fate, or freeform) → advance
             cached = get_cached_phase_response("seed", None)
             message = build_artifact_response("submit_starting_scenario", cached.get("data", {}))
             logger.info("[MOCK] Returning seed artifact")
-        else:
-            # Unknown state - show seed intro
-            message = build_seed_intro()
-            logger.info("[MOCK] Returning seed intro (default)")
 
     # Fallback
     if message is None:
