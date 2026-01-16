@@ -331,3 +331,13 @@ model = "gpt-5.1"             # Model to use for narrative generation
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 
+# =============================================================================
+# API Settings
+# =============================================================================
+
+[global.api]
+test_mock_server_url = "http://localhost:5102/v1"  # Mock server for TEST model
+
+[api.constraints]
+max_choice_text_length = 1000  # Maximum length of choice text
+

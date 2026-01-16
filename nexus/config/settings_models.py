@@ -47,6 +47,16 @@ class NarrativeConfig(BaseModel):
     test_database_suffix: str = Field(..., description="Database suffix for testing")
 
 
+class GlobalAPIConfig(BaseModel):
+    """Global API configuration."""
+    model_config = ConfigDict(extra='forbid')
+
+    test_mock_server_url: str = Field(
+        default="http://localhost:5102/v1",
+        description="Mock server URL for TEST model"
+    )
+
+
 class GlobalSettings(BaseModel):
     """Global configuration settings."""
     model_config = ConfigDict(extra='forbid')
@@ -54,6 +64,7 @@ class GlobalSettings(BaseModel):
     model: ModelConfig
     llm: LLMConfig
     narrative: NarrativeConfig
+    api: Optional[GlobalAPIConfig] = Field(default=None, description="API configuration")
 
 
 # =============================================================================
@@ -323,6 +334,31 @@ class APEXSettings(BaseModel):
 
 
 # =============================================================================
+# API Constraints Settings Models
+# =============================================================================
+
+class APIConstraintsConfig(BaseModel):
+    """API constraints configuration."""
+    model_config = ConfigDict(extra='forbid')
+
+    max_choice_text_length: int = Field(
+        default=1000,
+        ge=1,
+        description="Maximum length of choice text"
+    )
+
+
+class APISettings(BaseModel):
+    """Top-level API settings."""
+    model_config = ConfigDict(extra='forbid')
+
+    constraints: Optional[APIConstraintsConfig] = Field(
+        default=None,
+        description="API constraints configuration"
+    )
+
+
+# =============================================================================
 # Root Settings Model
 # =============================================================================
 
@@ -341,6 +377,7 @@ class Settings(BaseModel):
     memnon: MEMNONSettings
     memory: MemorySettings
     apex: APEXSettings
+    api: Optional[APISettings] = Field(default=None, description="API settings")
 
     def model_dump(self, **kwargs) -> dict:
         """
