@@ -8,3 +8,9 @@ ALTER TABLE assets.new_story_creator
 
 COMMENT ON COLUMN assets.new_story_creator.traits_confirmed IS
     'Set to TRUE when user confirms trait selection (choice 0 in trait menu)';
+
+-- Backfill for existing wizard sessions that already have 3 traits selected
+UPDATE assets.new_story_creator
+SET traits_confirmed = TRUE
+WHERE id = TRUE
+  AND (SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND id <= 10) = 3;

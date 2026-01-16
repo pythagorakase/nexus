@@ -895,6 +895,7 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                     character_archetype = NULL,
                     character_background = NULL,
                     character_appearance = NULL,
+                    traits_confirmed = FALSE,
                     -- Seed columns (also clear downstream)
                     seed_type = NULL,
                     seed_title = NULL,

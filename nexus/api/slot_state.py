@@ -110,7 +110,7 @@ def get_slot_state(slot: int) -> SlotState:
                        nsc.setting_genre,
                        nsc.character_name,
                        nsc.seed_type,
-                       (SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND id <= 10) as trait_count,
+                       nsc.traits_confirmed,
                        (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
                 FROM assets.new_story_creator nsc
                 WHERE nsc.id = TRUE
@@ -190,7 +190,7 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
 
     Phase is inferred from:
     - setting_genre IS NULL → "setting" phase
-    - trait_count < 3 or wildcard_rationale IS NULL → "character" phase
+    - traits_confirmed = FALSE or wildcard_rationale IS NULL → "character" phase
     - seed_type IS NULL → "seed" phase
     - All complete → "ready" for bootstrap
     """
@@ -235,7 +235,6 @@ def _get_wizard_state(cur) -> WizardState:
                nsc.character_name,
                nsc.seed_type,
                nsc.traits_confirmed,
-               (SELECT COUNT(*) FROM assets.traits WHERE is_selected = TRUE AND id <= 10) as trait_count,
                (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
         FROM assets.new_story_creator nsc
         WHERE nsc.id = TRUE
