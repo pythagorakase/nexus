@@ -29,17 +29,11 @@ from nexus.api.new_story_flow import (
     reset_setup,
     activate_slot,
 )
+from nexus.api.config_utils import get_new_story_model
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
 
 router = APIRouter(prefix="/api/story/new", tags=["setup"])
-
-
-def get_new_story_model() -> str:
-    """Get the configured model for new story workflow."""
-    from nexus.config import load_settings_as_dict
-    settings = load_settings_as_dict()
-    return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
 @router.post("/setup/start")

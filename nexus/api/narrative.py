@@ -55,6 +55,10 @@ from nexus.api.narrative_generation import (
     write_to_incubator,
     generate_bootstrap_narrative,
 )
+from nexus.api.config_utils import get_max_choice_text_length
+from nexus.api.slot_endpoints import router as slot_router
+from nexus.api.setup_endpoints import router as setup_router
+from nexus.api.wizard_chat import router as wizard_chat_router
 
 logger = logging.getLogger("nexus.api.narrative")
 
@@ -72,9 +76,6 @@ app.add_middleware(
 
 
 # Include modular routers
-from nexus.api.slot_endpoints import router as slot_router
-from nexus.api.setup_endpoints import router as setup_router
-from nexus.api.wizard_chat import router as wizard_chat_router
 app.include_router(slot_router)
 app.include_router(setup_router)
 app.include_router(wizard_chat_router)
@@ -145,13 +146,6 @@ def load_settings():
     """Load settings using centralized config loader."""
     from nexus.config import load_settings_as_dict
     return load_settings_as_dict()
-
-
-def get_new_story_model() -> str:
-    """Get the configured model for new story workflow."""
-    settings = load_settings()
-    return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
-
 
 
 # Import schemas from narrative_schemas.py
@@ -481,11 +475,11 @@ async def select_choice(request: SelectChoiceRequest):
                     )
 
             # P0: Validate text length (prevent abuse)
-            MAX_CHOICE_TEXT_LENGTH = 1000
-            if len(request.selection.text) > MAX_CHOICE_TEXT_LENGTH:
+            max_choice_text_length = get_max_choice_text_length()
+            if len(request.selection.text) > max_choice_text_length:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Selection text too long ({len(request.selection.text)} chars). Max: {MAX_CHOICE_TEXT_LENGTH}"
+                    detail=f"Selection text too long ({len(request.selection.text)} chars). Max: {max_choice_text_length}"
                 )
 
             # Update choice_object with selection
@@ -598,17 +592,6 @@ async def clear_incubator(slot: Optional[int] = None):
 async def accept_chunk_endpoint(request: ChunkAcceptRequest):
     """Accept a chunk and trigger embedding generation"""
     try:
-        # Assuming ChunkAcceptRequest needs to be updated or we pass slot via query param?
-        # The request model is imported. We might need to update it or check if it has slot.
-        # For now, let's assume we can pass slot if it's in the request, or we need to add it.
-        # Let's check ChunkAcceptRequest definition in chunk_workflow.py.
-        # If not present, we can't pass it easily without updating the model.
-        # But wait, default_workflow.accept_chunk might need slot.
-        # Let's assume for now we pass it if available.
-        # Actually, let's just pass it if the method accepts it.
-        # I'll check chunk_workflow.py later. For now, I'll leave this as is or update if I know the signature.
-        # Wait, I need to update the signature here to accept slot query param if the request body doesn't have it.
-        # But accept_chunk_endpoint takes a body.
         return default_workflow.accept_chunk(request.chunk_id, request.session_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

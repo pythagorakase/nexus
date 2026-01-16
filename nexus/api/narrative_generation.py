@@ -11,7 +11,7 @@ This module handles async narrative generation including:
 import json
 import logging
 import uuid
-from typing import Dict, Any, Optional, Protocol
+from typing import Callable, Dict, Any, Optional, Protocol
 
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
@@ -38,10 +38,10 @@ async def generate_narrative_async(
     user_text: str,
     slot: Optional[int] = None,
     *,
-    get_db_connection,
-    load_settings,
+    get_db_connection: Callable[[Optional[int]], Any],
+    load_settings: Callable[[], Dict[str, Any]],
     manager: ProgressManager,
-):
+) -> None:
     """
     Async function to generate narrative.
     Sends progress updates via WebSocket.

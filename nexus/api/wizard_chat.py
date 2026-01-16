@@ -45,6 +45,7 @@ from nexus.api.new_story_schemas import (
     make_openai_strict_schema,
 )
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.config_utils import get_new_story_model
 from nexus.config import load_settings_as_dict
 
 logger = logging.getLogger("nexus.api.wizard_chat")
@@ -55,12 +56,6 @@ router = APIRouter(prefix="/api/story/new", tags=["wizard"])
 def load_settings() -> dict:
     """Load settings from config."""
     return load_settings_as_dict()
-
-
-def get_new_story_model() -> str:
-    """Get the configured model for new story workflow."""
-    settings = load_settings()
-    return settings.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
 def get_base_url_for_model(model: str) -> Optional[str]:
