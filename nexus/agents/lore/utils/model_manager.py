@@ -240,9 +240,10 @@ class ModelManager:
                 model_config["default_model"] = llm_models[0]
                 logger.info(f"Updated default_model to: {llm_models[0]}")
         
-        # Save updated settings
-        self._save_settings(self.settings)
-        
+        # TODO: Re-enable when migrated to TOML write support
+        # Currently disabled to prevent unintended settings.json rewrites
+        # self._save_settings(self.settings)
+
         return llm_models
     
     def get_loaded_models(self) -> List[str]:
