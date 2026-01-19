@@ -47,15 +47,19 @@ def _get_next_phase(current_phase: str) -> Optional[str]:
 
 def _truncate_text(text: str, head: int = 10, tail: int = 10) -> str:
     """Truncate text to head + tail lines with indicator."""
-    lines = text.split('\n')
+    lines = text.split("\n")
     if len(lines) <= head + tail:
         return text
-    return '\n'.join(lines[:head] + [f'  [...{len(lines) - head - tail} lines omitted...]'] + lines[-tail:])
+    return "\n".join(
+        lines[:head]
+        + [f"  [...{len(lines) - head - tail} lines omitted...]"]
+        + lines[-tail:]
+    )
 
 
 def _print_value(key: str, value: Any, indent: int = 2, truncate: bool = False) -> None:
     """Print a single key-value pair with proper formatting."""
-    prefix = ' ' * indent
+    prefix = " " * indent
 
     if value is None:
         return
@@ -69,7 +73,7 @@ def _print_value(key: str, value: Any, indent: int = 2, truncate: bool = False) 
             return
         if all(isinstance(item, str) for item in value):
             # Simple string list - show inline or multiline based on length
-            joined = ', '.join(str(v) for v in value)
+            joined = ", ".join(str(v) for v in value)
             if len(joined) < 80:
                 print(f"{prefix}{key}: {joined}")
             else:
@@ -87,11 +91,11 @@ def _print_value(key: str, value: Any, indent: int = 2, truncate: bool = False) 
                 else:
                     print(f"{prefix}  - {item}")
     elif isinstance(value, str):
-        if '\n' in value or len(value) > 100:
+        if "\n" in value or len(value) > 100:
             # Multi-line or long text
             text = _truncate_text(value) if truncate else value
             print(f"{prefix}{key}:")
-            for line in text.split('\n'):
+            for line in text.split("\n"):
                 print(f"{prefix}  {line}")
         else:
             print(f"{prefix}{key}: {value}")
@@ -99,11 +103,13 @@ def _print_value(key: str, value: Any, indent: int = 2, truncate: bool = False) 
         print(f"{prefix}{key}: {value}")
 
 
-def _print_artifact(artifact_type: str, data: Dict[str, Any], truncate: bool = False) -> None:
+def _print_artifact(
+    artifact_type: str, data: Dict[str, Any], truncate: bool = False
+) -> None:
     """Print full artifact data. Use truncate=True for abbreviated output."""
     # Print all fields recursively
     for key, value in data.items():
-        if not key.startswith('_'):
+        if not key.startswith("_"):
             _print_value(key, value, indent=2, truncate=truncate)
 
 
@@ -129,7 +135,17 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
     choices = payload.get("choices", [])
     next_phase_intro = payload.get("next_phase_intro")
 
-    # Display choices now if no next_phase_intro (otherwise display after intro)
+    # Display artifact data FIRST if present (what was just confirmed)
+    artifact_type = payload.get("artifact_type")
+    artifact_data = payload.get("artifact_data")
+    if artifact_type and artifact_data:
+        print(
+            f"=== {artifact_type.replace('submit_', '').replace('_', ' ').title()} ==="
+        )
+        _print_artifact(artifact_type, artifact_data, truncate=truncate)
+        print()
+
+    # THEN display trait menu or choices (what's next)
     if trait_menu:
         # Render interactive trait selection menu
         can_confirm = payload.get("can_confirm", False)
@@ -153,14 +169,6 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
         print("Choices:")
         for idx, choice in enumerate(choices, start=1):
             print(f"  {idx}. {choice}")
-        print()
-
-    # Display artifact data if present (wizard mode)
-    artifact_type = payload.get("artifact_type")
-    artifact_data = payload.get("artifact_data")
-    if artifact_type and artifact_data:
-        print(f"=== {artifact_type.replace('submit_', '').replace('_', ' ').title()} ===")
-        _print_artifact(artifact_type, artifact_data, truncate=truncate)
         print()
 
     # Display next phase intro if present (after artifact)
@@ -240,7 +248,10 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -267,22 +278,22 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             # Use CLI-provided model, slot's configured model, or let backend use default
             setup_url = f"{get_api_url()}/api/story/new/setup/start"
             setup_payload = {"slot": args.slot}
-            model_to_use = getattr(args, 'model', None) or state.get("model")
+            model_to_use = getattr(args, "model", None) or state.get("model")
             if model_to_use:
                 setup_payload["model"] = model_to_use
-            setup_response = requests.post(
-                setup_url,
-                json=setup_payload,
-                timeout=30
-            )
+            setup_response = requests.post(setup_url, json=setup_payload, timeout=30)
             if not setup_response.ok:
-                return {"success": False, "error": f"Failed to initialize wizard: {setup_response.text}"}
+                return {
+                    "success": False,
+                    "error": f"Failed to initialize wizard: {setup_response.text}",
+                }
 
             # Use the actual response from the backend
             setup_data = setup_response.json()
             return {
                 "success": True,
-                "message": setup_data.get("welcome_message") or f"Wizard initialized for slot {args.slot}.",
+                "message": setup_data.get("welcome_message")
+                or f"Wizard initialized for slot {args.slot}.",
                 "choices": setup_data.get("welcome_choices", []),
                 "phase": "setting",
             }
@@ -293,19 +304,23 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 # Call transition endpoint, then bootstrap
                 transition_url = f"{get_api_url()}/api/story/new/transition"
                 transition_response = requests.post(
-                    transition_url,
-                    json={"slot": args.slot},
-                    timeout=60
+                    transition_url, json={"slot": args.slot}, timeout=60
                 )
                 if not transition_response.ok:
-                    return {"success": False, "error": f"Transition failed: {transition_response.text}"}
+                    return {
+                        "success": False,
+                        "error": f"Transition failed: {transition_response.text}",
+                    }
 
                 # Transition complete - refresh state and continue to narrative
                 state_response = requests.get(state_url, timeout=30)
                 state = state_response.json()
 
                 if state.get("is_wizard_mode"):
-                    return {"success": False, "error": "Transition completed but still in wizard mode"}
+                    return {
+                        "success": False,
+                        "error": "Transition completed but still in wizard mode",
+                    }
 
                 # Continue to narrative mode handling below (don't return here)
             else:
@@ -316,13 +331,24 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
                 # Check if we're in trait selection mode
                 trait_menu = state.get("trait_menu")
+
+                # Map --accept-fate to --choice 0 in trait mode when confirmation is available
+                if trait_menu and args.accept_fate and state.get("can_confirm"):
+                    args.choice = 0  # Treat as confirm
+
                 if trait_menu and args.choice is not None:
                     # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
                     if args.choice == 0:
                         if not state.get("can_confirm"):
-                            return {"success": False, "error": "Cannot confirm: must select exactly 3 traits"}
+                            return {
+                                "success": False,
+                                "error": "Cannot confirm: must select exactly 3 traits",
+                            }
                     elif not (1 <= args.choice <= 10):
-                        return {"success": False, "error": f"Choice {args.choice} out of range (0-10 for trait selection)"}
+                        return {
+                            "success": False,
+                            "error": f"Choice {args.choice} out of range (0-10 for trait selection)",
+                        }
 
                     payload = {
                         "slot": args.slot,
@@ -337,6 +363,34 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     response.raise_for_status()
                     data = response.json()
 
+                    # Check if subphase completed (traits confirmed → need wildcard intro)
+                    if data.get("subphase_complete"):
+                        next_subphase = data.get("subphase")  # Should be "wildcard"
+                        if next_subphase:
+                            # Request Skald intro for next subphase
+                            intro_payload = {
+                                "slot": args.slot,
+                                "message": f"[SYSTEM] Phase character subphase traits complete. Proceeding to {next_subphase}. Please introduce the next subphase.",
+                                "current_phase": "character",
+                            }
+                            if model_to_use:
+                                intro_payload["model"] = model_to_use
+
+                            intro_response = requests.post(
+                                url, json=intro_payload, timeout=120
+                            )
+                            if intro_response.ok:
+                                intro_data = intro_response.json()
+                                return {
+                                    "success": True,
+                                    "message": data.get("message", ""),
+                                    "next_phase_intro": intro_data.get("message"),
+                                    "choices": intro_data.get("choices", []),
+                                    "phase": "character",
+                                    "subphase": next_subphase,
+                                }
+
+                    # Return for non-completing operations (toggles) or if intro request failed
                     return {
                         "success": True,
                         "message": data.get("message", ""),
@@ -354,7 +408,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     if 1 <= args.choice <= len(choices):
                         user_text = choices[args.choice - 1]
                     else:
-                        return {"success": False, "error": f"Choice {args.choice} out of range (1-{len(choices)})"}
+                        return {
+                            "success": False,
+                            "error": f"Choice {args.choice} out of range (1-{len(choices)})",
+                        }
 
                 payload = {
                     "slot": args.slot,
@@ -398,13 +455,40 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         if model_to_use:
                             transition_payload["model"] = model_to_use
 
-                        intro_response = requests.post(url, json=transition_payload, timeout=120)
+                        intro_response = requests.post(
+                            url, json=transition_payload, timeout=120
+                        )
                         if intro_response.ok:
                             intro_data = intro_response.json()
                             # Append intro to result (artifact stays, intro message added)
                             result["next_phase_intro"] = intro_data.get("message")
                             result["choices"] = intro_data.get("choices", [])
                             result["phase"] = intro_data.get("phase") or next_phase
+
+                    elif next_phase == "ready":
+                        # Seed phase complete → transition to narrative mode
+                        transition_url = f"{get_api_url()}/api/story/new/transition"
+                        transition_response = requests.post(
+                            transition_url, json={"slot": args.slot}, timeout=60
+                        )
+                        if transition_response.ok:
+                            # Bootstrap narrative by calling continue endpoint
+                            continue_url = f"{get_api_url()}/api/narrative/continue"
+                            continue_payload = {"slot": args.slot, "user_text": ""}
+                            if model_to_use:
+                                continue_payload["model"] = model_to_use
+                            narrative_response = requests.post(
+                                continue_url, json=continue_payload, timeout=120
+                            )
+                            if narrative_response.ok:
+                                narrative_data = narrative_response.json()
+                                result["narrative_bootstrap"] = True
+                                result["next_phase_intro"] = narrative_data.get(
+                                    "storyteller_text"
+                                )
+                                result["choices"] = narrative_data.get("choices", [])
+                                result["chunk_id"] = narrative_data.get("chunk_id")
+                                result["phase"] = None  # Clear wizard phase
 
                 return result
 
@@ -419,15 +503,16 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 if 1 <= args.choice <= len(choices):
                     user_text = choices[args.choice - 1]
                 else:
-                    return {"success": False, "error": f"Choice {args.choice} out of range (1-{len(choices)})"}
+                    return {
+                        "success": False,
+                        "error": f"Choice {args.choice} out of range (1-{len(choices)})",
+                    }
 
             # Approve pending content if exists
             if state.get("has_pending"):
                 approve_url = f"{get_api_url()}/api/narrative/approve"
                 approve_response = requests.post(
-                    approve_url,
-                    json={"slot": args.slot, "commit": True},
-                    timeout=30
+                    approve_url, json={"slot": args.slot, "commit": True}, timeout=30
                 )
                 if not approve_response.ok:
                     logger.warning("Auto-approve failed: %s", approve_response.text)
@@ -449,7 +534,9 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 # Poll for completion (simplified - real implementation would use websocket)
                 for _ in range(60):  # Max 60 seconds
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
-                    status_response = requests.get(status_url, params={"slot": args.slot}, timeout=30)
+                    status_response = requests.get(
+                        status_url, params={"slot": args.slot}, timeout=30
+                    )
                     if status_response.ok:
                         status = status_response.json()
                         if status.get("status") == "completed":
@@ -462,7 +549,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                 "chunk_id": status.get("chunk_id"),
                             }
                         elif status.get("status") == "error":
-                            return {"success": False, "error": status.get("error", "Generation failed")}
+                            return {
+                                "success": False,
+                                "error": status.get("error", "Generation failed"),
+                            }
                     time.sleep(1)
                 return {"success": False, "error": "Generation timed out"}
 
@@ -473,7 +563,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             }
 
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -499,7 +592,10 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -519,8 +615,10 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
                 from nexus.config.loader import load_settings_as_dict
 
                 settings = load_settings_as_dict()
-                models = settings.get("global", {}).get("model", {}).get(
-                    "available_models", ["gpt-5.1", "TEST", "claude"]
+                models = (
+                    settings.get("global", {})
+                    .get("model", {})
+                    .get("available_models", ["gpt-5.1", "TEST", "claude"])
                 )
             except Exception:
                 # Fallback to hardcoded defaults if config unavailable
@@ -559,7 +657,10 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
         }
 
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -581,7 +682,10 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} cleared",
         }
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -603,7 +707,10 @@ def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} locked",
         }
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -625,7 +732,10 @@ def run_unlock(args: argparse.Namespace) -> Dict[str, Any]:
             "message": f"Slot {args.slot} unlocked",
         }
     except requests.exceptions.ConnectionError:
-        return {"success": False, "error": f"Cannot connect to API server at {get_api_url()}"}
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
     except requests.exceptions.HTTPError as e:
         return {"success": False, "error": f"API error: {e.response.text}"}
     except Exception as e:
@@ -654,17 +764,25 @@ Examples:
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
-    parser.add_argument("--truncate", action="store_true", help="Truncate long text fields (head 10 + tail 10 lines)")
+    parser.add_argument(
+        "--truncate",
+        action="store_true",
+        help="Truncate long text fields (head 10 + tail 10 lines)",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # load command
     load_parser = subparsers.add_parser("load", help="Display current slot state")
-    load_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    load_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     # continue command
     continue_parser = subparsers.add_parser("continue", help="Advance the story")
-    continue_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    continue_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
     continue_parser.add_argument(
         "--choice",
         type=int,
@@ -686,25 +804,43 @@ Examples:
 
     # undo command
     undo_parser = subparsers.add_parser("undo", help="Revert last action")
-    undo_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    undo_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     # model command
     model_parser = subparsers.add_parser("model", help="Get or set model for a slot")
     model_parser.add_argument("--slot", type=int, help="Slot number (1-5)")
-    model_parser.add_argument("--set", help="Set the model (e.g., gpt-5.1, TEST, claude)")
-    model_parser.add_argument("--list", action="store_true", help="List available models")
+    model_parser.add_argument(
+        "--set", help="Set the model (e.g., gpt-5.1, TEST, claude)"
+    )
+    model_parser.add_argument(
+        "--list", action="store_true", help="List available models"
+    )
 
     # clear command
-    clear_parser = subparsers.add_parser("clear", help="Clear a slot (reset wizard state)")
-    clear_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    clear_parser = subparsers.add_parser(
+        "clear", help="Clear a slot (reset wizard state)"
+    )
+    clear_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     # lock command
-    lock_parser = subparsers.add_parser("lock", help="Lock a slot to prevent modifications")
-    lock_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    lock_parser = subparsers.add_parser(
+        "lock", help="Lock a slot to prevent modifications"
+    )
+    lock_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     # unlock command
-    unlock_parser = subparsers.add_parser("unlock", help="Unlock a slot to allow modifications")
-    unlock_parser.add_argument("--slot", type=int, required=True, help="Slot number (1-5)")
+    unlock_parser = subparsers.add_parser(
+        "unlock", help="Unlock a slot to allow modifications"
+    )
+    unlock_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
 
     return parser
 
