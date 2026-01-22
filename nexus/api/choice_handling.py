@@ -16,13 +16,22 @@ This module eliminates the divergent implementations that led to:
 - Wizard mode ignoring --choice validation
 - Different accept-fate behavior (hardcoded string vs first choice)
 - Duplicated JSON parsing logic
+
+Note on accept-fate semantics:
+    The `resolve_input_text()` function is designed for **narrative mode**, where
+    accept-fate mechanically selects the first presented choice.
+
+    **Wizard mode** handles accept-fate differently: it's a semantic signal passed
+    to the LLM for autonomous generation, not a mechanical first-choice selection.
+    This intentional difference exists because wizard is conversational (the LLM
+    decides the outcome) while narrative requires explicit user input resolution.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union, Literal
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -37,7 +46,7 @@ logger = logging.getLogger("nexus.api.choice_handling")
 class ChoiceSelection(BaseModel):
     """User's selection from presented choices."""
 
-    label: Union[int, Literal["freeform"]] = Field(
+    label: int | Literal["freeform"] = Field(
         description="Choice number (1-indexed) or 'freeform' for custom input"
     )
     text: str = Field(description="The text of the selection (original or edited)")
