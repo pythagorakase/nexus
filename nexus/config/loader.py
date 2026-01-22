@@ -25,13 +25,12 @@ except ModuleNotFoundError:
 from .settings_models import Settings
 
 
-# Cache for available models (avoids repeated config reads)
-_available_models_cache: list[str] | None = None
-
-
 def get_available_api_models() -> list[str]:
     """
-    Get available API models from nexus.toml configuration (cached).
+    Get available API models from nexus.toml configuration.
+
+    Reads fresh from config on each call to ensure changes are picked up
+    without requiring server restart.
 
     Returns:
         List of available model names from config, or fallback defaults
@@ -42,15 +41,12 @@ def get_available_api_models() -> list[str]:
         >>> "gpt-5.1" in models
         True
     """
-    global _available_models_cache
-    if _available_models_cache is None:
-        try:
-            settings = load_settings()
-            _available_models_cache = settings.global_.model.available_models
-        except Exception:
-            # Fallback to hardcoded defaults if config unavailable
-            _available_models_cache = ["gpt-5.1", "TEST", "claude"]
-    return _available_models_cache
+    try:
+        settings = load_settings()
+        return settings.global_.model.available_models
+    except Exception:
+        # Fallback to hardcoded defaults if config unavailable
+        return ["gpt-5.1", "TEST", "claude"]
 
 
 def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
