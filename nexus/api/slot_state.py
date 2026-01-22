@@ -21,11 +21,11 @@ Phase detection uses normalized columns and assets.traits:
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from nexus.api.choice_handling import extract_presented_choices, resolve_input_text
 from nexus.api.db_pool import get_connection
 from nexus.api.slot_utils import slot_dbname
 
@@ -137,13 +137,10 @@ def get_slot_state(slot: int) -> SlotState:
                 """
             )
             global_row = cur.fetchone()
-            has_global_story = (
-                global_row is not None
-                and (
-                    global_row.get("setting") is not None
-                    or global_row.get("user_character") is not None
-                    or global_row.get("base_timestamp") is not None
-                )
+            has_global_story = global_row is not None and (
+                global_row.get("setting") is not None
+                or global_row.get("user_character") is not None
+                or global_row.get("base_timestamp") is not None
             )
 
             has_wizard_data = wizard_cache is not None
@@ -217,13 +214,8 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     else:
         phase = "ready"
 
-    # Extract choices from choice_object (mirrors incubator pattern)
-    choices: List[str] = []
-    choice_object = row.get("choice_object")
-    if choice_object:
-        if isinstance(choice_object, str):
-            choice_object = json.loads(choice_object)
-        choices = choice_object.get("presented", [])
+    # Extract choices from choice_object using shared handler
+    choices = extract_presented_choices(row.get("choice_object"))
 
     return WizardState(
         phase=phase,
@@ -257,6 +249,7 @@ def _get_wizard_state(cur) -> WizardState:
         return WizardState(
             phase="setting",
             thread_id=None,
+            choices=[],
             has_concept=False,
             has_traits=False,
             has_wildcard=False,
@@ -284,8 +277,7 @@ def _get_narrative_state(cur) -> NarrativeState:
     incubator_row = cur.fetchone()
 
     if incubator_row:
-        choice_object = _parse_json(incubator_row.get("choice_object"))
-        choices = choice_object.get("presented", []) if choice_object else []
+        choices = extract_presented_choices(incubator_row.get("choice_object"))
 
         return NarrativeState(
             current_chunk_id=incubator_row.get("chunk_id") or 0,
@@ -325,21 +317,6 @@ def _get_narrative_state(cur) -> NarrativeState:
         choices=[],
         session_id=None,
     )
-
-
-def _parse_json(value: Any) -> Optional[Dict[str, Any]]:
-    """Parse a JSON value that may be a string, dict, or None."""
-    if value is None:
-        return None
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON: %s", value[:100] if value else "")
-            return None
-    return None
 
 
 def get_current_choices(slot: int) -> List[str]:
@@ -414,10 +391,21 @@ def resolve_continue_action(
         if wizard is None:
             raise ValueError(f"Slot {slot} is in wizard mode but has no wizard state")
 
-        # Resolve input text
-        input_text = user_text
-        if accept_fate and not input_text:
-            input_text = "Accept my fate"  # Triggers auto-advance in wizard
+        # Wizard mode: validate choice if provided, but accept_fate is a semantic signal
+        # to the LLM to proceed autonomously (not a mechanical first-choice selection)
+        input_text: Optional[str] = None
+        if choice is not None:
+            # Validate and resolve choice using shared logic
+            input_text = resolve_input_text(
+                choice=choice,
+                user_text=None,
+                available_choices=wizard.choices,
+                accept_fate=False,
+            )
+        elif user_text:
+            input_text = user_text
+        # Note: accept_fate is passed through to wizard_chat params, not resolved here
+        # The wizard handles accept_fate semantically (signals LLM to proceed autonomously)
 
         return {
             "action": "wizard_chat",
@@ -436,30 +424,20 @@ def resolve_continue_action(
     if narrative is None:
         raise ValueError(f"Slot {slot} is in narrative mode but has no narrative state")
 
-    # Resolve input text from choice or user_text
-    input_text = user_text
-    if choice is not None:
-        if not narrative.choices:
-            raise ValueError(f"No choices available for slot {slot}")
-        if choice < 1 or choice > len(narrative.choices):
-            raise ValueError(
-                f"Invalid choice {choice}. Available choices: 1-{len(narrative.choices)}"
-            )
-        input_text = narrative.choices[choice - 1]  # Convert to 0-indexed
-
-    if accept_fate and not input_text:
-        # Auto-select first choice
-        if narrative.choices:
-            input_text = narrative.choices[0]
-        else:
-            raise ValueError("Cannot accept fate: no choices available")
+    # Use unified resolution for narrative
+    input_text = resolve_input_text(
+        choice=choice,
+        user_text=user_text,
+        available_choices=narrative.choices,
+        accept_fate=accept_fate,
+    )
 
     return {
         "action": "narrative_continue",
         "params": {
             "slot": slot,
             "chunk_id": narrative.current_chunk_id,
-            "user_text": input_text or "",
+            "user_text": input_text,
             "model": state.model,
             "session_id": narrative.session_id,  # For implicit approval
         },

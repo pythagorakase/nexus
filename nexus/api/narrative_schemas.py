@@ -10,17 +10,21 @@ from typing import Dict, List, Optional, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+# Re-export ChoiceSelection from shared module for backward compatibility
+from nexus.api.choice_handling import ChoiceSelection
+
 
 # =============================================================================
 # Core Narrative Schemas
 # =============================================================================
+
 
 class ContinueNarrativeRequest(BaseModel):
     """Request to continue narrative from a chunk, or bootstrap a new story"""
 
     chunk_id: Optional[int] = Field(
         default=None,
-        description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk)."
+        description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk).",
     )
     user_text: str = Field(description="User's completion text")
     slot: Optional[int] = Field(default=None, description="Active save slot")
@@ -57,19 +61,6 @@ class NarrativeStatus(BaseModel):
     error: Optional[str]
 
 
-class ChoiceSelection(BaseModel):
-    """User's selection from presented choices"""
-
-    label: int | Literal["freeform"] = Field(
-        description="Choice number (1-4) or 'freeform' for custom input"
-    )
-    text: str = Field(description="The text of the selection (original or edited)")
-    edited: bool = Field(
-        default=False,
-        description="True if user edited the choice before submitting"
-    )
-
-
 class SelectChoiceRequest(BaseModel):
     """Request to record user's choice selection for a chunk"""
 
@@ -89,6 +80,7 @@ class SelectChoiceResponse(BaseModel):
 # =============================================================================
 # Setup/New Story Request Schemas
 # =============================================================================
+
 
 class StartSetupRequest(BaseModel):
     slot: int
@@ -116,8 +108,10 @@ class SelectSlotRequest(BaseModel):
 # Slot State Schemas
 # =============================================================================
 
+
 class TraitMenuItemResponse(BaseModel):
     """A trait in the selection menu."""
+
     id: int
     name: str
     description: List[str]
@@ -148,17 +142,17 @@ class SlotStateResponse(BaseModel):
 # Slot Continue Schemas (Deprecated)
 # =============================================================================
 
+
 class SlotContinueRequest(BaseModel):
     """Request model for unified continue endpoint."""
 
     choice: Optional[int] = Field(
         default=None, description="Structured choice number (1-indexed)"
     )
-    user_text: Optional[str] = Field(
-        default=None, description="Freeform user input"
-    )
+    user_text: Optional[str] = Field(default=None, description="Freeform user input")
     accept_fate: bool = Field(
-        default=False, description="Auto-advance (select first choice or trigger auto-generate)"
+        default=False,
+        description="Auto-advance (select first choice or trigger auto-generate)",
     )
     model: Optional[str] = Field(
         default=None, description="Override model for this request"
@@ -181,6 +175,7 @@ class SlotContinueResponse(BaseModel):
 # =============================================================================
 # Slot Operation Schemas
 # =============================================================================
+
 
 class SlotUndoResponse(BaseModel):
     """Response from undo endpoint."""
@@ -216,6 +211,7 @@ class SlotLockResponse(BaseModel):
 # Wizard Chat Schemas
 # =============================================================================
 
+
 class ChatRequest(BaseModel):
     slot: int
     message: str
@@ -245,13 +241,16 @@ class ChatRequest(BaseModel):
 # Transition Schemas
 # =============================================================================
 
+
 class TransitionRequest(BaseModel):
     """Request to transition from wizard setup to narrative mode."""
+
     slot: int = Field(..., ge=1, le=5, description="Save slot number (1-5)")
 
 
 class TransitionResponse(BaseModel):
     """Response from successful transition."""
+
     status: str
     character_id: int
     place_id: int
