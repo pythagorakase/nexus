@@ -8,7 +8,7 @@ serialization of API requests and responses.
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # =============================================================================
@@ -222,12 +222,23 @@ class ChatRequest(BaseModel):
     # thread_id and current_phase are optional - resolved from slot state if not provided
     thread_id: Optional[str] = None
     current_phase: Optional[Literal["setting", "character", "seed"]] = None
-    model: Literal["gpt-5.1", "TEST", "claude"] = "gpt-5.1"  # Model selection
+    model: str = "gpt-5.1"  # Model selection - validated against nexus.toml
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
     # Trait selection operations (character phase, traits subphase)
     # 0 = confirm selection, 1-10 = toggle trait by ID
     trait_choice: Optional[int] = None
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, v: str) -> str:
+        """Validate model against available models from nexus.toml."""
+        from nexus.config import get_available_api_models
+
+        available = get_available_api_models()
+        if v not in available:
+            raise ValueError(f"Invalid model '{v}'. Available: {', '.join(available)}")
+        return v
 
 
 # =============================================================================

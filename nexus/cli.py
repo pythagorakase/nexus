@@ -611,18 +611,9 @@ def run_model(args: argparse.Namespace) -> Dict[str, Any]:
     try:
         if args.list:
             # List available models from config (no slot required)
-            try:
-                from nexus.config.loader import load_settings_as_dict
+            from nexus.config import get_available_api_models
 
-                settings = load_settings_as_dict()
-                models = (
-                    settings.get("global", {})
-                    .get("model", {})
-                    .get("available_models", ["gpt-5.1", "TEST", "claude"])
-                )
-            except Exception:
-                # Fallback to hardcoded defaults if config unavailable
-                models = ["gpt-5.1", "TEST", "claude"]
+            models = get_available_api_models()
             return {
                 "success": True,
                 "message": f"Available models: {', '.join(models)}",
