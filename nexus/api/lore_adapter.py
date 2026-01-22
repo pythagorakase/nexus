@@ -9,6 +9,7 @@ Handles conversion between structured Pydantic models and database JSONB fields.
 import logging
 from typing import Dict, Any, Optional, List
 from nexus.agents.logon.apex_schema import StoryTurnResponse
+from nexus.api.choice_handling import ChoiceObject
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -17,26 +18,23 @@ logger = logging.getLogger("nexus.api.lore_adapter")
 # Choice Handling Functions
 # =============================================================================
 
-def extract_choice_object(response: StoryTurnResponse) -> Optional[Dict[str, Any]]:
+
+def extract_choice_object(response: StoryTurnResponse) -> Optional[ChoiceObject]:
     """
     Extract structured choice object from the response.
 
     Returns:
-        Dictionary with {presented: [...], selected: null} or None if no choices
+        ChoiceObject with presented choices and selected=None, or None if no choices
     """
-    choices = getattr(response, 'choices', None)
+    choices = getattr(response, "choices", None)
     if not choices or not isinstance(choices, list) or len(choices) < 2:
         return None
 
-    return {
-        "presented": choices,
-        "selected": None  # Will be populated when user makes selection
-    }
+    return ChoiceObject(presented=choices, selected=None)
 
 
 def format_choice_text(
-    choice_object: Dict[str, Any],
-    include_selection: bool = True
+    choice_object: Dict[str, Any], include_selection: bool = True
 ) -> str:
     """
     Generate markdown-formatted text from choice object.
@@ -77,8 +75,7 @@ def format_choice_text(
 
 
 def compute_raw_text(
-    storyteller_text: str,
-    choice_object: Optional[Dict[str, Any]]
+    storyteller_text: str, choice_object: Optional[Dict[str, Any]]
 ) -> str:
     """
     Compute full raw_text by combining storyteller prose with choice text.
@@ -104,10 +101,7 @@ def compute_raw_text(
 
 
 def response_to_incubator(
-    response: StoryTurnResponse,
-    parent_chunk_id: int,
-    user_text: str,
-    session_id: str
+    response: StoryTurnResponse, parent_chunk_id: int, user_text: str, session_id: str
 ) -> Dict[str, Any]:
     """
     Transform a LORE StoryTurnResponse into incubator table format.
@@ -122,13 +116,15 @@ def response_to_incubator(
         Dictionary formatted for incubator table insertion
     """
     # Extract narrative text
-    storyteller_text = response.narrative if hasattr(response, 'narrative') else None
+    storyteller_text = response.narrative if hasattr(response, "narrative") else None
 
     if not storyteller_text:
         raise ValueError("No narrative text in LORE response")
 
     # Extract choice object (presented choices, no selection yet)
-    choice_object = extract_choice_object(response)
+    choice_obj = extract_choice_object(response)
+    # Convert to dict for database JSONB storage (None if no choices)
+    choice_object_dict = choice_obj.model_dump() if choice_obj else None
 
     # Build incubator data structure
     incubator_data = {
@@ -136,14 +132,14 @@ def response_to_incubator(
         "parent_chunk_id": parent_chunk_id,
         "user_text": user_text,
         "storyteller_text": storyteller_text,
-        "choice_object": choice_object,  # Structured choices data
+        "choice_object": choice_object_dict,  # Structured choices data
         "choice_text": None,  # Generated when user makes selection
         "metadata_updates": extract_metadata_updates(response),
         "entity_updates": extract_entity_updates(response),
         "reference_updates": extract_reference_updates(response),
         "session_id": session_id,
-        "llm_response_id": getattr(response, 'response_id', None),
-        "status": "provisional"
+        "llm_response_id": getattr(response, "response_id", None),
+        "status": "provisional",
     }
 
     return incubator_data
@@ -157,43 +153,44 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     """
     metadata_updates = {}
 
-    if hasattr(response, 'metadata') and response.metadata:
+    if hasattr(response, "metadata") and response.metadata:
         metadata = response.metadata
 
         # Extract chronology updates with new time field structure
-        if hasattr(metadata, 'chronology') and metadata.chronology:
+        if hasattr(metadata, "chronology") and metadata.chronology:
             chron = metadata.chronology
 
             # Handle both old boolean format and new enum format
-            if hasattr(chron, 'episode_transition'):
+            if hasattr(chron, "episode_transition"):
                 # New format with enum
                 episode_transition = (
                     chron.episode_transition.value
-                    if hasattr(chron.episode_transition, 'value')
+                    if hasattr(chron.episode_transition, "value")
                     else chron.episode_transition or "continue"
                 )
             else:
                 # Old format with boolean flags
-                if getattr(chron, 'season_increment', False):
+                if getattr(chron, "season_increment", False):
                     episode_transition = "new_season"
-                elif getattr(chron, 'episode_increment', False):
+                elif getattr(chron, "episode_increment", False):
                     episode_transition = "new_episode"
                 else:
                     episode_transition = "continue"
 
             metadata_updates["chronology"] = {
                 "episode_transition": episode_transition,
-                "time_delta_minutes": getattr(chron, 'time_delta_minutes', None),
-                "time_delta_hours": getattr(chron, 'time_delta_hours', None),
-                "time_delta_days": getattr(chron, 'time_delta_days', None),
-                "time_delta_description": getattr(chron, 'time_delta_description', None) or getattr(chron, 'time_elapsed_description', None)
+                "time_delta_minutes": getattr(chron, "time_delta_minutes", None),
+                "time_delta_hours": getattr(chron, "time_delta_hours", None),
+                "time_delta_days": getattr(chron, "time_delta_days", None),
+                "time_delta_description": getattr(chron, "time_delta_description", None)
+                or getattr(chron, "time_elapsed_description", None),
             }
 
         # Extract world layer
-        if hasattr(metadata, 'world_layer'):
+        if hasattr(metadata, "world_layer"):
             metadata_updates["world_layer"] = (
                 metadata.world_layer.value
-                if hasattr(metadata.world_layer, 'value')
+                if hasattr(metadata.world_layer, "value")
                 else metadata.world_layer or "primary"
             )
 
@@ -206,56 +203,46 @@ def extract_entity_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
     Includes character emotional states, location statuses, and faction activities.
     """
-    entity_updates = {
-        "characters": [],
-        "locations": [],
-        "factions": []
-    }
+    entity_updates = {"characters": [], "locations": [], "factions": []}
 
-    if hasattr(response, 'state_updates') and response.state_updates:
+    if hasattr(response, "state_updates") and response.state_updates:
         # Extract character updates
-        if hasattr(response.state_updates, 'characters'):
+        if hasattr(response.state_updates, "characters"):
             for char in response.state_updates.characters:
-                update = {
-                    "character_id": char.character_id
-                }
+                update = {"character_id": char.character_id}
 
                 # Only include fields that are actually set
-                if hasattr(char, 'character_name') and char.character_name:
+                if hasattr(char, "character_name") and char.character_name:
                     update["character_name"] = char.character_name
-                if hasattr(char, 'emotional_state') and char.emotional_state:
+                if hasattr(char, "emotional_state") and char.emotional_state:
                     update["emotional_state"] = char.emotional_state
-                if hasattr(char, 'current_activity') and char.current_activity:
+                if hasattr(char, "current_activity") and char.current_activity:
                     update["current_activity"] = char.current_activity
-                if hasattr(char, 'current_location') and char.current_location:
+                if hasattr(char, "current_location") and char.current_location:
                     update["current_location"] = char.current_location
 
                 entity_updates["characters"].append(update)
 
         # Extract location updates
-        if hasattr(response.state_updates, 'locations'):
+        if hasattr(response.state_updates, "locations"):
             for loc in response.state_updates.locations:
-                update = {
-                    "place_id": loc.place_id
-                }
+                update = {"place_id": loc.place_id}
 
-                if hasattr(loc, 'place_name') and loc.place_name:
+                if hasattr(loc, "place_name") and loc.place_name:
                     update["place_name"] = loc.place_name
-                if hasattr(loc, 'current_status') and loc.current_status:
+                if hasattr(loc, "current_status") and loc.current_status:
                     update["current_status"] = loc.current_status
 
                 entity_updates["locations"].append(update)
 
         # Extract faction updates
-        if hasattr(response.state_updates, 'factions'):
+        if hasattr(response.state_updates, "factions"):
             for faction in response.state_updates.factions:
-                update = {
-                    "faction_id": faction.faction_id
-                }
+                update = {"faction_id": faction.faction_id}
 
-                if hasattr(faction, 'faction_name') and faction.faction_name:
+                if hasattr(faction, "faction_name") and faction.faction_name:
                     update["faction_name"] = faction.faction_name
-                if hasattr(faction, 'current_activity') and faction.current_activity:
+                if hasattr(faction, "current_activity") and faction.current_activity:
                     update["current_activity"] = faction.current_activity
 
                 entity_updates["factions"].append(update)
@@ -269,21 +256,14 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
     Tracks which characters, places, and factions are referenced or present.
     """
-    reference_updates = {
-        "characters": [],
-        "places": [],
-        "factions": []
-    }
+    reference_updates = {"characters": [], "places": [], "factions": []}
 
     refs = getattr(response, "referenced_entities", None)
     if not refs:
         return reference_updates
 
     def _append_reference(
-        entity: Any,
-        id_key: str,
-        name_key: str,
-        target_list: list
+        entity: Any, id_key: str, name_key: str, target_list: list
     ) -> None:
         ref_data: Dict[str, Any] = {}
         entity_id = getattr(entity, "entity_id", None)
@@ -298,15 +278,21 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
         target_list.append(ref_data)
 
     for char in getattr(refs, "characters", []):
-        _append_reference(char, "character_id", "character_name", reference_updates["characters"])
+        _append_reference(
+            char, "character_id", "character_name", reference_updates["characters"]
+        )
 
     for location in getattr(refs, "locations", []):
-        _append_reference(location, "place_id", "place_name", reference_updates["places"])
+        _append_reference(
+            location, "place_id", "place_name", reference_updates["places"]
+        )
 
     # Factions are reported through the generic "other" list in StoryTurnResponse
     for entity in getattr(refs, "other", []):
         if getattr(entity, "entity_type", None) == "faction":
-            _append_reference(entity, "faction_id", "faction_name", reference_updates["factions"])
+            _append_reference(
+                entity, "faction_id", "faction_name", reference_updates["factions"]
+            )
 
     return reference_updates
 
@@ -333,7 +319,7 @@ def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
         "entity_updates",
         "reference_updates",
         "session_id",
-        "status"
+        "status",
     ]
 
     for field in required_fields:
