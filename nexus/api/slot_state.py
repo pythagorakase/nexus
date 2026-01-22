@@ -38,6 +38,7 @@ class WizardState:
 
     phase: str  # "setting", "character", "seed", or "ready"
     thread_id: Optional[str]
+    choices: List[str]  # Available choices from choice_object.presented
     # Character subphase tracking
     has_concept: bool = False
     has_traits: bool = False
@@ -111,6 +112,7 @@ def get_slot_state(slot: int) -> SlotState:
                        nsc.character_name,
                        nsc.seed_type,
                        nsc.traits_confirmed,
+                       nsc.choice_object,
                        (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
                 FROM assets.new_story_creator nsc
                 WHERE nsc.id = TRUE
@@ -215,9 +217,18 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     else:
         phase = "ready"
 
+    # Extract choices from choice_object (mirrors incubator pattern)
+    choices: List[str] = []
+    choice_object = row.get("choice_object")
+    if choice_object:
+        if isinstance(choice_object, str):
+            choice_object = json.loads(choice_object)
+        choices = choice_object.get("presented", [])
+
     return WizardState(
         phase=phase,
         thread_id=row.get("thread_id"),
+        choices=choices,
         has_concept=has_concept,
         has_traits=has_traits,
         has_wildcard=has_wildcard,
