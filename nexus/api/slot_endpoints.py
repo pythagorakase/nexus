@@ -239,10 +239,9 @@ async def get_slot_model_endpoint(slot: int):
                 current_model = row.get("model") if row else None
 
         # Get available models from config
-        settings = load_settings_as_dict()
-        available = settings.get("global", {}).get("model", {}).get(
-            "available_models", ["gpt-5.1", "TEST", "claude"]
-        )
+        from nexus.config import get_available_api_models
+
+        available = get_available_api_models()
 
         return SlotModelResponse(
             slot=slot,
@@ -258,7 +257,7 @@ async def get_slot_model_endpoint(slot: int):
 @router.post("/{slot}/model", response_model=SlotModelResponse)
 async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
     """Set model for a slot."""
-    from nexus.config import load_settings_as_dict
+    from nexus.config import get_available_api_models
 
     if slot < 1 or slot > 5:
         raise HTTPException(status_code=400, detail="Slot must be between 1 and 5")
@@ -267,10 +266,7 @@ async def set_slot_model_endpoint(slot: int, request: SlotModelRequest):
         dbname = slot_dbname(slot)
 
         # Validate model against available models
-        settings = load_settings_as_dict()
-        available = settings.get("global", {}).get("model", {}).get(
-            "available_models", ["gpt-5.1", "TEST", "claude"]
-        )
+        available = get_available_api_models()
 
         if request.model not in available:
             raise HTTPException(

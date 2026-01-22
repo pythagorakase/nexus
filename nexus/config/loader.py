@@ -25,6 +25,30 @@ except ModuleNotFoundError:
 from .settings_models import Settings
 
 
+def get_available_api_models() -> list[str]:
+    """
+    Get available API models from nexus.toml configuration.
+
+    Reads fresh from config on each call to ensure changes are picked up
+    without requiring server restart.
+
+    Returns:
+        List of available model names from config, or fallback defaults
+        if configuration is unavailable.
+
+    Examples:
+        >>> models = get_available_api_models()
+        >>> "gpt-5.1" in models
+        True
+    """
+    try:
+        settings = load_settings()
+        return settings.global_.model.available_models
+    except Exception:
+        # Fallback to hardcoded defaults if config unavailable
+        return ["gpt-5.1", "TEST", "claude"]
+
+
 def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
     """
     Load and validate NEXUS configuration.
