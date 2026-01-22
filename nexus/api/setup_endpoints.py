@@ -29,6 +29,8 @@ from nexus.api.new_story_flow import (
     reset_setup,
     activate_slot,
 )
+from nexus.api.new_story_cache import write_wizard_choices
+from nexus.api.slot_utils import slot_dbname
 from nexus.api.config_utils import get_new_story_model
 
 logger = logging.getLogger("nexus.api.setup_endpoints")
@@ -60,6 +62,10 @@ async def start_setup_endpoint(request: StartSetupRequest) -> Dict[str, Any]:
             model_to_use = request.model or get_new_story_model()
             client = ConversationsClient(model=model_to_use)
             client.add_message(thread_id, "assistant", welcome_message)
+
+        # Store welcome choices for CLI --choice resolution
+        if welcome_choices:
+            write_wizard_choices(welcome_choices, slot_dbname(request.slot))
 
         return {
             "status": "started",

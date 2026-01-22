@@ -25,7 +25,7 @@ from nexus.api.narrative_schemas import (
     TransitionRequest,
     TransitionResponse,
 )
-from nexus.api.new_story_cache import read_cache
+from nexus.api.new_story_cache import read_cache, write_wizard_choices
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import record_drafts
 from nexus.api.new_story_schemas import (
@@ -628,15 +628,20 @@ async def new_story_chat_endpoint(request: ChatRequest):
                     detail=f"LLM returned invalid WizardResponse via tool call: {str(e)}",
                 )
             client.add_message(request.thread_id, "assistant", wizard_response.message)
+            ui_choices = prepare_choices_for_ui(wizard_response.choices)
             logger.info(
                 "respond_with_choices: message_len=%d choices=%s",
                 len(wizard_response.message or ""),
-                prepare_choices_for_ui(wizard_response.choices),
+                ui_choices,
             )
+
+            # Store choices for CLI --choice resolution
+            if ui_choices:
+                write_wizard_choices(ui_choices, slot_dbname(request.slot))
 
             return {
                 "message": wizard_response.message,
-                "choices": prepare_choices_for_ui(wizard_response.choices),
+                "choices": ui_choices,
                 "phase_complete": False,
                 "thread_id": request.thread_id,
             }
@@ -654,15 +659,20 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Save assistant message to thread (just the narrative text, not JSON)
         client.add_message(request.thread_id, "assistant", wizard_response.message)
+        ui_choices = prepare_choices_for_ui(wizard_response.choices)
         logger.info(
             "respond_with_choices (content path): message_len=%d choices=%s",
             len(wizard_response.message or ""),
-            prepare_choices_for_ui(wizard_response.choices),
+            ui_choices,
         )
+
+        # Store choices for CLI --choice resolution
+        if ui_choices:
+            write_wizard_choices(ui_choices, slot_dbname(request.slot))
 
         return {
             "message": wizard_response.message,
-            "choices": prepare_choices_for_ui(wizard_response.choices),
+            "choices": ui_choices,
             "phase_complete": False,
             "thread_id": request.thread_id,
         }

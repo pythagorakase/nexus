@@ -63,6 +63,7 @@ async def get_slot_state_endpoint(slot: int):
                 is_wizard_mode=True,
                 phase=state.wizard_state.phase,
                 thread_id=state.wizard_state.thread_id,
+                choices=state.wizard_state.choices,
                 model=state.model,
             )
 

@@ -1206,3 +1206,31 @@ def write_cache(
                 cur.execute(sql, params)
 
     logger.info("Updated new_story_creator cache in %s", dbname or os.environ.get("PGDATABASE", "NEXUS"))
+
+
+def write_wizard_choices(choices: List[str], dbname: str) -> None:
+    """
+    Store wizard choices in new_story_creator for CLI --choice resolution.
+
+    Mirrors the incubator.choice_object pattern used in narrative mode.
+
+    Args:
+        choices: List of choice strings presented to user
+        dbname: Database name (e.g., "save_05")
+    """
+    import json
+
+    choice_object = {"presented": choices, "selected": None}
+
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.new_story_creator
+                SET choice_object = %s, updated_at = NOW()
+                WHERE id = TRUE
+                """,
+                (json.dumps(choice_object),),
+            )
+
+    logger.debug("Stored %d wizard choices in %s", len(choices), dbname)
