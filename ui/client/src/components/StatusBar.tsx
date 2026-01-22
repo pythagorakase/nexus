@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Home, Settings, Sparkles, Monitor, Wand2 } from "lucide-react";
+import { Menu, Home, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast as showToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -7,13 +7,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useFonts } from "@/contexts/FontContext";
 import { CornerSunburst } from "@/components/deco";
+import { ThemeMenu } from "@/components/ThemeMenu";
 import { cn } from "@/lib/utils";
 
 interface StatusBarProps {
@@ -51,8 +50,7 @@ export function StatusBar({
   onRefreshModelStatus,
   onNavigate,
 }: StatusBarProps) {
-  const { isGilded, isVector, theme, setTheme, glowClass, generatingClass } = useTheme();
-  const { currentDisplayFont } = useFonts();
+  const { isGilded, isVector, glowClass, generatingClass } = useTheme();
   const [isModelHovered, setIsModelHovered] = useState(false);
   const [isModelOperating, setIsModelOperating] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
@@ -298,10 +296,7 @@ export function StatusBar({
 
       {/* Centered NEXUS title - absolutely positioned for true window centering */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
-        <span
-          className={`text-xl md:text-2xl text-primary ${glowClass} tracking-wider`}
-          style={{ fontFamily: currentDisplayFont }}
-        >
+        <span className={`font-display text-xl md:text-2xl text-primary ${glowClass} tracking-wider`}>
           NEXUS
         </span>
       </div>
@@ -333,28 +328,7 @@ export function StatusBar({
               <span>Settings</span>
             </div>
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-xs text-muted-foreground">
-            Theme
-          </DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => setTheme('gilded')}>
-            <div className="flex items-center gap-2 cursor-pointer">
-              <Sparkles className="h-4 w-4" />
-              <span>Gilded{theme === 'gilded' ? ' ✓' : ''}</span>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setTheme('vector')}>
-            <div className="flex items-center gap-2 cursor-pointer">
-              <Monitor className="h-4 w-4" />
-              <span>Vector{theme === 'vector' ? ' ✓' : ''}</span>
-            </div>
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setTheme('veil')}>
-            <div className="flex items-center gap-2 cursor-pointer">
-              <Wand2 className="h-4 w-4" />
-              <span>Veil{theme === 'veil' ? ' ✓' : ''}</span>
-            </div>
-          </DropdownMenuItem>
+          <ThemeMenu />
         </DropdownMenuContent>
       </DropdownMenu>
 
