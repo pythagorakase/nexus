@@ -11,23 +11,10 @@ import sharp from "sharp";
 
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
-  const auditionPort = process.env.API_PORT || "8000";
-  const auditionTarget = process.env.AUDITION_API_URL || `http://localhost:${auditionPort}`;
   const corePort = process.env.CORE_API_PORT || "8001";
   const coreTarget = process.env.CORE_API_URL || `http://localhost:${corePort}`;
   const narrativePort = process.env.NARRATIVE_API_PORT || "8002";
   const narrativeTarget = process.env.NARRATIVE_API_URL || `http://localhost:${narrativePort}`;
-
-  // Proxy for Audition API (FastAPI backend on port 8000)
-  // Express strips /api/audition before passing to middleware, so we need to add it back
-  // IMPORTANT: Must be registered BEFORE express.json() to access raw body stream
-  const auditionProxy = createProxyMiddleware({
-    target: auditionTarget,
-    changeOrigin: true,
-    pathRewrite: (path) => `/api/audition${path}`,
-  });
-
-  app.use("/api/audition", auditionProxy);
 
   // Proxy for Core API (FastAPI backend on port 8001)
   // Handles model management and system operations

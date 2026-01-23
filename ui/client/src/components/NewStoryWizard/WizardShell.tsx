@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Menu, Home, Settings, Sparkles, Monitor, Wand2, X, Globe, User, MapPin } from "lucide-react";
+import { Menu, Home, Settings, X, Globe, User, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SlotSelector } from "./SlotSelector";
@@ -10,11 +10,11 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CornerSunburst } from "@/components/deco";
+import { ThemeMenu } from "@/components/ThemeMenu";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -64,7 +64,7 @@ export function NewStoryWizard() {
     const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
     const [resumeThreadId, setResumeThreadId] = useState<string | null>(null);
     const [_, setLocation] = useLocation();
-    const { isGilded, isVector, theme, setTheme, glowClass } = useTheme();
+    const { isGilded, isVector, glowClass } = useTheme();
     const { toast } = useToast();
 
     // State for data collected across phases
@@ -210,28 +210,7 @@ export function NewStoryWizard() {
                                 </div>
                             </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuLabel className="text-xs text-muted-foreground">
-                            Theme
-                        </DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => setTheme('gilded')}>
-                            <div className="flex items-center gap-2 cursor-pointer">
-                                <Sparkles className="h-4 w-4" />
-                                <span>Gilded{theme === 'gilded' ? ' ✓' : ''}</span>
-                            </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setTheme('vector')}>
-                            <div className="flex items-center gap-2 cursor-pointer">
-                                <Monitor className="h-4 w-4" />
-                                <span>Vector{theme === 'vector' ? ' ✓' : ''}</span>
-                            </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setTheme('veil')}>
-                            <div className="flex items-center gap-2 cursor-pointer">
-                                <Wand2 className="h-4 w-4" />
-                                <span>Veil{theme === 'veil' ? ' ✓' : ''}</span>
-                            </div>
-                        </DropdownMenuItem>
+                        <ThemeMenu />
                     </DropdownMenuContent>
                 </DropdownMenu>
 
