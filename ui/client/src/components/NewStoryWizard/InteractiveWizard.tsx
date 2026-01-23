@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Sparkles, Cpu } from "lucide-react";
+import { Sparkles, ChevronDown, Check } from "lucide-react";
+import { getProviderIcon, getProviderWordmark, getModelIcon } from "@/lib/model-icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,6 +16,16 @@ import {
 } from "@/components/ui/resizable";
 import type { ImperativePanelGroupHandle } from "react-resizable-panels";
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuPortal,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
     Conversation,
     ConversationContent,
     ConversationScrollButton,
@@ -23,11 +34,6 @@ import {
     PromptInputToolbar,
     PromptInputTools,
     PromptInputSubmit,
-    PromptInputModelSelect,
-    PromptInputModelSelectTrigger,
-    PromptInputModelSelectContent,
-    PromptInputModelSelectItem,
-    PromptInputModelSelectValue,
     Loader,
     Response,
 } from "@/components/ai";
@@ -121,7 +127,7 @@ export function InteractiveWizard({
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
     const { toast } = useToast();
-    const { model, setModel, availableModels, isTestMode } = useModel();
+    const { model, setModel, availableModels, modelsByProvider, isTestMode } = useModel();
 
     // Side panel state
     const [panelExpanded, setPanelExpanded] = useState(false);
@@ -1110,22 +1116,60 @@ export function InteractiveWizard({
                         />
                         <PromptInputToolbar>
                             <PromptInputTools>
-                                {/* Model Picker */}
-                                <PromptInputModelSelect value={model} onValueChange={(value) => setModel(value as any)}>
-                                    <PromptInputModelSelectTrigger className="w-auto font-mono text-xs">
-                                        <div className="flex items-center gap-1.5">
-                                            <Cpu className="w-3 h-3 shrink-0" />
-                                            <PromptInputModelSelectValue />
-                                        </div>
-                                    </PromptInputModelSelectTrigger>
-                                    <PromptInputModelSelectContent>
-                                        {availableModels.map((m) => (
-                                            <PromptInputModelSelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                                                {m.label}
-                                            </PromptInputModelSelectItem>
+                                {/* Model Picker - Nested Dropdown */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="sm" className="h-7 px-2 font-mono text-xs text-muted-foreground hover:text-foreground">
+                                            <div className="flex items-center gap-1.5">
+                                                {getModelIcon(model, modelsByProvider, 'w-3.5 h-3.5')}
+                                                <span>{availableModels.find(m => m.id === model)?.label || model}</span>
+                                            </div>
+                                            <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="font-mono text-xs" align="start">
+                                        {Object.entries(modelsByProvider).map(([provider, models]) => (
+                                            models.length === 1 ? (
+                                                <DropdownMenuItem
+                                                    key={models[0].id}
+                                                    onClick={() => setModel(models[0].id)}
+                                                    className="flex items-center justify-between gap-2 text-xs"
+                                                >
+                                                    <div className="flex items-center gap-1.5">
+                                                        {getProviderIcon(provider, 'w-3.5 h-3.5')}
+                                                        <span>{models[0].label}</span>
+                                                    </div>
+                                                    {model === models[0].id && <Check className="h-3 w-3 shrink-0" />}
+                                                </DropdownMenuItem>
+                                            ) : (
+                                                <DropdownMenuSub key={provider}>
+                                                    <DropdownMenuSubTrigger className="gap-1.5 text-xs">
+                                                        {getProviderWordmark(provider, true) || (
+                                                            <span>{provider.charAt(0).toUpperCase() + provider.slice(1)}</span>
+                                                        )}
+                                                    </DropdownMenuSubTrigger>
+                                                    <DropdownMenuPortal>
+                                                        <DropdownMenuSubContent className="font-mono text-xs">
+                                                            {models.map(m => (
+                                                                <DropdownMenuItem
+                                                                    key={m.id}
+                                                                    onClick={() => setModel(m.id)}
+                                                                    className="flex items-center justify-between gap-2 text-xs"
+                                                                >
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        {getProviderIcon(provider, 'w-3.5 h-3.5')}
+                                                                        <span>{m.label}</span>
+                                                                    </div>
+                                                                    {model === m.id && <Check className="h-3 w-3 shrink-0" />}
+                                                                </DropdownMenuItem>
+                                                            ))}
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuPortal>
+                                                </DropdownMenuSub>
+                                            )
                                         ))}
-                                    </PromptInputModelSelectContent>
-                                </PromptInputModelSelect>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </PromptInputTools>
                             <PromptInputSubmit
                                 disabled={isLoading || !input.trim() || !!pendingArtifact}
