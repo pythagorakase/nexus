@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useFonts } from '@/contexts/FontContext';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
-import { useModel, Model } from '@/contexts/ModelContext';
+import { useModel } from '@/contexts/ModelContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
@@ -15,10 +15,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor, Wand2, Palette, Cpu } from 'lucide-react';
+import { Loader2, Upload, Save, AlertCircle, Sparkles, Monitor, Wand2, Palette, ChevronDown, Check } from 'lucide-react';
+import { getProviderWordmark, getProviderIcon, getModelIcon } from '@/lib/model-icons';
 import { PaletteComparison } from '@/components/PaletteComparison';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
@@ -89,7 +100,7 @@ export function SettingsTab() {
     currentDisplayFont,
   } = useFonts();
   const { theme, setTheme, isGilded, isVector, isVeil } = useTheme();
-  const { model, setModel, availableModels } = useModel();
+  const { model, setModel, availableModels, modelsByProvider } = useModel();
   const queryClient = useQueryClient();
   const glowClass = isGilded ? "deco-glow" : isVeil ? "veil-glow" : "terminal-glow";
   const [iconFile, setIconFile] = useState<File | null>(null);
@@ -719,27 +730,64 @@ export function SettingsTab() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
-              <Label htmlFor="default-model" className="font-mono text-sm">
+              <Label className="font-mono text-sm">
                 Default Model
               </Label>
-              <Select value={model} onValueChange={(value) => setModel(value as Model)}>
-                <SelectTrigger id="default-model" className="font-mono">
-                  <div className="flex items-center gap-2">
-                    <Cpu className="w-4 h-4" />
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableModels.map((m) => (
-                    <SelectItem key={m.id} value={m.id} className="font-mono">
-                      <div className="flex flex-col">
-                        <span>{m.label}</span>
-                        <span className="text-xs text-muted-foreground">{m.description}</span>
-                      </div>
-                    </SelectItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="font-mono w-full justify-between">
+                    <div className="flex items-center gap-2">
+                      {getModelIcon(model, modelsByProvider)}
+                      {availableModels.find(m => m.id === model)?.label || model}
+                    </div>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56 font-mono">
+                  {Object.entries(modelsByProvider).map(([provider, models]) => (
+                    models.length === 1 ? (
+                      // Single model provider - flat item with check mark and icon
+                      <DropdownMenuItem
+                        key={models[0].id}
+                        onClick={() => setModel(models[0].id)}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          {getProviderIcon(provider)}
+                          <span>{models[0].label}</span>
+                        </div>
+                        {model === models[0].id && <Check className="h-4 w-4 shrink-0" />}
+                      </DropdownMenuItem>
+                    ) : (
+                      // Multiple models - nested submenu with provider logo
+                      <DropdownMenuSub key={provider}>
+                        <DropdownMenuSubTrigger className="gap-2">
+                          {getProviderWordmark(provider) || (
+                            <span>{provider.charAt(0).toUpperCase() + provider.slice(1)}</span>
+                          )}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuPortal>
+                          <DropdownMenuSubContent className="font-mono">
+                            {models.map(m => (
+                              <DropdownMenuItem
+                                key={m.id}
+                                onClick={() => setModel(m.id)}
+                                className="flex items-center justify-between gap-2"
+                              >
+                                <div className="flex items-center gap-2">
+                                  {getProviderIcon(provider)}
+                                  <span>{m.label}</span>
+                                </div>
+                                {model === m.id && <Check className="h-4 w-4 shrink-0" />}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuPortal>
+                      </DropdownMenuSub>
+                    )
                   ))}
-                </SelectContent>
-              </Select>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <p className="text-xs text-muted-foreground font-mono">
                 This model will be used for all LLM calls unless overridden in the chat interface.
                 Select TEST to use the mock server for development.
