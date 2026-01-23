@@ -24,6 +24,30 @@ except ModuleNotFoundError:
 
 from .settings_models import Settings
 
+DEFAULT_API_MODELS_BY_PROVIDER: Dict[str, List[dict]] = {
+    "openai": [
+        {"id": "gpt-5.2", "label": "GPT-5.2"},
+    ],
+    "anthropic": [
+        {"id": "claude", "label": "Claude"},
+    ],
+    "test": [
+        {
+            "id": "TEST",
+            "label": "TEST",
+            "description": "Mock server with cached data (dev)",
+        },
+    ],
+}
+
+
+def _default_api_models_config() -> Dict[str, Dict[str, List[dict]]]:
+    """Return default api_models structure compatible with Settings."""
+    return {
+        provider: {"models": models}
+        for provider, models in DEFAULT_API_MODELS_BY_PROVIDER.items()
+    }
+
 
 def get_available_api_models() -> List[str]:
     """
@@ -64,10 +88,14 @@ def get_api_models_by_provider() -> Dict[str, List[dict]]:
         'gpt-5.2'
     """
     settings = load_settings()
-    return {
+    mapped = {
         provider: [m.model_dump() for m in config.models]
         for provider, config in settings.global_.model.api_models.items()
+        if config.models
     }
+    if not mapped:
+        return DEFAULT_API_MODELS_BY_PROVIDER
+    return mapped
 
 
 def get_all_api_models() -> List[dict]:
@@ -194,10 +222,13 @@ def _load_from_json(path: Path) -> Settings:
     # Legacy has "Agent Settings" with nested agents, we want flat structure
     legacy_agent_settings = data.get("Agent Settings", {})
     legacy_global = legacy_agent_settings.get("global", {})
+    legacy_model = dict(legacy_global.get("model", {}))
+    if not legacy_model.get("api_models"):
+        legacy_model["api_models"] = _default_api_models_config()
 
     transformed_data = {
         "global": {
-            "model": legacy_global.get("model", {}),
+            "model": legacy_model,
             "llm": legacy_global.get("llm", {}),
             "narrative": legacy_global.get("narrative", {}),
         },
