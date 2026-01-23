@@ -333,12 +333,6 @@ export function StatusBar({
               <span>Settings</span>
             </div>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onNavigate?.("audition")}>
-            <div className="flex items-center gap-2 cursor-pointer">
-              <Sparkles className="h-4 w-4" />
-              <span>Audition</span>
-            </div>
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             Theme

@@ -210,14 +210,6 @@ export function NewStoryWizard() {
                                 </div>
                             </Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                            <Link href="/nexus">
-                                <div className="flex items-center gap-2 cursor-pointer">
-                                    <Sparkles className="h-4 w-4" />
-                                    <span>Audition</span>
-                                </div>
-                            </Link>
-                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuLabel className="text-xs text-muted-foreground">
                             Theme

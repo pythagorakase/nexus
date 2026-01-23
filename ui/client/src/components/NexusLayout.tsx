@@ -10,7 +10,6 @@ import { StatusBar } from "./StatusBar";
 import { NarrativeTab, type ChunkWithMetadata } from "./NarrativeTab";
 import { MapTab } from "./MapTab";
 import { CharactersTab } from "./CharactersTab";
-import AuditionTab from "@/pages/AuditionTab";
 import { SettingsTab } from "@/pages/SettingsTab";
 // FontProvider moved to App.tsx to wrap entire app
 import { useTheme } from "@/contexts/ThemeContext";
@@ -469,7 +468,7 @@ export function NexusLayout() {
       switch (cmd.toLowerCase()) {
         case "tab":
           const tabArg = args.join(" ").trim().toLowerCase();
-          if (["narrative", "map", "characters", "audition", "settings"].includes(tabArg)) {
+          if (["narrative", "map", "characters", "settings"].includes(tabArg)) {
             setActiveTab(tabArg);
           }
           break;
@@ -605,10 +604,6 @@ export function NexusLayout() {
 
           <TabsContent value="characters" className={tabContentClass}>
             <CharactersTab slot={activeSlot} />
-          </TabsContent>
-
-          <TabsContent value="audition" className={tabContentClass}>
-            <AuditionTab />
           </TabsContent>
 
           <TabsContent value="settings" className={tabContentClass}>
