@@ -89,7 +89,15 @@ export function ModelProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.warn('Failed to fetch models from API, using fallback:', error);
-        // Keep using fallback models
+        // Validate stored model against fallback list to prevent stale invalid models
+        const fallbackIds = FALLBACK_MODELS.map(m => m.id);
+        const storedModel = localStorage.getItem(STORAGE_KEY);
+        if (storedModel && !fallbackIds.includes(storedModel)) {
+          const newDefault = fallbackIds.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : fallbackIds[0];
+          console.warn(`[ModelContext] Stored model "${storedModel}" not in fallback list, resetting to "${newDefault}"`);
+          setModelState(newDefault);
+          localStorage.setItem(STORAGE_KEY, newDefault);
+        }
       } finally {
         setIsLoading(false);
       }
