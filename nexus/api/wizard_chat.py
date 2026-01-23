@@ -59,21 +59,33 @@ def load_settings() -> dict:
 
 
 def get_base_url_for_model(model: str) -> Optional[str]:
-    """Get API base URL based on model selection.
+    """Get API base URL based on model's provider.
+
+    Uses the provider lookup from nexus.toml api_models configuration
+    to determine which API backend to use.
 
     Args:
-        model: Model identifier (gpt-5.1, TEST, claude)
+        model: Model identifier (e.g., gpt-5.2, TEST, claude)
 
     Returns:
         Base URL for the model's API, or None to use default OpenAI
     """
-    if model == "TEST":
+    from nexus.config.loader import get_provider_for_model
+
+    provider = get_provider_for_model(model)
+
+    if provider == "test":
         settings = load_settings()
         return settings.get("global", {}).get("api", {}).get(
             "test_mock_server_url", "http://localhost:5102/v1"
         )
-    # Future: route Claude models to Anthropic API
-    return None  # Use default OpenAI
+    elif provider == "anthropic":
+        # Anthropic uses different client, not just URL change
+        # For now, return None - full Anthropic support requires client changes
+        return None
+
+    # Default: OpenAI (provider == "openai" or unknown)
+    return None
 
 
 def validate_subphase_tool(function_name: str, arguments: dict) -> dict:

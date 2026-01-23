@@ -9,14 +9,11 @@
 # Default LLM model to load for local inference (via LM Studio)
 default_model = "nexveridian/gpt-oss-120b"
 
-# Available API models for UI picker and CLI (not local inference)
-# These are the model endpoints available in the system
-available_models = ["gpt-5.2", "TEST", "claude"]
-
 # Default model for newly created/reset slots
 # Use "TEST" for development (mock responses, no API key needed)
 default_slot_model = "TEST"
 
+# Local model options (for LM Studio inference)
 possible_values = [
     "nousresearch/hermes-4-70b",
     "unsloth-gpt-oss-120b-hi-mlx",
@@ -28,6 +25,26 @@ possible_values = [
     "mixtral-8x22b-instruct-v0.1",
     "llama-3.3-70b-instruct@8bit",
     "llama-4-scout-17b-16e-instruct"
+]
+
+# Provider-grouped API model definitions
+# Each provider section lists models available for that API backend
+[global.model.api_models.openai]
+models = [
+    { id = "gpt-5.1", label = "GPT-5.1" },
+    { id = "gpt-5.2", label = "GPT-5.2" },
+]
+
+[global.model.api_models.anthropic]
+models = [
+    { id = "claude-haiku-4-5", label = "Haiku 4.5" },
+    { id = "claude-sonnet-4-5", label = "Sonnet 4.5" },
+    { id = "claude-opus-4-5", label = "Opus 4.5" },
+]
+
+[global.model.api_models.test]
+models = [
+    { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
 ]
 
 [global.llm]

@@ -2,47 +2,116 @@
  * Model selection context for managing LLM model choice across the application.
  *
  * Provides per-call model selection with localStorage persistence.
- * Available models: gpt-5.1 (default), TEST (mock server), claude (future)
+ * Models are fetched dynamically from /api/config/models to reflect nexus.toml changes.
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-export type Model = 'gpt-5.1' | 'TEST' | 'claude';
+// Model info from API
+interface ModelInfo {
+  id: string;
+  label: string;
+  description?: string;  // Optional now
+  provider: string;
+}
 
 interface ModelContextType {
-  model: Model;
-  setModel: (model: Model) => void;
+  model: string;
+  setModel: (model: string) => void;
   isTestMode: boolean;
-  // Available models for UI picker
-  availableModels: { id: Model; label: string; description: string }[];
+  // Available models for UI picker (fetched from backend)
+  availableModels: ModelInfo[];
+  // Models grouped by provider (for nested dropdown menus)
+  modelsByProvider: Record<string, ModelInfo[]>;
+  isLoading: boolean;
 }
 
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'nexus-model';
-const DEFAULT_MODEL: Model = 'gpt-5.1';
+const DEFAULT_MODEL = 'gpt-5.2';
 
-// Models available in the UI picker
-const AVAILABLE_MODELS: { id: Model; label: string; description: string }[] = [
-  { id: 'gpt-5.1', label: 'GPT-5.1', description: 'OpenAI GPT-5.1 (production)' },
-  { id: 'TEST', label: 'TEST', description: 'Mock server with cached data (dev)' },
-  { id: 'claude', label: 'Claude', description: 'Anthropic Claude (coming soon)' },
+// Fallback models if API fails (matches nexus.toml defaults)
+const FALLBACK_MODELS: ModelInfo[] = [
+  { id: 'gpt-5.2', label: 'GPT-5.2', provider: 'openai' },
+  { id: 'TEST', label: 'TEST', provider: 'test' },
+  { id: 'claude', label: 'Claude', provider: 'anthropic' },
 ];
 
-export function ModelProvider({ children }: { children: ReactNode }) {
-  const [model, setModelState] = useState<Model>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    // Validate stored value is a valid model
-    if (stored === 'gpt-5.1' || stored === 'TEST' || stored === 'claude') {
-      return stored;
-    }
-    return DEFAULT_MODEL;
-  });
+// Build fallback by_provider from flat list
+const FALLBACK_BY_PROVIDER: Record<string, ModelInfo[]> = FALLBACK_MODELS.reduce((acc, m) => {
+  if (!acc[m.provider]) acc[m.provider] = [];
+  acc[m.provider].push(m);
+  return acc;
+}, {} as Record<string, ModelInfo[]>);
 
+export function ModelProvider({ children }: { children: ReactNode }) {
+  const [model, setModelState] = useState<string>(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored || DEFAULT_MODEL;
+  });
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>(FALLBACK_MODELS);
+  const [modelsByProvider, setModelsByProvider] = useState<Record<string, ModelInfo[]>>(FALLBACK_BY_PROVIDER);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch available models from backend on mount
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        console.log('[ModelContext] Fetching models from API...');
+        const response = await fetch('/api/config/models');
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[ModelContext] API response:', data);
+          if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+            setAvailableModels(data.models);
+
+            // Compute modelsByProvider from the flat models list
+            // (more reliable than using by_provider since models already have provider field)
+            const byProvider = (data.models as ModelInfo[]).reduce((acc, m) => {
+              const provider = m.provider || 'other';
+              if (!acc[provider]) acc[provider] = [];
+              acc[provider].push(m);
+              return acc;
+            }, {} as Record<string, ModelInfo[]>);
+            console.log('[ModelContext] Computed byProvider:', byProvider);
+            setModelsByProvider(byProvider);
+
+            // Validate stored model is still valid
+            const validIds = data.models.map((m: ModelInfo) => m.id);
+            const storedModel = localStorage.getItem(STORAGE_KEY);
+            if (storedModel && !validIds.includes(storedModel)) {
+              // Stored model no longer valid, reset to default
+              const newDefault = validIds.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : validIds[0];
+              setModelState(newDefault);
+              localStorage.setItem(STORAGE_KEY, newDefault);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to fetch models from API, using fallback:', error);
+        // Validate stored model against fallback list to prevent stale invalid models
+        const fallbackIds = FALLBACK_MODELS.map(m => m.id);
+        const storedModel = localStorage.getItem(STORAGE_KEY);
+        if (storedModel && !fallbackIds.includes(storedModel)) {
+          const newDefault = fallbackIds.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : fallbackIds[0];
+          console.warn(`[ModelContext] Stored model "${storedModel}" not in fallback list, resetting to "${newDefault}"`);
+          setModelState(newDefault);
+          localStorage.setItem(STORAGE_KEY, newDefault);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchModels();
+  }, []);
+
+  // Persist model selection to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, model);
   }, [model]);
 
-  const setModel = (newModel: Model) => setModelState(newModel);
+  const setModel = (newModel: string) => setModelState(newModel);
 
   const isTestMode = model === 'TEST';
 
@@ -51,7 +120,9 @@ export function ModelProvider({ children }: { children: ReactNode }) {
       model,
       setModel,
       isTestMode,
-      availableModels: AVAILABLE_MODELS,
+      availableModels,
+      modelsByProvider,
+      isLoading,
     }}>
       {children}
     </ModelContext.Provider>

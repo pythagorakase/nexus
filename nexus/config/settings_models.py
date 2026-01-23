@@ -13,19 +13,38 @@ from pydantic import BaseModel, Field, ConfigDict
 # Global Settings Models
 # =============================================================================
 
-class ModelConfig(BaseModel):
-    """Local LLM model configuration."""
+class APIModelEntry(BaseModel):
+    """Single API model definition."""
     model_config = ConfigDict(extra='forbid')
 
-    default_model: str = Field(..., description="Default model to load")
-    possible_values: List[str] = Field(..., description="Available model options")
-    available_models: List[str] = Field(
-        default=["gpt-5.1", "TEST", "claude"],
-        description="Available API models for UI picker and CLI"
+    id: str = Field(..., description="Model identifier (e.g., 'gpt-5.2', 'claude')")
+    label: str = Field(..., description="Display label for UI")
+    description: Optional[str] = Field(default=None, description="Human-readable description (optional)")
+
+
+class ProviderModels(BaseModel):
+    """Models for a single API provider."""
+    model_config = ConfigDict(extra='forbid')
+
+    models: List[APIModelEntry] = Field(
+        default_factory=list,
+        description="List of models available from this provider"
     )
+
+
+class ModelConfig(BaseModel):
+    """LLM model configuration with provider grouping."""
+    model_config = ConfigDict(extra='forbid')
+
+    default_model: str = Field(..., description="Default model to load for local inference")
+    possible_values: List[str] = Field(..., description="Available local model options")
     default_slot_model: str = Field(
         default="TEST",
         description="Default model for newly created/reset slots"
+    )
+    api_models: Dict[str, ProviderModels] = Field(
+        default_factory=dict,
+        description="API models grouped by provider (openai, anthropic, test)"
     )
 
 

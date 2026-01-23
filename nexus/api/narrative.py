@@ -182,6 +182,16 @@ async def health_check():
     return {"status": "healthy", "service": "narrative_api"}
 
 
+@app.get("/api/config/models")
+async def get_config_models():
+    """Get available API models with provider info from nexus.toml."""
+    from nexus.config.loader import get_all_api_models, get_api_models_by_provider
+    return {
+        "models": get_all_api_models(),
+        "by_provider": get_api_models_by_provider(),
+    }
+
+
 @app.post("/api/narrative/continue", response_model=ContinueNarrativeResponse)
 async def continue_narrative(
     request: ContinueNarrativeRequest, background_tasks: BackgroundTasks
