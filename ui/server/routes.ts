@@ -92,6 +92,12 @@ export function registerProxyRoutes(app: Express): void {
     pathRewrite: (path) => `/api/user-character${path}`,
   }));
 
+  // Proxy for config endpoint (serves model configuration from nexus.toml)
+  app.use("/api/config", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/config${path}`,
+  }));
+
   app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
 }
 

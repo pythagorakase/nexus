@@ -138,32 +138,39 @@ async def select_slot_endpoint(request: SelectSlotRequest):
 
 @router.get("/slots")
 async def get_slots_status_endpoint():
-    """Get status of all save slots with wizard state"""
-    from nexus.api.slot_utils import all_slots, slot_dbname
-    from nexus.api.save_slots import list_slots
-    from nexus.api.new_story_cache import read_cache
+    """Get status of all save slots with wizard state.
+
+    Uses data-presence detection from slot_state.py rather than the
+    potentially stale new_story flag for robust is_active detection.
+    """
+    from nexus.api.slot_utils import all_slots
+    from nexus.api.slot_state import get_slot_state
+    from nexus.api.save_slots import is_slot_locked
 
     results = []
     for slot in all_slots():
-        dbname = slot_dbname(slot)
         try:
-            # Try to list slots from this DB
-            slots_data = list_slots(dbname=dbname)
-            # Find the row for this slot
-            slot_data = next((s for s in slots_data if s["slot_number"] == slot), None)
+            state = get_slot_state(slot)
 
-            if slot_data:
-                # Check if wizard is in progress
-                cache = read_cache(dbname)
-                if cache:
-                    slot_data["wizard_in_progress"] = True
-                    slot_data["wizard_thread_id"] = cache.thread_id
-                    slot_data["wizard_phase"] = cache.current_phase()
-                else:
-                    slot_data["wizard_in_progress"] = False
-                results.append(slot_data)
-            else:
-                results.append({"slot_number": slot, "is_active": False, "wizard_in_progress": False})
+            # Build response from slot_state data
+            slot_data = {
+                "slot_number": slot,
+                "is_active": not state.is_empty,  # Data presence, not flag
+                "is_locked": is_slot_locked(slot),
+                "model": state.model,
+                "wizard_in_progress": state.is_wizard_mode,
+            }
+
+            if state.is_wizard_mode and state.wizard_state:
+                slot_data["wizard_phase"] = state.wizard_state.phase
+                slot_data["wizard_thread_id"] = state.wizard_state.thread_id
+
+            if state.narrative_state:
+                # For narrative mode, include chunk info
+                slot_data["current_chunk_id"] = state.narrative_state.current_chunk_id
+                slot_data["has_pending"] = state.narrative_state.has_pending
+
+            results.append(slot_data)
         except (psycopg2.OperationalError, psycopg2.DatabaseError) as e:
             # Expected: DB doesn't exist or connection failed
             logger.warning(f"Could not connect to slot {slot} database: {e}")
