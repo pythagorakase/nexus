@@ -858,8 +858,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         zone=arguments.get("zone"),
                         location=arguments.get("location"),
                     )
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Failed to persist artifact for {function_name}: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to persist artifact for {function_name}: {str(e)}",
+                )
 
             # Determine if this completes the entire phase or just a sub-phase
             is_subphase_tool = function_name in [
