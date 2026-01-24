@@ -827,6 +827,24 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
             # Persist the artifact to the setup cache
             try:
+                if function_name == "submit_starting_scenario":
+                    try:
+                        scenario = StartingScenario.model_validate(arguments)
+                        arguments = scenario.model_dump()
+                    except Exception as e:
+                        payload = _summarize_payload(arguments)
+                        logger.error(
+                            "StartingScenario validation failed: %s | payload=%s",
+                            e,
+                            payload,
+                        )
+                        raise HTTPException(
+                            status_code=422,
+                            detail=(
+                                "LLM returned invalid StartingScenario: "
+                                f"{str(e)} | payload={payload}"
+                            ),
+                        )
                 if function_name == "submit_world_document":
                     record_drafts(request.slot, setting=arguments)
                 elif function_name == "submit_character_sheet":

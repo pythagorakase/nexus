@@ -5,7 +5,7 @@ The normalized schema stores wizard state in typed columns rather than JSONB blo
 Phase completion is determined by:
 - Setting complete: setting_genre IS NOT NULL
 - Character complete: 4 traits selected in assets.traits (3 + wildcard with rationale)
-- Seed complete: seed_type IS NOT NULL
+- Seed complete: seed_type, layer, zone, and initial location are present
 """
 
 from __future__ import annotations
@@ -173,7 +173,12 @@ class WizardCache:
 
     def seed_complete(self) -> bool:
         """Check if seed phase is complete."""
-        return self.seed.seed_type is not None
+        return (
+            bool(self.seed.seed_type)
+            and bool(self.seed.layer_name)
+            and bool(self.seed.zone_name)
+            and bool(self.seed.initial_location)
+        )
 
     def current_phase(self) -> str:
         """Infer current phase from data presence."""
