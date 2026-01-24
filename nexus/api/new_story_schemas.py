@@ -356,6 +356,75 @@ class TraitRationales(BaseModel):
         return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
+class TraitSuggestion(BaseModel):
+    """Suggested trait with explicit rationale."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    name: TraitName = Field(..., description="Trait name to suggest")
+    rationale: str = Field(
+        ...,
+        min_length=5,
+        description="Why this trait fits the character concept",
+    )
+
+
+class CharacterConceptSubmission(BaseModel):
+    """
+    Tool submission schema for the character concept with explicit rationales.
+
+    This schema ensures each suggested trait carries its own rationale.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    archetype: str = Field(
+        ...,
+        min_length=5,
+        description="Character archetype/concept (e.g., 'reluctant hero', 'cunning merchant')",
+    )
+    background: str = Field(
+        ...,
+        min_length=30,
+        description="Character's history, origin, and what shaped them",
+    )
+    name: str = Field(
+        ..., min_length=1, max_length=50, description="Character's full name"
+    )
+    appearance: str = Field(
+        ...,
+        min_length=30,
+        description="Physical description and how they present themselves",
+    )
+    suggested_traits: List[TraitSuggestion] = Field(
+        default_factory=list,
+        max_length=3,
+        description="Up to 3 suggested traits with rationales",
+    )
+
+    @field_validator("suggested_traits")
+    @classmethod
+    def validate_unique_trait_names(cls, v: List[TraitSuggestion]) -> List[TraitSuggestion]:
+        """Ensure suggested traits are unique."""
+        names = [item.name for item in v]
+        if names and len(set(names)) != len(names):
+            raise ValueError("Suggested traits must be unique")
+        return v
+
+    def to_character_concept(self) -> "CharacterConcept":
+        """Convert tool submission into the internal CharacterConcept schema."""
+        suggested_names = [item.name for item in self.suggested_traits]
+        rationales = {item.name: item.rationale for item in self.suggested_traits}
+        return CharacterConcept(
+            archetype=self.archetype,
+            background=self.background,
+            name=self.name,
+            appearance=self.appearance,
+            suggested_traits=suggested_names,
+            trait_rationales=TraitRationales(**rationales),
+        )
+
+
 class CharacterConcept(BaseModel):
     """
     Sub-phase 1: Core character concept.

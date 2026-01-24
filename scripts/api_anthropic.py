@@ -19,7 +19,7 @@ Common Arguments for Scripts Using This Library:
 LLM Provider Options:
     --model MODEL           Model name to use (defaults to DEFAULT_MODEL)
     --api-key KEY           API key (optional, tries environment variables by default)
-    --temperature FLOAT     Model temperature (0.0-1.0, default 0.1)
+    --temperature FLOAT     Model temperature (0.0-1.0, default: API default)
     --max-tokens INT        Maximum tokens to generate in response (default: 4000)
     --system-prompt TEXT    Optional system prompt to use
     --top-p FLOAT           Top-p sampling parameter (0.0-1.0, default None)
@@ -161,6 +161,9 @@ def get_token_count(text: str, model: str) -> int:
     
     # Fallback to character-based estimation if all else fails
     # Claude's tokenization is roughly 4 characters per token
+    logger.warning(
+        "Falling back to character-based token estimation; counts may be inaccurate."
+    )
     return len(text) // 4
 
 
@@ -170,7 +173,7 @@ class LLMProvider(abc.ABC):
     def __init__(self, 
                 api_key: Optional[str] = None, 
                 model: Optional[str] = None,
-                temperature: float = 0.1,
+                temperature: Optional[float] = None,
                 max_tokens: int = 4000,
                 system_prompt: Optional[str] = None):
         self.api_key = api_key
@@ -237,14 +240,14 @@ class LLMProvider(abc.ABC):
 
 class AnthropicProvider(LLMProvider):
     """Anthropic provider implementation."""
-    
+
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-haiku-20240307"
 
     def __init__(self,
                 api_key: Optional[str] = None,
                 model: Optional[str] = None,
-                temperature: float = 0.1,
+                temperature: Optional[float] = None,
                 max_tokens: int = 4000,
                 system_prompt: Optional[str] = None,
                 top_p: Optional[float] = None,
@@ -258,7 +261,7 @@ class AnthropicProvider(LLMProvider):
         Args:
             api_key: Anthropic API key
             model: Model name to use
-            temperature: Temperature for generation
+            temperature: Temperature for generation (omit to use API default)
             max_tokens: Maximum tokens to generate (includes thinking budget if enabled)
             system_prompt: Optional system prompt
             top_p: Optional top-p sampling parameter (0.0-1.0)
@@ -300,11 +303,19 @@ class AnthropicProvider(LLMProvider):
 
         # Log the model type and thinking status
         if self.thinking_enabled:
-            logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}, "
-                       f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
-                       f"total max_tokens: {self.max_tokens})")
+            if self.temperature is None:
+                logger.info(f"Using Anthropic model: {self.model} with default temperature, "
+                           f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
+                           f"total max_tokens: {self.max_tokens})")
+            else:
+                logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}, "
+                           f"extended thinking enabled (budget: {self.thinking_budget_tokens} tokens, "
+                           f"total max_tokens: {self.max_tokens})")
         else:
-            logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}")
+            if self.temperature is None:
+                logger.info(f"Using Anthropic model: {self.model} with default temperature")
+            else:
+                logger.info(f"Using Anthropic model: {self.model} with temperature: {self.temperature}")
         
     def get_completion(self, prompt: str, enable_cache: bool = False) -> LLMResponse:
         """
@@ -331,8 +342,9 @@ class AnthropicProvider(LLMProvider):
             "model": self.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
-            "temperature": self.temperature
         }
+        if self.temperature is not None:
+            params["temperature"] = self.temperature
 
         # Add optional parameters if provided
         if system:
@@ -448,45 +460,88 @@ class AnthropicProvider(LLMProvider):
         
         # Format input messages
         messages = [{"role": "user", "content": prompt}]
-        
-        # Get the JSON schema from the Pydantic model
-        json_schema = schema_model.model_json_schema()
-        
-        # Construct system prompt for structured output
-        system_message = self.system_prompt or ""
-        schema_instruction = f"""
-        You must respond with valid JSON that matches the following schema:
-        ```json
-        {json.dumps(json_schema, indent=2)}
-        ```
-        Only respond with valid JSON that matches this schema, nothing else.
-        """
-        
-        # Combine with existing system prompt if provided
-        if self.system_prompt:
-            system_message = f"{self.system_prompt}\n\n{schema_instruction}"
-        else:
-            system_message = schema_instruction
-        
+
+        # Transform schema for Anthropic structured outputs
+        from nexus.api.structured_output import STRUCTURED_OUTPUT_BETA, make_anthropic_schema
+
+        raw_schema = schema_model.model_json_schema()
+        structured_schema = make_anthropic_schema(raw_schema)
+
+        output_format = {
+            "type": "json_schema",
+            "schema": structured_schema,
+        }
+
         # Prepare parameters for the API call
         params = {
             "model": self.model,
             "messages": messages,
             "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
-            "system": system_message
         }
-        
+        if self.temperature is not None:
+            params["temperature"] = self.temperature
+
         # Add optional parameters if provided
+        if self.system_prompt:
+            params["system"] = self.system_prompt
+
         if self.top_p is not None:
             params["top_p"] = self.top_p
             
         if self.top_k is not None:
             params["top_k"] = self.top_k
+
+        extra_body: Dict[str, Any] = {
+            "output_format": output_format
+        }
+
+        if self.thinking_enabled:
+            extra_body["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget_tokens
+            }
         
-        try:
-            # Call the API
-            response = self.client.messages.create(**params)
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Call the API
+                response = self.client.beta.messages.create(
+                    **params,
+                    betas=[STRUCTURED_OUTPUT_BETA],
+                    extra_body=extra_body,
+                )
+            except Exception as e:
+                status_code = getattr(e, "status_code", None)
+                retryable = status_code in {429, 500, 502, 503, 504}
+                if retryable and attempt < max_attempts:
+                    retry_after = None
+                    if hasattr(e, "response") and hasattr(e.response, "headers"):
+                        retry_after = e.response.headers.get("retry-after")
+
+                    if status_code == 429:
+                        retry_wait = (
+                            int(retry_after)
+                            if retry_after and retry_after.isdigit()
+                            else COOLDOWNS["rate_limit"]
+                        )
+                    else:
+                        retry_wait = COOLDOWNS.get("individual", 15)
+
+                    logger.warning(
+                        "Anthropic structured output attempt %d/%d failed (%s). Retrying in %s seconds.",
+                        attempt,
+                        max_attempts,
+                        status_code or "unknown",
+                        retry_wait,
+                    )
+                    time.sleep(retry_wait)
+                    continue
+
+                logger.error(
+                    "Error calling Anthropic API for structured completion: %s",
+                    str(e),
+                )
+                raise
 
             # Extract the content from the response
             # For extended thinking, skip "thinking" blocks and get the first text block
@@ -506,7 +561,7 @@ class AnthropicProvider(LLMProvider):
                 logger.error(f"Error parsing response as JSON schema: {parse_error}")
                 logger.info(f"Raw response: {content}")
                 raise ValueError(f"Failed to parse response as JSON schema: {parse_error}")
-            
+
             # Create standardized response
             llm_response = LLMResponse(
                 content=content,
@@ -515,14 +570,9 @@ class AnthropicProvider(LLMProvider):
                 model=self.model,
                 raw_response=response
             )
-            
+
             # Return both the parsed object and the standard LLMResponse
             return parsed_obj, llm_response
-            
-        except Exception as e:
-            # Handle API errors
-            logger.error(f"Error calling Anthropic API for structured completion: {str(e)}")
-            raise
     
     def count_tokens(self, text: str) -> int:
         """
@@ -742,8 +792,8 @@ def get_default_llm_argument_parser():
     llm_group.add_argument("--model", default=AnthropicProvider.DEFAULT_MODEL,
                          help=f"Model name to use (default: {AnthropicProvider.DEFAULT_MODEL})")
     llm_group.add_argument("--api-key", help="API key (optional)")
-    llm_group.add_argument("--temperature", type=float, default=0.1,
-                         help="Model temperature (0.0-1.0, default: 0.1)")
+    llm_group.add_argument("--temperature", type=float, default=None,
+                         help="Model temperature (0.0-1.0, omit for API default)")
     llm_group.add_argument("--max-tokens", type=int, default=4000,
                          help="Maximum tokens to generate in response (default: 4000)")
     llm_group.add_argument("--system-prompt", 

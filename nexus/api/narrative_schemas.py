@@ -28,6 +28,20 @@ class ContinueNarrativeRequest(BaseModel):
     )
     user_text: str = Field(description="User's completion text")
     slot: Optional[int] = Field(default=None, description="Active save slot")
+    model: Optional[str] = Field(default=None, description="Override model for this request")
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, v: Optional[str]) -> Optional[str]:
+        """Validate model against available models from nexus.toml."""
+        if v is None:
+            return v
+        from nexus.config import get_available_api_models
+
+        available = get_available_api_models()
+        if v not in available:
+            raise ValueError(f"Invalid model '{v}'. Available: {', '.join(available)}")
+        return v
 
 
 class ContinueNarrativeResponse(BaseModel):
@@ -221,6 +235,10 @@ class ChatRequest(BaseModel):
     model: str = "gpt-5.1"  # Model selection - validated against nexus.toml
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
+    dev: bool = Field(
+        default=False,
+        description="Allow a freeform response for this turn (no tools/structured output).",
+    )
     # Trait selection operations (character phase, traits subphase)
     # 0 = confirm selection, 1-10 = toggle trait by ID
     trait_choice: Optional[int] = None
