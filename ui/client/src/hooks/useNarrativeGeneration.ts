@@ -14,6 +14,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ChunkWithMetadata } from "../components/NarrativeTab";
 import type { IncubatorViewPayload, NarrativeProgressPayload, NarrativePhase } from "../types/narrative";
 import { toast } from "./use-toast";
+import { useModel } from "@/contexts/ModelContext";
 
 /** Phases that indicate generation is actively in progress */
 const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
@@ -40,6 +41,7 @@ interface UseNarrativeGenerationOptions {
 export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = {}) {
   const { onPhaseChange, onComplete, onError, allowedChunkId = null, slot, initialSessionId = null } = options;
   const queryClient = useQueryClient();
+  const { model } = useModel();
 
   // Session state
   const [activeNarrativeSession, setActiveNarrativeSession] = useState<string | null>(initialSessionId);
@@ -299,6 +301,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
             chunk_id: selectedChunk.id,
             user_text: trimmedInput,
             slot: slot,
+            model,
           }),
         });
 
@@ -329,7 +332,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [allowedChunkId, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer],
+    [allowedChunkId, model, narrativePhase, onPhaseChange, onError, slot, startElapsedTimer, stopElapsedTimer],
   );
 
   const handleApprove = useCallback(async () => {
@@ -451,6 +454,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
             chunk_id: 0, // Signal bootstrap
             user_text: trimmedInput,
             slot: slot,
+            model,
           }),
         });
 
@@ -481,7 +485,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
         });
       }
     },
-    [narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer, slot],
+    [model, narrativePhase, onPhaseChange, onError, startElapsedTimer, stopElapsedTimer, slot],
   );
 
   return {

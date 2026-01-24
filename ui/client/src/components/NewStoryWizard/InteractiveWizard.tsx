@@ -126,6 +126,7 @@ export function InteractiveWizard({
     const [showTraitSelector, setShowTraitSelector] = useState(false);
     const [suggestedTraits, setSuggestedTraits] = useState<string[]>([]);
     const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
+    const [modelLocked, setModelLocked] = useState(false);
     const { toast } = useToast();
     const { model, setModel, availableModels, modelsByProvider, isTestMode } = useModel();
 
@@ -169,6 +170,7 @@ export function InteractiveWizard({
                 setDisplayChoices(null);
                 setPendingArtifact(null);
                 setShowTraitSelector(false);
+                setModelLocked(false);
 
                 if (resumeThreadId) {
                     setThreadId(resumeThreadId);
@@ -325,6 +327,7 @@ export function InteractiveWizard({
                     slot,
                     user_text: "Begin the story.",
                     test_mode: isTestMode,  // Pass TEST mode for mock bootstrap
+                    model,
                 }),
                 signal: abortController.signal,
             });
@@ -404,6 +407,9 @@ export function InteractiveWizard({
         content: string,
         artifact?: { type: string; data: any }
     ) => {
+        if (role === "user") {
+            setModelLocked(true);
+        }
         setMessages((prev) => [
             ...prev,
             {
@@ -1119,7 +1125,12 @@ export function InteractiveWizard({
                                 {/* Model Picker - Nested Dropdown */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="h-7 px-2 font-mono text-xs text-muted-foreground hover:text-foreground">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={modelLocked}
+                                            className="h-7 px-2 font-mono text-xs text-muted-foreground hover:text-foreground"
+                                        >
                                             <div className="flex items-center gap-1.5">
                                                 {getModelIcon(model, modelsByProvider, 'w-3.5 h-3.5')}
                                                 <span>{availableModels.find(m => m.id === model)?.label || model}</span>

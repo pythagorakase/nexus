@@ -337,6 +337,11 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     args.choice = 0  # Treat as confirm
 
                 if trait_menu and args.choice is not None:
+                    if args.dev:
+                        return {
+                            "success": False,
+                            "error": "Dev mode is not supported for trait selection toggles.",
+                        }
                     # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
                     if args.choice == 0:
                         if not state.get("can_confirm"):
@@ -419,6 +424,13 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     "accept_fate": args.accept_fate,
                     # thread_id and current_phase resolved by backend
                 }
+                if args.dev and args.accept_fate:
+                    return {
+                        "success": False,
+                        "error": "Cannot combine --dev with --accept-fate.",
+                    }
+                if args.dev:
+                    payload["dev"] = True
                 if model_to_use:
                     payload["model"] = model_to_use
 
@@ -497,6 +509,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         if not state.get("is_wizard_mode"):
             # Narrative mode - call continue directly
             # Resolve choice to user_text if provided
+            model_to_use = args.model or state.get("model")
             user_text = args.user_text or ""
             if args.choice is not None and state.get("choices"):
                 choices = state.get("choices", [])
@@ -523,6 +536,8 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 "user_text": user_text,
                 # chunk_id resolved by backend
             }
+            if model_to_use:
+                payload["model"] = model_to_use
 
             response = requests.post(url, json=payload, timeout=120)
             response.raise_for_status()
@@ -787,6 +802,11 @@ Examples:
         "--accept-fate",
         action="store_true",
         help="Auto-advance (select first choice or trigger auto-generate)",
+    )
+    continue_parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Request a freeform response for this turn (wizard only)",
     )
     continue_parser.add_argument(
         "--model",

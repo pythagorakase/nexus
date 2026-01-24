@@ -206,6 +206,16 @@ async def continue_narrative(
 
     Initiates async generation and returns session_id for tracking.
     """
+    if request.model:
+        if request.slot is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Model override requires a slot to persist the selection.",
+            )
+        from nexus.api.save_slots import upsert_slot
+        upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
+        logger.info("Persisted model %s to slot %s", request.model, request.slot)
+
     # Resolve chunk_id from slot state if not provided
     if request.chunk_id is None and request.slot is not None:
         from nexus.api.slot_state import get_slot_state

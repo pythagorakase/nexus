@@ -6,9 +6,10 @@ Manages communication with Apex AI providers (OpenAI, Anthropic, xAI).
 
 import json
 import logging
-from typing import Dict, Any, Optional
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 import psycopg2
 
 # Add scripts directory to path for API imports
@@ -22,6 +23,7 @@ from nexus.agents.logon.apex_schema import (
     create_minimal_response,
 )
 from nexus.api.slot_utils import require_slot_dbname
+from nexus.config.loader import get_provider_for_model
 
 logger = logging.getLogger("nexus.lore.logon")
 
@@ -120,7 +122,6 @@ class LogonUtility:
     def _initialize_provider(self) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
-        provider_type = apex_settings.get("provider", "openai")
 
         # Model priority: override > slot config > settings
         model = self.model_override
@@ -128,6 +129,8 @@ class LogonUtility:
             model = self._get_slot_model()
         if not model:
             model = apex_settings.get("model", "gpt-4o")
+
+        provider_type = get_provider_for_model(model) or apex_settings.get("provider", "openai")
 
         # Determine base_url for TEST model routing
         base_url = None
@@ -140,7 +143,7 @@ class LogonUtility:
         # Load system prompt
         system_prompt = self._load_system_prompt()
 
-        if provider_type == "openai":
+        if provider_type in {"openai", "test"}:
             self.provider = OpenAIProvider(
                 model=model,
                 temperature=apex_settings.get("temperature", 0.7),
@@ -153,8 +156,7 @@ class LogonUtility:
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
-                temperature=apex_settings.get("temperature", 0.7),
-                max_tokens=apex_settings.get("max_tokens", 4000),
+                max_tokens=apex_settings.get("max_output_tokens", apex_settings.get("max_tokens", 4000)),
                 system_prompt=system_prompt
             )
         else:
@@ -166,6 +168,12 @@ class LogonUtility:
     def _ensure_provider(self) -> None:
         """Ensure the provider is initialized before use."""
         if self.provider is None:
+            self._initialize_provider()
+            return
+
+        resolved_model = self.model_override or self._get_slot_model()
+        if resolved_model and getattr(self.provider, "model", None) != resolved_model:
+            logger.info("Model override detected. Reinitializing provider for model %s", resolved_model)
             self._initialize_provider()
 
     def ensure_provider(self) -> None:
