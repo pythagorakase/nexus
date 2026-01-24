@@ -672,13 +672,17 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Build WizardResponse schema for structured output
         wizard_schema = WizardResponse.model_json_schema()
+        wizard_strict = True
+        if use_anthropic and tools:
+            # Avoid oversized grammar compilation when multiple strict tools are present.
+            wizard_strict = False
         if use_anthropic:
             wizard_response_tool = build_anthropic_tool(
                 "respond_with_choices",
                 "Respond to the user with a narrative message and 2-4 short choice strings (no numbering/markdown) "
                 "to guide the next step. Do NOT list the choices inside the message; only in the choices array.",
                 wizard_schema,
-                strict=True,
+                strict=wizard_strict,
             )
         else:
             wizard_response_tool = build_openai_tool(
