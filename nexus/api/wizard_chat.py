@@ -485,12 +485,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
             schema_model = StartingScenario
             schema = schema_model.model_json_schema()
             if use_anthropic:
+                logger.info(
+                    "Anthropic seed tool using non-strict schema to avoid grammar size limits."
+                )
                 tools.append(
                     build_anthropic_tool(
                         "submit_starting_scenario",
                         "Submit the chosen story seed and starting location details.",
                         schema,
-                        strict=True,
+                        strict=False,
                     )
                 )
             else:
