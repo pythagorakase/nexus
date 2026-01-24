@@ -6,6 +6,8 @@ from copy import deepcopy
 from typing import Any, Dict
 
 
+STRUCTURED_OUTPUT_BETA = "structured-outputs-2025-11-13"
+
 SUPPORTED_STRING_FORMATS = {
     "date-time",
     "time",
@@ -68,7 +70,7 @@ def _sanitize_schema(node: Any) -> Any:
                 node.pop("format", None)
 
     if node.get("type") == "object" or "properties" in node:
-        node["additionalProperties"] = False
+        node.setdefault("additionalProperties", False)
 
     for key, value in list(node.items()):
         if isinstance(value, (dict, list)):

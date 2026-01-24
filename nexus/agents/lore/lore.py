@@ -56,10 +56,9 @@ from utils.turn_cycle import TurnCycleManager
 from utils.token_budget import TokenBudgetManager
 from utils.local_llm import LocalLLMManager
 from utils.model_manager import ModelManager
-from logon_utility import LogonUtility
+from nexus.agents.lore.logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager
-from nexus.api.slot_utils import get_slot_db_url
 from nexus.memory.user_confirmation import request_input
 
 # Import MEMNON if available
@@ -240,6 +239,7 @@ class LORE:
 
             # Get database URL - use slot-aware resolution
             # Priority: explicit dbname > slot > NEXUS_SLOT env var
+            from nexus.api.slot_utils import get_slot_db_url
             db_url = get_slot_db_url(dbname=self.dbname, slot=self.slot)
 
             # Create minimal agent state and user objects

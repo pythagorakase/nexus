@@ -46,7 +46,7 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.slot_utils import slot_dbname
 from nexus.api.config_utils import get_new_story_model
-from nexus.api.structured_output import make_anthropic_schema
+from nexus.api.structured_output import STRUCTURED_OUTPUT_BETA, make_anthropic_schema
 from nexus.config.loader import get_provider_for_model
 from nexus.config import load_settings_as_dict
 
@@ -54,7 +54,6 @@ logger = logging.getLogger("nexus.api.wizard_chat")
 
 router = APIRouter(prefix="/api/story/new", tags=["wizard"])
 
-STRUCTURED_OUTPUT_BETA = "structured-outputs-2025-11-13"
 
 
 def load_settings() -> dict:
@@ -74,8 +73,6 @@ def get_base_url_for_model(model: str) -> Optional[str]:
     Returns:
         Base URL for the model's API, or None to use default OpenAI
     """
-    from nexus.config.loader import get_provider_for_model
-
     provider = get_provider_for_model(model)
 
     if provider == "test":
@@ -293,11 +290,18 @@ async def new_story_chat_endpoint(request: ChatRequest):
             history_client = ConversationsClient(model=slot_model)
             history = history_client.list_messages(request.thread_id, limit=history_limit)
             if any(msg["role"] == "user" for msg in history):
+                logger.info(
+                    "Wizard model lock active: slot=%s thread=%s current=%s requested=%s",
+                    request.slot,
+                    request.thread_id,
+                    slot_model,
+                    request.model,
+                )
                 raise HTTPException(
                     status_code=409,
                     detail=(
-                        "Wizard model is locked after the first user message. "
-                        "Start a new setup to switch models."
+                        "Wizard model is locked after the first user message; "
+                        "start a new setup to switch models."
                     ),
                 )
 
@@ -783,6 +787,10 @@ async def new_story_chat_endpoint(request: ChatRequest):
             (tc for tc in tool_calls if tc["name"] == "respond_with_choices"),
             None,
         )
+        if use_anthropic and not tool_calls and raw_content:
+            logger.warning(
+                "Anthropic returned no tool calls; attempting to parse raw content as WizardResponse."
+            )
 
         def parse_tool_arguments(raw_args: Any) -> Dict[str, Any]:
             if isinstance(raw_args, dict):
@@ -948,8 +956,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Parse structured WizardResponse (guaranteed valid by response_format when OpenAI is used)
         if not raw_content:
+            status_code = 422 if use_anthropic else 500
             raise HTTPException(
-                status_code=500,
+                status_code=status_code,
                 detail="LLM returned no content for WizardResponse.",
             )
         try:
@@ -957,6 +966,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
         except Exception as e:
             logger.error(f"Failed to parse WizardResponse: {e}")
             logger.error(f"Raw content: {raw_content[:500] if raw_content else 'None'}")
+            summary = _summarize_payload(raw_content)
+            if use_anthropic:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "LLM returned invalid WizardResponse (expected tool call or JSON): "
+                        f"{str(e)} | raw={summary}"
+                    ),
+                )
             raise HTTPException(
                 status_code=500,
                 detail=f"LLM returned invalid WizardResponse: {str(e)}",
