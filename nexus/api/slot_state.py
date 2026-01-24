@@ -16,7 +16,7 @@ Phase detection uses normalized columns and assets.traits:
   - has_concept: character_name IS NOT NULL
   - has_traits: traits_confirmed = TRUE (explicit user confirmation)
   - has_wildcard: traits.rationale WHERE id = 11 IS NOT NULL
-- Seed complete: seed_type IS NOT NULL
+- Seed complete: seed_type, layer_name, zone_name, initial_location present
 """
 
 from __future__ import annotations
@@ -111,6 +111,9 @@ def get_slot_state(slot: int) -> SlotState:
                        nsc.setting_genre,
                        nsc.character_name,
                        nsc.seed_type,
+                       nsc.layer_name,
+                       nsc.zone_name,
+                       nsc.initial_location,
                        nsc.traits_confirmed,
                        nsc.choice_object,
                        (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
@@ -190,7 +193,7 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     Phase is inferred from:
     - setting_genre IS NULL → "setting" phase
     - traits_confirmed = FALSE or wildcard_rationale IS NULL → "character" phase
-    - seed_type IS NULL → "seed" phase
+    - seed_type/layer/zone/location missing → "seed" phase
     - All complete → "ready" for bootstrap
     """
     # Direct column checks
@@ -202,7 +205,12 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     has_wildcard = row.get("wildcard_rationale") is not None
     character_complete = has_concept and has_traits and has_wildcard
 
-    seed_complete = row.get("seed_type") is not None
+    seed_complete = (
+        bool(row.get("seed_type"))
+        and bool(row.get("layer_name"))
+        and bool(row.get("zone_name"))
+        and row.get("initial_location") is not None
+    )
 
     # Infer phase
     if not setting_complete:
@@ -237,6 +245,9 @@ def _get_wizard_state(cur) -> WizardState:
                nsc.setting_genre,
                nsc.character_name,
                nsc.seed_type,
+               nsc.layer_name,
+               nsc.zone_name,
+               nsc.initial_location,
                nsc.traits_confirmed,
                (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
         FROM assets.new_story_creator nsc
