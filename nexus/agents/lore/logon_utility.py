@@ -106,6 +106,8 @@ class LogonUtility:
 
     def _get_slot_model(self) -> Optional[str]:
         """Get the model configured for the current slot from global_variables."""
+        from nexus.api.slot_utils import require_slot_dbname
+
         try:
             db = require_slot_dbname(dbname=self.dbname)
             conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
