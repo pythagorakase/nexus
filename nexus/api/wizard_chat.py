@@ -589,16 +589,20 @@ async def new_story_chat_endpoint(request: ChatRequest):
         if dev_preamble:
             system_messages.append(dev_preamble)
 
+        accept_fate_signal = None
         if request.accept_fate:
             logger.info(f"Accept Fate active for phase {request.current_phase}")
-            system_messages.append(
+            accept_fate_signal = (
                 "[ACCEPT FATE ACTIVE] Follow the '### Accept Fate Protocol' in your instructions. "
                 "Make bold, concrete choices immediately."
             )
+            system_messages.append(accept_fate_signal)
 
         if use_anthropic:
             system_text = "\n\n".join(system_messages)
             messages = history
+            if accept_fate_signal:
+                messages = messages + [{"role": "user", "content": accept_fate_signal}]
         else:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -608,8 +612,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
             if dev_preamble:
                 messages.append({"role": "system", "content": dev_preamble})
             messages += history
-            if request.accept_fate:
-                messages.append({"role": "system", "content": system_messages[-1]})
+            if accept_fate_signal:
+                messages.append({"role": "system", "content": accept_fate_signal})
 
         # selected_model already defined at top of function from request.model
         base_url = get_base_url_for_model(selected_model)
