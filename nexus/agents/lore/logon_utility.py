@@ -22,7 +22,6 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseExtended,
     create_minimal_response,
 )
-from nexus.api.slot_utils import require_slot_dbname
 from nexus.config.loader import get_provider_for_model
 
 logger = logging.getLogger("nexus.lore.logon")
@@ -58,6 +57,8 @@ class LogonUtility:
 
     def _load_system_prompt(self) -> str:
         """Load and combine the storyteller core prompt with setting context"""
+        from nexus.api.slot_utils import require_slot_dbname
+
         # Load storyteller core prompt
         core_prompt_path = Path(__file__).parent.parent.parent.parent / "prompts" / "storyteller_core.md"
 

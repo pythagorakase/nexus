@@ -161,6 +161,9 @@ def get_token_count(text: str, model: str) -> int:
     
     # Fallback to character-based estimation if all else fails
     # Claude's tokenization is roughly 4 characters per token
+    logger.warning(
+        "Falling back to character-based token estimation; counts may be inaccurate."
+    )
     return len(text) // 4
 
 
@@ -240,7 +243,6 @@ class AnthropicProvider(LLMProvider):
 
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-haiku-20240307"
-    STRUCTURED_OUTPUT_BETA = "structured-outputs-2025-11-13"
 
     def __init__(self,
                 api_key: Optional[str] = None,
@@ -460,7 +462,7 @@ class AnthropicProvider(LLMProvider):
         messages = [{"role": "user", "content": prompt}]
 
         # Transform schema for Anthropic structured outputs
-        from nexus.api.structured_output import make_anthropic_schema
+        from nexus.api.structured_output import STRUCTURED_OUTPUT_BETA, make_anthropic_schema
 
         raw_schema = schema_model.model_json_schema()
         structured_schema = make_anthropic_schema(raw_schema)
@@ -499,13 +501,47 @@ class AnthropicProvider(LLMProvider):
                 "budget_tokens": self.thinking_budget_tokens
             }
         
-        try:
-            # Call the API
-            response = self.client.beta.messages.create(
-                **params,
-                betas=[self.STRUCTURED_OUTPUT_BETA],
-                extra_body=extra_body,
-            )
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                # Call the API
+                response = self.client.beta.messages.create(
+                    **params,
+                    betas=[STRUCTURED_OUTPUT_BETA],
+                    extra_body=extra_body,
+                )
+            except Exception as e:
+                status_code = getattr(e, "status_code", None)
+                retryable = status_code in {429, 500, 502, 503, 504}
+                if retryable and attempt < max_attempts:
+                    retry_after = None
+                    if hasattr(e, "response") and hasattr(e.response, "headers"):
+                        retry_after = e.response.headers.get("retry-after")
+
+                    if status_code == 429:
+                        retry_wait = (
+                            int(retry_after)
+                            if retry_after and retry_after.isdigit()
+                            else COOLDOWNS["rate_limit"]
+                        )
+                    else:
+                        retry_wait = COOLDOWNS.get("individual", 15)
+
+                    logger.warning(
+                        "Anthropic structured output attempt %d/%d failed (%s). Retrying in %s seconds.",
+                        attempt,
+                        max_attempts,
+                        status_code or "unknown",
+                        retry_wait,
+                    )
+                    time.sleep(retry_wait)
+                    continue
+
+                logger.error(
+                    "Error calling Anthropic API for structured completion: %s",
+                    str(e),
+                )
+                raise
 
             # Extract the content from the response
             # For extended thinking, skip "thinking" blocks and get the first text block
@@ -525,7 +561,7 @@ class AnthropicProvider(LLMProvider):
                 logger.error(f"Error parsing response as JSON schema: {parse_error}")
                 logger.info(f"Raw response: {content}")
                 raise ValueError(f"Failed to parse response as JSON schema: {parse_error}")
-            
+
             # Create standardized response
             llm_response = LLMResponse(
                 content=content,
@@ -534,14 +570,9 @@ class AnthropicProvider(LLMProvider):
                 model=self.model,
                 raw_response=response
             )
-            
+
             # Return both the parsed object and the standard LLMResponse
             return parsed_obj, llm_response
-            
-        except Exception as e:
-            # Handle API errors
-            logger.error(f"Error calling Anthropic API for structured completion: {str(e)}")
-            raise
     
     def count_tokens(self, text: str) -> int:
         """
