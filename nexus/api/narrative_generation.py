@@ -328,7 +328,6 @@ async def generate_bootstrap_narrative(
                 "stakes": story_seed.get("stakes", ""),
                 "tension_source": story_seed.get("tension_source", ""),
                 "weather": story_seed.get("weather", ""),
-                "initial_mystery": story_seed.get("initial_mystery", ""),
                 "key_npcs": story_seed.get("key_npcs", []),
             },
             "protagonist": {

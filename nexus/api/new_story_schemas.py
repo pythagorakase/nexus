@@ -713,7 +713,6 @@ class StorySeed(BaseModel):
     tension_source: str = Field(..., description="Source of narrative tension")
 
     # Setting details
-    starting_location: str = Field(..., description="Where the story begins")
     base_timestamp: StoryTimestamp = Field(
         ...,
         description="When the story begins - provide year, month, day, hour, minute",
@@ -722,18 +721,9 @@ class StorySeed(BaseModel):
 
     # Initial elements
     key_npcs: List[str] = Field(
-        default_factory=list, max_items=3, description="Important NPCs in opening"
-    )
-    initial_mystery: Optional[str] = Field(
-        None, description="Mystery or question to explore"
-    )
-
-    # Allies and obstacles
-    potential_allies: List[str] = Field(
-        default_factory=list, description="Potential allies nearby"
-    )
-    potential_obstacles: List[str] = Field(
-        default_factory=list, description="Initial challenges"
+        default_factory=list,
+        max_items=4,
+        description="Key figures or allies present in the opening",
     )
 
     # Secret channel content (LLM-to-LLM, user never sees)
@@ -889,18 +879,7 @@ class ZoneDefinition(BaseModel):
         ..., min_length=20, max_length=500, description="Zone description"
     )
 
-    # Geographic shape (will be converted to PostGIS MultiPolygon)
-    boundary_description: Optional[str] = Field(
-        None,
-        description="Textual description of zone boundaries (e.g., 'Northern mountains to eastern river')",
-    )
-    approximate_area: Optional[str] = Field(
-        None,
-        description="Rough size estimate (e.g., '100 square miles', 'size of France')",
-    )
-
-    # Note: actual PostGIS boundary polygon will be added later if needed
-    # For now, we just need the zone to exist in the hierarchy
+    # Note: PostGIS boundary polygon will be generated later if needed
 
 
 class StartingScenario(BaseModel):

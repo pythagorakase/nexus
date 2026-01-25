@@ -23,13 +23,11 @@ from nexus.api.new_story_schemas import (
     LayerType,
     ZoneDefinition,
     PlaceProfile,
-    SpecificLocation,
     TransitionData,
     Genre,
     TechLevel,
     StorySeedType,
-    PlaceCategory,
-    ZoneType,
+    PlaceExtraData,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_generator import StoryComponentGenerator
@@ -108,13 +106,9 @@ class TestNewStorySchemas:
             immediate_goal="Find clues at the last known campsite",
             stakes="More disappearances could cripple trade and starve the region",
             tension_source="Time pressure - another caravan departs tomorrow",
-            starting_location="The Last Light Inn, final stop before the dangerous road",
             base_timestamp=StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30),
             weather="Gathering storm clouds",
-            key_npcs=["Innkeeper Gareth", "Caravan guard survivor"],
-            initial_mystery="Strange blue flames were seen the night of each disappearance",
-            potential_allies=["Local ranger", "Traveling wizard"],
-            potential_obstacles=["Hostile wilderness", "Uncooperative witnesses", "Magical interference"],
+            key_npcs=["Innkeeper Gareth", "Caravan guard survivor", "Local ranger"],
             secrets="The blue flames are caused by a rogue fire elemental bound to a cursed artifact. "
                    "The innkeeper's brother was the first to disappear and secretly joined the bandits. "
                    "The 'survivor' is actually the bandit leader's spy, feeding false information."
@@ -122,7 +116,7 @@ class TestNewStorySchemas:
 
         assert seed.seed_type == StorySeedType.MYSTERY
         assert len(seed.secrets) >= 50
-        assert seed.initial_mystery is not None
+        assert len(seed.key_npcs) >= 2
         # Test timestamp conversion
         dt = seed.get_base_datetime()
         assert dt.year == 1347
@@ -165,26 +159,22 @@ class TestNewStorySchemas:
             secrets="A hidden cellar contains evidence of smuggling operations",
             inhabitants=["Innkeeper Gareth", "Serving staff", "Regular patrons"],
             coordinates=[45.5231, -122.6765],  # Example coordinates (Portland, OR area)
-            category=PlaceCategory.BUILDING,
-            atmosphere="Tense and watchful, with an undercurrent of fear",
-            size="medium",
-            population=30,
-            nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
-            notable_features=["Reinforced walls", "Hidden cellar", "Crow's nest lookout"],
-            resources=["Food stores", "Basic weapons", "Healing herbs"],
-            dangers=["Occasional bandit raids", "Wild beast attacks"],
-            ruler="Innkeeper Gareth",
-            factions=["Merchant's Guild", "Local militia"],
-            culture="Frontier hospitality mixed with survival pragmatism",
-            economy="Trade waystation and supply depot",
-            trade_goods=["Provisions", "Mountain gear", "Local ale"],
-            current_events=["Merchant disappearances", "Increased guard patrols"],
-            rumors=["Strange lights in the mountains", "Old magic awakening"]
+            extra_data=PlaceExtraData(
+                atmosphere="Tense and watchful, with an undercurrent of fear",
+                nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
+                resources=["Food stores", "Basic weapons", "Healing herbs"],
+                dangers=["Occasional bandit raids", "Wild beast attacks"],
+                ruler="Innkeeper Gareth",
+                factions=["Merchant's Guild", "Local militia"],
+                culture="Frontier hospitality mixed with survival pragmatism",
+                economy="Trade waystation and supply depot",
+                rumors=["Strange lights in the mountains", "Old magic awakening"],
+            ),
         )
 
         assert place.name == "The Last Light Inn"
-        assert place.population == 30
-        assert len(place.notable_features) == 3
+        assert place.extra_data is not None
+        assert len(place.extra_data.rumors) == 2
 
     def test_zone_definition_creation(self):
         """Test creating a valid ZoneDefinition."""
@@ -245,9 +235,7 @@ class TestNewStorySchemas:
             immediate_goal="Test goal",
             stakes="Test stakes",
             tension_source="Test tension",
-            starting_location="Test location",
             base_timestamp=StoryTimestamp(year=2024, month=6, day=15, hour=9, minute=0),
-            potential_obstacles=["Test obstacle"],
             secrets="Test secrets: hidden plot information that the user never sees - NPC agendas and twists"
         )
 
@@ -260,10 +248,11 @@ class TestNewStorySchemas:
             secrets="Test secrets hidden within this place",
             inhabitants=["Test inhabitant"],
             coordinates=[40.7128, -74.0060],  # NYC coordinates for testing
-            category=PlaceCategory.SETTLEMENT,
-            atmosphere="Test atmosphere",
-            notable_features=["Test feature"],
-            culture="Test culture"
+            extra_data=PlaceExtraData(
+                atmosphere="Test atmosphere",
+                culture="Test culture",
+                rumors=["Test rumor"],
+            ),
         )
 
         layer = LayerDefinition(
@@ -334,16 +323,12 @@ class TestDatabaseMapper:
             secrets="The town elder knows the location of an ancient cache of weapons",
             inhabitants=["Mayor Thompson", "Blacksmith Greta", "Local militia"],
             coordinates=[42.3601, -71.0589],
-            category=PlaceCategory.SETTLEMENT,
-            atmosphere="Determined but weary",
-            size="small",
-            population=500,
-            notable_features=["Wooden palisade", "Market square"],
-            culture="Hardy frontier folk",
-            economy="Agriculture and trade",
-            trade_goods=["Grain", "Furs"],
-            current_events=["Preparing for winter"],
-            rumors=["Bandits in the hills"]
+            extra_data=PlaceExtraData(
+                atmosphere="Determined but weary",
+                culture="Hardy frontier folk",
+                economy="Agriculture and trade",
+                rumors=["Bandits in the hills"],
+            ),
         )
 
     @pytest.fixture

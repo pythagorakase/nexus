@@ -332,7 +332,6 @@ class StoryComponentGenerator:
                     f"Setting: {setting.world_name} ({setting.time_period})\n"
                     f"Opening: {seed.title}\n"
                     f"Situation: {seed.situation}\n"
-                    f"Location mentioned: {seed.starting_location}\n\n"
                     f"Create the complete location hierarchy:\n"
                     f"1. A LayerDefinition for the world/planet\n"
                     f"2. A ZoneDefinition for the geographic region\n"
