@@ -7,6 +7,7 @@ These tests verify that:
 3. Database mapping correctly transforms schemas to table format
 """
 
+import os
 import pytest
 import json
 from datetime import datetime, timezone
@@ -31,6 +32,8 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_generator import StoryComponentGenerator
+
+RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
 
 
 class TestNewStorySchemas:
@@ -349,7 +352,7 @@ class TestDatabaseMapper:
         assert "veteran of many wars" in db_record["background"]
 
         # Check extra_data contains traits
-        extra = db_record["extra_data"]
+        extra = json.loads(db_record["extra_data"])
         assert "allies" in extra
         assert "reputation" in extra
         assert "obligations" in extra
@@ -371,9 +374,9 @@ class TestDatabaseMapper:
         assert len(db_record["inhabitants"]) > 0
 
         # Check extra_data
-        extra = db_record["extra_data"]
-        assert extra["category"] == "settlement"
-        assert extra["size"] == "small"
+        extra = json.loads(db_record["extra_data"])
+        assert extra["atmosphere"] == "Determined but weary"
+        assert extra["economy"] == "Agriculture and trade"
 
     def test_zone_mapping(self, mapper, sample_zone):
         """Test mapping ZoneDefinition to database format."""
@@ -388,6 +391,10 @@ class TestStructuredOutputIntegration:
     """Test integration with OpenAI structured output API."""
 
     @pytest.mark.integration
+    @pytest.mark.skipif(
+        not RUN_LIVE_LLM,
+        reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
+    )
     def test_setting_generation(self):
         """Test generating a setting with OpenAI API."""
         generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
@@ -401,6 +408,10 @@ class TestStructuredOutputIntegration:
         assert setting.magic_exists is not None
 
     @pytest.mark.integration
+    @pytest.mark.skipif(
+        not RUN_LIVE_LLM,
+        reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
+    )
     def test_character_generation(self):
         """Test generating a character with OpenAI API."""
         generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
