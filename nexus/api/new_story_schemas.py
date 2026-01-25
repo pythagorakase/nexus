@@ -638,7 +638,7 @@ class StorySeed(BaseModel):
     """
     A potential story starting point.
 
-    The system generates 3 of these for the user to choose from.
+    The system generates 2-4 of these for the user to choose from.
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -667,7 +667,6 @@ class StorySeed(BaseModel):
     # Initial elements
     key_npcs: List[str] = Field(
         default_factory=list,
-        max_items=4,
         description="Key figures or allies present in the opening",
     )
 
@@ -785,10 +784,14 @@ class PlaceProfile(BaseModel):
     # Geographic information (required for database)
     latitude: float = Field(
         ...,
+        ge=-90.0,
+        le=90.0,
         description="Latitude for the place (-90 to 90)",
     )
     longitude: float = Field(
         ...,
+        ge=-180.0,
+        le=180.0,
         description="Longitude for the place (-180 to 180)",
     )
 
