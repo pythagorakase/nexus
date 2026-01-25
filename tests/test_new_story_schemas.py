@@ -3,7 +3,7 @@ Tests for new story structured output schemas and database mapping.
 
 These tests verify that:
 1. Our Pydantic schemas are valid
-2. The OpenAI structured output works with our schemas
+2. Structured output works with our schemas
 3. Database mapping correctly transforms schemas to table format
 """
 
@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
+    CharacterTrait,
     StorySeed,
     StoryTimestamp,
     LayerDefinition,
@@ -79,10 +80,18 @@ class TestNewStorySchemas:
                        "Raised by the Order of the Silver Eye, she now investigates arcane crimes.",
             personality="Cautious and analytical, with a dry sense of humor. She keeps people at arm's length "
                        "but fiercely protects those she allows into her circle.",
-            # Exactly 3 of 10 optional traits
-            allies="Master Aldric, her mentor and father figure within the Order",
-            reputation="Known as the 'Shadow Seer' for solving impossible cases",
-            enemies="The Crimson Hand cult who may know what happened to her parents",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="Master Aldric, her mentor and father figure within the Order",
+            ),
+            trait_2=CharacterTrait(
+                name="reputation",
+                description="Known as the 'Shadow Seer' for solving impossible cases",
+            ),
+            trait_3=CharacterTrait(
+                name="enemies",
+                description="The Crimson Hand cult who may know what happened to her parents",
+            ),
             # Required wildcard trait
             wildcard_name="Arcane Tattoos",
             wildcard_description="Mystical tattoos that glow when magic is near, granting her "
@@ -91,12 +100,11 @@ class TestNewStorySchemas:
 
         assert character.name == "Lyra Shadowheart"
         assert "half-elf" in character.summary
-        assert character.allies is not None
-        assert character.reputation is not None
-        assert character.enemies is not None
-        # Traits not selected should be None
-        assert character.patron is None
-        assert character.resources is None
+        assert {"allies", "reputation", "enemies"} == {
+            character.trait_1.name,
+            character.trait_2.name,
+            character.trait_3.name,
+        }
 
     def test_story_seed_creation(self):
         """Test creating a valid StorySeed with atomized timestamp."""
@@ -221,10 +229,18 @@ class TestNewStorySchemas:
             appearance="Test appearance with sufficient detail for validation",
             background="Test backstory of sufficient length to meet the minimum requirements for validation",
             personality="Test personality that is complex enough for validation",
-            # Exactly 3 traits
-            allies="Test ally who helps the character",
-            contacts="Test contact for information",
-            resources="Test resources the character possesses",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="Test ally who helps the character",
+            ),
+            trait_2=CharacterTrait(
+                name="contacts",
+                description="Test contact for information",
+            ),
+            trait_3=CharacterTrait(
+                name="resources",
+                description="Test resources the character possesses",
+            ),
             # Wildcard trait
             wildcard_name="Test Trait",
             wildcard_description="A unique trait that sets this test character apart from others",
@@ -305,10 +321,18 @@ class TestDatabaseMapper:
             background="A veteran of many wars, seeking redemption for past deeds in service of a tyrant. "
                        "Now he fights for the innocent.",
             personality="Stoic and honorable, with a fierce protective instinct",
-            # Exactly 3 traits
-            allies="A brotherhood of former soldiers who served with him",
-            reputation="Known as the 'Iron Shield' for never abandoning a charge",
-            obligations="Sworn to protect the village that took him in after the war",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="A brotherhood of former soldiers who served with him",
+            ),
+            trait_2=CharacterTrait(
+                name="reputation",
+                description="Known as the 'Iron Shield' for never abandoning a charge",
+            ),
+            trait_3=CharacterTrait(
+                name="obligations",
+                description="Sworn to protect the village that took him in after the war",
+            ),
             # Wildcard
             wildcard_name="Battle Scars",
             wildcard_description="His scars tell stories - some recognize them and either fear or respect him",
@@ -388,16 +412,17 @@ class TestDatabaseMapper:
 
 
 class TestStructuredOutputIntegration:
-    """Test integration with OpenAI structured output API."""
+    """Test integration with structured output APIs."""
 
     @pytest.mark.integration
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,
         reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
     )
-    def test_setting_generation(self):
-        """Test generating a setting with OpenAI API."""
-        generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
+    def test_setting_generation(self, model):
+        """Test generating a setting with a live LLM."""
+        generator = StoryComponentGenerator(model=model, use_resilient=True)
 
         setting = generator.generate_setting_card(
             "Create a dark fantasy world with steampunk elements"
@@ -408,13 +433,14 @@ class TestStructuredOutputIntegration:
         assert setting.magic_exists is not None
 
     @pytest.mark.integration
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,
         reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
     )
-    def test_character_generation(self):
-        """Test generating a character with OpenAI API."""
-        generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
+    def test_character_generation(self, model):
+        """Test generating a character with a live LLM."""
+        generator = StoryComponentGenerator(model=model, use_resilient=True)
 
         # Create a setting first
         setting = SettingCard(
@@ -437,7 +463,8 @@ class TestStructuredOutputIntegration:
         assert isinstance(character, CharacterSheet)
         assert character.name
         assert character.summary
-        assert character.wildcard_name  # New required field
+        assert len({character.trait_1.name, character.trait_2.name, character.trait_3.name}) == 3
+        assert character.wildcard_name
 
 
 if __name__ == "__main__":

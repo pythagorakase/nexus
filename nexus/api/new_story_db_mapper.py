@@ -659,7 +659,7 @@ class NewStoryDatabaseMapper:
         """
         Build extra_data JSONB from CharacterSheet traits.
 
-        The Mind's Eye Theatre system uses 10 optional traits (exactly 3 selected)
+        The Mind's Eye Theatre system uses 10 menu traits (exactly 3 selected)
         plus a required wildcard trait. All traits are stored in the extra_data
         JSONB column rather than as separate database columns.
 
@@ -671,23 +671,9 @@ class NewStoryDatabaseMapper:
         """
         extra_data: Dict[str, Any] = {}
 
-        # Collect selected traits (exactly 3 of these 10 will be non-None)
-        trait_fields = [
-            "allies",
-            "contacts",
-            "patron",
-            "dependents",
-            "status",
-            "reputation",
-            "resources",
-            "domain",
-            "enemies",
-            "obligations",
-        ]
-        for field in trait_fields:
-            value = getattr(character, field)
-            if value is not None:
-                extra_data[field] = value
+        # Collect selected traits (exactly 3 entries)
+        for trait in character.get_trait_entries():
+            extra_data[trait.name] = trait.description
 
         # Add required wildcard trait
         extra_data["wildcard"] = {
