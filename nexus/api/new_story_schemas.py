@@ -777,17 +777,32 @@ class LayerDefinition(BaseModel):
     )
 
 
-class PlaceCategory(str, Enum):
-    """Categories of locations."""
+class PlaceExtraData(BaseModel):
+    """Optional location details stored in places.extra_data (JSONB)."""
 
-    SETTLEMENT = "settlement"
-    WILDERNESS = "wilderness"
-    DUNGEON = "dungeon"
-    BUILDING = "building"
-    DISTRICT = "district"
-    LANDMARK = "landmark"
-    ROAD = "road"
-    BORDER = "border"
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
+    resources: List[str] = Field(
+        default_factory=list, max_items=5, description="Available resources"
+    )
+    dangers: List[str] = Field(
+        default_factory=list, max_items=5, description="Known threats or hazards"
+    )
+    ruler: Optional[str] = Field(None, description="Who controls or governs this place")
+    factions: List[str] = Field(
+        default_factory=list, max_items=5, description="Active factions or groups"
+    )
+    culture: Optional[str] = Field(
+        None, description="Cultural characteristics and customs"
+    )
+    economy: Optional[str] = Field(None, description="Economic base and activities")
+    nearby_landmarks: List[str] = Field(
+        default_factory=list, max_items=5, description="Nearby notable locations"
+    )
+    rumors: List[str] = Field(
+        default_factory=list, max_items=3, description="Current rumors or gossip"
+    )
 
 
 class PlaceProfile(BaseModel):
@@ -795,9 +810,9 @@ class PlaceProfile(BaseModel):
     Detailed information about a location.
 
     Aligns with the places table in the database:
-    - Core fields (name, type, summary, inhabitants, history, current_status, secrets) map to columns
-    - Additional attributes stored in extra_data JSONB field
+    - Core fields map to columns (name, type, summary, inhabitants, history, current_status, secrets)
     - Coordinates stored as PostGIS geography type
+    - Optional attributes stored in extra_data JSONB
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -840,53 +855,9 @@ class PlaceProfile(BaseModel):
         description="Latitude and longitude coordinates [lat, lon] for the place",
     )
 
-    # Additional attributes (stored in extra_data JSONB)
-    category: Optional[PlaceCategory] = Field(
-        None, description="Narrative category of location"
-    )
-    size: Optional[Literal["tiny", "small", "medium", "large", "huge", "massive"]] = (
-        Field(None, description="Relative size")
-    )
-    population: Optional[int] = Field(
-        None, ge=0, description="Population if applicable"
-    )
-    atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
-
-    # Features and details (stored in extra_data)
-    notable_features: List[str] = Field(
-        default_factory=list, max_items=8, description="Distinctive physical features"
-    )
-    resources: List[str] = Field(
-        default_factory=list, max_items=5, description="Available resources"
-    )
-    dangers: List[str] = Field(
-        default_factory=list, max_items=5, description="Known threats or hazards"
-    )
-
-    # Social and economic (stored in extra_data)
-    ruler: Optional[str] = Field(None, description="Who controls or governs this place")
-    factions: List[str] = Field(
-        default_factory=list, max_items=5, description="Active factions or groups"
-    )
-    culture: Optional[str] = Field(
-        None, description="Cultural characteristics and customs"
-    )
-    economy: Optional[str] = Field(None, description="Economic base and activities")
-    trade_goods: List[str] = Field(
-        default_factory=list, max_items=5, description="Goods produced or traded"
-    )
-
-    # Nearby context (stored in extra_data)
-    nearby_landmarks: List[str] = Field(
-        default_factory=list, max_items=5, description="Nearby notable locations"
-    )
-
-    # Current happenings (stored in extra_data)
-    current_events: List[str] = Field(
-        default_factory=list, max_items=3, description="Ongoing events"
-    )
-    rumors: List[str] = Field(
-        default_factory=list, max_items=3, description="Current rumors or gossip"
+    # Optional attributes stored in extra_data JSONB
+    extra_data: Optional[PlaceExtraData] = Field(
+        None, description="Additional attributes stored in places.extra_data"
     )
 
 

@@ -115,26 +115,15 @@ class NewStoryDatabaseMapper:
             "secrets": place.secrets,
         }
 
-        # Additional data in extra_data
-        extra_data = {
-            "category": place.category.value if place.category else None,
-            "size": place.size,
-            "population": place.population,
-            "atmosphere": place.atmosphere,
-            "nearby_landmarks": place.nearby_landmarks or [],
-            "notable_features": place.notable_features or [],
-            "resources": place.resources or [],
-            "dangers": place.dangers or [],
-            "ruler": place.ruler,
-            "factions": place.factions or [],
-            "culture": place.culture,
-            "economy": place.economy,
-            "trade_goods": place.trade_goods or [],
-            "current_events": place.current_events or [],
-            "rumors": place.rumors or [],
-        }
-
-        db_record["extra_data"] = json.dumps(extra_data)
+        extra_payload = {}
+        if place.extra_data:
+            extra_payload = place.extra_data.model_dump(exclude_none=True)
+            extra_payload = {
+                key: value
+                for key, value in extra_payload.items()
+                if value not in (None, "", [])
+            }
+        db_record["extra_data"] = json.dumps(extra_payload) if extra_payload else None
 
         return db_record
 
