@@ -220,7 +220,7 @@ class StoryComponentGenerator:
             raise
 
     def generate_story_seeds(
-        self, setting: SettingCard, character: CharacterSheet, num_seeds: int = 3
+        self, setting: SettingCard, character: CharacterSheet
     ) -> List[StorySeed]:
         """
         Generate multiple story seed options for the user to choose from.
@@ -228,7 +228,6 @@ class StoryComponentGenerator:
         Args:
             setting: The established setting
             character: The created character
-            num_seeds: Number of seeds to generate (default: 3)
 
         Returns:
             List of StorySeed objects
@@ -239,9 +238,9 @@ class StoryComponentGenerator:
             """Collection of story seeds"""
 
             seeds: List[StorySeed] = Field(
-                min_items=num_seeds,
-                max_items=num_seeds,
-                description=f"Exactly {num_seeds} unique story seeds",
+                min_length=2,
+                max_length=4,
+                description="2-4 unique story seeds",
             )
 
             class Config:
@@ -271,7 +270,7 @@ class StoryComponentGenerator:
             {
                 "role": "user",
                 "content": (
-                    f"Create {num_seeds} unique story openings for:\n\n"
+                    "Create 2-4 unique story openings for:\n\n"
                     f"Setting: {setting.world_name} ({setting.genre})\n"
                     f"Protagonist: {character.name}\n"
                     f"Summary: {character.summary}\n"
@@ -285,7 +284,7 @@ class StoryComponentGenerator:
                     f"3. Connect to the character's traits and background\n"
                     f"4. Set up interesting narrative possibilities\n"
                     f"5. Feel appropriate to the {setting.tone} tone\n\n"
-                    f"Generate exactly {num_seeds} StorySeed objects with all required fields."
+                    "Generate 2-4 StorySeed objects with all required fields."
                 ),
             },
         ]
@@ -321,7 +320,7 @@ class StoryComponentGenerator:
             layer: LayerDefinition = Field(description="World layer (planet/dimension)")
             zone: ZoneDefinition = Field(description="Geographic zone")
             place: PlaceProfile = Field(
-                description="The specific place with coordinates"
+                description="The specific place with latitude/longitude"
             )
 
             class Config:
@@ -346,13 +345,13 @@ class StoryComponentGenerator:
                     f"Create the complete location hierarchy:\n"
                     f"1. A LayerDefinition for the world/planet\n"
                     f"2. A ZoneDefinition for the geographic region\n"
-                    f"3. A PlaceProfile for the specific starting location WITH COORDINATES\n\n"
-                    f"CRITICAL: The PlaceProfile MUST include valid coordinates (latitude, longitude).\n"
+                    f"3. A PlaceProfile for the specific starting location WITH latitude/longitude\n\n"
+                    f"CRITICAL: The PlaceProfile MUST include valid latitude and longitude fields.\n"
                     f"Use real Earth latitude/longitude even for fantasy settings. "
                     f"Treat fantasy worlds as 'mirror-Earth' - place locations where analogous real places would be. "
                     f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
                     f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
-                    f"The place should be where {character.name} begins their story, with exact coordinates."
+                    f"The place should be where {character.name} begins their story, with exact latitude/longitude."
                 ),
             },
         ]
@@ -362,7 +361,8 @@ class StoryComponentGenerator:
 
             logger.info(
                 f"Generated location hierarchy: {result.layer.name} -> "
-                f"{result.zone.name} -> {result.place.name} at {result.place.coordinates}"
+                f"{result.zone.name} -> {result.place.name} at "
+                f"({result.place.latitude}, {result.place.longitude})"
             )
             return result.layer, result.zone, result.place
 

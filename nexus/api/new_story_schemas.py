@@ -133,7 +133,7 @@ class SettingCard(BaseModel):
         "balanced", description="Overall tone"
     )
     themes: List[str] = Field(
-        ..., min_items=1, max_items=5, description="Major thematic elements"
+        ..., description="Major thematic elements"
     )
 
     # Cultural notes
@@ -783,11 +783,13 @@ class PlaceProfile(BaseModel):
     )
 
     # Geographic information (required for database)
-    coordinates: List[float] = Field(
+    latitude: float = Field(
         ...,
-        min_length=2,
-        max_length=2,
-        description="Latitude and longitude coordinates [lat, lon] for the place",
+        description="Latitude for the place (-90 to 90)",
+    )
+    longitude: float = Field(
+        ...,
+        description="Longitude for the place (-180 to 180)",
     )
 
     # Optional attributes stored in extra_data JSONB
@@ -918,7 +920,7 @@ class TransitionData(BaseModel):
     layer: LayerDefinition = Field(..., description="World layer (planet/dimension)")
     zone: ZoneDefinition = Field(..., description="Geographic zone")
     location: PlaceProfile = Field(
-        ..., description="Starting place with exact coordinates"
+        ..., description="Starting place with exact latitude/longitude"
     )
 
     # Timing

@@ -382,7 +382,7 @@ class NewStoryDatabaseMapper:
             Exception: If database operation fails (transaction will be rolled back)
         """
         # Validate coordinates before attempting database operations
-        lat, lon = place.coordinates[0], place.coordinates[1]
+        lat, lon = place.latitude, place.longitude
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             raise ValueError(
                 f"Invalid coordinates: ({lat}, {lon}). "
@@ -461,7 +461,7 @@ class NewStoryDatabaseMapper:
 
             # Generate a default circular boundary for the zone
             # Using a 50-mile radius (approximately 80km) centered on the place
-            self._create_default_zone_boundary(cur, zone_id, place.coordinates)
+            self._create_default_zone_boundary(cur, zone_id, lat, lon)
 
             logger.info(
                 f"Created location hierarchy: {layer.name} (ID: {layer_id}) "
@@ -684,7 +684,7 @@ class NewStoryDatabaseMapper:
         return extra_data
 
     def _create_default_zone_boundary(
-        self, cursor: Any, zone_id: int, coordinates: Tuple[float, float]
+        self, cursor: Any, zone_id: int, lat: float, lon: float
     ) -> None:
         """
         Create a default circular boundary for a zone.
@@ -694,10 +694,10 @@ class NewStoryDatabaseMapper:
         Args:
             cursor: Database cursor
             zone_id: ID of the zone to update
-            coordinates: (lat, lon) tuple for the center point
+            lat: Latitude for the center point
+            lon: Longitude for the center point
         """
         try:
-            lat, lon = coordinates
             # Create a 50-mile (approximately 80.47 km) radius circle
             # PostGIS ST_Buffer with geography type handles the spherical calculations
 

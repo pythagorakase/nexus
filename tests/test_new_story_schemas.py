@@ -169,7 +169,8 @@ class TestNewStorySchemas:
             current_status="Busy with travelers fleeing the troubles to the north",
             secrets="A hidden cellar contains evidence of smuggling operations",
             inhabitants=["Innkeeper Gareth", "Serving staff", "Regular patrons"],
-            coordinates=[45.5231, -122.6765],  # Example coordinates (Portland, OR area)
+            latitude=45.5231,
+            longitude=-122.6765,
             extra_data=PlaceExtraData(
                 atmosphere="Tense and watchful, with an undercurrent of fear",
                 nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
@@ -266,7 +267,8 @@ class TestNewStorySchemas:
             current_status="Test current status of the location",
             secrets="Test secrets hidden within this place",
             inhabitants=["Test inhabitant"],
-            coordinates=[40.7128, -74.0060],  # NYC coordinates for testing
+            latitude=40.7128,
+            longitude=-74.0060,
             extra_data=PlaceExtraData(
                 atmosphere="Test atmosphere",
                 culture="Test culture",
@@ -349,7 +351,8 @@ class TestDatabaseMapper:
             current_status="Preparing for winter with tension high due to recent bandit activity",
             secrets="The town elder knows the location of an ancient cache of weapons",
             inhabitants=["Mayor Thompson", "Blacksmith Greta", "Local militia"],
-            coordinates=[42.3601, -71.0589],
+            latitude=42.3601,
+            longitude=-71.0589,
             extra_data=PlaceExtraData(
                 atmosphere="Determined but weary",
                 culture="Hardy frontier folk",
