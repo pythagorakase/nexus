@@ -8,11 +8,14 @@ the new story initialization phase (new_story=true).
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Dict, Tuple, Type
 from datetime import datetime, timezone
+from typing import Dict, List, Optional, Type
 
 from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+from pydantic_ai.settings import ModelSettings
 
+from nexus.api.config_utils import get_wizard_max_tokens, get_wizard_retry_budget
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -22,10 +25,7 @@ from nexus.api.new_story_schemas import (
     PlaceProfile,
     TransitionData,
 )
-from nexus.api.resilient_openai import create_resilient_client
-from scripts.api_openai import OpenAIProvider
-from scripts.api_anthropic import AnthropicProvider
-from nexus.config.loader import get_provider_for_model
+from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
 
 logger = logging.getLogger("nexus.api.new_story_generator")
 
@@ -44,63 +44,32 @@ class StoryComponentGenerator:
 
         Args:
             model: Model name to use (default: gpt-5.1)
-            use_resilient: Whether to use resilient OpenAI client with retry logic
+            use_resilient: Deprecated (kept for compatibility; no longer used)
         """
         self.model = model
+        if use_resilient:
+            logger.info("Pydantic AI handles retries; ignoring use_resilient=True")
+        self._model = build_pydantic_ai_model(model)
+        self._model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
+        self._retry_budget = get_wizard_retry_budget()
 
-        self.provider = get_provider_for_model(model)
-
-        if self.provider == "anthropic":
-            self.client = AnthropicProvider(model=model)
-        else:
-            # Get API key using the standard provider
-            provider = OpenAIProvider(model=model)
-            api_key = provider.api_key
-
-            # Create client (resilient or standard)
-            if use_resilient:
-                logger.info("Using resilient OpenAI client with retry logic")
-                self.client = create_resilient_client(api_key, async_client=False)
-            else:
-                import openai
-
-                self.client = openai.OpenAI(api_key=api_key)
-
-    def _split_anthropic_prompt(
-        self, messages: List[Dict[str, str]]
-    ) -> Tuple[Optional[str], str]:
-        system_parts: List[str] = []
-        user_parts: List[str] = []
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            if role == "system":
-                system_parts.append(content)
-            else:
-                user_parts.append(f"[{role.upper()}]\n{content}")
-        system_prompt = "\n\n".join(system_parts).strip() or None
-        user_prompt = "\n\n".join(user_parts).strip()
-        return system_prompt, user_prompt
-
-    def _generate_structured(
+    def _run_structured(
         self,
-        messages: List[Dict[str, str]],
+        system_prompt: str,
+        user_prompt: str,
         schema_model: Type[BaseModel],
+        message_history: Optional[List[Dict[str, str]]] = None,
     ) -> BaseModel:
-        if self.provider == "anthropic":
-            system_prompt, user_prompt = self._split_anthropic_prompt(messages)
-            self.client.system_prompt = system_prompt
-            result, _ = self.client.get_structured_completion(
-                user_prompt, schema_model
-            )
-            return result
-
-        response = self.client.responses.parse(
-            model=self.model,
-            input=messages,
-            text_format=schema_model,
+        agent = Agent(
+            model=self._model,
+            output_type=schema_model,
+            system_prompt=system_prompt,
+            model_settings=self._model_settings,
+            retries=self._retry_budget,
         )
-        return response.output_parsed
+        history = build_message_history(message_history or [])
+        result = agent.run_sync(user_prompt, message_history=history)
+        return result.output
 
     def generate_setting_card(
         self,
@@ -117,35 +86,25 @@ class StoryComponentGenerator:
         Returns:
             A validated SettingCard object
         """
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a creative world-builder for an interactive narrative system. "
-                    "Create rich, consistent settings that provide fertile ground for storytelling. "
-                    "Ensure all details work together cohesively."
-                ),
-            }
-        ]
-
-        # Add conversation context if provided
-        if conversation_context:
-            messages.extend(conversation_context)
-
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    f"Based on these preferences, create a complete setting for the story:\n\n"
-                    f"{user_preferences}\n\n"
-                    f"Generate a detailed SettingCard with all required fields. "
-                    f"Make the world feel lived-in and authentic to its genre."
-                ),
-            }
+        system_prompt = (
+            "You are a creative world-builder for an interactive narrative system. "
+            "Create rich, consistent settings that provide fertile ground for storytelling. "
+            "Ensure all details work together cohesively."
+        )
+        user_prompt = (
+            f"Based on these preferences, create a complete setting for the story:\n\n"
+            f"{user_preferences}\n\n"
+            f"Generate a detailed SettingCard with all required fields. "
+            f"Make the world feel lived-in and authentic to its genre."
         )
 
         try:
-            result = self._generate_structured(messages, SettingCard)
+            result = self._run_structured(
+                system_prompt,
+                user_prompt,
+                SettingCard,
+                message_history=conversation_context,
+            )
             logger.info(f"Generated setting: {result.world_name} ({result.genre})")
             return result
 
@@ -170,19 +129,11 @@ class StoryComponentGenerator:
         Returns:
             A validated CharacterSheet object
         """
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a character designer for an interactive narrative system. "
-                    "Create compelling protagonists with clear motivations, flaws, and growth potential. "
-                    "Characters should feel authentic to their setting while being interesting to play."
-                ),
-            }
-        ]
-
-        if conversation_context:
-            messages.extend(conversation_context)
+        system_prompt = (
+            "You are a character designer for an interactive narrative system. "
+            "Create compelling protagonists with clear motivations, flaws, and growth potential. "
+            "Characters should feel authentic to their setting while being interesting to play."
+        )
 
         # Include setting context
         setting_context = (
@@ -194,24 +145,24 @@ class StoryComponentGenerator:
             f"Tone: {setting.tone}"
         )
 
-        messages.append(
-            {
-                "role": "user",
-                "content": (
-                    f"Create a protagonist for this setting:\n\n"
-                    f"{setting_context}\n\n"
-                    f"Character Concept:\n{character_concept}\n\n"
-                    f"Generate a complete CharacterSheet with rich detail. "
-                    f"The character should have clear strengths, weaknesses, and room for growth. "
-                    f"Make them feel like a real person with history and relationships. "
-                    f"Include trait_1, trait_2, and trait_3 (name + description) from the trait menu, "
-                    f"plus the required wildcard trait."
-                ),
-            }
+        user_prompt = (
+            f"Create a protagonist for this setting:\n\n"
+            f"{setting_context}\n\n"
+            f"Character Concept:\n{character_concept}\n\n"
+            f"Generate a complete CharacterSheet with rich detail. "
+            f"The character should have clear strengths, weaknesses, and room for growth. "
+            f"Make them feel like a real person with history and relationships. "
+            f"Include trait_1, trait_2, and trait_3 (name + description) from the trait menu, "
+            f"plus the required wildcard trait."
         )
 
         try:
-            result = self._generate_structured(messages, CharacterSheet)
+            result = self._run_structured(
+                system_prompt,
+                user_prompt,
+                CharacterSheet,
+                message_history=conversation_context,
+            )
             logger.info(f"Generated character: {result.name} ({result.background})")
             return result
 
@@ -258,39 +209,35 @@ class StoryComponentGenerator:
         )
         wildcard_text = f"{character.wildcard_name}: {character.wildcard_description}"
 
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a narrative designer creating compelling story openings. "
-                    "Each seed should offer different types of experiences and player choices. "
-                    "Openings should provide immediate engagement while setting up longer arcs."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "Create 2-4 unique story openings for:\n\n"
-                    f"Setting: {setting.world_name} ({setting.genre})\n"
-                    f"Protagonist: {character.name}\n"
-                    f"Summary: {character.summary}\n"
-                    f"Background: {character.background}\n"
-                    f"Personality: {character.personality}\n\n"
-                    f"Character Traits:\n{traits_text}\n\n"
-                    f"Wildcard: {wildcard_text}\n\n"
-                    f"Each seed should:\n"
-                    f"1. Start in a different type of situation\n"
-                    f"2. Offer clear player agency\n"
-                    f"3. Connect to the character's traits and background\n"
-                    f"4. Set up interesting narrative possibilities\n"
-                    f"5. Feel appropriate to the {setting.tone} tone\n\n"
-                    "Generate 2-4 StorySeed objects with all required fields."
-                ),
-            },
-        ]
+        system_prompt = (
+            "You are a narrative designer creating compelling story openings. "
+            "Each seed should offer different types of experiences and player choices. "
+            "Openings should provide immediate engagement while setting up longer arcs."
+        )
+        user_prompt = (
+            "Create 2-4 unique story openings for:\n\n"
+            f"Setting: {setting.world_name} ({setting.genre})\n"
+            f"Protagonist: {character.name}\n"
+            f"Summary: {character.summary}\n"
+            f"Background: {character.background}\n"
+            f"Personality: {character.personality}\n\n"
+            f"Character Traits:\n{traits_text}\n\n"
+            f"Wildcard: {wildcard_text}\n\n"
+            f"Each seed should:\n"
+            f"1. Start in a different type of situation\n"
+            f"2. Offer clear player agency\n"
+            f"3. Connect to the character's traits and background\n"
+            f"4. Set up interesting narrative possibilities\n"
+            f"5. Feel appropriate to the {setting.tone} tone\n\n"
+            "Generate 2-4 StorySeed objects with all required fields."
+        )
 
         try:
-            result = self._generate_structured(messages, StorySeedCollection)
+            result = self._run_structured(
+                system_prompt,
+                user_prompt,
+                StorySeedCollection,
+            )
             logger.info(f"Generated {len(result.seeds)} story seeds")
             return result.seeds
 
@@ -326,38 +273,34 @@ class StoryComponentGenerator:
             class Config:
                 extra = "forbid"
 
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a location designer for an interactive narrative. "
-                    "Create vivid, atmospheric locations that serve both as settings "
-                    "and as active participants in the story."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Create the starting location for this story opening:\n\n"
-                    f"Setting: {setting.world_name} ({setting.time_period})\n"
-                    f"Opening: {seed.title}\n"
-                    f"Situation: {seed.situation}\n"
-                    f"Create the complete location hierarchy:\n"
-                    f"1. A LayerDefinition for the world/planet\n"
-                    f"2. A ZoneDefinition for the geographic region\n"
-                    f"3. A PlaceProfile for the specific starting location WITH latitude/longitude\n\n"
-                    f"CRITICAL: The PlaceProfile MUST include valid latitude and longitude fields.\n"
-                    f"Use real Earth latitude/longitude even for fantasy settings. "
-                    f"Treat fantasy worlds as 'mirror-Earth' - place locations where analogous real places would be. "
-                    f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
-                    f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
-                    f"The place should be where {character.name} begins their story, with exact latitude/longitude."
-                ),
-            },
-        ]
+        system_prompt = (
+            "You are a location designer for an interactive narrative. "
+            "Create vivid, atmospheric locations that serve both as settings "
+            "and as active participants in the story."
+        )
+        user_prompt = (
+            f"Create the starting location for this story opening:\n\n"
+            f"Setting: {setting.world_name} ({setting.time_period})\n"
+            f"Opening: {seed.title}\n"
+            f"Situation: {seed.situation}\n"
+            f"Create the complete location hierarchy:\n"
+            f"1. A LayerDefinition for the world/planet\n"
+            f"2. A ZoneDefinition for the geographic region\n"
+            f"3. A PlaceProfile for the specific starting location WITH latitude/longitude\n\n"
+            f"CRITICAL: The PlaceProfile MUST include valid latitude and longitude fields.\n"
+            f"Use real Earth latitude/longitude even for fantasy settings. "
+            f"Treat fantasy worlds as 'mirror-Earth' - place locations where analogous real places would be. "
+            f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
+            f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
+            f"The place should be where {character.name} begins their story, with exact latitude/longitude."
+        )
 
         try:
-            result = self._generate_structured(messages, LocationHierarchy)
+            result = self._run_structured(
+                system_prompt,
+                user_prompt,
+                LocationHierarchy,
+            )
 
             logger.info(
                 f"Generated location hierarchy: {result.layer.name} -> "

@@ -418,6 +418,7 @@ class TestStructuredOutputIntegration:
     """Test integration with structured output APIs."""
 
     @pytest.mark.integration
+    @pytest.mark.live_llm
     @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,
@@ -436,6 +437,7 @@ class TestStructuredOutputIntegration:
         assert setting.magic_exists is not None
 
     @pytest.mark.integration
+    @pytest.mark.live_llm
     @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,

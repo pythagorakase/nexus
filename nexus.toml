@@ -60,6 +60,18 @@ test_mode = false
 test_database_suffix = "_test"
 
 # =============================================================================
+# Wizard Settings (New Story Setup)
+# =============================================================================
+
+[wizard]
+default_model = "gpt-5.1"
+fallback_model = "claude-haiku-4-5"
+message_history_limit = 20
+max_retries = 2
+max_tokens = 2048
+enable_streaming = true
+
+# =============================================================================
 # LORE Agent Settings
 # =============================================================================
 
@@ -357,4 +369,3 @@ test_mock_server_url = "http://localhost:5102/v1"  # Mock server for TEST model
 
 [api.constraints]
 max_choice_text_length = 1000  # Maximum length of choice text
-
