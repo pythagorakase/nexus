@@ -3,10 +3,11 @@ Tests for new story structured output schemas and database mapping.
 
 These tests verify that:
 1. Our Pydantic schemas are valid
-2. The OpenAI structured output works with our schemas
+2. Structured output works with our schemas
 3. Database mapping correctly transforms schemas to table format
 """
 
+import os
 import pytest
 import json
 from datetime import datetime, timezone
@@ -17,22 +18,23 @@ from pydantic import ValidationError
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
+    CharacterTrait,
     StorySeed,
     StoryTimestamp,
     LayerDefinition,
     LayerType,
     ZoneDefinition,
     PlaceProfile,
-    SpecificLocation,
     TransitionData,
     Genre,
     TechLevel,
     StorySeedType,
-    PlaceCategory,
-    ZoneType,
+    PlaceExtraData,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_generator import StoryComponentGenerator
+
+RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
 
 
 class TestNewStorySchemas:
@@ -78,10 +80,18 @@ class TestNewStorySchemas:
                        "Raised by the Order of the Silver Eye, she now investigates arcane crimes.",
             personality="Cautious and analytical, with a dry sense of humor. She keeps people at arm's length "
                        "but fiercely protects those she allows into her circle.",
-            # Exactly 3 of 10 optional traits
-            allies="Master Aldric, her mentor and father figure within the Order",
-            reputation="Known as the 'Shadow Seer' for solving impossible cases",
-            enemies="The Crimson Hand cult who may know what happened to her parents",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="Master Aldric, her mentor and father figure within the Order",
+            ),
+            trait_2=CharacterTrait(
+                name="reputation",
+                description="Known as the 'Shadow Seer' for solving impossible cases",
+            ),
+            trait_3=CharacterTrait(
+                name="enemies",
+                description="The Crimson Hand cult who may know what happened to her parents",
+            ),
             # Required wildcard trait
             wildcard_name="Arcane Tattoos",
             wildcard_description="Mystical tattoos that glow when magic is near, granting her "
@@ -90,12 +100,11 @@ class TestNewStorySchemas:
 
         assert character.name == "Lyra Shadowheart"
         assert "half-elf" in character.summary
-        assert character.allies is not None
-        assert character.reputation is not None
-        assert character.enemies is not None
-        # Traits not selected should be None
-        assert character.patron is None
-        assert character.resources is None
+        assert {"allies", "reputation", "enemies"} == {
+            character.trait_1.name,
+            character.trait_2.name,
+            character.trait_3.name,
+        }
 
     def test_story_seed_creation(self):
         """Test creating a valid StorySeed with atomized timestamp."""
@@ -108,13 +117,9 @@ class TestNewStorySchemas:
             immediate_goal="Find clues at the last known campsite",
             stakes="More disappearances could cripple trade and starve the region",
             tension_source="Time pressure - another caravan departs tomorrow",
-            starting_location="The Last Light Inn, final stop before the dangerous road",
             base_timestamp=StoryTimestamp(year=1347, month=9, day=15, hour=16, minute=30),
             weather="Gathering storm clouds",
-            key_npcs=["Innkeeper Gareth", "Caravan guard survivor"],
-            initial_mystery="Strange blue flames were seen the night of each disappearance",
-            potential_allies=["Local ranger", "Traveling wizard"],
-            potential_obstacles=["Hostile wilderness", "Uncooperative witnesses", "Magical interference"],
+            key_npcs=["Innkeeper Gareth", "Caravan guard survivor", "Local ranger"],
             secrets="The blue flames are caused by a rogue fire elemental bound to a cursed artifact. "
                    "The innkeeper's brother was the first to disappear and secretly joined the bandits. "
                    "The 'survivor' is actually the bandit leader's spy, feeding false information."
@@ -122,7 +127,7 @@ class TestNewStorySchemas:
 
         assert seed.seed_type == StorySeedType.MYSTERY
         assert len(seed.secrets) >= 50
-        assert seed.initial_mystery is not None
+        assert len(seed.key_npcs) >= 2
         # Test timestamp conversion
         dt = seed.get_base_datetime()
         assert dt.year == 1347
@@ -164,27 +169,24 @@ class TestNewStorySchemas:
             current_status="Busy with travelers fleeing the troubles to the north",
             secrets="A hidden cellar contains evidence of smuggling operations",
             inhabitants=["Innkeeper Gareth", "Serving staff", "Regular patrons"],
-            coordinates=[45.5231, -122.6765],  # Example coordinates (Portland, OR area)
-            category=PlaceCategory.BUILDING,
-            atmosphere="Tense and watchful, with an undercurrent of fear",
-            size="medium",
-            population=30,
-            nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
-            notable_features=["Reinforced walls", "Hidden cellar", "Crow's nest lookout"],
-            resources=["Food stores", "Basic weapons", "Healing herbs"],
-            dangers=["Occasional bandit raids", "Wild beast attacks"],
-            ruler="Innkeeper Gareth",
-            factions=["Merchant's Guild", "Local militia"],
-            culture="Frontier hospitality mixed with survival pragmatism",
-            economy="Trade waystation and supply depot",
-            trade_goods=["Provisions", "Mountain gear", "Local ale"],
-            current_events=["Merchant disappearances", "Increased guard patrols"],
-            rumors=["Strange lights in the mountains", "Old magic awakening"]
+            latitude=45.5231,
+            longitude=-122.6765,
+            extra_data=PlaceExtraData(
+                atmosphere="Tense and watchful, with an undercurrent of fear",
+                nearby_landmarks=["Old Watch Tower", "Merchant's Rest Cemetery"],
+                resources=["Food stores", "Basic weapons", "Healing herbs"],
+                dangers=["Occasional bandit raids", "Wild beast attacks"],
+                ruler="Innkeeper Gareth",
+                factions=["Merchant's Guild", "Local militia"],
+                culture="Frontier hospitality mixed with survival pragmatism",
+                economy="Trade waystation and supply depot",
+                rumors=["Strange lights in the mountains", "Old magic awakening"],
+            ),
         )
 
         assert place.name == "The Last Light Inn"
-        assert place.population == 30
-        assert len(place.notable_features) == 3
+        assert place.extra_data is not None
+        assert len(place.extra_data.rumors) == 2
 
     def test_zone_definition_creation(self):
         """Test creating a valid ZoneDefinition."""
@@ -228,10 +230,18 @@ class TestNewStorySchemas:
             appearance="Test appearance with sufficient detail for validation",
             background="Test backstory of sufficient length to meet the minimum requirements for validation",
             personality="Test personality that is complex enough for validation",
-            # Exactly 3 traits
-            allies="Test ally who helps the character",
-            contacts="Test contact for information",
-            resources="Test resources the character possesses",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="Test ally who helps the character",
+            ),
+            trait_2=CharacterTrait(
+                name="contacts",
+                description="Test contact for information",
+            ),
+            trait_3=CharacterTrait(
+                name="resources",
+                description="Test resources the character possesses",
+            ),
             # Wildcard trait
             wildcard_name="Test Trait",
             wildcard_description="A unique trait that sets this test character apart from others",
@@ -245,9 +255,7 @@ class TestNewStorySchemas:
             immediate_goal="Test goal",
             stakes="Test stakes",
             tension_source="Test tension",
-            starting_location="Test location",
             base_timestamp=StoryTimestamp(year=2024, month=6, day=15, hour=9, minute=0),
-            potential_obstacles=["Test obstacle"],
             secrets="Test secrets: hidden plot information that the user never sees - NPC agendas and twists"
         )
 
@@ -259,11 +267,13 @@ class TestNewStorySchemas:
             current_status="Test current status of the location",
             secrets="Test secrets hidden within this place",
             inhabitants=["Test inhabitant"],
-            coordinates=[40.7128, -74.0060],  # NYC coordinates for testing
-            category=PlaceCategory.SETTLEMENT,
-            atmosphere="Test atmosphere",
-            notable_features=["Test feature"],
-            culture="Test culture"
+            latitude=40.7128,
+            longitude=-74.0060,
+            extra_data=PlaceExtraData(
+                atmosphere="Test atmosphere",
+                culture="Test culture",
+                rumors=["Test rumor"],
+            ),
         )
 
         layer = LayerDefinition(
@@ -313,10 +323,18 @@ class TestDatabaseMapper:
             background="A veteran of many wars, seeking redemption for past deeds in service of a tyrant. "
                        "Now he fights for the innocent.",
             personality="Stoic and honorable, with a fierce protective instinct",
-            # Exactly 3 traits
-            allies="A brotherhood of former soldiers who served with him",
-            reputation="Known as the 'Iron Shield' for never abandoning a charge",
-            obligations="Sworn to protect the village that took him in after the war",
+            trait_1=CharacterTrait(
+                name="allies",
+                description="A brotherhood of former soldiers who served with him",
+            ),
+            trait_2=CharacterTrait(
+                name="reputation",
+                description="Known as the 'Iron Shield' for never abandoning a charge",
+            ),
+            trait_3=CharacterTrait(
+                name="obligations",
+                description="Sworn to protect the village that took him in after the war",
+            ),
             # Wildcard
             wildcard_name="Battle Scars",
             wildcard_description="His scars tell stories - some recognize them and either fear or respect him",
@@ -333,17 +351,14 @@ class TestDatabaseMapper:
             current_status="Preparing for winter with tension high due to recent bandit activity",
             secrets="The town elder knows the location of an ancient cache of weapons",
             inhabitants=["Mayor Thompson", "Blacksmith Greta", "Local militia"],
-            coordinates=[42.3601, -71.0589],
-            category=PlaceCategory.SETTLEMENT,
-            atmosphere="Determined but weary",
-            size="small",
-            population=500,
-            notable_features=["Wooden palisade", "Market square"],
-            culture="Hardy frontier folk",
-            economy="Agriculture and trade",
-            trade_goods=["Grain", "Furs"],
-            current_events=["Preparing for winter"],
-            rumors=["Bandits in the hills"]
+            latitude=42.3601,
+            longitude=-71.0589,
+            extra_data=PlaceExtraData(
+                atmosphere="Determined but weary",
+                culture="Hardy frontier folk",
+                economy="Agriculture and trade",
+                rumors=["Bandits in the hills"],
+            ),
         )
 
     @pytest.fixture
@@ -364,7 +379,7 @@ class TestDatabaseMapper:
         assert "veteran of many wars" in db_record["background"]
 
         # Check extra_data contains traits
-        extra = db_record["extra_data"]
+        extra = json.loads(db_record["extra_data"])
         assert "allies" in extra
         assert "reputation" in extra
         assert "obligations" in extra
@@ -386,9 +401,9 @@ class TestDatabaseMapper:
         assert len(db_record["inhabitants"]) > 0
 
         # Check extra_data
-        extra = db_record["extra_data"]
-        assert extra["category"] == "settlement"
-        assert extra["size"] == "small"
+        extra = json.loads(db_record["extra_data"])
+        assert extra["atmosphere"] == "Determined but weary"
+        assert extra["economy"] == "Agriculture and trade"
 
     def test_zone_mapping(self, mapper, sample_zone):
         """Test mapping ZoneDefinition to database format."""
@@ -400,12 +415,17 @@ class TestDatabaseMapper:
 
 
 class TestStructuredOutputIntegration:
-    """Test integration with OpenAI structured output API."""
+    """Test integration with structured output APIs."""
 
     @pytest.mark.integration
-    def test_setting_generation(self):
-        """Test generating a setting with OpenAI API."""
-        generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
+    @pytest.mark.skipif(
+        not RUN_LIVE_LLM,
+        reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
+    )
+    def test_setting_generation(self, model):
+        """Test generating a setting with a live LLM."""
+        generator = StoryComponentGenerator(model=model, use_resilient=True)
 
         setting = generator.generate_setting_card(
             "Create a dark fantasy world with steampunk elements"
@@ -416,9 +436,14 @@ class TestStructuredOutputIntegration:
         assert setting.magic_exists is not None
 
     @pytest.mark.integration
-    def test_character_generation(self):
-        """Test generating a character with OpenAI API."""
-        generator = StoryComponentGenerator(model="gpt-4.1", use_resilient=True)
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
+    @pytest.mark.skipif(
+        not RUN_LIVE_LLM,
+        reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
+    )
+    def test_character_generation(self, model):
+        """Test generating a character with a live LLM."""
+        generator = StoryComponentGenerator(model=model, use_resilient=True)
 
         # Create a setting first
         setting = SettingCard(
@@ -441,7 +466,8 @@ class TestStructuredOutputIntegration:
         assert isinstance(character, CharacterSheet)
         assert character.name
         assert character.summary
-        assert character.wildcard_name  # New required field
+        assert len({character.trait_1.name, character.trait_2.name, character.trait_3.name}) == 3
+        assert character.wildcard_name
 
 
 if __name__ == "__main__":

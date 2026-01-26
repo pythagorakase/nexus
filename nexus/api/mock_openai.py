@@ -84,12 +84,11 @@ def query_wizard_cache() -> Dict[str, Any]:
                     -- Seed
                     seed_type, seed_title, seed_situation, seed_hook,
                     seed_immediate_goal, seed_stakes, seed_tension_source,
-                    seed_starting_location, seed_weather, seed_key_npcs,
-                    seed_initial_mystery, seed_potential_allies, seed_potential_obstacles,
+                    seed_weather, seed_key_npcs,
                     seed_secrets,
                     -- Layer/Zone/Location
                     layer_name, layer_type, layer_description,
-                    zone_name, zone_summary, zone_boundary_description, zone_approximate_area,
+                    zone_name, zone_summary,
                     initial_location
                 FROM assets.new_story_creator
                 WHERE id = TRUE
@@ -239,12 +238,8 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                     "immediate_goal": cache.get("seed_immediate_goal"),
                     "stakes": cache.get("seed_stakes"),
                     "tension_source": cache.get("seed_tension_source"),
-                    "starting_location": cache.get("seed_starting_location"),
                     "weather": cache.get("seed_weather"),
                     "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
-                    "initial_mystery": cache.get("seed_initial_mystery"),
-                    "potential_allies": _parse_pg_array(cache.get("seed_potential_allies")),
-                    "potential_obstacles": _parse_pg_array(cache.get("seed_potential_obstacles")),
                     "secrets": cache.get("seed_secrets"),
                 },
                 "layer": {
@@ -255,8 +250,6 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                 "zone": {
                     "name": cache.get("zone_name"),
                     "summary": cache.get("zone_summary"),
-                    "boundary_description": cache.get("zone_boundary_description"),
-                    "approximate_area": cache.get("zone_approximate_area"),
                 },
                 "location": location,
             },

@@ -115,26 +115,15 @@ class NewStoryDatabaseMapper:
             "secrets": place.secrets,
         }
 
-        # Additional data in extra_data
-        extra_data = {
-            "category": place.category.value if place.category else None,
-            "size": place.size,
-            "population": place.population,
-            "atmosphere": place.atmosphere,
-            "nearby_landmarks": place.nearby_landmarks or [],
-            "notable_features": place.notable_features or [],
-            "resources": place.resources or [],
-            "dangers": place.dangers or [],
-            "ruler": place.ruler,
-            "factions": place.factions or [],
-            "culture": place.culture,
-            "economy": place.economy,
-            "trade_goods": place.trade_goods or [],
-            "current_events": place.current_events or [],
-            "rumors": place.rumors or [],
-        }
-
-        db_record["extra_data"] = json.dumps(extra_data)
+        extra_payload = {}
+        if place.extra_data:
+            extra_payload = place.extra_data.model_dump(exclude_none=True)
+            extra_payload = {
+                key: value
+                for key, value in extra_payload.items()
+                if value not in (None, "", [])
+            }
+        db_record["extra_data"] = json.dumps(extra_payload) if extra_payload else None
 
         return db_record
 
@@ -393,7 +382,7 @@ class NewStoryDatabaseMapper:
             Exception: If database operation fails (transaction will be rolled back)
         """
         # Validate coordinates before attempting database operations
-        lat, lon = place.coordinates[0], place.coordinates[1]
+        lat, lon = place.latitude, place.longitude
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             raise ValueError(
                 f"Invalid coordinates: ({lat}, {lon}). "
@@ -472,7 +461,7 @@ class NewStoryDatabaseMapper:
 
             # Generate a default circular boundary for the zone
             # Using a 50-mile radius (approximately 80km) centered on the place
-            self._create_default_zone_boundary(cur, zone_id, place.coordinates)
+            self._create_default_zone_boundary(cur, zone_id, lat, lon)
 
             logger.info(
                 f"Created location hierarchy: {layer.name} (ID: {layer_id}) "
@@ -670,7 +659,7 @@ class NewStoryDatabaseMapper:
         """
         Build extra_data JSONB from CharacterSheet traits.
 
-        The Mind's Eye Theatre system uses 10 optional traits (exactly 3 selected)
+        The Mind's Eye Theatre system uses 10 menu traits (exactly 3 selected)
         plus a required wildcard trait. All traits are stored in the extra_data
         JSONB column rather than as separate database columns.
 
@@ -682,23 +671,9 @@ class NewStoryDatabaseMapper:
         """
         extra_data: Dict[str, Any] = {}
 
-        # Collect selected traits (exactly 3 of these 10 will be non-None)
-        trait_fields = [
-            "allies",
-            "contacts",
-            "patron",
-            "dependents",
-            "status",
-            "reputation",
-            "resources",
-            "domain",
-            "enemies",
-            "obligations",
-        ]
-        for field in trait_fields:
-            value = getattr(character, field)
-            if value is not None:
-                extra_data[field] = value
+        # Collect selected traits (exactly 3 entries)
+        for trait in character.get_trait_entries():
+            extra_data[trait.name] = trait.description
 
         # Add required wildcard trait
         extra_data["wildcard"] = {
@@ -709,7 +684,7 @@ class NewStoryDatabaseMapper:
         return extra_data
 
     def _create_default_zone_boundary(
-        self, cursor: Any, zone_id: int, coordinates: Tuple[float, float]
+        self, cursor: Any, zone_id: int, lat: float, lon: float
     ) -> None:
         """
         Create a default circular boundary for a zone.
@@ -719,10 +694,10 @@ class NewStoryDatabaseMapper:
         Args:
             cursor: Database cursor
             zone_id: ID of the zone to update
-            coordinates: (lat, lon) tuple for the center point
+            lat: Latitude for the center point
+            lon: Longitude for the center point
         """
         try:
-            lat, lon = coordinates
             # Create a 50-mile (approximately 80.47 km) radius circle
             # PostGIS ST_Buffer with geography type handles the spherical calculations
 

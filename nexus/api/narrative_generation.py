@@ -285,11 +285,10 @@ async def generate_bootstrap_narrative(
 
         # Get starting location via FK chain:
         # global_variables.user_character → characters.current_location → places.id
-        # Note: atmosphere and notable_features are in extra_data JSONB
+        # Note: atmosphere is stored in extra_data JSONB
         cur.execute(
             """SELECT p.name, p.summary,
-                      p.extra_data->>'atmosphere' as atmosphere,
-                      p.extra_data->'notable_features' as notable_features
+                      p.extra_data->>'atmosphere' as atmosphere
                FROM global_variables g
                JOIN characters c ON c.id = g.user_character
                JOIN places p ON p.id = c.current_location
@@ -329,7 +328,6 @@ async def generate_bootstrap_narrative(
                 "stakes": story_seed.get("stakes", ""),
                 "tension_source": story_seed.get("tension_source", ""),
                 "weather": story_seed.get("weather", ""),
-                "initial_mystery": story_seed.get("initial_mystery", ""),
                 "key_npcs": story_seed.get("key_npcs", []),
             },
             "protagonist": {

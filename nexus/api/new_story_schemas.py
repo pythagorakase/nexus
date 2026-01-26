@@ -2,13 +2,13 @@
 Pydantic schemas for structured outputs during new story initialization.
 
 These schemas are used when new_story=true to receive structured data
-from the OpenAI API during the setup conversation phase.
+from LLM providers during the setup conversation phase.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Literal
+from typing import Dict, List, Optional, Literal
 from enum import Enum
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
@@ -133,7 +133,7 @@ class SettingCard(BaseModel):
         "balanced", description="Overall tone"
     )
     themes: List[str] = Field(
-        ..., min_items=1, max_items=5, description="Major thematic elements"
+        ..., description="Major thematic elements"
     )
 
     # Cultural notes
@@ -162,13 +162,34 @@ class SettingCard(BaseModel):
     )
 
 
+# Trait name type for schema validation
+TraitName = Literal[
+    "allies", "contacts", "patron", "dependents",
+    "status", "reputation", "resources", "domain",
+    "enemies", "obligations"
+]
+
+
+class CharacterTrait(BaseModel):
+    """Named trait entry with a narrative-focused description."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    name: TraitName = Field(..., description="Trait name from the defined trait menu")
+    description: str = Field(
+        ...,
+        min_length=5,
+        description="Why this trait matters for the character and story",
+    )
+
+
 class CharacterSheet(BaseModel):
     """
     Character definition following Mind's Eye Theatre trait philosophy.
 
     This aligns with the characters table schema:
     - Core fields (name, summary, appearance, background, personality) map to table columns
-    - Traits stored in extra_data JSONB field (exactly 3 of 10 optional + required wildcard)
+    - Traits stored in extra_data JSONB field (exactly 3 selected + required wildcard)
     - Dynamic fields (emotional_state, current_activity, current_location) set during story seed
 
     Philosophy: Traits signal what aspects of the character should be narratively foregrounded -
@@ -202,48 +223,18 @@ class CharacterSheet(BaseModel):
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TRAIT SYSTEM - Choose exactly 3 of these 10 optional traits
+    # TRAIT SYSTEM - Choose exactly 3 of these 10 traits
     # Each signals narrative focus, not mechanical capability
     # ═══════════════════════════════════════════════════════════════════════════
 
-    # Social Network
-    allies: Optional[str] = Field(
-        None, description="Who will actively help and take risks for you"
+    trait_1: CharacterTrait = Field(
+        ..., description="First selected trait entry"
     )
-    contacts: Optional[str] = Field(
-        None,
-        description="Information/favor sources - limited risk-taking, may be transactional",
+    trait_2: CharacterTrait = Field(
+        ..., description="Second selected trait entry"
     )
-    patron: Optional[str] = Field(
-        None, description="Powerful mentor/sponsor with their own position and agenda"
-    )
-    dependents: Optional[str] = Field(
-        None, description="Those who rely on you for support, protection, or guidance"
-    )
-
-    # Power & Position
-    status: Optional[str] = Field(
-        None,
-        description="Formal standing recognized by an institution or social structure",
-    )
-    reputation: Optional[str] = Field(
-        None, description="How widely known you are, what for, for better or worse"
-    )
-
-    # Assets & Territory
-    resources: Optional[str] = Field(
-        None, description="Material wealth, equipment, supplies, or reliable access"
-    )
-    domain: Optional[str] = Field(
-        None, description="Place or area you control or claim"
-    )
-
-    # Liabilities
-    enemies: Optional[str] = Field(
-        None, description="Those actively opposed who will expend energy to thwart you"
-    )
-    obligations: Optional[str] = Field(
-        None, description="Debts, oaths, or duties you must honor"
+    trait_3: CharacterTrait = Field(
+        ..., description="Third selected trait entry"
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -260,75 +251,30 @@ class CharacterSheet(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_trait_count(self) -> "CharacterSheet":
-        """Ensure exactly 3 of 10 optional traits are selected."""
-        trait_fields = [
-            "allies",
-            "contacts",
-            "patron",
-            "dependents",
-            "status",
-            "reputation",
-            "resources",
-            "domain",
-            "enemies",
-            "obligations",
-        ]
-        selected = sum(1 for f in trait_fields if getattr(self, f) is not None)
-        if selected != 3:
-            raise ValueError(
-                f"Must select exactly 3 traits from the 10 optional traits. "
-                f"Currently selected: {selected}. "
-                f"Traits signal narrative focus - choose what matters most for this character."
-            )
+    def validate_unique_traits(self) -> "CharacterSheet":
+        """Ensure trait names are unique across the three slots."""
+        names = [self.trait_1.name, self.trait_2.name, self.trait_3.name]
+        if len(set(names)) != 3:
+            raise ValueError("Trait names must be unique across trait_1/trait_2/trait_3.")
         return self
 
     def get_selected_traits(self) -> Dict[str, str]:
         """Return dict of selected trait names and their values."""
-        trait_fields = [
-            "allies",
-            "contacts",
-            "patron",
-            "dependents",
-            "status",
-            "reputation",
-            "resources",
-            "domain",
-            "enemies",
-            "obligations",
-        ]
         return {
-            field: getattr(self, field)
-            for field in trait_fields
-            if getattr(self, field) is not None
+            self.trait_1.name: self.trait_1.description,
+            self.trait_2.name: self.trait_2.description,
+            self.trait_3.name: self.trait_3.description,
         }
+
+    def get_trait_entries(self) -> List[CharacterTrait]:
+        """Return the three selected trait entries in order."""
+        return [self.trait_1, self.trait_2, self.trait_3]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHARACTER CREATION SUB-PHASE SCHEMAS
 # These enable gated progression through character creation with separate tools
 # ═══════════════════════════════════════════════════════════════════════════════
-
-# Trait name type for schema validation
-TraitName = Literal[
-    "allies", "contacts", "patron", "dependents",
-    "status", "reputation", "resources", "domain",
-    "enemies", "obligations"
-]
-
-VALID_TRAIT_NAMES = {
-    "allies",
-    "contacts",
-    "patron",
-    "dependents",
-    "status",
-    "reputation",
-    "resources",
-    "domain",
-    "enemies",
-    "obligations",
-}
-
 
 class TraitRationales(BaseModel):
     """
@@ -490,13 +436,13 @@ class TraitSelection(BaseModel):
     """
     Sub-phase 2: Trait selection with rationale.
 
-    Captures the 3 selected traits from the 10 optional traits,
+    Captures the 3 selected traits from the 10-item menu,
     along with rationales explaining why each fits the character.
     """
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
-    selected_traits: List[str] = Field(
+    selected_traits: List[TraitName] = Field(
         ...,
         min_length=3,
         max_length=3,
@@ -506,24 +452,18 @@ class TraitSelection(BaseModel):
         ...,
         description="Rationales for each selected trait explaining why it fits this character",
     )
-    suggested_by_llm: List[str] = Field(
+    suggested_by_llm: List[TraitName] = Field(
         default_factory=list,
         description="The 3 traits Skald pre-selected as fitting for this character",
     )
 
     @field_validator("selected_traits")
     @classmethod
-    def validate_trait_names(cls, v: List[str]) -> List[str]:
-        """Ensure all trait names are valid."""
-        normalized = [t.lower().strip() for t in v]
-        for trait in normalized:
-            if trait not in VALID_TRAIT_NAMES:
-                raise ValueError(
-                    f"Invalid trait: '{trait}'. Must be one of: {', '.join(sorted(VALID_TRAIT_NAMES))}"
-                )
-        if len(set(normalized)) != 3:
+    def validate_trait_names(cls, v: List[TraitName]) -> List[TraitName]:
+        """Ensure all trait names are valid and unique."""
+        if len(set(v)) != 3:
             raise ValueError("Must select exactly 3 unique traits")
-        return normalized
+        return v
 
 
 class WildcardTrait(BaseModel):
@@ -604,17 +544,20 @@ class CharacterCreationState(BaseModel):
                 missing.append("wildcard")
             raise ValueError(f"Cannot assemble CharacterSheet - missing: {missing}")
 
-        # Build trait kwargs
-        trait_kwargs: Dict[str, Any] = {}
+        # Build trait entries
+        trait_entries: List[CharacterTrait] = []
         rationales = self.trait_selection.trait_rationales.to_dict()
         for trait_name in self.trait_selection.selected_traits:
             # Use fleshed-out description if available, otherwise use rationale
             if trait_name in self.trait_details:
-                trait_kwargs[trait_name] = self.trait_details[trait_name]
+                description = self.trait_details[trait_name]
             elif trait_name in rationales:
-                trait_kwargs[trait_name] = rationales[trait_name]
+                description = rationales[trait_name]
             else:
-                trait_kwargs[trait_name] = f"Selected during character creation"
+                description = "Selected during character creation"
+            trait_entries.append(
+                CharacterTrait(name=trait_name, description=description)
+            )
 
         return CharacterSheet(
             name=self.concept.name,
@@ -624,7 +567,9 @@ class CharacterCreationState(BaseModel):
             personality=self.personality or "Personality to be revealed through play.",
             wildcard_name=self.wildcard.wildcard_name,
             wildcard_description=self.wildcard.wildcard_description,
-            **trait_kwargs,
+            trait_1=trait_entries[0],
+            trait_2=trait_entries[1],
+            trait_3=trait_entries[2],
         )
 
 
@@ -693,7 +638,7 @@ class StorySeed(BaseModel):
     """
     A potential story starting point.
 
-    The system generates 3 of these for the user to choose from.
+    The system generates 2-4 of these for the user to choose from.
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -713,7 +658,6 @@ class StorySeed(BaseModel):
     tension_source: str = Field(..., description="Source of narrative tension")
 
     # Setting details
-    starting_location: str = Field(..., description="Where the story begins")
     base_timestamp: StoryTimestamp = Field(
         ...,
         description="When the story begins - provide year, month, day, hour, minute",
@@ -722,18 +666,8 @@ class StorySeed(BaseModel):
 
     # Initial elements
     key_npcs: List[str] = Field(
-        default_factory=list, max_items=3, description="Important NPCs in opening"
-    )
-    initial_mystery: Optional[str] = Field(
-        None, description="Mystery or question to explore"
-    )
-
-    # Allies and obstacles
-    potential_allies: List[str] = Field(
-        default_factory=list, description="Potential allies nearby"
-    )
-    potential_obstacles: List[str] = Field(
-        default_factory=list, description="Initial challenges"
+        default_factory=list,
+        description="Key figures or allies present in the opening",
     )
 
     # Secret channel content (LLM-to-LLM, user never sees)
@@ -777,17 +711,32 @@ class LayerDefinition(BaseModel):
     )
 
 
-class PlaceCategory(str, Enum):
-    """Categories of locations."""
+class PlaceExtraData(BaseModel):
+    """Optional location details stored in places.extra_data (JSONB)."""
 
-    SETTLEMENT = "settlement"
-    WILDERNESS = "wilderness"
-    DUNGEON = "dungeon"
-    BUILDING = "building"
-    DISTRICT = "district"
-    LANDMARK = "landmark"
-    ROAD = "road"
-    BORDER = "border"
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
+    resources: List[str] = Field(
+        default_factory=list, max_items=5, description="Available resources"
+    )
+    dangers: List[str] = Field(
+        default_factory=list, max_items=5, description="Known threats or hazards"
+    )
+    ruler: Optional[str] = Field(None, description="Who controls or governs this place")
+    factions: List[str] = Field(
+        default_factory=list, max_items=5, description="Active factions or groups"
+    )
+    culture: Optional[str] = Field(
+        None, description="Cultural characteristics and customs"
+    )
+    economy: Optional[str] = Field(None, description="Economic base and activities")
+    nearby_landmarks: List[str] = Field(
+        default_factory=list, max_items=5, description="Nearby notable locations"
+    )
+    rumors: List[str] = Field(
+        default_factory=list, max_items=3, description="Current rumors or gossip"
+    )
 
 
 class PlaceProfile(BaseModel):
@@ -795,9 +744,9 @@ class PlaceProfile(BaseModel):
     Detailed information about a location.
 
     Aligns with the places table in the database:
-    - Core fields (name, type, summary, inhabitants, history, current_status, secrets) map to columns
-    - Additional attributes stored in extra_data JSONB field
+    - Core fields map to columns (name, type, summary, inhabitants, history, current_status, secrets)
     - Coordinates stored as PostGIS geography type
+    - Optional attributes stored in extra_data JSONB
     """
 
     model_config = ConfigDict(str_strip_whitespace=True)
@@ -833,60 +782,22 @@ class PlaceProfile(BaseModel):
     )
 
     # Geographic information (required for database)
-    coordinates: List[float] = Field(
+    latitude: float = Field(
         ...,
-        min_length=2,
-        max_length=2,
-        description="Latitude and longitude coordinates [lat, lon] for the place",
+        ge=-90.0,
+        le=90.0,
+        description="Latitude for the place (-90 to 90)",
+    )
+    longitude: float = Field(
+        ...,
+        ge=-180.0,
+        le=180.0,
+        description="Longitude for the place (-180 to 180)",
     )
 
-    # Additional attributes (stored in extra_data JSONB)
-    category: Optional[PlaceCategory] = Field(
-        None, description="Narrative category of location"
-    )
-    size: Optional[Literal["tiny", "small", "medium", "large", "huge", "massive"]] = (
-        Field(None, description="Relative size")
-    )
-    population: Optional[int] = Field(
-        None, ge=0, description="Population if applicable"
-    )
-    atmosphere: Optional[str] = Field(None, description="Mood and feeling of the place")
-
-    # Features and details (stored in extra_data)
-    notable_features: List[str] = Field(
-        default_factory=list, max_items=8, description="Distinctive physical features"
-    )
-    resources: List[str] = Field(
-        default_factory=list, max_items=5, description="Available resources"
-    )
-    dangers: List[str] = Field(
-        default_factory=list, max_items=5, description="Known threats or hazards"
-    )
-
-    # Social and economic (stored in extra_data)
-    ruler: Optional[str] = Field(None, description="Who controls or governs this place")
-    factions: List[str] = Field(
-        default_factory=list, max_items=5, description="Active factions or groups"
-    )
-    culture: Optional[str] = Field(
-        None, description="Cultural characteristics and customs"
-    )
-    economy: Optional[str] = Field(None, description="Economic base and activities")
-    trade_goods: List[str] = Field(
-        default_factory=list, max_items=5, description="Goods produced or traded"
-    )
-
-    # Nearby context (stored in extra_data)
-    nearby_landmarks: List[str] = Field(
-        default_factory=list, max_items=5, description="Nearby notable locations"
-    )
-
-    # Current happenings (stored in extra_data)
-    current_events: List[str] = Field(
-        default_factory=list, max_items=3, description="Ongoing events"
-    )
-    rumors: List[str] = Field(
-        default_factory=list, max_items=3, description="Current rumors or gossip"
+    # Optional attributes stored in extra_data JSONB
+    extra_data: Optional[PlaceExtraData] = Field(
+        None, description="Additional attributes stored in places.extra_data"
     )
 
 
@@ -918,18 +829,7 @@ class ZoneDefinition(BaseModel):
         ..., min_length=20, max_length=500, description="Zone description"
     )
 
-    # Geographic shape (will be converted to PostGIS MultiPolygon)
-    boundary_description: Optional[str] = Field(
-        None,
-        description="Textual description of zone boundaries (e.g., 'Northern mountains to eastern river')",
-    )
-    approximate_area: Optional[str] = Field(
-        None,
-        description="Rough size estimate (e.g., '100 square miles', 'size of France')",
-    )
-
-    # Note: actual PostGIS boundary polygon will be added later if needed
-    # For now, we just need the zone to exist in the hierarchy
+    # Note: PostGIS boundary polygon will be generated later if needed
 
 
 class StartingScenario(BaseModel):
@@ -1023,7 +923,7 @@ class TransitionData(BaseModel):
     layer: LayerDefinition = Field(..., description="World layer (planet/dimension)")
     zone: ZoneDefinition = Field(..., description="Geographic zone")
     location: PlaceProfile = Field(
-        ..., description="Starting place with exact coordinates"
+        ..., description="Starting place with exact latitude/longitude"
     )
 
     # Timing
@@ -1119,7 +1019,7 @@ with the genre and tone selected.
 CHARACTER_SHEET_SCHEMA_PROMPT = """
 Create a CharacterSheet with:
 - Core identity fields: name, summary, appearance, background, personality
-- Exactly 3 of 10 optional traits (see attached Trait Reference)
+- Exactly 3 trait entries in trait_1/trait_2/trait_3 (name + description) from the 10-item trait menu
 - Required wildcard trait (wildcard_name + wildcard_description)
 
 The output must be valid JSON conforming to the CharacterSheet schema.

@@ -1,5 +1,5 @@
 """
-New story structured output generator using OpenAI's responses.parse API.
+New story structured output generator using OpenAI or Anthropic structured outputs.
 
 This module handles the generation of structured story components during
 the new story initialization phase (new_story=true).
@@ -8,7 +8,7 @@ the new story initialization phase (new_story=true).
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Tuple, Type
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
@@ -24,13 +24,15 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.resilient_openai import create_resilient_client
 from scripts.api_openai import OpenAIProvider
+from scripts.api_anthropic import AnthropicProvider
+from nexus.config.loader import get_provider_for_model
 
 logger = logging.getLogger("nexus.api.new_story_generator")
 
 
 class StoryComponentGenerator:
     """
-    Generates structured story components using OpenAI's structured output API.
+    Generates structured story components using OpenAI or Anthropic structured outputs.
 
     This class handles all the structured generation needed during new story
     initialization, using Pydantic models for type safety and validation.
@@ -41,23 +43,64 @@ class StoryComponentGenerator:
         Initialize the story generator.
 
         Args:
-            model: OpenAI model to use (default: gpt-5.1)
-            use_resilient: Whether to use resilient client with retry logic
+            model: Model name to use (default: gpt-5.1)
+            use_resilient: Whether to use resilient OpenAI client with retry logic
         """
         self.model = model
 
-        # Get API key using the standard provider
-        provider = OpenAIProvider(model=model)
-        api_key = provider.api_key
+        self.provider = get_provider_for_model(model)
 
-        # Create client (resilient or standard)
-        if use_resilient:
-            logger.info("Using resilient OpenAI client with retry logic")
-            self.client = create_resilient_client(api_key, async_client=False)
+        if self.provider == "anthropic":
+            self.client = AnthropicProvider(model=model)
         else:
-            import openai
+            # Get API key using the standard provider
+            provider = OpenAIProvider(model=model)
+            api_key = provider.api_key
 
-            self.client = openai.OpenAI(api_key=api_key)
+            # Create client (resilient or standard)
+            if use_resilient:
+                logger.info("Using resilient OpenAI client with retry logic")
+                self.client = create_resilient_client(api_key, async_client=False)
+            else:
+                import openai
+
+                self.client = openai.OpenAI(api_key=api_key)
+
+    def _split_anthropic_prompt(
+        self, messages: List[Dict[str, str]]
+    ) -> Tuple[Optional[str], str]:
+        system_parts: List[str] = []
+        user_parts: List[str] = []
+        for message in messages:
+            role = message.get("role", "user")
+            content = message.get("content", "")
+            if role == "system":
+                system_parts.append(content)
+            else:
+                user_parts.append(f"[{role.upper()}]\n{content}")
+        system_prompt = "\n\n".join(system_parts).strip() or None
+        user_prompt = "\n\n".join(user_parts).strip()
+        return system_prompt, user_prompt
+
+    def _generate_structured(
+        self,
+        messages: List[Dict[str, str]],
+        schema_model: Type[BaseModel],
+    ) -> BaseModel:
+        if self.provider == "anthropic":
+            system_prompt, user_prompt = self._split_anthropic_prompt(messages)
+            self.client.system_prompt = system_prompt
+            result, _ = self.client.get_structured_completion(
+                user_prompt, schema_model
+            )
+            return result
+
+        response = self.client.responses.parse(
+            model=self.model,
+            input=messages,
+            text_format=schema_model,
+        )
+        return response.output_parsed
 
     def generate_setting_card(
         self,
@@ -102,14 +145,7 @@ class StoryComponentGenerator:
         )
 
         try:
-            response = self.client.responses.parse(
-                model=self.model,
-                input=messages,
-                temperature=0.7,  # Some creativity for world-building
-                text_format=SettingCard,
-            )
-
-            result = response.output_parsed
+            result = self._generate_structured(messages, SettingCard)
             logger.info(f"Generated setting: {result.world_name} ({result.genre})")
             return result
 
@@ -167,20 +203,15 @@ class StoryComponentGenerator:
                     f"Character Concept:\n{character_concept}\n\n"
                     f"Generate a complete CharacterSheet with rich detail. "
                     f"The character should have clear strengths, weaknesses, and room for growth. "
-                    f"Make them feel like a real person with history and relationships."
+                    f"Make them feel like a real person with history and relationships. "
+                    f"Include trait_1, trait_2, and trait_3 (name + description) from the trait menu, "
+                    f"plus the required wildcard trait."
                 ),
             }
         )
 
         try:
-            response = self.client.responses.parse(
-                model=self.model,
-                input=messages,
-                temperature=0.6,  # Balance consistency with creativity
-                text_format=CharacterSheet,
-            )
-
-            result = response.output_parsed
+            result = self._generate_structured(messages, CharacterSheet)
             logger.info(f"Generated character: {result.name} ({result.background})")
             return result
 
@@ -189,7 +220,7 @@ class StoryComponentGenerator:
             raise
 
     def generate_story_seeds(
-        self, setting: SettingCard, character: CharacterSheet, num_seeds: int = 3
+        self, setting: SettingCard, character: CharacterSheet
     ) -> List[StorySeed]:
         """
         Generate multiple story seed options for the user to choose from.
@@ -197,7 +228,6 @@ class StoryComponentGenerator:
         Args:
             setting: The established setting
             character: The created character
-            num_seeds: Number of seeds to generate (default: 3)
 
         Returns:
             List of StorySeed objects
@@ -208,32 +238,19 @@ class StoryComponentGenerator:
             """Collection of story seeds"""
 
             seeds: List[StorySeed] = Field(
-                min_items=num_seeds,
-                max_items=num_seeds,
-                description=f"Exactly {num_seeds} unique story seeds",
+                min_length=2,
+                max_length=4,
+                description="2-4 unique story seeds",
             )
 
             class Config:
                 extra = "forbid"
 
-        # Extract selected traits (the 3 chosen from the 10 optional traits)
-        trait_fields = [
-            "allies",
-            "contacts",
-            "patron",
-            "dependents",
-            "status",
-            "reputation",
-            "resources",
-            "domain",
-            "enemies",
-            "obligations",
+        # Extract selected traits (exactly 3 entries)
+        selected_traits = [
+            f"{trait.name.title()}: {trait.description}"
+            for trait in character.get_trait_entries()
         ]
-        selected_traits = []
-        for field in trait_fields:
-            value = getattr(character, field, None)
-            if value is not None:
-                selected_traits.append(f"{field.title()}: {value}")
 
         # Format traits for the prompt
         traits_text = (
@@ -253,7 +270,7 @@ class StoryComponentGenerator:
             {
                 "role": "user",
                 "content": (
-                    f"Create {num_seeds} unique story openings for:\n\n"
+                    "Create 2-4 unique story openings for:\n\n"
                     f"Setting: {setting.world_name} ({setting.genre})\n"
                     f"Protagonist: {character.name}\n"
                     f"Summary: {character.summary}\n"
@@ -267,20 +284,13 @@ class StoryComponentGenerator:
                     f"3. Connect to the character's traits and background\n"
                     f"4. Set up interesting narrative possibilities\n"
                     f"5. Feel appropriate to the {setting.tone} tone\n\n"
-                    f"Generate exactly {num_seeds} StorySeed objects with all required fields."
+                    "Generate 2-4 StorySeed objects with all required fields."
                 ),
             },
         ]
 
         try:
-            response = self.client.responses.parse(
-                model=self.model,
-                input=messages,
-                temperature=0.8,  # Higher creativity for variety
-                text_format=StorySeedCollection,
-            )
-
-            result = response.output_parsed
+            result = self._generate_structured(messages, StorySeedCollection)
             logger.info(f"Generated {len(result.seeds)} story seeds")
             return result.seeds
 
@@ -310,7 +320,7 @@ class StoryComponentGenerator:
             layer: LayerDefinition = Field(description="World layer (planet/dimension)")
             zone: ZoneDefinition = Field(description="Geographic zone")
             place: PlaceProfile = Field(
-                description="The specific place with coordinates"
+                description="The specific place with latitude/longitude"
             )
 
             class Config:
@@ -332,34 +342,27 @@ class StoryComponentGenerator:
                     f"Setting: {setting.world_name} ({setting.time_period})\n"
                     f"Opening: {seed.title}\n"
                     f"Situation: {seed.situation}\n"
-                    f"Location mentioned: {seed.starting_location}\n\n"
                     f"Create the complete location hierarchy:\n"
                     f"1. A LayerDefinition for the world/planet\n"
                     f"2. A ZoneDefinition for the geographic region\n"
-                    f"3. A PlaceProfile for the specific starting location WITH COORDINATES\n\n"
-                    f"CRITICAL: The PlaceProfile MUST include valid coordinates (latitude, longitude).\n"
+                    f"3. A PlaceProfile for the specific starting location WITH latitude/longitude\n\n"
+                    f"CRITICAL: The PlaceProfile MUST include valid latitude and longitude fields.\n"
                     f"Use real Earth latitude/longitude even for fantasy settings. "
                     f"Treat fantasy worlds as 'mirror-Earth' - place locations where analogous real places would be. "
                     f"For example, a fantasy kingdom could use coordinates for Germany (51.5, 10.5), "
                     f"a desert city could use coordinates for Cairo (30.0, 31.2), etc.\n\n"
-                    f"The place should be where {character.name} begins their story, with exact coordinates."
+                    f"The place should be where {character.name} begins their story, with exact latitude/longitude."
                 ),
             },
         ]
 
         try:
-            response = self.client.responses.parse(
-                model=self.model,
-                input=messages,
-                temperature=0.6,
-                text_format=LocationHierarchy,
-            )
-
-            result = response.output_parsed
+            result = self._generate_structured(messages, LocationHierarchy)
 
             logger.info(
                 f"Generated location hierarchy: {result.layer.name} -> "
-                f"{result.zone.name} -> {result.place.name} at {result.place.coordinates}"
+                f"{result.zone.name} -> {result.place.name} at "
+                f"({result.place.latitude}, {result.place.longitude})"
             )
             return result.layer, result.zone, result.place
 

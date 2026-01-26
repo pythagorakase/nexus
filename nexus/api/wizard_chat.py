@@ -485,12 +485,15 @@ async def new_story_chat_endpoint(request: ChatRequest):
             schema_model = StartingScenario
             schema = schema_model.model_json_schema()
             if use_anthropic:
+                logger.info(
+                    "Anthropic seed tool using non-strict schema to avoid grammar size limits."
+                )
                 tools.append(
                     build_anthropic_tool(
                         "submit_starting_scenario",
                         "Submit the chosen story seed and starting location details.",
                         schema,
-                        strict=True,
+                        strict=False,
                     )
                 )
             else:
@@ -672,13 +675,17 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         # Build WizardResponse schema for structured output
         wizard_schema = WizardResponse.model_json_schema()
+        wizard_strict = True
+        if use_anthropic and tools:
+            # Avoid oversized grammar compilation when multiple strict tools are present.
+            wizard_strict = False
         if use_anthropic:
             wizard_response_tool = build_anthropic_tool(
                 "respond_with_choices",
                 "Respond to the user with a narrative message and 2-4 short choice strings (no numbering/markdown) "
                 "to guide the next step. Do NOT list the choices inside the message; only in the choices array.",
                 wizard_schema,
-                strict=True,
+                strict=wizard_strict,
             )
         else:
             wizard_response_tool = build_openai_tool(
@@ -820,6 +827,24 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
             # Persist the artifact to the setup cache
             try:
+                if function_name == "submit_starting_scenario":
+                    try:
+                        scenario = StartingScenario.model_validate(arguments)
+                        arguments = scenario.model_dump()
+                    except Exception as e:
+                        payload = _summarize_payload(arguments)
+                        logger.error(
+                            "StartingScenario validation failed: %s | payload=%s",
+                            e,
+                            payload,
+                        )
+                        raise HTTPException(
+                            status_code=422,
+                            detail=(
+                                "LLM returned invalid StartingScenario: "
+                                f"{str(e)} | payload={payload}"
+                            ),
+                        )
                 if function_name == "submit_world_document":
                     record_drafts(request.slot, setting=arguments)
                 elif function_name == "submit_character_sheet":
@@ -833,8 +858,14 @@ async def new_story_chat_endpoint(request: ChatRequest):
                         zone=arguments.get("zone"),
                         location=arguments.get("location"),
                     )
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Failed to persist artifact for {function_name}: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to persist artifact for {function_name}: {str(e)}",
+                )
 
             # Determine if this completes the entire phase or just a sub-phase
             is_subphase_tool = function_name in [

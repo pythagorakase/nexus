@@ -5,7 +5,7 @@ The normalized schema stores wizard state in typed columns rather than JSONB blo
 Phase completion is determined by:
 - Setting complete: setting_genre IS NOT NULL
 - Character complete: 4 traits selected in assets.traits (3 + wildcard with rationale)
-- Seed complete: seed_type IS NOT NULL
+- Seed complete: seed_type, layer, zone, and initial location are present
 """
 
 from __future__ import annotations
@@ -48,6 +48,16 @@ def _parse_pg_array(value: Any) -> List[str]:
                 return []
             return inner.split(',')
     return []
+
+
+def _merge_unique_lists(*values: List[str]) -> List[str]:
+    """Merge lists while preserving order and removing duplicates."""
+    merged: List[str] = []
+    for value in values:
+        for item in value:
+            if item and item not in merged:
+                merged.append(item)
+    return merged
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -132,12 +142,8 @@ class SeedData:
     immediate_goal: Optional[str] = None
     stakes: Optional[str] = None
     tension_source: Optional[str] = None
-    starting_location: Optional[str] = None
     weather: Optional[str] = None
     key_npcs: Optional[List[str]] = None
-    initial_mystery: Optional[str] = None
-    potential_allies: Optional[List[str]] = None
-    potential_obstacles: Optional[List[str]] = None
     secrets: Optional[str] = None
     # Layer
     layer_name: Optional[str] = None
@@ -146,8 +152,6 @@ class SeedData:
     # Zone
     zone_name: Optional[str] = None
     zone_summary: Optional[str] = None
-    zone_boundary_description: Optional[str] = None
-    zone_approximate_area: Optional[str] = None
     # PlaceProfile (complex - kept as dict)
     initial_location: Optional[Dict[str, Any]] = None
 
@@ -173,7 +177,12 @@ class WizardCache:
 
     def seed_complete(self) -> bool:
         """Check if seed phase is complete."""
-        return self.seed.seed_type is not None
+        return (
+            bool(self.seed.seed_type)
+            and bool(self.seed.layer_name)
+            and bool(self.seed.zone_name)
+            and bool(self.seed.initial_location)
+        )
 
     def current_phase(self) -> str:
         """Infer current phase from data presence."""
@@ -268,13 +277,9 @@ class WizardCache:
             "immediate_goal": self.seed.immediate_goal,
             "stakes": self.seed.stakes,
             "tension_source": self.seed.tension_source,
-            "starting_location": self.seed.starting_location,
             "base_timestamp": base_timestamp_dict,
             "weather": self.seed.weather,
             "key_npcs": self.seed.key_npcs or [],
-            "initial_mystery": self.seed.initial_mystery,
-            "potential_allies": self.seed.potential_allies or [],
-            "potential_obstacles": self.seed.potential_obstacles or [],
             "secrets": self.seed.secrets,
         }
 
@@ -295,8 +300,6 @@ class WizardCache:
         return {
             "name": self.seed.zone_name,
             "summary": self.seed.zone_summary,
-            "boundary_description": self.seed.zone_boundary_description,
-            "approximate_area": self.seed.zone_approximate_area,
         }
 
     def get_initial_location(self) -> Optional[Dict[str, Any]]:
@@ -418,20 +421,17 @@ def _row_to_cache(
             immediate_goal=row.get("seed_immediate_goal"),
             stakes=row.get("seed_stakes"),
             tension_source=row.get("seed_tension_source"),
-            starting_location=row.get("seed_starting_location"),
             weather=row.get("seed_weather"),
-            key_npcs=_parse_pg_array(row.get("seed_key_npcs")),
-            initial_mystery=row.get("seed_initial_mystery"),
-            potential_allies=_parse_pg_array(row.get("seed_potential_allies")),
-            potential_obstacles=_parse_pg_array(row.get("seed_potential_obstacles")),
+            key_npcs=_merge_unique_lists(
+                _parse_pg_array(row.get("seed_key_npcs")),
+                _parse_pg_array(row.get("seed_potential_allies")),
+            ),
             secrets=row.get("seed_secrets"),
             layer_name=row.get("layer_name"),
             layer_type=row.get("layer_type"),
             layer_description=row.get("layer_description"),
             zone_name=row.get("zone_name"),
             zone_summary=row.get("zone_summary"),
-            zone_boundary_description=row.get("zone_boundary_description"),
-            zone_approximate_area=row.get("zone_approximate_area"),
             initial_location=row.get("initial_location"),
         ),
         base_timestamp=row.get("base_timestamp"),
@@ -718,13 +718,9 @@ def write_seed(
     immediate_goal: str,
     stakes: str,
     tension_source: str,
-    starting_location: str,
     secrets: str,
     weather: Optional[str] = None,
     key_npcs: Optional[List[str]] = None,
-    initial_mystery: Optional[str] = None,
-    potential_allies: Optional[List[str]] = None,
-    potential_obstacles: Optional[List[str]] = None,
     # Layer
     layer_name: str,
     layer_type: str,
@@ -732,8 +728,6 @@ def write_seed(
     # Zone
     zone_name: str,
     zone_summary: str,
-    zone_boundary_description: Optional[str] = None,
-    zone_approximate_area: Optional[str] = None,
     # PlaceProfile
     initial_location: Optional[Dict[str, Any]] = None,
     # Timestamp
@@ -752,20 +746,20 @@ def write_seed(
                     seed_immediate_goal = %s,
                     seed_stakes = %s,
                     seed_tension_source = %s,
-                    seed_starting_location = %s,
                     seed_weather = %s,
                     seed_key_npcs = %s,
-                    seed_initial_mystery = %s,
-                    seed_potential_allies = %s,
-                    seed_potential_obstacles = %s,
+                    seed_starting_location = NULL,
+                    seed_initial_mystery = NULL,
+                    seed_potential_allies = NULL,
+                    seed_potential_obstacles = NULL,
                     seed_secrets = %s,
                     layer_name = %s,
                     layer_type = %s,
                     layer_description = %s,
                     zone_name = %s,
                     zone_summary = %s,
-                    zone_boundary_description = %s,
-                    zone_approximate_area = %s,
+                    zone_boundary_description = NULL,
+                    zone_approximate_area = NULL,
                     initial_location = %s,
                     base_timestamp = %s,
                     updated_at = NOW()
@@ -779,20 +773,14 @@ def write_seed(
                     immediate_goal,
                     stakes,
                     tension_source,
-                    starting_location,
                     weather,
                     key_npcs,
-                    initial_mystery,
-                    potential_allies,
-                    potential_obstacles,
                     secrets,
                     layer_name,
                     layer_type,
                     layer_description,
                     zone_name,
                     zone_summary,
-                    zone_boundary_description,
-                    zone_approximate_area,
                     json.dumps(initial_location) if initial_location else None,
                     base_timestamp,
                 ),
@@ -1132,12 +1120,12 @@ def write_cache(
                     "seed_immediate_goal = %s",
                     "seed_stakes = %s",
                     "seed_tension_source = %s",
-                    "seed_starting_location = %s",
                     "seed_weather = %s",
                     "seed_key_npcs = %s",
-                    "seed_initial_mystery = %s",
-                    "seed_potential_allies = %s",
-                    "seed_potential_obstacles = %s",
+                    "seed_starting_location = NULL",
+                    "seed_initial_mystery = NULL",
+                    "seed_potential_allies = NULL",
+                    "seed_potential_obstacles = NULL",
                     "seed_secrets = %s",
                 ])
                 params.extend([
@@ -1148,12 +1136,8 @@ def write_cache(
                     selected_seed.get("immediate_goal"),
                     selected_seed.get("stakes"),
                     selected_seed.get("tension_source"),
-                    selected_seed.get("starting_location"),
                     selected_seed.get("weather"),
                     selected_seed.get("key_npcs"),
-                    selected_seed.get("initial_mystery"),
-                    selected_seed.get("potential_allies"),
-                    selected_seed.get("potential_obstacles"),
                     selected_seed.get("secrets"),
                 ])
 
@@ -1173,14 +1157,12 @@ def write_cache(
                 updates.extend([
                     "zone_name = %s",
                     "zone_summary = %s",
-                    "zone_boundary_description = %s",
-                    "zone_approximate_area = %s",
+                    "zone_boundary_description = NULL",
+                    "zone_approximate_area = NULL",
                 ])
                 params.extend([
                     zone_draft.get("name"),
                     zone_draft.get("summary"),
-                    zone_draft.get("boundary_description"),
-                    zone_draft.get("approximate_area"),
                 ])
 
             if initial_location is not None:
