@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -60,7 +60,12 @@ def build_pydantic_ai_model(model: str) -> Model:
 def build_message_history(
     messages: Sequence[Dict[str, Any]],
 ) -> List[ModelMessage]:
-    """Convert stored chat history into Pydantic AI message objects."""
+    """
+    Convert stored chat history into Pydantic AI message objects.
+
+    Empty or non-string content is skipped to avoid emitting blank parts in the
+    model history; tool-only turns should be represented explicitly elsewhere.
+    """
     history: List[ModelMessage] = []
     for message in messages:
         role = message.get("role")

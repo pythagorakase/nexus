@@ -426,7 +426,7 @@ class TestStructuredOutputIntegration:
     )
     def test_setting_generation(self, model):
         """Test generating a setting with a live LLM."""
-        generator = StoryComponentGenerator(model=model, use_resilient=True)
+        generator = StoryComponentGenerator(model=model)
 
         setting = generator.generate_setting_card(
             "Create a dark fantasy world with steampunk elements"
@@ -445,7 +445,7 @@ class TestStructuredOutputIntegration:
     )
     def test_character_generation(self, model):
         """Test generating a character with a live LLM."""
-        generator = StoryComponentGenerator(model=model, use_resilient=True)
+        generator = StoryComponentGenerator(model=model)
 
         # Create a setting first
         setting = SettingCard(

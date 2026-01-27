@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -58,7 +58,6 @@ class WizardContext:
     history_len: int = 0
     user_turns: int = 0
     assistant_turns: int = 0
-    model_config: Dict[str, Any] = field(default_factory=dict)
     last_tool_result: Optional[Dict[str, Any]] = None
     last_tool_name: Optional[str] = None
 
@@ -92,7 +91,6 @@ class WizardContext:
             history_len=history_len,
             user_turns=user_turns,
             assistant_turns=assistant_turns,
-            model_config={"max_tokens": get_wizard_max_tokens()},
         )
 
     @classmethod
@@ -106,7 +104,6 @@ class WizardContext:
             phase=cache.current_phase(),
             thread_id=cache.thread_id or "",
             model=model,
-            model_config={"max_tokens": get_wizard_max_tokens()},
         )
 
 

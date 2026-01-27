@@ -38,17 +38,14 @@ class StoryComponentGenerator:
     initialization, using Pydantic models for type safety and validation.
     """
 
-    def __init__(self, model: str = "gpt-5.1", use_resilient: bool = True):
+    def __init__(self, model: str = "gpt-5.1"):
         """
         Initialize the story generator.
 
         Args:
             model: Model name to use (default: gpt-5.1)
-            use_resilient: Deprecated (kept for compatibility; no longer used)
         """
         self.model = model
-        if use_resilient:
-            logger.info("Pydantic AI handles retries; ignoring use_resilient=True")
         self._model = build_pydantic_ai_model(model)
         self._model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
         self._retry_budget = get_wizard_retry_budget()

@@ -14,12 +14,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import frontmatter
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+import frontmatter
+from pydantic import ValidationError
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import DeferredToolRequests
-from pydantic import ValidationError
 
 from nexus.api.conversations import ConversationsClient
 from nexus.api.config_utils import (
@@ -55,6 +55,49 @@ logger = logging.getLogger("nexus.api.wizard_chat")
 router = APIRouter(prefix="/api/story/new", tags=["wizard"])
 
 
+def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]:
+    """Load character_state from cache if in character phase and no context provided."""
+    if request.current_phase != "character" or request.context_data is not None:
+        return request.context_data
+
+    cache = read_cache(slot_dbname(request.slot))
+    if not cache:
+        return None
+
+    char_state: Dict[str, Any] = {}
+    if cache.character.has_concept():
+        selected = [st.trait for st in cache.character.suggested_traits]
+        rationales = {
+            st.trait: st.rationale for st in cache.character.suggested_traits
+        }
+        char_state["concept"] = {
+            "name": cache.character.name,
+            "archetype": cache.character.archetype,
+            "background": cache.character.background,
+            "appearance": cache.character.appearance,
+            "suggested_traits": selected,
+            "trait_rationales": rationales,
+        }
+    if cache.character.has_traits():
+        selected = [st.trait for st in cache.character.suggested_traits]
+        rationales = {
+            st.trait: st.rationale for st in cache.character.suggested_traits
+        }
+        char_state["trait_selection"] = {
+            "selected_traits": selected,
+            "trait_rationales": rationales,
+        }
+    if cache.character.has_wildcard():
+        char_state["wildcard"] = {
+            "wildcard_name": cache.character.wildcard_name,
+            "wildcard_description": cache.character.wildcard_rationale,
+        }
+
+    if char_state:
+        return {"character_state": char_state}
+    return None
+
+
 @router.post("/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling."""
@@ -78,43 +121,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
         if request.current_phase is None:
             request.current_phase = state.wizard_state.phase
 
-        # Load character_state from cache if in character phase (always, not just when resolving)
-        if request.current_phase == "character" and request.context_data is None:
-            cache = read_cache(slot_dbname(request.slot))
-            if cache:
-                char_state: Dict[str, Any] = {}
-                if cache.character.has_concept():
-                    selected = [st.trait for st in cache.character.suggested_traits]
-                    rationales = {
-                        st.trait: st.rationale
-                        for st in cache.character.suggested_traits
-                    }
-                    concept_dict = {
-                        "name": cache.character.name,
-                        "archetype": cache.character.archetype,
-                        "background": cache.character.background,
-                        "appearance": cache.character.appearance,
-                        "suggested_traits": selected,
-                        "trait_rationales": rationales,
-                    }
-                    char_state["concept"] = concept_dict
-                if cache.character.has_traits():
-                    selected = [st.trait for st in cache.character.suggested_traits]
-                    rationales = {
-                        st.trait: st.rationale
-                        for st in cache.character.suggested_traits
-                    }
-                    char_state["trait_selection"] = {
-                        "selected_traits": selected,
-                        "trait_rationales": rationales,
-                    }
-                if cache.character.has_wildcard():
-                    char_state["wildcard"] = {
-                        "wildcard_name": cache.character.wildcard_name,
-                        "wildcard_description": cache.character.wildcard_rationale,
-                    }
-                if char_state:
-                    request.context_data = {"character_state": char_state}
+        request.context_data = _hydrate_character_context(request)
 
         # Handle trait toggle/confirm operations (no LLM call needed)
         if request.trait_choice is not None and request.current_phase == "character":
@@ -268,7 +275,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         if dev_mode:
             result = await wizard_debug_agent.run(
-                request.message,
+                None,
                 deps=context,
                 message_history=message_history,
                 model=model,
@@ -284,9 +291,8 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "dev_mode": True,
             }
 
-        user_prompt = None if request.accept_fate else request.message
         result = await wizard_agent.run(
-            user_prompt,
+            None,
             deps=context,
             message_history=message_history,
             model=model,
@@ -361,35 +367,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
     if request.current_phase is None:
         request.current_phase = state.wizard_state.phase
 
-    if request.current_phase == "character" and request.context_data is None:
-        cache = read_cache(slot_dbname(request.slot))
-        if cache:
-            char_state: Dict[str, Any] = {}
-            if cache.character.has_concept():
-                selected = [st.trait for st in cache.character.suggested_traits]
-                rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-                char_state["concept"] = {
-                    "name": cache.character.name,
-                    "archetype": cache.character.archetype,
-                    "background": cache.character.background,
-                    "appearance": cache.character.appearance,
-                    "suggested_traits": selected,
-                    "trait_rationales": rationales,
-                }
-            if cache.character.has_traits():
-                selected = [st.trait for st in cache.character.suggested_traits]
-                rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
-                char_state["trait_selection"] = {
-                    "selected_traits": selected,
-                    "trait_rationales": rationales,
-                }
-            if cache.character.has_wildcard():
-                char_state["wildcard"] = {
-                    "wildcard_name": cache.character.wildcard_name,
-                    "wildcard_description": cache.character.wildcard_rationale,
-                }
-            if char_state:
-                request.context_data = {"character_state": char_state}
+    request.context_data = _hydrate_character_context(request)
 
     dev_mode = request.dev
     if request.message:
@@ -472,7 +450,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
     async def event_stream():
         if dev_mode:
             result = await wizard_debug_agent.run(
-                request.message,
+                None,
                 deps=context,
                 message_history=message_history,
                 model=model,
@@ -483,9 +461,8 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             client.add_message(request.thread_id, "assistant", result.output)
             return
 
-        user_prompt = None if request.accept_fate else request.message
         async for streamed_result in wizard_agent.run_stream(
-            user_prompt,
+            None,
             deps=context,
             message_history=message_history,
             model=model,

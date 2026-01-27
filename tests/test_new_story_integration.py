@@ -26,7 +26,7 @@ RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
     reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
 )
 def test_complete_story_generation_flow(model: str):
-    generator = StoryComponentGenerator(model=model, use_resilient=True)
+    generator = StoryComponentGenerator(model=model)
     flow = InteractiveSetupFlow(generator)
 
     setting_prompt = (
