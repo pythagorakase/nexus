@@ -20,7 +20,7 @@ RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
 
 @pytest.mark.integration
 @pytest.mark.live_llm
-@pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
+@pytest.mark.parametrize("model", ["gpt-5.1", "claude-sonnet-4-5"])
 @pytest.mark.skipif(
     not RUN_LIVE_LLM,
     reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
