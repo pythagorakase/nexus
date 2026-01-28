@@ -372,7 +372,7 @@ class WizardSettings(BaseModel):
         default=2, ge=0, description="Retry budget for tool validation failures"
     )
     max_tokens: int = Field(
-        default=2048, ge=1, description="Max output tokens for wizard responses"
+        default=4096, ge=1, description="Max output tokens for wizard responses"
     )
     enable_streaming: bool = Field(
         default=True, description="Enable wizard streaming endpoint"

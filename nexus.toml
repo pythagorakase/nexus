@@ -52,7 +52,7 @@ models = [
 api_base = "http://localhost:1234"
 context_window = 65536  # Maximum context length for local model
 temperature = 0.8      # Sampling temperature for generation
-max_tokens = 2048      # Maximum tokens to generate per request
+max_tokens = 4096      # Maximum tokens to generate per request
 
 [global.narrative]
 # Test mode settings for development (legacy - prefer model picker with TEST model)
@@ -68,7 +68,7 @@ default_model = "gpt-5.1"
 fallback_model = "claude-haiku-4-5"
 message_history_limit = 20
 max_retries = 2
-max_tokens = 2048
+max_tokens = 4096
 enable_streaming = true
 
 # =============================================================================
