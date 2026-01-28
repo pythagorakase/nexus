@@ -53,13 +53,9 @@ from nexus.api.retry_handler import (
     openai_rate_limiter,
     FallbackChain,
 )
-from nexus.config import load_settings_as_dict
+from nexus.api.config_utils import get_new_story_model
 
 logger = logging.getLogger("nexus.api.storyteller")
-
-# Load settings
-SETTINGS = load_settings_as_dict()
-NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 ORIGINS = [
     "http://localhost:3000",
@@ -692,7 +688,7 @@ async def delete_session(
 def new_story_setup_start(request: NewStoryStartRequest) -> NewStoryStartResponse:
     """Start a new story setup for a slot (creates conversations thread, clears cache)."""
     # Use provided model or fall back to settings
-    model_to_use = request.model or NEW_STORY_MODEL
+    model_to_use = request.model or get_new_story_model()
     thread_id = start_new_story_setup(request.slot, model=model_to_use)
     return NewStoryStartResponse(thread_id=thread_id, slot=request.slot)
 

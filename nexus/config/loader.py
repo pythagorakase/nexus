@@ -226,6 +226,8 @@ def _load_from_json(path: Path) -> Settings:
     if not legacy_model.get("api_models"):
         legacy_model["api_models"] = _default_api_models_config()
 
+    legacy_new_story = data.get("API Settings", {}).get("new_story", {})
+
     transformed_data = {
         "global": {
             "model": legacy_model,
@@ -236,6 +238,14 @@ def _load_from_json(path: Path) -> Settings:
         "memnon": legacy_agent_settings.get("MEMNON", {}),
         "memory": data.get("memory", {}),
         "apex": data.get("API Settings", {}).get("apex", {}),
+        "wizard": {
+            "default_model": legacy_new_story.get("model", "gpt-5.1"),
+            "fallback_model": legacy_new_story.get("fallback_model"),
+            "message_history_limit": legacy_new_story.get("message_history_limit", 20),
+            "max_retries": legacy_new_story.get("max_retries", 2),
+            "max_tokens": legacy_new_story.get("max_tokens", 2048),
+            "enable_streaming": legacy_new_story.get("enable_streaming", True),
+        },
     }
 
     try:

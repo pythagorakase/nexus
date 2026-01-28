@@ -452,127 +452,85 @@ class AnthropicProvider(LLMProvider):
             print(f"Sentiment: {result.sentiment}, Score: {result.score}")
             ```
         """
-        # Check if we have the required dependencies
         try:
-            from pydantic import BaseModel
-        except ImportError:
-            raise ImportError("Pydantic is required for structured completions. Install with 'pip install pydantic'")
-        
-        # Format input messages
-        messages = [{"role": "user", "content": prompt}]
+            from pydantic_ai import Agent
+            from pydantic_ai.models.anthropic import AnthropicModel
+            from pydantic_ai.providers.anthropic import AnthropicProvider as PydanticAnthropicProvider
+            from pydantic_ai.settings import ModelSettings
+        except ImportError as exc:
+            raise ImportError(
+                "Pydantic AI is required for structured completions. "
+                "Install with 'pip install pydantic-ai'."
+            ) from exc
 
-        # Transform schema for Anthropic structured outputs
-        from nexus.api.structured_output import STRUCTURED_OUTPUT_BETA, make_anthropic_schema
+        logger.info(
+            "Using Pydantic AI structured output with model %s and schema %s",
+            self.model,
+            schema_model.__name__,
+        )
 
-        raw_schema = schema_model.model_json_schema()
-        structured_schema = make_anthropic_schema(raw_schema)
+        provider = PydanticAnthropicProvider(api_key=self.api_key)
+        model = AnthropicModel(model_name=self.model, provider=provider)
 
-        output_format = {
-            "type": "json_schema",
-            "schema": structured_schema,
-        }
+        settings_kwargs = {"max_tokens": self.max_tokens}
+        if (
+            "temperature" in ModelSettings.model_fields
+            and self.temperature is not None
+            and not self.model.lower().startswith("claude-")
+        ):
+            settings_kwargs["temperature"] = self.temperature
+        if "top_p" in ModelSettings.model_fields and self.top_p is not None:
+            settings_kwargs["top_p"] = self.top_p
+        if "top_k" in ModelSettings.model_fields and self.top_k is not None:
+            settings_kwargs["top_k"] = self.top_k
 
-        # Prepare parameters for the API call
-        params = {
-            "model": self.model,
-            "messages": messages,
-            "max_tokens": self.max_tokens,
-        }
-        if self.temperature is not None:
-            params["temperature"] = self.temperature
+        model_settings = ModelSettings(**settings_kwargs)
 
-        # Add optional parameters if provided
-        if self.system_prompt:
-            params["system"] = self.system_prompt
+        agent = Agent(
+            model=model,
+            output_type=schema_model,
+            system_prompt=self.system_prompt,
+            model_settings=model_settings,
+            retries=0,
+        )
 
-        if self.top_p is not None:
-            params["top_p"] = self.top_p
-            
-        if self.top_k is not None:
-            params["top_k"] = self.top_k
+        result = agent.run_sync(prompt)
+        parsed_output = result.output
 
-        extra_body: Dict[str, Any] = {
-            "output_format": output_format
-        }
+        content = (
+            parsed_output.model_dump_json()
+            if hasattr(parsed_output, "model_dump_json")
+            else json.dumps(parsed_output)
+        )
 
-        if self.thinking_enabled:
-            extra_body["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": self.thinking_budget_tokens
-            }
-        
-        max_attempts = 3
-        for attempt in range(1, max_attempts + 1):
-            try:
-                # Call the API
-                response = self.client.beta.messages.create(
-                    **params,
-                    betas=[STRUCTURED_OUTPUT_BETA],
-                    extra_body=extra_body,
+        usage = result.usage() if callable(getattr(result, "usage", None)) else getattr(result, "usage", None)
+        input_tokens = 0
+        output_tokens = 0
+        if usage:
+            if isinstance(usage, dict):
+                input_tokens = usage.get("input_tokens") or usage.get("request_tokens") or 0
+                output_tokens = usage.get("output_tokens") or usage.get("response_tokens") or 0
+            else:
+                input_tokens = (
+                    getattr(usage, "input_tokens", None)
+                    or getattr(usage, "request_tokens", None)
+                    or 0
                 )
-            except Exception as e:
-                status_code = getattr(e, "status_code", None)
-                retryable = status_code in {429, 500, 502, 503, 504}
-                if retryable and attempt < max_attempts:
-                    retry_after = None
-                    if hasattr(e, "response") and hasattr(e.response, "headers"):
-                        retry_after = e.response.headers.get("retry-after")
-
-                    if status_code == 429:
-                        retry_wait = (
-                            int(retry_after)
-                            if retry_after and retry_after.isdigit()
-                            else COOLDOWNS["rate_limit"]
-                        )
-                    else:
-                        retry_wait = COOLDOWNS.get("individual", 15)
-
-                    logger.warning(
-                        "Anthropic structured output attempt %d/%d failed (%s). Retrying in %s seconds.",
-                        attempt,
-                        max_attempts,
-                        status_code or "unknown",
-                        retry_wait,
-                    )
-                    time.sleep(retry_wait)
-                    continue
-
-                logger.error(
-                    "Error calling Anthropic API for structured completion: %s",
-                    str(e),
+                output_tokens = (
+                    getattr(usage, "output_tokens", None)
+                    or getattr(usage, "response_tokens", None)
+                    or 0
                 )
-                raise
 
-            # Extract the content from the response
-            # For extended thinking, skip "thinking" blocks and get the first text block
-            content = ""
-            if response.content:
-                for block in response.content:
-                    if hasattr(block, 'type') and block.type == 'thinking':
-                        continue  # Skip thinking blocks
-                    if hasattr(block, 'text') and block.text:
-                        content = block.text
-                        break
+        llm_response = LLMResponse(
+            content=content,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=self.model,
+            raw_response=result,
+        )
 
-            # Parse the JSON response into the Pydantic model
-            try:
-                parsed_obj = schema_model.model_validate_json(content)
-            except Exception as parse_error:
-                logger.error(f"Error parsing response as JSON schema: {parse_error}")
-                logger.info(f"Raw response: {content}")
-                raise ValueError(f"Failed to parse response as JSON schema: {parse_error}")
-
-            # Create standardized response
-            llm_response = LLMResponse(
-                content=content,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-                model=self.model,
-                raw_response=response
-            )
-
-            # Return both the parsed object and the standard LLMResponse
-            return parsed_obj, llm_response
+        return parsed_output, llm_response
     
     def count_tokens(self, text: str) -> int:
         """
