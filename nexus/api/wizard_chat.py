@@ -98,6 +98,13 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
     return None
 
 
+def _accept_fate_prompt(message: Optional[str]) -> str:
+    """Provide a deterministic user prompt when accept_fate is requested."""
+    if message and message.strip():
+        return message
+    return "Accept fate."
+
+
 @router.post("/chat")
 async def new_story_chat_endpoint(request: ChatRequest):
     """Handle chat for new story wizard with tool calling."""
@@ -291,8 +298,11 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "dev_mode": True,
             }
 
+        user_prompt = (
+            _accept_fate_prompt(request.message) if request.accept_fate else None
+        )
         result = await wizard_agent.run(
-            None,
+            user_prompt,
             deps=context,
             message_history=message_history,
             model=model,
@@ -461,8 +471,11 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             client.add_message(request.thread_id, "assistant", result.output)
             return
 
+        user_prompt = (
+            _accept_fate_prompt(request.message) if request.accept_fate else None
+        )
         async for streamed_result in wizard_agent.run_stream(
-            None,
+            user_prompt,
             deps=context,
             message_history=message_history,
             model=model,
