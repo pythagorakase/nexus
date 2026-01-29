@@ -28,7 +28,7 @@ from nexus.api.new_story_schemas import (
     CharacterCreationState,
     CharacterSheet,
     SettingCard,
-    StartingScenario,
+    StorySeedSubmission,
     TraitSelection,
     WildcardTrait,
     WizardResponse,
@@ -449,28 +449,36 @@ async def _submit_wildcard_impl(
 
 
 async def _submit_scenario_impl(
-    ctx: RunContext[WizardContext], scenario: StartingScenario
+    ctx: RunContext[WizardContext], submission: StorySeedSubmission
 ) -> str:
-    """Shared implementation for submit_starting_scenario tool."""
+    """
+    Shared implementation for submit_starting_scenario tool.
+
+    This is Phase 1 of the two-phase seed generation. It stores the creative
+    narrative content (seed + location_sketch) in the cache. Phase 2 (set designer)
+    is invoked in wizard_chat.py after this tool returns to generate the structured
+    location hierarchy (layer/zone/place).
+    """
     _log_retry(ctx, "submit_starting_scenario")
     _ensure_phase(ctx, "seed", "submit_starting_scenario")
 
+    # Store seed and location_sketch in cache
+    # Note: layer/zone/location will be populated by Phase 2 (set designer)
     record_drafts(
         ctx.deps.slot,
-        seed=scenario.seed.model_dump(),
-        layer=scenario.layer.model_dump(),
-        zone=scenario.zone.model_dump(),
-        location=scenario.location.model_dump(),
+        seed=submission.seed.model_dump(),
     )
 
     ctx.deps.last_tool_name = "submit_starting_scenario"
     ctx.deps.last_tool_result = {
         "message": "Generating artifact...",
-        "phase_complete": True,
+        "phase_complete": False,  # Not complete until set designer runs
         "subphase_complete": False,
         "phase": ctx.deps.phase,
         "artifact_type": "submit_starting_scenario",
-        "data": scenario.model_dump(),
+        "data": submission.model_dump(),
+        "location_sketch": submission.location_sketch,  # Pass to Phase 2
+        "requires_set_design": True,  # Signal that Phase 2 is needed
     }
     raise CallDeferred()
 

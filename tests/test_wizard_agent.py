@@ -17,8 +17,8 @@ from nexus.api.new_story_schemas import (
     LayerType,
     PlaceProfile,
     SettingCard,
-    StartingScenario,
     StorySeed,
+    StorySeedSubmission,
     StorySeedType,
     StoryTimestamp,
     TechLevel,
@@ -139,7 +139,13 @@ def sample_wildcard() -> WildcardTrait:
     )
 
 
-def sample_starting_scenario() -> StartingScenario:
+def sample_seed_submission() -> StorySeedSubmission:
+    """Create a sample StorySeedSubmission for testing.
+
+    Note: This uses the simplified two-phase schema where the creative seed
+    and location_sketch are submitted together, and the structured location
+    hierarchy (layer/zone/place) is generated separately by the set designer.
+    """
     seed = StorySeed(
         seed_type=StorySeedType.CRISIS,
         title="Ashes of the Regency",
@@ -159,30 +165,12 @@ def sample_starting_scenario() -> StartingScenario:
             "a double agent, while the archivist holds the true seal of succession."
         ),
     )
-    layer = LayerDefinition(
-        name="Aetheris",
-        type=LayerType.PLANET,
-        description="A storm-swept world where city-states cling to ancient ley lines.",
+    location_sketch = (
+        "A crystalline armory perched above the docks, with fog rolling in from a "
+        "storm-swept delta. Think Paris or Amsterdam - a major trade hub with "
+        "canals and guild houses. The building echoes with stored enchantments."
     )
-    zone = ZoneDefinition(
-        name="Regent's Reach",
-        summary="A fog-laced delta packed with trade hubs and rival guild houses.",
-    )
-    place = PlaceProfile(
-        name="The Glass Arsenal",
-        place_type="fixed_location",
-        summary=(
-            "A crystalline armory perched above the docks, echoing with the hum of "
-            "stored enchantments and the clang of restless smiths."
-        ),
-        history="Built after the last succession war to secure the regalia.",
-        current_status="Under lockdown as rumors of treason spread.",
-        secrets="Hidden chambers below hold the regent's emergency vault.",
-        inhabitants=["Armorer Nyx", "Dock guard patrol"],
-        latitude=48.8566,
-        longitude=2.3522,
-    )
-    return StartingScenario(seed=seed, layer=layer, zone=zone, location=place)
+    return StorySeedSubmission(seed=seed, location_sketch=location_sketch)
 
 
 def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
@@ -304,11 +292,14 @@ async def test_submit_starting_scenario_sets_tool_result(monkeypatch):
 
     ctx = DummyRunContext(make_context(phase="seed"))
     with pytest.raises(CallDeferred):
-        await submit_starting_scenario(ctx, sample_starting_scenario())
+        await submit_starting_scenario(ctx, sample_seed_submission())
 
     result = ctx.deps.last_tool_result
     assert result["artifact_type"] == "submit_starting_scenario"
-    assert result["phase_complete"] is True
+    # phase_complete is now False until set designer runs
+    assert result["phase_complete"] is False
+    assert result["requires_set_design"] is True
+    assert "location_sketch" in result
 
 
 # =============================================================================

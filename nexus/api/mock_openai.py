@@ -225,9 +225,24 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
 
     elif phase == "seed":
         location = cache.get("initial_location") or {}
-        # Keys must match what narrative.py expects: seed, layer, zone, location
+        # Two-phase seed generation: Return StorySeedSubmission format
+        # Phase 1: seed + location_sketch (creative content)
+        # Phase 2: set designer generates layer/zone/location (handled in wizard_chat.py)
+
+        # Generate location_sketch from existing location data for backward compatibility
+        location_name = location.get("name", "unknown location")
+        location_summary = location.get("summary", "")
+        zone_name = cache.get("zone_name", "")
+        layer_name = cache.get("layer_name", "")
+
+        location_sketch = (
+            f"A place called {location_name} in the {zone_name} region of {layer_name}. "
+            f"{location_summary}"
+        )
+
         return {
-            "phase_complete": True,
+            "phase_complete": False,  # Not complete until set designer runs
+            "requires_set_design": True,
             "artifact_type": "submit_starting_scenario",
             "data": {
                 "seed": {
@@ -242,9 +257,14 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                     "key_npcs": _parse_pg_array(cache.get("seed_key_npcs")),
                     "secrets": cache.get("seed_secrets"),
                 },
+                "location_sketch": location_sketch,
+            },
+            # Include pre-computed location data for TEST mode bypass
+            # wizard_chat.py can use this instead of calling set designer
+            "_mock_location_data": {
                 "layer": {
                     "name": cache.get("layer_name"),
-                    "type": cache.get("layer_type"),  # Key must be "type" to match new_story_cache.py
+                    "type": cache.get("layer_type"),
                     "description": cache.get("layer_description"),
                 },
                 "zone": {

@@ -40,6 +40,7 @@ from nexus.api.new_story_cache import (
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_flow import record_drafts
+from nexus.api.new_story_generator import generate_set_design
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -433,6 +434,96 @@ async def new_story_chat_endpoint(request: ChatRequest):
         )
 
         if context.last_tool_result:
+            # =================================================================
+            # Phase 2: Set Designer (for seed submissions only)
+            # =================================================================
+            # When the seed tool signals requires_set_design, invoke the set
+            # designer to translate the location_sketch into structured data.
+            if context.last_tool_result.get("requires_set_design"):
+                tool_data = context.last_tool_result.get("data", {})
+                location_sketch = context.last_tool_result.get("location_sketch", "")
+                seed_data = tool_data.get("seed", {})
+
+                # Get setting from cache
+                cache = read_cache(slot_dbname(request.slot))
+                if cache and cache.setting_complete() and seed_data:
+                    setting = SettingCard(**cache.get_setting_dict())
+                    seed = StorySeed(**seed_data)
+
+                    # TEST mode: Use pre-computed location data from mock database
+                    if selected_model == "TEST":
+                        logger.info("TEST mode: Using mock location data for slot %s", request.slot)
+                        try:
+                            from nexus.api.mock_openai import query_wizard_cache
+                            mock_cache = query_wizard_cache()
+                            layer_data = {
+                                "name": mock_cache.get("layer_name"),
+                                "type": mock_cache.get("layer_type"),
+                                "description": mock_cache.get("layer_description"),
+                            }
+                            zone_data = {
+                                "name": mock_cache.get("zone_name"),
+                                "summary": mock_cache.get("zone_summary"),
+                            }
+                            location_data = mock_cache.get("initial_location") or {}
+
+                            record_drafts(
+                                request.slot,
+                                layer=layer_data,
+                                zone=zone_data,
+                                location=location_data,
+                            )
+                            context.last_tool_result["phase_complete"] = True
+                            context.last_tool_result["set_design"] = {
+                                "layer": layer_data,
+                                "zone": zone_data,
+                                "location": location_data,
+                            }
+                            logger.info(
+                                "TEST mode set design complete: %s -> %s -> %s",
+                                layer_data.get("name"),
+                                zone_data.get("name"),
+                                location_data.get("name"),
+                            )
+                        except Exception as e:
+                            logger.error("TEST mode set design failed: %s", e)
+                            context.last_tool_result["set_design_error"] = str(e)
+                    else:
+                        # Production: Call set designer to generate location data
+                        logger.info("Running set designer for slot %s", request.slot)
+                        try:
+                            layer, zone, place = await generate_set_design(
+                                location_sketch=location_sketch,
+                                setting=setting,
+                                seed=seed,
+                            )
+
+                            # Record the generated location data
+                            record_drafts(
+                                request.slot,
+                                layer=layer.model_dump(),
+                                zone=zone.model_dump(),
+                                location=place.model_dump(),
+                            )
+
+                            # Update the result to indicate full completion
+                            context.last_tool_result["phase_complete"] = True
+                            context.last_tool_result["set_design"] = {
+                                "layer": layer.model_dump(),
+                                "zone": zone.model_dump(),
+                                "location": place.model_dump(),
+                            }
+                            logger.info(
+                                "Set designer complete: %s -> %s -> %s",
+                                layer.name,
+                                zone.name,
+                                place.name,
+                            )
+                        except Exception as e:
+                            logger.error("Set designer failed: %s", e)
+                            context.last_tool_result["set_design_error"] = str(e)
+                            # Still return partial result so user can see the seed
+
             return context.last_tool_result
         if isinstance(result.output, DeferredToolRequests):
             raise HTTPException(
@@ -639,6 +730,89 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                     "message": "Wizard tool call completed without a response payload.",
                     "phase_complete": False,
                 }
+
+                # Phase 2: Set Designer (same as /chat endpoint)
+                if payload.get("requires_set_design"):
+                    tool_data = payload.get("data", {})
+                    location_sketch = payload.get("location_sketch", "")
+                    seed_data = tool_data.get("seed", {})
+
+                    cache = read_cache(slot_dbname(request.slot))
+                    if cache and cache.setting_complete() and seed_data:
+                        setting = SettingCard(**cache.get_setting_dict())
+                        seed = StorySeed(**seed_data)
+
+                        # TEST mode: Use pre-computed location data from mock database
+                        if selected_model == "TEST":
+                            logger.info("TEST mode (stream): Using mock location data for slot %s", request.slot)
+                            try:
+                                from nexus.api.mock_openai import query_wizard_cache
+                                mock_cache = query_wizard_cache()
+                                layer_data = {
+                                    "name": mock_cache.get("layer_name"),
+                                    "type": mock_cache.get("layer_type"),
+                                    "description": mock_cache.get("layer_description"),
+                                }
+                                zone_data = {
+                                    "name": mock_cache.get("zone_name"),
+                                    "summary": mock_cache.get("zone_summary"),
+                                }
+                                location_data = mock_cache.get("initial_location") or {}
+
+                                record_drafts(
+                                    request.slot,
+                                    layer=layer_data,
+                                    zone=zone_data,
+                                    location=location_data,
+                                )
+                                payload["phase_complete"] = True
+                                payload["set_design"] = {
+                                    "layer": layer_data,
+                                    "zone": zone_data,
+                                    "location": location_data,
+                                }
+                                logger.info(
+                                    "TEST mode (stream) set design complete: %s -> %s -> %s",
+                                    layer_data.get("name"),
+                                    zone_data.get("name"),
+                                    location_data.get("name"),
+                                )
+                            except Exception as e:
+                                logger.error("TEST mode (stream) set design failed: %s", e)
+                                payload["set_design_error"] = str(e)
+                        else:
+                            # Production: Call set designer
+                            logger.info("Running set designer (stream) for slot %s", request.slot)
+                            try:
+                                layer, zone, place = await generate_set_design(
+                                    location_sketch=location_sketch,
+                                    setting=setting,
+                                    seed=seed,
+                                )
+
+                                record_drafts(
+                                    request.slot,
+                                    layer=layer.model_dump(),
+                                    zone=zone.model_dump(),
+                                    location=place.model_dump(),
+                                )
+
+                                payload["phase_complete"] = True
+                                payload["set_design"] = {
+                                    "layer": layer.model_dump(),
+                                    "zone": zone.model_dump(),
+                                    "location": place.model_dump(),
+                                }
+                                logger.info(
+                                    "Set designer (stream) complete: %s -> %s -> %s",
+                                    layer.name,
+                                    zone.name,
+                                    place.name,
+                                )
+                            except Exception as e:
+                                logger.error("Set designer (stream) failed: %s", e)
+                                payload["set_design_error"] = str(e)
+
                 yield json.dumps({"type": "artifact", "data": payload}) + "\n"
                 return
 

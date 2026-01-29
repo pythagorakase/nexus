@@ -633,7 +633,7 @@ class StorySeed(BaseModel):
     )
 
     # Opening scenario
-    situation: str = Field(..., min_length=50, description="The opening situation")
+    situation: str = Field(..., min_length=20, description="The opening situation")
     hook: str = Field(..., min_length=20, description="What makes this compelling")
     immediate_goal: str = Field(..., description="Character's immediate objective")
 
@@ -657,13 +657,46 @@ class StorySeed(BaseModel):
     # Secret channel content (LLM-to-LLM, user never sees)
     secrets: str = Field(
         ...,
-        min_length=50,
+        min_length=20,
         description="Hidden plot information: NPC hidden agendas, twists, complications waiting to emerge. User never sees this - LLM-to-LLM channel for dramatic irony.",
     )
 
     def get_base_datetime(self, tz: timezone = timezone.utc) -> datetime:
         """Get base_timestamp as a datetime object."""
         return self.base_timestamp.to_datetime(tz)
+
+
+class StorySeedSubmission(BaseModel):
+    """
+    Simplified seed submission for Phase 1 of two-phase seed generation.
+
+    This separates creative narrative work (seed + location sketch) from
+    structured location data (layer/zone/place), which is generated in Phase 2
+    by a dedicated "set designer" pass.
+
+    The location_sketch is a freeform description that the set designer will
+    translate into structured LayerDefinition, ZoneDefinition, and PlaceProfile.
+    Including Earth analogs (e.g., "like Bergen or Seattle") helps the set designer
+    derive sensible lat/lon coordinates.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    seed: StorySeed = Field(
+        ...,
+        description="The story seed with opening scenario, stakes, and secrets",
+    )
+
+    location_sketch: str = Field(
+        ...,
+        min_length=30,
+        description=(
+            "Freeform description of the starting location. Include mood, "
+            "physical details, and optionally an Earth analog for geography "
+            "(e.g., 'A fog-shrouded harbor city, think Bergen or Seattle'). "
+            "This sketch will be translated into structured location data."
+        ),
+    )
 
 
 class LayerType(str, Enum):
