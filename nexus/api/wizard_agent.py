@@ -704,8 +704,7 @@ def get_wizard_agent(context: WizardContext) -> Agent:
     raise ValueError(f"Unknown wizard phase: {phase}")
 
 
-# Legacy exports for backward compatibility during migration
-# TODO: Remove after wizard_chat.py is updated to use get_wizard_agent
+# Public API aliases (used by tests and external consumers)
 wizard_agent = _setting_agent
 
 # Tool function aliases for testing (tests call these directly with mock contexts)

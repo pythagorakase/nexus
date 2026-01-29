@@ -89,9 +89,7 @@ class SettingCard(BaseModel):
     tone: Literal["light", "balanced", "dark", "grimdark"] = Field(
         "balanced", description="Overall tone"
     )
-    themes: List[str] = Field(
-        ..., description="Major thematic elements"
-    )
+    themes: List[str] = Field(..., description="Major thematic elements")
 
     # Cultural notes
     cultural_notes: str = Field(
@@ -121,9 +119,16 @@ class SettingCard(BaseModel):
 
 # Trait name type for schema validation
 TraitName = Literal[
-    "allies", "contacts", "patron", "dependents",
-    "status", "reputation", "resources", "domain",
-    "enemies", "obligations"
+    "allies",
+    "contacts",
+    "patron",
+    "dependents",
+    "status",
+    "reputation",
+    "resources",
+    "domain",
+    "enemies",
+    "obligations",
 ]
 
 
@@ -184,15 +189,9 @@ class CharacterSheet(BaseModel):
     # Each signals narrative focus, not mechanical capability
     # ═══════════════════════════════════════════════════════════════════════════
 
-    trait_1: CharacterTrait = Field(
-        ..., description="First selected trait entry"
-    )
-    trait_2: CharacterTrait = Field(
-        ..., description="Second selected trait entry"
-    )
-    trait_3: CharacterTrait = Field(
-        ..., description="Third selected trait entry"
-    )
+    trait_1: CharacterTrait = Field(..., description="First selected trait entry")
+    trait_2: CharacterTrait = Field(..., description="Second selected trait entry")
+    trait_3: CharacterTrait = Field(..., description="Third selected trait entry")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # WILDCARD - Required custom trait that sets this character apart
@@ -212,7 +211,9 @@ class CharacterSheet(BaseModel):
         """Ensure trait names are unique across the three slots."""
         names = [self.trait_1.name, self.trait_2.name, self.trait_3.name]
         if len(set(names)) != 3:
-            raise ValueError("Trait names must be unique across trait_1/trait_2/trait_3.")
+            raise ValueError(
+                "Trait names must be unique across trait_1/trait_2/trait_3."
+            )
         return self
 
     def get_selected_traits(self) -> Dict[str, str]:
@@ -233,6 +234,7 @@ class CharacterSheet(BaseModel):
 # These enable gated progression through character creation with separate tools
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TraitRationales(BaseModel):
     """
     Rationales for suggested traits - explicit properties for OpenAI strict mode.
@@ -243,16 +245,36 @@ class TraitRationales(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    allies: Optional[str] = Field(None, description="Why allies trait fits this character")
-    contacts: Optional[str] = Field(None, description="Why contacts trait fits this character")
-    patron: Optional[str] = Field(None, description="Why patron trait fits this character")
-    dependents: Optional[str] = Field(None, description="Why dependents trait fits this character")
-    status: Optional[str] = Field(None, description="Why status trait fits this character")
-    reputation: Optional[str] = Field(None, description="Why reputation trait fits this character")
-    resources: Optional[str] = Field(None, description="Why resources trait fits this character")
-    domain: Optional[str] = Field(None, description="Why domain trait fits this character")
-    enemies: Optional[str] = Field(None, description="Why enemies trait fits this character")
-    obligations: Optional[str] = Field(None, description="Why obligations trait fits this character")
+    allies: Optional[str] = Field(
+        None, description="Why allies trait fits this character"
+    )
+    contacts: Optional[str] = Field(
+        None, description="Why contacts trait fits this character"
+    )
+    patron: Optional[str] = Field(
+        None, description="Why patron trait fits this character"
+    )
+    dependents: Optional[str] = Field(
+        None, description="Why dependents trait fits this character"
+    )
+    status: Optional[str] = Field(
+        None, description="Why status trait fits this character"
+    )
+    reputation: Optional[str] = Field(
+        None, description="Why reputation trait fits this character"
+    )
+    resources: Optional[str] = Field(
+        None, description="Why resources trait fits this character"
+    )
+    domain: Optional[str] = Field(
+        None, description="Why domain trait fits this character"
+    )
+    enemies: Optional[str] = Field(
+        None, description="Why enemies trait fits this character"
+    )
+    obligations: Optional[str] = Field(
+        None, description="Why obligations trait fits this character"
+    )
 
     def to_dict(self) -> Dict[str, str]:
         """Convert to dict with only non-None values."""
@@ -300,14 +322,17 @@ class CharacterConceptSubmission(BaseModel):
         description="Physical description and how they present themselves",
     )
     suggested_traits: List[TraitSuggestion] = Field(
-        default_factory=list,
+        ...,
+        min_length=3,
         max_length=3,
-        description="Up to 3 suggested traits with rationales",
+        description="Exactly 3 suggested traits with rationales",
     )
 
     @field_validator("suggested_traits")
     @classmethod
-    def validate_unique_trait_names(cls, v: List[TraitSuggestion]) -> List[TraitSuggestion]:
+    def validate_unique_trait_names(
+        cls, v: List[TraitSuggestion]
+    ) -> List[TraitSuggestion]:
         """Ensure suggested traits are unique."""
         names = [item.name for item in v]
         if names and len(set(names)) != len(names):
@@ -546,7 +571,9 @@ class StoryTimestamp(BaseModel):
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    year: int = Field(..., ge=1, le=9999, description="Year (1-9999; clamp to datetime range)")
+    year: int = Field(
+        ..., ge=1, le=9999, description="Year (1-9999; clamp to datetime range)"
+    )
     month: int = Field(..., ge=1, le=12, description="Month (1-12)")
     day: int = Field(..., ge=1, le=31, description="Day of month (1-31)")
     hour: int = Field(..., ge=0, le=23, description="Hour in 24h format (0-23)")

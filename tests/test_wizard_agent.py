@@ -109,6 +109,10 @@ def sample_concept_submission() -> CharacterConceptSubmission:
                 name="obligations",
                 rationale="They carry a vow to reclaim the throne for their people.",
             ),
+            TraitSuggestion(
+                name="patron",
+                rationale="A shadowy benefactor funds their cause from afar.",
+            ),
         ],
     )
 
@@ -219,7 +223,9 @@ async def test_submit_world_document_sets_tool_result(monkeypatch):
 @pytest.mark.asyncio
 async def test_submit_character_concept_sets_trait_menu(monkeypatch):
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
-    monkeypatch.setattr(wizard_module, "write_suggested_traits", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        wizard_module, "write_suggested_traits", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(
         wizard_module,
         "get_trait_menu",
@@ -246,13 +252,17 @@ async def test_submit_character_concept_sets_trait_menu(monkeypatch):
 @pytest.mark.asyncio
 async def test_submit_trait_selection_advances_state(monkeypatch):
     monkeypatch.setattr(wizard_module, "record_drafts", lambda *args, **kwargs: None)
-    monkeypatch.setattr(wizard_module, "clear_suggested_traits", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        wizard_module, "clear_suggested_traits", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(wizard_module, "slot_dbname", lambda _slot: "save_01")
 
     concept = sample_concept_submission().to_character_concept()
     state = CharacterCreationState(concept=concept)
     ctx = DummyRunContext(
-        make_context(phase="character", context_data={"character_state": state.model_dump()})
+        make_context(
+            phase="character", context_data={"character_state": state.model_dump()}
+        )
     )
 
     with pytest.raises(CallDeferred):
@@ -275,7 +285,9 @@ async def test_submit_wildcard_trait_completes_character(monkeypatch):
         summary="A determined heir reclaiming a lost realm.",
     )
     ctx = DummyRunContext(
-        make_context(phase="character", context_data={"character_state": state.model_dump()})
+        make_context(
+            phase="character", context_data={"character_state": state.model_dump()}
+        )
     )
 
     with pytest.raises(CallDeferred):
@@ -334,9 +346,9 @@ class TestAgentFactoryStructure:
         ]
         for agent in normal_agents:
             # output_type should be a tuple containing WizardResponse
-            assert WizardResponse in agent.output_type, (
-                f"Agent {agent} should allow WizardResponse"
-            )
+            assert (
+                WizardResponse in agent.output_type
+            ), f"Agent {agent} should allow WizardResponse"
 
     def test_accept_fate_agents_have_validators(self):
         """Accept-fate agents should have output validators to reject WizardResponse."""
@@ -348,9 +360,9 @@ class TestAgentFactoryStructure:
         ]
         for agent in accept_agents:
             # These agents should have output validators registered
-            assert len(agent._output_validators) > 0, (
-                f"Agent {agent} should have output validators"
-            )
+            assert (
+                len(agent._output_validators) > 0
+            ), f"Agent {agent} should have output validators"
 
     def test_factory_returns_correct_agent_for_setting_phase(self):
         """Factory should return correct agent for setting phase."""
@@ -377,7 +389,11 @@ class TestAgentFactoryStructure:
             phase="character",
             context_data={
                 "character_state": {
-                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
+                    "concept": {
+                        "name": "Test",
+                        "archetype": "Test",
+                        "background": "Test",
+                    },
                 }
             },
         )
@@ -393,8 +409,14 @@ class TestAgentFactoryStructure:
             phase="character",
             context_data={
                 "character_state": {
-                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
-                    "trait_selection": {"selected_traits": ["allies", "contacts", "patron"]},
+                    "concept": {
+                        "name": "Test",
+                        "archetype": "Test",
+                        "background": "Test",
+                    },
+                    "trait_selection": {
+                        "selected_traits": ["allies", "contacts", "patron"]
+                    },
                 }
             },
         )
@@ -402,8 +424,14 @@ class TestAgentFactoryStructure:
             phase="character",
             context_data={
                 "character_state": {
-                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
-                    "trait_selection": {"selected_traits": ["allies", "contacts", "patron"]},
+                    "concept": {
+                        "name": "Test",
+                        "archetype": "Test",
+                        "background": "Test",
+                    },
+                    "trait_selection": {
+                        "selected_traits": ["allies", "contacts", "patron"]
+                    },
                 }
             },
         )
@@ -454,5 +482,9 @@ class TestApplyTraitSelectionHelper:
         updated = apply_trait_selection_to_state(initial_state, selection)
 
         assert updated.trait_selection is not None
-        assert updated.trait_selection.selected_traits == ["allies", "contacts", "enemies"]
+        assert updated.trait_selection.selected_traits == [
+            "allies",
+            "contacts",
+            "enemies",
+        ]
         assert updated.current_subphase() == "wildcard"
