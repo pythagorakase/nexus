@@ -153,6 +153,7 @@ def _primary_tool_for_phase(context: WizardContext) -> Optional[str]:
 def _phase_instruction(context: WizardContext) -> str:
     instruction = f"Current Phase: {context.phase.upper()}.\n"
     if context.phase == "character":
+        subphase = _character_subphase(context)
         instruction += (
             "The world setting is established. Do NOT ask about genre. "
             "Focus on creating the protagonist.\n"
@@ -163,6 +164,30 @@ def _phase_instruction(context: WizardContext) -> str:
                 f"{json.dumps(context.context_data['setting'], indent=2, ensure_ascii=True)}\n"
                 "[/WORLD SUMMARY]\n"
             )
+
+        # Surface suggested traits during traits subphase for conversational flow
+        if subphase == "traits":
+            char_state = (context.context_data or {}).get("character_state", {})
+            concept = char_state.get("concept", {})
+            suggested = concept.get("suggested_traits", [])
+            rationales = concept.get("trait_rationales", {})
+
+            if suggested:
+                instruction += "\n[SUGGESTED TRAITS]\n"
+                instruction += "You previously suggested these traits for this character:\n"
+                for trait in suggested:
+                    rationale = rationales.get(trait, "")
+                    if rationale:
+                        instruction += f"• {trait} — {rationale}\n"
+                    else:
+                        instruction += f"• {trait}\n"
+                instruction += "[/SUGGESTED TRAITS]\n\n"
+                instruction += (
+                    "Discuss these traits with the user. They may accept your suggestions, "
+                    "propose alternatives from the trait menu, or want to refine the rationales. "
+                    "When ready to confirm, call submit_trait_selection with the final selection.\n"
+                )
+
     elif context.phase == "seed":
         instruction += (
             "World and Character are established. Focus on generating the starting scenario.\n"
@@ -273,19 +298,15 @@ def _ensure_character_subphase(
     return creation_state
 
 
-wizard_agent = Agent(
-    output_type=(WizardResponse, DeferredToolRequests),
-    instructions=build_wizard_prompt,
-    deps_type=WizardContext,
-    model_settings=ModelSettings(max_tokens=get_wizard_max_tokens()),
-    retries=get_wizard_retry_budget(),
-)
+# =============================================================================
+# Tool Implementation Functions (shared across agents)
+# =============================================================================
 
 
-@wizard_agent.tool(retries=get_wizard_retry_budget())
-async def submit_world_document(
+async def _submit_world_impl(
     ctx: RunContext[WizardContext], setting: SettingCard
 ) -> str:
+    """Shared implementation for submit_world_document tool."""
     _log_retry(ctx, "submit_world_document")
     _ensure_phase(ctx, "setting", "submit_world_document")
 
@@ -303,10 +324,10 @@ async def submit_world_document(
     raise CallDeferred()
 
 
-@wizard_agent.tool(retries=get_wizard_retry_budget())
-async def submit_character_concept(
+async def _submit_concept_impl(
     ctx: RunContext[WizardContext], concept: CharacterConceptSubmission
 ) -> str:
+    """Shared implementation for submit_character_concept tool."""
     _log_retry(ctx, "submit_character_concept")
     _ensure_phase(ctx, "character", "submit_character_concept")
     creation_state = _ensure_character_subphase(ctx, "concept", "submit_character_concept")
@@ -362,17 +383,15 @@ async def submit_character_concept(
     raise CallDeferred()
 
 
-@wizard_agent.tool(retries=get_wizard_retry_budget())
-async def submit_trait_selection(
+async def _submit_traits_impl(
     ctx: RunContext[WizardContext], selection: TraitSelection
 ) -> str:
+    """Shared implementation for submit_trait_selection tool."""
     _log_retry(ctx, "submit_trait_selection")
     _ensure_phase(ctx, "character", "submit_trait_selection")
     creation_state = _ensure_character_subphase(ctx, "traits", "submit_trait_selection")
 
-    updated_state = CharacterCreationState.model_validate(
-        {**creation_state.model_dump(), "trait_selection": selection.model_dump()}
-    )
+    updated_state = apply_trait_selection_to_state(creation_state, selection)
 
     clear_suggested_traits(slot_dbname(ctx.deps.slot))
     record_drafts(ctx.deps.slot, character=updated_state.model_dump())
@@ -396,10 +415,10 @@ async def submit_trait_selection(
     raise CallDeferred()
 
 
-@wizard_agent.tool(retries=get_wizard_retry_budget())
-async def submit_wildcard_trait(
+async def _submit_wildcard_impl(
     ctx: RunContext[WizardContext], wildcard: WildcardTrait
 ) -> str:
+    """Shared implementation for submit_wildcard_trait tool."""
     _log_retry(ctx, "submit_wildcard_trait")
     _ensure_phase(ctx, "character", "submit_wildcard_trait")
     creation_state = _ensure_character_subphase(ctx, "wildcard", "submit_wildcard_trait")
@@ -429,10 +448,10 @@ async def submit_wildcard_trait(
     raise CallDeferred()
 
 
-@wizard_agent.tool(retries=get_wizard_retry_budget())
-async def submit_starting_scenario(
+async def _submit_scenario_impl(
     ctx: RunContext[WizardContext], scenario: StartingScenario
 ) -> str:
+    """Shared implementation for submit_starting_scenario tool."""
     _log_retry(ctx, "submit_starting_scenario")
     _ensure_phase(ctx, "seed", "submit_starting_scenario")
 
@@ -456,9 +475,242 @@ async def submit_starting_scenario(
     raise CallDeferred()
 
 
+# =============================================================================
+# Shared State Helpers
+# =============================================================================
+
+
+def apply_trait_selection_to_state(
+    creation_state: CharacterCreationState, selection: TraitSelection
+) -> CharacterCreationState:
+    """
+    Apply trait selection to character creation state.
+
+    Used by both the submit_trait_selection tool and the deterministic
+    accept_fate path to ensure consistent state updates.
+    """
+    return CharacterCreationState.model_validate(
+        {**creation_state.model_dump(), "trait_selection": selection.model_dump()}
+    )
+
+
+# =============================================================================
+# Agent Configurations
+# =============================================================================
+#
+# TODO: Refactor phase names from strings to ordinals in a subsequent PR:
+#   Phase 1 = "setting"    (world/genre)
+#   Phase 2 = "character"  subphase "concept" (archetype)
+#   Phase 3 = "character"  subphase "traits"
+#   Phase 4 = "character"  subphase "wildcard"
+#   Phase 5 = "seed"       (story seed/starting scenario)
+#
+
+# Common settings for all wizard agents
+_wizard_model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
+_wizard_retries = get_wizard_retry_budget()
+
+# Type alias for agent output
+AgentOutput = WizardResponse | DeferredToolRequests
+
+
+def _make_accept_fate_validator(tool_name: str):
+    """
+    Create a result validator that rejects WizardResponse for accept_fate agents.
+
+    This enforces tool calling by rejecting conversational responses and
+    instructing the model to call the appropriate submission tool.
+    """
+
+    async def _validator(
+        ctx: RunContext[WizardContext], output: AgentOutput
+    ) -> AgentOutput:
+        if isinstance(output, WizardResponse):
+            raise ModelRetry(
+                f"Accept-fate is active. You must call {tool_name} immediately "
+                "to commit your creative choices. Do not present options."
+            )
+        return output
+
+    return _validator
+
+
+# -----------------------------------------------------------------------------
+# Setting Phase Agents
+# -----------------------------------------------------------------------------
+
+# Config 1: Setting phase, normal flow (WizardResponse + submit_world_document)
+_setting_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_setting_agent.tool(retries=_wizard_retries)(_submit_world_impl)
+
+# Config 2: Setting phase, accept_fate (forces submit_world_document)
+_setting_accept_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_setting_accept_agent.tool(retries=_wizard_retries)(_submit_world_impl)
+_setting_accept_agent.output_validator(_make_accept_fate_validator("submit_world_document"))
+
+# -----------------------------------------------------------------------------
+# Character Phase - Concept Subphase Agents
+# -----------------------------------------------------------------------------
+
+# Config 3: Character/concept, normal flow
+_concept_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_concept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
+
+# Config 4: Character/concept, accept_fate (forces submit_character_concept)
+_concept_accept_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_concept_accept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
+_concept_accept_agent.output_validator(_make_accept_fate_validator("submit_character_concept"))
+
+# -----------------------------------------------------------------------------
+# Character Phase - Traits Subphase Agent
+# -----------------------------------------------------------------------------
+
+# Config 5: Character/traits, normal flow only
+# (accept_fate for traits is handled deterministically in wizard_chat.py)
+_traits_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_traits_agent.tool(retries=_wizard_retries)(_submit_traits_impl)
+
+# -----------------------------------------------------------------------------
+# Character Phase - Wildcard Subphase Agents
+# -----------------------------------------------------------------------------
+
+# Config 7: Character/wildcard, normal flow
+_wildcard_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_wildcard_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
+
+# Config 8: Character/wildcard, accept_fate (forces submit_wildcard_trait)
+_wildcard_accept_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_wildcard_accept_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
+_wildcard_accept_agent.output_validator(_make_accept_fate_validator("submit_wildcard_trait"))
+
+# -----------------------------------------------------------------------------
+# Seed Phase Agents
+# -----------------------------------------------------------------------------
+
+# Config 9: Seed phase, normal flow
+_seed_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_seed_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
+
+# Config 10: Seed phase, accept_fate (forces submit_starting_scenario)
+_seed_accept_agent = Agent(
+    output_type=(WizardResponse, DeferredToolRequests),
+    instructions=build_wizard_prompt,
+    deps_type=WizardContext,
+    model_settings=_wizard_model_settings,
+    retries=_wizard_retries,
+)
+_seed_accept_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
+_seed_accept_agent.output_validator(_make_accept_fate_validator("submit_starting_scenario"))
+
+# -----------------------------------------------------------------------------
+# Debug Agent (unchanged)
+# -----------------------------------------------------------------------------
+
 wizard_debug_agent = Agent(
     output_type=str,
     instructions=build_wizard_prompt,
     deps_type=WizardContext,
-    model_settings=ModelSettings(max_tokens=get_wizard_max_tokens()),
+    model_settings=_wizard_model_settings,
 )
+
+
+# =============================================================================
+# Agent Factory
+# =============================================================================
+
+
+def get_wizard_agent(context: WizardContext) -> Agent:
+    """
+    Return the appropriate agent configuration for the current wizard state.
+
+    This factory selects an agent based on phase, subphase, and accept_fate flag.
+    Each agent configuration exposes only the tools valid for that state:
+    - Normal flow: WizardResponse (choices) + phase-appropriate submission tool
+    - Accept-fate: Phase-appropriate submission tool only (no WizardResponse)
+
+    Note: Traits + accept_fate is handled deterministically in wizard_chat.py,
+    so this factory won't be called for that combination.
+    """
+    phase = context.phase
+    accept_fate = context.accept_fate
+
+    if phase == "setting":
+        return _setting_accept_agent if accept_fate else _setting_agent
+
+    if phase == "character":
+        subphase = _character_subphase(context)
+        if subphase == "concept":
+            return _concept_accept_agent if accept_fate else _concept_agent
+        if subphase == "traits":
+            # Accept-fate for traits is deterministic (no LLM call)
+            # This branch only handles conversational flow
+            return _traits_agent
+        if subphase == "wildcard":
+            return _wildcard_accept_agent if accept_fate else _wildcard_agent
+        # subphase == "complete" shouldn't reach here
+        raise ValueError(f"Character phase complete, cannot get agent")
+
+    if phase == "seed":
+        return _seed_accept_agent if accept_fate else _seed_agent
+
+    raise ValueError(f"Unknown wizard phase: {phase}")
+
+
+# Legacy exports for backward compatibility during migration
+# TODO: Remove after wizard_chat.py is updated to use get_wizard_agent
+wizard_agent = _setting_agent
+
+# Tool function aliases for testing (tests call these directly with mock contexts)
+submit_world_document = _submit_world_impl
+submit_character_concept = _submit_concept_impl
+submit_trait_selection = _submit_traits_impl
+submit_wildcard_trait = _submit_wildcard_impl
+submit_starting_scenario = _submit_scenario_impl

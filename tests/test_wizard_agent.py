@@ -297,3 +297,162 @@ async def test_submit_starting_scenario_sets_tool_result(monkeypatch):
     result = ctx.deps.last_tool_result
     assert result["artifact_type"] == "submit_starting_scenario"
     assert result["phase_complete"] is True
+
+
+# =============================================================================
+# Structural Tests for Agent Factory (no LLM required)
+# =============================================================================
+
+from nexus.api.wizard_agent import (
+    get_wizard_agent,
+    apply_trait_selection_to_state,
+    _setting_agent,
+    _setting_accept_agent,
+    _concept_agent,
+    _concept_accept_agent,
+    _traits_agent,
+    _wildcard_agent,
+    _wildcard_accept_agent,
+    _seed_agent,
+    _seed_accept_agent,
+)
+from nexus.api.new_story_schemas import WizardResponse
+from pydantic_ai.tools import DeferredToolRequests
+
+
+class TestAgentFactoryStructure:
+    """Structural tests that verify agent configuration without LLM calls."""
+
+    def test_normal_agents_allow_wizard_response(self):
+        """Normal agents should allow WizardResponse in output_type."""
+        normal_agents = [
+            _setting_agent,
+            _concept_agent,
+            _traits_agent,
+            _wildcard_agent,
+            _seed_agent,
+        ]
+        for agent in normal_agents:
+            # output_type should be a tuple containing WizardResponse
+            assert WizardResponse in agent.output_type, (
+                f"Agent {agent} should allow WizardResponse"
+            )
+
+    def test_accept_fate_agents_have_validators(self):
+        """Accept-fate agents should have output validators to reject WizardResponse."""
+        accept_agents = [
+            _setting_accept_agent,
+            _concept_accept_agent,
+            _wildcard_accept_agent,
+            _seed_accept_agent,
+        ]
+        for agent in accept_agents:
+            # These agents should have output validators registered
+            assert len(agent._output_validators) > 0, (
+                f"Agent {agent} should have output validators"
+            )
+
+    def test_factory_returns_correct_agent_for_setting_phase(self):
+        """Factory should return correct agent for setting phase."""
+        context_normal = make_context(phase="setting")
+        context_accept = make_context(phase="setting")
+        context_accept.accept_fate = True
+
+        assert get_wizard_agent(context_normal) is _setting_agent
+        assert get_wizard_agent(context_accept) is _setting_accept_agent
+
+    def test_factory_returns_correct_agent_for_concept_phase(self):
+        """Factory should return correct agent for character/concept phase."""
+        context_normal = make_context(phase="character")
+        context_accept = make_context(phase="character")
+        context_accept.accept_fate = True
+
+        assert get_wizard_agent(context_normal) is _concept_agent
+        assert get_wizard_agent(context_accept) is _concept_accept_agent
+
+    def test_factory_returns_traits_agent_for_traits_phase(self):
+        """Factory should return traits agent for traits phase (no accept version)."""
+        # Traits with concept defined (puts us in traits subphase)
+        context = make_context(
+            phase="character",
+            context_data={
+                "character_state": {
+                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
+                }
+            },
+        )
+        # Even with accept_fate, traits phase returns normal agent
+        # (accept_fate for traits is handled deterministically in wizard_chat.py)
+        assert get_wizard_agent(context) is _traits_agent
+        context.accept_fate = True
+        assert get_wizard_agent(context) is _traits_agent
+
+    def test_factory_returns_correct_agent_for_wildcard_phase(self):
+        """Factory should return correct agent for character/wildcard phase."""
+        context_normal = make_context(
+            phase="character",
+            context_data={
+                "character_state": {
+                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
+                    "trait_selection": {"selected_traits": ["allies", "contacts", "patron"]},
+                }
+            },
+        )
+        context_accept = make_context(
+            phase="character",
+            context_data={
+                "character_state": {
+                    "concept": {"name": "Test", "archetype": "Test", "background": "Test"},
+                    "trait_selection": {"selected_traits": ["allies", "contacts", "patron"]},
+                }
+            },
+        )
+        context_accept.accept_fate = True
+
+        assert get_wizard_agent(context_normal) is _wildcard_agent
+        assert get_wizard_agent(context_accept) is _wildcard_accept_agent
+
+    def test_factory_returns_correct_agent_for_seed_phase(self):
+        """Factory should return correct agent for seed phase."""
+        context_normal = make_context(phase="seed")
+        context_accept = make_context(phase="seed")
+        context_accept.accept_fate = True
+
+        assert get_wizard_agent(context_normal) is _seed_agent
+        assert get_wizard_agent(context_accept) is _seed_accept_agent
+
+
+class TestApplyTraitSelectionHelper:
+    """Tests for the shared state helper function."""
+
+    def test_apply_trait_selection_updates_state(self):
+        """apply_trait_selection_to_state should correctly update character state."""
+        initial_state = CharacterCreationState(
+            concept={
+                "name": "Marcus",
+                "archetype": "Journalist",
+                "background": "Investigative reporter who spent twenty years uncovering corporate corruption",
+                "appearance": "Tall and gaunt with tired eyes that have seen too much darkness",
+                "suggested_traits": ["allies", "contacts", "patron"],
+                "trait_rationales": {
+                    "allies": "Underground contacts",
+                    "contacts": "Source network",
+                    "patron": "Anonymous tipster",
+                },
+            }
+        )
+        selection = TraitSelection(
+            selected_traits=["allies", "contacts", "enemies"],
+            trait_rationales=TraitRationales(
+                allies="Underground contacts",
+                contacts="Source network",
+                enemies="The Syndicate",
+            ),
+            suggested_by_llm=["allies", "contacts", "patron"],
+        )
+
+        updated = apply_trait_selection_to_state(initial_state, selection)
+
+        assert updated.trait_selection is not None
+        assert updated.trait_selection.selected_traits == ["allies", "contacts", "enemies"]
+        assert updated.current_subphase() == "wildcard"
