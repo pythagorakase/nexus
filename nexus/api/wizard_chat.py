@@ -33,8 +33,13 @@ from nexus.api.narrative_schemas import (
     TransitionRequest,
     TransitionResponse,
 )
-from nexus.api.new_story_cache import read_cache, write_wizard_choices
+from nexus.api.new_story_cache import (
+    clear_suggested_traits,
+    read_cache,
+    write_wizard_choices,
+)
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
+from nexus.api.new_story_flow import record_drafts
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -43,12 +48,20 @@ from nexus.api.new_story_schemas import (
     ZoneDefinition,
     PlaceProfile,
     CharacterCreationState,
+    TraitSelection,
+    TraitRationales,
     TransitionData,
     WizardResponse,
 )
 from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
 from nexus.api.slot_utils import slot_dbname
-from nexus.api.wizard_agent import WizardContext, wizard_agent, wizard_debug_agent
+from nexus.api.wizard_agent import (
+    WizardContext,
+    wizard_debug_agent,
+    get_wizard_agent,
+    apply_trait_selection_to_state,
+    _character_subphase,
+)
 
 logger = logging.getLogger("nexus.api.wizard_chat")
 
@@ -298,10 +311,83 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "dev_mode": True,
             }
 
+        # =================================================================
+        # Deterministic traits + auto-advance to wildcard
+        # =================================================================
+        # When accept_fate is active during traits subphase, commit the
+        # suggested traits deterministically (no LLM needed for copy-paste)
+        # then immediately invoke the wildcard phase.
+        if (
+            request.accept_fate
+            and request.current_phase == "character"
+            and _character_subphase(context) == "traits"
+        ):
+            cache = read_cache(slot_dbname(request.slot))
+            if cache and cache.character.suggested_traits:
+                # Build TraitSelection from suggested traits
+                selected = [st.trait for st in cache.character.suggested_traits]
+                rationales_dict = {
+                    st.trait: st.rationale for st in cache.character.suggested_traits
+                }
+                trait_selection = TraitSelection(
+                    selected_traits=selected,
+                    trait_rationales=TraitRationales(**rationales_dict),
+                    suggested_by_llm=selected,
+                )
+
+                # Get current character state and apply trait selection
+                char_state_data = (context.context_data or {}).get("character_state", {})
+                creation_state = CharacterCreationState.model_validate(char_state_data)
+                updated_state = apply_trait_selection_to_state(creation_state, trait_selection)
+
+                # Commit to cache (same as tool would do)
+                clear_suggested_traits(slot_dbname(request.slot))
+                record_drafts(request.slot, character=updated_state.model_dump())
+
+                # Update context for wildcard phase
+                context.context_data = {"character_state": updated_state.model_dump()}
+
+                # Now invoke wildcard agent (still accept_fate=True for forced submission)
+                # The agent will generate wildcard content and submit it
+                wildcard_agent = get_wizard_agent(context)
+                result = await wildcard_agent.run(
+                    "Traits confirmed. Now introduce the wildcard trait phase.",
+                    deps=context,
+                    message_history=message_history,
+                    model=model,
+                    model_settings=model_settings,
+                )
+
+                if context.last_tool_result:
+                    # Add note about traits being auto-confirmed
+                    context.last_tool_result["traits_auto_confirmed"] = True
+                    return context.last_tool_result
+
+                if isinstance(result.output, DeferredToolRequests):
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Wizard tool call completed without a response payload.",
+                    )
+
+                # Shouldn't reach here with accept_fate (validator should force tool call)
+                wizard_response = result.output
+                client.add_message(request.thread_id, "assistant", wizard_response.message)
+                return {
+                    "message": wizard_response.message,
+                    "choices": [c.strip() for c in wizard_response.choices if c.strip()],
+                    "phase_complete": False,
+                    "thread_id": request.thread_id,
+                    "traits_auto_confirmed": True,
+                }
+
+        # =================================================================
+        # Standard wizard agent flow
+        # =================================================================
         user_prompt = (
             _accept_fate_prompt(request.message) if request.accept_fate else None
         )
-        result = await wizard_agent.run(
+        agent = get_wizard_agent(context)
+        result = await agent.run(
             user_prompt,
             deps=context,
             message_history=message_history,
@@ -474,7 +560,8 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
         user_prompt = (
             _accept_fate_prompt(request.message) if request.accept_fate else None
         )
-        async for streamed_result in wizard_agent.run_stream(
+        agent = get_wizard_agent(context)
+        async for streamed_result in agent.run_stream(
             user_prompt,
             deps=context,
             message_history=message_history,
