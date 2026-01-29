@@ -33,8 +33,13 @@ from nexus.api.narrative_schemas import (
     TransitionRequest,
     TransitionResponse,
 )
-from nexus.api.new_story_cache import read_cache, write_wizard_choices
+from nexus.api.new_story_cache import (
+    clear_suggested_traits,
+    read_cache,
+    write_wizard_choices,
+)
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
+from nexus.api.new_story_flow import record_drafts
 from nexus.api.new_story_schemas import (
     SettingCard,
     CharacterSheet,
@@ -43,12 +48,20 @@ from nexus.api.new_story_schemas import (
     ZoneDefinition,
     PlaceProfile,
     CharacterCreationState,
+    TraitSelection,
+    TraitRationales,
     TransitionData,
     WizardResponse,
 )
 from nexus.api.pydantic_ai_utils import build_message_history, build_pydantic_ai_model
 from nexus.api.slot_utils import slot_dbname
-from nexus.api.wizard_agent import WizardContext, wizard_agent, wizard_debug_agent
+from nexus.api.wizard_agent import (
+    WizardContext,
+    wizard_debug_agent,
+    get_wizard_agent,
+    apply_trait_selection_to_state,
+    _character_subphase,
+)
 
 logger = logging.getLogger("nexus.api.wizard_chat")
 
@@ -67,9 +80,7 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
     char_state: Dict[str, Any] = {}
     if cache.character.has_concept():
         selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {
-            st.trait: st.rationale for st in cache.character.suggested_traits
-        }
+        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
         char_state["concept"] = {
             "name": cache.character.name,
             "archetype": cache.character.archetype,
@@ -80,9 +91,7 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
         }
     if cache.character.has_traits():
         selected = [st.trait for st in cache.character.suggested_traits]
-        rationales = {
-            st.trait: st.rationale for st in cache.character.suggested_traits
-        }
+        rationales = {st.trait: st.rationale for st in cache.character.suggested_traits}
         char_state["trait_selection"] = {
             "selected_traits": selected,
             "trait_rationales": rationales,
@@ -103,6 +112,90 @@ def _accept_fate_prompt(message: Optional[str]) -> str:
     if message and message.strip():
         return message
     return "Accept fate."
+
+
+async def _handle_accept_fate_traits(
+    context: WizardContext,
+    accept_fate: bool,
+    current_phase: Optional[str],
+    slot: int,
+    message_history: list,
+    model: Any,
+    model_settings: ModelSettings,
+    client: ConversationsClient,
+    thread_id: str,
+) -> Optional[dict]:
+    """
+    Handle accept_fate during traits subphase deterministically.
+
+    Returns tool result dict if handled, None to fall through to standard flow.
+    """
+    if not (
+        accept_fate
+        and current_phase == "character"
+        and _character_subphase(context) == "traits"
+    ):
+        return None
+
+    cache = read_cache(slot_dbname(slot))
+    if not cache or not cache.character.suggested_traits:
+        return None
+
+    # Build TraitSelection from suggested traits (exactly 3 guaranteed by schema)
+    selected = [st.trait for st in cache.character.suggested_traits]
+    rationales_dict = {
+        st.trait: st.rationale for st in cache.character.suggested_traits
+    }
+    trait_selection = TraitSelection(
+        selected_traits=selected,
+        trait_rationales=TraitRationales(**rationales_dict),
+        suggested_by_llm=selected,
+    )
+
+    # Get current character state and apply trait selection
+    char_state_data = (context.context_data or {}).get("character_state", {})
+    creation_state = CharacterCreationState.model_validate(char_state_data)
+    updated_state = apply_trait_selection_to_state(creation_state, trait_selection)
+
+    # Commit to cache (same as tool would do)
+    clear_suggested_traits(slot_dbname(slot))
+    record_drafts(slot, character=updated_state.model_dump())
+
+    # Update context for wildcard phase
+    context.context_data = {"character_state": updated_state.model_dump()}
+
+    # Now invoke wildcard agent (still accept_fate=True for forced submission)
+    # The agent will generate wildcard content and submit it
+    wildcard_agent = get_wizard_agent(context)
+    result = await wildcard_agent.run(
+        "Traits confirmed. Now introduce the wildcard trait phase.",
+        deps=context,
+        message_history=message_history,
+        model=model,
+        model_settings=model_settings,
+    )
+
+    if context.last_tool_result:
+        # Add note about traits being auto-confirmed
+        context.last_tool_result["traits_auto_confirmed"] = True
+        return context.last_tool_result
+
+    if isinstance(result.output, DeferredToolRequests):
+        raise HTTPException(
+            status_code=500,
+            detail="Wizard tool call completed without a response payload.",
+        )
+
+    # Shouldn't reach here with accept_fate (validator should force tool call)
+    wizard_response = result.output
+    client.add_message(thread_id, "assistant", wizard_response.message)
+    return {
+        "message": wizard_response.message,
+        "choices": [c.strip() for c in wizard_response.choices if c.strip()],
+        "phase_complete": False,
+        "thread_id": thread_id,
+        "traits_auto_confirmed": True,
+    }
 
 
 @router.post("/chat")
@@ -142,7 +235,11 @@ async def new_story_chat_endpoint(request: ChatRequest):
             dbname = slot_dbname(request.slot)
             cache = read_cache(dbname)
 
-            if cache and cache.character.has_concept() and not cache.character.has_traits():
+            if (
+                cache
+                and cache.character.has_concept()
+                and not cache.character.has_traits()
+            ):
                 if request.trait_choice == 0:
                     selected_count = get_selected_trait_count(dbname)
                     if selected_count != 3:
@@ -215,7 +312,9 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
         if request.model and slot_model and request.model != slot_model:
             history_client = ConversationsClient(model=slot_model)
-            history = history_client.list_messages(request.thread_id, limit=history_limit)
+            history = history_client.list_messages(
+                request.thread_id, limit=history_limit
+            )
             if any(msg["role"] == "user" for msg in history):
                 logger.info(
                     "Wizard model lock active: slot=%s thread=%s current=%s requested=%s",
@@ -298,10 +397,34 @@ async def new_story_chat_endpoint(request: ChatRequest):
                 "dev_mode": True,
             }
 
+        # =================================================================
+        # Deterministic traits + auto-advance to wildcard
+        # =================================================================
+        # When accept_fate is active during traits subphase, commit the
+        # suggested traits deterministically (no LLM needed for copy-paste)
+        # then immediately invoke the wildcard phase.
+        traits_result = await _handle_accept_fate_traits(
+            context=context,
+            accept_fate=request.accept_fate,
+            current_phase=request.current_phase,
+            slot=request.slot,
+            message_history=message_history,
+            model=model,
+            model_settings=model_settings,
+            client=client,
+            thread_id=request.thread_id,
+        )
+        if traits_result is not None:
+            return traits_result
+
+        # =================================================================
+        # Standard wizard agent flow
+        # =================================================================
         user_prompt = (
             _accept_fate_prompt(request.message) if request.accept_fate else None
         )
-        result = await wizard_agent.run(
+        agent = get_wizard_agent(context)
+        result = await agent.run(
             user_prompt,
             deps=context,
             message_history=message_history,
@@ -471,10 +594,27 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             client.add_message(request.thread_id, "assistant", result.output)
             return
 
+        # Deterministic traits + auto-advance to wildcard (same as /chat endpoint)
+        traits_result = await _handle_accept_fate_traits(
+            context=context,
+            accept_fate=request.accept_fate,
+            current_phase=request.current_phase,
+            slot=request.slot,
+            message_history=message_history,
+            model=model,
+            model_settings=model_settings,
+            client=client,
+            thread_id=request.thread_id,
+        )
+        if traits_result is not None:
+            yield json.dumps({"type": "artifact", "data": traits_result}) + "\n"
+            return
+
         user_prompt = (
             _accept_fate_prompt(request.message) if request.accept_fate else None
         )
-        async for streamed_result in wizard_agent.run_stream(
+        agent = get_wizard_agent(context)
+        async for streamed_result in agent.run_stream(
             user_prompt,
             deps=context,
             message_history=message_history,
@@ -511,7 +651,11 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
             if ui_choices:
                 write_wizard_choices(ui_choices, slot_dbname(request.slot))
             yield json.dumps(
-                {"type": "final", "message": final_output.message, "choices": ui_choices}
+                {
+                    "type": "final",
+                    "message": final_output.message,
+                    "choices": ui_choices,
+                }
             ) + "\n"
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
@@ -538,39 +682,33 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
     if not cache:
         raise HTTPException(
             status_code=400,
-            detail=f"No setup data found for slot {request.slot}. Complete the wizard first."
+            detail=f"No setup data found for slot {request.slot}. Complete the wizard first.",
         )
 
     # Validate all phases are complete
     if not cache.setting_complete():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: setting"
+            status_code=422, detail="Incomplete setup data. Missing: setting"
         )
     if not cache.character_complete():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: character"
+            status_code=422, detail="Incomplete setup data. Missing: character"
         )
     if not cache.seed_complete():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: seed"
+            status_code=422, detail="Incomplete setup data. Missing: seed"
         )
     if not cache.get_layer_dict():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: layer"
+            status_code=422, detail="Incomplete setup data. Missing: layer"
         )
     if not cache.get_zone_dict():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: zone"
+            status_code=422, detail="Incomplete setup data. Missing: zone"
         )
     if not cache.get_initial_location():
         raise HTTPException(
-            status_code=422,
-            detail="Incomplete setup data. Missing: initial_location"
+            status_code=422, detail="Incomplete setup data. Missing: initial_location"
         )
 
     # Build TransitionData from cache
@@ -597,8 +735,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
         # Fail loudly per user directive
         logger.error(f"Validation error building TransitionData: {e}")
         raise HTTPException(
-            status_code=422,
-            detail=f"Setup data validation failed: {e.errors()}"
+            status_code=422, detail=f"Setup data validation failed: {e.errors()}"
         )
 
     # Perform atomic transition
@@ -613,7 +750,7 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             place_id=result["place_id"],
             layer_id=result["layer_id"],
             zone_id=result["zone_id"],
-            message=f"Welcome to {transition_data.setting.world_name}. Your story begins."
+            message=f"Welcome to {transition_data.setting.world_name}. Your story begins.",
         )
     except ValueError as e:
         logger.error(f"Transition validation error: {e}")
