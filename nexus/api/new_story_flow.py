@@ -11,22 +11,13 @@ from typing import Dict, Optional
 import psycopg2
 
 from nexus.api.conversations import ConversationsClient
+from nexus.api.config_utils import get_new_story_model
 from nexus.api.new_story_cache import read_cache, write_cache, clear_cache, init_cache
 from nexus.api.save_slots import upsert_slot, clear_active
 from nexus.api.slot_utils import slot_dbname, all_slots
 from scripts.new_story_setup import create_slot_schema_only
 
 logger = logging.getLogger("nexus.api.new_story_flow")
-
-# Load settings using centralized config loader
-try:
-    from nexus.config import load_settings_as_dict
-    SETTINGS = load_settings_as_dict()
-except Exception as e:
-    logger.error(f"Failed to load settings: {e}")
-    raise RuntimeError(f"Cannot load settings: {e}")
-
-NEW_STORY_MODEL = SETTINGS.get("API Settings", {}).get("new_story", {}).get("model", "gpt-5.1")
 
 
 def start_setup(slot_number: int, model: Optional[str] = None) -> str:
@@ -58,7 +49,7 @@ def start_setup(slot_number: int, model: Optional[str] = None) -> str:
 
     clear_cache(dbname)
     # Use provided model or fall back to settings
-    model_to_use = model or NEW_STORY_MODEL
+    model_to_use = model or get_new_story_model()
     client = ConversationsClient(model=model_to_use)
     thread_id = client.create_thread()
     init_cache(dbname, thread_id=thread_id, target_slot=slot_number)

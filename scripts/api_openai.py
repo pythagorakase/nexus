@@ -356,112 +356,87 @@ class OpenAIProvider(LLMProvider):
             print(f"Sentiment: {result.sentiment}, Score: {result.score}")
             ```
         """
-        # Check if we have the required dependencies
         try:
-            from pydantic import BaseModel
-        except ImportError:
-            raise ImportError("Pydantic is required for structured completions. Install with 'pip install pydantic'")
-            
-        # Format input messages
-        input_messages = [{"role": "user", "content": prompt}]
-        
-        # Add system prompt if provided
-        if self.system_prompt:
-            input_messages.insert(0, {"role": "system", "content": self.system_prompt})
-        
-        logger.info(f"Using OpenAI structured output with model {self.model} and schema {schema_model.__name__}")
-        
-        try:
-            # Call API with different parameters based on model type
-            if self.is_reasoning_model:
-                # For reasoning models (GPT-5, o3, etc.)
-                response = self.client.responses.parse(
-                    model=self.model,
-                    input=input_messages,
-                    reasoning={"effort": self.reasoning_effort} if self.reasoning_effort else None,
-                    text_format=schema_model,
-                    max_output_tokens=self.max_output_tokens  # Important for reasoning models
-                )
-                logger.info(f"Used reasoning model with effort: {self.reasoning_effort}")
-            else:
-                # For standard models (GPT-4, etc.)
-                response = self.client.responses.parse(
-                    model=self.model,
-                    input=input_messages,
-                    temperature=self.temperature,
-                    text_format=schema_model,
-                    max_output_tokens=self.max_output_tokens
-                )
-                logger.info(f"Used standard model with temperature: {self.temperature}")
-                
-        except Exception as e:
-            logger.error(f"Error using responses.parse: {e}")
-            # Fall back to using model_json_schema for compatibility with older OpenAI API versions
-            model_schema = schema_model.model_json_schema()
-            
-            # Extract properties and required fields
-            schema_properties = model_schema.get("properties", {})
-            required_fields = model_schema.get("required", [])
-            
-            # Create custom schema - handling the structure OpenAI expects
-            custom_schema = {
-                "type": "object",
-                "properties": schema_properties,
-                "required": required_fields,
-                "additionalProperties": False
-            }
-            
-            # Debug: Print custom schema
-            logger.info(f"Falling back to custom JSON Schema for {schema_model.__name__}: {json.dumps(custom_schema)}")
-            
-            # Call the responses.create API with the custom schema
-            schema_name = schema_model.__name__
-            
-            # Call with different parameters based on model type
-            if self.is_reasoning_model:
-                params = {
-                    "model": self.model,
-                    "input": input_messages,
-                    "reasoning": {"effort": self.reasoning_effort} if self.reasoning_effort else None,
-                    "max_output_tokens": self.max_output_tokens,
-                    "text": {
-                        "format": {
-                            "type": "json_schema",
-                            "schema": custom_schema,
-                            "name": schema_name,
-                            "strict": True
-                        }
-                    }
-                }
-            else:
-                params = {
-                    "model": self.model,
-                    "input": input_messages,
-                    "temperature": self.temperature,
-                    "max_output_tokens": self.max_output_tokens,
-                    "text": {
-                        "format": {
-                            "type": "json_schema",
-                            "schema": custom_schema,
-                            "name": schema_name,
-                            "strict": True
-                        }
-                    }
-                }
-                
-            response = self.client.responses.create(**params)
-        
-        # Create LLMResponse object for compatibility
-        llm_response = LLMResponse(
-            content=response.output_text,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            model=self.model,
-            raw_response=response
+            from pydantic_ai import Agent
+            from pydantic_ai.models.openai import OpenAIResponsesModel
+            from pydantic_ai.providers.openai import OpenAIProvider as PydanticOpenAIProvider
+            from pydantic_ai.settings import ModelSettings
+        except ImportError as exc:
+            raise ImportError(
+                "Pydantic AI is required for structured completions. "
+                "Install with 'pip install pydantic-ai'."
+            ) from exc
+
+        logger.info(
+            "Using Pydantic AI structured output with model %s and schema %s",
+            self.model,
+            schema_model.__name__,
         )
-        
-        # Return both the parsed object and the standard LLMResponse
-        return response.output_parsed, llm_response
+
+        provider = PydanticOpenAIProvider(api_key=self.api_key, base_url=self.base_url)
+        model = OpenAIResponsesModel(model_name=self.model, provider=provider)
+
+        settings_kwargs = {"max_tokens": self.max_output_tokens}
+        if (
+            "temperature" in ModelSettings.model_fields
+            and self.supports_temperature
+            and self.temperature is not None
+            and not self.model.lower().startswith("gpt-5")
+        ):
+            settings_kwargs["temperature"] = self.temperature
+        if self.reasoning_effort:
+            if "reasoning_effort" in ModelSettings.model_fields:
+                settings_kwargs["reasoning_effort"] = self.reasoning_effort
+            elif "reasoning" in ModelSettings.model_fields:
+                settings_kwargs["reasoning"] = {"effort": self.reasoning_effort}
+
+        model_settings = ModelSettings(**settings_kwargs)
+
+        agent = Agent(
+            model=model,
+            output_type=schema_model,
+            system_prompt=self.system_prompt,
+            model_settings=model_settings,
+            retries=0,
+        )
+
+        result = agent.run_sync(prompt)
+        parsed_output = result.output
+
+        content = (
+            parsed_output.model_dump_json()
+            if hasattr(parsed_output, "model_dump_json")
+            else json.dumps(parsed_output)
+        )
+
+        usage = result.usage() if callable(getattr(result, "usage", None)) else getattr(result, "usage", None)
+        input_tokens = 0
+        output_tokens = 0
+        if usage:
+            if isinstance(usage, dict):
+                input_tokens = usage.get("input_tokens") or usage.get("request_tokens") or 0
+                output_tokens = usage.get("output_tokens") or usage.get("response_tokens") or 0
+            else:
+                input_tokens = (
+                    getattr(usage, "input_tokens", None)
+                    or getattr(usage, "request_tokens", None)
+                    or 0
+                )
+                output_tokens = (
+                    getattr(usage, "output_tokens", None)
+                    or getattr(usage, "response_tokens", None)
+                    or 0
+                )
+
+        llm_response = LLMResponse(
+            content=content,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=self.model,
+            raw_response=result,
+        )
+
+        return parsed_output, llm_response
     
     def _get_completion_unified(self, prompt: str, cache_key: Optional[str] = None) -> LLMResponse:
         """Get a completion using the unified /v1/responses API.

@@ -353,6 +353,33 @@ class APEXSettings(BaseModel):
 
 
 # =============================================================================
+# Wizard Settings Models
+# =============================================================================
+
+class WizardSettings(BaseModel):
+    """Wizard configuration for new story setup and structured responses."""
+    model_config = ConfigDict(extra='forbid')
+
+    default_model: str = Field(..., description="Default model for wizard flow")
+    fallback_model: Optional[str] = Field(
+        default=None,
+        description="Optional fallback model (manual use only; no automatic failover)",
+    )
+    message_history_limit: int = Field(
+        default=20, ge=1, description="Max message history to send per wizard turn"
+    )
+    max_retries: int = Field(
+        default=2, ge=0, description="Retry budget for tool validation failures"
+    )
+    max_tokens: int = Field(
+        default=4096, ge=1, description="Max output tokens for wizard responses"
+    )
+    enable_streaming: bool = Field(
+        default=True, description="Enable wizard streaming endpoint"
+    )
+
+
+# =============================================================================
 # API Constraints Settings Models
 # =============================================================================
 
@@ -396,6 +423,7 @@ class Settings(BaseModel):
     memnon: MEMNONSettings
     memory: MemorySettings
     apex: APEXSettings
+    wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
 
     def model_dump(self, **kwargs) -> dict:

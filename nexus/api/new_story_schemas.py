@@ -14,49 +14,6 @@ from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
-def make_openai_strict_schema(schema: dict) -> dict:
-    """
-    Transform a Pydantic JSON schema to be OpenAI strict-mode compatible.
-
-    OpenAI strict mode requires:
-    1. additionalProperties: false on ALL objects
-    2. ALL properties listed in required array (optional = allows null, not missing from required)
-    3. $ref cannot have sibling keywords (like description)
-
-    This recursively processes the schema and any $defs.
-    Returns a new dict to avoid mutating the input schema.
-    """
-    import copy
-    schema = copy.deepcopy(schema)
-
-    def process_object(obj: dict) -> dict:
-        if obj.get("type") != "object":
-            return obj
-
-        # Ensure additionalProperties is false
-        obj["additionalProperties"] = False
-
-        # Add all properties to required
-        if "properties" in obj:
-            obj["required"] = list(obj["properties"].keys())
-
-            # Clean $ref properties - remove sibling keywords
-            for prop_name, prop_schema in obj["properties"].items():
-                if "$ref" in prop_schema:
-                    # Keep only the $ref, remove description and other siblings
-                    obj["properties"][prop_name] = {"$ref": prop_schema["$ref"]}
-
-        return obj
-
-    # Process $defs (nested model definitions)
-    if "$defs" in schema:
-        for def_name, def_schema in schema["$defs"].items():
-            schema["$defs"][def_name] = process_object(def_schema)
-
-    # Process root object
-    return process_object(schema)
-
-
 class Genre(str, Enum):
     """Supported story genres."""
 
