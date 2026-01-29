@@ -418,14 +418,15 @@ class TestStructuredOutputIntegration:
     """Test integration with structured output APIs."""
 
     @pytest.mark.integration
-    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
+    @pytest.mark.live_llm
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-sonnet-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,
         reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
     )
     def test_setting_generation(self, model):
         """Test generating a setting with a live LLM."""
-        generator = StoryComponentGenerator(model=model, use_resilient=True)
+        generator = StoryComponentGenerator(model=model)
 
         setting = generator.generate_setting_card(
             "Create a dark fantasy world with steampunk elements"
@@ -436,14 +437,15 @@ class TestStructuredOutputIntegration:
         assert setting.magic_exists is not None
 
     @pytest.mark.integration
-    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-haiku-4-5"])
+    @pytest.mark.live_llm
+    @pytest.mark.parametrize("model", ["gpt-5.1", "claude-sonnet-4-5"])
     @pytest.mark.skipif(
         not RUN_LIVE_LLM,
         reason="Set NEXUS_RUN_LIVE_LLM=1 to run live LLM integration tests.",
     )
     def test_character_generation(self, model):
         """Test generating a character with a live LLM."""
-        generator = StoryComponentGenerator(model=model, use_resilient=True)
+        generator = StoryComponentGenerator(model=model)
 
         # Create a setting first
         setting = SettingCard(
