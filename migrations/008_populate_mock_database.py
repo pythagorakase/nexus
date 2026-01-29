@@ -22,7 +22,7 @@ from psycopg2.extras import Json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 MOCK_DB = "mock"
-CACHE_FILE = Path(__file__).parent.parent / "temp" / "test_cache_wizard.json"
+CACHE_FILE = Path(__file__).parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
 
 
 def load_wizard_cache() -> dict:

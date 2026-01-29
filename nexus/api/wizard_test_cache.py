@@ -19,7 +19,7 @@ from nexus.api.new_story_schemas import CharacterCreationState
 
 logger = logging.getLogger("nexus.api.wizard_test_cache")
 
-CACHE_FILE = Path(__file__).parent.parent.parent / "temp" / "test_cache_wizard.json"
+CACHE_FILE = Path(__file__).parent.parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
 
 _cache: Optional[Dict[str, Any]] = None
 
