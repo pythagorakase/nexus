@@ -538,7 +538,7 @@ async def generate_set_design(
     location_sketch: str,
     setting: SettingCard,
     seed: StorySeed,
-    model: str = "gpt-4.1-mini",
+    model: str = "claude-sonnet-4-5",
 ) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
     """
     Generate structured location data from a freeform sketch.
@@ -554,7 +554,7 @@ async def generate_set_design(
         location_sketch: Freeform description of the starting location
         setting: The established SettingCard for world context
         seed: The StorySeed for narrative context
-        model: Model to use (default: gpt-4.1-mini for cost efficiency)
+        model: Model to use (default: claude-sonnet-4-5)
 
     Returns:
         Tuple of (LayerDefinition, ZoneDefinition, PlaceProfile)

@@ -119,6 +119,7 @@ For detailed key management workflows, see the `update-1password-keys` skill in 
 ## User Directives
 - Do not hardcode any settings the user may conceivably want to adjust during development; instead, add the settings to `nexus.toml`, following the established format there, and write your code to pull configurable values from that file.
 - Do not build graceful fallbacks into your code unless the user requests it or explicitly gives permission. While in development, I prefer that errors surface visibly and unmistakebly. If that means a screeching traceback, so be it!
+- **Testing defaults**: When writing live tests or setting model defaults, use `gpt-5.1` and `claude-sonnet-4-5`. These are the configured, reliable models for testing structured outputs.
 
 ## Testing with NEXUS CLI
 
