@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional, Type
 
+import frontmatter
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
@@ -494,3 +496,121 @@ class InteractiveSetupFlow:
             location=self.location,
             setup_start_time=self.setup_start,
         )
+
+
+# =============================================================================
+# Set Designer: Phase 2 of Two-Phase Seed Generation
+# =============================================================================
+
+
+class SetDesignerOutput(BaseModel):
+    """
+    Structured output from the set designer.
+
+    Contains the complete location hierarchy generated from a freeform sketch.
+    """
+
+    layer: LayerDefinition = Field(
+        ..., description="World layer (planet/dimension)"
+    )
+    zone: ZoneDefinition = Field(
+        ..., description="Geographic zone/region"
+    )
+    location: PlaceProfile = Field(
+        ..., description="The specific starting place with latitude/longitude"
+    )
+
+
+def _load_set_designer_prompt() -> str:
+    """Load the set designer prompt from the prompts directory."""
+    prompt_path = Path(__file__).parent.parent.parent / "prompts" / "storyteller_set_designer.md"
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"Set designer prompt not found at {prompt_path}. "
+            "Please create prompts/storyteller_set_designer.md"
+        )
+    with prompt_path.open() as handle:
+        doc = frontmatter.load(handle)
+    return doc.content
+
+
+async def generate_set_design(
+    location_sketch: str,
+    setting: SettingCard,
+    seed: StorySeed,
+    model: str = "claude-sonnet-4-5",
+) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
+    """
+    Generate structured location data from a freeform sketch.
+
+    This is Phase 2 of the two-phase seed generation. The set designer
+    takes a creative location description and translates it into the
+    structured LayerDefinition, ZoneDefinition, and PlaceProfile schemas.
+
+    Using Earth-analog hints in the sketch (e.g., "like Bergen or Seattle")
+    helps derive sensible lat/lon coordinates from LLM training data.
+
+    Args:
+        location_sketch: Freeform description of the starting location
+        setting: The established SettingCard for world context
+        seed: The StorySeed for narrative context
+        model: Model to use (default: claude-sonnet-4-5)
+
+    Returns:
+        Tuple of (LayerDefinition, ZoneDefinition, PlaceProfile)
+    """
+    system_prompt = _load_set_designer_prompt()
+
+    # Build context for the set designer
+    user_prompt = f"""## World Context
+
+**World Name:** {setting.world_name}
+**Genre:** {setting.genre.value}
+**Time Period:** {setting.time_period}
+**Tech Level:** {setting.tech_level.value}
+**Geographic Scope:** {setting.geographic_scope}
+**Tone:** {setting.tone}
+
+## Story Opening
+
+**Title:** {seed.title}
+**Type:** {seed.seed_type.value}
+**Situation:** {seed.situation}
+**Weather:** {seed.weather or "Not specified"}
+
+## Location Sketch
+
+{location_sketch}
+
+---
+
+Generate the complete location hierarchy (layer, zone, place) based on the sketch above.
+For latitude/longitude, use Earth coordinates that match any Earth-analog hints in the sketch,
+or choose coordinates appropriate for the described environment (e.g., northern latitudes for
+cold climates, coastal coordinates for harbors, etc.)."""
+
+    pydantic_model = build_pydantic_ai_model(model)
+    model_settings = ModelSettings(max_tokens=get_wizard_max_tokens())
+    retry_budget = get_wizard_retry_budget()
+
+    agent = Agent(
+        model=pydantic_model,
+        output_type=SetDesignerOutput,
+        system_prompt=system_prompt,
+        model_settings=model_settings,
+        retries=retry_budget,
+    )
+
+    result = await agent.run(user_prompt)
+    output = result.output
+
+    logger.info(
+        "Set designer generated: %s -> %s -> %s at (%.2f, %.2f)",
+        output.layer.name,
+        output.zone.name,
+        output.location.name,
+        output.location.latitude,
+        output.location.longitude,
+    )
+
+    return output.layer, output.zone, output.location

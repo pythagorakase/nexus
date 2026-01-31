@@ -75,6 +75,7 @@ PHASE_CONFIGS: Dict[str, Dict[str, Any]] = {
                         "reputation": "Known as a coward by some, a hero by others",
                     },
                 },
+                "summary": "A haunted former soldier seeking redemption.",
             },
         },
         "expected_tool": "submit_wildcard_trait",

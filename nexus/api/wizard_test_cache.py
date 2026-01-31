@@ -19,7 +19,7 @@ from nexus.api.new_story_schemas import CharacterCreationState
 
 logger = logging.getLogger("nexus.api.wizard_test_cache")
 
-CACHE_FILE = Path(__file__).parent.parent.parent / "temp" / "test_cache_wizard.json"
+CACHE_FILE = Path(__file__).parent.parent.parent / "tests" / "fixtures" / "test_cache_wizard.json"
 
 _cache: Optional[Dict[str, Any]] = None
 
@@ -114,14 +114,33 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
             }
 
     elif phase == "seed":
+        # Two-phase seed generation: Return StorySeedSubmission format
+        # Phase 1: seed + location_sketch (creative content)
+        # Phase 2: set designer generates layer/zone/location
+        layer = cache.get("layer_draft", {})
+        zone = cache.get("zone_draft", {})
+        location = cache.get("initial_location", {})
+
+        # Generate location_sketch from existing data
+        location_sketch = (
+            f"A place called {location.get('name', 'unknown')} in the "
+            f"{zone.get('name', 'unknown')} region of {layer.get('name', 'unknown')}. "
+            f"{location.get('summary', '')}"
+        )
+
         return {
-            "phase_complete": True,
+            "phase_complete": False,  # Not complete until set designer runs
+            "requires_set_design": True,
             "artifact_type": "submit_starting_scenario",
             "data": {
                 "seed": cache["selected_seed"],
-                "layer": cache["layer_draft"],
-                "zone": cache["zone_draft"],
-                "location": cache["initial_location"],
+                "location_sketch": location_sketch,
+            },
+            # Pre-computed location data for TEST mode bypass
+            "_mock_location_data": {
+                "layer": layer,
+                "zone": zone,
+                "location": location,
             },
             "message": "[TEST MODE] Story seed loaded from cache.",
         }
