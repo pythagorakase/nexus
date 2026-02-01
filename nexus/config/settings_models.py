@@ -5,7 +5,7 @@ These models provide type-safe, validated access to settings from nexus.toml.
 All models use `extra='forbid'` to catch typos in configuration keys.
 """
 
-from typing import List, Optional, Dict
+from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -56,6 +56,44 @@ class LLMConfig(BaseModel):
     context_window: int = Field(..., ge=1024, description="Maximum context length")
     temperature: float = Field(..., ge=0.0, le=2.0, description="Sampling temperature")
     max_tokens: int = Field(..., ge=1, description="Maximum output tokens")
+
+
+class LLMEndpointConfig(BaseModel):
+    """Endpoint configuration for LM Studio backends."""
+    model_config = ConfigDict(extra='forbid')
+
+    base_url: str = Field(..., description="Base URL for the LM Studio server")
+
+
+class LLMCloudConfig(BaseModel):
+    """Cloud provider configuration for LLM fallback."""
+    model_config = ConfigDict(extra='forbid')
+
+    provider: str = Field(..., pattern="^(openai|anthropic)$")
+    model: str = Field(..., description="Cloud model identifier")
+    api_key_env: str = Field(..., description="Environment variable name for API key")
+
+
+class LLMRoutingConfig(BaseModel):
+    """Routing configuration for the pluggable LLM layer."""
+    model_config = ConfigDict(extra='forbid')
+
+    mode: Literal["local", "remote", "cloud", "auto"] = Field(
+        default="auto",
+        description="Backend routing mode",
+    )
+    local: Optional[LLMEndpointConfig] = Field(
+        default=None,
+        description="Local LM Studio backend configuration",
+    )
+    remote: Optional[LLMEndpointConfig] = Field(
+        default=None,
+        description="Remote LM Studio backend configuration",
+    )
+    cloud: Optional[LLMCloudConfig] = Field(
+        default=None,
+        description="Cloud provider fallback configuration",
+    )
 
 
 class NarrativeConfig(BaseModel):
@@ -419,6 +457,10 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     global_: GlobalSettings = Field(..., alias="global")
+    llm: Optional[LLMRoutingConfig] = Field(
+        default=None,
+        description="Pluggable LLM routing configuration",
+    )
     lore: LORESettings
     memnon: MEMNONSettings
     memory: MemorySettings

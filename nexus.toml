@@ -54,6 +54,20 @@ context_window = 65536  # Maximum context length for local model
 temperature = 0.8      # Sampling temperature for generation
 max_tokens = 4096      # Maximum tokens to generate per request
 
+[llm]
+mode = "auto"  # "local" | "remote" | "cloud" | "auto"
+
+[llm.local]
+base_url = "http://localhost:1234/v1"
+
+[llm.remote]
+base_url = "http://100.67.181.95:1234/v1"
+
+[llm.cloud]
+provider = "openai"
+model = "gpt-4o-mini"
+api_key_env = "OPENAI_API_KEY"
+
 [global.narrative]
 # Test mode settings for development (legacy - prefer model picker with TEST model)
 test_mode = false
