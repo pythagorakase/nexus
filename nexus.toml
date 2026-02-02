@@ -52,7 +52,7 @@ models = [
 api_base = "http://localhost:1234"
 context_window = 65536  # Maximum context length for local model
 temperature = 0.8      # Sampling temperature for generation
-max_tokens = 4096      # Maximum tokens to generate per request
+max_tokens = 16384     # Maximum tokens to generate per request (generous for reasoning models)
 
 [llm]
 mode = "auto"  # "local" | "remote" | "cloud" | "auto"
