@@ -1,0 +1,38 @@
+name: Notify EDI of Merge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Notify EDI Gateway
+        env:
+          EDI_GITHUB_SECRET: ${{ secrets.EDI_GITHUB_SECRET }}
+        run: |
+          # Build JSON payload
+          PAYLOAD=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg message "${{ github.event.head_commit.message }}" \
+            '{repository: $repo, ref: $ref, sha: $sha, message: $message}')
+
+          # Compute HMAC-SHA256 signature
+          SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$EDI_GITHUB_SECRET" | cut -d' ' -f2)"
+
+          # POST to EDI webhook endpoint
+          curl -X POST "http://100.104.206.23:19001/github-webhook" \
+            -H "Content-Type: application/json" \
+            -H "X-Hub-Signature-256: $SIG" \
+            -d "$PAYLOAD" \
+            --fail --silent --show-error
