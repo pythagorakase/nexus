@@ -5,10 +5,13 @@ Loads and validates settings from nexus.toml using Pydantic models.
 Falls back to settings.json for backward compatibility during migration.
 """
 
+import shutil
 import sys
 from pathlib import Path
 from typing import Union, Dict, Any, List, Optional
 import json
+
+import tomlkit
 
 # Try Python 3.11+ built-in tomllib, fall back to tomli
 try:
@@ -23,6 +26,99 @@ except ModuleNotFoundError:
         )
 
 from .settings_models import Settings
+
+
+def save_settings(
+    updates: Dict[str, Any],
+    path: Union[str, Path] = "nexus.toml",
+    validate: bool = True,
+    backup: bool = True,
+) -> None:
+    """
+    Save partial updates to nexus.toml while preserving comments and formatting.
+
+    Args:
+        updates: Dictionary of updates using dot-notation keys.
+                 Example: {"global.model.possible_values": ["model1", "model2"]}
+        path: Path to TOML file (default: nexus.toml)
+        validate: If True, validate the merged config against Pydantic models
+                  before writing. Raises ValidationError if invalid.
+        backup: If True, create a .bak file before writing.
+
+    Raises:
+        FileNotFoundError: If the TOML file doesn't exist
+        pydantic.ValidationError: If validate=True and merged config is invalid
+        ValueError: If updates contain invalid key paths
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+
+    # Load existing file with tomlkit (preserves structure)
+    with open(path, "r") as f:
+        doc = tomlkit.load(f)
+
+    # Apply updates using nested key navigation
+    for key_path, value in updates.items():
+        _set_nested_value(doc, key_path, value)
+
+    # Validate merged config against Pydantic models
+    if validate:
+        merged_dict = _tomlkit_to_dict(doc)
+        Settings(**merged_dict)  # Raises ValidationError if invalid
+
+    # Create backup
+    if backup:
+        backup_path = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(path, backup_path)
+
+    # Write back using tomlkit (preserves comments)
+    with open(path, "w") as f:
+        tomlkit.dump(doc, f)
+
+
+def _set_nested_value(doc: tomlkit.TOMLDocument, key_path: str, value: Any) -> None:
+    """Set a value in a tomlkit document using dot-notation path."""
+    keys = key_path.split(".")
+    target = doc
+
+    # Navigate to parent, creating intermediate tables if needed
+    for key in keys[:-1]:
+        if key not in target:
+            target[key] = tomlkit.table()
+        target = target[key]
+
+    # Set the final value with appropriate tomlkit type
+    final_key = keys[-1]
+    if isinstance(value, list):
+        arr = tomlkit.array()
+        arr.extend(value)
+        # Preserve multiline style if existing value is multiline
+        # tomlkit doesn't track this on parse, so check string representation
+        if final_key in target:
+            existing = target[final_key]
+            if hasattr(existing, "as_string") and "\n" in existing.as_string():
+                arr.multiline(True)
+        target[final_key] = arr
+    else:
+        target[final_key] = value
+
+
+def _tomlkit_to_dict(doc: tomlkit.TOMLDocument) -> Dict[str, Any]:
+    """Convert tomlkit document to plain dict for Pydantic validation."""
+
+    def unwrap(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {k: unwrap(v) for k, v in item.items()}
+        elif isinstance(item, list):
+            return [unwrap(v) for v in item]
+        elif hasattr(item, "unwrap"):
+            return item.unwrap()
+        return item
+
+    return unwrap(doc)
+
 
 DEFAULT_API_MODELS_BY_PROVIDER: Dict[str, List[dict]] = {
     "openai": [
