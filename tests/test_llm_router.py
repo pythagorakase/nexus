@@ -87,3 +87,114 @@ async def test_router_auto_fallbacks_on_failure() -> None:
     assert response.content == "remote:ping"
     assert local.complete_calls == 1
     assert remote.complete_calls == 1
+
+
+# =============================================================================
+# Remote Backend Model Configuration Tests
+# =============================================================================
+
+
+class MockSettings:
+    """Mock settings object for testing router configuration."""
+
+    def __init__(
+        self,
+        *,
+        mode: str = "remote",
+        remote_base_url: str | None = "http://remote:1234/v1",
+        remote_model: str | None = None,
+        default_model: str = "default-model",
+    ) -> None:
+        self.llm = MockLLMConfig(
+            mode=mode,
+            remote_base_url=remote_base_url,
+            remote_model=remote_model,
+        )
+        self.global_ = MockGlobalConfig(default_model=default_model)
+
+
+class MockLLMConfig:
+    """Mock LLM routing config."""
+
+    def __init__(
+        self,
+        *,
+        mode: str,
+        remote_base_url: str | None,
+        remote_model: str | None,
+    ) -> None:
+        self.mode = mode
+        self.local = None
+        self.remote = (
+            MockEndpointConfig(base_url=remote_base_url, model=remote_model)
+            if remote_base_url
+            else None
+        )
+        self.cloud = None
+
+
+class MockEndpointConfig:
+    """Mock endpoint config with optional model."""
+
+    def __init__(self, *, base_url: str, model: str | None) -> None:
+        self.base_url = base_url
+        self.model = model
+
+
+class MockGlobalConfig:
+    """Mock global config."""
+
+    def __init__(self, *, default_model: str) -> None:
+        self.llm = MockGlobalLLM()
+        self.model = MockModelConfig(default_model=default_model)
+
+
+class MockGlobalLLM:
+    """Mock global LLM settings."""
+
+    def __init__(self) -> None:
+        self.api_base = "http://localhost:1234"
+        self.temperature = 0.8
+        self.max_tokens = 4096
+
+
+class MockModelConfig:
+    """Mock model config."""
+
+    def __init__(self, *, default_model: str) -> None:
+        self.default_model = default_model
+
+
+def test_remote_backend_uses_explicit_model_when_configured() -> None:
+    """Remote backend should use explicitly configured model over global default."""
+    settings = MockSettings(
+        mode="remote",
+        remote_base_url="http://macbook:1234/v1",
+        remote_model="nexveridian/gpt-oss-120b",
+        default_model="some-other-model",
+    )
+
+    router = LLMRouter(settings=settings, mode="remote")
+
+    # Access the single backend (remote) and check its model
+    assert len(router._backends) == 1
+    remote_backend = router._backends[0]
+    # _model is the internal attribute where model is stored
+    assert remote_backend._model == "nexveridian/gpt-oss-120b"
+
+
+def test_remote_backend_falls_back_to_global_default_when_model_not_specified() -> None:
+    """Remote backend should use global default_model when endpoint model is None."""
+    settings = MockSettings(
+        mode="remote",
+        remote_base_url="http://macbook:1234/v1",
+        remote_model=None,  # Not specified
+        default_model="global-default-model",
+    )
+
+    router = LLMRouter(settings=settings, mode="remote")
+
+    assert len(router._backends) == 1
+    remote_backend = router._backends[0]
+    # _model is the internal attribute where model is stored
+    assert remote_backend._model == "global-default-model"

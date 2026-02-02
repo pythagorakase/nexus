@@ -63,6 +63,10 @@ class LLMEndpointConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     base_url: str = Field(..., description="Base URL for the LM Studio server")
+    model: Optional[str] = Field(
+        default=None,
+        description="Model identifier for inference (overrides global default)"
+    )
 
 
 class LLMCloudConfig(BaseModel):

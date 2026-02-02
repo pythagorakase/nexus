@@ -140,13 +140,15 @@ class LLMRouter(LLMBackend):
 
         if self._mode in {"remote", "auto"}:
             remote_base = None
+            remote_model = None
             if llm_config and llm_config.remote:
                 remote_base = llm_config.remote.base_url
+                remote_model = llm_config.remote.model
             if remote_base:
                 backends.append(
                     RemoteLMStudioBackend(
                         base_url=remote_base,
-                        model=global_model.default_model,
+                        model=remote_model or global_model.default_model,
                         default_params=default_params,
                     )
                 )
