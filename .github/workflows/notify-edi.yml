@@ -1,0 +1,71 @@
+name: Notify EDI of Merge
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Notify EDI Gateway
+        env:
+          EDI_GITHUB_SECRET: ${{ secrets.EDI_GITHUB_SECRET }}
+          EDI_WEBHOOK_URL: ${{ vars.EDI_WEBHOOK_URL || 'http://100.104.206.23:19001/github-webhook' }}
+        run: |
+          # Validate secret is configured
+          if [ -z "$EDI_GITHUB_SECRET" ]; then
+            echo "::error::EDI_GITHUB_SECRET is not set"
+            exit 1
+          fi
+
+          # Build JSON payload (compact format for consistent HMAC)
+          PAYLOAD=$(jq -nc \
+            --arg repo "${{ github.repository }}" \
+            --arg ref "${{ github.ref }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg message "${{ github.event.head_commit.message }}" \
+            '{repository: $repo, ref: $ref, sha: $sha, message: $message}')
+
+          echo "Notifying EDI of merge..."
+          echo "  Repository: ${{ github.repository }}"
+          echo "  Commit: ${{ github.sha }}"
+
+          # Compute HMAC-SHA256 signature
+          SIG="sha256=$(echo -n "$PAYLOAD" | openssl dgst -sha256 -hmac "$EDI_GITHUB_SECRET" | cut -d' ' -f2)"
+
+          # POST to EDI webhook endpoint with retries
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+            if curl -X POST "$EDI_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Hub-Signature-256: $SIG" \
+              -d "$PAYLOAD" \
+              --fail --show-error \
+              --max-time 30; then
+              echo "✓ Successfully notified EDI"
+              exit 0
+            else
+              EXIT_CODE=$?
+              echo "::warning::Attempt $ATTEMPT failed with exit code $EXIT_CODE"
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                SLEEP_TIME=$((ATTEMPT * 5))
+                echo "Retrying in ${SLEEP_TIME}s..."
+                sleep $SLEEP_TIME
+              fi
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "::error::Failed to notify EDI after $MAX_ATTEMPTS attempts"
+          exit 1
