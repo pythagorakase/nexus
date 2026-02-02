@@ -5,7 +5,6 @@ Manages loading/unloading of LLM models based on configuration.
 Uses centralized config loader (nexus.toml with settings.json fallback).
 """
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -14,7 +13,7 @@ from typing import Dict, List, Optional, Any
 import requests
 
 # Import centralized config loader
-from nexus.config import load_settings_as_dict
+from nexus.config import load_settings_as_dict, save_settings
 
 try:
     import lmstudio as lms
@@ -39,8 +38,6 @@ class ModelManager:
         """
         self.settings_path = settings_path
         self.settings = self._load_settings()
-        # Store JSON path for save operations (settings.json is still used for model list updates)
-        self._json_settings_path = Path(__file__).parent.parent.parent.parent.parent / "settings.json"
         self.unload_on_exit = unload_on_exit
         self.global_llm_config = (
             self.settings
@@ -92,20 +89,19 @@ class ModelManager:
             logger.error(f"Failed to load settings: {e}")
             raise RuntimeError(f"Cannot load settings: {e}")
     
-    def _save_settings(self, settings: Dict[str, Any]) -> None:
-        """Save settings back to JSON file (for model list updates).
+    def _save_settings(self) -> None:
+        """Save model settings to TOML config via centralized config system."""
+        model_config = (
+            self.settings
+            .get("Agent Settings", {})
+            .get("global", {})
+            .get("model", {})
+        )
 
-        TODO: Migrate to TOML write support when nexus.config gains a save_settings() function.
-        Currently writes to settings.json because the centralized loader only reads configs.
-        See: https://github.com/pythagorakase/nexus/issues/168
-        """
-        try:
-            with open(self._json_settings_path, 'w') as f:
-                json.dump(settings, f, indent=4)
-            logger.info(f"Updated settings saved to {self._json_settings_path}")
-        except Exception as e:
-            logger.error(f"Failed to save settings: {e}")
-            raise RuntimeError(f"Cannot save settings to {self._json_settings_path}")
+        save_settings({
+            "global.model.possible_values": model_config.get("possible_values", []),
+            "global.model.default_model": model_config.get("default_model"),
+        })
 
     def _normalize_api_base(self, raw_base: Optional[str]) -> str:
         """Ensure LM Studio API base is scheme://host:port without trailing paths"""
@@ -240,9 +236,8 @@ class ModelManager:
                 model_config["default_model"] = llm_models[0]
                 logger.info(f"Updated default_model to: {llm_models[0]}")
         
-        # TODO: Re-enable when migrated to TOML write support
-        # Currently disabled to prevent unintended settings.json rewrites
-        # self._save_settings(self.settings)
+        # Save updated model configuration
+        self._save_settings()
 
         return llm_models
     
