@@ -32,10 +32,12 @@ async def test_remote_lmstudio_completion():
     """Test actual completion via remote LM Studio."""
     if not REMOTE_BASE_URL:
         pytest.skip("NEXUS_REMOTE_BASE_URL not set")
+    if not REMOTE_MODEL:
+        pytest.skip("NEXUS_REMOTE_MODEL not set")
 
     backend = RemoteLMStudioBackend(
         base_url=REMOTE_BASE_URL,
-        model=REMOTE_MODEL,  # None uses server default
+        model=REMOTE_MODEL,
     )
 
     if not backend.is_available():

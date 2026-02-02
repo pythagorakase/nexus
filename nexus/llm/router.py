@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Iterable, Optional, Sequence
 
 from nexus.config import load_settings
 
@@ -39,13 +40,13 @@ class LLMRouter(LLMBackend):
             self._backends = self._build_backends(settings_obj, settings_path)
 
         # Cache stores (available: bool, timestamp: float)
-        self._availability_cache: Dict[int, Tuple[bool, float]] = {}
+        self._availability_cache: dict[int, tuple[bool, float]] = {}
 
     async def complete(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """Return a completion using the best available backend."""
-        errors: List[Exception] = []
+        errors: list[Exception] = []
         for backend in self._iter_backends():
-            if not self._is_backend_available(backend):
+            if not await self._is_backend_available(backend):
                 continue
             name = self._backend_name(backend)
             try:
@@ -61,9 +62,9 @@ class LLMRouter(LLMBackend):
 
     async def stream(self, prompt: str, **kwargs: Any) -> AsyncIterator[str]:
         """Stream completion tokens using the best available backend."""
-        errors: List[Exception] = []
+        errors: list[Exception] = []
         for backend in self._iter_backends():
-            if not self._is_backend_available(backend):
+            if not await self._is_backend_available(backend):
                 continue
             name = self._backend_name(backend)
             logger.info("LLM router streaming from %s backend", name)
@@ -84,8 +85,8 @@ class LLMRouter(LLMBackend):
         raise RuntimeError("No LLM backend available") from (errors[-1] if errors else None)
 
     def is_available(self) -> bool:
-        """Return True if any configured backend is available."""
-        return any(self._is_backend_available(backend) for backend in self._iter_backends())
+        """Return True if any configured backend is available (sync version)."""
+        return any(self._is_backend_available_sync(b) for b in self._iter_backends())
 
     def refresh_availability(self) -> None:
         """Clear cached availability probes."""
@@ -96,13 +97,29 @@ class LLMRouter(LLMBackend):
             return self._backends
         return [backend for backend in self._backends if self._backend_name(backend) == self._mode]
 
-    def _is_backend_available(self, backend: LLMBackend) -> bool:
+    async def _is_backend_available(self, backend: LLMBackend) -> bool:
+        """Check backend availability without blocking the event loop."""
         key = id(backend)
         now = time.monotonic()
 
         if key in self._availability_cache:
             available, timestamp = self._availability_cache[key]
             # Positive results cached indefinitely; negative results expire
+            if available or (now - timestamp) < AVAILABILITY_CACHE_TTL:
+                return available
+
+        # Run blocking is_available() in thread pool to avoid blocking event loop
+        available = await asyncio.to_thread(backend.is_available)
+        self._availability_cache[key] = (available, now)
+        return available
+
+    def _is_backend_available_sync(self, backend: LLMBackend) -> bool:
+        """Sync version for is_available() - blocks but expected in sync context."""
+        key = id(backend)
+        now = time.monotonic()
+
+        if key in self._availability_cache:
+            available, timestamp = self._availability_cache[key]
             if available or (now - timestamp) < AVAILABILITY_CACHE_TTL:
                 return available
 
@@ -123,7 +140,7 @@ class LLMRouter(LLMBackend):
             return llm_config.mode
         return "auto"
 
-    def _build_backends(self, settings_obj: Any, settings_path: Optional[str]) -> List[LLMBackend]:
+    def _build_backends(self, settings_obj: Any, settings_path: Optional[str]) -> list[LLMBackend]:
         llm_config = getattr(settings_obj, "llm", None)
         global_llm = settings_obj.global_.llm
         global_model = settings_obj.global_.model
@@ -133,7 +150,7 @@ class LLMRouter(LLMBackend):
             "max_tokens": global_llm.max_tokens,
         }
 
-        backends: List[LLMBackend] = []
+        backends: list[LLMBackend] = []
 
         if self._mode in {"local", "auto"}:
             local_base = None
