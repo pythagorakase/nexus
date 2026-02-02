@@ -97,7 +97,7 @@ class ModelManager:
 
         TODO: Migrate to TOML write support when nexus.config gains a save_settings() function.
         Currently writes to settings.json because the centralized loader only reads configs.
-        See: https://github.com/pythagorakase/nexus/issues/XXX (create tracking issue)
+        See: https://github.com/pythagorakase/nexus/issues/168
         """
         try:
             with open(self._json_settings_path, 'w') as f:

@@ -228,12 +228,26 @@ def _load_from_json(path: Path) -> Settings:
 
     legacy_new_story = data.get("API Settings", {}).get("new_story", {})
 
+    legacy_llm_router = data.get("llm")
+    if legacy_llm_router is None:
+        legacy_llm = legacy_global.get("llm", {})
+        api_base = legacy_llm.get("api_base")
+        if api_base:
+            base = str(api_base).rstrip("/")
+            if not base.endswith("/v1"):
+                base = f"{base}/v1"
+            legacy_llm_router = {
+                "mode": "local",
+                "local": {"base_url": base},
+            }
+
     transformed_data = {
         "global": {
             "model": legacy_model,
             "llm": legacy_global.get("llm", {}),
             "narrative": legacy_global.get("narrative", {}),
         },
+        "llm": legacy_llm_router,
         "lore": legacy_agent_settings.get("LORE", {}),
         "memnon": legacy_agent_settings.get("MEMNON", {}),
         "memory": data.get("memory", {}),
