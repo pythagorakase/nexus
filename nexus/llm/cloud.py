@@ -49,7 +49,28 @@ class CloudBackend(LLMBackend):
         yield response.content
 
     def is_available(self) -> bool:
-        """Return True if the provider can be initialized."""
+        """Return True if the provider can be initialized.
+
+        Requires either:
+        - NEXUS_ALLOW_CLOUD=1 environment variable, OR
+        - The configured API key env var to be present
+
+        This prevents accidental cloud usage in auto mode.
+        """
+        # Safety check: require explicit opt-in or API key presence
+        allow_cloud = os.environ.get("NEXUS_ALLOW_CLOUD", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        api_key_present = bool(self.api_key_env and os.environ.get(self.api_key_env))
+
+        if not (allow_cloud or api_key_present):
+            logger.debug(
+                "Cloud backend disabled: NEXUS_ALLOW_CLOUD not set and API key not in env"
+            )
+            return False
+
         try:
             self._resolve_provider()
             return True

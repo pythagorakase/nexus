@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Sequence
+import time
+from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from nexus.config import load_settings
 
@@ -13,6 +14,9 @@ from .local import LocalLMStudioBackend
 from .remote import RemoteLMStudioBackend
 
 logger = logging.getLogger("nexus.llm.router")
+
+# TTL for negative availability cache entries (seconds)
+AVAILABILITY_CACHE_TTL = 60.0
 
 
 class LLMRouter(LLMBackend):
@@ -34,7 +38,8 @@ class LLMRouter(LLMBackend):
             self._mode = mode or self._resolve_mode(settings_obj)
             self._backends = self._build_backends(settings_obj, settings_path)
 
-        self._availability_cache: Dict[int, bool] = {}
+        # Cache stores (available: bool, timestamp: float)
+        self._availability_cache: Dict[int, Tuple[bool, float]] = {}
 
     async def complete(self, prompt: str, **kwargs: Any) -> LLMResponse:
         """Return a completion using the best available backend."""
@@ -48,7 +53,7 @@ class LLMRouter(LLMBackend):
                 return await backend.complete(prompt, **kwargs)
             except Exception as exc:
                 logger.warning("LLM backend %s failed: %s", name, exc)
-                self._availability_cache[id(backend)] = False
+                self._availability_cache[id(backend)] = (False, time.monotonic())
                 errors.append(exc)
                 continue
 
@@ -70,7 +75,7 @@ class LLMRouter(LLMBackend):
                 return
             except Exception as exc:
                 logger.warning("LLM backend %s stream failed: %s", name, exc)
-                self._availability_cache[id(backend)] = False
+                self._availability_cache[id(backend)] = (False, time.monotonic())
                 errors.append(exc)
                 if yielded:
                     raise
@@ -93,10 +98,16 @@ class LLMRouter(LLMBackend):
 
     def _is_backend_available(self, backend: LLMBackend) -> bool:
         key = id(backend)
+        now = time.monotonic()
+
         if key in self._availability_cache:
-            return self._availability_cache[key]
+            available, timestamp = self._availability_cache[key]
+            # Positive results cached indefinitely; negative results expire
+            if available or (now - timestamp) < AVAILABILITY_CACHE_TTL:
+                return available
+
         available = backend.is_available()
-        self._availability_cache[key] = available
+        self._availability_cache[key] = (available, now)
         return available
 
     def _backend_name(self, backend: LLMBackend) -> str:
