@@ -98,10 +98,13 @@ class ModelManager:
             .get("model", {})
         )
 
-        save_settings({
-            "global.model.possible_values": model_config.get("possible_values", []),
-            "global.model.default_model": model_config.get("default_model"),
-        })
+        save_settings(
+            {
+                "global.model.possible_values": model_config.get("possible_values", []),
+                "global.model.default_model": model_config.get("default_model"),
+            },
+            path=self.settings_path or "nexus.toml",
+        )
 
     def _normalize_api_base(self, raw_base: Optional[str]) -> str:
         """Ensure LM Studio API base is scheme://host:port without trailing paths"""
