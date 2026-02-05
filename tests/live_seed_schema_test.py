@@ -12,8 +12,18 @@ Usage:
 import asyncio
 import json
 import logging
+import os
 import sys
 from typing import Any, Dict
+
+RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
+if "pytest" in sys.modules and not RUN_LIVE_LLM:
+    import pytest
+
+    pytest.skip(
+        "Set NEXUS_RUN_LIVE_LLM=1 to run live seed schema tests.",
+        allow_module_level=True,
+    )
 
 from pydantic_ai.tools import DeferredToolRequests
 

@@ -152,7 +152,8 @@ def test_pass2_divergence_triggers_incremental_retrieval(minimal_settings, dummy
     update = manager.handle_user_input(user_input, token_counts)
 
     assert update.baseline_available is True
-    assert update.divergence.detected is True
+    assert update.llm_unavailable is True
+    assert update.divergence.detected is False
     assert dummy_memnon.queries  # Retrieval happened
     assert update.retrieved_chunks, "Expected incremental retrieval results"
     assert manager.context_state.context is not None
@@ -236,15 +237,6 @@ def test_pass2_warm_slice_expansion_without_divergence(minimal_settings, dummy_m
         token_usage=baseline_inputs["token_usage"],
     )
 
-    # Force divergence detector to report no gap so we exercise warm slice expansion
-    manager.divergence_detector.detect = lambda text, context, transition: DivergenceResult(
-        detected=False,
-        confidence=0.0,
-        gaps={},
-        unmatched_entities=set(),
-        references_seen=set(),
-    )
-
     token_counts = {
         "total_available": 1200,
         "warm_slice": 360,
@@ -255,11 +247,11 @@ def test_pass2_warm_slice_expansion_without_divergence(minimal_settings, dummy_m
     update = manager.handle_user_input("Continue the vault briefing.", token_counts)
 
     assert update.divergence.detected is False
-    assert not dummy_memnon.queries  # No gap-driven queries
-    assert dummy_memnon.recent_calls == [5]  # Warm slice expansion call
-    assert update.retrieved_chunks, "Warm slice expansion should contribute chunks"
+    assert dummy_memnon.queries  # Raw input retrieval still runs
+    assert not dummy_memnon.recent_calls  # Warm slice expansion no longer used in pass2
+    assert update.retrieved_chunks, "Raw input retrieval should contribute chunks"
     assert update.tokens_used > 0
-    assert 610 in manager.context_state.context.additional_chunks
+    assert 501 in manager.context_state.context.additional_chunks
 
 
 def test_augment_warm_slice_merges_incremental_additions(minimal_settings, dummy_memnon, baseline_inputs):
@@ -300,7 +292,7 @@ def test_get_memory_summary_reports_state(minimal_settings, dummy_memnon, baseli
         token_usage=baseline_inputs["token_usage"],
     )
 
-    manager.divergence_detector.detect = lambda text, context, transition: DivergenceResult(
+    manager._detect_divergence = lambda *args, **kwargs: DivergenceResult(
         detected=True,
         confidence=0.9,
         gaps={"Dynacorp": "Reference not present"},

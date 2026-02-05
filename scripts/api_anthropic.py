@@ -473,15 +473,16 @@ class AnthropicProvider(LLMProvider):
         model = AnthropicModel(model_name=self.model, provider=provider)
 
         settings_kwargs = {"max_tokens": self.max_tokens}
+        model_fields = getattr(ModelSettings, "model_fields", None) or getattr(ModelSettings, "__fields__", {})
         if (
-            "temperature" in ModelSettings.model_fields
+            "temperature" in model_fields
             and self.temperature is not None
             and not self.model.lower().startswith("claude-")
         ):
             settings_kwargs["temperature"] = self.temperature
-        if "top_p" in ModelSettings.model_fields and self.top_p is not None:
+        if "top_p" in model_fields and self.top_p is not None:
             settings_kwargs["top_p"] = self.top_p
-        if "top_k" in ModelSettings.model_fields and self.top_k is not None:
+        if "top_k" in model_fields and self.top_k is not None:
             settings_kwargs["top_k"] = self.top_k
 
         model_settings = ModelSettings(**settings_kwargs)

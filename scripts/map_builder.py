@@ -40,7 +40,7 @@ from datetime import datetime
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Import from api_openai.py
 try:
@@ -193,8 +193,7 @@ class LocationAnalysisResult(BaseModel):
     known_places: List[PlaceReference] = Field(description="References to places already in the database")
     new_places: List[NewPlaceSuggestion] = Field(description="Suggestions for new places to add to the database")
     
-    class Config:
-        extra = "forbid"  # No additional properties allowed
+    model_config = ConfigDict(extra="forbid")
 
 
 def parse_arguments() -> argparse.Namespace:

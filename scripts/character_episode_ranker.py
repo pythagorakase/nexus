@@ -23,7 +23,7 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 from collections import defaultdict
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 # Import the OpenAI API utility
 from api_openai import OpenAIProvider, LLMResponse, get_db_connection_string, setup_abort_handler, is_abort_requested
@@ -47,9 +47,7 @@ class EpisodeRankingResult(BaseModel):
         description="Ordered array of episode identifiers from most to least important for character understanding"
     )
     
-    class Config:
-        """Configure schema generation for OpenAI compatibility."""
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""

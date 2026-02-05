@@ -20,9 +20,13 @@ def main():
     # Load settings
     with open('tests/test_lore/lore_test_settings.json') as f:
         settings = json.load(f)
+
+    prompt_path = Path(__file__).parent.parent.parent / "nexus" / "agents" / "lore" / "lore_system_prompt.md"
+    with open(prompt_path, "r") as f:
+        system_prompt = f.read()
     
     # Create manager
-    manager = LocalLLMManager(settings)
+    manager = LocalLLMManager(settings, system_prompt=system_prompt)
     print(f"\n✅ Connected to LM Studio")
     print(f"   Model: {manager.loaded_model_id}")
     

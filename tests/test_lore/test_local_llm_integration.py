@@ -19,14 +19,16 @@ from nexus.agents.lore.utils.local_llm import (
     LMS_SDK_AVAILABLE
 )
 
+pytestmark = [pytest.mark.requires_local_llm]
+
 
 @pytest.mark.skipif(not LMS_SDK_AVAILABLE, reason="LM Studio SDK not available")
 class TestLMStudioIntegration:
     """Real integration tests with LM Studio."""
     
-    def test_manager_connects_to_lm_studio(self, settings):
+    def test_manager_connects_to_lm_studio(self, settings, system_prompt):
         """Test that manager successfully connects to LM Studio."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # Should connect and be available
         assert manager.is_available()
@@ -34,9 +36,9 @@ class TestLMStudioIntegration:
         # Should have loaded a model
         assert manager.loaded_model_id is not None
     
-    def test_query_delegates_to_llm(self, settings):
+    def test_query_delegates_to_llm(self, settings, system_prompt):
         """Test that queries are actually sent to LM Studio."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # Send a simple query
         result = manager.query(
@@ -49,18 +51,16 @@ class TestLMStudioIntegration:
         assert len(result) > 0
         print(f"LLM Response: {result}")
     
-    def test_analyze_narrative_returns_structure(self, settings, sample_chunks):
+    def test_analyze_narrative_returns_structure(self, settings, system_prompt, sample_chunks):
         """Test narrative analysis with real narrative chunk."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # Use a real narrative chunk
         dialogue_chunk = sample_chunks.get('dialogue_offer')
         if dialogue_chunk and 'raw_text' in dialogue_chunk:
             # Analyze real narrative text
-            result = manager.analyze_narrative_context(
-                narrative_text=dialogue_chunk['raw_text'][:500],  # First 500 chars
-                context_type="dialogue"
-            )
+            warm_slice = [{"id": dialogue_chunk.get("id"), "text": dialogue_chunk['raw_text'][:500]}]
+            result = manager.analyze_narrative_context(warm_slice, "Continue the dialogue.")
             
             # Should return structured data
             assert result is not None
@@ -72,16 +72,18 @@ class TestLMStudioIntegration:
             # Should have some expected fields (may vary based on LLM response)
             # The key is that it delegated to LLM, not what exactly comes back
     
-    def test_generate_natural_language_queries(self, settings):
+    def test_generate_natural_language_queries(self, settings, system_prompt):
         """Test that query generation produces natural language."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # Generate queries for some entities
-        entities = ["Victor Sato", "betrayal", "Dynacorp conspiracy"]
-        queries = manager.generate_retrieval_queries(
-            entities=entities,
-            max_queries=3
-        )
+        analysis = {
+            "characters": ["Victor Sato"],
+            "locations": [],
+            "entities_for_retrieval": ["Dynacorp conspiracy"],
+            "context_type": "dialogue",
+        }
+        queries = manager.generate_retrieval_queries(analysis, "What happened with Victor?")
         
         # Should generate queries
         assert queries is not None
@@ -97,9 +99,9 @@ class TestLMStudioIntegration:
                 # Should not be just keywords joined
                 assert query != " ".join(entities), "Query is just keywords"
     
-    def test_no_fallback_on_failure(self, settings):
+    def test_no_fallback_on_failure(self, settings, system_prompt):
         """Test that manager fails hard when LM Studio unavailable."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # First verify it's working
         assert manager.is_available()
@@ -114,9 +116,9 @@ class TestLMStudioIntegration:
 class TestSemanticDelegationPattern:
     """Test the semantic delegation pattern without mocking."""
     
-    def test_manager_methods_are_delegation_only(self, settings):
+    def test_manager_methods_are_delegation_only(self, settings, system_prompt):
         """Test that manager methods only format and delegate."""
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         
         # Check the actual implementation pattern
         # The manager should NOT have methods that process text locally

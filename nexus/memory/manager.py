@@ -582,7 +582,14 @@ class ContextMemoryManager:
                     break
                 kept_chunks.append(chunk)
                 total_tokens += chunk_tokens
-
+            if kept_chunks:
+                new_chunks = self.context_state.register_additional_chunks(kept_chunks)
+                self.context_state.consume_budget(total_tokens)
+                logger.info(
+                    "✅ Phase 2 fallback complete: %s new chunks, %s tokens",
+                    len(new_chunks),
+                    total_tokens,
+                )
             return Pass2Update(
                 divergence, kept_chunks, total_tokens,
                 baseline_available=True,

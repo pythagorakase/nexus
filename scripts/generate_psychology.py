@@ -39,7 +39,7 @@ from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, 
 from sqlalchemy.dialects.postgresql import JSONB
 
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, ConfigDict
 except ImportError:
     print("Error: Pydantic package is required. Please install with: pip install pydantic")
     sys.exit(1)
@@ -162,8 +162,7 @@ class PsychologyProfile(BaseModel):
         description="Supporting evidence and reasoning for the psychological assessment"
     )
     
-    class Config:
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 def parse_arguments():
     """Parse command line arguments."""

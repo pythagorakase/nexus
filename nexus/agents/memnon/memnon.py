@@ -30,8 +30,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect, func, or_
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 # Import utility modules
 from .utils.db_access import check_vector_extension, execute_vector_search, execute_hybrid_search, setup_database_indexes, prepare_tsquery

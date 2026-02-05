@@ -92,10 +92,21 @@ class LocalLLMManager:
         """Initialize LM Studio SDK client - FAILS HARD if not available"""
         try:
             # Extract host from URL
-            host = self.base_url.replace("http://", "").replace("/v1", "")
+            host = (
+                self.base_url.replace("https://", "")
+                .replace("http://", "")
+                .replace("/v1", "")
+                .strip("/")
+            )
             
-            # Configure default client
-            lms.configure_default_client(host)
+            # Configure default client (idempotent)
+            try:
+                lms.configure_default_client(host)
+            except Exception as e:
+                if "Default client is already created" in str(e):
+                    logger.debug("Default LM Studio client already configured; reusing existing client")
+                else:
+                    raise
             
             # Use model manager to ensure correct model is loaded
             from nexus.llm import ModelManager

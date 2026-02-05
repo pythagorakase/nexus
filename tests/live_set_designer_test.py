@@ -11,6 +11,7 @@ Usage:
 
 import asyncio
 import logging
+import os
 import sys
 from typing import Any, Dict
 
@@ -26,6 +27,15 @@ logger = logging.getLogger("live_set_designer_test")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
+
+RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
+if "pytest" in sys.modules and not RUN_LIVE_LLM:
+    import pytest
+
+    pytest.skip(
+        "Set NEXUS_RUN_LIVE_LLM=1 to run live set designer tests.",
+        allow_module_level=True,
+    )
 
 from nexus.api.new_story_generator import generate_set_design
 from nexus.api.new_story_schemas import (
