@@ -28,7 +28,10 @@ def get_apex_model_encoding():
             # Note: Using gpt-4o encoding as proxy until newer models are supported
             normalized = str(target_model).lower()
             if re.match(r"^gpt-5(\.[0-9]+)?$", normalized):
-                model_name = "gpt-4o"
+                try:
+                    return tiktoken.encoding_for_model("gpt-5.2")
+                except Exception:
+                    model_name = "gpt-4o"
             else:
                 model_map = {
                     "claude-opus-4-1": "gpt-4o",

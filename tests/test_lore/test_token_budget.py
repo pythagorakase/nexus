@@ -4,6 +4,7 @@ Unit tests for token_budget.py
 Tests token budget allocation and management with 20k limit for testing.
 """
 
+import copy
 import pytest
 from pathlib import Path
 import sys
@@ -133,7 +134,7 @@ class TestBudgetAllocation:
     def test_allocation_with_test_limit(self, settings):
         """Test allocation with reduced context window."""
         # Modify settings to use smaller window for testing
-        test_settings = settings.copy()
+        test_settings = copy.deepcopy(settings)
         test_settings['Agent Settings']['LORE']['token_budget']['apex_context_window'] = 20000
         
         manager = TokenBudgetManager(test_settings)
@@ -183,15 +184,13 @@ class TestEdgeCases:
         }
         
         manager = TokenBudgetManager(minimal_settings)
-        budget = manager.calculate_budget("Test")
-        
-        # Should use defaults
-        assert budget['total_available'] > 0
+        with pytest.raises(ValueError, match="apex_context_window must be configured"):
+            manager.calculate_budget("Test")
     
     def test_extreme_percentages(self, settings):
         """Test with extreme percentage configurations."""
         # Modify settings to have extreme percentages
-        extreme_settings = settings.copy()
+        extreme_settings = copy.deepcopy(settings)
         extreme_settings['Agent Settings']['LORE']['payload_percent_budget'] = {
             'warm_slice': {'min': 80, 'max': 90},  # Very high
             'structured_summaries': {'min': 5, 'max': 10},  # Very low
