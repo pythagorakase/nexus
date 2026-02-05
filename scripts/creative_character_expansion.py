@@ -103,7 +103,7 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple, Union
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 # Import the OpenAI API utility - we're already in the scripts directory
@@ -140,9 +140,7 @@ class ExtraData(BaseModel):
     signature_tech: Optional[List[str]] = Field(None, description="Unique tech items")
     connection_points: Optional[List[str]] = Field(None, description="Story hooks")
 
-    class Config:
-        """Configure schema generation for OpenAI compatibility."""
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 class CharacterExpansion(BaseModel):
     """Schema for an expanded character profile returned by OpenAI."""
@@ -178,9 +176,7 @@ class CharacterExpansion(BaseModel):
         description="Additional character details as structured data (skills, allies, enemies, etc.)"
     )
     
-    class Config:
-        """Configure schema generation for OpenAI compatibility."""
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 # Single character response is all we need
 # Removed CharacterExpansions class for simplification

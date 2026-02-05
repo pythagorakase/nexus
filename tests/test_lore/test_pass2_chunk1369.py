@@ -22,6 +22,8 @@ AUTHORIAL_DIRECTIVES = [
     "Pete and Alina collaboration highlights aboard The Ghost",
 ]
 
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_llm]
+
 
 def _strip_user_section(full_text: str) -> str:
     marker = "\n## You"

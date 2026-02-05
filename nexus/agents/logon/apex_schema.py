@@ -17,7 +17,7 @@ All models use Pydantic v2 for validation and serialization.
 
 import logging
 from typing import List, Optional, Dict, Any, Union, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import datetime
 
 # Import all database ENUMs
@@ -65,8 +65,7 @@ class Coordinates(BaseModel):
     lat: float = Field(description="Latitude (-90 to 90)")
     lon: float = Field(description="Longitude (-180 to 180)")
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class CharacterTraits(BaseModel):
@@ -121,8 +120,7 @@ class CharacterTraits(BaseModel):
         description="What this trait means - capability, possession, relationship, or curse"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class PlaceDetails(BaseModel):
@@ -177,8 +175,7 @@ class PlaceDetails(BaseModel):
         default_factory=list, description="Current rumors or gossip (max 3)"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class FactionDetails(BaseModel):
@@ -204,8 +201,7 @@ class FactionDetails(BaseModel):
         default=None, description="Key traditions or rituals"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -433,8 +429,7 @@ class ReferencedEntities(BaseModel):
     # Note: items and threats tables exist but are empty
     # events table doesn't exist
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -493,8 +488,7 @@ class ChronologyUpdate(BaseModel):
         # All None is also valid (no time passage)
         return self
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class ChunkMetadataUpdate(BaseModel):
@@ -511,8 +505,7 @@ class ChunkMetadataUpdate(BaseModel):
         description="Narrative layer (primary, flashback, dream, etc.)"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -547,8 +540,7 @@ class CharacterStateUpdate(BaseModel):
         description="Additional observations stored in extra_data JSONB"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class RelationshipUpdate(BaseModel):
@@ -589,8 +581,7 @@ class RelationshipUpdate(BaseModel):
         description="Recent events affecting relationship"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class LocationStateUpdate(BaseModel):
@@ -658,8 +649,7 @@ class StateUpdates(BaseModel):
         description="Faction state updates"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -677,8 +667,7 @@ class SummaryRequest(BaseModel):
         description="Reason for requesting summary"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class RegenerationRequest(BaseModel):
@@ -699,8 +688,7 @@ class RegenerationRequest(BaseModel):
         description="Specific issues detected"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class Operations(BaseModel):
@@ -714,8 +702,7 @@ class Operations(BaseModel):
         description="Request to regenerate this chunk"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -737,8 +724,7 @@ class StorytellerResponseMinimal(BaseModel):
         description="Entities referenced in narrative"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class StorytellerResponseStandard(BaseModel):
@@ -762,8 +748,7 @@ class StorytellerResponseStandard(BaseModel):
         description="State changes for entities"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class StorytellerResponseExtended(BaseModel):
@@ -794,8 +779,7 @@ class StorytellerResponseExtended(BaseModel):
         description="Storyteller's reasoning (debug mode only)"
     )
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================

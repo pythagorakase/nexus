@@ -3,7 +3,7 @@ Pydantic models for FastAPI endpoints.
 
 These match the TypeScript interfaces expected by the iris2 frontend.
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any, List, Literal
 from datetime import datetime
 
@@ -29,8 +29,7 @@ class Condition(BaseModel):
     is_visible: bool = True
     notes: Optional[List[Dict[str, Any]]] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Generation(BaseModel):

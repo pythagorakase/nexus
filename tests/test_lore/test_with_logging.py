@@ -10,6 +10,7 @@ This test captures:
 """
 
 import sys
+import os
 import json
 import logging
 from pathlib import Path
@@ -17,6 +18,15 @@ from datetime import datetime
 
 # Add nexus to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+RUN_LIVE_LLM = os.environ.get("NEXUS_RUN_LIVE_LLM") == "1"
+if "pytest" in sys.modules and not RUN_LIVE_LLM:
+    import pytest
+
+    pytest.skip(
+        "Set NEXUS_RUN_LIVE_LLM=1 to run LORE logging integration tests.",
+        allow_module_level=True,
+    )
 
 from nexus.agents.lore.utils.local_llm import LocalLLMManager
 from nexus.agents.lore.utils.token_budget import TokenBudgetManager
@@ -196,10 +206,13 @@ def main():
     settings_path = Path(__file__).parent / "lore_test_settings.json"
     with open(settings_path) as f:
         settings = json.load(f)
+    prompt_path = Path(__file__).parent.parent.parent / "nexus" / "agents" / "lore" / "lore_system_prompt.md"
+    with open(prompt_path, "r") as f:
+        system_prompt = f.read()
     
     try:
         # Initialize manager once (SDK singleton)
-        manager = LocalLLMManager(settings)
+        manager = LocalLLMManager(settings, system_prompt=system_prompt)
         logger.info(f"Manager initialized with model: {manager.loaded_model_id}")
         
         # Run tests

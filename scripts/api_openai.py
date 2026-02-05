@@ -377,17 +377,18 @@ class OpenAIProvider(LLMProvider):
         model = OpenAIResponsesModel(model_name=self.model, provider=provider)
 
         settings_kwargs = {"max_tokens": self.max_output_tokens}
+        model_fields = getattr(ModelSettings, "model_fields", None) or getattr(ModelSettings, "__fields__", {})
         if (
-            "temperature" in ModelSettings.model_fields
+            "temperature" in model_fields
             and self.supports_temperature
             and self.temperature is not None
             and not self.model.lower().startswith("gpt-5")
         ):
             settings_kwargs["temperature"] = self.temperature
         if self.reasoning_effort:
-            if "reasoning_effort" in ModelSettings.model_fields:
+            if "reasoning_effort" in model_fields:
                 settings_kwargs["reasoning_effort"] = self.reasoning_effort
-            elif "reasoning" in ModelSettings.model_fields:
+            elif "reasoning" in model_fields:
                 settings_kwargs["reasoning"] = {"effort": self.reasoning_effort}
 
         model_settings = ModelSettings(**settings_kwargs)

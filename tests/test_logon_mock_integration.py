@@ -21,8 +21,28 @@ def get_slot_model(dbname: str) -> str:
 @pytest.mark.requires_postgres
 def test_slot_model_detection():
     """Test that we can detect TEST model from slot config."""
-    model = get_slot_model("save_05")
-    assert model == "TEST", f"Expected TEST, got {model}"
+    conn = psycopg2.connect(host="localhost", database="save_05", user="pythagor")
+    original_model = None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT model FROM global_variables WHERE id = TRUE")
+            row = cur.fetchone()
+            original_model = row[0] if row else None
+
+            if original_model != "TEST":
+                cur.execute("UPDATE global_variables SET model = %s WHERE id = TRUE", ("TEST",))
+                conn.commit()
+
+        model = get_slot_model("save_05")
+        assert model == "TEST", f"Expected TEST, got {model}"
+    finally:
+        try:
+            if original_model is not None and original_model != "TEST":
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE global_variables SET model = %s WHERE id = TRUE", (original_model,))
+                    conn.commit()
+        finally:
+            conn.close()
 
 
 @pytest.mark.requires_postgres

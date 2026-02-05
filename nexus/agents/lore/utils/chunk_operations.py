@@ -7,6 +7,7 @@ All operations are deterministic - no LLM inference required.
 
 import logging
 import json
+import re
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import tiktoken
@@ -25,13 +26,16 @@ def get_apex_model_encoding():
         if target_model:
             # Map model names to tiktoken-compatible names
             # Note: Using gpt-4o encoding as proxy until newer models are supported
-            model_map = {
-                "gpt-5": "gpt-4o",
-                "claude-opus-4-1": "gpt-4o",
-                "claude-opus-4-0": "gpt-4o",
-                "claude-sonnet-4-0": "gpt-4o"
-            }
-            model_name = model_map.get(target_model, target_model)
+            normalized = str(target_model).lower()
+            if re.match(r"^gpt-5(\.[0-9]+)?$", normalized):
+                model_name = "gpt-4o"
+            else:
+                model_map = {
+                    "claude-opus-4-1": "gpt-4o",
+                    "claude-opus-4-0": "gpt-4o",
+                    "claude-sonnet-4-0": "gpt-4o",
+                }
+                model_name = model_map.get(normalized, target_model)
             return tiktoken.encoding_for_model(model_name)
     except Exception as e:
         logger.warning(f"Failed to load target model from settings: {e}")

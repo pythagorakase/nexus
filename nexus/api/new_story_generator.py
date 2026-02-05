@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Type
 
 import frontmatter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic_ai import Agent
 from pydantic_ai.settings import ModelSettings
 
@@ -193,8 +193,7 @@ class StoryComponentGenerator:
                 description="2-4 unique story seeds",
             )
 
-            class Config:
-                extra = "forbid"
+            model_config = ConfigDict(extra="forbid")
 
         # Extract selected traits (exactly 3 entries)
         selected_traits = [
@@ -269,8 +268,7 @@ class StoryComponentGenerator:
                 description="The specific place with latitude/longitude"
             )
 
-            class Config:
-                extra = "forbid"
+            model_config = ConfigDict(extra="forbid")
 
         system_prompt = (
             "You are a location designer for an interactive narrative. "

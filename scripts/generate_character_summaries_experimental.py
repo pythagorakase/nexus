@@ -98,7 +98,7 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple, Union
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 # Import the OpenAI API utility - we're already in the scripts directory
@@ -126,9 +126,7 @@ class CharacterSummary(BaseModel):
         description="Summary of the target character"
     )
     
-    class Config:
-        """Configure schema generation for OpenAI compatibility."""
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 class CharacterSummaries(BaseModel):
     """Schema for a collection of character summaries (array-based approach)."""
@@ -136,9 +134,7 @@ class CharacterSummaries(BaseModel):
         description="List of character summaries"
     )
     
-    class Config:
-        """Configure schema generation for OpenAI compatibility."""
-        extra = "forbid"  # Equivalent to additionalProperties: false
+    model_config = ConfigDict(extra="forbid")
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""

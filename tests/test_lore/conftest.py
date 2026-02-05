@@ -5,6 +5,7 @@ pytest configuration and fixtures for LORE tests.
 import pytest
 import logging
 import json
+import os
 import psycopg2
 from pathlib import Path
 from typing import Dict, Any, Generator
@@ -29,6 +30,27 @@ def settings() -> Dict[str, Any]:
     test_settings_path = Path(__file__).parent / "lore_test_settings.json"
     with open(test_settings_path, 'r') as f:
         return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def system_prompt() -> str:
+    """Load the LORE system prompt for LocalLLMManager tests."""
+    prompt_path = nexus_root / "nexus" / "agents" / "lore" / "lore_system_prompt.md"
+    with open(prompt_path, "r") as f:
+        return f.read()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_nexus_slot_env() -> None:
+    """Ensure NEXUS_SLOT is set for tests that rely on slot-based databases."""
+    if os.environ.get("NEXUS_SLOT") is not None:
+        yield
+        return
+    os.environ["NEXUS_SLOT"] = "1"
+    try:
+        yield
+    finally:
+        os.environ.pop("NEXUS_SLOT", None)
 
 
 @pytest.fixture(scope="session")

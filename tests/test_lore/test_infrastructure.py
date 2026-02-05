@@ -11,6 +11,8 @@ import tiktoken
 import requests
 from pathlib import Path
 
+pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_llm]
+
 
 class TestInfrastructure:
     """Test that all required infrastructure is available."""
@@ -32,7 +34,8 @@ class TestInfrastructure:
         # Verify NEXUS database exists
         cursor.execute("SELECT current_database()")
         db_name = cursor.fetchone()[0]
-        assert db_name == "NEXUS", f"Connected to wrong database: {db_name}"
+        expected_db = db_config.get("name", db_name)
+        assert db_name == expected_db, f"Connected to wrong database: {db_name}"
         
         # Verify required tables exist
         cursor.execute("""
@@ -92,8 +95,8 @@ class TestInfrastructure:
     
     def test_lm_studio_availability(self, settings):
         """Test that LM Studio is running and accessible - MUST FAIL HARD if not."""
-        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("local_llm", {})
-        base_url = lm_settings.get("base_url", "http://localhost:1234/v1")
+        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
+        base_url = lm_settings.get("lmstudio_url", "http://localhost:1234/v1")
         
         # Strip /v1 if present for health check
         health_url = base_url.replace("/v1", "") + "/health"
@@ -108,8 +111,8 @@ class TestInfrastructure:
     
     def test_lm_studio_models(self, settings):
         """Test that required models are loaded in LM Studio."""
-        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("local_llm", {})
-        base_url = lm_settings.get("base_url", "http://localhost:1234/v1")
+        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
+        base_url = lm_settings.get("lmstudio_url", "http://localhost:1234/v1")
         
         # Check models endpoint
         models_url = f"{base_url}/models"
@@ -160,7 +163,7 @@ class TestInfrastructure:
         # Check required sections
         assert "token_budget" in lore_settings
         assert "payload_percent_budget" in lore_settings
-        assert "local_llm" in lore_settings
+        assert "llm" in lore_settings
         
         # Verify token budget structure
         token_budget = lore_settings["token_budget"]

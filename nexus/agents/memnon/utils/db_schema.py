@@ -9,8 +9,7 @@ from typing import Dict, Any, Optional
 import sqlalchemy as sa
 from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect
 from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 logger = logging.getLogger("nexus.memnon.db_schema")
 
