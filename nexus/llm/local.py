@@ -40,7 +40,7 @@ class LocalLMStudioBackend(LMStudioBackend):
 
         if self._model_manager is None:
             try:
-                from nexus.agents.lore.utils.model_manager import ModelManager
+                from .model_manager import ModelManager
             except Exception as exc:
                 raise RuntimeError(
                     "LM Studio SDK is required for local backend initialization"
