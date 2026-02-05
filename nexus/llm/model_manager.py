@@ -22,12 +22,12 @@ except ImportError:
     LMS_SDK_AVAILABLE = False
     raise RuntimeError("LM Studio SDK is required: pip install lmstudio")
 
-logger = logging.getLogger("nexus.lore.model_manager")
+logger = logging.getLogger("nexus.llm.model_manager")
 
 
 class ModelManager:
     """Manages LM Studio model lifecycle based on settings configuration"""
-    
+
     def __init__(self, settings_path: Optional[str] = None, unload_on_exit: bool = True):
         """
         Initialize model manager with settings
@@ -46,7 +46,7 @@ class ModelManager:
             .get("llm", {})
         )
         self.lmstudio_api_base = self._normalize_api_base(self.global_llm_config.get("api_base"))
-        
+
         # Configure LM Studio client (idempotent)
         try:
             # Derive host from settings if available
@@ -73,11 +73,11 @@ class ModelManager:
                 logger.debug("Default LM Studio client already configured; reusing existing client")
             else:
                 raise
-        
+
         # Track current loaded model
         self.current_model = None
         self.current_model_id = None
-        
+
     def _load_settings(self) -> Dict[str, Any]:
         """Load settings using centralized config loader."""
         try:
@@ -88,7 +88,7 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Failed to load settings: {e}")
             raise RuntimeError(f"Cannot load settings: {e}")
-    
+
     def _save_settings(self) -> None:
         """Save model settings to TOML config via centralized config system."""
         model_config = (
@@ -181,7 +181,7 @@ class ModelManager:
         except Exception as sdk_error:
             logger.error(f"LM Studio SDK list_loaded_models failed: {sdk_error}")
             return []
-        
+
         identifiers: List[str] = []
         for model in loaded or []:
             if hasattr(model, 'id') and model.id:
@@ -191,19 +191,19 @@ class ModelManager:
             elif hasattr(model, 'model_id') and model.model_id:
                 identifiers.append(model.model_id)
         return identifiers
-    
+
     def update_available_models(self) -> List[str]:
         """
         Update the possible_values array in settings with available models
-        
+
         Returns:
             List of available model IDs
         """
         logger.info("Checking available LLM models in LM Studio...")
-        
+
         # Get downloaded models
         downloaded_models = lms.list_downloaded_models()
-        
+
         # Filter for LLM models only (not embedding models)
         llm_models = []
         for model in downloaded_models:
@@ -216,20 +216,20 @@ class ModelManager:
                 elif hasattr(model, 'path'):
                     # Extract from path if needed
                     llm_models.append(model.path)
-        
+
         if not llm_models:
             logger.warning("No LLM models found in LM Studio!")
             return []
-        
+
         logger.info(f"Found {len(llm_models)} LLM models: {llm_models}")
-        
+
         # Update settings
         model_config = self.settings.get("Agent Settings", {}).get("global", {}).get("model", {})
         current_possible = model_config.get("possible_values", [])
-        
+
         # Update possible_values with available models
         model_config["possible_values"] = llm_models
-        
+
         # Ensure default_model is in the list
         default_model = model_config.get("default_model")
         if default_model and default_model not in llm_models:
@@ -238,12 +238,12 @@ class ModelManager:
                 # Set first available model as default
                 model_config["default_model"] = llm_models[0]
                 logger.info(f"Updated default_model to: {llm_models[0]}")
-        
+
         # Save updated model configuration
         self._save_settings()
 
         return llm_models
-    
+
     def get_loaded_models(self) -> List[str]:
         """Get currently loaded models in LM Studio.
 
@@ -254,14 +254,14 @@ class ModelManager:
         if http_result is not None:
             return http_result
         return self._get_loaded_models_via_sdk()
-    
+
     def unload_model(self, model_id: Optional[str] = None) -> bool:
         """
         Unload a model from LM Studio
-        
+
         Args:
             model_id: Specific model to unload, or None to unload current
-            
+
         Returns:
             True if successful
         """
@@ -271,12 +271,12 @@ class ModelManager:
             if not loaded:
                 logger.debug("No models currently loaded")
                 return True
-            
+
             # Get the model handle if we don't have it
             if not self.current_model:
                 self.current_model = lms.llm()
                 self.current_model_id = loaded[0] if loaded else None
-            
+
             if self.current_model:
                 logger.info(f"Unloading model: {self.current_model_id or loaded[0]}")
                 self.current_model.unload()
@@ -291,33 +291,33 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Failed to unload model: {e}")
             return False
-    
+
     def load_model(self, model_id: str, context_window: Optional[int] = None) -> bool:
         """
         Load a specific model in LM Studio
-        
+
         Args:
             model_id: Model identifier to load
-            
+
         Returns:
             True if successful
         """
         try:
             logger.info(f"Loading model: {model_id}")
-            
+
             # First unload any existing model
             if self.current_model:
                 self.unload_model()
                 time.sleep(2)  # Extra time between unload and load
-            
+
             # Get context window from settings when not explicitly provided
             if context_window is None:
                 global_llm_config = self.settings.get("Agent Settings", {}).get("global", {}).get("llm", {})
                 context_window = global_llm_config.get("context_window", 65536)
-            
+
             # Load the new model with explicit context window
             logger.info(f"Loading with context_window: {context_window}")
-            
+
             # According to LM Studio docs, context length is set via load options
             # Note: This requires LM Studio SDK v0.3.0+
             try:
@@ -328,17 +328,17 @@ class ModelManager:
                 # Fall back to basic load if config not supported
                 logger.warning("contextLength parameter not supported in this SDK version")
                 self.current_model = lms.llm(model_id)
-            
+
             self.current_model_id = model_id
-            
+
             # Wait for model to initialize
             time.sleep(5)
-            
+
             # Verify the model works
             logger.info("Verifying model...")
             chat = lms.Chat("You are a test assistant.")
             chat.add_user_message("Respond with 'OK'")
-            
+
             result = self.current_model.respond(chat, config={"maxTokens": 10})
             if result and result.content:
                 logger.info(f"Model {model_id} loaded and verified successfully")
@@ -346,36 +346,36 @@ class ModelManager:
             else:
                 logger.error("Model verification failed: no response")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Failed to load model {model_id}: {e}")
             return False
-    
+
     def ensure_default_model(self) -> str:
         """
         Ensure the default model from settings is loaded
-        
+
         Returns:
             The loaded model ID
         """
         # Update available models first
         available = self.update_available_models()
-        
+
         if not available:
             raise RuntimeError("No LLM models available in LM Studio!")
-        
+
         # Get the default model from settings
         model_config = self.settings.get("Agent Settings", {}).get("global", {}).get("model", {})
         default_model = model_config.get("default_model")
-        
+
         if not default_model:
             # Use first available model
             default_model = available[0]
             logger.warning(f"No default_model set, using: {default_model}")
-        
+
         # Check what's currently loaded
         loaded = self.get_loaded_models()
-        
+
         if loaded:
             current = loaded[0]  # Assume first loaded model is active
             if current == default_model:
@@ -396,13 +396,13 @@ class ModelManager:
                     self.current_model = lms.llm()
                     self.current_model_id = current
                     return current
-        
+
         # Load the default model
         if self.load_model(default_model):
             return default_model
         else:
             raise RuntimeError(f"Failed to load default model: {default_model}")
-    
+
     def cleanup(self) -> None:
         """Clean up resources - optionally unload model"""
         # Check if we should unload after use
@@ -410,7 +410,7 @@ class ModelManager:
         if not self.unload_on_exit:
             logger.debug("Model unload skipped due to unload_on_exit=False")
             return
-            
+
         lore_config = self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
         if lore_config.get("unload_after_turn", True):
             # Best-effort unload; if ws inactive, skip without warning
@@ -421,7 +421,7 @@ class ModelManager:
 def main():
     """Test the model manager"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="LM Studio Model Manager")
     parser.add_argument("--settings", help="Path to settings.json")
     parser.add_argument("--list", action="store_true", help="List available models")
@@ -429,46 +429,46 @@ def main():
     parser.add_argument("--ensure", action="store_true", help="Ensure default model is loaded")
     parser.add_argument("--load", help="Load a specific model")
     parser.add_argument("--unload", action="store_true", help="Unload current model")
-    
+
     args = parser.parse_args()
-    
+
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    
+
     manager = ModelManager(args.settings)
-    
+
     if args.list:
         models = manager.update_available_models()
         print("\nAvailable LLM models:")
         for model in models:
             print(f"  - {model}")
-    
+
     elif args.loaded:
         loaded = manager.get_loaded_models()
         if loaded:
             print(f"\nLoaded models: {loaded}")
         else:
             print("\nNo models currently loaded")
-    
+
     elif args.ensure:
         model_id = manager.ensure_default_model()
         print(f"\nDefault model ensured: {model_id}")
-    
+
     elif args.load:
         if manager.load_model(args.load):
             print(f"\nSuccessfully loaded: {args.load}")
         else:
             print(f"\nFailed to load: {args.load}")
-    
+
     elif args.unload:
         if manager.unload_model():
             print("\nModel unloaded")
         else:
             print("\nFailed to unload model")
-    
+
     else:
         # Default action: ensure default model
         model_id = manager.ensure_default_model()

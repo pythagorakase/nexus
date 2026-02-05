@@ -98,7 +98,7 @@ class LocalLLMManager:
             lms.configure_default_client(host)
             
             # Use model manager to ensure correct model is loaded
-            from .model_manager import ModelManager
+            from nexus.llm import ModelManager
             manager = ModelManager(self.settings_path, unload_on_exit=self.unload_on_exit)
             model_id = manager.ensure_default_model()
             
@@ -576,7 +576,7 @@ Each query should be a complete question or search phrase."""
         if LMS_SDK_AVAILABLE and self.model:
             try:
                 # Use model manager for proper unloading
-                from .model_manager import ModelManager
+                from nexus.llm import ModelManager
                 manager = ModelManager(self.settings_path, unload_on_exit=self.unload_on_exit)
                 if manager.unload_model():
                     logger.info(f"Unloaded model: {self.loaded_model_id}")

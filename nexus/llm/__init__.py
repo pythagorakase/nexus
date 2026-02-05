@@ -5,6 +5,7 @@ from .cloud import CloudBackend
 from .local import LocalLMStudioBackend
 from .remote import RemoteLMStudioBackend
 from .router import LLMRouter
+from .model_manager import ModelManager
 
 __all__ = [
     "LLMBackend",
@@ -13,4 +14,5 @@ __all__ = [
     "LocalLMStudioBackend",
     "RemoteLMStudioBackend",
     "LLMRouter",
+    "ModelManager",
 ]

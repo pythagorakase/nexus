@@ -55,7 +55,7 @@ from utils.turn_context import TurnContext, TurnPhase
 from utils.turn_cycle import TurnCycleManager
 from utils.token_budget import TokenBudgetManager
 from utils.local_llm import LocalLLMManager
-from utils.model_manager import ModelManager
+from nexus.llm import ModelManager
 from nexus.agents.lore.logon_utility import LogonUtility
 
 from nexus.memory import ContextMemoryManager

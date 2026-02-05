@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from nexus.agents.lore.utils.model_manager import ModelManager
+from nexus.llm import ModelManager
 
 # Initialize FastAPI app
 app = FastAPI(title="NEXUS Core API", version="1.0.0")
