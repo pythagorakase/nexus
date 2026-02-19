@@ -6,13 +6,13 @@ DROP TABLE IF EXISTS pgvector_test;
 -- Show pgvector version
 SELECT extversion FROM pg_extension WHERE extname = 'vector';
 
--- Create a test table with a vector of 3584 dimensions
+-- Create a test table with a vector of 4096 dimensions
 CREATE TABLE pgvector_test (
   id SERIAL PRIMARY KEY,
-  embedding vector(3584) NOT NULL
+  embedding vector(4096) NOT NULL
 );
 
--- Try to create HNSW index (only works if HNSW_MAX_DIM >= 3584)
+-- Try to create HNSW index (only works if HNSW_MAX_DIM >= 4096)
 CREATE INDEX pgvector_test_hnsw_idx ON pgvector_test USING hnsw (embedding vector_cosine_ops);
 
 -- Try to create IVFFLAT index (may fail if MAX_DIM < 3584)
@@ -30,7 +30,7 @@ END $$;
 
 -- Insert a test vector
 INSERT INTO pgvector_test (embedding) 
-SELECT ARRAY_AGG(random()) FROM generate_series(1, 3584) AS x;
+SELECT ARRAY_AGG(random()) FROM generate_series(1, 4096) AS x;
 
 -- Query the vector for similarity (this will use the index if it was created)
 SELECT id, embedding <=> embedding AS self_distance
@@ -41,5 +41,5 @@ LIMIT 1;
 -- Show message indicating success
 DO $$
 BEGIN
-  RAISE NOTICE 'Success! pgvector is working with 3584 dimensions';
+  RAISE NOTICE 'Success! pgvector is working with 4096 dimensions';
 END $$;

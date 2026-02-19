@@ -1,5 +1,59 @@
 # NEXUS IR Evaluation System
 
+## V2 Embedding Evaluation Setup (Issue #175)
+
+The new V2 runner supports explicit model selection with immutable run configs.
+It is intended for solo-model and head-to-head embedding comparisons (including
+Octen-4B and Octen-8B) without mutating global MEMNON settings.
+
+### Quick start (V2)
+
+1. Apply DB migrations:
+
+```bash
+python scripts/migrate.py --slot 1
+```
+
+2. Seed queries:
+
+```bash
+python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS seed-queries --file ir_eval/golden_queries_backup.json
+```
+
+3. Create a run (example: Octen-8B solo):
+
+```bash
+python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS create-run \
+  --name "octen-8b-solo" \
+  --model "Octen-Embedding-8B:1.0" \
+  --hybrid \
+  --vector-weight 0.6 \
+  --text-weight 0.4 \
+  --cross-encoder \
+  --top-k 10
+```
+
+4. Execute and inspect:
+
+```bash
+python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS execute-run --run-id 1
+python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS list-runs --limit 10
+```
+
+5. Compare two runs:
+
+```bash
+python -m ir_eval.runner --db-url postgresql://pythagor@localhost/NEXUS compare-runs --run-a 1 --run-b 2
+```
+
+### Octen embedding generation helper
+
+```bash
+python scripts/generate_octen_embeddings.py --model all --parallel --create-indexes
+```
+
+## Legacy System
+
 This system provides a comprehensive toolkit for evaluating and comparing information retrieval performance in the NEXUS project. It implements a pooled relevance judgment approach that helps systematically evaluate and improve search quality across different embedding configurations.
 
 ## Key Features
