@@ -121,8 +121,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="IR evaluation V2 runner")
     parser.add_argument(
         "--db-url",
-        default=default_db_url(),
-        help="PostgreSQL URL (for example: postgresql://pythagor@localhost/NEXUS)",
+        default=None,
+        help="PostgreSQL URL (default: from MEMNON settings)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -180,6 +180,8 @@ def main() -> int:
     """Entry point for CLI execution."""
     parser = build_parser()
     args = parser.parse_args()
+    if args.db_url is None:
+        args.db_url = default_db_url()
     args.func(args)
     return 0
 

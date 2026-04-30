@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -19,9 +20,14 @@ class EvaluationStore:
         """Initialize the store with a PostgreSQL DSN/URL."""
         self.db_url = db_url
 
-    def _connect(self) -> psycopg2.extensions.connection:
-        """Create a new PostgreSQL connection."""
-        return psycopg2.connect(self.db_url)
+    @contextmanager
+    def _connect(self):
+        """Create a new PostgreSQL connection with guaranteed close."""
+        conn = psycopg2.connect(self.db_url)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def create_run(self, config: EvalRunConfig) -> int:
         """Insert a pending run and return its ID."""
