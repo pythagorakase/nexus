@@ -57,10 +57,16 @@ class RunExecutor:
         }
 
     def _build_run_memnon_settings(
-        self, config: EvalRunConfig
+        self,
+        config: EvalRunConfig,
+        base_settings: Dict[str, Any] | None = None,
     ) -> Tuple[Dict[str, Any], Dict[str, float]]:
-        """Build a per-run MEMNON config copy from the immutable run config."""
-        run_settings = copy.deepcopy(self.base_memnon_settings)
+        """Build a per-run MEMNON config copy from the immutable run config.
+
+        When *base_settings* is provided (e.g. from a stored snapshot), it is
+        used instead of the executor's current ``base_memnon_settings``.
+        """
+        run_settings = copy.deepcopy(base_settings or self.base_memnon_settings)
         run_settings.setdefault("database", {})["url"] = self.db_url
 
         selected_model_weights = self._normalize_model_weights(config)
@@ -206,8 +212,10 @@ class RunExecutor:
     def execute_run(self, run_id: int) -> RunExecutionSummary:
         """Execute a persisted run and store query results + metrics."""
         run_config = self.store.get_run_config(run_id)
+        snapshot = run_config.settings_snapshot or None
         run_settings, selected_model_weights = self._build_run_memnon_settings(
-            run_config
+            run_config,
+            base_settings=snapshot,
         )
         search_manager, query_analyzer = self._initialize_search_stack(
             run_settings,
