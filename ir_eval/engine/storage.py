@@ -124,10 +124,10 @@ class EvaluationStore:
             params.append(query_ids)
 
         if query_categories:
-            where_clauses.append("category = ANY(%s)")
+            where_clauses.append("category::text = ANY(%s)")
             params.append(query_categories)
 
-        sql = "SELECT id, text, COALESCE(category, 'unknown') AS category, COALESCE(name, '') AS name FROM ir_eval.queries"
+        sql = "SELECT id, text, COALESCE(category::text, 'unknown') AS category, COALESCE(name, '') AS name FROM ir_eval.queries"
         if where_clauses:
             sql += " WHERE " + " AND ".join(where_clauses)
         sql += " ORDER BY id ASC"
@@ -203,7 +203,10 @@ class EvaluationStore:
                     result.reranker_score,
                     psycopg2.extras.Json(result.model_scores),
                     result.source,
-                    psycopg2.extras.Json(result.metadata),
+                    psycopg2.extras.Json(
+                        result.metadata,
+                        dumps=lambda obj: json.dumps(obj, default=str),
+                    ),
                 )
             )
 
