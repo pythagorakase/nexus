@@ -9,6 +9,7 @@ from typing import List, Optional
 from nexus.config import load_settings_as_dict
 
 from ir_eval.engine import ComparisonEngine, EvaluationStore, RunExecutor
+from ir_eval.engine.judge import JudgmentEngine
 from ir_eval.models import EvalModelConfig, EvalRunConfig
 
 
@@ -93,10 +94,29 @@ def cmd_create_run(args: argparse.Namespace) -> None:
     print(json.dumps({"run_id": run_id}, indent=2))
 
 
+def _build_judgment_engine() -> JudgmentEngine:
+    """Construct a JudgmentEngine using ``[ir_eval.judgment]`` settings."""
+    settings = load_settings_as_dict()
+    judgment_cfg = (settings.get("ir_eval") or {}).get("judgment") or {}
+    if not judgment_cfg.get("model"):
+        raise ValueError(
+            "ir_eval.judgment.model is not configured in nexus.toml"
+        )
+    return JudgmentEngine(
+        model=judgment_cfg["model"],
+        reasoning_effort=judgment_cfg.get("reasoning_effort", "high"),
+    )
+
+
 def cmd_execute_run(args: argparse.Namespace) -> None:
     """Execute a previously created run."""
     store = EvaluationStore(args.db_url)
-    executor = RunExecutor(store=store, db_url=args.db_url)
+    judgment_engine = _build_judgment_engine() if args.judge_on_demand else None
+    executor = RunExecutor(
+        store=store,
+        db_url=args.db_url,
+        judgment_engine=judgment_engine,
+    )
     summary = executor.execute_run(args.run_id)
     print(json.dumps(summary.model_dump(mode="json"), indent=2))
 
@@ -162,6 +182,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     execute = subparsers.add_parser("execute-run", help="Execute an existing run")
     execute.add_argument("--run-id", type=int, required=True)
+    execute.add_argument(
+        "--judge-on-demand",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Call the LLM to score relevance for any retrieved chunk that lacks a judgment",
+    )
     execute.set_defaults(func=cmd_execute_run)
 
     compare = subparsers.add_parser("compare-runs", help="Compare two runs")

@@ -388,6 +388,14 @@ reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 
 # =============================================================================
+# IR Evaluation V2 Settings
+# =============================================================================
+
+[ir_eval.judgment]
+model = "gpt-5.1"             # LLM used to score relevance when a retrieved chunk lacks a judgment
+reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
+
+# =============================================================================
 # API Settings
 # =============================================================================
 

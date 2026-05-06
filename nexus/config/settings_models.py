@@ -450,6 +450,24 @@ class APISettings(BaseModel):
 # Root Settings Model
 # =============================================================================
 
+class IREvalJudgmentConfig(BaseModel):
+    """LLM judgment-on-demand configuration for the IR eval V2 runner."""
+    model_config = ConfigDict(extra='forbid')
+
+    model: str = Field(..., description="LLM model identifier for relevance judgments")
+    reasoning_effort: str = Field(
+        default="high",
+        description="Reasoning effort for the judgment model (e.g. minimal/medium/high)",
+    )
+
+
+class IREvalSettings(BaseModel):
+    """Configuration for the IR evaluation V2 subsystem."""
+    model_config = ConfigDict(extra='forbid')
+
+    judgment: IREvalJudgmentConfig
+
+
 class Settings(BaseModel):
     """
     Root configuration model for NEXUS.
@@ -471,6 +489,10 @@ class Settings(BaseModel):
     apex: APEXSettings
     wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
+    ir_eval: Optional[IREvalSettings] = Field(
+        default=None,
+        description="IR evaluation subsystem settings",
+    )
 
     def model_dump(self, **kwargs) -> dict:
         """

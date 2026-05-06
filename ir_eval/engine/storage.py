@@ -244,6 +244,53 @@ class EvaluationStore:
                 )
             conn.commit()
 
+    def fetch_chunk_texts(self, chunk_ids: Iterable[int]) -> Dict[int, str]:
+        """Return ``{chunk_id: raw_text}`` for the requested chunk IDs."""
+        chunk_id_list = list(chunk_ids)
+        if not chunk_id_list:
+            return {}
+
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, raw_text
+                    FROM public.narrative_chunks
+                    WHERE id = ANY(%s)
+                    """,
+                    (chunk_id_list,),
+                )
+                rows = cursor.fetchall()
+
+        return {int(chunk_id): raw_text for chunk_id, raw_text in rows}
+
+    def upsert_judgment(
+        self,
+        query_id: int,
+        chunk_id: int,
+        relevance: int,
+        doc_text: Optional[str] = None,
+        justification: Optional[str] = None,
+    ) -> None:
+        """Insert or update a relevance judgment for a (query, chunk) pair."""
+        with self._connect() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO ir_eval.judgments
+                        (query_id, chunk_id, relevance, doc_text, justification)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (query_id, chunk_id) DO UPDATE SET
+                        relevance = EXCLUDED.relevance,
+                        doc_text = COALESCE(EXCLUDED.doc_text, ir_eval.judgments.doc_text),
+                        justification = COALESCE(
+                            EXCLUDED.justification, ir_eval.judgments.justification
+                        )
+                    """,
+                    (query_id, chunk_id, relevance, doc_text, justification),
+                )
+            conn.commit()
+
     def fetch_judgments(self, query_ids: Iterable[int]) -> Dict[int, Dict[int, int]]:
         """Return relevance judgments keyed by query and chunk ID."""
         query_id_list = list(query_ids)
