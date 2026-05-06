@@ -262,6 +262,20 @@
                     "remote_path": "infly/inf-retriever-v1-1.5b",
                     "dimensions": 1536,
                     "weight": 0.5
+                },
+                "Octen-Embedding-4B": {
+                    "is_active": false,
+                    "local_path": "/Users/pythagor/nexus/models/Octen-Embedding-4B",
+                    "remote_path": "",
+                    "dimensions": 2560,
+                    "weight": 0.0
+                },
+                "Octen-Embedding-8B": {
+                    "is_active": false,
+                    "local_path": "/Users/pythagor/nexus/models/Octen-Embedding-8B",
+                    "remote_path": "",
+                    "dimensions": 4096,
+                    "weight": 0.0
                 }
             },
             "import": {

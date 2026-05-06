@@ -15,6 +15,11 @@ NEXUS uses a multi-model ensemble approach with weighted combinations of differe
    - **E5-Large-V2** (intfloat/e5-large-v2) - Weight: 0.3
    - **BGE-Large-EN** (BAAI/bge-large-en) - Weight: 0.2
 
+3. **Octen Candidate Models (Issue #175 evaluation path)**
+   - **Octen-Embedding-4B** (2560 dimensions)
+   - **Octen-Embedding-8B** (4096 dimensions)
+   - Configured in `nexus.toml` / `settings.json` as inactive-by-default.
+
 ## Database Storage Strategy
 
 To handle different vector dimensions efficiently, we use a **dimension-specific tables approach**:
@@ -26,6 +31,14 @@ To handle different vector dimensions efficiently, we use a **dimension-specific
 2. **chunk_embeddings_1024d**
    - Table for 1024-dimensional vectors (E5-Large-V2, BGE-Large-EN)
    - Column type: `embedding Vector(1024)`
+
+3. **chunk_embeddings_2560d**
+   - Table for 2560-dimensional vectors (Octen-Embedding-4B)
+   - Column type: `embedding Vector(2560)`
+
+4. **chunk_embeddings_4096d**
+   - Table for 4096-dimensional vectors (Octen-Embedding-8B)
+   - Column type: `embedding Vector(4096)`
 
 This approach was chosen because pgvector requires fixed dimensions at table creation time, and mixing vectors of different dimensions in the same table would require significant padding and dimensionality management.
 
