@@ -51,15 +51,26 @@ class JudgmentEngine:
     ):
         """Create a judgment engine backed by an OpenAI structured-output call.
 
+        The OpenAI provider is constructed lazily on first ``judge()`` call so
+        that runs which don't trigger any LLM judgments (e.g. retrievals fully
+        covered by existing judgments) don't require API credentials.
+
         Errors from the underlying API call propagate to the caller — this
         engine has no fallback or default-score behavior.
         """
         self.model = model
         self.reasoning_effort = reasoning_effort
-        self.provider = OpenAIProvider(
-            model=model,
-            reasoning_effort=reasoning_effort,
-        )
+        self._provider: Optional[OpenAIProvider] = None
+
+    @property
+    def provider(self) -> OpenAIProvider:
+        """Lazily construct the OpenAI provider on first access."""
+        if self._provider is None:
+            self._provider = OpenAIProvider(
+                model=self.model,
+                reasoning_effort=self.reasoning_effort,
+            )
+        return self._provider
 
     def judge(
         self,
