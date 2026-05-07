@@ -46,7 +46,7 @@ class JudgmentEngine:
 
     def __init__(
         self,
-        model: str = "gpt-5.1",
+        model: str = "gpt-5.5",
         reasoning_effort: str = "high",
     ):
         """Create a judgment engine backed by an OpenAI structured-output call.
