@@ -29,15 +29,13 @@ possible_values = [
 # Each provider section lists models available for that API backend
 [global.model.api_models.openai]
 models = [
-    { id = "gpt-5.1", label = "GPT-5.1" },
-    { id = "gpt-5.2", label = "GPT-5.2" },
+    { id = "gpt-5.5", label = "GPT-5.5" },
 ]
 
 [global.model.api_models.anthropic]
 models = [
-    { id = "claude-haiku-4-5", label = "Haiku 4.5" },
-    { id = "claude-sonnet-4-5", label = "Sonnet 4.5" },
-    { id = "claude-opus-4-5", label = "Opus 4.5" },
+    { id = "claude-sonnet-4-6", label = "Sonnet 4.6" },
+    { id = "claude-opus-4-7", label = "Opus 4.7" },
 ]
 
 [global.model.api_models.test]
@@ -386,6 +384,14 @@ provider = "openai"           # API provider: "openai" or "anthropic"
 model = "gpt-5.1"             # Model to use for narrative generation
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
+
+# =============================================================================
+# IR Evaluation V2 Settings
+# =============================================================================
+
+[ir_eval.judgment]
+model = "gpt-5.5"             # LLM used to score relevance when a retrieved chunk lacks a judgment
+reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 
 # =============================================================================
 # API Settings

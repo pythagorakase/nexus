@@ -13,9 +13,11 @@ from nexus.agents.memnon.utils.idf_dictionary import IDFDictionary
 from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
 from nexus.agents.memnon.utils.search import SearchManager
 
+from ir_eval.engine.judge import JudgmentEngine
 from ir_eval.engine.metrics import MetricsCalculator
 from ir_eval.engine.storage import EvaluationStore
 from ir_eval.models.schemas import (
+    EvalQuery,
     EvalRunConfig,
     QueryExecutionResult,
     RetrievedDocument,
@@ -32,8 +34,13 @@ class RunExecutor:
         *,
         settings_dict: Dict[str, Any] | None = None,
         db_url: str | None = None,
+        judgment_engine: JudgmentEngine | None = None,
     ):
-        """Create a run executor with repository and base settings."""
+        """Create a run executor with repository and base settings.
+
+        If *judgment_engine* is provided, ``execute_run`` will fill missing
+        relevance judgments via LLM calls before metrics are computed.
+        """
         self.store = store
         self.settings_dict = settings_dict or load_settings_as_dict()
         self.base_memnon_settings = copy.deepcopy(
@@ -44,6 +51,8 @@ class RunExecutor:
         self.db_url = db_url or configured_db_url
         if not self.db_url:
             raise ValueError("MEMNON database.url is not configured")
+
+        self.judgment_engine = judgment_engine
 
     @staticmethod
     def _normalize_model_weights(config: EvalRunConfig) -> Dict[str, float]:
@@ -201,6 +210,57 @@ class RunExecutor:
             results=typed_results,
         )
 
+    def _judge_unjudged_results(
+        self,
+        queries: List[EvalQuery],
+        query_results: List[QueryExecutionResult],
+    ) -> None:
+        """Call the LLM judgment engine for any retrieved (query, chunk) pair
+        that lacks a relevance judgment, and persist the result.
+        """
+        if self.judgment_engine is None:
+            return
+
+        existing_judgments = self.store.fetch_judgments(
+            [query.id for query in queries]
+        )
+        queries_by_id = {query.id: query for query in queries}
+
+        unjudged_pairs: List[Tuple[int, int]] = []
+        unjudged_chunk_ids: set[int] = set()
+        for query_result in query_results:
+            judged_for_query = existing_judgments.get(query_result.query_id, {})
+            for retrieved in query_result.results:
+                if retrieved.chunk_id in judged_for_query:
+                    continue
+                unjudged_pairs.append((query_result.query_id, retrieved.chunk_id))
+                unjudged_chunk_ids.add(retrieved.chunk_id)
+
+        if not unjudged_pairs:
+            return
+
+        chunk_texts = self.store.fetch_chunk_texts(unjudged_chunk_ids)
+        missing = unjudged_chunk_ids - chunk_texts.keys()
+        if missing:
+            raise ValueError(
+                f"Cannot judge chunks not present in narrative_chunks: {sorted(missing)}"
+            )
+
+        for query_id, chunk_id in unjudged_pairs:
+            query = queries_by_id[query_id]
+            assessment = self.judgment_engine.judge(
+                query_text=query.text,
+                chunk_text=chunk_texts[chunk_id],
+                query_category=query.category,
+            )
+            self.store.upsert_judgment(
+                query_id=query_id,
+                chunk_id=chunk_id,
+                relevance=assessment.relevance_score,
+                doc_text=chunk_texts[chunk_id],
+                justification=assessment.justification,
+            )
+
     def create_run(self, config: EvalRunConfig) -> int:
         """Persist a run configuration and return its run ID."""
         if not config.settings_snapshot:
@@ -296,6 +356,8 @@ class RunExecutor:
 
                 query_results.append(typed_query_result)
                 self.store.insert_query_results(run_id, typed_query_result)
+
+            self._judge_unjudged_results(queries, query_results)
 
             metrics_calculator = MetricsCalculator()
             judgments_by_query = self.store.fetch_judgments(
