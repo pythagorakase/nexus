@@ -54,7 +54,7 @@ class TokenBudgetManager:
             apex_settings = self.settings.get("API Settings", {}).get("apex", {})
             apex_model = apex_settings.get("model", "gpt-4o")
         
-        using_reasoning_model = apex_model.startswith("o") or "gpt-5" in apex_model
+        using_reasoning_model = apex_model.startswith("o") or "gpt-5" in apex_model  # pin: family-prefix feature detection
         
         # Reserve tokens for reasoning if needed (up to 30k for high-effort reasoning)
         reasoning_reserve = 30000 if using_reasoning_model else 0
