@@ -26,19 +26,25 @@ possible_values = [
 ]
 
 # Provider-grouped API model definitions
-# Each provider section lists models available for that API backend
+# Each provider section lists models available for that API backend AND named
+# roles that downstream consumers reference via "@provider.role" syntax.
+# Editing a role here (e.g., openai.default) propagates everywhere automatically.
 [global.model.api_models.openai]
+roles = { default = "gpt-5.5" }
 models = [
     { id = "gpt-5.5", label = "GPT-5.5" },
 ]
 
 [global.model.api_models.anthropic]
+roles = { default = "claude-sonnet-4-6", deep = "claude-opus-4-7", fast = "claude-haiku-4-5" }
 models = [
     { id = "claude-sonnet-4-6", label = "Sonnet 4.6" },
     { id = "claude-opus-4-7", label = "Opus 4.7" },
+    { id = "claude-haiku-4-5", label = "Haiku 4.5" },
 ]
 
 [global.model.api_models.test]
+roles = { default = "TEST" }
 models = [
     { id = "TEST", label = "TEST", description = "Mock server with cached data (dev)" },
 ]
@@ -75,8 +81,9 @@ test_database_suffix = "_test"
 # =============================================================================
 
 [wizard]
-default_model = "gpt-5.1"
-fallback_model = "claude-haiku-4-5"
+# Use @provider.role syntax. Resolved at config load via the api_models registry.
+default_model = "@openai.default"
+fallback_model = "@anthropic.fast"
 message_history_limit = 20
 max_retries = 2
 max_tokens = 4096
@@ -381,7 +388,7 @@ confidence_threshold = 0.7  # Minimum confidence to trigger retrieval
 
 [apex]
 provider = "openai"           # API provider: "openai" or "anthropic"
-model = "gpt-5.1"             # Model to use for narrative generation
+model = "@openai.default"     # Resolved via api_models registry; edit roles to migrate
 reasoning_effort = "medium"   # Reasoning effort level (low/medium/high)
 max_output_tokens = 25000     # Maximum tokens for generated narrative
 
@@ -390,7 +397,7 @@ max_output_tokens = 25000     # Maximum tokens for generated narrative
 # =============================================================================
 
 [ir_eval.judgment]
-model = "gpt-5.5"             # LLM used to score relevance when a retrieved chunk lacks a judgment
+model = "@openai.default"     # Resolved via api_models registry; edit openai.default to migrate
 reasoning_effort = "high"     # Reasoning effort level (low/medium/high)
 
 # =============================================================================

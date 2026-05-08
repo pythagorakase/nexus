@@ -120,78 +120,34 @@ def _tomlkit_to_dict(doc: tomlkit.TOMLDocument) -> Dict[str, Any]:
     return unwrap(doc)
 
 
-DEFAULT_API_MODELS_BY_PROVIDER: Dict[str, List[dict]] = {
-    "openai": [
-        {"id": "gpt-5.2", "label": "GPT-5.2"},
-    ],
-    "anthropic": [
-        {"id": "claude", "label": "Claude"},
-    ],
-    "test": [
-        {
-            "id": "TEST",
-            "label": "TEST",
-            "description": "Mock server with cached data (dev)",
-        },
-    ],
-}
-
-
-def _default_api_models_config() -> Dict[str, Dict[str, List[dict]]]:
-    """Return default api_models structure compatible with Settings."""
-    return {
-        provider: {"models": models}
-        for provider, models in DEFAULT_API_MODELS_BY_PROVIDER.items()
-    }
-
-
 def get_available_api_models() -> List[str]:
     """
     Get available API model IDs from nexus.toml configuration.
 
     Reads fresh from config on each call to ensure changes are picked up
-    without requiring server restart.
+    without requiring server restart. Raises if config is unavailable —
+    no fallback defaults, since stale fallbacks were the original drift bug.
 
     Returns:
-        List of available model IDs from config, or fallback defaults
-        if configuration is unavailable.
-
-    Examples:
-        >>> models = get_available_api_models()
-        >>> "gpt-5.2" in models
-        True
+        List of available model IDs from the active registry.
     """
-    try:
-        return [m["id"] for m in get_all_api_models()]
-    except Exception:
-        # Fallback to hardcoded defaults if config unavailable
-        return ["gpt-5.2", "TEST", "claude"]
+    return [m["id"] for m in get_all_api_models()]
 
 
 def get_api_models_by_provider() -> Dict[str, List[dict]]:
     """
-    Get API models grouped by provider.
+    Get API models grouped by provider, sourced from nexus.toml.
 
     Returns:
         Dictionary mapping provider name to list of model dicts.
         Each model dict contains: id, label, description
-
-    Examples:
-        >>> by_provider = get_api_models_by_provider()
-        >>> "openai" in by_provider
-        True
-        >>> by_provider["openai"][0]["id"]
-        'gpt-5.2'
     """
     settings = load_settings()
-    mapped = {
+    return {
         provider: [m.model_dump() for m in config.models]
         for provider, config in settings.global_.model.api_models.items()
         if config.models
     }
-    if not mapped:
-        return DEFAULT_API_MODELS_BY_PROVIDER
-    return mapped
 
 
 def get_all_api_models() -> List[dict]:
@@ -200,11 +156,6 @@ def get_all_api_models() -> List[dict]:
 
     Returns:
         List of model dicts, each containing: id, label, description, provider
-
-    Examples:
-        >>> models = get_all_api_models()
-        >>> any(m["id"] == "TEST" and m["provider"] == "test" for m in models)
-        True
     """
     result = []
     for provider, models in get_api_models_by_provider().items():
@@ -218,18 +169,10 @@ def get_provider_for_model(model_id: str) -> Optional[str]:
     Look up which provider a model belongs to.
 
     Args:
-        model_id: The model identifier (e.g., "gpt-5.2", "TEST", "claude")
+        model_id: A registry model identifier from nexus.toml's api_models section
 
     Returns:
         Provider name ("openai", "anthropic", "test") or None if not found
-
-    Examples:
-        >>> get_provider_for_model("gpt-5.2")
-        'openai'
-        >>> get_provider_for_model("TEST")
-        'test'
-        >>> get_provider_for_model("unknown")
-        None
     """
     for provider, models in get_api_models_by_provider().items():
         if any(m["id"] == model_id for m in models):
@@ -256,8 +199,8 @@ def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
         >>> settings = load_settings()
         >>> settings.lore.debug
         True
-        >>> settings.apex.model
-        'gpt-5.1'
+        >>> # settings.apex.model resolves to a concrete ID from the api_models
+        >>> # registry (e.g. whatever openai.default points at).
     """
     path = Path(path)
 
@@ -319,8 +262,8 @@ def _load_from_json(path: Path) -> Settings:
     legacy_agent_settings = data.get("Agent Settings", {})
     legacy_global = legacy_agent_settings.get("global", {})
     legacy_model = dict(legacy_global.get("model", {}))
-    if not legacy_model.get("api_models"):
-        legacy_model["api_models"] = _default_api_models_config()
+    # If api_models is missing from legacy JSON, the Settings validator will
+    # surface a clear error rather than silently filling in stale defaults.
 
     legacy_new_story = data.get("API Settings", {}).get("new_story", {})
 
@@ -349,7 +292,7 @@ def _load_from_json(path: Path) -> Settings:
         "memory": data.get("memory", {}),
         "apex": data.get("API Settings", {}).get("apex", {}),
         "wizard": {
-            "default_model": legacy_new_story.get("model", "gpt-5.1"),
+            "default_model": legacy_new_story.get("model", "@openai.default"),
             "fallback_model": legacy_new_story.get("fallback_model"),
             "message_history_limit": legacy_new_story.get("message_history_limit", 20),
             "max_retries": legacy_new_story.get("max_retries", 2),
