@@ -1,0 +1,29 @@
+name: Model drift check
+
+# Runs scripts/check_model_drift.py on every push and PR. The check fails if a
+# literal gpt-5.X or claude-{sonnet,opus,haiku}-N-N reference appears outside
+# the [global.model.api_models] registry without a "# pin: <reason>" annotation.
+# See issue #181 and CLAUDE.md for the role-based config pattern this enforces.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The drift checker is stdlib-only; no `poetry install` required.
+      - name: Run drift checker
+        run: python scripts/check_model_drift.py
