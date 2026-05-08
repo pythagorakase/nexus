@@ -5,8 +5,28 @@ These models provide type-safe, validated access to settings from nexus.toml.
 All models use `extra='forbid'` to catch typos in configuration keys.
 """
 
-from typing import Dict, List, Literal, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, Optional, Tuple
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+
+
+# String prefix used for role references in consumer fields.
+# Example: "@openai.default" resolves via api_models.openai.roles.default
+MODEL_ROLE_PREFIX = "@"
+
+
+@dataclass
+class _ModelRegistry:
+    """Indexed view of [global.model.api_models] used during reference resolution.
+
+    Built once per Settings load by ``Settings._build_model_registry`` and passed
+    to ``_resolve_model_reference``. Replaces an earlier sentinel-keyed dict
+    (``registry["_ids"]``) so the typing is honest and the consumer doesn't have
+    to filter out a magic key when iterating providers.
+    """
+
+    roles: Dict[str, Dict[str, str]]  # provider name → {role_name → concrete_id}
+    all_ids: Dict[str, str]           # concrete_id → provider, for error messages
 
 
 # =============================================================================
@@ -17,19 +37,46 @@ class APIModelEntry(BaseModel):
     """Single API model definition."""
     model_config = ConfigDict(extra='forbid')
 
-    id: str = Field(..., description="Model identifier (e.g., 'gpt-5.2', 'claude')")
+    id: str = Field(..., description="Concrete model identifier registered with this provider")
     label: str = Field(..., description="Display label for UI")
     description: Optional[str] = Field(default=None, description="Human-readable description (optional)")
 
 
 class ProviderModels(BaseModel):
-    """Models for a single API provider."""
+    """Models for a single API provider, plus named roles consumers can reference.
+
+    Roles map symbolic names (e.g., "default", "fast", "deep") to concrete model
+    IDs from this provider's `models` list. Consumer fields reference roles via
+    "@provider.role" syntax (resolved at Settings load time).
+    """
     model_config = ConfigDict(extra='forbid')
 
+    roles: Dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Named roles mapping role name to a concrete model ID. The ID must "
+            "appear in the `models` list. Consumers reference roles via "
+            "'@provider.role' strings."
+        ),
+    )
     models: List[APIModelEntry] = Field(
         default_factory=list,
         description="List of models available from this provider"
     )
+
+    @model_validator(mode="after")
+    def _validate_roles_reference_known_models(self) -> "ProviderModels":
+        """Roles must resolve to a model ID declared in this provider's `models`."""
+        if not self.roles:
+            return self
+        known_ids = {entry.id for entry in self.models}
+        for role, target_id in self.roles.items():
+            if target_id not in known_ids:
+                raise ValueError(
+                    f"Role '{role}' references unknown model id '{target_id}'. "
+                    f"Known IDs: {sorted(known_ids)}"
+                )
+        return self
 
 
 class ModelConfig(BaseModel):
@@ -494,6 +541,68 @@ class Settings(BaseModel):
         description="IR evaluation subsystem settings",
     )
 
+    @model_validator(mode="after")
+    def _resolve_model_references(self) -> "Settings":
+        """Resolve @provider.role refs in consumer fields and validate literal IDs.
+
+        After this runs, every consumer field that names a model holds a literal
+        ID, not an "@provider.role" reference. Downstream code therefore never
+        sees role syntax — it can treat model fields as concrete IDs throughout.
+        """
+        registry = self._build_model_registry()
+        # Each tuple is (container, attribute_name, optional_flag). When the
+        # value is None on an optional field, skip resolution silently.
+        targets: List[Tuple[Any, str, bool]] = [
+            (self.apex, "model", False),
+            (self.wizard, "default_model", False),
+            (self.wizard, "fallback_model", True),
+        ]
+        if self.ir_eval is not None and self.ir_eval.judgment is not None:
+            targets.append((self.ir_eval.judgment, "model", False))
+
+        for container, attr, optional in targets:
+            current = getattr(container, attr)
+            if current is None:
+                if optional:
+                    continue
+                raise ValueError(
+                    f"Required model field '{attr}' on "
+                    f"{type(container).__name__} is missing"
+                )
+            resolved = _resolve_model_reference(
+                current,
+                registry=registry,
+                source=f"{type(container).__name__}.{attr}",
+            )
+            # Mutate the child Pydantic model in place. We use object.__setattr__
+            # rather than direct attribute assignment for two reasons:
+            #   1. It works regardless of whether the child model is later marked
+            #      frozen=True (Pydantic raises on direct assignment for frozen).
+            #   2. It is intentionally a *bypass* — no @field_validator on the
+            #      child model's `model` field will fire on the resolved value.
+            #      If anyone later adds such a validator (e.g. on
+            #      APEXSettings.model), they need to also wire it into this
+            #      resolution pass or move that logic into _resolve_model_reference.
+            object.__setattr__(container, attr, resolved)
+
+        return self
+
+    def _build_model_registry(self) -> _ModelRegistry:
+        """Index [global.model.api_models] for fast role / literal-ID lookup.
+
+        Returns a small dataclass with two maps: provider→{role→id} and id→provider.
+        Both are needed by ``_resolve_model_reference`` — the first to resolve
+        ``@provider.role`` refs, the second to validate that any literal ID
+        names a model declared *somewhere* in the registry.
+        """
+        roles: Dict[str, Dict[str, str]] = {}
+        all_ids: Dict[str, str] = {}
+        for provider, provider_models in self.global_.model.api_models.items():
+            roles[provider] = dict(provider_models.roles)
+            for entry in provider_models.models:
+                all_ids[entry.id] = provider
+        return _ModelRegistry(roles=roles, all_ids=all_ids)
+
     def model_dump(self, **kwargs) -> dict:
         """
         Convert settings to dict, preserving dict-style access for backward compatibility.
@@ -501,3 +610,60 @@ class Settings(BaseModel):
         This ensures that existing code using settings.get("key", default) continues to work.
         """
         return super().model_dump(by_alias=True, **kwargs)
+
+
+def _resolve_model_reference(
+    value: str,
+    *,
+    registry: _ModelRegistry,
+    source: str,
+) -> str:
+    """Resolve @provider.role references and validate literal model IDs.
+
+    - "@<provider>.<role>" is looked up in ``registry.roles[provider][role]``
+      and replaced with the concrete model ID from the api_models entry.
+    - Literal IDs are validated against ``registry.all_ids``; unknown IDs raise
+      ValueError with the source field for debuggability.
+
+    Raises ValueError on:
+    - Malformed @ref (missing dot separator).
+    - Unknown provider in @ref.
+    - Unknown role for known provider.
+    - Literal ID not present in any provider's model list.
+    """
+    if not isinstance(value, str):
+        raise TypeError(f"{source}: expected string, got {type(value).__name__}")
+
+    if value.startswith(MODEL_ROLE_PREFIX):
+        body = value[len(MODEL_ROLE_PREFIX):]
+        if "." not in body:
+            raise ValueError(
+                f"{source}: malformed model role reference '{value}'. "
+                f"Expected '@provider.role' (e.g., '@openai.default')"
+            )
+        provider, role = body.split(".", 1)
+        provider_roles = registry.roles.get(provider)
+        if provider_roles is None:
+            known = sorted(registry.roles)
+            raise ValueError(
+                f"{source}: unknown provider '{provider}' in '{value}'. "
+                f"Known providers: {known}"
+            )
+        resolved = provider_roles.get(role)
+        if resolved is None:
+            known_roles = sorted(provider_roles)
+            raise ValueError(
+                f"{source}: provider '{provider}' has no role '{role}'. "
+                f"Known roles: {known_roles}"
+            )
+        return resolved
+
+    # Literal ID — validate it exists somewhere in the registry.
+    if value not in registry.all_ids:
+        known = sorted(registry.all_ids)
+        raise ValueError(
+            f"{source}: model ID '{value}' is not declared in "
+            f"[global.model.api_models.*].models. Known IDs: {known}. "
+            f"Either add it to the registry or use a '@provider.role' reference."
+        )
+    return value

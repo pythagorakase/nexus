@@ -62,9 +62,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.summarize_narrative")
 
+def _resolve_default_summary_model() -> str:
+    """Read the default narrative-summary model from nexus.toml's [apex] section."""
+    from nexus.config import load_settings
+
+    return load_settings().apex.model
+
+
 # Constants
-DEFAULT_MODEL = "gpt-5.1"
-FALLBACK_MODEL = "gpt-4.1"
+# DEFAULT_MODEL is resolved from nexus.toml on demand; see _resolve_default_summary_model.
+# FALLBACK_MODEL is a CLI-only escape hatch for a one-off retry attempt — the user
+# must pass --fallback-model explicitly if they want to use it.
+DEFAULT_MODEL = None  # type: ignore[assignment]  # resolved at argparse time
+FALLBACK_MODEL = None  # type: ignore[assignment]
 DEFAULT_TEMPERATURE = 0.2
 MAX_TOKENS_SEASON = 4000
 MAX_TOKENS_EPISODE = 2500
@@ -1102,7 +1112,7 @@ class SummaryGenerator:
     
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: str,
         temperature: float = DEFAULT_TEMPERATURE,
         effort: str = "medium",
         db_manager: Optional[DatabaseManager] = None,
@@ -2125,12 +2135,16 @@ def main():
     mode_group.add_argument("--episode", nargs='+', help="Episode(s) to summarize (e.g., s03e01 or s03e01 s03e13 for range)")
     mode_group.add_argument("--chunks", nargs=2, type=int, help="Chunk ID range to summarize (manual fallback)")
     
-    # OpenAI options
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"OpenAI model to use (default: {DEFAULT_MODEL})")
+    # OpenAI options. --model defaults to apex.model from nexus.toml when omitted.
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="OpenAI model to use (default: resolved from nexus.toml [apex].model)",
+    )
     parser.add_argument(
         "--fallback-model",
-        default=FALLBACK_MODEL,
-        help=f"Alternate model to try if the primary fails (default: {FALLBACK_MODEL})"
+        default=None,
+        help="Alternate model to try if the primary fails (no default; pass --disable-fallback to skip)",
     )
     parser.add_argument(
         "--disable-fallback",
@@ -2152,7 +2166,11 @@ def main():
     parser.add_argument("--disable-abort", action="store_true", help="Disable ESC key and Ctrl+C abort capability")
     
     args = parser.parse_args()
-    
+
+    # Resolve --model from nexus.toml when the user didn't specify it explicitly.
+    if args.model is None:
+        args.model = _resolve_default_summary_model()
+
     # Set up database manager
     db_manager = DatabaseManager(db_url=args.db_url)
     

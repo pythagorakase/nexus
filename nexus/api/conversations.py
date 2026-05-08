@@ -39,11 +39,12 @@ class ConversationsClient:
     to enable instant testing without API credentials.
     """
 
-    def __init__(self, model: str = "gpt-5.1"):
+    def __init__(self, model: str):
         """Initialize the Conversations client with the specified model.
 
         Args:
-            model: Model name. Use "TEST" for in-memory mode without API calls.
+            model: Model name (a concrete ID from the api_models registry).
+                Use "TEST" for in-memory mode without API calls.
         """
         self.model = model
         self._store_mode = "openai"

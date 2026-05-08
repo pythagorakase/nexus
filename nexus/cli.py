@@ -810,7 +810,7 @@ Examples:
     )
     continue_parser.add_argument(
         "--model",
-        help="Override model for this request (e.g., gpt-5.1, TEST, claude)",
+        help="Override model for this request (use a registry ID; see /api/config/models)",
     )
 
     # undo command
@@ -823,7 +823,7 @@ Examples:
     model_parser = subparsers.add_parser("model", help="Get or set model for a slot")
     model_parser.add_argument("--slot", type=int, help="Slot number (1-5)")
     model_parser.add_argument(
-        "--set", help="Set the model (e.g., gpt-5.1, TEST, claude)"
+        "--set", help="Set the model (use a registry ID; run with --list to see options)"
     )
     model_parser.add_argument(
         "--list", action="store_true", help="List available models"

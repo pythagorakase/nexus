@@ -418,25 +418,6 @@ class FallbackChain:
                     raise RuntimeError(f"All fallback strategies failed: {error_summary}")
 
 
-# Example usage for OpenAI API calls with fallback models
-def create_openai_fallback_chain(primary_model: str = "gpt-5.1") -> FallbackChain:
-    """Create a fallback chain for OpenAI API calls."""
-
-    @retry_with_backoff(OPENAI_RETRY_CONFIG)
-    def try_primary():
-        return {"model": primary_model}
-
-    @retry_with_backoff(OPENAI_RETRY_CONFIG)
-    def try_gpt5():
-        return {"model": "gpt-5"}
-
-    @retry_with_backoff(OPENAI_RETRY_CONFIG)
-    def try_gpt4():
-        return {"model": "gpt-4.1"}
-
-    return FallbackChain([try_primary, try_gpt5, try_gpt4])
-
-
 def log_retry_attempt(exception: Exception, attempt: int) -> None:
     """Standard logging for retry attempts."""
     logger.info(f"Retry attempt {attempt + 1} after error: {type(exception).__name__}: {exception}")

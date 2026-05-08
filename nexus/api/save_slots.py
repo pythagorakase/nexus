@@ -222,7 +222,7 @@ def get_slot_model(slot_number: int, dbname: Optional[str] = None) -> Optional[s
         dbname: Optional database name (defaults to slot_dbname(slot_number))
 
     Returns:
-        Model name (e.g., 'gpt-5.1', 'TEST', 'claude') or None
+        Model name (a registry ID from nexus.toml's api_models) or None
     """
     db = dbname or slot_dbname(slot_number)
     with get_connection(db) as conn:
@@ -238,7 +238,7 @@ def set_slot_model(slot_number: int, model: str, dbname: Optional[str] = None) -
 
     Args:
         slot_number: Slot number (1-5)
-        model: Model name (e.g., 'gpt-5.1', 'TEST', 'claude')
+        model: Model name (a registry ID from nexus.toml's api_models)
         dbname: Optional database name (defaults to slot_dbname(slot_number))
     """
     db = dbname or slot_dbname(slot_number)
