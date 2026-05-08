@@ -40,12 +40,12 @@ class StoryComponentGenerator:
     initialization, using Pydantic models for type safety and validation.
     """
 
-    def __init__(self, model: str = "gpt-5.1"):
+    def __init__(self, model: str):
         """
         Initialize the story generator.
 
         Args:
-            model: Model name to use (default: gpt-5.1)
+            model: Concrete model ID to use (must appear in the api_models registry).
         """
         self.model = model
         self._model = build_pydantic_ai_model(model)
@@ -536,7 +536,7 @@ async def generate_set_design(
     location_sketch: str,
     setting: SettingCard,
     seed: StorySeed,
-    model: str = "claude-sonnet-4-5",
+    model: str,
 ) -> tuple[LayerDefinition, ZoneDefinition, PlaceProfile]:
     """
     Generate structured location data from a freeform sketch.
@@ -552,7 +552,7 @@ async def generate_set_design(
         location_sketch: Freeform description of the starting location
         setting: The established SettingCard for world context
         seed: The StorySeed for narrative context
-        model: Model to use (default: claude-sonnet-4-5)
+        model: Concrete model ID to use (must appear in the api_models registry).
 
     Returns:
         Tuple of (LayerDefinition, ZoneDefinition, PlaceProfile)

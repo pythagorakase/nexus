@@ -202,7 +202,7 @@ class SlotUndoResponse(BaseModel):
 class SlotModelRequest(BaseModel):
     """Request model for setting slot model."""
 
-    model: str = Field(description="Model to set (e.g., gpt-5.1, TEST, claude)")
+    model: str = Field(description="Model to set (a registry ID; see /api/config/models)")
 
 
 class SlotModelResponse(BaseModel):
@@ -226,13 +226,25 @@ class SlotLockResponse(BaseModel):
 # =============================================================================
 
 
+def _wizard_default_model_factory() -> str:
+    """Return the resolved wizard default model from nexus.toml.
+
+    Used as the field default when an HTTP client doesn't specify a model.
+    Reading at request time keeps the value in sync with config edits.
+    """
+    from nexus.config import load_settings
+
+    return load_settings().wizard.default_model
+
+
 class ChatRequest(BaseModel):
     slot: int
     message: str
     # thread_id and current_phase are optional - resolved from slot state if not provided
     thread_id: Optional[str] = None
     current_phase: Optional[Literal["setting", "character", "seed"]] = None
-    model: str = "gpt-5.1"  # Model selection - validated against nexus.toml
+    # Defaults to the resolved wizard.default_model from nexus.toml
+    model: str = Field(default_factory=_wizard_default_model_factory)
     context_data: Optional[Dict[str, Any]] = None  # Accumulated wizard state
     accept_fate: bool = False  # Force tool call without adding user message
     dev: bool = Field(

@@ -496,6 +496,7 @@ async def new_story_chat_endpoint(request: ChatRequest):
                                 location_sketch=location_sketch,
                                 setting=setting,
                                 seed=seed,
+                                model=request.model,
                             )
 
                             # Record the generated location data
@@ -788,6 +789,7 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                     location_sketch=location_sketch,
                                     setting=setting,
                                     seed=seed,
+                                    model=request.model,
                                 )
 
                                 record_drafts(
