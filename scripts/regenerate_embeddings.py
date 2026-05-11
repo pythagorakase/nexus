@@ -197,13 +197,18 @@ class ModelLoader:
                         except Exception as e:
                             logger.warning(f"Failed to load from snapshot: {e}")
             
+            # INT8-quantized models use bitsandbytes, which has no working MPS
+            # backend on Apple Silicon — force CPU to avoid mixed-device matmul
+            # errors. Other models use SentenceTransformer's auto-detection.
+            device = "cpu" if "INT8" in model_name else None
+
             # For other models or fallback
             if model_local_path and os.path.exists(model_local_path):
-                logger.info(f"Loading model from local path: {model_local_path}")
-                return SentenceTransformer(model_local_path)
+                logger.info(f"Loading model from local path: {model_local_path} (device={device or 'auto'})")
+                return SentenceTransformer(model_local_path, device=device)
             else:
-                logger.info(f"Loading model from Hugging Face hub: {model_name}")
-                return SentenceTransformer(model_name)
+                logger.info(f"Loading model from Hugging Face hub: {model_name} (device={device or 'auto'})")
+                return SentenceTransformer(model_name, device=device)
                 
         except ImportError:
             logger.error("sentence-transformers not found. Install with: pip install sentence-transformers")
