@@ -382,6 +382,40 @@ location = 0.35
 theme = 0.2
 general = 0.3
 
+# Reranker candidate registry for bakeoff testing.
+# The IR eval framework can target any entry via `create-run --reranker NAME`.
+# `api_type` selects the inference path: "cross_encoder" for standard
+# SequenceClassification rerankers (DeBERTa-v3, mxbai), "qwen3_lm" for Qwen3-Reranker
+# yes/no causal-LM rerankers. `is_active = true` on exactly one entry marks the
+# production default — this is what `model_path` above resolves to in legacy reads.
+[memnon.retrieval.cross_encoder_reranking.candidates."deberta-v3-trecdl22"]
+is_active = true
+local_path = "/Users/pythagor/nexus/models/naver-trecdl22-crossencoder-debertav3"
+remote_path = "naver/trecdl22-crossencoder-debertav3"
+api_type = "cross_encoder"
+notes = "DeBERTa-v3-large fine-tuned on TREC-DL 2022; current production default."
+
+[memnon.retrieval.cross_encoder_reranking.candidates."qwen3-reranker-0.6b"]
+is_active = false
+local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-0.6B"
+remote_path = "Qwen/Qwen3-Reranker-0.6B"
+api_type = "qwen3_lm"
+notes = "Qwen3-based yes/no causal-LM reranker, 0.6B params (issue #175 follow-up)."
+
+[memnon.retrieval.cross_encoder_reranking.candidates."qwen3-reranker-4b"]
+is_active = false
+local_path = "/Users/pythagor/nexus/models/Qwen3-Reranker-4B"
+remote_path = "Qwen/Qwen3-Reranker-4B"
+api_type = "qwen3_lm"
+notes = "Qwen3-based yes/no causal-LM reranker, 4B params (issue #175 follow-up)."
+
+[memnon.retrieval.cross_encoder_reranking.candidates."mxbai-rerank-large"]
+is_active = false
+local_path = "/Users/pythagor/nexus/models/mxbai-rerank-large-v2"
+remote_path = "mixedbread-ai/mxbai-rerank-large-v2"
+api_type = "cross_encoder"
+notes = "Mixedbread modern cross-encoder reranker (issue #175 follow-up)."
+
 [memnon.logging]
 file = "memnon.log"
 level = "INFO"

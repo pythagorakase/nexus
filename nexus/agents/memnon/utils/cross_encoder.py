@@ -217,41 +217,193 @@ class CrossEncoderReranker:
         return [s.strip() for s in text.split('[SEP]') if s.strip()]
     
     def rerank_batch(
-        self, 
-        query: str, 
-        passages: List[str], 
-        batch_size: int = 8, 
+        self,
+        query: str,
+        passages: List[str],
+        batch_size: int = 8,
         use_sliding_window: bool = True
     ) -> List[float]:
         """
         Rerank a batch of passages against a query.
-        
+
         Args:
             query: The search query
             passages: List of passages to score
             batch_size: Batch size for model inference
             use_sliding_window: Whether to use sliding window for long texts
-            
+
         Returns:
             List of relevance scores for each passage
         """
         scores = []
-        
+
         # Process in batches
         for i in range(0, len(passages), batch_size):
             batch_passages = passages[i:i+batch_size]
             batch_scores = []
-            
+
             for passage in batch_passages:
                 if use_sliding_window:
                     score = self.score_pair_with_sliding_window(query, passage)
                 else:
                     score = self.score_pair(query, passage)
                 batch_scores.append(score)
-            
+
             scores.extend(batch_scores)
-        
+
         return scores
+
+
+class Qwen3LMReranker:
+    """Qwen3-Reranker yes/no causal-LM scorer for (query, document) pairs.
+
+    Qwen3-Reranker is a causal LM (not a SequenceClassification head). Scoring
+    a pair runs the model once over `<Instruct>... <Query>... <Document>...`
+    and reads P("yes") from the last-token logits over the {"yes", "no"} tokens.
+    This class wraps that into the same ``rerank_batch(query, passages, ...)``
+    surface as ``CrossEncoderReranker`` so callers don't branch.
+    """
+
+    _PREFIX = (
+        '<|im_start|>system\n'
+        'Judge whether the Document meets the requirements based on the Query '
+        'and the Instruct provided. Note that the answer can only be "yes" or '
+        '"no".<|im_end|>\n<|im_start|>user\n'
+    )
+    _SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    _INSTRUCTION = (
+        "Given a web search query, retrieve relevant passages that answer the query"
+    )
+
+    def __init__(
+        self,
+        model_name_or_path: str,
+        device: Optional[str] = None,
+        max_length: int = 8192,
+    ):
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        if device is None:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
+                device = "mps"
+            else:
+                device = "cpu"
+        self.device = device
+        self.max_length = max_length
+
+        logger.info(f"Loading Qwen3-Reranker from {model_name_or_path} on {device}")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name_or_path, padding_side="left"
+        )
+        # MPS doesn't support all kernels at fp16; use fp32 on CPU, fp16 elsewhere.
+        dtype = torch.float32 if device == "cpu" else torch.float16
+        self.model = (
+            AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=dtype)
+            .to(device)
+            .eval()
+        )
+
+        self._token_yes = self.tokenizer.convert_tokens_to_ids("yes")
+        self._token_no = self.tokenizer.convert_tokens_to_ids("no")
+        self._prefix_tokens = self.tokenizer.encode(
+            self._PREFIX, add_special_tokens=False
+        )
+        self._suffix_tokens = self.tokenizer.encode(
+            self._SUFFIX, add_special_tokens=False
+        )
+        logger.info(
+            f"Qwen3-Reranker ready: yes_id={self._token_yes}, no_id={self._token_no}"
+        )
+
+    def _format_pair(self, query: str, doc: str) -> str:
+        return (
+            f"<Instruct>: {self._INSTRUCTION}\n"
+            f"<Query>: {query}\n"
+            f"<Document>: {doc}"
+        )
+
+    def _build_inputs(self, pairs: List[str]):
+        body_budget = self.max_length - len(self._prefix_tokens) - len(self._suffix_tokens)
+        inputs = self.tokenizer(
+            pairs,
+            padding=False,
+            truncation="longest_first",
+            return_attention_mask=False,
+            max_length=body_budget,
+        )
+        for i, body in enumerate(inputs["input_ids"]):
+            inputs["input_ids"][i] = self._prefix_tokens + body + self._suffix_tokens
+        inputs = self.tokenizer.pad(
+            inputs, padding=True, return_tensors="pt", max_length=self.max_length
+        )
+        return {k: v.to(self.device) for k, v in inputs.items()}
+
+    @torch.no_grad()
+    def _score_batch(self, pairs: List[str]) -> List[float]:
+        inputs = self._build_inputs(pairs)
+        logits = self.model(**inputs).logits[:, -1, :]
+        yes_logit = logits[:, self._token_yes]
+        no_logit = logits[:, self._token_no]
+        stacked = torch.stack([no_logit, yes_logit], dim=1)
+        log_probs = torch.nn.functional.log_softmax(stacked, dim=1)
+        return log_probs[:, 1].exp().tolist()
+
+    def rerank_batch(
+        self,
+        query: str,
+        passages: List[str],
+        batch_size: int = 8,
+        use_sliding_window: bool = True,  # API-compat; Qwen3 truncates internally.
+    ) -> List[float]:
+        if not passages:
+            return []
+        formatted = [self._format_pair(query, p or "") for p in passages]
+        scores: List[float] = []
+        for start in range(0, len(formatted), batch_size):
+            batch = formatted[start:start + batch_size]
+            scores.extend(self._score_batch(batch))
+        return scores
+
+
+# Module-level cache for reranker instances. Loading a 0.6B model is seconds;
+# a 4B model is ~10s. Per-query reloads would dominate eval wall time, so we
+# keep the instance alive across calls within the process.
+_RERANKER_CACHE: Dict[Tuple[str, str, bool], Any] = {}
+
+
+def _get_or_create_reranker(
+    model_path: str,
+    api_type: str,
+    device: Optional[str],
+    use_8bit: bool,
+):
+    """Return a cached reranker, constructing it on first request."""
+    key = (model_path, api_type, use_8bit)
+    cached = _RERANKER_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    if api_type == "cross_encoder":
+        instance = CrossEncoderReranker(
+            model_name_or_path=model_path,
+            device=device,
+            use_8bit=use_8bit,
+        )
+    elif api_type == "qwen3_lm":
+        instance = Qwen3LMReranker(
+            model_name_or_path=model_path,
+            device=device,
+        )
+    else:
+        raise ValueError(
+            f"Unknown reranker api_type: {api_type!r}. "
+            "Expected 'cross_encoder' or 'qwen3_lm'."
+        )
+
+    _RERANKER_CACHE[key] = instance
+    return instance
 
 
 def rerank_results(
@@ -262,12 +414,13 @@ def rerank_results(
     batch_size: int = 8,
     use_sliding_window: bool = True,
     model_path: str = "naver/trecdl22-crossencoder-debertav3",
+    api_type: str = "cross_encoder",
     device: Optional[str] = None,
     use_8bit: bool = False,
 ) -> List[Dict[str, Any]]:
     """
-    Rerank results using cross-encoder model.
-    
+    Rerank results using a reranker model.
+
     Args:
         query: The search query
         results: List of result dicts from initial retrieval
@@ -277,23 +430,27 @@ def rerank_results(
               final_score = alpha * original_score + (1 - alpha) * reranker_score
         batch_size: Batch size for model inference
         use_sliding_window: Whether to use sliding window for long texts
-        model_path: Path to the cross-encoder model
+        model_path: Path to the reranker model
+        api_type: "cross_encoder" (SequenceClassification: DeBERTa-v3, mxbai)
+                  or "qwen3_lm" (Qwen3-Reranker yes/no causal-LM)
         device: Device to use for inference
-        use_8bit: Whether to use 8-bit quantization
-        
+        use_8bit: Whether to use 8-bit quantization (cross_encoder only)
+
     Returns:
         Reranked list of result dicts with updated scores
     """
     if not results:
         logger.warning("No results to rerank")
         return []
-    
+
     try:
-        # Initialize the reranker
-        reranker = CrossEncoderReranker(
-            model_name_or_path=model_path,
+        # Get cached reranker (loaded once per process; eviction is not needed
+        # at our scale and would defeat the latency win).
+        reranker = _get_or_create_reranker(
+            model_path=model_path,
+            api_type=api_type,
             device=device,
-            use_8bit=use_8bit
+            use_8bit=use_8bit,
         )
         
         # Extract passages from results

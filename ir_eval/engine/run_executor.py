@@ -296,6 +296,29 @@ class RunExecutor:
             "cross_encoder_reranking", {}
         )
 
+        # Resolve which reranker to use. If the run config names a candidate,
+        # look it up in the registry; otherwise fall back to the legacy
+        # cross_encoder_reranking.model_path (and assume "cross_encoder" api_type).
+        candidates = cross_encoder_settings.get("candidates", {}) or {}
+        if run_config.reranker_candidate:
+            candidate = candidates.get(run_config.reranker_candidate)
+            if candidate is None:
+                raise ValueError(
+                    f"Reranker candidate '{run_config.reranker_candidate}' is not registered "
+                    f"in [memnon.retrieval.cross_encoder_reranking.candidates]. "
+                    f"Known: {sorted(candidates.keys())}"
+                )
+            reranker_model_path = str(candidate["local_path"])
+            reranker_api_type = str(candidate.get("api_type", "cross_encoder"))
+        else:
+            reranker_model_path = str(
+                cross_encoder_settings.get(
+                    "model_path",
+                    "naver-trecdl22-crossencoder-debertav3",
+                )
+            )
+            reranker_api_type = "cross_encoder"
+
         try:
             for query in queries:
                 query_start = time.time()
@@ -336,12 +359,8 @@ class RunExecutor:
                         use_sliding_window=bool(
                             cross_encoder_settings.get("use_sliding_window", True)
                         ),
-                        model_path=str(
-                            cross_encoder_settings.get(
-                                "model_path",
-                                "naver-trecdl22-crossencoder-debertav3",
-                            )
-                        ),
+                        model_path=reranker_model_path,
+                        api_type=reranker_api_type,
                         use_8bit=bool(cross_encoder_settings.get("use_8bit", False)),
                     )
 

@@ -339,6 +339,22 @@ class HybridSearchConfig(BaseModel):
     temporal_boost_factor: float = Field(..., ge=0.0)
 
 
+class RerankerCandidate(BaseModel):
+    """One reranker model entry in the bakeoff candidate registry.
+
+    `api_type` selects the inference path in ``cross_encoder.rerank_results``:
+      - "cross_encoder": standard SequenceClassification (DeBERTa-v3, mxbai, BGE-v2, etc.)
+      - "qwen3_lm": Qwen3-Reranker causal-LM with yes/no logit head
+    """
+    model_config = ConfigDict(extra='forbid', protected_namespaces=())
+
+    is_active: bool = False
+    local_path: str
+    remote_path: str = ""
+    api_type: Literal["cross_encoder", "qwen3_lm"] = "cross_encoder"
+    notes: str = ""
+
+
 class CrossEncoderReranking(BaseModel):
     """Cross-encoder reranking configuration."""
     model_config = ConfigDict(extra='forbid', protected_namespaces=())
@@ -354,6 +370,7 @@ class CrossEncoderReranking(BaseModel):
     weights_by_query_type: Dict[str, float]
     use_query_type_weights: bool
     use_8bit: bool
+    candidates: Dict[str, RerankerCandidate] = Field(default_factory=dict)
 
 
 class RetrievalConfig(BaseModel):
