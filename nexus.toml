@@ -160,19 +160,27 @@ drop_existing = true
 # Embedding models configuration
 # Multiple models are ensembled for better retrieval quality
 
+# Active retrieval embedder: Octen-Embedding-4B (issue #175 winner).
+# Beat the prior bge+e5+inf-retriever ensemble on all 5 IR metrics
+# (P@5 +0.015, P@10 +0.015, MRR +0.025, bpref +0.003, NDCG@10 +0.021)
+# while cutting production query latency by ~31% (single model encode +
+# single-table vector search instead of 3 sequential encodes + 3-table SQL).
+# Statistical significance approached but didn't reach p<0.05 at n=130;
+# direction was consistent on all 5 metrics.
+
 [memnon.models.bge-large]
-is_active = true
+is_active = false  # Deprecated by Octen-4B (issue #175)
 local_path = "/Users/pythagor/nexus/models/bge-large-en"
 remote_path = "BAAI/bge-large-en"
 dimensions = 1024
-weight = 0.2  # Ensemble weight for this model
+weight = 0.0
 
 [memnon.models.e5-large]
-is_active = true
+is_active = false  # Deprecated by Octen-4B (issue #175)
 local_path = "/Users/pythagor/nexus/models/e5-large-v2"
 remote_path = "intfloat/e5-large-v2"
 dimensions = 1024
-weight = 0.3
+weight = 0.0
 
 [memnon.models.bge-small-custom]
 is_active = false  # Fine-tuned model, currently disabled
@@ -182,11 +190,11 @@ dimensions = 384
 weight = 0.0
 
 [memnon.models."inf-retriever-v1-1.5b"]
-is_active = true
+is_active = false  # Deprecated by Octen-4B (issue #175)
 local_path = "/Users/pythagor/nexus/models/inf-retriever-v1-1.5b"
 remote_path = "infly/inf-retriever-v1-1.5b"
 dimensions = 1536
-weight = 0.5  # Highest weight - best performing model
+weight = 0.0
 
 [memnon.models."Octen-Embedding-0.6B"]
 is_active = false  # Candidate model for issue #175 evaluation campaign
@@ -196,11 +204,11 @@ dimensions = 1024
 weight = 0.0
 
 [memnon.models."Octen-Embedding-4B"]
-is_active = false  # Candidate model for issue #175 evaluation campaign
+is_active = true  # Production embedder (winner of issue #175 bakeoff)
 local_path = "/Users/pythagor/nexus/models/Octen-Embedding-4B"
 remote_path = "Octen/Octen-Embedding-4B"
 dimensions = 2560
-weight = 0.0
+weight = 1.0
 
 [memnon.models."Octen-Embedding-4B-INT8"]
 is_active = false  # Candidate model for issue #175 evaluation campaign (INT8 quantized, CPU-only on Apple Silicon)
