@@ -279,16 +279,22 @@ class Qwen3LMReranker:
         self,
         model_name_or_path: str,
         device: Optional[str] = None,
-        max_length: int = 8192,
+        max_length: int = 2048,
     ):
+        # NOTE: max_length defaults to 2048 (vs the model card's 8192) and
+        # device defaults to CPU on Apple Silicon, both for MPS-stability
+        # reasons. On MPS, Qwen3 inference with batched long sequences hits
+        # "NDArray dimension length > INT_MAX" inside Metal regardless of
+        # attention implementation (eager or SDPA, fp16 or bf16, max_length
+        # 2048 or 8192 — all reproduce). CPU is slower but reliable.
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         if device is None:
             if torch.cuda.is_available():
                 device = "cuda"
-            elif hasattr(torch, "has_mps") and torch.backends.mps.is_built():
-                device = "mps"
             else:
+                # Apple Silicon path: prefer CPU over MPS for Qwen3 because of
+                # the Metal indexing bug noted above.
                 device = "cpu"
         self.device = device
         self.max_length = max_length
@@ -297,8 +303,9 @@ class Qwen3LMReranker:
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name_or_path, padding_side="left"
         )
-        # MPS doesn't support all kernels at fp16; use fp32 on CPU, fp16 elsewhere.
-        dtype = torch.float32 if device == "cpu" else torch.float16
+        # fp32 on CPU (no native bf16 acceleration on most CPUs); bf16 on CUDA
+        # to match Qwen3's native dtype.
+        dtype = torch.float32 if device == "cpu" else torch.bfloat16
         self.model = (
             AutoModelForCausalLM.from_pretrained(model_name_or_path, torch_dtype=dtype)
             .to(device)
