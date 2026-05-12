@@ -85,6 +85,7 @@ def cmd_create_run(args: argparse.Namespace) -> None:
         vector_weight=args.vector_weight,
         text_weight=args.text_weight,
         cross_encoder_enabled=args.cross_encoder,
+        reranker_candidate=args.reranker,
         top_k=args.top_k,
         query_ids=parse_csv_ints(args.query_ids),
         query_categories=parse_csv_strings(args.query_categories),
@@ -170,6 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Enable/disable cross-encoder reranking",
+    )
+    create.add_argument(
+        "--reranker",
+        default=None,
+        help=(
+            "Name of a candidate in [memnon.retrieval.cross_encoder_reranking.candidates]. "
+            "If omitted, falls back to the legacy cross_encoder_reranking.model_path setting."
+        ),
     )
     create.add_argument("--top-k", type=int, default=10)
     create.add_argument("--query-ids", default=None, help="Comma-separated query IDs")

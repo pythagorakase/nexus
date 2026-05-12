@@ -25,6 +25,7 @@ class EvalRunConfig(BaseModel):
     vector_weight: float = Field(default=0.6, ge=0.0, le=1.0)
     text_weight: float = Field(default=0.4, ge=0.0, le=1.0)
     cross_encoder_enabled: bool = True
+    reranker_candidate: Optional[str] = None
     top_k: int = Field(default=10, ge=1)
     query_ids: Optional[List[int]] = None
     query_categories: Optional[List[str]] = None

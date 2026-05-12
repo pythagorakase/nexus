@@ -31,8 +31,11 @@ MODEL_DIMENSIONS = {
     # High-dimensional models
     "infly/inf-retriever-v1": 3584,  # Original model - too high for efficient indexing
     "infly/inf-retriever-v1-1.5b": 1536,  # Lightweight version with 1536 dimensions
+    "Octen-Embedding-0.6B": 1024,
     "Octen-Embedding-4B": 2560,
+    "Octen-Embedding-4B-INT8": 2560,
     "Octen-Embedding-8B": 4096,
+    "Octen-Embedding-8B-INT8": 4096,
 }
 
 
