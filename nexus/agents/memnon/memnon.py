@@ -1749,9 +1749,13 @@ class MEMNON:
                 batch_size = cross_encoder_config.get("batch_size", 8)
                 use_sliding_window = cross_encoder_config.get("use_sliding_window", True)
                 model_path = cross_encoder_config.get("model_path", "naver-trecdl22-crossencoder-debertav3")
-                
+                # api_type must accompany model_path so that swapping production
+                # to a Qwen3-Reranker checkpoint doesn't silently load it as a
+                # SequenceClassification CrossEncoder.
+                api_type = cross_encoder_config.get("api_type", "cross_encoder")
+
                 rerank_start_time = time.time()
-                
+
                 # Apply reranking
                 # Get use_8bit parameter from settings
                 use_8bit = cross_encoder_config.get("use_8bit", False)
@@ -1764,6 +1768,7 @@ class MEMNON:
                     batch_size=batch_size,
                     use_sliding_window=use_sliding_window,
                     model_path=model_path,
+                    api_type=api_type,
                     use_8bit=use_8bit
                 )
                 

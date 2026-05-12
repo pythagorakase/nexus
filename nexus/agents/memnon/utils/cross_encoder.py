@@ -271,6 +271,10 @@ class Qwen3LMReranker:
         '"no".<|im_end|>\n<|im_start|>user\n'
     )
     _SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+    # TODO(issue #175): the model-card default instruction is tuned for web
+    # search; a narrative-domain instruction (e.g., "Given a narrative query,
+    # retrieve relevant story passages...") may improve scores. Re-bakeoff
+    # before changing.
     _INSTRUCTION = (
         "Given a web search query, retrieve relevant passages that answer the query"
     )
@@ -314,6 +318,19 @@ class Qwen3LMReranker:
 
         self._token_yes = self.tokenizer.convert_tokens_to_ids("yes")
         self._token_no = self.tokenizer.convert_tokens_to_ids("no")
+        # Fail fast if the tokenizer doesn't have unique tokens for "yes"/"no".
+        # `convert_tokens_to_ids` returns `unk_token_id` for missing tokens,
+        # which would silently produce garbage relevance scores at scoring
+        # time. This catches future tokenizer variants (e.g., BPE that
+        # encodes "yes" as " yes" or "Ġyes").
+        unk = self.tokenizer.unk_token_id
+        if self._token_yes == unk or self._token_no == unk:
+            raise ValueError(
+                f"Qwen3-Reranker tokenizer at {model_name_or_path} does not "
+                f"map 'yes' or 'no' to a unique vocab id "
+                f"(got yes={self._token_yes}, no={self._token_no}, unk={unk}). "
+                f"Check token surface forms (e.g., 'Ġyes' / '▁yes')."
+            )
         self._prefix_tokens = self.tokenizer.encode(
             self._PREFIX, add_special_tokens=False
         )
@@ -377,7 +394,9 @@ class Qwen3LMReranker:
 # Module-level cache for reranker instances. Loading a 0.6B model is seconds;
 # a 4B model is ~10s. Per-query reloads would dominate eval wall time, so we
 # keep the instance alive across calls within the process.
-_RERANKER_CACHE: Dict[Tuple[str, str, bool], Any] = {}
+# Key includes `device` so a workflow that loads first on (say) MPS doesn't
+# silently return that instance to a later caller that requests CPU.
+_RERANKER_CACHE: Dict[Tuple[str, str, Optional[str], bool], Any] = {}
 
 
 def _get_or_create_reranker(
@@ -387,7 +406,7 @@ def _get_or_create_reranker(
     use_8bit: bool,
 ):
     """Return a cached reranker, constructing it on first request."""
-    key = (model_path, api_type, use_8bit)
+    key = (model_path, api_type, device, use_8bit)
     cached = _RERANKER_CACHE.get(key)
     if cached is not None:
         return cached

@@ -345,10 +345,14 @@ class RerankerCandidate(BaseModel):
     `api_type` selects the inference path in ``cross_encoder.rerank_results``:
       - "cross_encoder": standard SequenceClassification (DeBERTa-v3, mxbai, BGE-v2, etc.)
       - "qwen3_lm": Qwen3-Reranker causal-LM with yes/no logit head
+
+    Note: the production reranker is selected by the top-level
+    ``CrossEncoderReranking.model_path`` + ``api_type`` fields, not by any
+    flag on this candidate entry. This registry is for ir_eval bakeoff
+    selection via ``ir_eval.runner create-run --reranker NAME``.
     """
     model_config = ConfigDict(extra='forbid', protected_namespaces=())
 
-    is_active: bool = False
     local_path: str
     remote_path: str = ""
     api_type: Literal["cross_encoder", "qwen3_lm"] = "cross_encoder"
@@ -361,6 +365,7 @@ class CrossEncoderReranking(BaseModel):
 
     enabled: bool
     model_path: str
+    api_type: Literal["cross_encoder", "qwen3_lm"] = "cross_encoder"
     blend_weight: float = Field(..., ge=0.0, le=1.0)
     top_k: int = Field(..., ge=1)
     batch_size: int = Field(..., ge=1)
