@@ -36,6 +36,7 @@ import os
 import sys
 import abc
 import argparse
+import asyncio
 import logging
 import re
 import json
@@ -421,7 +422,9 @@ class AnthropicProvider(LLMProvider):
             # Re-raise other exceptions
             raise
     
-    def get_structured_completion(self, prompt: str, schema_model: Type):
+    def get_structured_completion(
+        self, prompt: str, schema_model: Type
+    ) -> Tuple[Any, LLMResponse]:
         """
         Get a structured completion using a Pydantic model.
         
@@ -452,6 +455,36 @@ class AnthropicProvider(LLMProvider):
             print(f"Sentiment: {result.sentiment}, Score: {result.score}")
             ```
         """
+        self._raise_if_running_loop(
+            "get_structured_completion",
+            "get_structured_completion_async",
+        )
+        agent = self._build_structured_agent(schema_model)
+        result = agent.run_sync(prompt)
+        return self._structured_result_to_response(result)
+
+    async def get_structured_completion_async(
+        self, prompt: str, schema_model: Type
+    ) -> Tuple[Any, LLMResponse]:
+        """Get a structured completion without blocking an existing event loop."""
+        agent = self._build_structured_agent(schema_model)
+        result = await agent.run(prompt)
+        return self._structured_result_to_response(result)
+
+    def _raise_if_running_loop(self, method_name: str, async_method_name: str) -> None:
+        """Reject sync structured calls from async contexts with a clear error."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        raise RuntimeError(
+            f"AnthropicProvider.{method_name}() cannot be called from a running "
+            f"event loop; use AnthropicProvider.{async_method_name}() instead."
+        )
+
+    def _build_structured_agent(self, schema_model: Type) -> Any:
+        """Build the Pydantic AI agent for structured output."""
         try:
             from pydantic_ai import Agent
             from pydantic_ai.models.anthropic import AnthropicModel
@@ -495,7 +528,10 @@ class AnthropicProvider(LLMProvider):
             retries=0,
         )
 
-        result = agent.run_sync(prompt)
+        return agent
+
+    def _structured_result_to_response(self, result: Any) -> Tuple[Any, LLMResponse]:
+        """Convert a Pydantic AI run result into the local response tuple."""
         parsed_output = result.output
 
         content = (

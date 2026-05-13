@@ -579,7 +579,9 @@ class TurnCycleManager:
 
         try:
             # Generate narrative with structured output
-            story_response = self.lore.logon.generate_narrative(turn_context.context_payload)
+            story_response = await self.lore.logon.generate_narrative_async(
+                turn_context.context_payload
+            )
 
             # Store the full structured response
             turn_context.apex_response = story_response
@@ -602,12 +604,12 @@ class TurnCycleManager:
             return story_response  # Return the full StoryTurnResponse
             
         except Exception as e:
-            logger.error(f"Apex AI call failed: {e}")
+            logger.error("Apex AI call failed: %s", e)
             turn_context.phase_states["apex_generation"] = {
                 "success": False,
                 "error": str(e)
             }
-            return f"Error generating narrative: {str(e)}"
+            raise
     
     async def integrate_response(
         self,
