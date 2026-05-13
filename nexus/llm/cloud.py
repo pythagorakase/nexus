@@ -20,14 +20,12 @@ class CloudBackend(LLMBackend):
         *,
         provider: str,
         model: str,
-        api_key_env: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
     ) -> None:
         self.provider_name = provider
         self.model = model
-        self.api_key_env = api_key_env
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt
@@ -53,21 +51,31 @@ class CloudBackend(LLMBackend):
 
         Requires either:
         - NEXUS_ALLOW_CLOUD=1 environment variable, OR
-        - The configured API key env var to be present
+        - A usable API key for the configured provider (in Keychain or env)
 
         This prevents accidental cloud usage in auto mode.
         """
-        # Safety check: require explicit opt-in or API key presence
         allow_cloud = os.environ.get("NEXUS_ALLOW_CLOUD", "").lower() in (
             "1",
             "true",
             "yes",
         )
-        api_key_present = bool(self.api_key_env and os.environ.get(self.api_key_env))
+
+        api_key_present = False
+        if not allow_cloud:
+            try:
+                from nexus.util.secret_manager import get_secret
+
+                get_secret(self.provider_name)
+                api_key_present = True
+            except Exception:
+                pass
 
         if not (allow_cloud or api_key_present):
             logger.debug(
-                "Cloud backend disabled: NEXUS_ALLOW_CLOUD not set and API key not in env"
+                "Cloud backend disabled: NEXUS_ALLOW_CLOUD not set and no "
+                "API key available for provider %s",
+                self.provider_name,
             )
             return False
 
@@ -152,18 +160,23 @@ class CloudBackend(LLMBackend):
         raise ValueError(f"Unsupported cloud provider: {self.provider_name}")
 
     def _resolve_api_key(self) -> Optional[str]:
-        if not self.api_key_env:
+        """Resolve API key via the central secret manager.
+
+        Returns the key on success, or None on failure. Returning None lets
+        the downstream provider classes raise their own diagnostic error
+        rather than masking it here.
+        """
+        try:
+            from nexus.util.secret_manager import get_secret
+
+            return get_secret(self.provider_name)
+        except Exception as exc:
+            logger.info(
+                "Could not resolve API key for %s via secret manager: %s",
+                self.provider_name,
+                exc,
+            )
             return None
-
-        api_key = os.environ.get(self.api_key_env)
-        if api_key:
-            return api_key
-
-        logger.info(
-            "API key env var %s not set; using 1Password helper",
-            self.api_key_env,
-        )
-        return None
 
     def _translate_response(self, response: Any) -> LLMResponse:
         usage: Optional[Dict[str, Any]] = None

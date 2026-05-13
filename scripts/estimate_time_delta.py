@@ -332,44 +332,10 @@ class AnthropicProvider(LLMProvider):
         return model_info["output"] / 1_000_000  # Convert to cost per token
     
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from various potential sources."""
-        # Try different environment variables that might contain the API key
-        for var_name in ["ANTHROPIC_API_KEY", "CLAUDE_API_KEY", "ANTHROPIC_KEY"]:
-            if var_name in os.environ and os.environ[var_name]:
-                return os.environ[var_name]
-        
-        # Try from a key file
-        key_file_paths = [
-            os.path.expanduser("~/.anthropic/api_key"),
-            os.path.expanduser("~/.claude/api_key"),
-            os.path.expanduser("~/.config/anthropic/api_key")
-        ]
-        
-        for path in key_file_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        key = f.read().strip()
-                        if key:
-                            return key
-                except:
-                    pass
-        
-        # Try to read from ~/.zshrc
-        try:
-            zshrc_path = os.path.expanduser("~/.zshrc")
-            if os.path.exists(zshrc_path):
-                with open(zshrc_path, 'r') as f:
-                    for line in f:
-                        if "ANTHROPIC_API_KEY" in line:
-                            # Extract the key using regex
-                            match = re.search(r'ANTHROPIC_API_KEY=([a-zA-Z0-9_-]+)', line)
-                            if match:
-                                return match.group(1)
-        except:
-            pass
-        
-        raise ValueError("No Anthropic API key found. Please set ANTHROPIC_API_KEY environment variable.")
+        """Get Anthropic API key via the central secret manager (Keychain)."""
+        from nexus.util.secret_manager import get_secret
+
+        return get_secret("anthropic")
 
 
 class OpenAIProvider(LLMProvider):
@@ -612,42 +578,10 @@ class OpenAIProvider(LLMProvider):
         return model_info["output"] / 1_000_000  # Convert to cost per token
     
     def _get_api_key(self) -> str:
-        """Get OpenAI API key from various potential sources."""
-        # Try environment variable
-        if "OPENAI_API_KEY" in os.environ and os.environ["OPENAI_API_KEY"]:
-            return os.environ["OPENAI_API_KEY"]
-        
-        # Try from a key file
-        key_file_paths = [
-            os.path.expanduser("~/.openai/api_key"),
-            os.path.expanduser("~/.config/openai/api_key")
-        ]
-        
-        for path in key_file_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, 'r') as f:
-                        key = f.read().strip()
-                        if key:
-                            return key
-                except:
-                    pass
-        
-        # Try to read from ~/.zshrc
-        try:
-            zshrc_path = os.path.expanduser("~/.zshrc")
-            if os.path.exists(zshrc_path):
-                with open(zshrc_path, 'r') as f:
-                    for line in f:
-                        if "OPENAI_API_KEY" in line:
-                            # Extract the key using regex
-                            match = re.search(r'OPENAI_API_KEY=([a-zA-Z0-9_-]+)', line)
-                            if match:
-                                return match.group(1)
-        except:
-            pass
-        
-        raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+        """Get OpenAI API key via the central secret manager (Keychain)."""
+        from nexus.util.secret_manager import get_secret
+
+        return get_secret("openai")
 
 
 def parse_arguments() -> argparse.Namespace:

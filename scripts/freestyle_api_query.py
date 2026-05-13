@@ -666,12 +666,14 @@ def call_openai_api(prompt: str, model: str, temperature: float, effort: str) ->
         logger.error("OpenAI package not installed. Install with 'pip install openai'")
         sys.exit(1)
     
-    # Get API key from environment
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        logger.error("OPENAI_API_KEY environment variable not set")
+    # Get API key via Keychain (or NEXUS_KEYRING_DISABLE=1 + OPENAI_API_KEY for one-offs)
+    from nexus.util.secret_manager import get_secret, MissingSecretError
+    try:
+        api_key = get_secret("openai")
+    except MissingSecretError as exc:
+        logger.error(str(exc))
         sys.exit(1)
-    
+
     # Initialize client
     client = openai.OpenAI(api_key=api_key)
     

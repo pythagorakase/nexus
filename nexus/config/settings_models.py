@@ -117,12 +117,16 @@ class LLMEndpointConfig(BaseModel):
 
 
 class LLMCloudConfig(BaseModel):
-    """Cloud provider configuration for LLM fallback."""
+    """Cloud provider configuration for LLM fallback.
+
+    Keys are no longer named here -- runtime lookups go through
+    ``nexus.util.secret_manager.get_secret(<provider>)`` which reads from
+    macOS Keychain.
+    """
     model_config = ConfigDict(extra='forbid')
 
     provider: str = Field(..., pattern="^(openai|anthropic)$")
     model: str = Field(..., description="Cloud model identifier")
-    api_key_env: str = Field(..., description="Environment variable name for API key")
 
 
 class LLMRoutingConfig(BaseModel):
@@ -537,6 +541,26 @@ class IREvalSettings(BaseModel):
     judgment: IREvalJudgmentConfig
 
 
+class SecretsConfig(BaseModel):
+    """Provider -> 1Password reference mappings.
+
+    Consumed ONLY by ``scripts/sync_secrets.py`` during Keychain bootstrap or
+    rotation. Runtime code never reads this section -- it reads from Keychain
+    via ``nexus.util.secret_manager.get_secret``.
+
+    Each value uses one of two schemes:
+
+    * ``op-item:<item-id>:<field-name>`` -> resolved with ``op item get``.
+    * ``op-read:<secret-reference>``     -> resolved with ``op read``.
+    """
+    model_config = ConfigDict(extra='forbid')
+
+    providers: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Provider name -> 1Password reference",
+    )
+
+
 class Settings(BaseModel):
     """
     Root configuration model for NEXUS.
@@ -551,6 +575,10 @@ class Settings(BaseModel):
     llm: Optional[LLMRoutingConfig] = Field(
         default=None,
         description="Pluggable LLM routing configuration",
+    )
+    secrets: Optional[SecretsConfig] = Field(
+        default=None,
+        description="Provider -> 1Password reference mappings (sync_secrets.py only)",
     )
     lore: LORESettings
     memnon: MEMNONSettings

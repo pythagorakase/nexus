@@ -112,9 +112,17 @@ Use functions from `nexus/api/slot_utils.py`:
 
 ## API Key Management
 
-**IMPORTANT: All API keys are securely stored in 1Password. Never store API keys in environment variables, config files, or source code.**
+**Runtime API key storage is macOS Keychain.** 1Password remains the canonical source of truth used for rotation and audit; `scripts/sync_secrets.py` copies keys from 1Password into Keychain on bootstrap or rotation, and that script is the only place in the codebase that touches `op`.
 
-For detailed key management workflows, see the `update-1password-keys` skill in `.claude/skills/`.
+All runtime code retrieves keys via `nexus.util.secret_manager.get_secret(<provider>)`. The helper subprocesses to the system `security` CLI (Apple-signed, silent) rather than invoking 1Password — so agentic / unattended workflows are not interrupted by biometric or session-expiry prompts.
+
+**Storage rules:**
+- Never commit keys to source.
+- Never export keys in long-lived shell rc files.
+- `NEXUS_KEYRING_DISABLE=1` is the supported CI/debug escape hatch — when set, `get_secret` reads from `<PROVIDER>_API_KEY` env vars instead of Keychain.
+- Keys live in Keychain under service `nexus-api`, account `<provider>` (e.g., `openai`, `anthropic`, `openrouter`). Inspect with `security find-generic-password -s nexus-api -a <provider> -w`.
+
+For detailed key management workflows including rotation, see the `manage-api-keys` skill in `.claude/skills/`.
 
 ## User Directives
 - **Formatting**: The user has a strong preference for Chicago title case in headings.
