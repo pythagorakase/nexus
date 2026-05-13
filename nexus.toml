@@ -84,12 +84,12 @@ model = "nexveridian/gpt-oss-120b"
 
 [llm.cloud]
 # Routing fallback for the pluggable LLM layer (used when llm.mode is
-# "cloud" or "auto" can't reach local/remote). NOT covered by the
-# [global.model.api_models] registry validation — this is an
-# infrastructure-level routing target, not an inference model selection,
-# so it is intentionally outside the @provider.role indirection.
+# "cloud" or "auto" can't reach local/remote). Resolved via the
+# api_models registry like every other consumer of a model ID — set to
+# "@provider.role" for indirection, or to a literal ID that appears in
+# [global.model.api_models].
 provider = "openai"
-model = "gpt-4o-mini"
+model = "@openai.default"
 
 [global.narrative]
 # Test mode settings for development (legacy - prefer model picker with TEST model)
