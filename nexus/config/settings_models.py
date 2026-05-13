@@ -612,8 +612,10 @@ class Settings(BaseModel):
         # [llm.cloud] is the cloud-fallback routing target for the pluggable
         # LLM layer; it does inference like any other consumer, so it goes
         # through the same registry resolution + validation as APEX, wizard,
-        # and ir_eval.judgment. Optional because [llm.cloud] itself is optional.
-        if self.llm.cloud is not None:
+        # and ir_eval.judgment. Two-level guard because both [llm] (the whole
+        # routing section) and [llm.cloud] (the fallback subsection) are
+        # independently optional in the schema.
+        if self.llm is not None and self.llm.cloud is not None:
             targets.append((self.llm.cloud, "model", False))
 
         for container, attr, optional in targets:
