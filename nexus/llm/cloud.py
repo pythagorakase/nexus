@@ -63,13 +63,24 @@ class CloudBackend(LLMBackend):
 
         api_key_present = False
         if not allow_cloud:
-            try:
-                from nexus.util.secret_manager import get_secret
+            from nexus.util.secret_manager import MissingSecretError, get_secret
 
+            try:
                 get_secret(self.provider_name)
                 api_key_present = True
-            except Exception:
+            except MissingSecretError:
+                # Expected when no key has been bootstrapped for this provider.
                 pass
+            except Exception as exc:
+                # Anything else (Keychain locked, subprocess timeout,
+                # corrupted store) is unexpected and worth flagging --
+                # silently disabling the cloud backend would mask real
+                # configuration breakage.
+                logger.warning(
+                    "Unexpected error probing API key availability for %s: %s",
+                    self.provider_name,
+                    exc,
+                )
 
         if not (allow_cloud or api_key_present):
             logger.debug(
@@ -159,24 +170,20 @@ class CloudBackend(LLMBackend):
 
         raise ValueError(f"Unsupported cloud provider: {self.provider_name}")
 
-    def _resolve_api_key(self) -> Optional[str]:
-        """Resolve API key via the central secret manager.
+    def _resolve_api_key(self) -> str:
+        """Resolve the API key for this provider.
 
-        Returns the key on success, or None on failure. Returning None lets
-        the downstream provider classes raise their own diagnostic error
-        rather than masking it here.
+        Raises ``MissingSecretError`` (or any other secret-manager error)
+        directly. Catching the exception here would force a second silent
+        lookup via the downstream provider's own ``_get_api_key`` fallback,
+        making the eventual traceback originate from an unexpected call
+        site. ``is_available`` is the place where the absence of a key is
+        a routine condition; once routing has already chosen this backend,
+        the absence is a real error.
         """
-        try:
-            from nexus.util.secret_manager import get_secret
+        from nexus.util.secret_manager import get_secret
 
-            return get_secret(self.provider_name)
-        except Exception as exc:
-            logger.info(
-                "Could not resolve API key for %s via secret manager: %s",
-                self.provider_name,
-                exc,
-            )
-            return None
+        return get_secret(self.provider_name)
 
     def _translate_response(self, response: Any) -> LLMResponse:
         usage: Optional[Dict[str, Any]] = None

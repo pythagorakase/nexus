@@ -108,14 +108,16 @@ def write_to_keychain(provider: str, key: str) -> None:
     )
 
 
-def verify(provider: str) -> None:
+def verify(provider: str) -> bool:
+    """Print a masked summary of the stored key. Returns True on success."""
     try:
         value = get_secret(provider)
     except Exception as exc:  # noqa: BLE001 - diagnostic only
         print(f"  [FAIL] {provider}: {exc}")
-        return
+        return False
     masked = f"{value[:7]}...{value[-4:]}" if len(value) > 11 else "<too short>"
     print(f"  [ OK ] {provider}: {masked} (len={len(value)})")
+    return True
 
 
 def main() -> int:
@@ -145,9 +147,8 @@ def main() -> int:
 
     if args.verify:
         print("Verifying Keychain entries:")
-        for provider in targets:
-            verify(provider)
-        return 0
+        results = [verify(provider) for provider in targets]
+        return 0 if all(results) else 1
 
     for provider, reference in targets.items():
         print(f"Syncing {provider} from {reference} ...")
@@ -158,12 +159,12 @@ def main() -> int:
         write_to_keychain(provider, key)
         print(f"  stored {provider} in Keychain ({len(key)} chars)")
 
-    if not args.dry_run:
-        print("\nVerifying:")
-        for provider in targets:
-            verify(provider)
+    if args.dry_run:
+        return 0
 
-    return 0
+    print("\nVerifying:")
+    results = [verify(provider) for provider in targets]
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
