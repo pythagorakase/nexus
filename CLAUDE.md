@@ -154,7 +154,7 @@ For detailed, task-specific workflows and guides, see the Claude Code skills in 
 - **test-lore-agent**: Run LORE agent tests with context saving, divergence detection testing, and jq query helpers
 - **audit-settings**: Validate `settings.json` for configuration errors, constraint violations, and cross-agent consistency
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
-- **update-1password-keys**: Manage API key retrieval from 1Password, verify CLI configuration, and rotate credentials
+- **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
 - **analyze-divergence**: Debug divergence detection behavior, understand the LLM-based architecture, and tune thresholds
 
