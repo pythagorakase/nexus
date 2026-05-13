@@ -350,9 +350,12 @@ class LORE:
             return response
             
         except Exception as e:
-            logger.error(f"Error in turn cycle phase {self.current_phase}: {e}")
-            self.turn_context.error_log.append(f"{self.current_phase}: {str(e)}")
+            failed_phase = self.current_phase
+            logger.error(f"Error in turn cycle phase {failed_phase}: {e}")
+            self.turn_context.error_log.append(f"{failed_phase}: {str(e)}")
             self.current_phase = TurnPhase.IDLE
+            if failed_phase == TurnPhase.APEX_GENERATION:
+                raise
             return f"Error processing turn: {str(e)}"
         
         finally:

@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 import pytest
 
+from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 
@@ -20,11 +21,53 @@ class _DummyResponse:
 
 
 class _DummyProvider:
+    model = "dummy-model"
+
     def __init__(self) -> None:
         self.calls = 0
+        self.completion_calls = 0
 
     def get_completion(self, prompt: str) -> _DummyResponse:
+        self.completion_calls += 1
+        return _DummyResponse(prompt)
+
+    def get_structured_completion(
+        self, prompt: str, schema_model: type
+    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
         self.calls += 1
+        return self._response(prompt), _DummyResponse(prompt)
+
+    async def get_structured_completion_async(
+        self, prompt: str, schema_model: type
+    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+        self.calls += 1
+        return self._response(prompt), _DummyResponse(prompt)
+
+    def _response(self, prompt: str) -> StorytellerResponseMinimal:
+        return StorytellerResponseMinimal(
+            narrative=f"dummy:{prompt[:20]}",
+            choices=[
+                "Continue.",
+                "Wait and observe.",
+            ],
+        )
+
+
+class _FailingProvider:
+    model = "dummy-model"
+
+    def __init__(self) -> None:
+        self.structured_calls = 0
+        self.completion_calls = 0
+
+    async def get_structured_completion_async(
+        self, prompt: str, schema_model: type
+    ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
+        self.structured_calls += 1
+        raise RuntimeError("structured boom")
+
+    def get_completion(self, prompt: str) -> _DummyResponse:
+        self.completion_calls += 1
         return _DummyResponse(prompt)
 
 
@@ -98,4 +141,41 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert patched_provider["count"] == 1
     assert isinstance(lore.logon.provider, _DummyProvider)
     assert lore.logon.provider.calls == 1
-    assert response.content.startswith("dummy:")
+    assert response.narrative.startswith("dummy:")
+
+
+@pytest.mark.requires_local_llm
+@pytest.mark.requires_postgres
+@pytest.mark.asyncio
+async def test_logon_async_generation_uses_structured_provider(
+    patched_provider: Dict[str, int],
+) -> None:
+    """Async LOGON generation should use structured provider output directly."""
+
+    lore = LORE(debug=True, enable_logon=True)
+    lore.ensure_logon()
+    assert lore.logon is not None
+
+    response = await lore.logon.generate_narrative_async(_minimal_payload())
+
+    assert patched_provider["count"] == 1
+    assert isinstance(lore.logon.provider, _DummyProvider)
+    assert lore.logon.provider.calls == 1
+    assert lore.logon.provider.completion_calls == 0
+    assert response.narrative.startswith("dummy:")
+    assert len(response.choices) == 2
+
+
+@pytest.mark.asyncio
+async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> None:
+    """Structured LOGON failures should fail fast without a second LLM call."""
+
+    provider = _FailingProvider()
+    logon = LogonUtility({}, model_override="dummy-model")
+    logon.provider = provider
+
+    with pytest.raises(RuntimeError, match="structured boom"):
+        await logon.generate_narrative_async(_minimal_payload())
+
+    assert provider.structured_calls == 1
+    assert provider.completion_calls == 0

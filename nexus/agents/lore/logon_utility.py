@@ -15,12 +15,11 @@ import psycopg2
 # Add scripts directory to path for API imports
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
-from scripts.api_openai import OpenAIProvider, LLMResponse
+from scripts.api_openai import OpenAIProvider
 from scripts.api_anthropic import AnthropicProvider
 from nexus.agents.logon.apex_schema import (
     StoryTurnResponse,
     StorytellerResponseExtended,
-    create_minimal_response,
 )
 from nexus.config.loader import get_provider_for_model
 
@@ -183,8 +182,10 @@ class LogonUtility:
         """Public wrapper for provider initialization."""
         self._ensure_provider()
     
-    def generate_narrative(self, context_payload: Dict) -> StoryTurnResponse:
-        """Generate narrative from context payload with structured output"""
+    def generate_narrative(
+        self, context_payload: Dict[str, Any]
+    ) -> StoryTurnResponse:
+        """Generate narrative from context payload with structured output."""
         self._ensure_provider()
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
@@ -192,18 +193,41 @@ class LogonUtility:
         # Get structured completion from provider
         # This returns a tuple of (parsed_object, llm_response)
         try:
-            parsed_response, llm_response = self.provider.get_structured_completion(
+            parsed_response, _llm_response = self.provider.get_structured_completion(
                 prompt,
                 StorytellerResponseExtended,
             )
-            logger.debug(f"Received structured response with narrative length: {len(parsed_response.narrative)}")
+            logger.debug(
+                "Received structured response with narrative length: %s",
+                len(parsed_response.narrative),
+            )
             return parsed_response  # Return the StoryTurnResponse object
-        except Exception as e:
-            logger.error(f"Failed to get structured response: {e}")
-            # Fall back to plain text if structured output fails
-            response = self.provider.get_completion(prompt)
-            # Create a minimal StoryTurnResponse from plain text
-            return create_minimal_response(response.content)
+        except Exception:
+            logger.exception("Failed to get structured response")
+            raise
+
+    async def generate_narrative_async(
+        self, context_payload: Dict[str, Any]
+    ) -> StoryTurnResponse:
+        """Generate narrative from context payload without blocking the event loop."""
+        self._ensure_provider()
+        prompt = self._format_context_prompt(context_payload)
+
+        try:
+            parsed_response, _llm_response = (
+                await self.provider.get_structured_completion_async(
+                    prompt,
+                    StorytellerResponseExtended,
+                )
+            )
+            logger.debug(
+                "Received structured response with narrative length: %s",
+                len(parsed_response.narrative),
+            )
+            return parsed_response
+        except Exception:
+            logger.exception("Failed to get structured response")
+            raise
     
     def _format_context_prompt(self, context: Dict) -> str:
         """Format context payload into a prompt for the Apex AI"""

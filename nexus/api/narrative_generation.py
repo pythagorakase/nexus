@@ -354,7 +354,7 @@ async def generate_bootstrap_narrative(
     settings = load_settings()
     dbname = require_slot_dbname(slot=slot)
     logon = LogonUtility(settings, dbname=dbname)
-    story_response = logon.generate_narrative(bootstrap_context)
+    story_response = await logon.generate_narrative_async(bootstrap_context)
 
     # Extract narrative text
     narrative_text = story_response.narrative if hasattr(story_response, 'narrative') else str(story_response)

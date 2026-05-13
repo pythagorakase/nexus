@@ -869,16 +869,22 @@ def validate_story_turn_response(data: Dict[str, Any]) -> StoryTurnResponse:
 
 def create_minimal_response(narrative_text: str) -> StorytellerResponseMinimal:
     """
-    Create a minimal response with just narrative text.
+    Create a minimal response from narrative text.
     Useful for fallback scenarios.
 
     Args:
         narrative_text: The narrative prose
 
     Returns:
-        StorytellerResponseMinimal with just narrative
+        StorytellerResponseMinimal with generic choices
     """
-    return StorytellerResponseMinimal(narrative=narrative_text)
+    return StorytellerResponseMinimal(
+        narrative=narrative_text,
+        choices=[
+            "Continue.",
+            "Wait and observe.",
+        ],
+    )
 
 
 def extract_narrative_text(response: StoryTurnResponse) -> str:
