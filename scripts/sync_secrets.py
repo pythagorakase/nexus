@@ -82,30 +82,57 @@ def fetch_from_1password(reference: str, provider: str) -> str:
 def write_to_keychain(provider: str, key: str) -> None:
     """Write a generic password to the login keychain.
 
-    Uses ``security add-generic-password`` with ``-A`` (allow any
-    application). This avoids the macOS Keychain ACL prompt that would
-    otherwise interrupt unattended / agentic runs the first time a new
-    Python interpreter tries to read the item. The Keychain remains
-    user-scoped, so this does not weaken security against other macOS
-    users -- only against other processes running as the same user, which
-    already have access to env vars, ``~/.aws/credentials``, browser
-    cookies, etc.
+    Uses **delete-then-add** rather than ``-U`` (update-in-place). Updating
+    an existing item triggers a macOS "enter login keychain password" GUI
+    prompt that blocks unattended runs, because the modify-protected-item
+    check is separate from the per-app ACL. A fresh-create write has no
+    prior ACL to consult, so it completes silently. Both ``delete`` and
+    ``add`` are silent because the Apple-signed ``security`` binary is
+    unconditionally trusted by Keychain Services.
+
+    Uses ``-A`` (allow any application) on the add, so subsequent reads
+    from any user-level process are silent. This is appropriate on a
+    single-user macOS workstation; for stricter ACLs, replace ``-A`` with
+    explicit ``-T <trusted-app>`` flags.
+
+    On failure, re-raises a sanitized ``RuntimeError`` with ``from None``
+    so the original ``CalledProcessError`` -- which embeds the secret
+    value in its ``args`` list -- never appears in tracebacks or logs.
     """
+    # Silent if entry exists; silent (with non-zero exit, ignored) if not.
     subprocess.run(
         [
             "security",
-            "add-generic-password",
-            "-U",  # update existing entry if present
-            "-A",  # allow access by any application (no ACL prompt)
+            "delete-generic-password",
             "-s",
             SERVICE_NAME,
             "-a",
             provider,
-            "-w",
-            key,
         ],
-        check=True,
+        capture_output=True,
     )
+    try:
+        subprocess.run(
+            [
+                "security",
+                "add-generic-password",
+                "-A",  # allow access by any application (no ACL prompt)
+                "-s",
+                SERVICE_NAME,
+                "-a",
+                provider,
+                "-w",
+                key,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode("utf-8", errors="replace").strip() if exc.stderr else ""
+        raise RuntimeError(
+            f"security add-generic-password failed for '{provider}' "
+            f"(exit {exc.returncode}). stderr: {stderr}"
+        ) from None
 
 
 def verify(provider: str) -> bool:
