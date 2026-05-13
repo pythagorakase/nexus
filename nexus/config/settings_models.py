@@ -609,6 +609,12 @@ class Settings(BaseModel):
         ]
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))
+        # [llm.cloud] is the cloud-fallback routing target for the pluggable
+        # LLM layer; it does inference like any other consumer, so it goes
+        # through the same registry resolution + validation as APEX, wizard,
+        # and ir_eval.judgment. Optional because [llm.cloud] itself is optional.
+        if self.llm.cloud is not None:
+            targets.append((self.llm.cloud, "model", False))
 
         for container, attr, optional in targets:
             current = getattr(container, attr)

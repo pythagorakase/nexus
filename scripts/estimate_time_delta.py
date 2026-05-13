@@ -183,14 +183,6 @@ class LLMProvider:
         """Get a completion from the LLM."""
         pass
     
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        return 0.0
-        
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        return 0.0
-        
     def count_tokens(self, text: str) -> int:
         """Count tokens for the provider's model."""
         return get_token_count(text, self.model)
@@ -273,18 +265,7 @@ class AnthropicProvider(LLMProvider):
     
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-7-sonnet-20250219"
-    
-    # Model pricing (per 1M tokens as of April 2025)
-    MODEL_PRICING = {
-        "claude-3-7-sonnet-20250219": {"input": 15.0, "output": 75.0},
-        "claude-3-opus-20240229": {"input": 30.0, "output": 150.0},
-        "claude-3-haiku-20240307": {"input": 3.0, "output": 15.0},
-        "claude-3-5-sonnet-20240620": {"input": 5.0, "output": 15.0},
-        "claude-2.1": {"input": 8.0, "output": 24.0},
-        "claude-2.0": {"input": 8.0, "output": 24.0},
-        "claude-instant-1.2": {"input": 1.63, "output": 5.51},
-    }
-    
+
     def initialize(self) -> None:
         """Initialize the Anthropic client."""
         if not anthropic:
@@ -321,16 +302,6 @@ class AnthropicProvider(LLMProvider):
             raw_response=response
         )
     
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"input": 15.0})  # Default to Sonnet pricing
-        return model_info["input"] / 1_000_000  # Convert to cost per token
-        
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"output": 75.0})  # Default to Sonnet pricing
-        return model_info["output"] / 1_000_000  # Convert to cost per token
-    
     def _get_api_key(self) -> str:
         """Get Anthropic API key via the central secret manager (Keychain)."""
         from nexus.util.secret_manager import get_secret
@@ -354,21 +325,8 @@ class OpenAIProvider(LLMProvider):
     
     # Valid reasoning effort levels
     VALID_REASONING_EFFORTS = ["low", "medium", "high", None]
-    
-    # Model pricing (per 1M tokens as of April 2025)
-    MODEL_PRICING = {
-        "gpt-4o": {"input": 5.0, "output": 15.0},
-        "gpt-4o-mini": {"input": 0.15, "output": 0.6},
-        "o3": {"input": 5.0, "output": 15.0},  # o3/o3-mini are aliased to 4o for pricing
-        "o3-mini": {"input": 0.15, "output": 0.6},
-        "o4": {"input": 5.0, "output": 15.0},
-        "o4-mini": {"input": 0.15, "output": 0.6},
-        "gpt-4-turbo": {"input": 10.0, "output": 30.0},
-        "gpt-4": {"input": 30.0, "output": 60.0},
-        "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
-    }
-    
-    def __init__(self, 
+
+    def __init__(self,
                 api_key: Optional[str] = None, 
                 model: Optional[str] = None,
                 temperature: float = 0.1,
@@ -566,16 +524,6 @@ class OpenAIProvider(LLMProvider):
             model=self.model,
             raw_response=response
         )
-    
-    def get_input_token_cost(self) -> float:
-        """Get the cost per 1M input tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"input": 5.0})  # Default to GPT-4o pricing
-        return model_info["input"] / 1_000_000  # Convert to cost per token
-        
-    def get_output_token_cost(self) -> float:
-        """Get the cost per 1M output tokens for this model."""
-        model_info = self.MODEL_PRICING.get(self.model, {"output": 15.0})  # Default to GPT-4o pricing
-        return model_info["output"] / 1_000_000  # Convert to cost per token
     
     def _get_api_key(self) -> str:
         """Get OpenAI API key via the central secret manager (Keychain)."""
@@ -1065,14 +1013,7 @@ Total time delta for Chunk #1: 15 minutes
         # Log token usage
         logger.info(f"API success: {response.input_tokens} input tokens, {response.output_tokens} output tokens")
         logger.info(f"Total token usage: {response.total_tokens}")
-        
-        # Calculate cost estimate
-        cost_estimate = (
-            response.input_tokens * llm.get_input_token_cost() +
-            response.output_tokens * llm.get_output_token_cost()
-        )
-        logger.info(f"Estimated cost: ${cost_estimate:.6f}")
-        
+
         # Return the full LLMResponse object for better parsing
         return response
         

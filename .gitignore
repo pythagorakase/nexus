@@ -45,6 +45,10 @@ logs/
 # Ignore binaries and database files
 *.sqlite3
 
+# Ignore backup snapshots — config diverges fast from these, so a
+# committed .bak just creates permanent `M` noise in `git status`.
+*.bak
+
 # Ignore system files
 .DS_Store
 __pycache__/
