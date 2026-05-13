@@ -495,42 +495,10 @@ class OpenAIProvider(LLMProvider):
         )
 
     def _get_api_key(self) -> str:
-        """Get OpenAI API key from environment variable or 1Password CLI."""
-        import subprocess
-        import os
+        """Get OpenAI API key via the central secret manager (Keychain)."""
+        from nexus.util.secret_manager import get_secret
 
-        # First, check if API key is already in environment (e.g., pre-fetched by parent process)
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if api_key:
-            return api_key
-
-        # Otherwise, fetch from 1Password using the specific item ID in the API vault
-        try:
-            result = subprocess.run(
-                ["op", "item", "get", "tyrupcepa4wluec7sou4e7mkza", "--fields", "api key", "--reveal"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            api_key = result.stdout.strip()
-            if api_key:
-                return api_key
-            else:
-                raise ValueError("Empty API key returned from 1Password")
-
-        except subprocess.CalledProcessError as e:
-            # Don't expose the actual error details which might contain sensitive info
-            raise ValueError(
-                "Failed to retrieve OpenAI API key from 1Password. "
-                "Ensure 1Password CLI is installed and you're signed in. "
-                "Run 'op signin' if needed."
-            )
-        except FileNotFoundError:
-            raise ValueError(
-                "1Password CLI (op) not found. Please install it from "
-                "https://developer.1password.com/docs/cli/get-started/"
-            )
+        return get_secret("openai")
 
 
 # Database utilities

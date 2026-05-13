@@ -466,38 +466,10 @@ class OpenRouterProvider(LLMProvider):
             raise
 
     def _get_api_key(self) -> str:
-        """Get OpenRouter API key from 1Password CLI."""
-        # First, check if API key is already in environment
-        api_key = os.environ.get("OPENROUTER_API_KEY")
-        if api_key:
-            return api_key
+        """Get OpenRouter API key via the central secret manager (Keychain)."""
+        from nexus.util.secret_manager import get_secret
 
-        # Otherwise, fetch from 1Password
-        try:
-            result = subprocess.run(
-                ["op", "read", "op://API/OpenRouter/api key"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            api_key = result.stdout.strip()
-            if api_key:
-                return api_key
-            else:
-                raise ValueError("Empty API key returned from 1Password")
-
-        except subprocess.CalledProcessError as e:
-            raise ValueError(
-                "Failed to retrieve OpenRouter API key from 1Password. "
-                "Ensure 1Password CLI is installed and you're signed in. "
-                "Run 'op signin' if needed."
-            )
-        except FileNotFoundError:
-            raise ValueError(
-                "1Password CLI (op) not found. Please install it from "
-                "https://developer.1password.com/docs/cli/get-started/"
-            )
+        return get_secret("openrouter")
 
 
 # Database utilities

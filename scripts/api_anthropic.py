@@ -655,42 +655,10 @@ class AnthropicProvider(LLMProvider):
         return [{"role": "user", "content": content_blocks}]
 
     def _get_api_key(self) -> str:
-        """Get Anthropic API key from environment variable or 1Password CLI."""
-        import subprocess
-        import os
+        """Get Anthropic API key via the central secret manager (Keychain)."""
+        from nexus.util.secret_manager import get_secret
 
-        # First, check if API key is already in environment (e.g., pre-fetched by parent process)
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if api_key:
-            return api_key
-
-        # Otherwise, fetch from 1Password using the secret reference syntax
-        try:
-            result = subprocess.run(
-                ["op", "read", "op://API/Anthropic/api key"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
-
-            api_key = result.stdout.strip()
-            if api_key:
-                return api_key
-            else:
-                raise ValueError("Empty API key returned from 1Password")
-
-        except subprocess.CalledProcessError as e:
-            # Don't expose the actual error details which might contain sensitive info
-            raise ValueError(
-                "Failed to retrieve Anthropic API key from 1Password. "
-                "Ensure 1Password CLI is installed and you're signed in. "
-                "Run 'op signin' if needed."
-            )
-        except FileNotFoundError:
-            raise ValueError(
-                "1Password CLI (op) not found. Please install it from "
-                "https://developer.1password.com/docs/cli/get-started/"
-            )
+        return get_secret("anthropic")
 
 
 # Database utilities

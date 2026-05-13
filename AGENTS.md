@@ -16,7 +16,7 @@ Pytest drives coverage; mirror test filenames to their targets (e.g., `test_chun
 Write concise, imperative commits (`Add divergence guard`). Stage and commit your work proactively; don't leave useful changes sitting unstaged when you pause or hand off. Pair code with its tests. PRs should summarize impact, call out touched agents or memory modules, list manual verification commands, and note any updates to `settings.json` or database schema. Screenshots are only needed when changing rendered output.
 
 ## Security & Configuration Tips
-Fetch API credentials via the 1Password CLI helpers in `scripts/api_openai.py` and `scripts/api_anthropic.py`; never introduce environment variable fallbacks. Ensure `op` authentication and the `NEXUS` PostgreSQL instance with vector extensions are ready before runs. Align local LLM endpoints with the models referenced in `settings.json`.
+Fetch API credentials via `nexus.util.secret_manager.get_secret(<provider>)`, which reads from macOS Keychain (service `nexus-api`). 1Password is the canonical source but only `scripts/sync_secrets.py` invokes `op` — runtime code never does, so `op` session state is irrelevant to inference runs. Ensure the `NEXUS` PostgreSQL instance with vector extensions is ready before runs. Align local LLM endpoints with the models referenced in `settings.json`.
 
 ## Authorization & Access Requests
 When work needs extra permissions (network, filesystem, etc.), try the action so the approval prompt can surface or spell out exactly what the user must enable—don't declare a hard "can't" if capability exists behind a permission gate.

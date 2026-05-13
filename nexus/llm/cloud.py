@@ -20,14 +20,12 @@ class CloudBackend(LLMBackend):
         *,
         provider: str,
         model: str,
-        api_key_env: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         system_prompt: Optional[str] = None,
     ) -> None:
         self.provider_name = provider
         self.model = model
-        self.api_key_env = api_key_env
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.system_prompt = system_prompt
@@ -53,21 +51,42 @@ class CloudBackend(LLMBackend):
 
         Requires either:
         - NEXUS_ALLOW_CLOUD=1 environment variable, OR
-        - The configured API key env var to be present
+        - A usable API key for the configured provider (in Keychain or env)
 
         This prevents accidental cloud usage in auto mode.
         """
-        # Safety check: require explicit opt-in or API key presence
         allow_cloud = os.environ.get("NEXUS_ALLOW_CLOUD", "").lower() in (
             "1",
             "true",
             "yes",
         )
-        api_key_present = bool(self.api_key_env and os.environ.get(self.api_key_env))
+
+        api_key_present = False
+        if not allow_cloud:
+            from nexus.util.secret_manager import MissingSecretError, get_secret
+
+            try:
+                get_secret(self.provider_name)
+                api_key_present = True
+            except MissingSecretError:
+                # Expected when no key has been bootstrapped for this provider.
+                pass
+            except Exception as exc:
+                # Anything else (Keychain locked, subprocess timeout,
+                # corrupted store) is unexpected and worth flagging --
+                # silently disabling the cloud backend would mask real
+                # configuration breakage.
+                logger.warning(
+                    "Unexpected error probing API key availability for %s: %s",
+                    self.provider_name,
+                    exc,
+                )
 
         if not (allow_cloud or api_key_present):
             logger.debug(
-                "Cloud backend disabled: NEXUS_ALLOW_CLOUD not set and API key not in env"
+                "Cloud backend disabled: NEXUS_ALLOW_CLOUD not set and no "
+                "API key available for provider %s",
+                self.provider_name,
             )
             return False
 
@@ -151,19 +170,20 @@ class CloudBackend(LLMBackend):
 
         raise ValueError(f"Unsupported cloud provider: {self.provider_name}")
 
-    def _resolve_api_key(self) -> Optional[str]:
-        if not self.api_key_env:
-            return None
+    def _resolve_api_key(self) -> str:
+        """Resolve the API key for this provider.
 
-        api_key = os.environ.get(self.api_key_env)
-        if api_key:
-            return api_key
+        Raises ``MissingSecretError`` (or any other secret-manager error)
+        directly. Catching the exception here would force a second silent
+        lookup via the downstream provider's own ``_get_api_key`` fallback,
+        making the eventual traceback originate from an unexpected call
+        site. ``is_available`` is the place where the absence of a key is
+        a routine condition; once routing has already chosen this backend,
+        the absence is a real error.
+        """
+        from nexus.util.secret_manager import get_secret
 
-        logger.info(
-            "API key env var %s not set; using 1Password helper",
-            self.api_key_env,
-        )
-        return None
+        return get_secret(self.provider_name)
 
     def _translate_response(self, response: Any) -> LLMResponse:
         usage: Optional[Dict[str, Any]] = None

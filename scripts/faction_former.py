@@ -298,8 +298,9 @@ def call_openai_api(messages: list, test_mode: bool = False) -> Optional[Faction
         print("TEST MODE COMPLETE - NO API CALL MADE")
         return None
     
-    # Initialize OpenAI client (will use OPENAI_API_KEY environment variable)
-    client = OpenAI()
+    # Initialize OpenAI client (key sourced via Keychain / nexus.util.secret_manager)
+    from nexus.util.secret_manager import get_secret
+    client = OpenAI(api_key=get_secret("openai"))
     
     # Retry logic with exponential backoff
     max_retries = 3

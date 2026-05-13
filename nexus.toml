@@ -56,6 +56,22 @@ context_window = 65536  # Maximum context length for local model
 temperature = 0.8      # Sampling temperature for generation
 max_tokens = 16384     # Maximum tokens to generate per request (generous for reasoning models)
 
+# =============================================================================
+# Secrets (API Keys)
+# =============================================================================
+
+# Provider -> 1Password reference mapping. Used ONLY by
+# scripts/sync_secrets.py to bootstrap macOS Keychain. Runtime callers go
+# through nexus.util.secret_manager.get_secret() which reads from Keychain.
+#
+# Reference syntax:
+#   "op-item:<item-id>:<field-name>"   -> uses `op item get`
+#   "op-read:<secret-reference>"       -> uses `op read`
+[secrets.providers]
+openai = "op-item:tyrupcepa4wluec7sou4e7mkza:api key"
+anthropic = "op-read:op://API/Anthropic/api key"
+openrouter = "op-read:op://API/OpenRouter/api key"
+
 [llm]
 mode = "auto"  # "local" | "remote" | "cloud" | "auto"
 
@@ -74,7 +90,6 @@ model = "nexveridian/gpt-oss-120b"
 # so it is intentionally outside the @provider.role indirection.
 provider = "openai"
 model = "gpt-4o-mini"
-api_key_env = "OPENAI_API_KEY"
 
 [global.narrative]
 # Test mode settings for development (legacy - prefer model picker with TEST model)

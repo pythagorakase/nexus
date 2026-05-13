@@ -192,7 +192,6 @@ class LLMRouter(LLMBackend):
                     CloudBackend(
                         provider=cloud.provider,
                         model=cloud.model,
-                        api_key_env=cloud.api_key_env,
                     )
                 )
             elif self._mode == "cloud":
