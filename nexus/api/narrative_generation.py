@@ -357,7 +357,7 @@ async def generate_bootstrap_narrative(
     story_response = await logon.generate_narrative_async(bootstrap_context)
 
     # Extract narrative text
-    narrative_text = story_response.narrative if hasattr(story_response, 'narrative') else str(story_response)
+    narrative_text = story_response.narrative
 
     # Build incubator data
     incubator_data = {

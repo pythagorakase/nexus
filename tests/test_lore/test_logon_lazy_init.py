@@ -144,24 +144,18 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert response.narrative.startswith("dummy:")
 
 
-@pytest.mark.requires_local_llm
-@pytest.mark.requires_postgres
 @pytest.mark.asyncio
-async def test_logon_async_generation_uses_structured_provider(
-    patched_provider: Dict[str, int],
-) -> None:
+async def test_logon_async_generation_uses_structured_provider() -> None:
     """Async LOGON generation should use structured provider output directly."""
 
-    lore = LORE(debug=True, enable_logon=True)
-    lore.ensure_logon()
-    assert lore.logon is not None
+    provider = _DummyProvider()
+    logon = LogonUtility({}, model_override="dummy-model")
+    logon.provider = provider
 
-    response = await lore.logon.generate_narrative_async(_minimal_payload())
+    response = await logon.generate_narrative_async(_minimal_payload())
 
-    assert patched_provider["count"] == 1
-    assert isinstance(lore.logon.provider, _DummyProvider)
-    assert lore.logon.provider.calls == 1
-    assert lore.logon.provider.completion_calls == 0
+    assert provider.calls == 1
+    assert provider.completion_calls == 0
     assert response.narrative.startswith("dummy:")
     assert len(response.choices) == 2
 

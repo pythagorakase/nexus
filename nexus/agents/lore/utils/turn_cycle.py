@@ -604,7 +604,7 @@ class TurnCycleManager:
             return story_response  # Return the full StoryTurnResponse
             
         except Exception as e:
-            logger.error(f"Apex AI call failed: {e}")
+            logger.error("Apex AI call failed: %s", e)
             turn_context.phase_states["apex_generation"] = {
                 "success": False,
                 "error": str(e)
