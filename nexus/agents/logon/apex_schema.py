@@ -709,6 +709,20 @@ class Operations(BaseModel):
 # Main Response Schema with Hierarchical Options
 # ============================================================================
 
+class StorytellerResponseBootstrap(BaseModel):
+    """Bootstrap response for first-chunk narrative generation."""
+    narrative: str = Field(
+        description="The opening narrative prose"
+    )
+    choices: List[str] = Field(
+        min_length=2,
+        max_length=4,
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class StorytellerResponseMinimal(BaseModel):
     """Minimal response for quick narrative generation."""
     narrative: str = Field(
@@ -827,9 +841,10 @@ def validate_entity_references(entities: ReferencedEntities) -> List[str]:
 # Union type for backward compatibility with old logon_schemas
 # Accepts any of the three response types
 StoryTurnResponse = Union[
-    StorytellerResponseMinimal,
+    StorytellerResponseExtended,
     StorytellerResponseStandard,
-    StorytellerResponseExtended
+    StorytellerResponseMinimal,
+    StorytellerResponseBootstrap
 ]
 
 
@@ -840,13 +855,14 @@ StoryTurnResponse = Union[
 def validate_story_turn_response(data: Dict[str, Any]) -> StoryTurnResponse:
     """
     Validate and parse a story turn response from raw data.
-    Attempts to parse as Extended first, falls back to Standard, then Minimal.
+    Attempts to parse as Extended first, falls back to Standard, then Minimal,
+    then Bootstrap.
 
     Args:
         data: Raw dictionary from API response
 
     Returns:
-        Validated StoryTurnResponse (one of Minimal/Standard/Extended)
+        Validated StoryTurnResponse (one of Bootstrap/Minimal/Standard/Extended)
 
     Raises:
         ValidationError: If data doesn't match any schema
@@ -863,8 +879,14 @@ def validate_story_turn_response(data: Dict[str, Any]) -> StoryTurnResponse:
     except Exception:
         pass
 
-    # Fall back to Minimal
-    return StorytellerResponseMinimal(**data)
+    # Try Minimal
+    try:
+        return StorytellerResponseMinimal(**data)
+    except Exception:
+        pass
+
+    # Fall back to Bootstrap
+    return StorytellerResponseBootstrap(**data)
 
 
 def create_minimal_response(narrative_text: str) -> StorytellerResponseMinimal:

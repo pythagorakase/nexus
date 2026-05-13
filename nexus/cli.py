@@ -26,6 +26,13 @@ logger = logging.getLogger("nexus.cli")
 
 # Default API server URL (narrative API handles wizard + story endpoints)
 DEFAULT_API_URL = "http://localhost:8002"
+TERMINAL_GENERATION_STATUSES = {
+    "complete",
+    "completed",
+    "provisional",
+    "approved",
+    "committed",
+}
 
 
 def get_api_url() -> str:
@@ -33,6 +40,11 @@ def get_api_url() -> str:
     import os
 
     return os.environ.get("NEXUS_API_URL", DEFAULT_API_URL)
+
+
+def _is_terminal_generation_status(status: Optional[str]) -> bool:
+    """Return whether narrative generation has produced a loadable result."""
+    return status in TERMINAL_GENERATION_STATUSES
 
 
 def _get_next_phase(current_phase: str) -> Optional[str]:
@@ -554,7 +566,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     )
                     if status_response.ok:
                         status = status_response.json()
-                        if status.get("status") == "completed":
+                        if _is_terminal_generation_status(status.get("status")):
                             # Fetch incubator for result
                             load_result = run_load(args)
                             return {

@@ -19,6 +19,7 @@ from scripts.api_openai import OpenAIProvider
 from scripts.api_anthropic import AnthropicProvider
 from nexus.agents.logon.apex_schema import (
     StoryTurnResponse,
+    StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
 from nexus.config.loader import get_provider_for_model
@@ -189,13 +190,14 @@ class LogonUtility:
         self._ensure_provider()
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
+        schema_model = self._select_response_schema(context_payload)
 
         # Get structured completion from provider
         # This returns a tuple of (parsed_object, llm_response)
         try:
             parsed_response, _llm_response = self.provider.get_structured_completion(
                 prompt,
-                StorytellerResponseExtended,
+                schema_model,
             )
             logger.debug(
                 "Received structured response with narrative length: %s",
@@ -212,12 +214,13 @@ class LogonUtility:
         """Generate narrative from context payload without blocking the event loop."""
         self._ensure_provider()
         prompt = self._format_context_prompt(context_payload)
+        schema_model = self._select_response_schema(context_payload)
 
         try:
             parsed_response, _llm_response = (
                 await self.provider.get_structured_completion_async(
                     prompt,
-                    StorytellerResponseExtended,
+                    schema_model,
                 )
             )
             logger.debug(
@@ -228,6 +231,20 @@ class LogonUtility:
         except Exception:
             logger.exception("Failed to get structured response")
             raise
+
+    def _select_response_schema(
+        self, context_payload: Dict[str, Any]
+    ) -> type[StorytellerResponseBootstrap] | type[StorytellerResponseExtended]:
+        """Select the structured output schema for the current narrative context."""
+        metadata = context_payload.get("metadata", {})
+        metadata_bootstrap = (
+            metadata.get("is_bootstrap", False) if isinstance(metadata, dict) else False
+        )
+
+        if context_payload.get("is_bootstrap", False) or metadata_bootstrap:
+            return StorytellerResponseBootstrap
+
+        return StorytellerResponseExtended
     
     def _format_context_prompt(self, context: Dict) -> str:
         """Format context payload into a prompt for the Apex AI"""
