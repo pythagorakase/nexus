@@ -6,7 +6,11 @@ from typing import Any, Dict
 
 import pytest
 
-from nexus.agents.logon.apex_schema import StorytellerResponseMinimal
+from nexus.agents.logon.apex_schema import (
+    StorytellerResponseBootstrap,
+    StorytellerResponseExtended,
+    StorytellerResponseMinimal,
+)
 from nexus.agents.lore.lore import LORE
 from nexus.agents.lore.logon_utility import LogonUtility
 
@@ -26,6 +30,7 @@ class _DummyProvider:
     def __init__(self) -> None:
         self.calls = 0
         self.completion_calls = 0
+        self.schema_models = []
 
     def get_completion(self, prompt: str) -> _DummyResponse:
         self.completion_calls += 1
@@ -35,12 +40,14 @@ class _DummyProvider:
         self, prompt: str, schema_model: type
     ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
         self.calls += 1
+        self.schema_models.append(schema_model)
         return self._response(prompt), _DummyResponse(prompt)
 
     async def get_structured_completion_async(
         self, prompt: str, schema_model: type
     ) -> tuple[StorytellerResponseMinimal, _DummyResponse]:
         self.calls += 1
+        self.schema_models.append(schema_model)
         return self._response(prompt), _DummyResponse(prompt)
 
     def _response(self, prompt: str) -> StorytellerResponseMinimal:
@@ -108,13 +115,17 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
     return init_calls
 
 
-def _minimal_payload() -> Dict[str, Any]:
-    return {
+def _minimal_payload(*, is_bootstrap: bool = False) -> Dict[str, Any]:
+    payload = {
         "user_input": "Test",
         "warm_slice": {"chunks": []},
         "entity_data": {},
         "retrieved_passages": {"results": []},
     }
+    if is_bootstrap:
+        payload["is_bootstrap"] = True
+        payload["metadata"] = {"is_bootstrap": True}
+    return payload
 
 
 @pytest.mark.requires_local_llm
@@ -141,6 +152,7 @@ def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> Non
     assert patched_provider["count"] == 1
     assert isinstance(lore.logon.provider, _DummyProvider)
     assert lore.logon.provider.calls == 1
+    assert lore.logon.provider.schema_models == [StorytellerResponseExtended]
     assert response.narrative.startswith("dummy:")
 
 
@@ -156,8 +168,25 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
+    assert provider.schema_models == [StorytellerResponseExtended]
     assert response.narrative.startswith("dummy:")
     assert len(response.choices) == 2
+
+
+@pytest.mark.asyncio
+async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> None:
+    """Bootstrap LOGON generation should only request narrative and choices."""
+
+    provider = _DummyProvider()
+    logon = LogonUtility({}, model_override="dummy-model")
+    logon.provider = provider
+
+    response = await logon.generate_narrative_async(_minimal_payload(is_bootstrap=True))
+
+    assert provider.calls == 1
+    assert provider.completion_calls == 0
+    assert provider.schema_models == [StorytellerResponseBootstrap]
+    assert response.narrative.startswith("dummy:")
 
 
 @pytest.mark.asyncio

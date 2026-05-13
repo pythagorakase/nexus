@@ -23,6 +23,7 @@ from nexus.api.session_manager import SessionManager, SessionNotFoundError, Sess
 from nexus.agents.lore.lore import LORE
 from nexus.agents.logon.apex_schema import (
     StoryTurnResponse,
+    StorytellerResponseBootstrap,
     StorytellerResponseMinimal,
     StorytellerResponseStandard,
     StorytellerResponseExtended,
@@ -44,6 +45,13 @@ from nexus.api.chunk_workflow import (
     ChunkRejectResponse,
     EditPreviousRequest,
     EditPreviousResponse,
+)
+
+_STORY_RESPONSE_TYPES = (
+    StorytellerResponseBootstrap,
+    StorytellerResponseMinimal,
+    StorytellerResponseStandard,
+    StorytellerResponseExtended,
 )
 from nexus.api.retry_handler import (
     retry_with_backoff,
@@ -223,7 +231,7 @@ def _format_error(error: str, detail: str, session_id: Optional[str]) -> Dict[st
 def _coerce_story_response(payload: Any) -> StoryTurnResponse:
     """Coerce arbitrary payloads into a StoryTurnResponse."""
 
-    if isinstance(payload, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
+    if isinstance(payload, _STORY_RESPONSE_TYPES):
         return payload
     if isinstance(payload, dict):
         try:
@@ -494,7 +502,7 @@ async def story_turn(
     if isinstance(result, str):
         # Error or fallback case - create minimal response
         story_response = create_minimal_response(result)
-    elif isinstance(result, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
+    elif isinstance(result, _STORY_RESPONSE_TYPES):
         # Full structured response from Storyteller
         story_response = result
     else:
@@ -599,7 +607,7 @@ async def regenerate_turn(
     if isinstance(result, str):
         # Error or fallback case - create minimal response
         story_response = create_minimal_response(result)
-    elif isinstance(result, (StorytellerResponseMinimal, StorytellerResponseStandard, StorytellerResponseExtended)):
+    elif isinstance(result, _STORY_RESPONSE_TYPES):
         # Full structured response from Storyteller
         story_response = result
     else:
