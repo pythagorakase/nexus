@@ -46,13 +46,6 @@ from nexus.api.chunk_workflow import (
     EditPreviousRequest,
     EditPreviousResponse,
 )
-
-_STORY_RESPONSE_TYPES = (
-    StorytellerResponseBootstrap,
-    StorytellerResponseMinimal,
-    StorytellerResponseStandard,
-    StorytellerResponseExtended,
-)
 from nexus.api.retry_handler import (
     retry_with_backoff,
     async_retry_with_backoff,
@@ -64,6 +57,13 @@ from nexus.api.retry_handler import (
 from nexus.api.config_utils import get_new_story_model
 
 logger = logging.getLogger("nexus.api.storyteller")
+
+_STORY_RESPONSE_TYPES = (
+    StorytellerResponseExtended,
+    StorytellerResponseStandard,
+    StorytellerResponseMinimal,
+    StorytellerResponseBootstrap,
+)
 
 ORIGINS = [
     "http://localhost:3000",

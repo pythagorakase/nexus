@@ -841,10 +841,10 @@ def validate_entity_references(entities: ReferencedEntities) -> List[str]:
 # Union type for backward compatibility with old logon_schemas
 # Accepts any of the three response types
 StoryTurnResponse = Union[
-    StorytellerResponseBootstrap,
-    StorytellerResponseMinimal,
+    StorytellerResponseExtended,
     StorytellerResponseStandard,
-    StorytellerResponseExtended
+    StorytellerResponseMinimal,
+    StorytellerResponseBootstrap
 ]
 
 

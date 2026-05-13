@@ -185,6 +185,7 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
 
     assert provider.calls == 1
     assert provider.completion_calls == 0
+    # _DummyProvider always returns Minimal; this test verifies schema selection.
     assert provider.schema_models == [StorytellerResponseBootstrap]
     assert response.narrative.startswith("dummy:")
 
