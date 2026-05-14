@@ -4,6 +4,8 @@ import pytest
 from pydantic import ValidationError
 
 from nexus.agents.logon.apex_schema import (
+    FactionStateUpdate,
+    NewPlace,
     PlaceType,
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
@@ -40,6 +42,29 @@ def test_create_minimal_response_includes_valid_choices() -> None:
         "Continue.",
         "Wait and observe.",
     ]
+
+
+def test_new_place_normalization_does_not_mutate_input_payload() -> None:
+    """Place type normalization should not leak mutations to caller data."""
+
+    payload = {"name": "Mirror Tram", "type": "fixed location"}
+    original_payload = dict(payload)
+
+    place = NewPlace.model_validate(payload)
+
+    assert payload == original_payload
+    assert place.type == PlaceType.FIXED_LOCATION
+
+
+def test_faction_state_update_accepts_current_activity() -> None:
+    """Faction updates can carry the activity field commit handlers persist."""
+
+    update = FactionStateUpdate(
+        faction_id=42,
+        current_activity="Watching the station exits.",
+    )
+
+    assert update.current_activity == "Watching the station exits."
 
 
 def test_extended_response_accepts_partial_new_character_context() -> None:

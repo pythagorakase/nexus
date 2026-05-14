@@ -147,25 +147,9 @@ class ModelManager:
                 loaded.append(str(identifier))
         return loaded
 
-    def _extract_model_identifiers(self, entries: List[Dict[str, Any]]) -> List[str]:
-        """Extract model identifiers from an already-filtered model list."""
-        identifiers: List[str] = []
-        for entry in entries:
-            identifier = (
-                entry.get("id")
-                or entry.get("identifier")
-                or entry.get("model_id")
-                or entry.get("name")
-                or entry.get("path")
-            )
-            if identifier:
-                identifiers.append(str(identifier))
-        return identifiers
-
     def _get_loaded_models_via_http(self) -> Optional[List[str]]:
         """Query LM Studio's HTTP API for loaded models."""
         endpoints = [
-            f"{self.lmstudio_api_base}/v1/models",
             f"{self.lmstudio_api_base}/api/v0/models",
             f"{self.lmstudio_api_base}/api/v0/models/list",
             f"{self.lmstudio_api_base}/api/models",
@@ -185,8 +169,6 @@ class ModelManager:
                 loaded_identifiers = self._extract_loaded_identifiers(entries)
                 if loaded_identifiers:
                     return loaded_identifiers
-                if endpoint.endswith("/v1/models"):
-                    return self._extract_model_identifiers(entries)
                 return loaded_identifiers
             except requests.RequestException as http_error:
                 logger.warning(f"Failed to query LM Studio via {endpoint}: {http_error}")
@@ -276,8 +258,8 @@ class ModelManager:
         return self._get_loaded_models_via_sdk()
 
     def _set_current_model_handle(self, model_id: str) -> None:
-        """Attach to the currently loaded LM Studio model without loading it."""
-        self.current_model = lms.llm()
+        """Attach to a specific loaded LM Studio model without loading it."""
+        self.current_model = lms.llm(model_id)
         self.current_model_id = model_id
 
     def _log_loaded_model_probe(self, model_id: str) -> None:

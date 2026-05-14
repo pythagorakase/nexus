@@ -304,12 +304,14 @@ class NewPlace(BaseModel):
         if not isinstance(raw_type, str):
             return data
 
-        normalized_type = raw_type.strip().lower().replace("-", "_").replace(" ", "_")
-        if normalized_type in PlaceType._value2member_map_:
-            data["type"] = normalized_type
-            return data
-
         data = dict(data)
+        normalized_type = raw_type.strip().lower().replace("-", "_").replace(" ", "_")
+        try:
+            data["type"] = PlaceType(normalized_type).value
+            return data
+        except ValueError:
+            pass
+
         vehicle_terms = {"vehicle", "train", "car", "bus", "tram", "ship", "boat"}
         virtual_terms = {"virtual", "digital", "online", "network", "simulation"}
         if normalized_type in vehicle_terms:
@@ -681,6 +683,10 @@ class FactionStateUpdate(BaseModel):
     faction_name: Optional[str] = Field(
         default=None,
         description="Faction name (if ID unknown)"
+    )
+    current_activity: Optional[str] = Field(
+        default=None,
+        description="Current faction activity or operational focus"
     )
     recent_actions: Optional[List[str]] = Field(
         default_factory=list,

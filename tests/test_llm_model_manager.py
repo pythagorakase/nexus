@@ -74,16 +74,50 @@ def test_load_model_attaches_when_requested_model_is_already_loaded(
 
     assert manager.load_model("nexveridian/gpt-oss-120b") is True
     assert manager.current_model_id == "nexveridian/gpt-oss-120b"
-    assert stub_lms.llm_calls == [(None, None)]
+    assert stub_lms.llm_calls == [("nexveridian/gpt-oss-120b", None)]
 
 
-def test_v1_models_endpoint_identifiers_count_as_loaded(monkeypatch) -> None:
-    """The OpenAI-compatible LM Studio model list contains loaded model IDs."""
+def test_openai_compatible_models_endpoint_is_not_loaded_inventory(
+    monkeypatch,
+) -> None:
+    """/v1/models is not a reliable loaded-model inventory endpoint."""
     manager = _bare_manager()
     requested_urls: list[str] = []
 
     class Response:
-        """HTTP response double for the /v1/models probe."""
+        """HTTP response double for unavailable loaded-model endpoints."""
+
+        status_code = 404
+
+        def raise_for_status(self) -> None:
+            """Represent a response that should be skipped before raising."""
+            return None
+
+        def json(self) -> dict[str, Any]:
+            """Return an empty payload."""
+            return {"data": []}
+
+    def fake_get(url: str, timeout: int) -> Response:
+        requested_urls.append(url)
+        return Response()
+
+    monkeypatch.setattr(model_manager.requests, "get", fake_get)
+
+    assert manager._get_loaded_models_via_http() is None
+    assert requested_urls == [
+        "http://localhost:1234/api/v0/models",
+        "http://localhost:1234/api/v0/models/list",
+        "http://localhost:1234/api/models",
+        "http://localhost:1234/models",
+    ]
+
+
+def test_unflagged_model_entries_are_not_counted_as_loaded(monkeypatch) -> None:
+    """Downloaded model entries without loaded state should not skip loading."""
+    manager = _bare_manager()
+
+    class Response:
+        """HTTP response double with unflagged model entries."""
 
         status_code = 200
 
@@ -92,14 +126,12 @@ def test_v1_models_endpoint_identifiers_count_as_loaded(monkeypatch) -> None:
             return None
 
         def json(self) -> dict[str, Any]:
-            """Return an OpenAI-compatible model list payload."""
+            """Return model IDs without loaded-state fields."""
             return {"data": [{"id": "nexveridian/gpt-oss-120b"}]}
 
     def fake_get(url: str, timeout: int) -> Response:
-        requested_urls.append(url)
         return Response()
 
     monkeypatch.setattr(model_manager.requests, "get", fake_get)
 
-    assert manager._get_loaded_models_via_http() == ["nexveridian/gpt-oss-120b"]
-    assert requested_urls == ["http://localhost:1234/v1/models"]
+    assert manager._get_loaded_models_via_http() == []
