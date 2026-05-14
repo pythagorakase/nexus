@@ -245,6 +245,7 @@ class OpenAIProvider(LLMProvider):
     
     # Default model if none specified
     DEFAULT_MODEL = "gpt-4.1"
+    STRUCTURED_OUTPUT_RETRIES = 1
     
     # Valid reasoning effort levels (model-specific)
     VALID_REASONING_EFFORTS = ["minimal", "medium", "high", "low", None]
@@ -431,7 +432,7 @@ class OpenAIProvider(LLMProvider):
             output_type=schema_model,
             system_prompt=self.system_prompt,
             model_settings=model_settings,
-            retries=0,
+            retries=self.STRUCTURED_OUTPUT_RETRIES,
         )
 
         return agent

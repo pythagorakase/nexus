@@ -24,3 +24,10 @@ async def test_anthropic_sync_structured_completion_rejects_running_loop() -> No
 
     with pytest.raises(RuntimeError, match="get_structured_completion_async"):
         provider.get_structured_completion("prompt", object)
+
+
+def test_structured_providers_allow_one_schema_repair_attempt() -> None:
+    """Structured output should retry validation once before failing fast."""
+
+    assert OpenAIProvider.STRUCTURED_OUTPUT_RETRIES == 1
+    assert AnthropicProvider.STRUCTURED_OUTPUT_RETRIES == 1

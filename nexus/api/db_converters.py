@@ -24,6 +24,16 @@ from nexus.agents.logon.apex_schema import (
 )
 
 
+def _json_dumps_model(value: Any) -> Optional[str]:
+    """Serialize dicts or Pydantic models for JSONB columns."""
+
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json", exclude_none=True)
+    return json.dumps(value)
+
+
 # ============================================================================
 # Time Conversion Functions
 # ============================================================================
@@ -151,7 +161,9 @@ async def resolve_place_references(
         elif ref.place_name:
             # Look up existing place by name
             place_id = await lookup_place_by_name(conn, ref.place_name)
-            if not place_id:
+            if not place_id and ref.new_place:
+                place_id = await create_new_place(conn, ref.new_place)
+            elif not place_id:
                 raise ValueError(f"Place '{ref.place_name}' not found in database")
         elif ref.new_place:
             # Create new place and get ID
@@ -183,31 +195,21 @@ async def create_new_place(conn: asyncpg.Connection, new_place: NewPlace) -> int
     Returns:
         ID of newly created place
     """
-    # Validate zone exists if provided
-    if new_place.zone:
-        zone_exists = await conn.fetchval(
-            "SELECT id FROM zones WHERE id = $1",
-            new_place.zone
-        )
-        if not zone_exists:
-            raise ValueError(f"Zone ID {new_place.zone} not found")
-
     # Insert place
     place_id = await conn.fetchval("""
         INSERT INTO places (
-            name, summary, history, current_status, secrets,
-            extra_data, zone, place_type
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            name, type, summary, history, current_status, secrets,
+            extra_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
     """,
         new_place.name,
+        new_place.type.value if new_place.type else None,
         new_place.summary,
         new_place.history,
         new_place.current_status,
         new_place.secrets,
-        json.dumps(new_place.extra_data) if new_place.extra_data else None,
-        new_place.zone,
-        new_place.place_type.value if new_place.place_type else None
+        _json_dumps_model(new_place.extra_data),
     )
 
     return place_id
@@ -238,7 +240,9 @@ async def resolve_character_references(
             char_id = ref.character_id
         elif ref.character_name:
             char_id = await lookup_character_by_name(conn, ref.character_name)
-            if not char_id:
+            if not char_id and ref.new_character:
+                char_id = await create_new_character(conn, ref.new_character)
+            elif not char_id:
                 raise ValueError(f"Character '{ref.character_name}' not found")
         elif ref.new_character:
             # Create new character
@@ -293,7 +297,7 @@ async def create_new_character(conn: asyncpg.Connection, new_char: NewCharacter)
         new_char.emotional_state,
         new_char.current_activity,
         new_char.current_location,
-        json.dumps(new_char.extra_data) if new_char.extra_data else None
+        _json_dumps_model(new_char.extra_data),
     )
 
     return char_id
@@ -324,7 +328,9 @@ async def resolve_faction_references(
             faction_id = ref.faction_id
         elif ref.faction_name:
             faction_id = await lookup_faction_by_name(conn, ref.faction_name)
-            if not faction_id:
+            if not faction_id and ref.new_faction:
+                faction_id = await create_new_faction(conn, ref.new_faction)
+            elif not faction_id:
                 raise ValueError(f"Faction '{ref.faction_name}' not found")
         elif ref.new_faction:
             # Create new faction
@@ -358,15 +364,19 @@ async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) 
         if not location_exists:
             raise ValueError(f"Place ID {new_faction.primary_location} not found for faction location")
 
+    await conn.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+    faction_id = await conn.fetchval("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
+
     # Insert faction
     faction_id = await conn.fetchval("""
         INSERT INTO factions (
-            name, summary, ideology, history, current_activity,
+            id, name, summary, ideology, history, current_activity,
             hidden_agenda, territory, power_level, resources,
             primary_location, extra_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id
     """,
+        faction_id,
         new_faction.name,
         new_faction.summary,
         new_faction.ideology,
@@ -377,7 +387,7 @@ async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) 
         new_faction.power_level,
         new_faction.resources,
         new_faction.primary_location,
-        json.dumps(new_faction.extra_data) if new_faction.extra_data else None
+        _json_dumps_model(new_faction.extra_data),
     )
 
     return faction_id

@@ -1450,14 +1450,22 @@ class MEMNON:
                         cm.season,
                         cm.episode,
                         cm.scene,
-                        cm.place,
                         nv.world_time,
-                        p.name as place_name
+                        string_agg(DISTINCT p.name, ', ' ORDER BY p.name)
+                            FILTER (WHERE p.name IS NOT NULL) AS place_names
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
                     LEFT JOIN narrative_view nv ON nc.id = nv.id
-                    LEFT JOIN places p ON cm.place = p.id
+                    LEFT JOIN place_chunk_references pcr ON nc.id = pcr.chunk_id
+                    LEFT JOIN places p ON pcr.place_id = p.id
                     WHERE nc.id = :chunk_id
+                    GROUP BY
+                        nc.id,
+                        nc.raw_text,
+                        cm.season,
+                        cm.episode,
+                        cm.scene,
+                        nv.world_time
                 """)
                 
                 result = session.execute(query, {"chunk_id": chunk_id}).fetchone()
@@ -1468,8 +1476,8 @@ class MEMNON:
                     header += f"(chunk {chunk_id})\n"
                     if result.world_time:
                         header += f"{result.world_time}\n"
-                    if result.place_name:
-                        header += f"{result.place_name}\n"
+                    if result.place_names:
+                        header += f"{result.place_names}\n"
                     
                     return {
                         "id": result.id,
@@ -1480,7 +1488,7 @@ class MEMNON:
                 return None
                 
         except Exception as e:
-            self.logger.error(f"Error fetching chunk {chunk_id}: {str(e)}")
+            logger.error(f"Error fetching chunk {chunk_id}: {str(e)}")
             return None
     
     def get_recent_chunks(self, limit: int = 10) -> Dict[str, Any]:
