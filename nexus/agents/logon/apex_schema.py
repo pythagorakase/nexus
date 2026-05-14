@@ -114,13 +114,17 @@ class CharacterTraits(BaseModel):
         default=None, description="Debts, oaths, or duties you must honor"
     )
 
-    # Required wildcard - unique trait that sets this character apart
-    wildcard_name: str = Field(description="Name of the unique custom trait")
-    wildcard_description: str = Field(
+    # Optional wildcard - unique trait that sets this character apart
+    wildcard_name: Optional[str] = Field(
+        default=None,
+        description="Name of the unique custom trait"
+    )
+    wildcard_description: Optional[str] = Field(
+        default=None,
         description="What this trait means - capability, possession, relationship, or curse"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
 
 class PlaceDetails(BaseModel):
@@ -175,7 +179,7 @@ class PlaceDetails(BaseModel):
         default_factory=list, description="Current rumors or gossip (max 3)"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
 
 class FactionDetails(BaseModel):
@@ -201,7 +205,7 @@ class FactionDetails(BaseModel):
         default=None, description="Key traditions or rituals"
     )
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
 
 # ============================================================================
@@ -211,32 +215,39 @@ class FactionDetails(BaseModel):
 class NewCharacter(BaseModel):
     """
     Schema for introducing a new character - aligned with DB schema.
-    All fields required except where DB dictates otherwise.
     """
     name: str = Field(description="Character's name")
-    appearance: str = Field(
+    appearance: Optional[str] = Field(
+        default=None,
         description="Physical description - how the character looks"
     )
-    background: str = Field(
+    background: Optional[str] = Field(
+        default=None,
         description="Character backstory and history"
     )
-    personality: str = Field(
+    personality: Optional[str] = Field(
+        default=None,
         description="Personality traits and quirks (prose format, e.g., 'Methodical problem-solver. Paranoid about digital traces.')"
     )
-    emotional_state: str = Field(
+    emotional_state: Optional[str] = Field(
+        default=None,
         description="Current emotional state"
     )
-    current_activity: str = Field(
+    current_activity: Optional[str] = Field(
+        default=None,
         description="What the character is currently doing"
     )
-    current_location: int = Field(
+    current_location: Optional[int] = Field(
+        default=None,
         description="Place ID where character is located (FK to places.id)"
     )
-    summary: str = Field(
+    summary: Optional[str] = Field(
+        default=None,
         max_length=500,
         description="Brief character description (max 500 chars)"
     )
-    extra_data: CharacterTraits = Field(
+    extra_data: Optional[CharacterTraits] = Field(
+        default=None,
         description="Character traits (3 of 10 optional traits + required wildcard)"
     )
 
@@ -248,56 +259,108 @@ class NewPlace(BaseModel):
     """
     name: str = Field(description="Place name")
     type: PlaceType = Field(
+        default=PlaceType.FIXED_LOCATION,
         description="Type of place (fixed_location, vehicle, virtual, other)"
     )
-    summary: str = Field(
+    summary: Optional[str] = Field(
+        default=None,
         max_length=500,
         description="Brief place description (max 500 chars)"
     )
-    history: str = Field(
+    history: Optional[str] = Field(
+        default=None,
         description="Place history and past events"
     )
-    current_status: str = Field(
+    current_status: Optional[str] = Field(
+        default=None,
         description="Current state, conditions, and activity at this location"
     )
-    secrets: str = Field(
-        description="Hidden information, plot hooks, and narrative opportunities (REQUIRED - invaluable for storytelling)"
+    secrets: Optional[str] = Field(
+        default=None,
+        description="Hidden information, plot hooks, and narrative opportunities"
     )
-    coordinates: Coordinates = Field(
+    coordinates: Optional[Coordinates] = Field(
+        default=None,
         description="Geographic coordinates (lat/lon on Earth-shaped planet). Zone calculated from this."
     )
     inhabitants: Optional[List[int]] = Field(
         default_factory=list,
         description="Character IDs of inhabitants (usually empty for newly introduced places)"
     )
-    extra_data: PlaceDetails = Field(
+    extra_data: Optional[PlaceDetails] = Field(
+        default=None,
         description="Additional place attributes (atmosphere, features, dangers, etc.)"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_place_type(cls, data: Any) -> Any:
+        """Coerce descriptive place categories into the database enum."""
+
+        if not isinstance(data, dict):
+            return data
+
+        raw_type = data.get("type")
+        if not isinstance(raw_type, str):
+            return data
+
+        data = dict(data)
+        normalized_type = raw_type.strip().lower().replace("-", "_").replace(" ", "_")
+        try:
+            data["type"] = PlaceType(normalized_type).value
+            return data
+        except ValueError:
+            pass
+
+        vehicle_terms = {"vehicle", "train", "car", "bus", "tram", "ship", "boat"}
+        virtual_terms = {"virtual", "digital", "online", "network", "simulation"}
+        if normalized_type in vehicle_terms:
+            data["type"] = PlaceType.VEHICLE.value
+        elif normalized_type in virtual_terms:
+            data["type"] = PlaceType.VIRTUAL.value
+        else:
+            data["type"] = PlaceType.FIXED_LOCATION.value
+
+        extra_data = data.get("extra_data")
+        if isinstance(extra_data, dict):
+            extra_data = dict(extra_data)
+            extra_data.setdefault("category", raw_type)
+            data["extra_data"] = extra_data
+        elif extra_data is None:
+            data["extra_data"] = {"category": raw_type}
+
+        return data
 
 
 class NewFaction(BaseModel):
     """
     Schema for introducing a new faction - aligned with DB schema.
-    All fields required. Leader info goes in extra_data or character relationships.
+    Leader info goes in extra_data or character relationships.
     """
     name: str = Field(description="Faction name")
-    summary: str = Field(
+    summary: Optional[str] = Field(
+        default=None,
         max_length=500,
         description="Brief faction description (max 500 chars)"
     )
-    ideology: str = Field(
+    ideology: Optional[str] = Field(
+        default=None,
         description="Faction's core ideology or purpose"
     )
-    history: str = Field(
+    history: Optional[str] = Field(
+        default=None,
         description="Faction origins, past events, and evolution"
     )
-    current_activity: str = Field(
+    current_activity: Optional[str] = Field(
+        default=None,
         description="What the faction is currently doing"
     )
-    hidden_agenda: str = Field(
+    hidden_agenda: Optional[str] = Field(
+        default=None,
         description="Secret goals, plots, and agendas (like place secrets - narrative gold!)"
     )
-    territory: str = Field(
+    territory: Optional[str] = Field(
+        default=None,
         description="Controlled areas, zones of influence, or operational reach"
     )
     power_level: float = Field(
@@ -306,13 +369,16 @@ class NewFaction(BaseModel):
         le=1.0,
         description="Faction influence/power rating (0.0-1.0, default 0.5 for new factions)"
     )
-    resources: str = Field(
+    resources: Optional[str] = Field(
+        default=None,
         description="Assets, capabilities, personnel, and resources"
     )
-    primary_location: int = Field(
+    primary_location: Optional[int] = Field(
+        default=None,
         description="Place ID of faction headquarters/primary base (FK to places.id)"
     )
-    extra_data: FactionDetails = Field(
+    extra_data: Optional[FactionDetails] = Field(
+        default=None,
         description="Additional faction attributes (leader, members, allies, rivals, etc.)"
     )
 
@@ -617,6 +683,10 @@ class FactionStateUpdate(BaseModel):
     faction_name: Optional[str] = Field(
         default=None,
         description="Faction name (if ID unknown)"
+    )
+    current_activity: Optional[str] = Field(
+        default=None,
+        description="Current faction activity or operational focus"
     )
     recent_actions: Optional[List[str]] = Field(
         default_factory=list,

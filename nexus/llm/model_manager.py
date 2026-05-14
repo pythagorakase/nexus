@@ -7,8 +7,7 @@ Uses centralized config loader (nexus.toml with settings.json fallback).
 
 import logging
 import time
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -255,6 +254,29 @@ class ModelManager:
             return http_result
         return self._get_loaded_models_via_sdk()
 
+    def _set_current_model_handle(self, model_id: str) -> None:
+        """Attach to a specific loaded LM Studio model without loading it."""
+        self.current_model = lms.llm(model_id)
+        self.current_model_id = model_id
+
+    def _log_loaded_model_probe(self, model_id: str) -> None:
+        """Log the loaded-model probe result without running model inference."""
+        loaded = self.get_loaded_models()
+        if model_id in loaded:
+            logger.info(f"Model {model_id} is reported loaded by LM Studio")
+        elif loaded:
+            logger.warning(
+                "Loaded-model probe did not find %s; LM Studio reports: %s",
+                model_id,
+                loaded,
+            )
+        else:
+            logger.info(
+                "Loaded-model probe returned no loaded models; treating acquired "
+                "LM Studio handle for %s as successful",
+                model_id,
+            )
+
     def unload_model(self, model_id: Optional[str] = None) -> bool:
         """
         Unload a model from LM Studio
@@ -305,6 +327,14 @@ class ModelManager:
         try:
             logger.info(f"Loading model: {model_id}")
 
+            loaded = self.get_loaded_models()
+            if model_id in loaded:
+                logger.info(
+                    f"Model {model_id} already loaded; attaching to existing handle"
+                )
+                self._set_current_model_handle(model_id)
+                return True
+
             # First unload any existing model
             if self.current_model:
                 self.unload_model()
@@ -334,18 +364,11 @@ class ModelManager:
             # Wait for model to initialize
             time.sleep(5)
 
-            # Verify the model works
-            logger.info("Verifying model...")
-            chat = lms.Chat("You are a test assistant.")
-            chat.add_user_message("Respond with 'OK'")
-
-            result = self.current_model.respond(chat, config={"maxTokens": 10})
-            if result and result.content:
-                logger.info(f"Model {model_id} loaded and verified successfully")
-                return True
-            else:
-                logger.error("Model verification failed: no response")
-                return False
+            # Avoid chat-completion verification here. Some LM Studio SDK/runtime
+            # combinations crash large reasoning models during that first probe.
+            self._log_loaded_model_probe(model_id)
+            logger.info(f"Model {model_id} loaded successfully")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to load model {model_id}: {e}")
@@ -381,8 +404,7 @@ class ModelManager:
             if current == default_model:
                 logger.info(f"Default model {default_model} already loaded")
                 # Get the model handle
-                self.current_model = lms.llm()
-                self.current_model_id = default_model
+                self._set_current_model_handle(default_model)
                 return default_model
             else:
                 logger.info(f"Current model {current} != default {default_model}")
@@ -393,8 +415,7 @@ class ModelManager:
                 else:
                     logger.info("Keeping current model due to unload_on_exit=False")
                     # Return the current model instead of switching
-                    self.current_model = lms.llm()
-                    self.current_model_id = current
+                    self._set_current_model_handle(current)
                     return current
 
         # Load the default model

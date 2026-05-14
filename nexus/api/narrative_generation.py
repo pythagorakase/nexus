@@ -11,7 +11,7 @@ This module handles async narrative generation including:
 import json
 import logging
 import uuid
-from typing import Callable, Dict, Any, Optional, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol
 
 from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
@@ -23,6 +23,34 @@ from nexus.api.lore_adapter import (
 )
 
 logger = logging.getLogger("nexus.api.narrative_generation")
+
+
+def _exception_detail(exc: Exception) -> str:
+    """Return the most useful user-facing detail from an exception."""
+    if isinstance(exc, HTTPException) and exc.detail:
+        return str(exc.detail)
+    return str(exc)
+
+
+def _describe_lore_failure(lore: LORE, response: Any) -> Optional[str]:
+    """Describe a LORE turn failure before adapter coercion hides the phase."""
+    narrative_text = getattr(response, "narrative", None)
+    if narrative_text:
+        return None
+
+    turn_context = getattr(lore, "turn_context", None)
+    error_log = getattr(turn_context, "error_log", []) if turn_context else []
+    phase_errors = [str(error) for error in error_log if error]
+    if phase_errors:
+        return (
+            "Narrative turn failed before APEX returned structured output: "
+            + " | ".join(phase_errors)
+        )
+
+    if isinstance(response, str) and response:
+        return f"Narrative turn failed before APEX returned structured output: {response}"
+
+    return "Narrative turn did not return structured APEX output."
 
 
 class ProgressManager(Protocol):
@@ -120,7 +148,7 @@ async def generate_narrative_async(
             logger.info("Initializing LORE for narrative generation")
 
             # Initialize LORE with LOGON enabled for API calls
-            lore = LORE(enable_logon=True, debug=True)
+            lore = LORE(enable_logon=True, debug=True, slot=slot)
 
             # Send progress: calling LLM
             await manager.send_progress(session_id, "calling_llm")
@@ -132,13 +160,23 @@ async def generate_narrative_async(
                 )
                 logger.info(f"LORE response received for session {session_id}")
             except Exception as e:
-                logger.error(f"LORE process_turn failed: {e}")
+                error_detail = _exception_detail(e)
+                logger.error(f"LORE process_turn failed: {error_detail}")
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to generate narrative: {str(e)}"
+                    status_code=500, detail=f"Failed to generate narrative: {error_detail}"
                 )
 
             # Send progress: processing response
             await manager.send_progress(session_id, "processing_response")
+
+            failure_detail = _describe_lore_failure(lore, response)
+            if failure_detail:
+                logger.error(
+                    "Narrative turn failed for session %s: %s",
+                    session_id,
+                    failure_detail,
+                )
+                raise HTTPException(status_code=500, detail=failure_detail)
 
             # Transform LORE response to incubator format
             incubator_data = response_to_incubator(
@@ -167,8 +205,9 @@ async def generate_narrative_async(
         logger.info(f"Narrative generation complete for session {session_id}")
 
     except Exception as e:
-        logger.error(f"Error generating narrative: {e}")
-        await manager.send_progress(session_id, "error", {"error": str(e)})
+        error_detail = _exception_detail(e)
+        logger.error(f"Error generating narrative: {error_detail}")
+        await manager.send_progress(session_id, "error", {"error": error_detail})
     finally:
         if conn:
             conn.close()

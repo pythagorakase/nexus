@@ -33,6 +33,7 @@ TERMINAL_GENERATION_STATUSES = {
     "approved",
     "committed",
 }
+GENERATION_POLL_SECONDS = 240
 
 
 def get_api_url() -> str:
@@ -559,7 +560,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             session_id = data.get("session_id")
             if session_id:
                 # Poll for completion (simplified - real implementation would use websocket)
-                for _ in range(60):  # Max 60 seconds
+                for _ in range(GENERATION_POLL_SECONDS):
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
                     status_response = requests.get(
                         status_url, params={"slot": args.slot}, timeout=30

@@ -244,6 +244,7 @@ class AnthropicProvider(LLMProvider):
 
     # Default model if none specified
     DEFAULT_MODEL = "claude-3-haiku-20240307"
+    STRUCTURED_OUTPUT_RETRIES = 1
 
     def __init__(self,
                 api_key: Optional[str] = None,
@@ -525,7 +526,7 @@ class AnthropicProvider(LLMProvider):
             output_type=schema_model,
             system_prompt=self.system_prompt,
             model_settings=model_settings,
-            retries=0,
+            retries=self.STRUCTURED_OUTPUT_RETRIES,
         )
 
         return agent

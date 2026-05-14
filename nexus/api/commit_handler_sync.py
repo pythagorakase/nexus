@@ -32,6 +32,16 @@ from nexus.api.lore_adapter import compute_raw_text, format_choice_text
 logger = logging.getLogger("nexus.api.commit_handler_sync")
 
 
+def _json_dumps_model(value: Any) -> Optional[str]:
+    """Serialize dicts or Pydantic models for JSONB columns."""
+
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json", exclude_none=True)
+    return json.dumps(value)
+
+
 # ============================================================================
 # Entity Resolution Functions (Synchronous)
 # ============================================================================
@@ -55,6 +65,8 @@ def resolve_place_references_sync(
                 result = cur.fetchone()
                 if result:
                     place_id = result[0]
+                elif ref.new_place:
+                    place_id = create_new_place_sync(cur, ref.new_place)
                 else:
                     raise ValueError(f"Place '{ref.place_name}' not found in database")
             elif ref.new_place:
@@ -73,28 +85,21 @@ def resolve_place_references_sync(
 
 def create_new_place_sync(cur, new_place):
     """Create a new place synchronously"""
-    # Validate zone exists if provided
-    if new_place.zone:
-        cur.execute("SELECT id FROM zones WHERE id = %s", (new_place.zone,))
-        if not cur.fetchone():
-            raise ValueError(f"Zone ID {new_place.zone} not found")
-
     # Insert place
     cur.execute("""
         INSERT INTO places (
-            name, summary, history, current_status, secrets,
-            extra_data, zone, place_type
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            name, type, summary, history, current_status, secrets,
+            extra_data
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
         new_place.name,
+        new_place.type.value if new_place.type else None,
         new_place.summary,
         new_place.history,
         new_place.current_status,
         new_place.secrets,
-        json.dumps(new_place.extra_data) if new_place.extra_data else None,
-        new_place.zone,
-        new_place.place_type.value if new_place.place_type else None
+        _json_dumps_model(new_place.extra_data),
     ))
 
     return cur.fetchone()[0]
@@ -118,6 +123,8 @@ def resolve_character_references_sync(
                 result = cur.fetchone()
                 if result:
                     char_id = result[0]
+                elif ref.new_character:
+                    char_id = create_new_character_sync(cur, ref.new_character)
                 else:
                     raise ValueError(f"Character '{ref.character_name}' not found")
             elif ref.new_character:
@@ -156,7 +163,7 @@ def create_new_character_sync(cur, new_char):
         new_char.emotional_state,
         new_char.current_activity,
         new_char.current_location,
-        json.dumps(new_char.extra_data) if new_char.extra_data else None
+        _json_dumps_model(new_char.extra_data),
     ))
 
     return cur.fetchone()[0]
@@ -180,6 +187,8 @@ def resolve_faction_references_sync(
                 result = cur.fetchone()
                 if result:
                     faction_id = result[0]
+                elif ref.new_faction:
+                    faction_id = create_new_faction_sync(cur, ref.new_faction)
                 else:
                     raise ValueError(f"Faction '{ref.faction_name}' not found")
             elif ref.new_faction:
@@ -201,15 +210,20 @@ def create_new_faction_sync(cur, new_faction):
         if not cur.fetchone():
             raise ValueError(f"Place ID {new_faction.primary_location} not found for faction location")
 
+    cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM factions")
+    faction_id = cur.fetchone()[0]
+
     # Insert faction
     cur.execute("""
         INSERT INTO factions (
-            name, summary, ideology, history, current_activity,
+            id, name, summary, ideology, history, current_activity,
             hidden_agenda, territory, power_level, resources,
             primary_location, extra_data
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
+        faction_id,
         new_faction.name,
         new_faction.summary,
         new_faction.ideology,
@@ -220,7 +234,7 @@ def create_new_faction_sync(cur, new_faction):
         new_faction.power_level,
         new_faction.resources,
         new_faction.primary_location,
-        json.dumps(new_faction.extra_data) if new_faction.extra_data else None
+        _json_dumps_model(new_faction.extra_data),
     ))
 
     return cur.fetchone()[0]

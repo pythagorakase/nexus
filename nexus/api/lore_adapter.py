@@ -14,6 +14,16 @@ from nexus.api.choice_handling import ChoiceObject
 logger = logging.getLogger("nexus.api.lore_adapter")
 
 
+def _model_to_json_dict(model: Any) -> Dict[str, Any]:
+    """Serialize Pydantic models into JSON-compatible dictionaries."""
+
+    if hasattr(model, "model_dump"):
+        return model.model_dump(mode="json", exclude_none=True)
+    if isinstance(model, dict):
+        return {key: value for key, value in model.items() if value is not None}
+    return {}
+
+
 # =============================================================================
 # Choice Handling Functions
 # =============================================================================
@@ -153,8 +163,11 @@ def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     """
     metadata_updates = {}
 
-    if hasattr(response, "metadata") and response.metadata:
-        metadata = response.metadata
+    metadata = getattr(response, "chunk_metadata", None) or getattr(
+        response, "metadata", None
+    )
+
+    if metadata:
 
         # Extract chronology updates with new time field structure
         if hasattr(metadata, "chronology") and metadata.chronology:
@@ -262,37 +275,20 @@ def extract_reference_updates(response: StoryTurnResponse) -> Dict[str, Any]:
     if not refs:
         return reference_updates
 
-    def _append_reference(
-        entity: Any, id_key: str, name_key: str, target_list: list
-    ) -> None:
-        ref_data: Dict[str, Any] = {}
-        entity_id = getattr(entity, "entity_id", None)
-        if entity_id is not None:
-            ref_data[id_key] = entity_id
-        entity_name = getattr(entity, "entity_name", None)
-        if entity_name:
-            ref_data[name_key] = entity_name
-        prominence = getattr(entity, "prominence", None)
-        if prominence:
-            ref_data["reference_type"] = prominence
-        target_list.append(ref_data)
-
     for char in getattr(refs, "characters", []):
-        _append_reference(
-            char, "character_id", "character_name", reference_updates["characters"]
-        )
+        ref_data = _model_to_json_dict(char)
+        if ref_data:
+            reference_updates["characters"].append(ref_data)
 
-    for location in getattr(refs, "locations", []):
-        _append_reference(
-            location, "place_id", "place_name", reference_updates["places"]
-        )
+    for place in getattr(refs, "places", []):
+        ref_data = _model_to_json_dict(place)
+        if ref_data:
+            reference_updates["places"].append(ref_data)
 
-    # Factions are reported through the generic "other" list in StoryTurnResponse
-    for entity in getattr(refs, "other", []):
-        if getattr(entity, "entity_type", None) == "faction":
-            _append_reference(
-                entity, "faction_id", "faction_name", reference_updates["factions"]
-            )
+    for faction in getattr(refs, "factions", []):
+        ref_data = _model_to_json_dict(faction)
+        if ref_data:
+            reference_updates["factions"].append(ref_data)
 
     return reference_updates
 
