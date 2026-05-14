@@ -166,10 +166,7 @@ class ModelManager:
                 entries = self._extract_model_entries(payload)
                 if not entries:
                     logger.debug(f"LM Studio endpoint {endpoint} returned no model entries")
-                loaded_identifiers = self._extract_loaded_identifiers(entries)
-                if loaded_identifiers:
-                    return loaded_identifiers
-                return loaded_identifiers
+                return self._extract_loaded_identifiers(entries)
             except requests.RequestException as http_error:
                 logger.warning(f"Failed to query LM Studio via {endpoint}: {http_error}")
             except ValueError as json_error:
