@@ -15,14 +15,11 @@ default_slot_model = "TEST"
 
 # Local model options (for LM Studio inference)
 possible_values = [
-    "qwen/qwen3-next-80b",
     "nousresearch/hermes-4-70b",
-    "llama-3.3-70b-instruct@6bit",
     "openai/gpt-oss-120b",
     "nexveridian/gpt-oss-120b",
     "mixtral-8x22b-instruct-v0.1",
-    "llama-3.3-70b-instruct@8bit",
-    "llama-4-scout-17b-16e-instruct",
+    "mlx-community/llama-3.3-70b-instruct",
 ]
 
 # Provider-grouped API model definitions
