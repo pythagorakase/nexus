@@ -105,10 +105,13 @@ Use functions from `nexus/api/slot_utils.py`:
 - Port: 5432 (default PostgreSQL port)
 - Example connection string: `postgresql://pythagor@localhost:5432/save_01`
 
-### Main Tables (per slot)
-- `narrative_chunks`: Contains the raw text content (fields: id, raw_text, created_at)
-- `chunk_metadata`: Contains metadata for each chunk (fields: id, chunk_id, world_layer, etc.)
-- `chunk_embeddings`: Contains vector embeddings for search (fields: chunk_id, model, embedding)
+### Schema Reference
+
+The NEXUS database schema is self-describing via Postgres table and column comments. **Do not duplicate schema details in this file** — they drift. Use the live schema instead:
+
+- **Interactive inspection**: `psql -d save_NN -c '\d+ <table>'` (`\dt` to list all tables). The `\d+` form shows column comments in the Description column plus foreign-key references — effectively a free, always-current ER diagram in text.
+- **Programmatic access**: `MEMNON.get_schema_summary(tables=[...])` in `nexus/agents/memnon/memnon.py` returns a structured summary (the same path LORE uses to build retrieval context).
+- **Convention**: when adding a column, include `COMMENT ON COLUMN <table>.<col> IS '...'` in the same migration. The comment IS the documentation.
 
 ## API Key Management
 
