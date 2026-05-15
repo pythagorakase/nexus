@@ -113,8 +113,6 @@ The NEXUS database schema is self-describing via Postgres table and column comme
 - **Programmatic access**: `MEMNON.get_schema_summary(tables=[...])` returns a structured summary (the same path LORE uses to build retrieval context — see `nexus/agents/memnon/memnon.py:374`).
 - **Convention**: when adding a column, include `COMMENT ON COLUMN <table>.<col> IS '...'` in the same migration. The comment IS the documentation.
 
-Embedding vectors live in five dimension-sharded tables (`chunk_embeddings_0384d` / `_1024d` / `_1536d` / `_2560d` / `_4096d`); active model + target dimension is configured in `nexus.toml` under `[memnon.models.*]`.
-
 ## API Key Management
 
 **Runtime API key storage is macOS Keychain.** 1Password remains the canonical source of truth used for rotation and audit; `scripts/sync_secrets.py` copies keys from 1Password into Keychain on bootstrap or rotation, and that script is the only place in the codebase that touches `op`.
