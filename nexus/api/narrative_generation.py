@@ -74,6 +74,7 @@ async def generate_narrative_async(
     get_db_connection: Callable[[Optional[int]], Any],
     load_settings: Callable[[], Dict[str, Any]],
     manager: ProgressManager,
+    note: Optional[str] = None,
 ) -> None:
     """
     Async function to generate narrative.
@@ -93,6 +94,8 @@ async def generate_narrative_async(
         get_db_connection: Database connection factory function
         load_settings: Settings loader function
         manager: Progress notification manager
+        note: Optional soft author's note for the storyteller (used by regenerate
+            for meta-hints; ignored by bootstrap path).
     """
     conn = None
     is_bootstrap = parent_chunk_id == 0
@@ -166,7 +169,7 @@ async def generate_narrative_async(
             # Process the turn with LORE (builds context and generates narrative)
             try:
                 response = await lore.process_turn(
-                    user_text, parent_chunk_id=parent_chunk_id
+                    user_text, parent_chunk_id=parent_chunk_id, note=note
                 )
                 logger.info(f"LORE response received for session {session_id}")
             except Exception as e:

@@ -286,25 +286,30 @@ class LORE:
         if self.logon is None:
             self._initialize_logon()
     
-    async def process_turn(self, user_input: str, parent_chunk_id: Optional[int] = None):
+    async def process_turn(self, user_input: str, parent_chunk_id: Optional[int] = None, note: Optional[str] = None):
         """
         Process a complete turn cycle.
 
         Args:
             user_input: The user's input text
             parent_chunk_id: Optional chunk id that should be continued
+            note: Optional soft author's note to nudge the storyteller (used by regenerate
+                for meta-hints like "darker, plz" or continuity corrections; out-of-character).
 
         Returns:
             StoryTurnResponse with narrative and metadata, or string on error
         """
         logger.info(f"Starting turn cycle with input: {user_input[:100]}...")
-        
+        if note:
+            logger.info(f"Author's note: {note[:200]}")
+
         # Initialize turn context
         self.turn_context = TurnContext(
             turn_id=f"turn_{int(time.time())}",
             user_input=user_input,
             start_time=time.time(),
-            target_chunk_id=parent_chunk_id
+            target_chunk_id=parent_chunk_id,
+            note=note,
         )
         
         try:

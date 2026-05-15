@@ -5,6 +5,7 @@ Commands:
     nexus load --slot N         Display current slot state
     nexus continue --slot N     Advance the story (wizard or narrative)
     nexus undo --slot N         Revert the last action
+    nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
@@ -613,6 +614,68 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def run_regenerate(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Regenerate the last storyteller turn for a slot.
+
+    Calls POST /api/narrative/regenerate, then polls /api/narrative/status
+    until generation completes, matching run_continue's pattern.
+    """
+    url = f"{get_api_url()}/api/narrative/regenerate"
+    payload: Dict[str, Any] = {"slot": args.slot}
+    if args.note:
+        payload["note"] = args.note
+
+    try:
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+
+        session_id = data.get("session_id")
+        if not session_id:
+            return {"success": False, "error": "No session ID returned from regenerate"}
+
+        for _ in range(GENERATION_POLL_SECONDS):
+            status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
+            try:
+                status_response = requests.get(
+                    status_url, params={"slot": args.slot}, timeout=30
+                )
+            except requests.exceptions.RequestException:
+                # Transient hang on a single status GET (event loop briefly slammed
+                # by sync work in generate_narrative_async). Sleep and retry rather
+                # than aborting the whole polling loop.
+                time.sleep(1)
+                continue
+            if status_response.ok:
+                status = status_response.json()
+                if _is_terminal_generation_status(status.get("status")):
+                    load_result = run_load(args)
+                    return {
+                        "success": True,
+                        "message": load_result.get("message"),
+                        "choices": load_result.get("choices", []),
+                        "chunk_id": status.get("chunk_id"),
+                    }
+                elif status.get("status") == "error":
+                    return {
+                        "success": False,
+                        "error": status.get("error", "Regeneration failed"),
+                    }
+            time.sleep(1)
+        return {"success": False, "error": "Regeneration timed out"}
+
+    except requests.exceptions.ConnectionError:
+        return {
+            "success": False,
+            "error": f"Cannot connect to API server at {get_api_url()}",
+        }
+    except requests.exceptions.HTTPError as e:
+        return {"success": False, "error": f"API error: {e.response.text}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def run_model(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Get or set the model for a slot.
@@ -815,6 +878,22 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
+    # regenerate command
+    regenerate_parser = subparsers.add_parser(
+        "regenerate", help="Regenerate the last storyteller turn"
+    )
+    regenerate_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    regenerate_parser.add_argument(
+        "--note",
+        help=(
+            "Optional out-of-character note to the storyteller — a soft suggestion "
+            "for this regen (e.g., 'darker, plz', 'I want to win the fight despite "
+            "my poor choices', 'continuity correction: artifact was found in Vienna')"
+        ),
+    )
+
     # model command
     model_parser = subparsers.add_parser("model", help="Get or set model for a slot")
     model_parser.add_argument("--slot", type=int, help="Slot number (1-5)")
@@ -859,7 +938,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # Validate slot for commands that require it
-    if args.command in ("load", "continue", "undo", "clear", "lock", "unlock"):
+    if args.command in ("load", "continue", "undo", "regenerate", "clear", "lock", "unlock"):
         if args.slot < 1 or args.slot > 5:
             emit_error("Slot must be between 1 and 5", args.json)
             return 1
@@ -879,6 +958,8 @@ def main() -> int:
         result = run_continue(args)
     elif args.command == "undo":
         result = run_undo(args)
+    elif args.command == "regenerate":
+        result = run_regenerate(args)
     elif args.command == "model":
         result = run_model(args)
     elif args.command == "clear":

@@ -586,6 +586,7 @@ class TurnCycleManager:
                 "authorial_directives": turn_context.authorial_directives,
             },
             "memory_state": turn_context.memory_state,
+            "note": turn_context.note,
         }
 
         if turn_context.target_chunk_id is not None:

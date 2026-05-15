@@ -260,6 +260,17 @@ class LogonUtility:
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
+        # Add author's note (soft out-of-character suggestion, used by regenerate)
+        note = context.get("note")
+        if note:
+            sections.append("\n=== AUTHOR'S NOTE ===")
+            sections.append(
+                "The player is also leaving a soft, out-of-character suggestion for this "
+                "generation — treat it as authorial intent, not a hard constraint. It may "
+                "be a tonal nudge, a continuity correction, or an outcome preference:"
+            )
+            sections.append(note)
+
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:

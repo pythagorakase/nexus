@@ -105,6 +105,7 @@ async def get_slot_state_endpoint(slot: int):
                 has_pending=state.narrative_state.has_pending,
                 storyteller_text=state.narrative_state.storyteller_text,
                 choices=state.narrative_state.choices,
+                session_id=state.narrative_state.session_id,
                 model=state.model,
             )
 
