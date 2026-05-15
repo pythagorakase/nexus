@@ -19,13 +19,13 @@ COMMENT ON COLUMN narrative_chunks.finalized_at IS
     'Timestamp set by ChunkWorkflow.accept_chunk when the chunk transitions to the ''finalized'' state. NULL while the chunk is in ''draft'' or ''pending_review''.';
 
 COMMENT ON COLUMN narrative_chunks.embedding_generated_at IS
-    'Timestamp set by the embedding subprocess (scripts/regenerate_embeddings.py) after writing a row into one of the chunk_embeddings_*d tables for this chunk. NULL until embedding succeeds.';
+    'Timestamp set by ChunkWorkflow._trigger_embedding_generation after the embedding subprocess (scripts/regenerate_embeddings.py) exits with code 0 — i.e., after a row has been written into one of the chunk_embeddings_*d tables. The subprocess itself does not write this column; the workflow does, post-success. NULL until embedding succeeds.';
 
 COMMENT ON COLUMN narrative_chunks.regeneration_count IS
     'Number of times the storyteller text for this chunk has been regenerated via the regenerate flow. Zero for chunks accepted on first generation.';
 
 COMMENT ON COLUMN narrative_chunks.storyteller_text IS
-    'Authoritative storyteller portion of the chunk (narration only). For in-system chunks this is a strict subset of raw_text — distinct from choice_text (the user response). For legacy imports (slot 1) this equals raw_text because the corpus was never decomposed.';
+    'Authoritative storyteller portion of the chunk (narration only). For in-system chunks this is the leading segment of raw_text — concretely, raw_text = storyteller_text || choice_text, so raw_text.startswith(storyteller_text) holds. For legacy imports (slot 1) this equals raw_text because the corpus was never decomposed.';
 
 COMMENT ON COLUMN narrative_chunks.choice_text IS
     'Authoritative text of the user''s response for this chunk. When the user selects a structured choice via --choice N, holds the text of that presented choice (resolved from choice_object.presented[N-1]). When the user submits freeform input via --user-text, holds that text directly.';
