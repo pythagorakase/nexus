@@ -235,40 +235,6 @@ def _get_wizard_state_from_row(row: dict) -> WizardState:
     )
 
 
-def _get_wizard_state(cur) -> WizardState:
-    """
-    Get wizard state from new_story_creator cache and assets.traits.
-    """
-    cur.execute(
-        """
-        SELECT nsc.thread_id,
-               nsc.setting_genre,
-               nsc.character_name,
-               nsc.seed_type,
-               nsc.layer_name,
-               nsc.zone_name,
-               nsc.initial_location,
-               nsc.traits_confirmed,
-               (SELECT rationale FROM assets.traits WHERE id = 11) as wildcard_rationale
-        FROM assets.new_story_creator nsc
-        WHERE nsc.id = TRUE
-        """
-    )
-    row = cur.fetchone()
-
-    if row is None:
-        return WizardState(
-            phase="setting",
-            thread_id=None,
-            choices=[],
-            has_concept=False,
-            has_traits=False,
-            has_wildcard=False,
-        )
-
-    return _get_wizard_state_from_row(row)
-
-
 def _get_narrative_state(cur) -> NarrativeState:
     """
     Get narrative state from incubator and narrative_chunks.
