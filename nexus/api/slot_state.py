@@ -301,7 +301,7 @@ def _get_narrative_state(cur) -> NarrativeState:
     # No pending content - get latest committed chunk
     cur.execute(
         """
-        SELECT nc.id, nc.raw_text
+        SELECT nc.id, nc.raw_text, nc.choice_object
         FROM narrative_chunks nc
         ORDER BY nc.id DESC
         LIMIT 1
@@ -310,13 +310,12 @@ def _get_narrative_state(cur) -> NarrativeState:
     chunk_row = cur.fetchone()
 
     if chunk_row:
-        # Get choices from the last chunk's choice_object if stored
-        # Note: committed chunks may not have choice_object preserved
+        choices = extract_presented_choices(chunk_row.get("choice_object"))
         return NarrativeState(
             current_chunk_id=chunk_row.get("id"),
             has_pending=False,
             storyteller_text=chunk_row.get("raw_text"),
-            choices=[],  # No pending choices for committed chunks
+            choices=choices,
             session_id=None,
         )
 
