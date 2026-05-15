@@ -29,8 +29,12 @@ from nexus.agents.lore.lore import LORE
 from nexus.api.lore_adapter import (
     response_to_incubator,
     validate_incubator_data,
-    format_choice_text,
     compute_raw_text,
+)
+from nexus.api.choice_handling import (
+    normalize_choice_object,
+    resolve_choice_response,
+    validate_choice_index,
 )
 from nexus.api.chunk_workflow import (
     ChunkWorkflow,
@@ -74,11 +78,11 @@ app.add_middleware(
 )
 
 
-
 # Include modular routers
 app.include_router(slot_router)
 app.include_router(setup_router)
 app.include_router(wizard_chat_router)
+
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -138,13 +142,14 @@ def get_db_connection(slot: Optional[int] = None):
         host=os.environ.get("PGHOST", "localhost"),
         database=dbname,
         user=os.environ.get("PGUSER", "pythagor"),
-        port=os.environ.get("PGPORT", "5432")
+        port=os.environ.get("PGPORT", "5432"),
     )
 
 
 def load_settings():
     """Load settings using centralized config loader."""
     from nexus.config import load_settings_as_dict
+
     return load_settings_as_dict()
 
 
@@ -175,6 +180,269 @@ from nexus.api.narrative_schemas import (
 )
 
 
+def _has_player_response_input(request: ContinueNarrativeRequest) -> bool:
+    """Return whether a continue request carries player response input."""
+    return (
+        bool(request.user_text.strip())
+        or request.choice is not None
+        or request.accept_fate
+    )
+
+
+def _persist_chunk_response(
+    cur,
+    *,
+    is_incubator: bool,
+    chunk_id: int,
+    storyteller_text: str,
+    choice_object: Optional[Dict[str, Any]],
+    choice_text: str,
+) -> str:
+    """Persist resolved player response fields for a chunk."""
+    raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
+
+    if is_incubator:
+        cur.execute(
+            """
+            UPDATE incubator
+            SET choice_object = %s,
+                choice_text = %s
+            WHERE chunk_id = %s
+            """,
+            (
+                json.dumps(choice_object) if choice_object else None,
+                choice_text,
+                chunk_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Incubator chunk_id mismatch; concurrent generation may have replaced it.",
+            )
+    else:
+        cur.execute(
+            """
+            UPDATE narrative_chunks
+            SET choice_object = %s,
+                choice_text = %s,
+                raw_text = %s
+            WHERE id = %s
+            """,
+            (
+                json.dumps(choice_object) if choice_object else None,
+                choice_text,
+                raw_text,
+                chunk_id,
+            ),
+        )
+        if cur.rowcount != 1:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chunk {chunk_id} not found",
+            )
+
+    return raw_text
+
+
+def _record_player_response_for_chunk(
+    *,
+    slot: Optional[int],
+    chunk_id: int,
+    user_text: str,
+    choice: Optional[int],
+    accept_fate: bool,
+    require_response: bool,
+) -> str:
+    """
+    Resolve and persist the player's response for an incubator/committed chunk.
+
+    Returns:
+        The response text that should be sent into the next generation.
+    """
+    try:
+        conn = get_db_connection(slot)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT chunk_id AS id, storyteller_text, choice_object, choice_text
+                FROM incubator
+                WHERE chunk_id = %s
+                """,
+                (chunk_id,),
+            )
+            chunk = cur.fetchone()
+            is_incubator = chunk is not None
+
+            if not chunk:
+                cur.execute(
+                    """
+                    SELECT id, storyteller_text, choice_object, choice_text
+                    FROM narrative_chunks
+                    WHERE id = %s
+                    """,
+                    (chunk_id,),
+                )
+                chunk = cur.fetchone()
+
+            if not chunk:
+                raise HTTPException(
+                    status_code=404, detail=f"Chunk {chunk_id} not found"
+                )
+
+            existing_choice_text = (chunk.get("choice_text") or "").strip()
+            try:
+                choice_object = normalize_choice_object(chunk.get("choice_object"))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            has_new_input = bool(user_text.strip()) or choice is not None or accept_fate
+
+            if existing_choice_text:
+                if has_new_input:
+                    try:
+                        resolved = resolve_choice_response(
+                            choice_object,
+                            choice=choice,
+                            user_text=user_text,
+                            accept_fate=accept_fate,
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
+                    if resolved.choice_text != existing_choice_text:
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Choice already selected for chunk {chunk_id}.",
+                        )
+                return existing_choice_text
+
+            if not has_new_input and not require_response:
+                return user_text
+
+            if not has_new_input:
+                raise HTTPException(status_code=400, detail="No input provided")
+
+            try:
+                resolved = resolve_choice_response(
+                    choice_object,
+                    choice=choice,
+                    user_text=user_text,
+                    accept_fate=accept_fate,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            max_choice_text_length = get_max_choice_text_length()
+            if len(resolved.choice_text) > max_choice_text_length:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Selection text too long ({len(resolved.choice_text)} "
+                        f"chars). Max: {max_choice_text_length}"
+                    ),
+                )
+
+            _persist_chunk_response(
+                cur,
+                is_incubator=is_incubator,
+                chunk_id=chunk_id,
+                storyteller_text=chunk.get("storyteller_text") or "",
+                choice_object=resolved.choice_object,
+                choice_text=resolved.choice_text,
+            )
+
+        conn.commit()
+        return resolved.choice_text
+
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Error recording player response for chunk %s: %s", chunk_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        conn.close()
+
+
+def _trigger_locked_chunk_embedding(
+    *, slot: Optional[int], parent_chunk_id: int
+) -> None:
+    """
+    Embed the chunk that becomes locked when starting from parent_chunk_id.
+
+    Continuing from chunk n-1 creates provisional chunk n. That leaves chunk
+    n-1 undoable, while chunk n-2 is now locked and eligible for embeddings.
+    """
+    locked_chunk_id = parent_chunk_id - 1
+    if locked_chunk_id < 1:
+        return
+
+    try:
+        dbname = require_slot_dbname(slot=slot)
+    except Exception as exc:
+        logger.warning(
+            "Skipping locked chunk embedding for chunk %s: %s",
+            locked_chunk_id,
+            exc,
+        )
+        return
+
+    try:
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT embedding_generated_at
+                    FROM narrative_chunks
+                    WHERE id = %s
+                    """,
+                    (locked_chunk_id,),
+                )
+                row = cur.fetchone()
+
+        if not row:
+            logger.warning(
+                "Skipping locked chunk embedding: chunk %s not found in %s",
+                locked_chunk_id,
+                dbname,
+            )
+            return
+
+        if row.get("embedding_generated_at"):
+            logger.info(
+                "Skipping locked chunk embedding: chunk %s already embedded",
+                locked_chunk_id,
+            )
+            return
+
+        workflow = ChunkWorkflow(dbname)
+        job_id = workflow.trigger_embedding_generation(locked_chunk_id)
+        if job_id:
+            logger.info(
+                "Generated embeddings for locked chunk %s in %s (%s)",
+                locked_chunk_id,
+                dbname,
+                job_id,
+            )
+        else:
+            logger.warning(
+                "Embedding generation did not complete for locked chunk %s in %s",
+                locked_chunk_id,
+                dbname,
+            )
+    except Exception as exc:
+        logger.error(
+            "Error embedding locked chunk %s for slot %s: %s",
+            locked_chunk_id,
+            slot,
+            exc,
+        )
+
+
 # API Endpoints
 @app.get("/health")
 async def health_check():
@@ -186,6 +454,7 @@ async def health_check():
 async def get_config_models():
     """Get available API models with provider info from nexus.toml."""
     from nexus.config.loader import get_all_api_models, get_api_models_by_provider
+
     return {
         "models": get_all_api_models(),
         "by_provider": get_api_models_by_provider(),
@@ -213,10 +482,12 @@ async def continue_narrative(
                 detail="Model override requires a slot to persist the selection.",
             )
         from nexus.api.save_slots import upsert_slot
+
         upsert_slot(request.slot, model=request.model, dbname=slot_dbname(request.slot))
         logger.info("Persisted model %s to slot %s", request.model, request.slot)
 
     # Resolve chunk_id from slot state if not provided
+    resolved_user_text = request.user_text
     if request.chunk_id is None and request.slot is not None:
         from nexus.api.slot_state import get_slot_state
 
@@ -224,7 +495,7 @@ async def continue_narrative(
         if state.is_wizard_mode:
             raise HTTPException(
                 status_code=400,
-                detail="Slot is in wizard mode. Use /api/story/new/chat for wizard."
+                detail="Slot is in wizard mode. Use /api/story/new/chat for wizard.",
             )
         if state.narrative_state is not None:
             narrative_state = state.narrative_state
@@ -232,12 +503,20 @@ async def continue_narrative(
                 if narrative_state.session_id is None:
                     raise HTTPException(
                         status_code=409,
-                        detail="Slot has pending incubator content that must be approved before continuing."
+                        detail="Slot has pending incubator content that must be approved before continuing.",
                     )
                 logger.info(
                     "Auto-approving pending incubator session %s for slot %s",
                     narrative_state.session_id,
                     request.slot,
+                )
+                resolved_user_text = _record_player_response_for_chunk(
+                    slot=request.slot,
+                    chunk_id=narrative_state.current_chunk_id,
+                    user_text=request.user_text,
+                    choice=request.choice,
+                    accept_fate=request.accept_fate,
+                    require_response=True,
                 )
                 approval = await approve_narrative(
                     session_id=narrative_state.session_id,
@@ -250,12 +529,36 @@ async def continue_narrative(
                 if not approved_chunk_id:
                     raise HTTPException(
                         status_code=409,
-                        detail="Pending incubator content must be approved before continuing."
+                        detail="Pending incubator content must be approved before continuing.",
                     )
                 request.chunk_id = approved_chunk_id
             else:
                 request.chunk_id = narrative_state.current_chunk_id
-            logger.info(f"Resolved chunk_id={request.chunk_id} from slot {request.slot}")
+                if _has_player_response_input(request) and (
+                    request.choice is not None
+                    or request.accept_fate
+                    or narrative_state.choices
+                ):
+                    resolved_user_text = _record_player_response_for_chunk(
+                        slot=request.slot,
+                        chunk_id=narrative_state.current_chunk_id,
+                        user_text=request.user_text,
+                        choice=request.choice,
+                        accept_fate=request.accept_fate,
+                        require_response=False,
+                    )
+            logger.info(
+                f"Resolved chunk_id={request.chunk_id} from slot {request.slot}"
+            )
+    elif request.chunk_id and _has_player_response_input(request):
+        resolved_user_text = _record_player_response_for_chunk(
+            slot=request.slot,
+            chunk_id=request.chunk_id,
+            user_text=request.user_text,
+            choice=request.choice,
+            accept_fate=request.accept_fate,
+            require_response=False,
+        )
 
     session_id = str(uuid.uuid4())
 
@@ -268,13 +571,17 @@ async def continue_narrative(
     else:
         logger.info(f"Starting narrative continuation for chunk {parent_chunk_id}")
     logger.info(f"Session ID: {session_id}")
-    logger.info(f"User text: {request.user_text[:100]}...")
+    logger.info(f"User text: {resolved_user_text[:100]}...")
 
     # Send initial progress
     await manager.send_progress(
         session_id,
         "initiated",
-        {"chunk_id": parent_chunk_id, "parent_chunk_id": parent_chunk_id, "is_bootstrap": is_bootstrap},
+        {
+            "chunk_id": parent_chunk_id,
+            "parent_chunk_id": parent_chunk_id,
+            "is_bootstrap": is_bootstrap,
+        },
     )
 
     # Start async generation in background
@@ -282,14 +589,24 @@ async def continue_narrative(
         generate_narrative_async,
         session_id,
         parent_chunk_id,
-        request.user_text,
+        resolved_user_text,
         request.slot,
         get_db_connection=get_db_connection,
         load_settings=load_settings,
         manager=manager,
     )
+    if not is_bootstrap and request.slot is not None:
+        background_tasks.add_task(
+            _trigger_locked_chunk_embedding,
+            slot=request.slot,
+            parent_chunk_id=parent_chunk_id,
+        )
 
-    message = "Narrative bootstrap started" if is_bootstrap else f"Narrative generation started for chunk {parent_chunk_id}"
+    message = (
+        "Narrative bootstrap started"
+        if is_bootstrap
+        else f"Narrative generation started for chunk {parent_chunk_id}"
+    )
     return ContinueNarrativeResponse(
         session_id=session_id,
         status="processing",
@@ -350,8 +667,7 @@ async def approve_narrative_unified(request: ApproveNarrativeRequest):
     if session_id is None:
         if slot is None:
             raise HTTPException(
-                status_code=400,
-                detail="Either session_id or slot must be provided"
+                status_code=400, detail="Either session_id or slot must be provided"
             )
         from nexus.api.slot_utils import slot_dbname
 
@@ -365,17 +681,23 @@ async def approve_narrative_unified(request: ApproveNarrativeRequest):
                 if not row:
                     raise HTTPException(
                         status_code=404,
-                        detail="No pending session to approve in incubator"
+                        detail="No pending session to approve in incubator",
                     )
                 session_id = row["session_id"]
-                logger.info(f"Resolved session_id={session_id} from slot {slot} incubator")
+                logger.info(
+                    f"Resolved session_id={session_id} from slot {slot} incubator"
+                )
 
     # Now call the implementation
     return await _approve_narrative_impl(session_id, request.commit, slot)
 
 
 @app.post("/api/narrative/approve/{session_id}")
-async def approve_narrative(session_id: str, request: Optional[ApproveNarrativeRequest] = None, slot: Optional[int] = None):
+async def approve_narrative(
+    session_id: str,
+    request: Optional[ApproveNarrativeRequest] = None,
+    slot: Optional[int] = None,
+):
     """
     Approve narrative and optionally commit to database (path-based for backward compatibility).
     """
@@ -445,42 +767,51 @@ async def select_choice(request: SelectChoiceRequest):
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # First try narrative_chunks
-            cur.execute("""
-                SELECT id, storyteller_text, choice_object
+            cur.execute(
+                """
+                SELECT id, storyteller_text, choice_object, choice_text
                 FROM narrative_chunks
                 WHERE id = %s
-            """, (request.chunk_id,))
+            """,
+                (request.chunk_id,),
+            )
             chunk = cur.fetchone()
 
             # Fall back to incubator if not found in narrative_chunks
             if not chunk:
-                cur.execute("""
-                    SELECT chunk_id as id, storyteller_text, choice_object
+                cur.execute(
+                    """
+                    SELECT chunk_id as id, storyteller_text, choice_object, choice_text
                     FROM incubator
                     WHERE chunk_id = %s
-                """, (request.chunk_id,))
+                """,
+                    (request.chunk_id,),
+                )
                 chunk = cur.fetchone()
                 is_incubator = True
 
             if not chunk:
                 raise HTTPException(
-                    status_code=404,
-                    detail=f"Chunk {request.chunk_id} not found"
+                    status_code=404, detail=f"Chunk {request.chunk_id} not found"
                 )
 
             # Validate choice_object exists
-            choice_object = chunk.get("choice_object")
+            try:
+                choice_object = normalize_choice_object(chunk.get("choice_object"))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
             if not choice_object:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Chunk {request.chunk_id} has no choices to select from"
+                    detail=f"Chunk {request.chunk_id} has no choices to select from",
                 )
 
             # P1: Check if choice already selected (prevent race condition)
-            if choice_object.get("selected"):
+            if choice_object.get("selected") or chunk.get("choice_text"):
                 raise HTTPException(
                     status_code=409,
-                    detail=f"Choice already selected for chunk {request.chunk_id}. Cannot re-select."
+                    detail=f"Choice already selected for chunk {request.chunk_id}. Cannot re-select.",
                 )
 
             # P0: Validate selection label is valid
@@ -488,60 +819,51 @@ async def select_choice(request: SelectChoiceRequest):
             if request.selection.label != "freeform":
                 if not isinstance(request.selection.label, int):
                     raise HTTPException(status_code=400, detail="Invalid label type")
-                if not (1 <= request.selection.label <= len(presented)):
+                try:
+                    selected_choice_text = validate_choice_index(
+                        request.selection.label, presented
+                    )
+                except ValueError as exc:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid choice label: {request.selection.label}. Must be 1-{len(presented)} or 'freeform'"
-                    )
+                        detail=str(exc),
+                    ) from exc
+                choice_text = (
+                    request.selection.text
+                    if request.selection.edited
+                    else selected_choice_text
+                )
+                selected_index: Optional[int] = request.selection.label
+            else:
+                choice_text = request.selection.text
+                selected_index = None
 
             # P0: Validate text length (prevent abuse)
             max_choice_text_length = get_max_choice_text_length()
-            if len(request.selection.text) > max_choice_text_length:
+            if len(choice_text) > max_choice_text_length:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Selection text too long ({len(request.selection.text)} chars). Max: {max_choice_text_length}"
+                    detail=f"Selection text too long ({len(choice_text)} chars). Max: {max_choice_text_length}",
                 )
 
             # Update choice_object with selection
-            choice_object["selected"] = {
-                "label": request.selection.label,
-                "text": request.selection.text,
-                "edited": request.selection.edited,
-            }
-
-            # Generate choice_text markdown
-            choice_text = format_choice_text(choice_object, include_selection=True)
-
-            # Compute final raw_text for embeddings
+            choice_object["selected"] = selected_index
             storyteller_text = chunk.get("storyteller_text") or ""
-            raw_text = compute_raw_text(storyteller_text, choice_object)
 
             # Update the chunk in the appropriate table
+            raw_text = _persist_chunk_response(
+                cur,
+                is_incubator=is_incubator,
+                chunk_id=request.chunk_id,
+                storyteller_text=storyteller_text,
+                choice_object=choice_object,
+                choice_text=choice_text,
+            )
             if is_incubator:
-                # For incubator, only update choice_object (raw_text computed at commit)
-                cur.execute("""
-                    UPDATE incubator
-                    SET choice_object = %s
-                    WHERE chunk_id = %s
-                """, (
-                    json.dumps(choice_object),
-                    request.chunk_id
-                ))
-                logger.info(f"Recorded choice selection for incubator chunk {request.chunk_id}")
+                logger.info(
+                    f"Recorded choice selection for incubator chunk {request.chunk_id}"
+                )
             else:
-                # For committed chunks, update all fields
-                cur.execute("""
-                    UPDATE narrative_chunks
-                    SET choice_object = %s,
-                        choice_text = %s,
-                        raw_text = %s
-                    WHERE id = %s
-                """, (
-                    json.dumps(choice_object),
-                    choice_text,
-                    raw_text,
-                    request.chunk_id
-                ))
                 logger.info(f"Finalized choice selection for chunk {request.chunk_id}")
 
         conn.commit()
@@ -549,7 +871,7 @@ async def select_choice(request: SelectChoiceRequest):
         return SelectChoiceResponse(
             status="pending" if is_incubator else "finalized",
             chunk_id=request.chunk_id,
-            raw_text=raw_text
+            raw_text=raw_text,
         )
 
     except HTTPException:
@@ -687,12 +1009,14 @@ async def get_user_character(slot: Optional[int] = None):
         )
         with conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT c.name
                     FROM global_variables gv
                     JOIN characters c ON c.id = gv.user_character
                     WHERE gv.id = TRUE
-                """)
+                """
+                )
                 row = cur.fetchone()
                 if row:
                     return {"name": row[0]}
@@ -701,7 +1025,7 @@ async def get_user_character(slot: Optional[int] = None):
         logger.error(f"Database error fetching user character: {e}")
         raise HTTPException(status_code=500, detail="Database error")
     finally:
-        if 'conn' in locals():
+        if "conn" in locals():
             conn.close()
 
 

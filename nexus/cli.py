@@ -521,32 +521,15 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
         # (Also reached after wizard transition above)
         if not state.get("is_wizard_mode"):
             # Narrative mode - call continue directly
-            # Resolve choice to user_text if provided
             model_to_use = args.model or state.get("model")
             user_text = args.user_text or ""
-            if args.choice is not None and state.get("choices"):
-                choices = state.get("choices", [])
-                if 1 <= args.choice <= len(choices):
-                    user_text = choices[args.choice - 1]
-                else:
-                    return {
-                        "success": False,
-                        "error": f"Choice {args.choice} out of range (1-{len(choices)})",
-                    }
-
-            # Approve pending content if exists
-            if state.get("has_pending"):
-                approve_url = f"{get_api_url()}/api/narrative/approve"
-                approve_response = requests.post(
-                    approve_url, json={"slot": args.slot, "commit": True}, timeout=30
-                )
-                if not approve_response.ok:
-                    logger.warning("Auto-approve failed: %s", approve_response.text)
 
             url = f"{get_api_url()}/api/narrative/continue"
             payload = {
                 "slot": args.slot,
                 "user_text": user_text,
+                "choice": args.choice,
+                "accept_fate": args.accept_fate,
                 # chunk_id resolved by backend
             }
             if model_to_use:
@@ -836,7 +819,8 @@ Examples:
     model_parser = subparsers.add_parser("model", help="Get or set model for a slot")
     model_parser.add_argument("--slot", type=int, help="Slot number (1-5)")
     model_parser.add_argument(
-        "--set", help="Set the model (use a registry ID; run with --list to see options)"
+        "--set",
+        help="Set the model (use a registry ID; run with --list to see options)",
     )
     model_parser.add_argument(
         "--list", action="store_true", help="List available models"
