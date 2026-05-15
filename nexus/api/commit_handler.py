@@ -29,8 +29,11 @@ from nexus.api.summary_triggers import (
     plan_summary_tasks,
     schedule_summary_generation,
 )
-from nexus.api.choice_handling import normalize_choice_object
-from nexus.api.lore_adapter import compute_raw_text, format_choice_text
+from nexus.api.choice_handling import (
+    normalize_choice_object,
+    selected_text_from_choice_object,
+)
+from nexus.api.lore_adapter import compute_raw_text
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -396,11 +399,9 @@ async def commit_incubator_to_database(
             storyteller_text = incubator.get("storyteller_text") or ""
             choice_text = incubator.get("choice_text")
             if choice_object:
+                if not choice_text:
+                    choice_text = selected_text_from_choice_object(choice_object)
                 choice_object = normalize_choice_object(choice_object)
-                if not choice_text and choice_object.get("selected"):
-                    choice_text = format_choice_text(
-                        choice_object, include_selection=True
-                    )
 
             raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
             chunk_id = await insert_narrative_chunk(

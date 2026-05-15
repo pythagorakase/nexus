@@ -215,6 +215,11 @@ def _persist_chunk_response(
                 chunk_id,
             ),
         )
+        if cur.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Incubator chunk_id mismatch; concurrent generation may have replaced it.",
+            )
     else:
         cur.execute(
             """
@@ -231,6 +236,11 @@ def _persist_chunk_response(
                 chunk_id,
             ),
         )
+        if cur.rowcount != 1:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Chunk {chunk_id} not found",
+            )
 
     return raw_text
 
@@ -250,7 +260,11 @@ def _record_player_response_for_chunk(
     Returns:
         The response text that should be sent into the next generation.
     """
-    conn = get_db_connection(slot)
+    try:
+        conn = get_db_connection(slot)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
@@ -536,11 +550,7 @@ async def continue_narrative(
             logger.info(
                 f"Resolved chunk_id={request.chunk_id} from slot {request.slot}"
             )
-    elif (
-        request.chunk_id
-        and request.slot is not None
-        and _has_player_response_input(request)
-    ):
+    elif request.chunk_id and _has_player_response_input(request):
         resolved_user_text = _record_player_response_for_chunk(
             slot=request.slot,
             chunk_id=request.chunk_id,
@@ -585,7 +595,7 @@ async def continue_narrative(
         load_settings=load_settings,
         manager=manager,
     )
-    if not is_bootstrap:
+    if not is_bootstrap and request.slot is not None:
         background_tasks.add_task(
             _trigger_locked_chunk_embedding,
             slot=request.slot,

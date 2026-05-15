@@ -1103,7 +1103,7 @@ class EmbeddingRegenerator:
                 missing_sql = f"""
                 SELECT c.id FROM narrative_chunks c
                 LEFT JOIN {table_name} e ON c.id = e.chunk_id AND e.model = :model_name
-                WHERE e.id IS NULL;
+                WHERE e.chunk_id IS NULL;
                 """
                 missing_ids = [row[0] for row in conn.execute(text(missing_sql), {"model_name": self.model_name}).fetchall()]
                 
@@ -1352,6 +1352,78 @@ def regenerate_missing_chunks(model_name: str, missing_file: str, batch_size: in
         return {"total": 0, "success": 0, "failed": 0}
 
 
+def delete_existing_chunk_embedding(
+    model_name: str,
+    chunk_id: int,
+    db_url: str = None,
+    dry_run: bool = False,
+) -> int:
+    """
+    Delete one existing embedding row before targeted regeneration.
+
+    Args:
+        model_name: Embedding model to delete
+        chunk_id: Narrative chunk ID to delete
+        db_url: Database URL
+        dry_run: If True, don't make actual changes
+
+    Returns:
+        Number of deleted rows
+    """
+    if dry_run:
+        logger.info(
+            f"[DRY RUN] Would delete existing {model_name} embedding for chunk {chunk_id}"
+        )
+        return 0
+
+    if not db_url:
+        try:
+            from nexus.api.slot_utils import get_slot_db_url
+
+            db_url = get_slot_db_url()
+        except (ImportError, RuntimeError):
+            db_url = os.environ.get("NEXUS_DB_URL")
+            if not db_url:
+                raise RuntimeError(
+                    "No database URL provided. Set NEXUS_SLOT (1-5) or NEXUS_DB_URL."
+                )
+
+    dimensions = get_model_dimensions(model_name)
+    table_name = f"chunk_embeddings_{dimensions:04d}d"
+    engine = create_engine(db_url)
+
+    with engine.begin() as conn:
+        table_exists = conn.execute(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables
+                    WHERE LOWER(table_name) = LOWER(:table_name)
+                );
+                """
+            ),
+            {"table_name": table_name},
+        ).scalar()
+        if not table_exists:
+            return 0
+
+        result = conn.execute(
+            text(f"""
+                DELETE FROM {table_name}
+                WHERE chunk_id = :chunk_id
+                  AND model = :model_name
+            """),
+            {"chunk_id": chunk_id, "model_name": model_name},
+        )
+        deleted = result.rowcount or 0
+
+    if deleted:
+        logger.info(
+            f"Deleted existing {model_name} embedding for chunk {chunk_id}"
+        )
+    return deleted
+
+
 def regenerate_specific_chunk(
     model_name: str,
     chunk_id: int,
@@ -1376,6 +1448,13 @@ def regenerate_specific_chunk(
     """
     if chunk_id <= 0:
         raise ValueError(f"chunk_id must be positive, got {chunk_id}")
+
+    delete_existing_chunk_embedding(
+        model_name=model_name,
+        chunk_id=chunk_id,
+        db_url=db_url,
+        dry_run=dry_run,
+    )
 
     missing_path = None
     try:

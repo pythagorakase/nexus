@@ -174,6 +174,23 @@ def normalize_choice_object(raw: Any) -> Optional[Dict[str, Any]]:
 
 def selected_text_from_choice_object(raw: Any) -> Optional[str]:
     """Return selected choice text from a choice_object, if it has one."""
+    decoded = raw
+    if isinstance(decoded, str):
+        try:
+            decoded = json.loads(decoded)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid choice_object JSON") from exc
+
+    if isinstance(decoded, dict):
+        selected_raw = decoded.get("selected")
+        if isinstance(selected_raw, dict):
+            label = selected_raw.get("label")
+            text = (selected_raw.get("text") or "").strip()
+            if label == "freeform":
+                return text or None
+            if isinstance(label, int) and selected_raw.get("edited") and text:
+                return text
+
     choice_object = normalize_choice_object(raw)
     if not choice_object or choice_object.get("selected") is None:
         return None

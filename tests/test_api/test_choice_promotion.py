@@ -80,6 +80,27 @@ def test_legacy_selected_object_normalizes_to_integer() -> None:
     assert selected_text_from_choice_object(choice_object) == "Stay hidden."
 
 
+def test_legacy_freeform_selection_preserves_text() -> None:
+    """Readers should recover freeform text before canonical normalization."""
+    choice_object = {
+        "presented": ["Cross the street.", "Stay hidden."],
+        "selected": {
+            "label": "freeform",
+            "text": "Circle around through the loading dock.",
+            "edited": True,
+        },
+    }
+
+    assert normalize_choice_object(choice_object)["selected"] is None
+    assert (
+        selected_text_from_choice_object(choice_object)
+        == "Circle around through the loading dock."
+    )
+    assert compute_raw_text("Rain silvered the street.", choice_object) == (
+        "Rain silvered the street.\n\nCircle around through the loading dock."
+    )
+
+
 def test_compute_raw_text_uses_choice_text_not_full_menu() -> None:
     """raw_text is storyteller prose plus the selected/freeform response only."""
     raw_text = compute_raw_text(

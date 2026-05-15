@@ -7,9 +7,10 @@ CREATE TABLE IF NOT EXISTS incubator (
     parent_chunk_id BIGINT NOT NULL,                        -- Where we're continuing from (e.g., 1425)
     user_text TEXT,                                         -- User's completion text for parent chunk
     storyteller_text TEXT,                                  -- Generated text for new chunk
+    choice_object JSONB,                                    -- Structured choices presented by LOGON
     choice_text TEXT,                                       -- User response text resolved before commit
     metadata_updates JSONB DEFAULT '{}',                    -- Time delta, episode transition, etc
-    entity_updates JSONB DEFAULT '[]',                      -- Character/place/faction state changes
+    entity_updates JSONB DEFAULT '{}',                      -- Character/place/faction state changes
     reference_updates JSONB DEFAULT '{}',                   -- Entity references (present/mentioned)
     session_id UUID NOT NULL DEFAULT gen_random_uuid(),     -- Track generation attempts
     llm_response_id TEXT,                                   -- API response ID for debugging
@@ -24,9 +25,10 @@ COMMENT ON COLUMN incubator.chunk_id IS 'ID of the new chunk being created (not 
 COMMENT ON COLUMN incubator.parent_chunk_id IS 'ID of existing chunk being continued from';
 COMMENT ON COLUMN incubator.user_text IS 'User completion text for the parent chunk';
 COMMENT ON COLUMN incubator.storyteller_text IS 'AI-generated storyteller text for the new chunk';
+COMMENT ON COLUMN incubator.choice_object IS 'Structured choice data: {presented: string[], selected: int|null}';
 COMMENT ON COLUMN incubator.choice_text IS 'Resolved user response text for the pending chunk';
 COMMENT ON COLUMN incubator.metadata_updates IS 'JSON: {episode_transition, time_delta_seconds, time_delta_description, world_layer, pacing}';
-COMMENT ON COLUMN incubator.entity_updates IS 'JSON array of entity state changes: [{type, id, field, old_value, new_value}]';
+COMMENT ON COLUMN incubator.entity_updates IS 'JSON object of entity state changes: {characters: [], locations: [], factions: []}';
 COMMENT ON COLUMN incubator.reference_updates IS 'JSON: {character_present: [], character_referenced: [], place_referenced: []}';
 COMMENT ON COLUMN incubator.session_id IS 'UUID for tracking regeneration attempts';
 COMMENT ON COLUMN incubator.llm_response_id IS 'OpenAI or LM Studio response ID for debugging';
@@ -40,19 +42,24 @@ SELECT
     nc.raw_text as parent_chunk_text,
     i.user_text,
     i.storyteller_text,
+    i.choice_object,
     i.choice_text,
-    i.metadata_updates->>'episode_transition' as episode_transition,
-    i.metadata_updates->>'time_delta_description' as time_delta,
-    i.metadata_updates->>'world_layer' as world_layer,
-    i.metadata_updates->>'pacing' as pacing,
-    jsonb_array_length(i.entity_updates) as entity_update_count,
-    i.entity_updates as entity_changes,
-    i.reference_updates as references,
+    i.metadata_updates -> 'chronology' ->> 'episode_transition' AS episode_transition,
+    i.metadata_updates -> 'chronology' ->> 'time_delta_description' AS time_delta,
+    i.metadata_updates ->> 'world_layer' AS world_layer,
+    i.metadata_updates ->> 'pacing' AS pacing,
+    COALESCE(jsonb_array_length(i.entity_updates -> 'characters'), 0)
+        + COALESCE(jsonb_array_length(i.entity_updates -> 'locations'), 0)
+        + COALESCE(jsonb_array_length(i.entity_updates -> 'factions'), 0)
+        AS entity_update_count,
+    i.entity_updates AS entity_changes,
+    i.reference_updates AS "references",
     i.status,
     i.session_id,
     i.created_at
 FROM incubator i
-LEFT JOIN narrative_chunks nc ON nc.id = i.parent_chunk_id;
+LEFT JOIN narrative_chunks nc ON nc.id = i.parent_chunk_id
+WHERE i.id = TRUE;
 
 COMMENT ON VIEW incubator_view IS 'Human-readable view of incubator contents with parent chunk context';
 
