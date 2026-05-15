@@ -20,6 +20,9 @@ python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --on
 # Resume embedding generation from a missing chunks file:
 python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --resume-from missing_chunks.txt
 
+# Generate embeddings for one locked narrative chunk in a slot database:
+python scripts/regenerate_embeddings.py --model Octen-Embedding-4B --chunk 42 --database save_05
+
 # Do a dry run without making changes:
 python scripts/regenerate_embeddings.py --model infly/inf-retriever-v1-1.5b --dry-run
 
@@ -33,6 +36,8 @@ ARGUMENTS:
 --create-indexes          Create vector indexes after data loading
 --only-indexes            Only create indexes, skip embedding generation
 --resume-from FILE        Resume from a file of missing chunk IDs
+--chunk ID                Generate or update embeddings for one chunk ID
+--database DBNAME         Slot database name (save_01 through save_05)
 
 Dependencies:
     - pgvector 
@@ -46,6 +51,7 @@ import sys
 import json
 import logging
 import time
+import tempfile
 from typing import Dict, List, Tuple, Any, Optional, Union
 import tqdm
 import argparse
@@ -75,6 +81,7 @@ except ImportError:
         
         # High-dimensional models
         "infly/inf-retriever-v1-1.5b": 1536,
+        "inf-retriever-v1-1.5b": 1536,
     }
     
     def get_model_dimensions(model_name: str) -> int:
@@ -254,7 +261,8 @@ class EmbeddingRegenerator:
     """Regenerates embeddings for all narrative chunks"""
     
     def __init__(self, model_name: str, batch_size: int = 10, db_url: str = None, dry_run: bool = False,
-                 create_indexes: bool = False, truncate_table: bool = False):
+                 create_indexes: bool = False, truncate_table: bool = False,
+                 preserve_existing: bool = False):
         """
         Initialize the regenerator with database connection and model.
         
@@ -266,12 +274,15 @@ class EmbeddingRegenerator:
             create_indexes: If True, create vector indexes after data is loaded
                            If False, only create basic indexes (faster for data loading)
             truncate_table: If True, completely truncate the table before starting (clean slate)
+            preserve_existing: If True, keep existing rows for this model
         """
         self.model_name = model_name
         self.batch_size = batch_size
         self.dry_run = dry_run
         self.create_indexes = create_indexes
         self.truncate_table = truncate_table
+        self.preserve_existing = preserve_existing
+        self.align_ids_with_chunk_ids = False
         self.dimensions = get_model_dimensions(model_name)
         self.sequence_reset_done = False  # Track if we've reset the sequence
         self.force_id_for_first_insert = False  # Will be set to True if needed
@@ -479,6 +490,16 @@ class EmbeddingRegenerator:
         dim_str = f"{self.dimensions:04d}"  # Format with leading zeros
         # PostgreSQL converts identifiers to lowercase by default
         return f"chunk_embeddings_{dim_str}d"
+
+    def sync_id_sequence_to_max(self) -> None:
+        """Move the table ID sequence to the current max(id)."""
+        table_name = self.get_table_name()
+        with self.engine.begin() as conn:
+            conn.execute(text(f"""
+                SELECT setval('{table_name}_id_seq',
+                    (SELECT COALESCE(MAX(id), 1) FROM {table_name}),
+                    true);
+            """))
     
     def get_all_chunks(self) -> List[Dict[str, Any]]:
         """
@@ -604,10 +625,15 @@ class EmbeddingRegenerator:
         if not self.sequence_reset_done:
             with self.engine.begin() as conn:
                 try:
-                    # First ensure there are no existing rows for this model (belt and suspenders)
-                    delete_query = f"DELETE FROM {table_name} WHERE model = :model_name;"
-                    conn.execute(text(delete_query), {"model_name": self.model_name})
-                    logger.info(f"✅ Removed any existing rows for model {self.model_name}")
+                    if self.preserve_existing:
+                        logger.info(
+                            f"Preserving existing rows for model {self.model_name}"
+                        )
+                    else:
+                        # First ensure there are no existing rows for this model (belt and suspenders)
+                        delete_query = f"DELETE FROM {table_name} WHERE model = :model_name;"
+                        conn.execute(text(delete_query), {"model_name": self.model_name})
+                        logger.info(f"✅ Removed any existing rows for model {self.model_name}")
                     
                     # Check if other models are using this table
                     other_models_sql = f"""
@@ -620,6 +646,24 @@ class EmbeddingRegenerator:
                                               {"this_model": self.model_name}).fetchall()
                     
                     has_other_models = len(other_models) > 0
+
+                    if self.preserve_existing and not has_other_models:
+                        self.align_ids_with_chunk_ids = True
+                        conn.execute(text(f"""
+                            UPDATE {table_name}
+                            SET id = -chunk_id
+                            WHERE model = :model_name
+                              AND id <> chunk_id;
+                        """), {"model_name": self.model_name})
+                        conn.execute(text(f"""
+                            UPDATE {table_name}
+                            SET id = chunk_id
+                            WHERE model = :model_name
+                              AND id < 0;
+                        """), {"model_name": self.model_name})
+                        logger.info(
+                            f"Aligned {table_name}.id with chunk_id for {self.model_name}"
+                        )
                     
                     # Next get minimum and maximum existing IDs
                     count_sql = f"SELECT COUNT(*), MIN(id), MAX(id) FROM {table_name};"
@@ -641,7 +685,7 @@ class EmbeddingRegenerator:
                         # to avoid conflicts with existing rows
                         reset_sql = f"""
                         SELECT setval('{table_name}_id_seq', 
-                                     (SELECT COALESCE(MAX(id), 0) FROM {table_name}),
+                                     (SELECT COALESCE(MAX(id), 1) FROM {table_name}),
                                      true);
                         """
                         conn.execute(text(reset_sql))
@@ -662,7 +706,7 @@ class EmbeddingRegenerator:
                         # No other models but not truncating - just reset to next available ID
                         reset_sql = f"""
                         SELECT setval('{table_name}_id_seq', 
-                                     (SELECT COALESCE(MAX(id), 0) FROM {table_name}),
+                                     (SELECT COALESCE(MAX(id), 1) FROM {table_name}),
                                      true);
                         """
                         conn.execute(text(reset_sql))
@@ -711,7 +755,17 @@ class EmbeddingRegenerator:
                     embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
                     
                     # For the very first insert on a truncated table, force ID=1
-                    if is_first_insert and self.force_id_for_first_insert:
+                    if self.align_ids_with_chunk_ids:
+                        insert_sql = text(f"""
+                            INSERT INTO {table_name}
+                            (id, chunk_id, model, embedding, created_at)
+                            VALUES (:embedding_id, :chunk_id, :model_name, '{embedding_str}'::vector({self.dimensions}), NOW())
+                            ON CONFLICT (chunk_id, model) DO UPDATE
+                            SET id = EXCLUDED.id,
+                                embedding = '{embedding_str}'::vector({self.dimensions}),
+                                created_at = NOW();
+                        """)
+                    elif is_first_insert and self.force_id_for_first_insert:
                         insert_sql = text(f"""
                             INSERT INTO {table_name} 
                             (id, chunk_id, model, embedding, created_at) 
@@ -738,6 +792,7 @@ class EmbeddingRegenerator:
                     
                     # Execute the statement with just the standard parameters
                     session.execute(insert_sql, {
+                        "embedding_id": int(chunk_id),
                         "chunk_id": int(chunk_id), 
                         "model_name": self.model_name
                     })
@@ -753,6 +808,8 @@ class EmbeddingRegenerator:
             
             if success_count > 0:
                 logger.info(f"Stored {success_count}/{len(batch)} embeddings in {table_name}")
+                if self.align_ids_with_chunk_ids:
+                    self.sync_id_sequence_to_max()
             
             return success_count
         
@@ -1243,7 +1300,8 @@ def regenerate_missing_chunks(model_name: str, missing_file: str, batch_size: in
             db_url=db_url, 
             dry_run=dry_run,
             create_indexes=create_indexes,
-            truncate_table=truncate_table
+            truncate_table=truncate_table,
+            preserve_existing=True
         )
         
         # Process each chunk in batches
@@ -1293,6 +1351,60 @@ def regenerate_missing_chunks(model_name: str, missing_file: str, batch_size: in
         logger.error(f"Error processing missing chunks: {e}")
         return {"total": 0, "success": 0, "failed": 0}
 
+
+def regenerate_specific_chunk(
+    model_name: str,
+    chunk_id: int,
+    batch_size: int = 1,
+    db_url: str = None,
+    dry_run: bool = False,
+    create_indexes: bool = False,
+):
+    """
+    Generate or update embeddings for one narrative chunk.
+
+    Args:
+        model_name: Embedding model to use
+        chunk_id: Narrative chunk ID to embed
+        batch_size: Batch size for processing
+        db_url: Database URL
+        dry_run: If True, don't make actual changes
+        create_indexes: If True, create vector indexes after data loading
+
+    Returns:
+        Dict with results
+    """
+    if chunk_id <= 0:
+        raise ValueError(f"chunk_id must be positive, got {chunk_id}")
+
+    missing_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            delete=False,
+            prefix=f"nexus_chunk_{chunk_id}_",
+            suffix=".txt",
+        ) as missing_file:
+            missing_file.write(f"{chunk_id}\n")
+            missing_path = missing_file.name
+
+        return regenerate_missing_chunks(
+            model_name=model_name,
+            missing_file=missing_path,
+            batch_size=batch_size,
+            db_url=db_url,
+            dry_run=dry_run,
+            create_indexes=create_indexes,
+            truncate_table=False,
+        )
+    finally:
+        if missing_path:
+            try:
+                os.unlink(missing_path)
+            except OSError as exc:
+                logger.warning(f"Could not delete temporary chunk file: {exc}")
+
+
 def main():
     """Main function to run the regeneration process"""
     parser = argparse.ArgumentParser(description="Regenerate embeddings for narrative chunks")
@@ -1306,17 +1418,76 @@ def main():
     parser.add_argument("--only-indexes", action="store_true",
                        help="Only create indexes, skip embedding generation (use after running without indexes)")
     parser.add_argument("--resume-from", help="Resume from a file of missing chunk IDs")
+    parser.add_argument("--chunk", type=int, help="Generate embeddings for one chunk ID")
+    parser.add_argument("--database", help="Slot database name (save_01 through save_05)")
     parser.add_argument("--truncate-table", action="store_true", 
                        help="Completely truncate the table and reset sequence before starting (clean slate approach)")
     args = parser.parse_args()
+
+    if args.database:
+        if args.db_url:
+            print("Error: Use either --database or --db-url, not both")
+            sys.exit(1)
+        try:
+            from nexus.api.slot_utils import get_slot_db_url
+
+            args.db_url = get_slot_db_url(dbname=args.database)
+        except Exception as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
     
     # Check input validity
-    if not args.model and not args.all_models and not args.only_indexes and not args.resume_from:
-        print("Error: Either --model, --all-models, --only-indexes, or --resume-from must be specified")
+    if (
+        not args.model
+        and not args.all_models
+        and not args.only_indexes
+        and not args.resume_from
+        and args.chunk is None
+    ):
+        print(
+            "Error: Either --model, --all-models, --only-indexes, "
+            "--resume-from, or --chunk must be specified"
+        )
         parser.print_help()
         sys.exit(1)
     
     try:
+        if args.chunk is not None:
+            if not args.model:
+                print("Error: --model must be specified when using --chunk")
+                sys.exit(1)
+            if args.chunk <= 0:
+                print("Error: --chunk must be a positive integer")
+                sys.exit(1)
+
+            logger.info(
+                f"Generating embedding for chunk {args.chunk} with {args.model}"
+            )
+            results = regenerate_specific_chunk(
+                model_name=args.model,
+                chunk_id=args.chunk,
+                batch_size=args.batch_size,
+                db_url=args.db_url,
+                dry_run=args.dry_run,
+                create_indexes=args.create_indexes,
+            )
+
+            print("\nChunk Embedding Generation Complete:")
+            print(f"Model: {args.model}")
+            print(f"Chunk ID: {args.chunk}")
+            print(f"Total chunks processed: {results['total']}")
+            print(f"Successful embeddings: {results['success']}")
+            print(f"Failed embeddings: {results['failed']}")
+
+            if args.dry_run:
+                print("\nThis was a dry run, no changes were made to the database.")
+
+            if results["failed"] > 0 or results["success"] < 1:
+                print("\nChunk embedding failed. Check the log for details.")
+                sys.exit(1)
+
+            return
+
         # If resuming from missing chunks, handle that separately
         if args.resume_from:
             if not args.model:

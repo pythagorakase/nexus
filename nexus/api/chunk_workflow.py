@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any
@@ -30,7 +31,7 @@ logger = logging.getLogger("nexus.api.chunk_workflow")
 VALID_DATABASES = {"save_01", "save_02", "save_03", "save_04", "save_05"}
 
 # Security: Valid model name pattern (alphanumeric, hyphens, dots, underscores only)
-VALID_MODEL_PATTERN = re.compile(r'^[a-zA-Z0-9._-]+$')
+VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 class ChunkState(str, Enum):
@@ -63,8 +64,11 @@ class ChunkRejectRequest(BaseModel):
 
     chunk_id: int = Field(..., description="ID of the chunk to reject")
     session_id: str = Field(..., description="Session ID for context")
-    action: str = Field(..., pattern="^(regenerate|edit_previous)$",
-                       description="Action to take: regenerate or edit_previous")
+    action: str = Field(
+        ...,
+        pattern="^(regenerate|edit_previous)$",
+        description="Action to take: regenerate or edit_previous",
+    )
 
 
 class ChunkRejectResponse(BaseModel):
@@ -114,41 +118,53 @@ class ChunkWorkflow:
         with get_connection(self.dbname) as conn:
             with conn.cursor() as cur:
                 # Check if columns exist, add if not
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_name = 'narrative_chunks'
                     AND column_name IN ('state', 'finalized_at', 'embedding_generated_at', 'regeneration_count')
-                """)
+                """
+                )
                 existing_columns = {row[0] for row in cur.fetchall()}
 
                 # Add missing columns
-                if 'state' not in existing_columns:
-                    cur.execute("""
+                if "state" not in existing_columns:
+                    cur.execute(
+                        """
                         ALTER TABLE narrative_chunks
                         ADD COLUMN state VARCHAR(20) DEFAULT 'draft'
-                    """)
+                    """
+                    )
                     logger.info("Added state column to narrative_chunks")
 
-                if 'finalized_at' not in existing_columns:
-                    cur.execute("""
+                if "finalized_at" not in existing_columns:
+                    cur.execute(
+                        """
                         ALTER TABLE narrative_chunks
                         ADD COLUMN finalized_at TIMESTAMPTZ
-                    """)
+                    """
+                    )
                     logger.info("Added finalized_at column to narrative_chunks")
 
-                if 'embedding_generated_at' not in existing_columns:
-                    cur.execute("""
+                if "embedding_generated_at" not in existing_columns:
+                    cur.execute(
+                        """
                         ALTER TABLE narrative_chunks
                         ADD COLUMN embedding_generated_at TIMESTAMPTZ
-                    """)
-                    logger.info("Added embedding_generated_at column to narrative_chunks")
+                    """
+                    )
+                    logger.info(
+                        "Added embedding_generated_at column to narrative_chunks"
+                    )
 
-                if 'regeneration_count' not in existing_columns:
-                    cur.execute("""
+                if "regeneration_count" not in existing_columns:
+                    cur.execute(
+                        """
                         ALTER TABLE narrative_chunks
                         ADD COLUMN regeneration_count INTEGER DEFAULT 0
-                    """)
+                    """
+                    )
                     logger.info("Added regeneration_count column to narrative_chunks")
 
     def accept_chunk(self, chunk_id: int, session_id: str) -> ChunkAcceptResponse:
@@ -166,21 +182,26 @@ class ChunkWorkflow:
             with conn.cursor() as cur:
                 # Security: Atomic state transition to prevent race condition
                 # Only finalize if currently pending_review (prevents double-finalization)
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE narrative_chunks
                     SET state = %s, finalized_at = %s
                     WHERE id = %s AND state = %s
                     RETURNING id
-                """, (
-                    ChunkState.FINALIZED.value,
-                    datetime.now(timezone.utc),
-                    chunk_id,
-                    ChunkState.PENDING_REVIEW.value  # Only update if pending
-                ))
+                """,
+                    (
+                        ChunkState.FINALIZED.value,
+                        datetime.now(timezone.utc),
+                        chunk_id,
+                        ChunkState.PENDING_REVIEW.value,  # Only update if pending
+                    ),
+                )
 
                 if not cur.fetchone():
                     # Check if chunk exists but wrong state
-                    cur.execute("SELECT state FROM narrative_chunks WHERE id = %s", (chunk_id,))
+                    cur.execute(
+                        "SELECT state FROM narrative_chunks WHERE id = %s", (chunk_id,)
+                    )
                     result = cur.fetchone()
                     if not result:
                         raise ValueError(f"Chunk {chunk_id} not found")
@@ -190,13 +211,16 @@ class ChunkWorkflow:
                         )
 
                 # Get previous chunk (N-1) to trigger embedding
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, state, raw_text
                     FROM narrative_chunks
                     WHERE id < %s
                     ORDER BY id DESC
                     LIMIT 1
-                """, (chunk_id,))
+                """,
+                    (chunk_id,),
+                )
 
                 previous_chunk = cur.fetchone()
                 embedding_triggered = False
@@ -207,26 +231,33 @@ class ChunkWorkflow:
 
                     # Only generate embeddings if not already done
                     if prev_state == ChunkState.FINALIZED.value:
-                        embedding_job_id = self._trigger_embedding_generation(prev_id)
+                        embedding_job_id = self.trigger_embedding_generation(prev_id)
                         embedding_triggered = True
 
                         # Mark as embedding in progress
-                        cur.execute("""
+                        cur.execute(
+                            """
                             UPDATE narrative_chunks
                             SET state = %s
                             WHERE id = %s
-                        """, (ChunkState.EMBEDDED.value, prev_id))
+                        """,
+                            (ChunkState.EMBEDDED.value, prev_id),
+                        )
 
-                logger.info(f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}")
+                logger.info(
+                    f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}"
+                )
 
                 return ChunkAcceptResponse(
                     chunk_id=chunk_id,
                     state=ChunkState.FINALIZED,
                     previous_chunk_embedded=embedding_triggered,
-                    embedding_job_id=embedding_job_id
+                    embedding_job_id=embedding_job_id,
                 )
 
-    def reject_chunk(self, chunk_id: int, session_id: str, action: str) -> ChunkRejectResponse:
+    def reject_chunk(
+        self, chunk_id: int, session_id: str, action: str
+    ) -> ChunkRejectResponse:
         """
         Reject a Storyteller chunk with specified action.
 
@@ -241,11 +272,14 @@ class ChunkWorkflow:
         with get_connection(self.dbname) as conn:
             with conn.cursor() as cur:
                 # Get current chunk info
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT state, regeneration_count
                     FROM narrative_chunks
                     WHERE id = %s
-                """, (chunk_id,))
+                """,
+                    (chunk_id,),
+                )
 
                 result = cur.fetchone()
                 if not result:
@@ -260,22 +294,27 @@ class ChunkWorkflow:
                     chunk_id=chunk_id,
                     state=ChunkState.PENDING_REVIEW,
                     action_taken=action,
-                    regeneration_count=regen_count
+                    regeneration_count=regen_count,
                 )
 
                 if action == "regenerate":
                     # Increment regeneration counter
-                    cur.execute("""
+                    cur.execute(
+                        """
                         UPDATE narrative_chunks
                         SET regeneration_count = regeneration_count + 1,
                             state = %s
                         WHERE id = %s
                         RETURNING regeneration_count
-                    """, (ChunkState.PENDING_REVIEW.value, chunk_id))
+                    """,
+                        (ChunkState.PENDING_REVIEW.value, chunk_id),
+                    )
 
                     new_count = cur.fetchone()[0]
                     response.regeneration_count = new_count
-                    logger.info(f"Chunk {chunk_id} marked for regeneration (attempt {new_count})")
+                    logger.info(
+                        f"Chunk {chunk_id} marked for regeneration (attempt {new_count})"
+                    )
 
                 elif action == "edit_previous":
                     # Enable editing of previous user input
@@ -284,7 +323,9 @@ class ChunkWorkflow:
 
                 return response
 
-    def edit_previous_input(self, chunk_id: int, new_user_input: str, session_id: str) -> EditPreviousResponse:
+    def edit_previous_input(
+        self, chunk_id: int, new_user_input: str, session_id: str
+    ) -> EditPreviousResponse:
         """
         Edit the user's input from the previous chunk.
 
@@ -302,11 +343,14 @@ class ChunkWorkflow:
                 prev_chunk_id = chunk_id - 1
 
                 # Find the previous user chunk (should be user input)
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, state, raw_text
                     FROM narrative_chunks
                     WHERE id = %s
-                """, (prev_chunk_id,))
+                """,
+                    (prev_chunk_id,),
+                )
 
                 prev_chunk = cur.fetchone()
                 if not prev_chunk:
@@ -319,28 +363,48 @@ class ChunkWorkflow:
                     raise ValueError(f"Cannot edit finalized chunk {prev_id}")
 
                 # Update the user's previous input
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE narrative_chunks
                     SET raw_text = %s,
                         state = %s
                     WHERE id = %s
-                """, (new_user_input, ChunkState.DRAFT.value, prev_id))
+                """,
+                    (new_user_input, ChunkState.DRAFT.value, prev_id),
+                )
 
                 # Mark current Storyteller chunk for regeneration
-                cur.execute("""
+                cur.execute(
+                    """
                     UPDATE narrative_chunks
                     SET state = %s,
                         regeneration_count = regeneration_count + 1
                     WHERE id = %s
-                """, (ChunkState.PENDING_REVIEW.value, chunk_id))
+                """,
+                    (ChunkState.PENDING_REVIEW.value, chunk_id),
+                )
 
-                logger.info(f"Updated user input in chunk {prev_id}, triggering regeneration of {chunk_id}")
+                logger.info(
+                    f"Updated user input in chunk {prev_id}, triggering regeneration of {chunk_id}"
+                )
 
                 return EditPreviousResponse(
                     previous_chunk_id=prev_id,
                     updated=True,
-                    new_generation_triggered=True
+                    new_generation_triggered=True,
                 )
+
+    def trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
+        """
+        Generate embeddings for a locked chunk.
+
+        Args:
+            chunk_id: The chunk to generate embeddings for
+
+        Returns:
+            Job ID if generation succeeds, None otherwise
+        """
+        return self._trigger_embedding_generation(chunk_id)
 
     def _trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
         """
@@ -355,11 +419,14 @@ class ChunkWorkflow:
         try:
             # Load settings to get embedding configuration
             from nexus.config import load_settings_as_dict
+
             settings = load_settings_as_dict()
 
             # Get the appropriate embedding model from settings
-            embedding_config = settings.get("Agent Settings", {}).get("MEMNON", {}).get("embedding", {})
-            models = embedding_config.get("models", {})
+            memnon_config = settings.get("Agent Settings", {}).get("MEMNON", {})
+            models = memnon_config.get("models") or memnon_config.get(
+                "embedding", {}
+            ).get("models", {})
 
             # Find active model
             active_model = None
@@ -369,8 +436,12 @@ class ChunkWorkflow:
                     break
 
             if not active_model:
-                logger.warning("No active embedding model found in settings - using default")
-                active_model = "inf-retriever-v1-1.5b"  # Best performing model from IR testing
+                logger.warning(
+                    "No active embedding model found in settings - using default"
+                )
+                active_model = (
+                    "Octen-Embedding-4B"  # Production embedder from IR testing
+                )
 
             # Security: Validate inputs before subprocess call
             if not isinstance(chunk_id, int) or chunk_id <= 0:
@@ -386,34 +457,55 @@ class ChunkWorkflow:
 
             # Run embedding generation script
             # TODO: Make async with FastAPI BackgroundTasks or Celery to avoid blocking
-            result = subprocess.run([
-                "python", "scripts/regenerate_embeddings.py",
-                "--chunk", str(chunk_id),  # Safe: validated as positive int
-                "--model", active_model,    # Safe: validated with regex
-                "--database", self.dbname   # Safe: validated in __init__
-            ], capture_output=True, text=True, timeout=300)  # 5 min timeout
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/regenerate_embeddings.py",
+                    "--chunk",
+                    str(chunk_id),  # Safe: validated as positive int
+                    "--model",
+                    active_model,  # Safe: validated with regex
+                    "--database",
+                    self.dbname,  # Safe: validated in __init__
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )  # 5 min timeout
 
             if result.returncode == 0:
                 # Mark chunk as embedded
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
-                        cur.execute("""
+                        cur.execute(
+                            """
                             UPDATE narrative_chunks
-                            SET embedding_generated_at = %s
+                            SET embedding_generated_at = %s,
+                                state = %s
                             WHERE id = %s
-                        """, (datetime.now(timezone.utc), chunk_id))
+                        """,
+                            (
+                                datetime.now(timezone.utc),
+                                ChunkState.EMBEDDED.value,
+                                chunk_id,
+                            ),
+                        )
 
                 logger.info(f"Successfully generated embeddings for chunk {chunk_id}")
                 return f"embed_{chunk_id}_{datetime.now().timestamp()}"
             else:
-                logger.error(f"Embedding generation failed for chunk {chunk_id}: {result.stderr}")
+                logger.error(
+                    f"Embedding generation failed for chunk {chunk_id}: {result.stderr}"
+                )
                 return None
 
         except Exception as e:
             logger.error(f"Error triggering embedding generation: {e}")
             return None
 
-    def get_chunk_states(self, start_chunk: int, end_chunk: int) -> List[Dict[str, Any]]:
+    def get_chunk_states(
+        self, start_chunk: int, end_chunk: int
+    ) -> List[Dict[str, Any]]:
         """
         Get the states of chunks in a range.
 
@@ -426,12 +518,15 @@ class ChunkWorkflow:
         """
         with get_connection(self.dbname, dict_cursor=True) as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT id, state, finalized_at, embedding_generated_at, regeneration_count
                     FROM narrative_chunks
                     WHERE id BETWEEN %s AND %s
                     ORDER BY id
-                """, (start_chunk, end_chunk))
+                """,
+                    (start_chunk, end_chunk),
+                )
 
                 return [dict(row) for row in cur.fetchall()]
 

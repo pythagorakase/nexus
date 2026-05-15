@@ -26,9 +26,17 @@ class ContinueNarrativeRequest(BaseModel):
         default=None,
         description="Parent chunk ID to continue from. None or 0 for bootstrap (first chunk).",
     )
-    user_text: str = Field(description="User's completion text")
+    user_text: str = Field(default="", description="User's completion text")
+    choice: Optional[int] = Field(
+        default=None, description="Structured choice number (1-indexed)"
+    )
+    accept_fate: bool = Field(
+        default=False, description="Auto-advance by selecting the first choice"
+    )
     slot: Optional[int] = Field(default=None, description="Active save slot")
-    model: Optional[str] = Field(default=None, description="Override model for this request")
+    model: Optional[str] = Field(
+        default=None, description="Override model for this request"
+    )
 
     @field_validator("model")
     @classmethod
@@ -202,7 +210,9 @@ class SlotUndoResponse(BaseModel):
 class SlotModelRequest(BaseModel):
     """Request model for setting slot model."""
 
-    model: str = Field(description="Model to set (a registry ID; see /api/config/models)")
+    model: str = Field(
+        description="Model to set (a registry ID; see /api/config/models)"
+    )
 
 
 class SlotModelResponse(BaseModel):

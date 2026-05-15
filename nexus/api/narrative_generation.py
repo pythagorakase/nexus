@@ -48,14 +48,19 @@ def _describe_lore_failure(lore: LORE, response: Any) -> Optional[str]:
         )
 
     if isinstance(response, str) and response:
-        return f"Narrative turn failed before APEX returned structured output: {response}"
+        return (
+            f"Narrative turn failed before APEX returned structured output: {response}"
+        )
 
     return "Narrative turn did not return structured APEX output."
 
 
 class ProgressManager(Protocol):
     """Protocol for progress notification manager."""
-    async def send_progress(self, session_id: str, status: str, data: Dict = None) -> None:
+
+    async def send_progress(
+        self, session_id: str, status: str, data: Dict = None
+    ) -> None:
         """Send progress update for a specific session."""
         ...
 
@@ -107,7 +112,9 @@ async def generate_narrative_async(
                 "episode": 1,
                 "place_name": "Starting Location",
             }
-            logger.info("Bootstrap mode: skipping parent chunk load, using global state")
+            logger.info(
+                "Bootstrap mode: skipping parent chunk load, using global state"
+            )
         else:
             chunk_info = await get_chunk_info(conn, parent_chunk_id)
 
@@ -128,7 +135,9 @@ async def generate_narrative_async(
         if is_bootstrap:
             # Bootstrap mode: Generate first chunk using story seed directly
             # Skip LORE entirely (requires warm slice and local LLM)
-            logger.info("Bootstrap mode: calling apex AI directly with story seed context")
+            logger.info(
+                "Bootstrap mode: calling apex AI directly with story seed context"
+            )
 
             # Send progress: calling LLM
             await manager.send_progress(session_id, "calling_llm")
@@ -141,7 +150,8 @@ async def generate_narrative_async(
             except Exception as e:
                 logger.error(f"Bootstrap generation failed: {e}")
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to generate bootstrap narrative: {str(e)}"
+                    status_code=500,
+                    detail=f"Failed to generate bootstrap narrative: {str(e)}",
                 )
         else:
             # Real LORE integration for continuation
@@ -163,7 +173,8 @@ async def generate_narrative_async(
                 error_detail = _exception_detail(e)
                 logger.error(f"LORE process_turn failed: {error_detail}")
                 raise HTTPException(
-                    status_code=500, detail=f"Failed to generate narrative: {error_detail}"
+                    status_code=500,
+                    detail=f"Failed to generate narrative: {error_detail}",
                 )
 
             # Send progress: processing response
@@ -252,10 +263,11 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
         query = """
         INSERT INTO incubator (
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
-            choice_object, metadata_updates, entity_updates, reference_updates,
+            choice_object, choice_text,
+            metadata_updates, entity_updates, reference_updates,
             session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -266,7 +278,12 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                 data["parent_chunk_id"],
                 data["user_text"],
                 data["storyteller_text"],
-                json.dumps(data.get("choice_object")) if data.get("choice_object") else None,
+                (
+                    json.dumps(data.get("choice_object"))
+                    if data.get("choice_object")
+                    else None
+                ),
+                data.get("choice_text"),
                 json.dumps(data["metadata_updates"]),
                 json.dumps(data["entity_updates"]),
                 json.dumps(data["reference_updates"]),
@@ -304,10 +321,14 @@ async def generate_bootstrap_narrative(
 
     # Load story context from global_variables
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute("SELECT setting, user_character FROM global_variables WHERE id = true")
+        cur.execute(
+            "SELECT setting, user_character FROM global_variables WHERE id = true"
+        )
         row = cur.fetchone()
         if not row or not row["setting"]:
-            raise ValueError("No setting found in global_variables - transition may not have completed")
+            raise ValueError(
+                "No setting found in global_variables - transition may not have completed"
+            )
 
         setting_data = row["setting"]
         character_id = row["user_character"]
@@ -315,7 +336,7 @@ async def generate_bootstrap_narrative(
         # Get character details
         cur.execute(
             "SELECT name, appearance, background FROM characters WHERE id = %s",
-            (character_id,)
+            (character_id,),
         )
         char_row = cur.fetchone()
         character_name = char_row["name"] if char_row else "Unknown"
@@ -345,10 +366,7 @@ async def generate_bootstrap_narrative(
     bootstrap_context = {
         "user_input": user_text,
         "is_bootstrap": True,
-        "warm_slice": {
-            "chunks": [],  # No prior chunks for bootstrap
-            "token_count": 0
-        },
+        "warm_slice": {"chunks": [], "token_count": 0},  # No prior chunks for bootstrap
         "bootstrap_data": {
             "setting": {
                 "world_name": setting_data.get("world_name", "Unknown World"),
@@ -418,7 +436,11 @@ async def generate_bootstrap_narrative(
         },
         "entity_updates": {},
         "reference_updates": {
-            "characters": [{"character_id": character_id, "reference_type": "present"}] if character_id else [],
+            "characters": (
+                [{"character_id": character_id, "reference_type": "present"}]
+                if character_id
+                else []
+            ),
             "places": [],
             "factions": [],
         },
@@ -429,7 +451,7 @@ async def generate_bootstrap_narrative(
 
     # Extract choices if present
     # NOTE: Key must be "presented" to match schema used by select_choice() and lore_adapter
-    if hasattr(story_response, 'choices') and story_response.choices:
+    if hasattr(story_response, "choices") and story_response.choices:
         incubator_data["choice_object"] = {
             "presented": story_response.choices,
             "selected": None,

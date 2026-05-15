@@ -16,19 +16,21 @@ import asyncpg
 from nexus.agents.logon.apex_schema import (
     ChronologyUpdate,
     ReferencedEntities,
-    StateUpdates
+    StateUpdates,
 )
 from nexus.api.db_converters import (
     chronology_to_db_values,
     resolve_character_references,
     resolve_place_references,
-    resolve_faction_references
+    resolve_faction_references,
 )
 from nexus.api.summary_triggers import (
     SummaryTask,
     plan_summary_tasks,
-    schedule_summary_generation
+    schedule_summary_generation,
 )
+from nexus.api.choice_handling import normalize_choice_object
+from nexus.api.lore_adapter import compute_raw_text, format_choice_text
 
 logger = logging.getLogger("nexus.api.commit_handler")
 
@@ -37,9 +39,9 @@ logger = logging.getLogger("nexus.api.commit_handler")
 # Database Query Functions
 # ============================================================================
 
+
 async def fetch_incubator_data(
-    conn: asyncpg.Connection,
-    session_id: str
+    conn: asyncpg.Connection, session_id: str
 ) -> Dict[str, Any]:
     """
     Fetch data from incubator table for a given session.
@@ -47,12 +49,13 @@ async def fetch_incubator_data(
     row = await conn.fetchrow(
         """
         SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
+               choice_object, choice_text,
                metadata_updates, entity_updates, reference_updates,
                llm_response_id, status
         FROM incubator
         WHERE session_id = $1
         """,
-        session_id
+        session_id,
     )
 
     if not row:
@@ -62,8 +65,7 @@ async def fetch_incubator_data(
 
 
 async def fetch_chunk_metadata(
-    conn: asyncpg.Connection,
-    chunk_id: int
+    conn: asyncpg.Connection, chunk_id: int
 ) -> Dict[str, Any]:
     """
     Fetch metadata for an existing chunk.
@@ -74,7 +76,7 @@ async def fetch_chunk_metadata(
         FROM chunk_metadata
         WHERE chunk_id = $1
         """,
-        chunk_id
+        chunk_id,
     )
 
     if not row:
@@ -87,9 +89,13 @@ async def fetch_chunk_metadata(
 # Insert Functions
 # ============================================================================
 
+
 async def insert_narrative_chunk(
     conn: asyncpg.Connection,
     raw_text: str,
+    storyteller_text: Optional[str],
+    choice_object: Optional[Dict[str, Any]],
+    choice_text: Optional[str],
 ) -> int:
     """
     Insert a new narrative chunk and return its ID.
@@ -98,11 +104,16 @@ async def insert_narrative_chunk(
     """
     chunk_id = await conn.fetchval(
         """
-        INSERT INTO narrative_chunks (raw_text)
-        VALUES ($1)
+        INSERT INTO narrative_chunks (
+            raw_text, storyteller_text, choice_object, choice_text
+        )
+        VALUES ($1, $2, $3::jsonb, $4)
         RETURNING id
         """,
         raw_text,
+        storyteller_text,
+        json.dumps(choice_object) if choice_object else None,
+        choice_text,
     )
     logger.info(f"Created narrative chunk {chunk_id}")
     return chunk_id
@@ -116,7 +127,7 @@ async def insert_chunk_metadata(
     scene: int,
     world_layer: str,
     time_delta: Optional[Any],
-    generation_date: Optional[datetime] = None
+    generation_date: Optional[datetime] = None,
 ) -> None:
     """
     Insert metadata for a chunk.
@@ -145,9 +156,7 @@ async def insert_chunk_metadata(
 
 
 async def insert_place_references(
-    conn: asyncpg.Connection,
-    chunk_id: int,
-    place_refs: list
+    conn: asyncpg.Connection, chunk_id: int, place_refs: list
 ) -> None:
     """
     Insert place-chunk references into junction table.
@@ -164,15 +173,13 @@ async def insert_place_references(
             ref["place_id"],
             chunk_id,
             ref["reference_type"],
-            ref.get("evidence")
+            ref.get("evidence"),
         )
     logger.info(f"Inserted {len(place_refs)} place references for chunk {chunk_id}")
 
 
 async def insert_character_references(
-    conn: asyncpg.Connection,
-    chunk_id: int,
-    char_refs: list
+    conn: asyncpg.Connection, chunk_id: int, char_refs: list
 ) -> None:
     """
     Insert character-chunk references into junction table.
@@ -188,15 +195,13 @@ async def insert_character_references(
             """,
             chunk_id,
             ref["character_id"],
-            ref["reference"]
+            ref["reference"],
         )
     logger.info(f"Inserted {len(char_refs)} character references for chunk {chunk_id}")
 
 
 async def insert_faction_references(
-    conn: asyncpg.Connection,
-    chunk_id: int,
-    faction_refs: list
+    conn: asyncpg.Connection, chunk_id: int, faction_refs: list
 ) -> None:
     """
     Insert faction-chunk references into junction table.
@@ -211,7 +216,7 @@ async def insert_faction_references(
             VALUES ($1, $2)
             """,
             chunk_id,
-            ref["faction_id"]
+            ref["faction_id"],
         )
     logger.info(f"Inserted {len(faction_refs)} faction references for chunk {chunk_id}")
 
@@ -220,9 +225,9 @@ async def insert_faction_references(
 # State Update Functions
 # ============================================================================
 
+
 async def apply_state_updates(
-    conn: asyncpg.Connection,
-    state_updates: StateUpdates
+    conn: asyncpg.Connection, state_updates: StateUpdates
 ) -> None:
     """
     Apply entity state updates from the LLM response.
@@ -260,7 +265,7 @@ async def apply_state_updates(
                     SET {', '.join(updates)}
                     WHERE id = ${param_count}
                     """,
-                    *params
+                    *params,
                 )
                 logger.info(f"Updated character {char_update.character_id}")
 
@@ -274,7 +279,7 @@ async def apply_state_updates(
                 WHERE id = $2
                 """,
                 place_update.current_status,
-                place_update.place_id
+                place_update.place_id,
             )
             logger.info(f"Updated place {place_update.place_id}")
 
@@ -288,25 +293,19 @@ async def apply_state_updates(
                 WHERE id = $2
                 """,
                 faction_update.current_activity,
-                faction_update.faction_id
+                faction_update.faction_id,
             )
             logger.info(f"Updated faction {faction_update.faction_id}")
 
 
-async def clear_incubator(
-    conn: asyncpg.Connection,
-    session_id: str = None
-) -> None:
+async def clear_incubator(conn: asyncpg.Connection, session_id: str = None) -> None:
     """
     Clear incubator after successful commit.
     If session_id is provided, only clear that session.
     Otherwise, clear all (for singleton incubator).
     """
     if session_id:
-        await conn.execute(
-            "DELETE FROM incubator WHERE session_id = $1",
-            session_id
-        )
+        await conn.execute("DELETE FROM incubator WHERE session_id = $1", session_id)
         logger.info(f"Cleared incubator for session {session_id}")
     else:
         await conn.execute("DELETE FROM incubator")
@@ -317,9 +316,9 @@ async def clear_incubator(
 # Main Commit Function
 # ============================================================================
 
+
 async def commit_incubator_to_database(
-    conn: asyncpg.Connection,
-    session_id: str
+    conn: asyncpg.Connection, session_id: str
 ) -> int:
     """
     Complete commit flow from incubator to production tables.
@@ -366,7 +365,9 @@ async def commit_incubator_to_database(
             ref_entities = ReferencedEntities(**incubator["reference_updates"])
 
             # Create new entities and resolve all to IDs
-            character_refs = await resolve_character_references(ref_entities.characters, conn)
+            character_refs = await resolve_character_references(
+                ref_entities.characters, conn
+            )
             place_refs = await resolve_place_references(ref_entities.places, conn)
             faction_refs = await resolve_faction_references(ref_entities.factions, conn)
 
@@ -376,7 +377,7 @@ async def commit_incubator_to_database(
             db_meta = chronology_to_db_values(
                 chronology,
                 current_season=parent_meta["season"],
-                current_episode=parent_meta["episode"]
+                current_episode=parent_meta["episode"],
             )
             summary_tasks = plan_summary_tasks(
                 chronology.episode_transition,
@@ -391,9 +392,23 @@ async def commit_incubator_to_database(
             world_layer = incubator["metadata_updates"].get("world_layer", "primary")
 
             # Step 5: Insert narrative chunk
+            choice_object = incubator.get("choice_object")
+            storyteller_text = incubator.get("storyteller_text") or ""
+            choice_text = incubator.get("choice_text")
+            if choice_object:
+                choice_object = normalize_choice_object(choice_object)
+                if not choice_text and choice_object.get("selected"):
+                    choice_text = format_choice_text(
+                        choice_object, include_selection=True
+                    )
+
+            raw_text = compute_raw_text(storyteller_text, choice_object, choice_text)
             chunk_id = await insert_narrative_chunk(
                 conn,
-                raw_text=incubator["storyteller_text"],
+                raw_text=raw_text,
+                storyteller_text=storyteller_text,
+                choice_object=choice_object,
+                choice_text=choice_text,
             )
             if chunk_id is None:
                 raise ValueError("Failed to obtain chunk_id after insert")
@@ -406,7 +421,7 @@ async def commit_incubator_to_database(
                 episode=db_meta["episode"],
                 scene=db_meta["scene"],
                 world_layer=world_layer,
-                time_delta=db_meta["time_delta"]
+                time_delta=db_meta["time_delta"],
             )
 
             # Step 7: Insert junction table references
@@ -430,7 +445,9 @@ async def commit_incubator_to_database(
         try:
             schedule_summary_generation(summary_tasks)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error("Failed to schedule summaries for session %s: %s", session_id, exc)
+            logger.error(
+                "Failed to schedule summaries for session %s: %s", session_id, exc
+            )
 
     logger.info("Successfully committed chunk %s from session %s", chunk_id, session_id)
     return chunk_id

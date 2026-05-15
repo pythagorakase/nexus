@@ -57,7 +57,9 @@ def _stub_baseline(
     return package
 
 
-def test_integrate_response_passes_authorial_directives(turn_manager: TurnCycleManager, monkeypatch: pytest.MonkeyPatch):
+def test_integrate_response_passes_authorial_directives(
+    turn_manager: TurnCycleManager, monkeypatch: pytest.MonkeyPatch
+):
     ctx = TurnContext(
         turn_id="turn_directive",
         user_input="Test input",
@@ -66,7 +68,12 @@ def test_integrate_response_passes_authorial_directives(turn_manager: TurnCycleM
     ctx.authorial_directives = ["Directive A", "Directive B"]
     ctx.warm_slice = [{"chunk_id": 999, "text": "Recent narrative."}]
     ctx.retrieved_passages = []
-    ctx.token_counts = {"total_available": 1000, "warm_slice": 100, "structured": 0, "augmentation": 0}
+    ctx.token_counts = {
+        "total_available": 1000,
+        "warm_slice": 100,
+        "structured": 0,
+        "augmentation": 0,
+    }
 
     captured: Dict[str, Any] = {}
 
@@ -92,3 +99,45 @@ def test_integrate_response_passes_authorial_directives(turn_manager: TurnCycleM
     baseline_snapshot = ctx.memory_state["pass1"]
     assert baseline_snapshot["authorial_directives"] == ctx.authorial_directives
     assert baseline_snapshot["structured_passages"] == []
+
+
+def test_integrate_response_sorts_mixed_chunk_id_payloads(
+    turn_manager: TurnCycleManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pass 1 snapshots should tolerate older string chunk IDs."""
+    ctx = TurnContext(
+        turn_id="turn_mixed_ids",
+        user_input="Test input",
+        start_time=time.time(),
+    )
+    ctx.warm_slice = []
+    ctx.retrieved_passages = []
+    ctx.token_counts = {"total_available": 1000}
+
+    def fake_handle_storyteller_response(**kwargs: Any) -> ContextPackage:
+        package = ContextPackage(
+            baseline_chunks={3, "2", 1},
+            baseline_entities={},
+            baseline_themes=[],
+            authorial_directives=[],
+            structured_passages=[],
+            token_usage=kwargs.get("token_usage", {}),
+        )
+        transition = PassTransition(
+            storyteller_output=kwargs.get("narrative", ""),
+            remaining_budget=1000,
+        )
+        turn_manager.lore.memory_manager.context_state.store_baseline(
+            package, transition
+        )
+        return package
+
+    monkeypatch.setattr(
+        turn_manager.lore.memory_manager,
+        "handle_storyteller_response",
+        fake_handle_storyteller_response,
+    )
+
+    asyncio.run(turn_manager.integrate_response(ctx, "Story chunk text"))
+
+    assert ctx.memory_state["pass1"]["baseline_chunks"] == [1, "2", 3]
