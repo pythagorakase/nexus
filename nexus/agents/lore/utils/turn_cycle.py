@@ -583,9 +583,8 @@ class TurnCycleManager:
 
         binding_settings = orrery_settings.get("binding", {})
         window_chunks = int(binding_settings.get("window_chunks", 30))
-        anchor_chunk_id = self._orrery_anchor_chunk_id(turn_context)
-
         with self.lore.memnon.Session() as session:
+            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
             proposal = resolve_dry_run(
                 session,
                 BUILTIN_TEMPLATES,
@@ -609,7 +608,9 @@ class TurnCycleManager:
             proposal.resolution_count,
         )
 
-    def _orrery_anchor_chunk_id(self, turn_context: TurnContext) -> Optional[int]:
+    def _orrery_anchor_chunk_id(
+        self, session: Any, turn_context: TurnContext
+    ) -> Optional[int]:
         """Choose the current read anchor for a no-write Orrery resolve."""
 
         if turn_context.target_chunk_id is not None:
@@ -626,15 +627,14 @@ class TurnCycleManager:
             except (TypeError, ValueError):
                 logger.warning("Unable to infer Orrery anchor from warm-slice IDs")
 
-        with self.lore.memnon.Session() as session:
-            from sqlalchemy import text
+        from sqlalchemy import text
 
-            row = (
-                session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
-                .mappings()
-                .first()
-            )
-            return row["max_id"] if row and row["max_id"] is not None else None
+        row = (
+            session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
+            .mappings()
+            .first()
+        )
+        return row["max_id"] if row and row["max_id"] is not None else None
 
     async def assemble_context_payload(self, turn_context: TurnContext):
         """

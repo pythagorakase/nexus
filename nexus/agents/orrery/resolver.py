@@ -66,6 +66,7 @@ def hydrate_world_state(
     for row in session.execute(
         text(
             """
+            /* orrery:current_tags */
             SELECT entity_id, tag, is_ephemeral
             FROM entity_tags_current
             """
@@ -79,6 +80,7 @@ def hydrate_world_state(
         for row in session.execute(
             text(
                 """
+                /* orrery:character_locations */
                 SELECT entity_id, current_location
                 FROM characters
                 WHERE entity_id IS NOT NULL
@@ -93,6 +95,7 @@ def hydrate_world_state(
         for row in session.execute(
             text(
                 """
+                /* orrery:location_classes */
                 SELECT id, type::text AS location_class
                 FROM places
                 WHERE type IS NOT NULL
@@ -106,6 +109,7 @@ def hydrate_world_state(
         for row in session.execute(
             text(
                 """
+                /* orrery:character_activities */
                 SELECT entity_id, current_activity
                 FROM characters
                 WHERE entity_id IS NOT NULL
@@ -119,6 +123,7 @@ def hydrate_world_state(
     for row in session.execute(
         text(
             """
+            /* orrery:relationship_types */
             SELECT c1.entity_id AS source_entity_id,
                    c2.entity_id AS target_entity_id,
                    cr.relationship_type::text AS relationship_type
@@ -139,6 +144,7 @@ def hydrate_world_state(
     for row in session.execute(
         text(
             """
+            /* orrery:faction_memberships */
             SELECT c.entity_id AS member_entity_id,
                    f.entity_id AS faction_entity_id
             FROM faction_character_relationships fcr
@@ -158,6 +164,8 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
+    time_of_day = _load_time_of_day(session, anchor_chunk_id=anchor_chunk_id)
+    weather = _load_weather(session)
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -166,6 +174,8 @@ def hydrate_world_state(
         },
         locations=locations,
         activities=activities,
+        # TODO: Hydrate trust and orbit_distance when the resolver has an
+        # authoritative source. Current built-in packages do not use them.
         relationship_types={
             key: frozenset(values) for key, values in relationship_types.items()
         },
@@ -175,6 +185,8 @@ def hydrate_world_state(
         },
         location_class=location_class,
         recent_events=recent_events,
+        time_of_day=time_of_day,
+        weather=weather,
         current_tick=anchor_chunk_id or 0,
     )
 
@@ -194,6 +206,7 @@ def compose_actor_bindings(
         for row in session.execute(
             text(
                 """
+                /* orrery:actor_bindings_chunk_refs */
                 SELECT DISTINCT cer.entity_id
                 FROM chunk_entity_references_v cer
                 JOIN entities e ON e.id = cer.entity_id
@@ -209,15 +222,20 @@ def compose_actor_bindings(
         for row in session.execute(
             text(
                 """
+                /* orrery:actor_bindings_events */
                 SELECT DISTINCT candidate.entity_id
                 FROM (
                     SELECT actor_entity_id AS entity_id
                     FROM world_events
                     WHERE tick_chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
+                      AND (world_layer IS NULL OR world_layer = 'primary')
+                      AND superseded_by_event_id IS NULL
                     UNION
                     SELECT target_entity_id AS entity_id
                     FROM world_events
                     WHERE tick_chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
+                      AND (world_layer IS NULL OR world_layer = 'primary')
+                      AND superseded_by_event_id IS NULL
                 ) candidate
                 JOIN entities e ON e.id = candidate.entity_id
                 WHERE candidate.entity_id IS NOT NULL
@@ -232,6 +250,7 @@ def compose_actor_bindings(
     for row in session.execute(
         text(
             """
+            /* orrery:actor_bindings_ephemeral */
             SELECT DISTINCT etc.entity_id
             FROM entity_tags_current etc
             JOIN entities e ON e.id = etc.entity_id
@@ -292,6 +311,7 @@ def _load_recent_events(
     for row in session.execute(
         text(
             """
+            /* orrery:recent_events */
             SELECT event_type,
                    tick_chunk_id,
                    actor_entity_id,
@@ -303,6 +323,7 @@ def _load_recent_events(
             FROM world_events
             WHERE tick_chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
               AND (world_layer IS NULL OR world_layer = 'primary')
+              AND superseded_by_event_id IS NULL
             ORDER BY tick_chunk_id DESC, id DESC
             """
         ),
@@ -323,10 +344,77 @@ def _load_recent_events(
     return tuple(events)
 
 
+def _load_time_of_day(session: Any, *, anchor_chunk_id: Optional[int]) -> str:
+    if anchor_chunk_id is None:
+        return "midday"
+
+    row = (
+        session.execute(
+            text(
+                """
+                /* orrery:anchor_world_time */
+                SELECT world_time
+                FROM chunk_metadata
+                WHERE chunk_id = :anchor_chunk_id
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        )
+        .mappings()
+        .first()
+    )
+    world_time = row["world_time"] if row else None
+    if world_time is None:
+        return "midday"
+
+    hour = world_time.hour
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 16:
+        return "afternoon"
+    if 16 <= hour < 21:
+        return "evening"
+    return "night"
+
+
+def _load_weather(session: Any) -> str:
+    # TODO: Replace seed-weather classification with GAIA scene weather once
+    # world-state weather has an authoritative runtime table.
+    row = (
+        session.execute(
+            text(
+                """
+                /* orrery:seed_weather */
+                SELECT setting #>> '{story_seed,weather}' AS weather
+                FROM global_variables
+                WHERE id = true
+                """
+            )
+        )
+        .mappings()
+        .first()
+    )
+    raw_weather = (row["weather"] if row else None) or ""
+    return _classify_weather(raw_weather)
+
+
+def _classify_weather(raw_weather: str) -> str:
+    weather = raw_weather.lower()
+    if any(token in weather for token in ("rain", "sleet", "storm", "thunder")):
+        return "rain"
+    if "snow" in weather:
+        return "snow"
+    if "fog" in weather:
+        return "fog"
+    if any(token in weather for token in ("sun", "clear")):
+        return "clear"
+    return "clear"
+
+
 def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
     if resolution.branch_label is None or resolution.narrative_stub is None:
         raise RuntimeError(
-            f"Passing Orrery resolution {resolution.template_id} lacks branch data"
+            f"Orrery resolution {resolution.template_id!r} passed gate but lacks branch data"
         )
     return OrreryResolutionDraft(
         template_id=resolution.template_id,
