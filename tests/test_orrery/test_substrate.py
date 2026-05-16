@@ -12,6 +12,7 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     count_co_located,
     evaluate_stack,
+    has_symmetric_relationship_of_type,
     recent_event,
     since_last_event_at_least,
     validate_always_fallbacks,
@@ -54,6 +55,21 @@ def test_missing_always_fallback_is_rejected() -> None:
         ("fragment", "pursue_ghost_lead", "Recon a hideout their body remembers"),
         ("debt", "honor_debt", "Fulfill obligation through a dead-drop"),
         ("quiet", "maintain_cover", "Run a low-level courier job"),
+        (
+            "vengeance",
+            "extract_vengeance",
+            "Strike directly when opportunity opens",
+        ),
+        (
+            "kin_danger",
+            "protect_kin",
+            "Physically intervene at the target's location",
+        ),
+        (
+            "informant",
+            "cultivate_informant",
+            "Routine contact to maintain the relationship",
+        ),
     ],
 )
 def test_demo_presets_fire_expected_package(
@@ -66,6 +82,24 @@ def test_demo_presets_fire_expected_package(
     assert result["fired"] is True
     assert result["template_id"] == template_id
     assert result["branch_label"] == branch_label
+
+
+def test_has_symmetric_relationship_of_type_matches_either_direction() -> None:
+    """Symmetric helper finds a typed relationship regardless of stored order."""
+
+    forward_state = WorldState(
+        relationship_types={(1, 2): frozenset({"family"})},
+    )
+    reverse_state = WorldState(
+        relationship_types={(2, 1): frozenset({"family"})},
+    )
+    empty_state = WorldState()
+    predicate = has_symmetric_relationship_of_type("family")
+    bindings = {Slot.ACTOR: 1, Slot.TARGET: 2}
+
+    assert predicate(forward_state, bindings)
+    assert predicate(reverse_state, bindings)
+    assert not predicate(empty_state, bindings)
 
 
 def test_targeted_events_fire_builtin_package_gates() -> None:

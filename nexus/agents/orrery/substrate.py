@@ -253,6 +253,31 @@ def has_relationship_of_type(
     )
 
 
+def has_symmetric_relationship_of_type(
+    relationship_type: str,
+    slot_a: Slot = Slot.ACTOR,
+    slot_b: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether a directionally-symmetric typed relationship exists.
+
+    WorldState hydration stores each relationship row in its stored direction
+    only, preserving asymmetric semantics for handler/asset and similar pairs.
+    Templates wanting symmetric semantics (family, romantic, comrade) check
+    both directions; this helper expresses that intent without an explicit OR.
+    """
+
+    forward = has_relationship_of_type(relationship_type, slot_a, slot_b)
+    reverse = has_relationship_of_type(relationship_type, slot_b, slot_a)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        return forward(state, bindings) or reverse(state, bindings)
+
+    return _named(
+        _condition,
+        f"has_symmetric_relationship_of_type({relationship_type},{slot_a.value}<->{slot_b.value})",
+    )
+
+
 def faction_member(
     faction_slot: Slot = Slot.FACTION,
     member_slot: Slot = Slot.ACTOR,

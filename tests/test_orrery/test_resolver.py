@@ -6,7 +6,16 @@ import pytest
 
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
-from nexus.agents.orrery.resolver import resolve_dry_run
+from nexus.agents.orrery.resolver import (
+    compose_actor_target_bindings,
+    resolve_dry_run,
+)
+from nexus.agents.orrery.substrate import (
+    ALWAYS,
+    Branch,
+    Slot,
+    Template,
+)
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -43,6 +52,7 @@ class FakeSession:
         event_actor_rows=None,
         ephemeral_actor_rows=None,
         present_actor_rows=None,
+        actor_target_relationship_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -62,6 +72,7 @@ class FakeSession:
         self.event_actor_rows = event_actor_rows or []
         self.ephemeral_actor_rows = ephemeral_actor_rows or []
         self.present_actor_rows = present_actor_rows or []
+        self.actor_target_relationship_rows = actor_target_relationship_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -101,6 +112,9 @@ class FakeSession:
             return FakeResult(self.ephemeral_actor_rows)
         if "/* orrery:present_actor_ids_at_anchor */" in sql:
             return FakeResult(self.present_actor_rows)
+        if "/* orrery:actor_target_bindings_character_relationships */" in sql:
+            assert "relationship_scope = 'character'" in sql
+            return FakeResult(self.actor_target_relationship_rows)
         if "/* orrery:anchor_world_time */" in sql:
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
@@ -316,3 +330,140 @@ async def test_resolve_orrery_uses_same_session_for_anchor_fallback() -> None:
     assert session.max_id_queries == 1
     assert context.orrery_proposal is not None
     assert context.orrery_proposal.anchor_chunk_id == 101
+
+
+def test_compose_actor_target_bindings_is_empty_without_relationships() -> None:
+    """No stored relationships ⇒ no actor-target pairs to evaluate."""
+
+    bindings = compose_actor_target_bindings(
+        FakeSession(),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert bindings == ()
+
+
+def test_compose_actor_target_bindings_yields_both_directions() -> None:
+    """Each stored relationship row yields forward + reverse bindings.
+
+    The actor side filter restricts pairs to actors in the recently-relevant
+    set; both directions are emitted so symmetric templates can fire under
+    either ordering and asymmetric templates can role-invert via OR clauses.
+    """
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+        ],
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
+    assert pairs == {(1, 2), (2, 1)}
+
+
+def test_compose_actor_target_bindings_filters_to_recently_relevant_actors() -> None:
+    """A pair (X, Y) emits only when X is in the recently-relevant actor set.
+
+    The bidirectional emission in test_compose_actor_target_bindings_
+    yields_both_directions requires BOTH actors to be in the set; here only
+    actor 1 is, so only the (1, 2) direction emits and the (3, 4) pair is
+    fully skipped.
+    """
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+            {"source_entity_id": 3, "target_entity_id": 4},
+        ],
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
+    assert pairs == {(1, 2)}
+
+
+def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
+    """Templates with non-(ACTOR,)/non-(ACTOR,TARGET) slot tuples fail loud."""
+
+    weird_template = Template(
+        id="weird",
+        priority=1,
+        blurb="declares an unsupported slot signature",
+        required_slots=(Slot.ACTOR, Slot.FACTION),
+        package_gate=ALWAYS,
+        branches=(Branch("fallback", ALWAYS, "{actor} acts."),),
+    )
+
+    with pytest.raises(ValueError, match="required_slots"):
+        resolve_dry_run(
+            FakeSession(),
+            [weird_template],
+            anchor_chunk_id=100,
+            window_chunks=30,
+        )
+
+
+def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
+    """A multi-slot template fires when its hydrated state + bindings line up.
+
+    Builds a FakeSession that produces a single character→character
+    relationship plus the ephemeral tag and event needed to satisfy
+    PROTECT_KIN's gate. The reverse binding fires the intervene branch.
+    """
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        location_rows=[
+            {"entity_id": 1, "current_location": 10},
+            {"entity_id": 2, "current_location": 10},
+        ],
+        location_class_rows=[{"id": 10, "location_class": "the_glow"}],
+        activity_rows=[],
+        tag_rows=[
+            {"entity_id": 2, "tag": "under_active_pursuit", "is_ephemeral": True},
+        ],
+        relationship_rows=[
+            {
+                "source_entity_id": 1,
+                "target_entity_id": 2,
+                "relationship_type": "family",
+            },
+        ],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+        ],
+        ephemeral_actor_rows=[{"entity_id": 2}],
+    )
+
+    proposal = resolve_dry_run(
+        session,
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    protect_kin_drafts = [
+        draft for draft in proposal.resolutions if draft.template_id == "protect_kin"
+    ]
+    assert protect_kin_drafts, (
+        "PROTECT_KIN expected to fire under the constructed hydrated state; "
+        f"got resolutions for {[d.template_id for d in proposal.resolutions]}"
+    )
+    assert protect_kin_drafts[0].branch_label == (
+        "Physically intervene at the target's location"
+    )
+    assert protect_kin_drafts[0].bindings == {"actor": 1, "target": 2}
