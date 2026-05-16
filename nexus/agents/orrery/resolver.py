@@ -181,15 +181,12 @@ def hydrate_world_state(
         text(
             """
             /* orrery:relationship_types */
-            SELECT c1.entity_id AS source_entity_id,
-                   c2.entity_id AS target_entity_id,
-                   cr.relationship_type::text AS relationship_type
-            FROM character_relationships cr
-            JOIN characters c1 ON c1.id = cr.character1_id
-            JOIN characters c2 ON c2.id = cr.character2_id
-            WHERE c1.entity_id IS NOT NULL
-              AND c2.entity_id IS NOT NULL
-              AND cr.relationship_type IS NOT NULL
+            SELECT source_entity_id, target_entity_id, relationship_type
+            FROM entity_relationships_v
+            WHERE relationship_scope = 'character'
+              AND source_entity_id IS NOT NULL
+              AND target_entity_id IS NOT NULL
+              AND relationship_type IS NOT NULL
             """
         )
     ).mappings():
@@ -361,6 +358,7 @@ def compose_actor_target_bindings(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    actor_ids: Optional[Iterable[int]] = None,
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
@@ -370,14 +368,25 @@ def compose_actor_target_bindings(
     reverse) so templates with symmetric semantics see both orderings; gate
     predicates with asymmetric semantics (handler/asset) filter via
     role-explicit OR clauses.
+
+    When actor_ids is provided (typical: resolve_dry_run threads through
+    the actor set it already computed), this skips the redundant
+    compose_actor_bindings call. That avoids two costs: the duplicate DB
+    queries on every tick, and the READ COMMITTED inconsistency window
+    where the two binding passes could see different actor sets if rows
+    change between reads. Direct callers (e.g., focused unit tests) may
+    omit actor_ids and accept the implicit recomputation.
     """
 
-    actor_only = compose_actor_bindings(
-        session,
-        anchor_chunk_id=anchor_chunk_id,
-        window_chunks=window_chunks,
-    )
-    actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
+    if actor_ids is None:
+        actor_only = compose_actor_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+        )
+        actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
+    else:
+        actor_id_set = set(actor_ids)
     if not actor_id_set:
         return ()
 
@@ -471,6 +480,7 @@ def resolve_dry_run(
             session,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
+            actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
         )
         for bindings in actor_target_bindings:
             resolution = evaluate_stack(actor_target_templates, state, bindings)

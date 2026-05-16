@@ -102,6 +102,44 @@ def test_has_symmetric_relationship_of_type_matches_either_direction() -> None:
     assert not predicate(empty_state, bindings)
 
 
+def test_since_last_event_at_least_target_slot_scopes_cooldown() -> None:
+    """When target_slot is given, the cooldown is per-(actor, target) pair.
+
+    Models the CULTIVATE_INFORMANT case: handler A contacting informant B
+    must not block A from contacting informant C in the same window.
+    """
+
+    from nexus.agents.orrery.substrate import EventRecord
+
+    state = WorldState(
+        recent_events=(
+            EventRecord(
+                event_type="informant_contact",
+                tick=9,
+                actor_entity_id=1,
+                target_entity_id=2,
+            ),
+        ),
+        current_tick=10,
+    )
+
+    actor_global = since_last_event_at_least("informant_contact", 5)
+    per_target = since_last_event_at_least(
+        "informant_contact",
+        5,
+        target_slot=Slot.TARGET,
+    )
+
+    # Actor-global: the recent contact resets the cooldown regardless of
+    # which target the binding names.
+    assert not actor_global(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert not actor_global(state, {Slot.ACTOR: 1, Slot.TARGET: 3})
+
+    # Per-target: only the same (actor, target) pair sees the cooldown.
+    assert not per_target(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert per_target(state, {Slot.ACTOR: 1, Slot.TARGET: 3})
+
+
 def test_targeted_events_fire_builtin_package_gates() -> None:
     """Built-ins that react to incoming events use target-role matching."""
 

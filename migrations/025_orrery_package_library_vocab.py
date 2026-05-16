@@ -40,12 +40,6 @@ DURABLE_TAGS: Sequence[tuple[str, str, str]] = (
         "pursuing grievances. Priority hint for EXTRACT_VENGEANCE.",
     ),
     (
-        "kin_protector",
-        "disposition",
-        "Identity tag — characters with strong protective instincts "
-        "toward relational kin.",
-    ),
-    (
         "informant_handler",
         "profession_lite",
         "Identity tag — characters who run informant networks. "

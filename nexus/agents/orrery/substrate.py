@@ -388,18 +388,32 @@ def since_last_event_at_least(
     minimum_ticks: int,
     *,
     actor_slot: Slot = Slot.ACTOR,
+    target_slot: Optional[Slot] = None,
 ) -> Condition:
-    """Return whether enough ticks have passed since the last matching event."""
+    """Return whether enough ticks have passed since the last matching event.
+
+    When target_slot is provided, the match also requires the event's
+    target to bind to the same entity — making the cooldown per-
+    (actor, target) rather than actor-global. Use this in multi-slot
+    templates whose cooldown is meant to bound interaction frequency with
+    one specific target (e.g., handler/informant cadence), not the actor's
+    behavior class across all targets.
+    """
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         actor_id = _slot_entity(bindings, actor_slot)
         if actor_id is None:
+            return False
+        target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if target_slot is not None and target_id is None:
             return False
         latest_tick: Optional[int] = None
         for event in state.recent_events:
             if event.event_type != event_type:
                 continue
             if event.actor_entity_id != actor_id:
+                continue
+            if target_id is not None and event.target_entity_id != target_id:
                 continue
             latest_tick = (
                 event.tick if latest_tick is None else max(latest_tick, event.tick)
@@ -408,9 +422,11 @@ def since_last_event_at_least(
             return True
         return state.current_tick - latest_tick >= minimum_ticks
 
+    suffix = f",target={target_slot.value}" if target_slot else ""
     return _named(
         _condition,
-        f"since_last_event_at_least({event_type},{minimum_ticks}@{actor_slot.value})",
+        f"since_last_event_at_least({event_type},{minimum_ticks}"
+        f"@{actor_slot.value}{suffix})",
     )
 
 

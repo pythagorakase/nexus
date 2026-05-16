@@ -239,10 +239,21 @@ MAINTAIN_COVER = Template(
 #     enemy/rival for vendetta) use has_symmetric_relationship_of_type to keep
 #     the gates readable; the helper expresses bidirectional lookup against the
 #     stored-direction-only WorldState hydration.
-#   * Cross-actor state_delta keys (entity_tags_target.add/remove) are preserved
-#     verbatim from the draft as a contract for PR 3's CommitOrreryTick writer;
-#     the substrate accepts arbitrary Mapping keys, so they are decorative here
-#     and load-bearing downstream.
+#
+# Two contracts that PR 3 (CommitOrreryTick) will need to honor or revisit:
+#
+#   * Cross-actor state_delta keys (entity_tags_target.add/remove) are
+#     preserved verbatim from the draft. The substrate accepts arbitrary
+#     Mapping keys, so they're decorative here; PR 3 must parse and route
+#     them by convention (no enum/TypedDict yet). Define a state_delta
+#     schema alongside the writer if the implicit-string approach proves
+#     too brittle in implementation.
+#   * Trust hydration is un-implemented (resolver.py:177 TODO). Any branch
+#     gated on trust_at_least(N) with N > 0 or trust_below(N) with N < 0
+#     is currently unreachable — WorldState.trust defaults to 0 for every
+#     pair. The affected branches are flagged with TODO comments below;
+#     they remain in the catalog because they're the intended firing
+#     paths once trust hydration lands.
 # ----------------------------------------------------------------------------
 
 
@@ -251,11 +262,18 @@ EXTRACT_VENGEANCE = Template(
     priority=90,
     blurb="A grudge ripens until the moment is right to settle it.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Cooldown is intentionally actor-global (no target_slot=): an active
+    # grudge has a refractory period after any attempt regardless of
+    # target — the actor needs to "calm down," not just back off a
+    # specific target.
     package_gate=AND(
         has_ephemeral("grudge_active"),
         OR(
             has_symmetric_relationship_of_type("enemy"),
             has_symmetric_relationship_of_type("rival"),
+            # TODO: trust_below(-2) is unreachable until resolver.py:177's
+            # trust hydration TODO is resolved. The OR keeps the predicate
+            # documented; the enemy/rival arms carry the gate today.
             trust_below(-2),
         ),
         since_last_event_at_least("retaliation_attempted", minimum_ticks=8),
@@ -431,13 +449,20 @@ CULTIVATE_INFORMANT = Template(
     priority=50,
     blurb="Patient intelligence work with a specific asset.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Cooldowns here are per-(actor, target) via target_slot=: handler A
+    # contacting informant B must not block A from contacting informant C.
+    # Contrast with EXTRACT_VENGEANCE's actor-global retaliation cooldown.
     package_gate=AND(
         has_tag("informant_handler"),
         OR(
             has_relationship_of_type("handler", Slot.ACTOR, Slot.TARGET),
             has_relationship_of_type("asset", Slot.TARGET, Slot.ACTOR),
         ),
-        since_last_event_at_least("informant_contact", minimum_ticks=4),
+        since_last_event_at_least(
+            "informant_contact",
+            minimum_ticks=4,
+            target_slot=Slot.TARGET,
+        ),
         time_of_day_in("evening", "night"),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("grudge_active")),
@@ -445,10 +470,17 @@ CULTIVATE_INFORMANT = Template(
     branches=(
         Branch(
             label="Press for material intel when trust is sufficient",
+            # TODO: trust_at_least(2) is unreachable until resolver.py:177's
+            # trust hydration TODO is resolved. WorldState.trust defaults
+            # to 0, so this branch routes to the ALWAYS fallback today.
             conditions=AND(
                 co_located(Slot.ACTOR, Slot.TARGET),
                 trust_at_least(2),
-                since_last_event_at_least("intel_acquired", minimum_ticks=6),
+                since_last_event_at_least(
+                    "intel_acquired",
+                    minimum_ticks=6,
+                    target_slot=Slot.TARGET,
+                ),
             ),
             narrative_stub=(
                 "{actor} meets {target} in a place that looks ordinary to "
