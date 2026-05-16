@@ -120,7 +120,7 @@ def promote_pending_resolutions_sync(
                     WHERE r.promotion_status = 'pending'
                     ORDER BY r.tick_chunk_id, r.priority DESC, r.id
                     LIMIT %s
-                    FOR UPDATE SKIP LOCKED
+                    FOR UPDATE OF r SKIP LOCKED
                     """,
                     (limit,),
                 )
@@ -186,7 +186,7 @@ def drain_narration_outbox_sync(
                       AND j.available_at <= now()
                     ORDER BY j.available_at, j.id
                     LIMIT %s
-                    FOR UPDATE SKIP LOCKED
+                    FOR UPDATE OF j SKIP LOCKED
                     """,
                     (limit,),
                 )

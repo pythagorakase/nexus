@@ -166,6 +166,7 @@ def test_promote_pending_resolutions_queues_narration_job() -> None:
 
     assert promoted == 1
     assert skipped == 0
+    assert "FOR UPDATE OF r SKIP LOCKED" in statements
     assert "promotion_status = 'promoted'" in statements
     assert "INSERT INTO orrery_narration_jobs" in statements
 
@@ -202,6 +203,7 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     assert narrated == 1
     assert failed == 0
     assert provider.prompts
+    assert "FOR UPDATE OF j SKIP LOCKED" in statements
     assert "INSERT INTO offscreen_narrations" in statements
     assert "narration_status = 'succeeded'" in statements
     assert "state = 'succeeded'" in statements
