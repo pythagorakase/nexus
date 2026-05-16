@@ -46,6 +46,7 @@ from nexus.api.chunk_workflow import (
     EditPreviousRequest,
     EditPreviousResponse,
     build_embedding_scheduler,
+    default_workflow,
 )
 from nexus.api.retry_handler import (
     retry_with_backoff,
@@ -772,14 +773,11 @@ def accept_chunk(
     embeddings are generated for it.
     """
     try:
-        # Get the appropriate database from session
-        # For now, using default workflow instance
-        workflow = ChunkWorkflow()
-        return workflow.accept_chunk(
+        return default_workflow.accept_chunk(
             request.chunk_id,
             request.session_id,
             embedding_scheduler=build_embedding_scheduler(
-                workflow, background_tasks.add_task
+                default_workflow, background_tasks.add_task
             ),
         )
     except ValueError as e:

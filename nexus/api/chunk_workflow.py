@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import threading
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
@@ -35,6 +36,12 @@ VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 EmbeddingScheduler = Callable[[int], Optional[str]]
 
+# BackgroundTasks are intentionally in-process for issue #206's minimum viable
+# async handoff. This guard prevents duplicate queueing inside one API worker;
+# a durable cross-process queue remains follow-up scope.
+_queued_embedding_jobs: set[tuple[str, int]] = set()
+_queued_embedding_jobs_lock = threading.Lock()
+
 
 def build_embedding_scheduler(
     workflow: "ChunkWorkflow", add_task: Callable[..., Any]
@@ -42,11 +49,37 @@ def build_embedding_scheduler(
     """Create a scheduler that queues embedding generation in a background runner."""
 
     def schedule_embedding(chunk_id: int) -> Optional[str]:
+        job_key = (workflow.dbname, chunk_id)
+        with _queued_embedding_jobs_lock:
+            if job_key in _queued_embedding_jobs:
+                logger.info(
+                    "Embedding generation already queued or running for chunk %s in %s",
+                    chunk_id,
+                    workflow.dbname,
+                )
+                return None
+            _queued_embedding_jobs.add(job_key)
+
         job_id = workflow.create_embedding_job_id(chunk_id)
-        add_task(workflow.trigger_embedding_generation, chunk_id, job_id)
+        try:
+            add_task(_run_scheduled_embedding, workflow, chunk_id, job_id, job_key)
+        except Exception:
+            with _queued_embedding_jobs_lock:
+                _queued_embedding_jobs.discard(job_key)
+            raise
         return job_id
 
     return schedule_embedding
+
+
+def _run_scheduled_embedding(
+    workflow: "ChunkWorkflow", chunk_id: int, job_id: str, job_key: tuple[str, int]
+) -> None:
+    try:
+        workflow.trigger_embedding_generation(chunk_id, job_id)
+    finally:
+        with _queued_embedding_jobs_lock:
+            _queued_embedding_jobs.discard(job_key)
 
 
 class ChunkState(str, Enum):
@@ -261,7 +294,7 @@ class ChunkWorkflow:
                             embedding_job_id = self.trigger_embedding_generation(
                                 prev_id
                             )
-                        embedding_triggered = True
+                        embedding_triggered = embedding_job_id is not None
 
                 logger.info(
                     f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}"
@@ -504,30 +537,14 @@ class ChunkWorkflow:
     def trigger_embedding_generation(
         self, chunk_id: int, job_id: Optional[str] = None
     ) -> Optional[str]:
-        """
-        Generate embeddings for a locked chunk.
+        """Trigger embedding generation for a finalized chunk.
 
         Args:
             chunk_id: The chunk to generate embeddings for
             job_id: Optional preassigned job identifier
 
         Returns:
-            Job ID if generation succeeds, None otherwise
-        """
-        return self._trigger_embedding_generation(chunk_id, job_id=job_id)
-
-    def _trigger_embedding_generation(
-        self, chunk_id: int, job_id: Optional[str] = None
-    ) -> Optional[str]:
-        """
-        Trigger embedding generation for a finalized chunk.
-
-        Args:
-            chunk_id: The chunk to generate embeddings for
-            job_id: Optional preassigned job identifier
-
-        Returns:
-            Job ID if async, None if synchronous
+            Job ID string on success, None on failure.
         """
         try:
             # Load settings to get embedding configuration
@@ -608,45 +625,16 @@ class ChunkWorkflow:
                 return job_id or self.create_embedding_job_id(chunk_id)
             else:
                 logger.error(
-                    f"Embedding generation failed for chunk {chunk_id}: {result.stderr}"
+                    "Embedding generation failed for chunk %s; "
+                    "embedding_generated_at remains NULL for retry. stderr: %s",
+                    chunk_id,
+                    result.stderr,
                 )
-                self._clear_failed_embedding_state(chunk_id)
                 return None
 
         except Exception as e:
-            logger.error(f"Error triggering embedding generation: {e}")
-            if isinstance(chunk_id, int) and chunk_id > 0:
-                self._clear_failed_embedding_state(chunk_id)
+            logger.exception("Error triggering embedding generation: %s", e)
             return None
-
-    def _clear_failed_embedding_state(self, chunk_id: int) -> None:
-        """Clear partial embedding state left behind by a failed worker run."""
-
-        try:
-            with get_connection(self.dbname) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        UPDATE narrative_chunks
-                        SET embedding_generated_at = NULL,
-                            state = CASE
-                                WHEN state = %s THEN %s
-                                ELSE state
-                            END
-                        WHERE id = %s AND embedding_generated_at IS NULL
-                        """,
-                        (
-                            ChunkState.EMBEDDED.value,
-                            ChunkState.FINALIZED.value,
-                            chunk_id,
-                        ),
-                    )
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.error(
-                "Failed to clear embedding state after worker failure for chunk %s: %s",
-                chunk_id,
-                exc,
-            )
 
     def get_chunk_states(
         self, start_chunk: int, end_chunk: int
