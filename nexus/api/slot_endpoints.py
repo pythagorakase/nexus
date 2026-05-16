@@ -9,7 +9,7 @@ This module handles slot state queries and operations including:
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -191,25 +191,55 @@ async def slot_undo_endpoint(slot: int):
             narrative = state.narrative_state
 
             if narrative.has_pending and narrative.session_id:
-                # Delete pending incubator content
+                # Capture the parent chunk ID before deleting the incubator row,
+                # then delete the row. The parent chunk's choice fields will be
+                # reset below (closes the loop on the user's un-made choice).
+                parent_chunk_id: Optional[int] = None
                 with get_connection(dbname) as conn:
                     with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT parent_chunk_id FROM incubator WHERE session_id = %s",
+                            (narrative.session_id,),
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            parent_chunk_id = row[0]
+
                         cur.execute(
                             "DELETE FROM incubator WHERE session_id = %s",
                             (narrative.session_id,),
                         )
 
+                # Reset the parent chunk's choice fields. Skipped for bootstrap
+                # (parent_chunk_id == 0): chunk 1 has no preceding choice to revert.
+                reverted_parent = False
+                if parent_chunk_id and parent_chunk_id > 0:
+                    from nexus.api.chunk_workflow import ChunkWorkflow
+
+                    workflow = ChunkWorkflow(dbname=dbname)
+                    workflow.revert_pending_choice(parent_chunk_id)
+                    reverted_parent = True
+
+                message = (
+                    f"Deleted pending content and reverted choice on chunk {parent_chunk_id}"
+                    if reverted_parent
+                    else "Deleted pending content"
+                )
                 return SlotUndoResponse(
                     success=True,
-                    message="Deleted pending content",
+                    message=message,
                     previous_state=str(narrative.current_chunk_id),
                 )
 
             else:
-                # No pending content - cannot undo committed chunks
+                # No pending content - the grace window has closed (last chunk
+                # is now ironman / embedded under the lifecycle invariant).
                 return SlotUndoResponse(
                     success=False,
-                    message="Cannot undo committed chunks - only pending content can be undone",
+                    message=(
+                        "Cannot undo: no live turn. The last response is already "
+                        "committed (the parent chunk is ironman / embedded)."
+                    ),
                 )
 
         return SlotUndoResponse(

@@ -598,10 +598,13 @@ def run_undo(args: argparse.Namespace) -> Dict[str, Any]:
         response.raise_for_status()
         data = response.json()
 
-        return {
-            "success": data.get("success", True),
-            "message": data.get("message"),
-        }
+        success = data.get("success", True)
+        message = data.get("message")
+        if not success:
+            # Surface the API's reason via "error" so main() prints something
+            # informative instead of the generic "Unknown error" fallback.
+            return {"success": False, "error": message or "Undo failed"}
+        return {"success": True, "message": message}
 
     except requests.exceptions.ConnectionError:
         return {
