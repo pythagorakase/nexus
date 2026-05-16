@@ -35,12 +35,17 @@ VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
 
 
 class ChunkState(str, Enum):
-    """States for narrative chunk lifecycle."""
+    """States for narrative chunk lifecycle.
+
+    The authoritative "has been embedded" predicate is
+    narrative_chunks.embedding_generated_at IS NOT NULL — that timestamp is
+    the single source of truth for ironman status. Earlier versions also
+    carried a redundant 'embedded' state value; retired in migration 021.
+    """
 
     DRAFT = "draft"
     PENDING_REVIEW = "pending_review"  # Storyteller text awaiting user decision
     FINALIZED = "finalized"  # User accepted, chunk is locked
-    EMBEDDED = "embedded"  # Embeddings have been generated
 
 
 class ChunkAcceptRequest(BaseModel):
@@ -213,7 +218,7 @@ class ChunkWorkflow:
                 # Get previous chunk (N-1) to trigger embedding
                 cur.execute(
                     """
-                    SELECT id, state, raw_text
+                    SELECT id, embedding_generated_at
                     FROM narrative_chunks
                     WHERE id < %s
                     ORDER BY id DESC
@@ -227,22 +232,16 @@ class ChunkWorkflow:
                 embedding_job_id = None
 
                 if previous_chunk:
-                    prev_id, prev_state, prev_text = previous_chunk
+                    prev_id, prev_embedded_at = previous_chunk
 
-                    # Only generate embeddings if not already done
-                    if prev_state == ChunkState.FINALIZED.value:
+                    # Fire embedding on the previous chunk only if it hasn't
+                    # been embedded yet. embedding_generated_at IS NULL is the
+                    # authoritative "not yet ironman" predicate; the old
+                    # state=='embedded' value was a redundant proxy for this
+                    # same signal and has been retired.
+                    if prev_embedded_at is None:
                         embedding_job_id = self.trigger_embedding_generation(prev_id)
                         embedding_triggered = True
-
-                        # Mark as embedding in progress
-                        cur.execute(
-                            """
-                            UPDATE narrative_chunks
-                            SET state = %s
-                            WHERE id = %s
-                        """,
-                            (ChunkState.EMBEDDED.value, prev_id),
-                        )
 
                 logger.info(
                     f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}"
@@ -557,21 +556,17 @@ class ChunkWorkflow:
             )  # 5 min timeout
 
             if result.returncode == 0:
-                # Mark chunk as embedded
+                # Stamp the embedded-at timestamp. state stays FINALIZED —
+                # embedding_generated_at IS NOT NULL is the ironman predicate.
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
                         cur.execute(
                             """
                             UPDATE narrative_chunks
-                            SET embedding_generated_at = %s,
-                                state = %s
+                            SET embedding_generated_at = %s
                             WHERE id = %s
                         """,
-                            (
-                                datetime.now(timezone.utc),
-                                ChunkState.EMBEDDED.value,
-                                chunk_id,
-                            ),
+                            (datetime.now(timezone.utc), chunk_id),
                         )
 
                 logger.info(f"Successfully generated embeddings for chunk {chunk_id}")
