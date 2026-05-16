@@ -18,6 +18,7 @@ from nexus.agents.orrery.substrate import (
     evaluate_stack,
     validate_always_fallbacks,
 )
+from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
 
 __all__ = [
     "ALWAYS",
@@ -33,6 +34,8 @@ __all__ = [
     "Slot",
     "Template",
     "WorldState",
+    "OrreryResolutionDraft",
+    "OrreryTickProposal",
     "evaluate",
     "evaluate_stack",
     "validate_always_fallbacks",

@@ -332,6 +332,10 @@ class LORE:
             # Phase 4: Deep Queries
             self.current_phase = TurnPhase.DEEP_QUERIES
             await self.turn_manager.execute_deep_queries(self.turn_context)
+
+            # Phase 4.5: Orrery dry-run resolution (optional; no canonical writes)
+            self.current_phase = TurnPhase.ORRERY_RESOLVE
+            await self.turn_manager.resolve_orrery(self.turn_context)
             
             # Phase 5: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
