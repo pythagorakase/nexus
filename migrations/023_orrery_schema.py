@@ -714,7 +714,7 @@ def _create_world_time_support(conn) -> None:
     _execute(
         conn,
         """
-        CREATE OR REPLACE FUNCTION refresh_world_time_from_chunk(changed_chunk_id bigint)
+        CREATE OR REPLACE FUNCTION refresh_world_time_from_chunk()
         RETURNS void AS $$
         BEGIN
             WITH baseline AS (
@@ -744,8 +744,8 @@ def _create_world_time_support(conn) -> None:
         CREATE OR REPLACE FUNCTION refresh_world_time_from_chunk_trigger()
         RETURNS trigger AS $$
         BEGIN
-            PERFORM refresh_world_time_from_chunk(NEW.chunk_id);
-            RETURN NEW;
+            PERFORM refresh_world_time_from_chunk();
+            RETURN NULL;
         END;
         $$ LANGUAGE plpgsql;
 
@@ -753,10 +753,12 @@ def _create_world_time_support(conn) -> None:
             ON chunk_metadata;
         CREATE TRIGGER trg_chunk_metadata_refresh_world_time
             AFTER INSERT OR UPDATE OF time_delta ON chunk_metadata
-            FOR EACH ROW
+            FOR EACH STATEMENT
             EXECUTE FUNCTION refresh_world_time_from_chunk_trigger();
 
-        SELECT refresh_world_time_from_chunk(NULL);
+        DROP FUNCTION IF EXISTS refresh_world_time_from_chunk(bigint);
+
+        SELECT refresh_world_time_from_chunk();
         """,
     )
     conn.commit()

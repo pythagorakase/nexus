@@ -9,9 +9,11 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
     WorldState,
+    binding_hash,
     count_co_located,
     evaluate_stack,
     recent_event,
+    since_last_event_at_least,
     validate_always_fallbacks,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
@@ -66,6 +68,31 @@ def test_demo_presets_fire_expected_package(
     assert result["branch_label"] == branch_label
 
 
+def test_targeted_events_fire_builtin_package_gates() -> None:
+    """Built-ins that react to incoming events use target-role matching."""
+
+    from nexus.agents.orrery.substrate import EventRecord
+
+    state = WorldState(
+        locations={1: 10},
+        location_class={10: "the_roots"},
+        recent_events=(
+            EventRecord(
+                event_type="compliance_alert",
+                tick=99,
+                target_entity_id=1,
+            ),
+        ),
+        weather="rain",
+        current_tick=100,
+    )
+
+    result = evaluate_stack(BUILTIN_TEMPLATES, state, {Slot.ACTOR: 1})
+
+    assert result is not None
+    assert result.template_id == "evade_pursuers"
+
+
 def test_count_co_located_condition_filters_by_tag() -> None:
     """Co-location can be counted with a tag filter for crowd-like gates."""
 
@@ -107,6 +134,68 @@ def test_recent_event_can_filter_by_changed_fields() -> None:
         changed_fields_any_of=("character.emotional_state",),
         actor_slot=Slot.ACTOR,
     )(state, {Slot.ACTOR: 1})
+
+
+def test_recent_event_preserves_actor_target_roles() -> None:
+    """Actor and target filters match their corresponding event fields only."""
+
+    from nexus.agents.orrery.substrate import EventRecord
+
+    state = WorldState(
+        recent_events=(
+            EventRecord(
+                event_type="warning",
+                tick=9,
+                actor_entity_id=1,
+                target_entity_id=2,
+            ),
+        ),
+        current_tick=10,
+    )
+
+    assert recent_event("warning", actor_slot=Slot.ACTOR)(state, {Slot.ACTOR: 1})
+    assert recent_event("warning", target_slot=Slot.ACTOR)(state, {Slot.ACTOR: 2})
+    assert not recent_event("warning", actor_slot=Slot.ACTOR)(state, {Slot.ACTOR: 2})
+    assert not recent_event("warning", target_slot=Slot.ACTOR)(state, {Slot.ACTOR: 1})
+    assert recent_event(
+        "warning",
+        actor_slot=Slot.ACTOR,
+        target_slot=Slot.TARGET,
+    )(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert not recent_event(
+        "warning",
+        actor_slot=Slot.ACTOR,
+        target_slot=Slot.TARGET,
+    )(state, {Slot.ACTOR: 2, Slot.TARGET: 1})
+
+
+def test_since_last_event_at_least_preserves_actor_role() -> None:
+    """Cooldown predicates do not treat target-only events as actor matches."""
+
+    from nexus.agents.orrery.substrate import EventRecord
+
+    state = WorldState(
+        recent_events=(
+            EventRecord(
+                event_type="warning",
+                tick=9,
+                actor_entity_id=2,
+                target_entity_id=1,
+            ),
+        ),
+        current_tick=10,
+    )
+
+    assert since_last_event_at_least("warning", 5)(state, {Slot.ACTOR: 1})
+    assert not since_last_event_at_least("warning", 5)(state, {Slot.ACTOR: 2})
+
+
+def test_binding_hash_handles_runtime_non_slot_keys() -> None:
+    """Runtime callers that pass non-Slot keys get a deterministic hash."""
+
+    assert binding_hash({Slot.ACTOR: 1, "custom": 2}) == binding_hash(
+        {"custom": 2, Slot.ACTOR: 1}
+    )
 
 
 def test_evaluate_stack_returns_none_when_no_template_passes() -> None:

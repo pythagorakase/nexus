@@ -329,21 +329,19 @@ def recent_event(
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         actor_id = _slot_entity(bindings, actor_slot) if actor_slot else None
         target_id = _slot_entity(bindings, target_slot) if target_slot else None
+        if actor_slot is not None and actor_id is None:
+            return False
+        if target_slot is not None and target_id is None:
+            return False
         cutoff = state.current_tick - within_ticks
         for event in state.recent_events:
             if event.tick < cutoff:
                 continue
             if event_type is not None and event.event_type != event_type:
                 continue
-            if actor_id is not None and actor_id not in (
-                event.actor_entity_id,
-                event.target_entity_id,
-            ):
+            if actor_id is not None and event.actor_entity_id != actor_id:
                 continue
-            if target_id is not None and target_id not in (
-                event.actor_entity_id,
-                event.target_entity_id,
-            ):
+            if target_id is not None and event.target_entity_id != target_id:
                 continue
             if changed_fields and not changed_fields.intersection(event.changed_fields):
                 continue
@@ -370,14 +368,13 @@ def since_last_event_at_least(
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         actor_id = _slot_entity(bindings, actor_slot)
+        if actor_id is None:
+            return False
         latest_tick: Optional[int] = None
         for event in state.recent_events:
             if event.event_type != event_type:
                 continue
-            if actor_id is not None and actor_id not in (
-                event.actor_entity_id,
-                event.target_entity_id,
-            ):
+            if event.actor_entity_id != actor_id:
                 continue
             latest_tick = (
                 event.tick if latest_tick is None else max(latest_tick, event.tick)
@@ -480,9 +477,13 @@ class Resolution:
 def binding_hash(bindings: Bindings) -> str:
     """Return a stable hash for a bindings dictionary."""
 
+    def _binding_sort_key(item: Tuple[Any, Any]) -> str:
+        slot = item[0]
+        return slot.value if isinstance(slot, Slot) else str(slot)
+
     serializable = {
         slot.value if isinstance(slot, Slot) else str(slot): value
-        for slot, value in sorted(bindings.items(), key=lambda item: item[0].value)
+        for slot, value in sorted(bindings.items(), key=_binding_sort_key)
     }
     encoded = json.dumps(serializable, sort_keys=True, separators=(",", ":"))
     return sha256(encoded.encode("utf-8")).hexdigest()
