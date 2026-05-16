@@ -260,17 +260,6 @@ class LogonUtility:
         sections.append("\n=== USER INPUT ===")
         sections.append(context.get("user_input", ""))
 
-        # Add author's note (soft out-of-character suggestion, used by regenerate)
-        note = context.get("note")
-        if note:
-            sections.append("\n=== AUTHOR'S NOTE ===")
-            sections.append(
-                "The player is also leaving a soft, out-of-character suggestion for this "
-                "generation — treat it as authorial intent, not a hard constraint. It may "
-                "be a tonal nudge, a continuity correction, or an outcome preference:"
-            )
-            sections.append(note)
-
         # Add entity data with hierarchical support
         entity_data = context.get("entity_data", {})
         if entity_data:
@@ -390,6 +379,19 @@ class LogonUtility:
             sections.append("\n=== HISTORICAL CONTEXT ===")
             for passage in context["retrieved_passages"]["results"][:5]:  # Limit to top 5
                 sections.append(f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}")
+
+        # Add author's note (soft out-of-character suggestion, used by regenerate).
+        # Placed immediately before INSTRUCTIONS so recency bias gives it the influence
+        # a soft nudge needs — entity/historical context above would otherwise bury it.
+        note = context.get("note")
+        if note:
+            sections.append("\n=== AUTHOR'S NOTE ===")
+            sections.append(
+                "The player is also leaving a soft, out-of-character suggestion for this "
+                "generation — treat it as authorial intent, not a hard constraint. It may "
+                "be a tonal nudge, a continuity correction, or an outcome preference:"
+            )
+            sections.append(note)
 
         # Add instructions
         sections.append("\n=== INSTRUCTIONS ===")

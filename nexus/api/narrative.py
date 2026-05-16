@@ -691,10 +691,11 @@ async def regenerate_narrative(
             chunk_id = row["chunk_id"]
             parent_chunk_id = row["parent_chunk_id"]
             user_text = row["user_text"] or ""
-
-            # Clear the existing incubator row so generate_narrative_async can write fresh content.
-            cur.execute("DELETE FROM incubator WHERE id = TRUE")
-            conn.commit()
+            # Intentionally NOT deleting the incubator row here. write_to_incubator
+            # (called inside generate_narrative_async on success) does DELETE+INSERT
+            # atomically. If we deleted eagerly and generation later failed (LLM error,
+            # timeout, etc.), the slot would be left with no pending turn — irrecoverable
+            # data loss of the draft the user was trying to re-roll.
     finally:
         conn.close()
 
