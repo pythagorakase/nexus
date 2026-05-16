@@ -396,6 +396,28 @@ def test_compose_actor_target_bindings_filters_to_recently_relevant_actors() -> 
     assert pairs == {(1, 2)}
 
 
+def test_compose_actor_target_bindings_excludes_anchor_present_targets() -> None:
+    """Multi-slot packages do not drive actors currently owned by storyteller."""
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        present_actor_rows=[{"entity_id": 2}],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+            {"source_entity_id": 1, "target_entity_id": 3},
+        ],
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
+    assert pairs == {(1, 3)}
+
+
 def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
     """Templates with non-(ACTOR,)/non-(ACTOR,TARGET) slot tuples fail loud."""
 

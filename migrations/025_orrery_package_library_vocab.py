@@ -8,12 +8,9 @@ needed for the new templates to fire without violating the Vocabulary Growth
 Contract (resolver-sourced unknowns fail loudly — templates must register
 their vocabulary before use).
 
-Scope is intentionally narrow: only the vocabulary the three new templates
-reference. The existing built-in templates (EVADE_PURSUERS, HONOR_DEBT,
-PURSUE_GHOST_LEAD, MAINTAIN_COVER) reference further tags and event_types
-that are still unseeded; those become PR 3's seeding task because PR 3
-(CommitOrreryTick) is the first slice that actually attempts canonical
-writes against the registries.
+Scope is intentionally narrow: migration 024 seeds the initial built-in
+package vocabulary, and this migration adds only the new vocabulary needed
+by the three package-library templates introduced here.
 """
 
 from __future__ import annotations

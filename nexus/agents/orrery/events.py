@@ -22,6 +22,9 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
     {
         "character.current_activity",
         "entity_tags.add",
+        "entity_tags.remove",
+        "entity_tags_target.add",
+        "entity_tags_target.remove",
     }
 )
 
@@ -79,6 +82,7 @@ def commit_orrery_tick_sync(
 
         for draft in coerced.resolutions:
             actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
+            target_entity_id = _scalar_entity_binding(draft.bindings, "target")
             brief = _render_brief(draft, entity_names)
             resolution_id = _insert_resolution_sync(
                 cur,
@@ -96,6 +100,8 @@ def commit_orrery_tick_sync(
                 cur,
                 draft,
                 actor_entity_id=actor_entity_id,
+                target_entity_id=target_entity_id,
+                source_chunk_id=tick_chunk_id,
             )
             event_id = _emit_world_event_sync(
                 cur,
@@ -103,6 +109,7 @@ def commit_orrery_tick_sync(
                 tick_chunk_id=tick_chunk_id,
                 resolution_id=resolution_id,
                 actor_entity_id=actor_entity_id,
+                target_entity_id=target_entity_id,
                 world_layer=world_layer,
             )
             if event_id is not None:
@@ -153,6 +160,7 @@ async def commit_orrery_tick_async(
 
     for draft in coerced.resolutions:
         actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
+        target_entity_id = _scalar_entity_binding(draft.bindings, "target")
         brief = _render_brief(draft, entity_names)
         resolution_id = await _insert_resolution_async(
             conn,
@@ -170,6 +178,8 @@ async def commit_orrery_tick_async(
             conn,
             draft,
             actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
+            source_chunk_id=tick_chunk_id,
         )
         event_id = await _emit_world_event_async(
             conn,
@@ -177,6 +187,7 @@ async def commit_orrery_tick_async(
             tick_chunk_id=tick_chunk_id,
             resolution_id=resolution_id,
             actor_entity_id=actor_entity_id,
+            target_entity_id=target_entity_id,
             world_layer=world_layer,
         )
         if event_id is not None:
@@ -377,6 +388,8 @@ def _apply_state_delta_sync(
     draft: OrreryResolutionDraft,
     *,
     actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
+    source_chunk_id: int,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -400,6 +413,34 @@ def _apply_state_delta_sync(
     for tag in draft.state_delta.get("entity_tags.add", ()) or ():
         if _add_entity_tag_sync(cur, actor_entity_id, str(tag), draft.template_id):
             tag_mutations += 1
+    for tag in draft.state_delta.get("entity_tags.remove", ()) or ():
+        tag_mutations += _remove_entity_tag_sync(
+            cur,
+            actor_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="entity_tags.remove",
+        )
+
+    if (
+        draft.state_delta.get("entity_tags_target.add")
+        or draft.state_delta.get("entity_tags_target.remove")
+    ) and target_entity_id is None:
+        raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
+
+    for tag in draft.state_delta.get("entity_tags_target.add", ()) or ():
+        if _add_entity_tag_sync(cur, target_entity_id, str(tag), draft.template_id):
+            tag_mutations += 1
+    for tag in draft.state_delta.get("entity_tags_target.remove", ()) or ():
+        tag_mutations += _remove_entity_tag_sync(
+            cur,
+            target_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="entity_tags_target.remove",
+        )
     return tag_mutations
 
 
@@ -408,6 +449,8 @@ async def _apply_state_delta_async(
     draft: OrreryResolutionDraft,
     *,
     actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
+    source_chunk_id: int,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -431,6 +474,36 @@ async def _apply_state_delta_async(
             conn, actor_entity_id, str(tag), draft.template_id
         ):
             tag_mutations += 1
+    for tag in draft.state_delta.get("entity_tags.remove", ()) or ():
+        tag_mutations += await _remove_entity_tag_async(
+            conn,
+            actor_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="entity_tags.remove",
+        )
+
+    if (
+        draft.state_delta.get("entity_tags_target.add")
+        or draft.state_delta.get("entity_tags_target.remove")
+    ) and target_entity_id is None:
+        raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
+
+    for tag in draft.state_delta.get("entity_tags_target.add", ()) or ():
+        if await _add_entity_tag_async(
+            conn, target_entity_id, str(tag), draft.template_id
+        ):
+            tag_mutations += 1
+    for tag in draft.state_delta.get("entity_tags_target.remove", ()) or ():
+        tag_mutations += await _remove_entity_tag_async(
+            conn,
+            target_entity_id,
+            str(tag),
+            draft.template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="entity_tags_target.remove",
+        )
     return tag_mutations
 
 
@@ -440,20 +513,7 @@ def _add_entity_tag_sync(
     tag: str,
     template_id: str,
 ) -> bool:
-    cur.execute(
-        """
-        SELECT id
-        FROM tags
-        WHERE tag = %s
-          AND deprecated = false
-          AND synonym_for IS NULL
-        """,
-        (tag,),
-    )
-    row = cur.fetchone()
-    if not row:
-        raise ValueError(f"Orrery tag {tag!r} is not registered")
-    tag_id = _row_get(row, "id", 0)
+    tag_id = _registered_tag_id_sync(cur, tag)
 
     cur.execute(
         """
@@ -467,24 +527,30 @@ def _add_entity_tag_sync(
     return cur.fetchone() is not None
 
 
+def _registered_tag_id_sync(cur: Any, tag: str) -> int:
+    cur.execute(
+        """
+        SELECT id
+        FROM tags
+        WHERE tag = %s
+          AND deprecated = false
+          AND synonym_for IS NULL
+        """,
+        (tag,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ValueError(f"Orrery tag {tag!r} is not registered")
+    return _row_get(row, "id", 0)
+
+
 async def _add_entity_tag_async(
     conn: Any,
     entity_id: int,
     tag: str,
     template_id: str,
 ) -> bool:
-    tag_id = await conn.fetchval(
-        """
-        SELECT id
-        FROM tags
-        WHERE tag = $1
-          AND deprecated = false
-          AND synonym_for IS NULL
-        """,
-        tag,
-    )
-    if tag_id is None:
-        raise ValueError(f"Orrery tag {tag!r} is not registered")
+    tag_id = await _registered_tag_id_async(conn, tag)
 
     inserted_id = await conn.fetchval(
         """
@@ -500,6 +566,103 @@ async def _add_entity_tag_async(
     return inserted_id is not None
 
 
+async def _registered_tag_id_async(conn: Any, tag: str) -> int:
+    tag_id = await conn.fetchval(
+        """
+        SELECT id
+        FROM tags
+        WHERE tag = $1
+          AND deprecated = false
+          AND synonym_for IS NULL
+        """,
+        tag,
+    )
+    if tag_id is None:
+        raise ValueError(f"Orrery tag {tag!r} is not registered")
+    return tag_id
+
+
+def _remove_entity_tag_sync(
+    cur: Any,
+    entity_id: int,
+    tag: str,
+    template_id: str,
+    *,
+    source_chunk_id: int,
+    delta_key: str,
+) -> int:
+    tag_id = _registered_tag_id_sync(cur, tag)
+    cur.execute(
+        """
+        SELECT et.id
+        FROM entity_tags et
+        WHERE et.entity_id = %s
+          AND et.tag_id = %s
+          AND et.cleared_at IS NULL
+        """,
+        (entity_id, tag_id),
+    )
+    entity_tag_ids = [_row_get(row, "id", 0) for row in cur.fetchall()]
+    for entity_tag_id in entity_tag_ids:
+        cur.execute(
+            "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+            (entity_tag_id,),
+        )
+        cur.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_tag_id, mechanism, justification, source_chunk_id
+            ) VALUES (%s, 'authored', %s::jsonb, %s)
+            """,
+            (
+                entity_tag_id,
+                json.dumps({"template_id": template_id, "state_delta": delta_key}),
+                source_chunk_id,
+            ),
+        )
+    return len(entity_tag_ids)
+
+
+async def _remove_entity_tag_async(
+    conn: Any,
+    entity_id: int,
+    tag: str,
+    template_id: str,
+    *,
+    source_chunk_id: int,
+    delta_key: str,
+) -> int:
+    tag_id = await _registered_tag_id_async(conn, tag)
+    rows = await conn.fetch(
+        """
+        SELECT et.id
+        FROM entity_tags et
+        WHERE et.entity_id = $1
+          AND et.tag_id = $2
+          AND et.cleared_at IS NULL
+        """,
+        entity_id,
+        tag_id,
+    )
+    entity_tag_ids = [_row_get(row, "id", 0) for row in rows]
+    for entity_tag_id in entity_tag_ids:
+        await conn.execute(
+            "UPDATE entity_tags SET cleared_at = now() WHERE id = $1",
+            entity_tag_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_tag_id, mechanism, justification, source_chunk_id
+            ) VALUES ($1, 'authored', $2::jsonb, $3)
+            """,
+            entity_tag_id,
+            json.dumps({"template_id": template_id, "state_delta": delta_key}),
+            source_chunk_id,
+        )
+    return len(entity_tag_ids)
+
+
 def _emit_world_event_sync(
     cur: Any,
     draft: OrreryResolutionDraft,
@@ -507,6 +670,7 @@ def _emit_world_event_sync(
     tick_chunk_id: int,
     resolution_id: int,
     actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
     world_layer: Optional[str],
 ) -> Optional[int]:
     if not draft.event_type:
@@ -524,16 +688,17 @@ def _emit_world_event_sync(
     cur.execute(
         """
         INSERT INTO world_events (
-            event_type, tick_chunk_id, actor_entity_id, location_id,
+            event_type, tick_chunk_id, actor_entity_id, target_entity_id, location_id,
             world_layer, source, changed_fields, magnitude, resolution_id,
             payload
-        ) VALUES (%s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
+        ) VALUES (%s, %s, %s, %s, %s, %s, 'resolver', %s, %s, %s, %s::jsonb)
         RETURNING id
         """,
         (
             draft.event_type,
             tick_chunk_id,
             actor_entity_id,
+            target_entity_id,
             location_id,
             world_layer,
             list(draft.changed_fields),
@@ -552,6 +717,15 @@ def _emit_world_event_sync(
             """,
             (event_id, actor_entity_id),
         )
+    if target_entity_id is not None:
+        cur.execute(
+            """
+            INSERT INTO world_event_entities (event_id, role, entity_id)
+            VALUES (%s, 'target', %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (event_id, target_entity_id),
+        )
     return event_id
 
 
@@ -562,6 +736,7 @@ async def _emit_world_event_async(
     tick_chunk_id: int,
     resolution_id: int,
     actor_entity_id: Optional[int],
+    target_entity_id: Optional[int],
     world_layer: Optional[str],
 ) -> Optional[int]:
     if not draft.event_type:
@@ -579,18 +754,19 @@ async def _emit_world_event_async(
     event_id = await conn.fetchval(
         """
         INSERT INTO world_events (
-            event_type, tick_chunk_id, actor_entity_id, location_id,
+            event_type, tick_chunk_id, actor_entity_id, target_entity_id, location_id,
             world_layer, source, changed_fields, magnitude, resolution_id,
             payload
         ) VALUES (
-            $1, $2, $3, $4, $5::world_layer_type, 'resolver',
-            $6::text[], $7, $8, $9::jsonb
+            $1, $2, $3, $4, $5, $6::world_layer_type, 'resolver',
+            $7::text[], $8, $9, $10::jsonb
         )
         RETURNING id
         """,
         draft.event_type,
         tick_chunk_id,
         actor_entity_id,
+        target_entity_id,
         location_id,
         world_layer,
         list(draft.changed_fields),
@@ -607,6 +783,16 @@ async def _emit_world_event_async(
             """,
             event_id,
             actor_entity_id,
+        )
+    if target_entity_id is not None:
+        await conn.execute(
+            """
+            INSERT INTO world_event_entities (event_id, role, entity_id)
+            VALUES ($1, 'target', $2)
+            ON CONFLICT DO NOTHING
+            """,
+            event_id,
+            target_entity_id,
         )
     return event_id
 

@@ -387,6 +387,10 @@ def compose_actor_target_bindings(
         actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
     else:
         actor_id_set = set(actor_ids)
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    actor_id_set -= present_actor_ids
     if not actor_id_set:
         return ()
 
@@ -411,6 +415,8 @@ def compose_actor_target_bindings(
     ).mappings():
         source = row["source_entity_id"]
         target = row["target_entity_id"]
+        if source in present_actor_ids or target in present_actor_ids:
+            continue
         if source in actor_id_set:
             pairs.add((source, target))
         if target in actor_id_set:

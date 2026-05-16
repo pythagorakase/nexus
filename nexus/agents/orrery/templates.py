@@ -240,14 +240,12 @@ MAINTAIN_COVER = Template(
 #     the gates readable; the helper expresses bidirectional lookup against the
 #     stored-direction-only WorldState hydration.
 #
-# Two contracts that PR 3 (CommitOrreryTick) will need to honor or revisit:
+# Writer contract:
 #
 #   * Cross-actor state_delta keys (entity_tags_target.add/remove) are
-#     preserved verbatim from the draft. The substrate accepts arbitrary
-#     Mapping keys, so they're decorative here; PR 3 must parse and route
-#     them by convention (no enum/TypedDict yet). Define a state_delta
-#     schema alongside the writer if the implicit-string approach proves
-#     too brittle in implementation.
+#     routed by convention to Slot.TARGET by CommitOrreryTick. Define a
+#     state_delta TypedDict/dataclass if the implicit-string convention
+#     grows past this small vocabulary.
 #   * Trust hydration is un-implemented (resolver.py:177 TODO). Any branch
 #     gated on trust_at_least(N) with N > 0 or trust_below(N) with N < 0
 #     is currently unreachable — WorldState.trust defaults to 0 for every
