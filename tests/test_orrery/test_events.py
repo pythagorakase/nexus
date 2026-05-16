@@ -47,7 +47,11 @@ class RecordingCursor:
             entity_ids = params[0]
             self._fetchall = [{"id": entity_id} for entity_id in entity_ids]
         elif "FROM entity_names_v WHERE id = ANY" in normalized:
-            self._fetchall = [{"id": 1, "name": "Mara"}]
+            names = {1: "Mara", 2: "Vale"}
+            self._fetchall = [
+                {"id": entity_id, "name": names.get(entity_id, f"Entity {entity_id}")}
+                for entity_id in params[0]
+            ]
         elif "INSERT INTO orrery_resolutions" in normalized:
             self._fetchone = None if self.duplicate_resolution else {"id": 10}
         elif "UPDATE characters SET current_activity" in normalized:
@@ -68,8 +72,14 @@ class RecordingCursor:
             self._fetchone = {"current_location": 99}
         elif "INSERT INTO world_events" in normalized:
             self._fetchone = {"id": 20}
-        elif "SELECT et.id FROM entity_tags" in normalized:
+        elif "SELECT et.id FROM entity_tags et JOIN tags t" in normalized:
             self._fetchall = [{"id": tag_id} for tag_id in self.clear_tag_ids]
+        elif "SELECT et.id FROM entity_tags et WHERE" in normalized:
+            entity_id, tag_id = params
+            tags_by_id = {value: key for key, value in self.known_tags.items()}
+            tag = tags_by_id[tag_id]
+            if (entity_id, tag) in self.current_tags:
+                self._fetchall = [{"id": tag_id + 1000}]
 
     def fetchone(self):
         return self._fetchone
@@ -260,3 +270,59 @@ def test_commit_orrery_tick_skips_duplicate_active_tag_insert() -> None:
 
     assert result.tag_mutation_count == 0
     assert "ON CONFLICT DO NOTHING" in statements
+
+
+def test_commit_orrery_tick_applies_target_tag_deltas() -> None:
+    """Multi-slot packages can mutate actor and target tag state explicitly."""
+
+    draft = OrreryResolutionDraft(
+        template_id="extract_vengeance",
+        priority=90,
+        binding_hash="vengeance-1",
+        bindings={"actor": 1, "target": 2},
+        branch_label="Surface a reputation attack",
+        narrative_stub="{actor} compromises {target}'s reputation.",
+        state_delta={
+            "character.current_activity": "running a reputation attack",
+            "entity_tags.add": ["off_grid"],
+            "entity_tags_target.add": ["reputation_compromised"],
+            "entity_tags_target.remove": ["grudge_active"],
+        },
+        event_type="retaliation_attempted",
+        changed_fields=("character.current_activity", "entity_tags"),
+        magnitude=0.58,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        known_tags={
+            "off_grid": 77,
+            "reputation_compromised": 78,
+            "grudge_active": 79,
+        },
+        current_tags={(2, "grudge_active")},
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    event_params = next(
+        params for sql, params in cursor.executed if "INSERT INTO world_events" in sql
+    )
+
+    assert result.resolution_count == 1
+    assert result.event_count == 1
+    assert result.tag_mutation_count == 3
+    assert "VALUES (%s, 'target', %s)" in statements
+    assert "mechanism, justification, source_chunk_id" in statements
+    assert event_params[3] == 2

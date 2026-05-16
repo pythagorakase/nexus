@@ -17,6 +17,7 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 ACTOR_ID = 1
+TARGET_ID = 2
 ROOTS_PLACE_ID = 101
 GLOW_PLACE_ID = 102
 STACKS_PLACE_ID = 103
@@ -91,15 +92,78 @@ def build_presets() -> Dict[str, WorldState]:
     }
 
 
+def build_multi_slot_presets() -> Dict[str, dict]:
+    """Multi-slot demo states for the package-library expansion templates.
+
+    Each entry carries both a WorldState and an explicit (ACTOR, TARGET)
+    binding, matching how the multi-slot binding composer would yield pairs
+    against real database state.
+    """
+
+    location_classes = {
+        ROOTS_PLACE_ID: "the_roots",
+        GLOW_PLACE_ID: "the_glow",
+        STACKS_PLACE_ID: "the_stacks",
+    }
+    return {
+        "vengeance": {
+            "state": WorldState(
+                tags={ACTOR_ID: frozenset({"vendetta_holder"})},
+                ephemeral_tags={ACTOR_ID: frozenset({"grudge_active"})},
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"enemy"})},
+                locations={ACTOR_ID: ROOTS_PLACE_ID, TARGET_ID: ROOTS_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="night",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "kin_danger": {
+            "state": WorldState(
+                ephemeral_tags={TARGET_ID: frozenset({"under_active_pursuit"})},
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="evening",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "informant": {
+            "state": WorldState(
+                tags={ACTOR_ID: frozenset({"informant_handler"})},
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"handler"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="evening",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+    }
+
+
 def run_preset(name: str) -> dict:
     """Evaluate the built-in template stack against one preset."""
 
-    presets = build_presets()
-    if name not in presets:
-        raise ValueError(f"Unknown Orrery demo preset: {name}")
+    actor_only_presets = build_presets()
+    multi_slot_presets = build_multi_slot_presets()
     validate_always_fallbacks(BUILTIN_TEMPLATES)
-    bindings: Bindings = {Slot.ACTOR: ACTOR_ID}
-    result = evaluate_stack(BUILTIN_TEMPLATES, presets[name], bindings)
+
+    if name in actor_only_presets:
+        state = actor_only_presets[name]
+        bindings: Bindings = {Slot.ACTOR: ACTOR_ID}
+    elif name in multi_slot_presets:
+        preset = multi_slot_presets[name]
+        state = preset["state"]
+        bindings = preset["bindings"]
+    else:
+        raise ValueError(f"Unknown Orrery demo preset: {name}")
+
+    result = evaluate_stack(BUILTIN_TEMPLATES, state, bindings)
     if result is None:
         return {"preset": name, "fired": False}
     return {
@@ -113,13 +177,19 @@ def run_preset(name: str) -> dict:
     }
 
 
+def _all_preset_names() -> list[str]:
+    """All known preset names across actor-only and multi-slot harnesses."""
+
+    return sorted(set(build_presets()) | set(build_multi_slot_presets()))
+
+
 def main() -> None:
     """Run the offline Orrery package harness."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--preset",
-        choices=sorted(build_presets()),
+        choices=_all_preset_names(),
         default="hunted",
         help="Demo preset to evaluate",
     )

@@ -181,15 +181,12 @@ def hydrate_world_state(
         text(
             """
             /* orrery:relationship_types */
-            SELECT c1.entity_id AS source_entity_id,
-                   c2.entity_id AS target_entity_id,
-                   cr.relationship_type::text AS relationship_type
-            FROM character_relationships cr
-            JOIN characters c1 ON c1.id = cr.character1_id
-            JOIN characters c2 ON c2.id = cr.character2_id
-            WHERE c1.entity_id IS NOT NULL
-              AND c2.entity_id IS NOT NULL
-              AND cr.relationship_type IS NOT NULL
+            SELECT source_entity_id, target_entity_id, relationship_type
+            FROM entity_relationships_v
+            WHERE relationship_scope = 'character'
+              AND source_entity_id IS NOT NULL
+              AND target_entity_id IS NOT NULL
+              AND relationship_type IS NOT NULL
             """
         )
     ).mappings():
@@ -356,6 +353,85 @@ def _present_actor_ids_at_anchor(
     }
 
 
+def compose_actor_target_bindings(
+    session: Any,
+    *,
+    anchor_chunk_id: Optional[int],
+    window_chunks: int,
+    actor_ids: Optional[Iterable[int]] = None,
+) -> Tuple[Bindings, ...]:
+    """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
+
+    Yields {Slot.ACTOR: a, Slot.TARGET: t} for each character-to-character
+    relationship row where the actor side is in the recently-relevant set.
+    Each stored relationship row produces up to two bindings (forward and
+    reverse) so templates with symmetric semantics see both orderings; gate
+    predicates with asymmetric semantics (handler/asset) filter via
+    role-explicit OR clauses.
+
+    When actor_ids is provided (typical: resolve_dry_run threads through
+    the actor set it already computed), this skips the redundant
+    compose_actor_bindings call. That avoids two costs: the duplicate DB
+    queries on every tick, and the READ COMMITTED inconsistency window
+    where the two binding passes could see different actor sets if rows
+    change between reads. Direct callers (e.g., focused unit tests) may
+    omit actor_ids and accept the implicit recomputation.
+    """
+
+    if actor_ids is None:
+        actor_only = compose_actor_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+        )
+        actor_id_set = {bindings[Slot.ACTOR] for bindings in actor_only}
+    else:
+        actor_id_set = set(actor_ids)
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
+    actor_id_set -= present_actor_ids
+    if not actor_id_set:
+        return ()
+
+    pairs: set[Tuple[int, int]] = set()
+    for row in session.execute(
+        text(
+            """
+            /* orrery:actor_target_bindings_character_relationships */
+            SELECT er.source_entity_id, er.target_entity_id
+            FROM entity_relationships_v er
+            JOIN entities es ON es.id = er.source_entity_id
+            JOIN entities et ON et.id = er.target_entity_id
+            WHERE er.relationship_scope = 'character'
+              AND er.source_entity_id IS NOT NULL
+              AND er.target_entity_id IS NOT NULL
+              AND es.kind = 'character'
+              AND et.kind = 'character'
+              AND es.is_active = true
+              AND et.is_active = true
+            """
+        )
+    ).mappings():
+        source = row["source_entity_id"]
+        target = row["target_entity_id"]
+        if source in present_actor_ids or target in present_actor_ids:
+            continue
+        if source in actor_id_set:
+            pairs.add((source, target))
+        if target in actor_id_set:
+            pairs.add((target, source))
+
+    return tuple(
+        {Slot.ACTOR: actor_id, Slot.TARGET: target_id}
+        for actor_id, target_id in sorted(pairs)
+    )
+
+
+_ACTOR_ONLY_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR,)
+_ACTOR_TARGET_SLOTS: Tuple[Slot, ...] = (Slot.ACTOR, Slot.TARGET)
+
+
 def resolve_dry_run(
     session: Any,
     templates: Iterable[Template],
@@ -370,20 +446,60 @@ def resolve_dry_run(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
+
+    templates_list = list(templates)
+    actor_only_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_ONLY_SLOTS
+    ]
+    actor_target_templates = [
+        t for t in templates_list if t.required_slots == _ACTOR_TARGET_SLOTS
+    ]
+    unsupported = [
+        t
+        for t in templates_list
+        if t.required_slots not in (_ACTOR_ONLY_SLOTS, _ACTOR_TARGET_SLOTS)
+    ]
+    if unsupported:
+        raise ValueError(
+            "Orrery resolver does not yet compose bindings for required_slots="
+            + ", ".join(
+                f"{t.id}:{tuple(s.value for s in t.required_slots)}"
+                for t in unsupported
+            )
+        )
+
+    drafts: list[OrreryResolutionDraft] = []
+
     actor_bindings = compose_actor_bindings(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    drafts = []
     for bindings in actor_bindings:
-        resolution = evaluate_stack(templates, state, bindings)
+        resolution = evaluate_stack(actor_only_templates, state, bindings)
         if resolution is not None and resolution.passes:
             drafts.append(_draft_from_resolution(resolution))
 
+    actor_target_bindings: Tuple[Bindings, ...] = ()
+    if actor_target_templates:
+        actor_target_bindings = compose_actor_target_bindings(
+            session,
+            anchor_chunk_id=anchor_chunk_id,
+            window_chunks=window_chunks,
+            actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+        )
+        for bindings in actor_target_bindings:
+            resolution = evaluate_stack(actor_target_templates, state, bindings)
+            if resolution is not None and resolution.passes:
+                drafts.append(_draft_from_resolution(resolution))
+
+    unique_actors = {bindings[Slot.ACTOR] for bindings in actor_bindings} | {
+        bindings[Slot.ACTOR] for bindings in actor_target_bindings
+    }
+
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,
-        actor_count=len(actor_bindings),
+        actor_count=len(unique_actors),
         resolutions=tuple(drafts),
     )
 
