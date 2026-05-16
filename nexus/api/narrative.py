@@ -522,6 +522,7 @@ async def continue_narrative(
                 )
                 approval = await approve_narrative(
                     session_id=narrative_state.session_id,
+                    background_tasks=background_tasks,
                     request=ApproveNarrativeRequest(
                         session_id=narrative_state.session_id, commit=True
                     ),
@@ -737,7 +738,9 @@ async def regenerate_narrative(
 
 
 @app.post("/api/narrative/approve")
-async def approve_narrative_unified(request: ApproveNarrativeRequest):
+async def approve_narrative_unified(
+    request: ApproveNarrativeRequest, background_tasks: BackgroundTasks
+):
     """
     Approve narrative and optionally commit to database.
 
@@ -772,12 +775,15 @@ async def approve_narrative_unified(request: ApproveNarrativeRequest):
                 )
 
     # Now call the implementation
-    return await _approve_narrative_impl(session_id, request.commit, slot)
+    return await _approve_narrative_impl(
+        session_id, request.commit, slot, background_tasks
+    )
 
 
 @app.post("/api/narrative/approve/{session_id}")
 async def approve_narrative(
     session_id: str,
+    background_tasks: BackgroundTasks,
     request: Optional[ApproveNarrativeRequest] = None,
     slot: Optional[int] = None,
 ):
@@ -786,10 +792,17 @@ async def approve_narrative(
     """
     should_commit = request.commit if request else True
     effective_slot = request.slot if request and request.slot else slot
-    return await _approve_narrative_impl(session_id, should_commit, effective_slot)
+    return await _approve_narrative_impl(
+        session_id, should_commit, effective_slot, background_tasks
+    )
 
 
-async def _approve_narrative_impl(session_id: str, commit: bool, slot: Optional[int]):
+async def _approve_narrative_impl(
+    session_id: str,
+    commit: bool,
+    slot: Optional[int],
+    background_tasks: Optional[BackgroundTasks] = None,
+):
     """Internal implementation for approve narrative."""
     conn = get_db_connection(slot)
     try:
@@ -810,6 +823,10 @@ async def _approve_narrative_impl(session_id: str, commit: bool, slot: Optional[
             try:
                 # Commit to database
                 chunk_id = commit_incubator_to_database_sync(conn, session_id, slot)
+                if background_tasks is not None:
+                    from nexus.agents.orrery.worker import process_orrery_outbox_sync
+
+                    background_tasks.add_task(process_orrery_outbox_sync, slot)
 
                 return {
                     "status": "committed",

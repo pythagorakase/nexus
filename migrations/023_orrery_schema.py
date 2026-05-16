@@ -508,7 +508,7 @@ def _create_tag_schema(conn) -> None:
             UNIQUE (entity_id, tag_id, applied_at)
         );
 
-        CREATE INDEX IF NOT EXISTS ix_entity_tags_current
+        CREATE UNIQUE INDEX IF NOT EXISTS ix_entity_tags_current
             ON entity_tags (entity_id, tag_id)
             WHERE cleared_at IS NULL;
 

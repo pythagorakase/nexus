@@ -42,6 +42,7 @@ class FakeSession:
         chunk_ref_actor_rows=None,
         event_actor_rows=None,
         ephemeral_actor_rows=None,
+        present_actor_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -60,6 +61,7 @@ class FakeSession:
         self.chunk_ref_actor_rows = chunk_ref_actor_rows or [{"entity_id": 1}]
         self.event_actor_rows = event_actor_rows or []
         self.ephemeral_actor_rows = ephemeral_actor_rows or []
+        self.present_actor_rows = present_actor_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -89,6 +91,7 @@ class FakeSession:
             assert "superseded_by_event_id IS NULL" in sql
             return FakeResult(self.event_rows)
         if "/* orrery:actor_bindings_chunk_refs */" in sql:
+            assert "reference_type IS DISTINCT FROM 'present'" in sql
             return FakeResult(self.chunk_ref_actor_rows)
         if "/* orrery:actor_bindings_events */" in sql:
             assert "(world_layer IS NULL OR world_layer = 'primary')" in sql
@@ -96,6 +99,8 @@ class FakeSession:
             return FakeResult(self.event_actor_rows)
         if "/* orrery:actor_bindings_ephemeral */" in sql:
             return FakeResult(self.ephemeral_actor_rows)
+        if "/* orrery:present_actor_ids_at_anchor */" in sql:
+            return FakeResult(self.present_actor_rows)
         if "/* orrery:anchor_world_time */" in sql:
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
@@ -139,6 +144,40 @@ def test_resolve_dry_run_returns_inspectable_proposal() -> None:
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "maintain_cover"
     assert proposal.resolutions[0].bindings == {"actor": 1}
+
+
+def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
+    """Orrery does not drive characters currently owned by the storyteller."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+            event_actor_rows=[{"entity_id": 3}],
+            ephemeral_actor_rows=[{"entity_id": 4}],
+            present_actor_rows=[{"entity_id": 1}, {"entity_id": 3}],
+            location_rows=[
+                {"entity_id": 1, "current_location": 10},
+                {"entity_id": 2, "current_location": 10},
+                {"entity_id": 3, "current_location": 10},
+                {"entity_id": 4, "current_location": 10},
+            ],
+            activity_rows=[
+                {"entity_id": 1, "current_activity": "in scene"},
+                {"entity_id": 2, "current_activity": "mentioned elsewhere"},
+                {"entity_id": 3, "current_activity": "recent event"},
+                {"entity_id": 4, "current_activity": "ephemeral pressure"},
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.actor_count == 2
+    assert [resolution.bindings for resolution in proposal.resolutions] == [
+        {"actor": 2},
+        {"actor": 4},
+    ]
 
 
 @pytest.mark.parametrize(

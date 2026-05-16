@@ -34,6 +34,39 @@ class OrreryResolutionDraft:
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation of this draft."""
+
+        return {
+            "template_id": self.template_id,
+            "priority": self.priority,
+            "binding_hash": self.binding_hash,
+            "bindings": dict(self.bindings),
+            "branch_label": self.branch_label,
+            "narrative_stub": self.narrative_stub,
+            "state_delta": dict(self.state_delta),
+            "event_type": self.event_type,
+            "changed_fields": list(self.changed_fields),
+            "magnitude": self.magnitude,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "OrreryResolutionDraft":
+        """Hydrate a draft from incubator JSONB data."""
+
+        return cls(
+            template_id=str(data["template_id"]),
+            priority=int(data["priority"]),
+            binding_hash=str(data["binding_hash"]),
+            bindings=dict(data.get("bindings") or {}),
+            branch_label=str(data["branch_label"]),
+            narrative_stub=str(data["narrative_stub"]),
+            state_delta=dict(data.get("state_delta") or {}),
+            event_type=data.get("event_type"),
+            changed_fields=tuple(data.get("changed_fields") or ()),
+            magnitude=float(data.get("magnitude") or 0.0),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class OrreryTickProposal:
@@ -51,6 +84,30 @@ class OrreryTickProposal:
         """Return the number of draft resolutions in this proposal."""
 
         return len(self.resolutions)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation of this proposal."""
+
+        return {
+            "anchor_chunk_id": self.anchor_chunk_id,
+            "actor_count": self.actor_count,
+            "generated_at": self.generated_at,
+            "resolutions": [draft.to_dict() for draft in self.resolutions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "OrreryTickProposal":
+        """Hydrate a proposal from incubator JSONB data."""
+
+        return cls(
+            anchor_chunk_id=data.get("anchor_chunk_id"),
+            actor_count=int(data.get("actor_count") or 0),
+            generated_at=str(data["generated_at"]),
+            resolutions=tuple(
+                OrreryResolutionDraft.from_dict(item)
+                for item in data.get("resolutions", ())
+            ),
+        )
 
 
 def hydrate_world_state(
@@ -197,9 +254,12 @@ def compose_actor_bindings(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
 ) -> Tuple[Bindings, ...]:
-    """Compose ACTOR-only bindings for recently relevant character entities."""
+    """Compose ACTOR-only bindings for recently relevant off-screen characters."""
 
     actor_ids: set[int] = set()
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
 
     if anchor_chunk_id is not None:
         lower_bound = max(0, anchor_chunk_id - window_chunks + 1)
@@ -212,6 +272,7 @@ def compose_actor_bindings(
                 JOIN entities e ON e.id = cer.entity_id
                 WHERE e.kind = 'character'
                   AND e.is_active = true
+                  AND cer.reference_type IS DISTINCT FROM 'present'
                   AND cer.chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
                 """
             ),
@@ -262,7 +323,37 @@ def compose_actor_bindings(
     ).mappings():
         actor_ids.add(row["entity_id"])
 
-    return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(actor_ids))
+    offscreen_actor_ids = actor_ids - present_actor_ids
+    return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(offscreen_actor_ids))
+
+
+def _present_actor_ids_at_anchor(
+    session: Any, *, anchor_chunk_id: Optional[int]
+) -> set[int]:
+    """Return character entities explicitly present in the current scene anchor."""
+
+    if anchor_chunk_id is None:
+        return set()
+
+    return {
+        row["entity_id"]
+        for row in session.execute(
+            text(
+                """
+                /* orrery:present_actor_ids_at_anchor */
+                SELECT DISTINCT c.entity_id
+                FROM chunk_character_references ccr
+                JOIN characters c ON c.id = ccr.character_id
+                JOIN entities e ON e.id = c.entity_id
+                WHERE ccr.chunk_id = :anchor_chunk_id
+                  AND ccr.reference = 'present'
+                  AND e.kind = 'character'
+                  AND e.is_active = true
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    }
 
 
 def resolve_dry_run(
