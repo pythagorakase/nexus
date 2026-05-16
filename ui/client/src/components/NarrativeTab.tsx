@@ -35,7 +35,7 @@ interface ChoiceObject {
 
 export interface ChunkWithMetadata extends Omit<NarrativeChunk, 'choiceObject'> {
   metadata?: ChunkMetadata;
-  state?: "draft" | "pending_review" | "finalized" | "embedded";
+  state?: "draft" | "pending_review" | "finalized";
   regeneration_count?: number;
   // Choice fields - typed more specifically than base schema's `unknown`
   choiceObject?: ChoiceObject | null;
@@ -668,7 +668,6 @@ export function NarrativeTab({
                         "px-1.5 py-0.5 rounded",
                         currentChunkState.state === "pending_review" && `bg-warning/20 text-warning ${glowClass}`,
                         currentChunkState.state === "finalized" && "bg-primary/20 text-primary",
-                        currentChunkState.state === "embedded" && "bg-primary/20 text-primary",
                         currentChunkState.state === "draft" && "bg-muted text-muted-foreground"
                       )}>
                         [{currentChunkState.state.toUpperCase()}]

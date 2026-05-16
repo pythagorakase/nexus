@@ -2,7 +2,7 @@ import { NarrativeChunk } from "@shared/schema";
 
 export interface ChunkState {
   id: number;
-  state: "draft" | "pending_review" | "finalized" | "embedded";
+  state: "draft" | "pending_review" | "finalized";
   finalized_at?: string;
   embedding_generated_at?: string;
   regeneration_count: number;
