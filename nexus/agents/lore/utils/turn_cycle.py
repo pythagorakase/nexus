@@ -25,6 +25,8 @@ try:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -40,6 +42,8 @@ except ImportError:
         StorytellerResponseStandard,
         extract_narrative_text,
     )
+    from nexus.agents.orrery.resolver import resolve_dry_run
+    from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -558,6 +562,79 @@ class TurnCycleManager:
         )
 
     # DEPRECATED: Cold Distillation phase removed - cross-encoders handle reranking
+
+    async def resolve_orrery(self, turn_context: TurnContext):
+        """
+        Phase 4.5: Resolve Orrery behavior packages without canonical writes.
+
+        The proposal is intentionally kept on TurnContext only. It is not injected
+        into the storyteller payload until a later phase proves the no-write path.
+        """
+        orrery_settings = self.settings.get("orrery", {})
+        if not orrery_settings.get("enabled", False):
+            turn_context.phase_states["orrery_resolve"] = {
+                "enabled": False,
+                "skipped": True,
+            }
+            return
+
+        if not self.lore.memnon:
+            raise RuntimeError("Orrery resolve requires MEMNON database access")
+
+        binding_settings = orrery_settings.get("binding", {})
+        window_chunks = int(binding_settings.get("window_chunks", 30))
+        with self.lore.memnon.Session() as session:
+            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            proposal = resolve_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+            )
+
+        turn_context.orrery_proposal = proposal
+        turn_context.phase_states["orrery_resolve"] = {
+            "enabled": True,
+            "anchor_chunk_id": proposal.anchor_chunk_id,
+            "actor_count": proposal.actor_count,
+            "resolution_count": proposal.resolution_count,
+            "template_ids": [
+                resolution.template_id for resolution in proposal.resolutions
+            ],
+        }
+        logger.info(
+            "Orrery dry-run resolved %d actors into %d draft resolutions",
+            proposal.actor_count,
+            proposal.resolution_count,
+        )
+
+    def _orrery_anchor_chunk_id(
+        self, session: Any, turn_context: TurnContext
+    ) -> Optional[int]:
+        """Choose the current read anchor for a no-write Orrery resolve."""
+
+        if turn_context.target_chunk_id is not None:
+            return turn_context.target_chunk_id
+
+        warm_ids = [
+            chunk.get("id")
+            for chunk in turn_context.warm_slice
+            if isinstance(chunk, dict) and chunk.get("id") is not None
+        ]
+        if warm_ids:
+            try:
+                return max(int(chunk_id) for chunk_id in warm_ids)
+            except (TypeError, ValueError):
+                logger.warning("Unable to infer Orrery anchor from warm-slice IDs")
+
+        from sqlalchemy import text
+
+        row = (
+            session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
+            .mappings()
+            .first()
+        )
+        return row["max_id"] if row and row["max_id"] is not None else None
 
     async def assemble_context_payload(self, turn_context: TurnContext):
         """
