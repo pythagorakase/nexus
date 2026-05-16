@@ -34,6 +34,39 @@ class OrreryResolutionDraft:
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation of this draft."""
+
+        return {
+            "template_id": self.template_id,
+            "priority": self.priority,
+            "binding_hash": self.binding_hash,
+            "bindings": dict(self.bindings),
+            "branch_label": self.branch_label,
+            "narrative_stub": self.narrative_stub,
+            "state_delta": dict(self.state_delta),
+            "event_type": self.event_type,
+            "changed_fields": list(self.changed_fields),
+            "magnitude": self.magnitude,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "OrreryResolutionDraft":
+        """Hydrate a draft from incubator JSONB data."""
+
+        return cls(
+            template_id=str(data["template_id"]),
+            priority=int(data["priority"]),
+            binding_hash=str(data["binding_hash"]),
+            bindings=dict(data.get("bindings") or {}),
+            branch_label=str(data["branch_label"]),
+            narrative_stub=str(data["narrative_stub"]),
+            state_delta=dict(data.get("state_delta") or {}),
+            event_type=data.get("event_type"),
+            changed_fields=tuple(data.get("changed_fields") or ()),
+            magnitude=float(data.get("magnitude") or 0.0),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class OrreryTickProposal:
@@ -51,6 +84,30 @@ class OrreryTickProposal:
         """Return the number of draft resolutions in this proposal."""
 
         return len(self.resolutions)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation of this proposal."""
+
+        return {
+            "anchor_chunk_id": self.anchor_chunk_id,
+            "actor_count": self.actor_count,
+            "generated_at": self.generated_at,
+            "resolutions": [draft.to_dict() for draft in self.resolutions],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "OrreryTickProposal":
+        """Hydrate a proposal from incubator JSONB data."""
+
+        return cls(
+            anchor_chunk_id=data.get("anchor_chunk_id"),
+            actor_count=int(data.get("actor_count") or 0),
+            generated_at=str(data["generated_at"]),
+            resolutions=tuple(
+                OrreryResolutionDraft.from_dict(item)
+                for item in data.get("resolutions", ())
+            ),
+        )
 
 
 def hydrate_world_state(

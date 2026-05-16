@@ -19,6 +19,7 @@ from nexus.agents.orrery.substrate import (
     validate_always_fallbacks,
 )
 from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+from nexus.agents.orrery.events import CommitOrreryTickResult
 
 __all__ = [
     "ALWAYS",
@@ -34,6 +35,7 @@ __all__ = [
     "Slot",
     "Template",
     "WorldState",
+    "CommitOrreryTickResult",
     "OrreryResolutionDraft",
     "OrreryTickProposal",
     "evaluate",

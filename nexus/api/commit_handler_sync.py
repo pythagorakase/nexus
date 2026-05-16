@@ -21,6 +21,7 @@ from nexus.agents.logon.apex_schema import (
     FactionReference,
     StateUpdates,
 )
+from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
     SummaryTask,
@@ -287,7 +288,7 @@ def commit_incubator_to_database_sync(
                 cur.execute(
                     """
                     SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
-                           choice_object, choice_text,
+                           choice_object, choice_text, orrery_proposal,
                            metadata_updates, entity_updates, reference_updates,
                            llm_response_id, status
                     FROM incubator
@@ -486,6 +487,26 @@ def commit_incubator_to_database_sync(
             if incubator.get("entity_updates"):
                 state_updates = StateUpdates(**incubator["entity_updates"])
                 apply_state_updates_sync(conn, state_updates)
+
+            # Step 8.5: Commit Orrery proposal inside the accepted-chunk transaction
+            orrery_result = commit_orrery_tick_sync(
+                conn,
+                incubator.get("orrery_proposal"),
+                tick_chunk_id=chunk_id,
+                slot=slot,
+                world_layer=world_layer,
+            )
+            if orrery_result.resolution_count or orrery_result.skipped_existing_count:
+                logger.info(
+                    "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
+                    "%s tag mutations, %s cleared tags, %s existing skipped",
+                    chunk_id,
+                    orrery_result.resolution_count,
+                    orrery_result.event_count,
+                    orrery_result.tag_mutation_count,
+                    orrery_result.cleared_tag_count,
+                    orrery_result.skipped_existing_count,
+                )
 
             # Step 9: Clear incubator
             with conn.cursor() as cur:

@@ -198,6 +198,9 @@ async def generate_narrative_async(
                 parent_chunk_id=parent_chunk_id,
                 user_text=user_text,
                 session_id=session_id,
+                orrery_proposal=(
+                    lore.turn_context.orrery_proposal if lore.turn_context else None
+                ),
             )
 
             # Validate the data before writing
@@ -267,10 +270,10 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
         INSERT INTO incubator (
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
             choice_object, choice_text,
-            metadata_updates, entity_updates, reference_updates,
+            metadata_updates, entity_updates, reference_updates, orrery_proposal,
             session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -290,6 +293,11 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                 json.dumps(data["metadata_updates"]),
                 json.dumps(data["entity_updates"]),
                 json.dumps(data["reference_updates"]),
+                (
+                    json.dumps(data.get("orrery_proposal"))
+                    if data.get("orrery_proposal")
+                    else None
+                ),
                 data["session_id"],
                 data["llm_response_id"],
                 data["status"],

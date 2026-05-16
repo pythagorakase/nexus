@@ -96,7 +96,11 @@ def compute_raw_text(
 
 
 def response_to_incubator(
-    response: StoryTurnResponse, parent_chunk_id: int, user_text: str, session_id: str
+    response: StoryTurnResponse,
+    parent_chunk_id: int,
+    user_text: str,
+    session_id: str,
+    orrery_proposal: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Transform a LORE StoryTurnResponse into incubator table format.
@@ -106,6 +110,7 @@ def response_to_incubator(
         parent_chunk_id: The parent chunk being continued from
         user_text: The user's input text
         session_id: Session ID for tracking
+        orrery_proposal: Optional no-write Orrery proposal from TurnContext
 
     Returns:
         Dictionary formatted for incubator table insertion
@@ -134,12 +139,25 @@ def response_to_incubator(
         "metadata_updates": extract_metadata_updates(response),
         "entity_updates": extract_entity_updates(response),
         "reference_updates": extract_reference_updates(response),
+        "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
         "status": "provisional",
     }
 
     return incubator_data
+
+
+def _serialize_orrery_proposal(proposal: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Serialize an optional Orrery proposal for incubator JSONB storage."""
+
+    if proposal is None:
+        return None
+    if hasattr(proposal, "to_dict"):
+        return proposal.to_dict()
+    if isinstance(proposal, dict):
+        return proposal
+    raise TypeError(f"Unsupported Orrery proposal type: {type(proposal).__name__}")
 
 
 def extract_metadata_updates(response: StoryTurnResponse) -> Dict[str, Any]:
