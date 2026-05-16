@@ -22,25 +22,26 @@ NEXUS uses a multi-model ensemble approach with weighted combinations of differe
 
 ## Database Storage Strategy
 
-To handle different vector dimensions efficiently, we use a **dimension-specific tables approach**:
+To handle different vector dimensions efficiently, we use a **lazy
+dimension-specific tables approach**. Tables are named
+`chunk_embeddings_<dimensions>d` with four-digit padding for current model
+families, such as `chunk_embeddings_1536d`.
 
-1. **chunk_embeddings_1536d**
-   - Table for 1536-dimensional vectors (inf-retriever-v1-1.5b)
-   - Column type: `embedding Vector(1536)`
+Each table has the same logical shape:
 
-2. **chunk_embeddings_1024d**
-   - Table for 1024-dimensional vectors (E5-Large-V2, BGE-Large-EN)
-   - Column type: `embedding Vector(1024)`
-
-3. **chunk_embeddings_2560d**
-   - Table for 2560-dimensional vectors (Octen-Embedding-4B)
-   - Column type: `embedding Vector(2560)`
-
-4. **chunk_embeddings_4096d**
-   - Table for 4096-dimensional vectors (Octen-Embedding-8B)
-   - Column type: `embedding Vector(4096)`
+```sql
+chunk_id BIGINT NOT NULL REFERENCES narrative_chunks(id) ON DELETE CASCADE,
+model TEXT NOT NULL,
+embedding vector(<dimensions>) NOT NULL,
+created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+PRIMARY KEY (chunk_id, model)
+```
 
 This approach was chosen because pgvector requires fixed dimensions at table creation time, and mixing vectors of different dimensions in the same table would require significant padding and dimensionality management.
+
+Fresh slots do not pre-create every possible embedding table. Write paths call
+`ensure_embedding_table(...)` for the active model dimension when embeddings are
+generated. Read paths inspect existing tables and never create them.
 
 ## Query Routing System
 

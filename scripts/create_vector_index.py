@@ -22,6 +22,8 @@ logger = logging.getLogger("nexus.embeddings")
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from nexus.agents.memnon.utils.embedding_tables import table_name_for_dimensions
+
 # Try to load settings using centralized config loader
 try:
     from nexus.config import load_settings_as_dict
@@ -76,9 +78,7 @@ def get_model_dimensions(model_name: str) -> int:
 def get_table_name(model_name: str) -> str:
     """Get table name for a model"""
     dimensions = get_model_dimensions(model_name)
-    dim_str = f"{dimensions:04d}"  # Format with leading zeros
-    # PostgreSQL converts identifiers to lowercase by default
-    return f"chunk_embeddings_{dim_str}d"
+    return table_name_for_dimensions(dimensions)
 
 
 def create_vector_indexes(model_name: str, db_url: str = None):
@@ -175,7 +175,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
                 start_time = time.time()
 
                 ivf_sql = f"""
-                CREATE INDEX {table_name}_ivf_idx 
+                CREATE INDEX IF NOT EXISTS {table_name}_ivf_idx
                 ON {table_name} USING ivfflat (embedding vector_cosine_ops)
                 WITH (lists=100);
                 """
@@ -191,7 +191,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
                 try:
                     logger.info("Creating plain index as fallback...")
                     plain_sql = f"""
-                    CREATE INDEX {table_name}_plain_idx 
+                    CREATE INDEX IF NOT EXISTS {table_name}_plain_idx
                     ON {table_name} (embedding vector_cosine_ops);
                     """
                     conn.execute(text(plain_sql))
@@ -209,7 +209,7 @@ def create_vector_indexes(model_name: str, db_url: str = None):
             try:
                 logger.info("Attempting to create plain vector index anyway...")
                 plain_sql = f"""
-                CREATE INDEX {table_name}_vector_idx 
+                CREATE INDEX IF NOT EXISTS {table_name}_vector_idx
                 ON {table_name} (embedding vector_cosine_ops);
                 """
                 conn.execute(text(plain_sql))

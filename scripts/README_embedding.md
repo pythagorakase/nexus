@@ -6,12 +6,16 @@ This document describes the implementation details of how we manage multiple vec
 
 ## Approach Summary
 
-After investigation, we decided to keep the vector embeddings in separate tables based on their dimensions:
+After investigation, we decided to keep vector embeddings in separate tables
+based on their dimensions:
 
-1. **chunk_embeddings**: Table for 1024-dimensional vectors (BGE-Large, E5-Large)
-2. **chunk_embeddings_small**: Table for 384-dimensional vectors (BGE-Small-Custom)
+1. **chunk_embeddings_1024d**: Table for 1024-dimensional vectors (BGE-Large, E5-Large)
+2. **chunk_embeddings_1536d**: Table for 1536-dimensional vectors (inf-retriever-v1-1.5b)
+3. **chunk_embeddings_2560d**: Table for 2560-dimensional vectors (Octen-Embedding-4B)
 
 This approach works better with PostgreSQL's pgvector extension, which requires fixed dimensions at table creation time.
+Tables are created lazily by embedding write paths and use `(chunk_id, model)`
+as the primary key. Fresh slots do not pre-create unused dimension tables.
 
 ## Key Components
 
@@ -44,12 +48,8 @@ if EMBEDDING_UTILS_AVAILABLE:
     dimensions = get_model_dimensions(model)
 else:
     # Fallback logic if utilities aren't available
-    if model.startswith("bge-small"):
-        embedding_table = "chunk_embeddings_small"
-        dimensions = 384
-    else:
-        embedding_table = "chunk_embeddings"
-        dimensions = 1024
+    dimensions = 384 if model.startswith("bge-small") else 1024
+    embedding_table = f"chunk_embeddings_{dimensions:04d}d"
 ```
 
 ### 3. Validation Scripts
@@ -70,14 +70,14 @@ from scripts.query_narratives_vector import NarrativeSearcher
 # Initialize the searcher
 searcher = NarrativeSearcher()
 
-# Search with large model (will use chunk_embeddings table)
+# Search with large model (will use chunk_embeddings_1024d)
 large_results = searcher.semantic_search(
     "What did Alex discover in the temple?",
     model="bge-large",
     limit=5
 )
 
-# Search with small model (will use chunk_embeddings_small table)
+# Search with small model (will use chunk_embeddings_0384d if active)
 small_results = searcher.semantic_search(
     "What did Alex discover in the temple?",
     model="bge-small-custom",
@@ -91,7 +91,7 @@ small_results = searcher.semantic_search(
 from scripts.utils.embedding_utils import get_table_for_model, construct_vector_search_sql
 
 # Get table name
-table = get_table_for_model("bge-small-custom")  # Returns "chunk_embeddings_small"
+table = get_table_for_model("bge-small-custom")  # Returns "chunk_embeddings_0384d"
 
 # Build SQL query
 sql, used_table = construct_vector_search_sql(

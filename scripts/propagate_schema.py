@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-Propagate schema migrations from NEXUS_template to all databases.
+Propagate schema migrations to NEXUS_template and all slot databases.
 
-The template database contains:
-  - The canonical schema (all tables empty)
-  - schema_migrations table tracking what's applied where
+Each database contains its own schema_migrations table with version/name rows.
 
 Usage:
     python scripts/propagate_schema.py           # Apply pending to all
@@ -46,32 +44,47 @@ def get_target_connection(db_name: str) -> PGConnection:
 
 
 def ensure_schema_migrations_table(conn: PGConnection) -> None:
-    """Create schema_migrations table in template if missing."""
+    """Create the per-database schema_migrations table if missing."""
 
     with conn.cursor() as cur:
         cur.execute(
             """
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = 'schema_migrations'
+            )
+            """
+        )
+        if cur.fetchone()[0]:
+            return
+
+        cur.execute(
+            """
             CREATE TABLE IF NOT EXISTS schema_migrations (
-                migration_name TEXT NOT NULL,
-                database_name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                name TEXT NOT NULL,
                 applied_at TIMESTAMPTZ DEFAULT NOW(),
-                PRIMARY KEY (migration_name, database_name)
+                PRIMARY KEY (version)
             )
             """
         )
     conn.commit()
 
 
+def migration_identity(migration_path: Path) -> tuple[str, str]:
+    """Return the version and descriptive name encoded in a migration file."""
+    version, _, name = migration_path.stem.partition("_")
+    return version, name or migration_path.stem
+
+
 def get_applied_migrations(db_name: str) -> set[str]:
-    """Query template for migrations already applied to this database."""
-    conn = get_template_connection()
+    """Query a database for migration versions already applied there."""
+    conn = get_target_connection(db_name)
     try:
         ensure_schema_migrations_table(conn)
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT migration_name FROM schema_migrations WHERE database_name = %s",
-                (db_name,),
-            )
+            cur.execute("SELECT version FROM schema_migrations")
             return {row[0] for row in cur.fetchall()}
     finally:
         conn.close()
@@ -87,7 +100,7 @@ def get_all_migrations() -> list[Path]:
 def get_pending_migrations(db_name: str) -> list[Path]:
     """Get migrations not yet applied to this database."""
     applied = get_applied_migrations(db_name)
-    return [m for m in get_all_migrations() if m.name not in applied]
+    return [m for m in get_all_migrations() if migration_identity(m)[0] not in applied]
 
 
 def apply_migration(db_name: str, migration_path: Path, dry_run: bool = False) -> bool:
@@ -97,6 +110,7 @@ def apply_migration(db_name: str, migration_path: Path, dry_run: bool = False) -
     Returns True on success, False on failure.
     """
     sql = migration_path.read_text()
+    version, name = migration_identity(migration_path)
 
     if dry_run:
         print(f"  [DRY RUN] Would apply {migration_path.name}")
@@ -106,8 +120,19 @@ def apply_migration(db_name: str, migration_path: Path, dry_run: bool = False) -
     try:
         target_conn = get_target_connection(db_name)
         try:
+            ensure_schema_migrations_table(target_conn)
             with target_conn.cursor() as cur:
                 cur.execute(sql)
+                cur.execute(
+                    """
+                    INSERT INTO schema_migrations (version, name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (version) DO UPDATE
+                    SET name = EXCLUDED.name,
+                        applied_at = NOW()
+                    """,
+                    (version, name),
+                )
             target_conn.commit()
         finally:
             target_conn.close()
@@ -115,53 +140,7 @@ def apply_migration(db_name: str, migration_path: Path, dry_run: bool = False) -
         print(f"  \u2717 {migration_path.name}: {e}")
         return False
 
-    # Record in template
-    try:
-        template_conn = get_template_connection()
-        try:
-            ensure_schema_migrations_table(template_conn)
-            with template_conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO schema_migrations (migration_name, database_name) VALUES (%s, %s)",
-                    (migration_path.name, db_name),
-                )
-            template_conn.commit()
-        finally:
-            template_conn.close()
-    except Exception as e:
-        print(f"  \u2717 Failed to record migration: {e}")
-        return False
-
     print(f"  \u2713 {migration_path.name}")
-    return True
-
-
-def apply_migration_to_template(migration_path: Path, dry_run: bool = False) -> bool:
-    """
-    Apply migration to template database itself (for future clones).
-
-    This ensures new slots created via `createdb -T NEXUS_template` have the schema.
-    """
-    sql = migration_path.read_text()
-
-    if dry_run:
-        print(f"  [DRY RUN] Would apply to template: {migration_path.name}")
-        return True
-
-    try:
-        conn = get_template_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(sql)
-            conn.commit()
-            print(f"  [TEMPLATE] ✓ {migration_path.name}")
-        finally:
-            conn.close()
-    except Exception as e:
-        # Surface errors visibly per CLAUDE.md - don't silently continue
-        print(f"  [TEMPLATE] ✗ {migration_path.name}: {e}")
-        return False
-
     return True
 
 
@@ -186,10 +165,11 @@ def show_status():
     print("-" * (37 + len(all_dbs) * 11))
 
     # Each migration row
-    for migration in all_migrations:
-        print(f"{migration:<35} |", end="")
+    for migration_path in get_all_migrations():
+        version, _ = migration_identity(migration_path)
+        print(f"{migration_path.name:<35} |", end="")
         for db in all_dbs:
-            applied = migration in get_applied_migrations(db)
+            applied = version in get_applied_migrations(db)
             status = "\u2713" if applied else "\u2717"
             print(f" {status:<8} |", end="")
         print()
@@ -235,12 +215,12 @@ Examples:
         show_status()
         return
 
-    targets = [args.db] if args.db else TARGET_DBS
+    targets = [args.db] if args.db else [TEMPLATE_DB] + TARGET_DBS
 
     # Validate target database
     if args.db and args.db not in TARGET_DBS and args.db != TEMPLATE_DB:
         print(f"Warning: {args.db} is not in the standard target list.")
-        print(f"Standard targets: {', '.join(TARGET_DBS)}")
+        print(f"Standard targets: {TEMPLATE_DB}, {', '.join(TARGET_DBS)}")
 
     any_applied = False
     for db in targets:
@@ -254,11 +234,6 @@ Examples:
             success = apply_migration(db, migration, dry_run=args.dry_run)
             if success:
                 any_applied = True
-                # Also apply to template (for future clones)
-                template_success = apply_migration_to_template(migration, dry_run=args.dry_run)
-                if not template_success:
-                    print(f"  ⚠ Template migration failed - target DB was updated but template may be out of sync")
-                    sys.exit(1)
             else:
                 print(f"  Stopping due to error.")
                 sys.exit(1)
