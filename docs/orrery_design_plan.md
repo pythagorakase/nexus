@@ -1,6 +1,6 @@
-# Off-Screen Behavior Resolver — Design Plan (Post-Review v4)
+# Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Post-multi-model-review + grounding pass against the live codebase. Round 2's neutrally-framed re-review of the entity super-table converged on a staged identity-spine approach (Option C), changing the round-1 verdict. v4 corrects hook-seam line numbers, disambiguates the "Phase 7" naming collision, tightens schema declarations, and resolves a `tick_chunk_id` timing gap.
+**Status:** Foundation implemented in PR #210. The current branch lands the Orrery schema substrate, entity identity spine, config surface, MEMNON read-only SQL expansion, managed Python migration support, and the offline behavior-package harness. The runtime pipeline is still disabled by default (`orrery.enabled = false`) and has no LORE turn-cycle integration yet.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -8,6 +8,52 @@
 **Terminology in v4:**
 - **LORE Phase N** = a phase of `LORE.process_turn()` (`turn_context.py:12-21`: USER_INPUT, WARM_ANALYSIS, ENTITY_STATE, DEEP_QUERIES, PAYLOAD_ASSEMBLY, APEX_GENERATION, INTEGRATION).
 - **Orrery Stage N** = a stage of the off-screen pipeline (Resolve / Commit / Clear / Promote / Narrate / Bleed / [deferred Stage 7]). v3 used "Phase 7" for the deferred prose stage, which collided with LORE Phase 7 = INTEGRATION; v4 reserves "Phase" for LORE and uses "Stage" for Orrery.
+
+---
+
+## Current Implementation Status
+
+### Landed in PR #210
+
+- Rebranded the feature surface from Radiant to Orrery (`docs/orrery_design_plan.md`, `nexus/agents/orrery/`, `[orrery]` config).
+- Added managed Python migration discovery in `scripts/migrate.py`, while keeping `008_populate_mock_database.py` script-only.
+- Added `migrations/023_orrery_schema.py`:
+  - enum-backed controlled vocabularies for entity kinds, tag provenance, event roles/sources/severity, Orrery statuses, narration jobs, and off-screen embedding state
+  - `entities` identity spine plus staged `entity_id` backfill for `characters`, `factions`, and `places`
+  - kind-correctness triggers for subtype tables
+  - compatibility views over names, chunk references, and relationships
+  - tag, event, Orrery resolution, narration outbox, and off-screen narration tables
+  - `chunk_metadata.world_time` and a statement-level refresh trigger
+- Added pure-Python package substrate in `nexus/agents/orrery/substrate.py`, initial package catalog in `templates.py`, and an offline demo harness in `demo.py`.
+- Added focused tests for the substrate, migration discovery, config resolution, and MEMNON whitelist.
+- Expanded `MEMNON.execute_readonly_sql` to expose only the public Orrery read surfaces, excluding raw/internal queue tables.
+
+### Local Verification Completed for PR #210
+
+- `poetry run pytest tests/test_orrery`
+- `poetry run pytest tests/test_orrery tests/config tests/test_api`
+- `poetry run python scripts/check_model_drift.py`
+- `poetry run python -m nexus.agents.orrery.demo --preset hunted`
+- `poetry run python -m nexus.agents.orrery.demo --preset debt`
+- `poetry run python scripts/migrate.py --status`
+- Live migration and trigger probes against `NEXUS_template`, `save_02`, `save_03`, `save_04`, and `save_05`
+- `save_01` intentionally remains locked and unmodified
+- `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment
+
+### Next Slice
+
+PR 2 should start from `main` after PR #210 merges and remain a no-write dry-run integration:
+
+- hydrate a read-side `WorldState`
+- compose ACTOR-only bindings
+- evaluate the package stack
+- attach an inspectable `OrreryTickProposal` to `TurnContext`
+- insert LORE Phase 4.5 between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`
+- keep all canonical database writes out of scope
+
+### Package Author Checkpoint
+
+Start soliciting additional package-library contributions **after PR 2 validates the hydrated `WorldState`, binding composer, and `OrreryTickProposal` shape against both slot 5 and slot 2**. That is the first point where external package authors can target a real runtime surface rather than a synthetic harness, while still avoiding the higher-risk commit/promote/narrate pipeline. Before that checkpoint, package work is useful for examples and stress tests, but the API vocabulary may still move.
 
 ---
 
@@ -296,7 +342,7 @@ CREATE TABLE world_event_entities (
 );
 ```
 
-**`world_layer_type` precondition:** the Python enum `WorldLayerType` exists at `apex_enums.py:196` (`primary`, `flashback`, `dream`, ...), but the *Postgres* type `world_layer_type` is not declared in any tracked migration (only referenced as a JSONB field in `migrations/005_add_incubator_choice_object.sql`). PR 0 must confirm whether `world_layer_type` already exists in `NEXUS_template`; if not, prepend a `CREATE TYPE world_layer_type AS ENUM (...)` to migration 018 (mirroring `WorldLayerType` values) before any column that uses it.
+**`world_layer_type` precondition:** the Python enum `WorldLayerType` exists at `apex_enums.py:196` (`primary`, `flashback`, `dream`, ...). PR #210's `023_orrery_schema.py` now creates the Postgres `world_layer_type` enum if it is not already present, before any Orrery column uses it.
 
 **Locked-in choices:**
 - Append-only; supersession only for in-world retcons
@@ -531,20 +577,20 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 
 ## Phased Delivery
 
-### PR 0 — Seam Audit & Invariants
+### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
 
-- Confirm the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
-- Confirm `query_memory` and `SearchManager` retrieval surfaces never join or union `offscreen_narrations` into warm-slice results; add an integration test asserting the warm slice is disjoint from `offscreen_narrations`. (Note: `memnon.py::get_recent_chunks` at L1486 is already safe — it queries only `narrative_chunks`.)
-- Update `nexus/agents/memnon/memnon.py::execute_readonly_sql` allowed-tables list (L492-495 — current set: `{"characters", "episodes", "seasons", "events", "factions", "places", "chunk_metadata", "narrative_chunks"}`). Additions: `entities`, `entity_names_v`, `entity_tags_current`, `world_events`, `world_event_entities`, `orrery_resolutions`, `offscreen_narrations`, `event_types`, `tags`. Excluded (internal-only): `orrery_narration_jobs`, `tag_clearance_log`, raw `entity_tags`.
-- Confirm `world_layer_type` Postgres ENUM exists in `NEXUS_template`. If not, prepend `CREATE TYPE world_layer_type AS ENUM (...)` to `migrations/018_*` mirroring `apex_enums.py:WorldLayerType`.
+- Confirmed the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
+- Still needed before Bleed ships: confirm `query_memory` and `SearchManager` retrieval surfaces never join or union `offscreen_narrations` into warm-slice results; add an integration test asserting the warm slice is disjoint from `offscreen_narrations`. (Note: `memnon.py::get_recent_chunks` at L1486 is already safe — it queries only `narrative_chunks`.)
+- Updated `nexus/agents/memnon/memnon.py::execute_readonly_sql` allowed-tables list. Additions: `entities`, `entity_names_v`, `entity_tags_current`, `world_events`, `world_event_entities`, `orrery_resolutions`, `offscreen_narrations`, `event_types`, `tags`. Excluded (internal-only): `orrery_narration_jobs`, `tag_clearance_log`, raw `entity_tags`.
+- Confirmed or created `world_layer_type` via `migrations/023_orrery_schema.py`.
 - Note that `chunk_workflow.py` is *not* on the commit path — it manages downstream embedding state transitions only. Do not hook `CommitOrreryTick` there.
 
-### PR 1 — Substrate + Schema + Identity Spine
+### PR 1 — Substrate + Schema + Identity Spine (Foundation Subset in PR #210)
 
-- Move substrate from `temp/orrery/behavior_substrate.py` to `nexus/agents/orrery/`
-- Port `EVADE_PURSUERS`, `PURSUE_GHOST_LEAD`, `MAINTAIN_COVER` from JSX simulator
-- Extend condition library: `has_relationship_of_type`, `count_co_located`, `since_last_event`, `faction_member`, `relative_orbit_distance`, `recent_event(changed_fields_any_of=..., actor=...)`
-- Add ALWAYS-fallback validator (pytest fixture)
+- Moved substrate from `temp/orrery/behavior_substrate.py` to `nexus/agents/orrery/`
+- Ported `EVADE_PURSUERS`, `HONOR_DEBT`, `PURSUE_GHOST_LEAD`, `MAINTAIN_COVER` from the simulator seed set
+- Extended condition library: `has_relationship_of_type`, `count_co_located`, `since_last_event_at_least`, `faction_member`, `relative_orbit_distance`, `recent_event(changed_fields_any_of=..., actor_slot=..., target_slot=...)`
+- Added ALWAYS-fallback validator and unit coverage
 - **Migration `023_orrery_schema.py`** (Python, not SQL — the staged FK backfill needs multi-transaction control and concurrent indexes):
   - **Type prerequisites**: `entity_kind`, `entity_tag_source_kind`, `event_source_kind`, `event_role_kind`. If `world_layer_type` doesn't already exist in template (per PR 0 audit), create it too.
   - **Identity spine**: `entities` table (id, kind, is_active, timestamps — no name column) + `entity_id` columns on `characters`/`factions`/`places`, added via the staged `NOT VALID → backfill → VALIDATE → CONCURRENTLY UNIQUE INDEX → SET NOT NULL` pattern + kind-correctness triggers
@@ -554,11 +600,11 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
   - **Event stream**: `event_types`, `world_events` (single-FK actor/target, `source` + `world_event_entities.role` as real enums), `world_event_entities`
   - **Orrery tables**: `orrery_resolutions` (with `UNIQUE` idempotency key + surfacing bookkeeping columns), `orrery_narration_jobs`, `offscreen_narrations`
   - **Time denormalization**: `chunk_metadata.world_time` column + `refresh_world_time_from_chunk` trigger function
-- `EntityRef` Pydantic helper in `nexus/agents/orrery/entity_ref.py` (thin read-side type; uses `EntityKind` enum mirroring the new `entity_kind` Postgres type)
-- Generator script: derive `changed_fields` vocabulary from `apex_schema.py::StateUpdates` Pydantic models (`apex_schema.py:631`)
-- Backfill durable tags from existing entity records (LLM-assisted; reviewed before commit)
-- Seed initial `event_types` vocabulary
-- Demo: `python -m nexus.agents.orrery.demo` runs four templates against synthetic `WorldState`
+- `EntityRef` Pydantic helper in `nexus/agents/orrery/entity_ref.py` (thin read-side type; uses `EntityKind` enum mirroring the new `entity_kind` Postgres type) remains deferred until a runtime reader needs it
+- Still needed before commit-time event emission: generator script deriving `changed_fields` vocabulary from `apex_schema.py::StateUpdates` Pydantic models (`apex_schema.py:631`)
+- Still needed before broad package authoring: durable tag backfill from existing entity records (LLM-assisted; reviewed before commit)
+- Still needed before event writes: seed initial `event_types` vocabulary
+- Demo: `python -m nexus.agents.orrery.demo` runs four presets against synthetic `WorldState`
 
 ### PR 2 — Hydration + Dry-Pass Resolver (no canonical writes)
 
@@ -571,7 +617,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
   - `bleed_menu: List["BleedCandidate"] = field(default_factory=list)`
 - `[orrery]` section in `nexus.toml` (see "`nexus.toml` Section Layout" above)
 - **No canonical writes yet.** Proposal is buffered, inspectable, but does not mutate any table
-- Verification: real turn against `save_01`; storyteller output identical to control; proposal contents validated
+- Verification: real turns against slot 5 (baby narrative state) and slot 2 (mature narrative state); storyteller output identical to control; proposal contents validated
 
 ### PR 3 — CommitOrreryTick + Promote + Narrate + Clear
 
@@ -630,7 +676,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 **Schema sources**
 - `nexus/agents/logon/apex_schema.py:631` — `StateUpdates` Pydantic models (source for `changed_fields` vocab)
 - `nexus/agents/logon/apex_enums.py:41` — existing `EntityType` enum (includes `'item'`); spine declares its own narrower `entity_kind`
-- `nexus/agents/logon/apex_enums.py:196` — `WorldLayerType` (Python); `world_layer_type` Postgres ENUM presence to be confirmed in PR 0
+- `nexus/agents/logon/apex_enums.py:196` — `WorldLayerType` (Python); `world_layer_type` Postgres ENUM is created if missing by `023_orrery_schema.py`
 
 **MEMNON**
 - `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (already `narrative_chunks`-only; no change needed)
@@ -655,11 +701,11 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 
 ## Verification Approach
 
-All tests use real LLM calls, no mocks (per `CLAUDE.md` testing philosophy).
+Verification should use live NEXUS flows where the feature touches LORE, LOGON, MEMNON, or database state. Pure substrate/package tests remain deterministic unit tests because their purpose is to validate package logic without paying model or API costs.
 
-- **PR 0:** Integration test asserting `query_memory` warm-slice is disjoint from `offscreen_narrations`; `execute_readonly_sql` whitelist updated and tested with a SELECT against each new allowed table; `world_layer_type` confirmed in template.
-- **PR 1:** Substrate demo runs against four templates; migration applies cleanly via `scripts/migrate.py --slot 5` (or `--template` first); entity spine backfill validated (every existing character/faction/place has an `entity_id`; staged FK validation succeeded); kind-enforcement triggers tested; compatibility views return expected unions; durable-tag backfill reviewed.
-- **PR 2:** Dry-pass against `save_01`; proposal contents inspected; storyteller output identical to control. Verify `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase.
+- **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
+- **Remaining pre-Bleed audit:** Integration test asserting `query_memory` warm-slice is disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from each new public table and cannot select internal queue/raw tag tables.
+- **PR 2:** Dry-pass against slot 5 and slot 2; proposal contents inspected; storyteller output identical to control. Verify `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase.
 - **PR 3:** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
 - **PR 4:** Apt-bleed (audible peripheral surfaces in distant scene); null-bleed (irrelevant resolutions produce empty menu); spoiler-boundary (resolutions before the player's current world-time are eligible; future resolutions are not); chronology tests (`offscreen_narrations` never advance `narrative_view.world_time`); latency-budget overrun produces empty menu and logs loudly.
 
