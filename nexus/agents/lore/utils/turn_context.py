@@ -38,3 +38,4 @@ class TurnContext:
     memory_state: Dict[str, Any] = field(default_factory=dict)
     authorial_directives: List[str] = field(default_factory=list)
     target_chunk_id: Optional[int] = None
+    note: Optional[str] = None  # Soft author's note / suggestion for the storyteller (e.g., regen meta-hints)

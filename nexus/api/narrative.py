@@ -157,6 +157,7 @@ def load_settings():
 from nexus.api.narrative_schemas import (
     ContinueNarrativeRequest,
     ContinueNarrativeResponse,
+    RegenerateNarrativeRequest,
     ApproveNarrativeRequest,
     NarrativeStatus,
     ChoiceSelection,
@@ -651,6 +652,87 @@ async def get_narrative_status(session_id: str, slot: Optional[int] = None):
 
     finally:
         conn.close()
+
+
+@app.post("/api/narrative/regenerate", response_model=ContinueNarrativeResponse)
+async def regenerate_narrative(
+    request: RegenerateNarrativeRequest,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Regenerate the storyteller turn currently in the incubator.
+
+    Replaces the incubator's pending content with a fresh generation,
+    reusing the same parent_chunk_id, user_text, and session_id for
+    "replace in place" semantics. The CLI/UI polls
+    /api/narrative/status/{session_id} for completion.
+    """
+    conn = get_db_connection(request.slot)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT session_id, chunk_id, parent_chunk_id, user_text
+                FROM incubator
+                WHERE id = TRUE
+                """
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        "No live turn to regenerate. "
+                        "Regenerate is only available while a turn is pending in the incubator."
+                    ),
+                )
+
+            session_id = str(row["session_id"])
+            chunk_id = row["chunk_id"]
+            parent_chunk_id = row["parent_chunk_id"]
+            user_text = row["user_text"] or ""
+            # Intentionally NOT deleting the incubator row here. write_to_incubator
+            # (called inside generate_narrative_async on success) does DELETE+INSERT
+            # atomically. If we deleted eagerly and generation later failed (LLM error,
+            # timeout, etc.), the slot would be left with no pending turn — irrecoverable
+            # data loss of the draft the user was trying to re-roll.
+    finally:
+        conn.close()
+
+    note = request.note.strip() if request.note else None
+    logger.info(
+        f"Regenerating chunk {chunk_id} (parent={parent_chunk_id}) for session {session_id}"
+        f"{' [with note]' if note else ''}"
+    )
+
+    await manager.send_progress(
+        session_id,
+        "initiated",
+        {
+            "chunk_id": chunk_id,
+            "parent_chunk_id": parent_chunk_id,
+            "is_bootstrap": parent_chunk_id == 0,
+            "regenerate": True,
+        },
+    )
+
+    background_tasks.add_task(
+        generate_narrative_async,
+        session_id,
+        parent_chunk_id,
+        user_text,
+        request.slot,
+        get_db_connection=get_db_connection,
+        load_settings=load_settings,
+        manager=manager,
+        note=note,
+    )
+
+    return ContinueNarrativeResponse(
+        session_id=session_id,
+        status="processing",
+        message=f"Regenerating chunk {chunk_id}",
+    )
 
 
 @app.post("/api/narrative/approve")

@@ -60,6 +60,24 @@ class ContinueNarrativeResponse(BaseModel):
     message: str = Field(description="Status message")
 
 
+class RegenerateNarrativeRequest(BaseModel):
+    """Request to regenerate the storyteller turn currently in the incubator."""
+
+    slot: Optional[int] = Field(default=None, description="Active save slot")
+    note: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Optional out-of-character note to the storyteller for this regen — a soft "
+            "suggestion, not a directive. Examples: 'darker, plz', 'I want to win the fight "
+            "despite my poor choices', 'continuity correction: the artifact was found in "
+            "Vienna, not Prague'. Does NOT replace user_text (that's what undo is for); it's "
+            "an author's aside that nudges tone, fixes errors, or signals preferences. "
+            "Capped at 500 chars to keep it from compressing the context budget."
+        ),
+    )
+
+
 class ApproveNarrativeRequest(BaseModel):
     """Request to approve and commit narrative"""
 
@@ -154,6 +172,7 @@ class SlotStateResponse(BaseModel):
     has_pending: bool = False  # True if incubator has pending content
     storyteller_text: Optional[str] = None
     choices: List[str] = []
+    session_id: Optional[str] = None  # Live session ID while incubator pending; basis for regenerate
     model: Optional[str] = None
     # Trait selection menu (character phase, traits subphase)
     trait_menu: Optional[List[TraitMenuItemResponse]] = None
