@@ -9,6 +9,10 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional, Union
 import numpy as np
 
+from nexus.agents.memnon.utils.embedding_tables import (
+    table_name_for_dimensions,
+)
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -76,9 +80,7 @@ def get_table_for_model(model_name: str) -> str:
     """
     # Use the new standardized naming convention
     dimensions = get_model_dimensions(model_name)
-    dim_str = f"{dimensions:04d}"  # Format dimensions with leading zeros (e.g., 0384)
-    # PostgreSQL converts identifiers to lowercase by default
-    return f"chunk_embeddings_{dim_str}d"
+    return table_name_for_dimensions(dimensions)
 
 
 def construct_vector_search_sql(
@@ -209,13 +211,10 @@ def get_all_model_tables() -> List[str]:
     Returns:
         List of table names
     """
-    tables = []
-
-    for dim in [384, 1024, 1536, 2560, 4096]:
-        dim_str = f"{dim:04d}"
-        tables.append(f"chunk_embeddings_{dim_str}d")
-
-    return tables
+    return [
+        table_name_for_dimensions(dimensions)
+        for dimensions in sorted(set(MODEL_DIMENSIONS.values()))
+    ]
 
 
 def normalize_vector(vector: Union[List[float], np.ndarray]) -> np.ndarray:

@@ -15,9 +15,19 @@
 -- Idempotent: re-running on a database where no 'embedded' rows remain
 -- is a no-op UPDATE; COMMENT ON overwrites the prior comment.
 
-UPDATE narrative_chunks
-SET state = 'finalized'
-WHERE state = 'embedded';
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'narrative_chunks'
+          AND column_name = 'state'
+    ) THEN
+        UPDATE narrative_chunks
+        SET state = 'finalized'
+        WHERE state = 'embedded';
 
-COMMENT ON COLUMN narrative_chunks.state IS
-    'Chunk lifecycle state. One of: ''draft'' (initial), ''pending_review'' (storyteller has produced text, user has not yet accepted), ''finalized'' (user accepted; chunk is locked). The authoritative "has been embedded" predicate is embedding_generated_at IS NOT NULL, not a state value. See ChunkState enum in nexus/api/chunk_workflow.py.';
+        COMMENT ON COLUMN narrative_chunks.state IS
+            'Chunk lifecycle state. One of: ''draft'' (initial), ''pending_review'' (storyteller has produced text, user has not yet accepted), ''finalized'' (user accepted; chunk is locked). The authoritative "has been embedded" predicate is embedding_generated_at IS NOT NULL, not a state value. See ChunkState enum in nexus/api/chunk_workflow.py.';
+    END IF;
+END $$;

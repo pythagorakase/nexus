@@ -75,9 +75,7 @@ $$
     SELECT 1 - (a <=> b) FROM (SELECT a::vector, b::vector FROM (VALUES (\\$1, \\$2)) AS t(a, b)) AS v
 $$;
 
--- Create indexes on chunk_embeddings table
-CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model 
-    ON chunk_embeddings (model);
+-- Embedding tables are created lazily by active write paths.
 
 -- Check if extension is installed correctly
 SELECT TRUE as extension_installed FROM pg_extension WHERE extname = 'vector';
