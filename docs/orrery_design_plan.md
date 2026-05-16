@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210. The current branch lands the Orrery schema substrate, entity identity spine, config surface, MEMNON read-only SQL expansion, managed Python migration support, and the offline behavior-package harness. The runtime pipeline is still disabled by default (`orrery.enabled = false`) and has no LORE turn-cycle integration yet.
+**Status:** Foundation implemented in PR #210. PR #211 adds the no-write hydration/dry-run resolver and the LORE Phase 4.5 hook. The runtime pipeline is still disabled by default (`orrery.enabled = false`), produces only an inspectable `OrreryTickProposal`, and performs no canonical Orrery writes or storyteller payload injection yet.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -40,20 +40,38 @@
 - `save_01` intentionally remains locked and unmodified
 - `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment
 
+### In PR #211
+
+- Added `OrreryTickProposal` and `OrreryResolutionDraft` as in-memory proposal carriers with no `tick_chunk_id` during resolve.
+- Hydrates read-side `WorldState` from current tags, ephemeral tags, character locations and activities, place classes, relationships, faction memberships, recent primary unsuperseded events, and coarse time/weather context.
+- Composes `ACTOR`-only bindings from recent chunk references, recent primary unsuperseded events, and current ephemeral tags.
+- Evaluates the package stack in a dry-run resolver and attaches the proposal to `TurnContext.orrery_proposal`.
+- Adds `TurnPhase.ORRERY_RESOLVE` between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`, plus the `bleed_menu` placeholder needed by the later Bleed slice.
+- Keeps all canonical database writes and storyteller payload effects out of scope.
+
+### Local Verification Completed for PR #211
+
+- `poetry run pytest tests/test_orrery`
+- `poetry run pytest tests/test_orrery tests/test_lore/test_turn_cycle.py tests/test_lore/test_context_validation.py`
+- `poetry run python -m py_compile nexus/agents/orrery/resolver.py nexus/agents/lore/utils/turn_cycle.py tests/test_orrery/test_resolver.py`
+- `git diff --check`
+- Live direct dry-run against slot 5: hydrated evening/rain context, produced proposals, and performed zero writes.
+- Live direct dry-run against slot 2: hydrated mature-state morning/clear context, produced proposals, and performed zero writes.
+- `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment.
+
 ### Next Slice
 
-PR 2 should start from `main` after PR #210 merges and remain a no-write dry-run integration:
+PR 3 should wire commit-time persistence while preserving the accepted-chunk invariant:
 
-- hydrate a read-side `WorldState`
-- compose ACTOR-only bindings
-- evaluate the package stack
-- attach an inspectable `OrreryTickProposal` to `TurnContext`
-- insert LORE Phase 4.5 between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`
-- keep all canonical database writes out of scope
+- stamp `tick_chunk_id` onto the in-memory proposal inside the accepted-chunk commit transaction
+- materialize `orrery_resolutions`, related `world_events`, and tag mutations through one unified writer
+- enqueue durable narration jobs only after canonical commit succeeds
+- add Promote/Narrate/Clear plumbing with loud failure behavior
+- verify idempotency, incubator rejection, and warm-slice isolation against live slots
 
 ### Package Author Checkpoint
 
-Start soliciting additional package-library contributions **after PR 2 validates the hydrated `WorldState`, binding composer, and `OrreryTickProposal` shape against both slot 5 and slot 2**. That is the first point where external package authors can target a real runtime surface rather than a synthetic harness, while still avoiding the higher-risk commit/promote/narrate pipeline. Before that checkpoint, package work is useful for examples and stress tests, but the API vocabulary may still move.
+Start soliciting additional package-library contributions **after PR #211 merges**. At that point, package authors can target a real hydrated `WorldState`, binding composer, and `OrreryTickProposal` shape validated against both slot 5 and slot 2, while still avoiding the higher-risk commit/promote/narrate pipeline. The best contribution format is pure template/condition/action logic plus any proposed tag or event-type vocabulary it requires; durable tag backfill and event-type seeding remain controlled schema/data work.
 
 ---
 
@@ -606,18 +624,18 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - Still needed before event writes: seed initial `event_types` vocabulary
 - Demo: `python -m nexus.agents.orrery.demo` runs four presets against synthetic `WorldState`
 
-### PR 2 — Hydration + Dry-Pass Resolver (no canonical writes)
+### PR 2 — Hydration + Dry-Pass Resolver (implemented in PR #211; no canonical writes)
 
-- `hydrate_world_state(tick_chunk_id) -> WorldState`. One bulk SELECT per source.
-- Sliding-window binding composer for `ACTOR`-only templates
-- Resolver loop produces `OrreryTickProposal` (no `tick_chunk_id` in the proposal — see Stage 1 note above)
-- **New LORE Phase 4.5**: add `TurnPhase.ORRERY_RESOLVE = "orrery_resolve"` to `turn_context.py:12` enum; insert phase between `DEEP_QUERIES` (Phase 4) and `PAYLOAD_ASSEMBLY` (Phase 5) in `lore.py::process_turn` (L289+); add corresponding `TurnCycleManager` method invoked from there.
-- **Extend `TurnContext`** (`turn_context.py:24-41`, a `@dataclass`) with two fields:
+- `hydrate_world_state(session, anchor_chunk_id, window_chunks) -> WorldState` gathers tags, locations, activities, place classes, relationships, faction memberships, recent primary unsuperseded events, and coarse time/weather context.
+- Sliding-window binding composer for `ACTOR`-only templates pulls candidates from recent chunk references, recent primary unsuperseded events, and current ephemeral tags.
+- Resolver loop produces `OrreryTickProposal` with no `tick_chunk_id` in the proposal — see Stage 1 note above.
+- **New LORE Phase 4.5**: `TurnPhase.ORRERY_RESOLVE = "orrery_resolve"` is inserted between `DEEP_QUERIES` (Phase 4) and `PAYLOAD_ASSEMBLY` (Phase 5). `TurnCycleManager.resolve_orrery()` skips cleanly while `[orrery].enabled = false`, and otherwise stores the dry-run proposal on the turn context.
+- **Extended `TurnContext`** with:
   - `orrery_proposal: Optional["OrreryTickProposal"] = None`
   - `bleed_menu: List["BleedCandidate"] = field(default_factory=list)`
 - `[orrery]` section in `nexus.toml` (see "`nexus.toml` Section Layout" above)
-- **No canonical writes yet.** Proposal is buffered, inspectable, but does not mutate any table
-- Verification: real turns against slot 5 (baby narrative state) and slot 2 (mature narrative state); storyteller output identical to control; proposal contents validated
+- **No canonical writes yet.** Proposal is buffered and inspectable, but does not mutate any table or enter the storyteller payload.
+- Verification: unit coverage for disabled/enabled phase behavior, anchor fallback, fallback/non-fallback packages, and SQL filters; live direct dry-runs against slot 5 (baby narrative state) and slot 2 (mature narrative state) with zero writes.
 
 ### PR 3 — CommitOrreryTick + Promote + Narrate + Clear
 
@@ -705,7 +723,7 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 
 - **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
 - **Remaining pre-Bleed audit:** Integration test asserting `query_memory` warm-slice is disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from each new public table and cannot select internal queue/raw tag tables.
-- **PR 2:** Dry-pass against slot 5 and slot 2; proposal contents inspected; storyteller output identical to control. Verify `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase.
+- **PR 2 (#211):** Dry-pass against slot 5 and slot 2; proposal contents inspected; zero writes observed; `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase. Optional full-turn acceptance before PR 3: enable Orrery for a live LORE pass and confirm the storyteller payload remains unaffected while the proposal is attached only to the turn context.
 - **PR 3:** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
 - **PR 4:** Apt-bleed (audible peripheral surfaces in distant scene); null-bleed (irrelevant resolutions produce empty menu); spoiler-boundary (resolutions before the player's current world-time are eligible; future resolutions are not); chronology tests (`offscreen_narrations` never advance `narrative_view.world_time`); latency-budget overrun produces empty menu and logs loudly.
 
