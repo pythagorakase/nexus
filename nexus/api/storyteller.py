@@ -45,6 +45,7 @@ from nexus.api.chunk_workflow import (
     ChunkRejectResponse,
     EditPreviousRequest,
     EditPreviousResponse,
+    build_embedding_scheduler,
 )
 from nexus.api.retry_handler import (
     retry_with_backoff,
@@ -761,7 +762,9 @@ async def stream_turns(websocket: WebSocket, session_id: str) -> None:
 
 # Chunk Acceptance Workflow Endpoints
 @app.post("/api/chunks/accept", response_model=ChunkAcceptResponse)
-def accept_chunk(request: ChunkAcceptRequest) -> ChunkAcceptResponse:
+def accept_chunk(
+    request: ChunkAcceptRequest, background_tasks: BackgroundTasks
+) -> ChunkAcceptResponse:
     """
     Accept a Storyteller chunk, finalizing it and triggering embedding for the previous chunk.
 
@@ -772,7 +775,13 @@ def accept_chunk(request: ChunkAcceptRequest) -> ChunkAcceptResponse:
         # Get the appropriate database from session
         # For now, using default workflow instance
         workflow = ChunkWorkflow()
-        return workflow.accept_chunk(request.chunk_id, request.session_id)
+        return workflow.accept_chunk(
+            request.chunk_id,
+            request.session_id,
+            embedding_scheduler=build_embedding_scheduler(
+                workflow, background_tasks.add_task
+            ),
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:

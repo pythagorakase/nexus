@@ -54,7 +54,12 @@ async def test_lore_phase_failure_is_reported_before_adapter_coercion(
             )
             self.instances.append(self)
 
-        async def process_turn(self, user_text: str, parent_chunk_id: int) -> str:
+        async def process_turn(
+            self,
+            user_text: str,
+            parent_chunk_id: int,
+            note: str | None = None,
+        ) -> str:
             """Return the legacy failure string from LORE.process_turn."""
             return "Error processing turn: FATAL: No warm slice chunks retrieved."
 

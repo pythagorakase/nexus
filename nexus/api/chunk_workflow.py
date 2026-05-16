@@ -15,7 +15,7 @@ import logging
 import sys
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 import subprocess
 import re
@@ -32,6 +32,21 @@ VALID_DATABASES = {"save_01", "save_02", "save_03", "save_04", "save_05"}
 
 # Security: Valid model name pattern (alphanumeric, hyphens, dots, underscores only)
 VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
+
+EmbeddingScheduler = Callable[[int], Optional[str]]
+
+
+def build_embedding_scheduler(
+    workflow: "ChunkWorkflow", add_task: Callable[..., Any]
+) -> EmbeddingScheduler:
+    """Create a scheduler that queues embedding generation in a background runner."""
+
+    def schedule_embedding(chunk_id: int) -> Optional[str]:
+        job_id = workflow.create_embedding_job_id(chunk_id)
+        add_task(workflow.trigger_embedding_generation, chunk_id, job_id)
+        return job_id
+
+    return schedule_embedding
 
 
 class ChunkState(str, Enum):
@@ -167,13 +182,19 @@ class ChunkWorkflow:
                     )
                     logger.info("Added regeneration_count column to narrative_chunks")
 
-    def accept_chunk(self, chunk_id: int, session_id: str) -> ChunkAcceptResponse:
+    def accept_chunk(
+        self,
+        chunk_id: int,
+        session_id: str,
+        embedding_scheduler: Optional[EmbeddingScheduler] = None,
+    ) -> ChunkAcceptResponse:
         """
         Accept a Storyteller chunk, finalizing it and triggering embedding for the previous chunk.
 
         Args:
             chunk_id: The chunk to accept
             session_id: Session context
+            embedding_scheduler: Optional scheduler for async embedding generation
 
         Returns:
             Response with finalization status and embedding job info
@@ -213,7 +234,7 @@ class ChunkWorkflow:
                 # Get previous chunk (N-1) to trigger embedding
                 cur.execute(
                     """
-                    SELECT id, state, raw_text
+                    SELECT id, state, raw_text, embedding_generated_at
                     FROM narrative_chunks
                     WHERE id < %s
                     ORDER BY id DESC
@@ -227,22 +248,20 @@ class ChunkWorkflow:
                 embedding_job_id = None
 
                 if previous_chunk:
-                    prev_id, prev_state, prev_text = previous_chunk
+                    prev_id, prev_state, _prev_text, prev_embedded_at = previous_chunk
 
                     # Only generate embeddings if not already done
-                    if prev_state == ChunkState.FINALIZED.value:
-                        embedding_job_id = self.trigger_embedding_generation(prev_id)
+                    if (
+                        prev_state == ChunkState.FINALIZED.value
+                        and prev_embedded_at is None
+                    ):
+                        if embedding_scheduler:
+                            embedding_job_id = embedding_scheduler(prev_id)
+                        else:
+                            embedding_job_id = self.trigger_embedding_generation(
+                                prev_id
+                            )
                         embedding_triggered = True
-
-                        # Mark as embedding in progress
-                        cur.execute(
-                            """
-                            UPDATE narrative_chunks
-                            SET state = %s
-                            WHERE id = %s
-                        """,
-                            (ChunkState.EMBEDDED.value, prev_id),
-                        )
 
                 logger.info(
                     f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}"
@@ -477,24 +496,35 @@ class ChunkWorkflow:
             f"(raw_text recomputed from storyteller_text only)"
         )
 
-    def trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
+    def create_embedding_job_id(self, chunk_id: int) -> str:
+        """Create a client-visible identifier for an embedding generation job."""
+
+        return f"embed_{chunk_id}_{datetime.now(timezone.utc).timestamp()}"
+
+    def trigger_embedding_generation(
+        self, chunk_id: int, job_id: Optional[str] = None
+    ) -> Optional[str]:
         """
         Generate embeddings for a locked chunk.
 
         Args:
             chunk_id: The chunk to generate embeddings for
+            job_id: Optional preassigned job identifier
 
         Returns:
             Job ID if generation succeeds, None otherwise
         """
-        return self._trigger_embedding_generation(chunk_id)
+        return self._trigger_embedding_generation(chunk_id, job_id=job_id)
 
-    def _trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
+    def _trigger_embedding_generation(
+        self, chunk_id: int, job_id: Optional[str] = None
+    ) -> Optional[str]:
         """
         Trigger embedding generation for a finalized chunk.
 
         Args:
             chunk_id: The chunk to generate embeddings for
+            job_id: Optional preassigned job identifier
 
         Returns:
             Job ID if async, None if synchronous
@@ -538,8 +568,8 @@ class ChunkWorkflow:
 
             # Security: dbname already validated in __init__
 
-            # Run embedding generation script
-            # TODO: Make async with FastAPI BackgroundTasks or Celery to avoid blocking
+            # Run embedding generation script. API routes should schedule this method
+            # through FastAPI BackgroundTasks so accept calls can return immediately.
             result = subprocess.run(
                 [
                     sys.executable,
@@ -575,16 +605,48 @@ class ChunkWorkflow:
                         )
 
                 logger.info(f"Successfully generated embeddings for chunk {chunk_id}")
-                return f"embed_{chunk_id}_{datetime.now().timestamp()}"
+                return job_id or self.create_embedding_job_id(chunk_id)
             else:
                 logger.error(
                     f"Embedding generation failed for chunk {chunk_id}: {result.stderr}"
                 )
+                self._clear_failed_embedding_state(chunk_id)
                 return None
 
         except Exception as e:
             logger.error(f"Error triggering embedding generation: {e}")
+            if isinstance(chunk_id, int) and chunk_id > 0:
+                self._clear_failed_embedding_state(chunk_id)
             return None
+
+    def _clear_failed_embedding_state(self, chunk_id: int) -> None:
+        """Clear partial embedding state left behind by a failed worker run."""
+
+        try:
+            with get_connection(self.dbname) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE narrative_chunks
+                        SET embedding_generated_at = NULL,
+                            state = CASE
+                                WHEN state = %s THEN %s
+                                ELSE state
+                            END
+                        WHERE id = %s AND embedding_generated_at IS NULL
+                        """,
+                        (
+                            ChunkState.EMBEDDED.value,
+                            ChunkState.FINALIZED.value,
+                            chunk_id,
+                        ),
+                    )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error(
+                "Failed to clear embedding state after worker failure for chunk %s: %s",
+                chunk_id,
+                exc,
+            )
 
     def get_chunk_states(
         self, start_chunk: int, end_chunk: int
