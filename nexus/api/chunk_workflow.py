@@ -394,6 +394,89 @@ class ChunkWorkflow:
                     new_generation_triggered=True,
                 )
 
+    def revert_pending_choice(self, cur, parent_chunk_id: int) -> None:
+        """
+        Reset the parent chunk's choice fields after the user undoes a pending turn.
+
+        Runs inside the caller's open cursor/transaction (no connection
+        management here). Designed this way so the slot undo endpoint can
+        compose this with its own DELETE FROM incubator inside one
+        transaction — if either fails, both roll back and the slot stays
+        consistent. (Codex P1 review on PR #205 caught the prior split-
+        transaction version.)
+
+        Mutations on the parent chunk:
+        - choice_text → NULL
+        - choice_object.selected → JSON null (preserves choice_object.presented)
+        - raw_text → storyteller_text  (re-derived without the choice append)
+
+        The parent chunk should NOT be embedded yet — the lifecycle invariant
+        places the mutable parent at the N-1 position (committed but not yet
+        ironman; embedding fires only when the next chunk is accepted). If we
+        ever hit an embedded chunk here, the design has drifted and silently
+        mutating raw_text would invalidate the embedding's source — surface it.
+        Same fail-loud principle applies to the other lifecycle invariants
+        (NULL/empty storyteller_text, NULL choice_object): a parent that
+        produced a pending child should have both populated.
+
+        Args:
+            cur: An open psycopg2 cursor owned by the caller's transaction.
+            parent_chunk_id: ID of the parent chunk whose choice fields to reset.
+        """
+        cur.execute(
+            """
+            SELECT storyteller_text, choice_object, embedding_generated_at
+            FROM narrative_chunks
+            WHERE id = %s
+            """,
+            (parent_chunk_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError(f"Parent chunk {parent_chunk_id} not found")
+
+        storyteller_text, choice_object, embedded_at = row
+
+        if embedded_at is not None:
+            raise ValueError(
+                f"Cannot revert choice on chunk {parent_chunk_id}: already "
+                f"embedded (embedding_generated_at={embedded_at}). The undo "
+                f"grace window has closed; this chunk is ironman."
+            )
+
+        if not storyteller_text:
+            raise ValueError(
+                f"Parent chunk {parent_chunk_id} has NULL/empty storyteller_text; "
+                f"cannot revert raw_text (lifecycle violation)."
+            )
+
+        if choice_object is None:
+            raise ValueError(
+                f"Parent chunk {parent_chunk_id} has NULL choice_object; "
+                f"a parent that produced a pending child should always have "
+                f"presented choices recorded (lifecycle violation)."
+            )
+
+        cur.execute(
+            """
+            UPDATE narrative_chunks
+            SET choice_text = NULL,
+                raw_text = %s,
+                choice_object = jsonb_set(choice_object, '{selected}', 'null'::jsonb)
+            WHERE id = %s
+            """,
+            (storyteller_text, parent_chunk_id),
+        )
+        if cur.rowcount == 0:
+            raise ValueError(
+                f"UPDATE matched 0 rows for chunk {parent_chunk_id}; "
+                f"row may have been deleted between SELECT and UPDATE."
+            )
+        logger.info(
+            f"Reverted pending choice on chunk {parent_chunk_id} "
+            f"(raw_text recomputed from storyteller_text only)"
+        )
+
     def trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
         """
         Generate embeddings for a locked chunk.
