@@ -121,6 +121,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexus.memnon")
 
+READONLY_SQL_ALLOWED_TABLES = {
+    "characters",
+    "episodes",
+    "seasons",
+    "events",
+    "factions",
+    "places",
+    "chunk_metadata",
+    "narrative_chunks",
+    "entities",
+    "entity_names_v",
+    "entity_tags_current",
+    "world_events",
+    "world_event_entities",
+    "orrery_resolutions",
+    "offscreen_narrations",
+    "event_types",
+    "tags",
+}
+
 # LLM settings
 MODEL_CONFIG = GLOBAL_SETTINGS.get("model", {})
 DEFAULT_MODEL_ID = MODEL_CONFIG.get("default_model", "llama-3.3-70b-instruct@q6_k")
@@ -528,16 +548,7 @@ class MEMNON:
             # Whitelist tables referenced in FROM/JOIN
             import re
 
-            allowed_tables = {
-                "characters",
-                "episodes",
-                "seasons",
-                "events",
-                "factions",
-                "places",
-                "chunk_metadata",
-                "narrative_chunks",
-            }
+            allowed_tables = READONLY_SQL_ALLOWED_TABLES
             referenced: List[str] = []
             for pattern in [
                 r"\\bfrom\\s+([a-zA-Z_\\.\"]+)",

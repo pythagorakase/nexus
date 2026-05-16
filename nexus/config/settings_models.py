@@ -26,20 +26,26 @@ class _ModelRegistry:
     """
 
     roles: Dict[str, Dict[str, str]]  # provider name → {role_name → concrete_id}
-    all_ids: Dict[str, str]           # concrete_id → provider, for error messages
+    all_ids: Dict[str, str]  # concrete_id → provider, for error messages
 
 
 # =============================================================================
 # Global Settings Models
 # =============================================================================
 
+
 class APIModelEntry(BaseModel):
     """Single API model definition."""
-    model_config = ConfigDict(extra='forbid')
 
-    id: str = Field(..., description="Concrete model identifier registered with this provider")
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        ..., description="Concrete model identifier registered with this provider"
+    )
     label: str = Field(..., description="Display label for UI")
-    description: Optional[str] = Field(default=None, description="Human-readable description (optional)")
+    description: Optional[str] = Field(
+        default=None, description="Human-readable description (optional)"
+    )
 
 
 class ProviderModels(BaseModel):
@@ -49,7 +55,8 @@ class ProviderModels(BaseModel):
     IDs from this provider's `models` list. Consumer fields reference roles via
     "@provider.role" syntax (resolved at Settings load time).
     """
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     roles: Dict[str, str] = Field(
         default_factory=dict,
@@ -60,8 +67,7 @@ class ProviderModels(BaseModel):
         ),
     )
     models: List[APIModelEntry] = Field(
-        default_factory=list,
-        description="List of models available from this provider"
+        default_factory=list, description="List of models available from this provider"
     )
 
     @model_validator(mode="after")
@@ -81,23 +87,26 @@ class ProviderModels(BaseModel):
 
 class ModelConfig(BaseModel):
     """LLM model configuration with provider grouping."""
-    model_config = ConfigDict(extra='forbid')
 
-    default_model: str = Field(..., description="Default model to load for local inference")
+    model_config = ConfigDict(extra="forbid")
+
+    default_model: str = Field(
+        ..., description="Default model to load for local inference"
+    )
     possible_values: List[str] = Field(..., description="Available local model options")
     default_slot_model: str = Field(
-        default="TEST",
-        description="Default model for newly created/reset slots"
+        default="TEST", description="Default model for newly created/reset slots"
     )
     api_models: Dict[str, ProviderModels] = Field(
         default_factory=dict,
-        description="API models grouped by provider (openai, anthropic, test)"
+        description="API models grouped by provider (openai, anthropic, test)",
     )
 
 
 class LLMConfig(BaseModel):
     """Local LLM API settings (LM Studio)."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     api_base: str = Field(..., description="LM Studio API endpoint")
     context_window: int = Field(..., ge=1024, description="Maximum context length")
@@ -107,12 +116,13 @@ class LLMConfig(BaseModel):
 
 class LLMEndpointConfig(BaseModel):
     """Endpoint configuration for LM Studio backends."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     base_url: str = Field(..., description="Base URL for the LM Studio server")
     model: Optional[str] = Field(
         default=None,
-        description="Model identifier for inference (overrides global default)"
+        description="Model identifier for inference (overrides global default)",
     )
 
 
@@ -123,7 +133,8 @@ class LLMCloudConfig(BaseModel):
     ``nexus.util.secret_manager.get_secret(<provider>)`` which reads from
     macOS Keychain.
     """
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     provider: str = Field(..., pattern="^(openai|anthropic)$")
     model: str = Field(..., description="Cloud model identifier")
@@ -131,7 +142,8 @@ class LLMCloudConfig(BaseModel):
 
 class LLMRoutingConfig(BaseModel):
     """Routing configuration for the pluggable LLM layer."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     mode: Literal["local", "remote", "cloud", "auto"] = Field(
         default="auto",
@@ -153,7 +165,8 @@ class LLMRoutingConfig(BaseModel):
 
 class NarrativeConfig(BaseModel):
     """Narrative test mode settings."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     test_mode: bool = Field(..., description="Enable test mode")
     test_database_suffix: str = Field(..., description="Database suffix for testing")
@@ -161,39 +174,47 @@ class NarrativeConfig(BaseModel):
 
 class GlobalAPIConfig(BaseModel):
     """Global API configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     test_mock_server_url: str = Field(
-        default="http://localhost:5102/v1",
-        description="Mock server URL for TEST model"
+        default="http://localhost:5102/v1", description="Mock server URL for TEST model"
     )
 
 
 class GlobalSettings(BaseModel):
     """Global configuration settings."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     model: ModelConfig
     llm: LLMConfig
     narrative: NarrativeConfig
-    api: Optional[GlobalAPIConfig] = Field(default=None, description="API configuration")
+    api: Optional[GlobalAPIConfig] = Field(
+        default=None, description="API configuration"
+    )
 
 
 # =============================================================================
 # LORE Agent Settings Models
 # =============================================================================
 
+
 class TokenBudgetConfig(BaseModel):
     """Token budget allocation for APEX generation."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     apex_context_window: int = Field(..., ge=1000, description="Total tokens for APEX")
-    system_prompt_tokens: int = Field(..., ge=100, description="Reserved for system prompt")
+    system_prompt_tokens: int = Field(
+        ..., ge=100, description="Reserved for system prompt"
+    )
 
 
 class PayloadBudgetRange(BaseModel):
     """Min/max percentage range for payload budget allocation."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     min: int = Field(..., ge=0, le=100, description="Minimum percentage")
     max: int = Field(..., ge=0, le=100, description="Maximum percentage")
@@ -201,7 +222,8 @@ class PayloadBudgetRange(BaseModel):
 
 class PayloadPercentBudget(BaseModel):
     """Percentage allocations for different context payload sections."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     structured_summaries: PayloadBudgetRange
     contextual_augmentation: PayloadBudgetRange
@@ -210,7 +232,8 @@ class PayloadPercentBudget(BaseModel):
 
 class EntityInclusionConfig(BaseModel):
     """Configuration for entity inclusion in context payloads."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     warm_slice_lookback_chunks: int = Field(..., ge=1)
     max_characters_from_warm_slice: int = Field(..., ge=1)
@@ -228,7 +251,8 @@ class EntityInclusionConfig(BaseModel):
 
 class LORESettings(BaseModel):
     """LORE agent configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     debug: bool
     agentic_sql: bool
@@ -238,12 +262,66 @@ class LORESettings(BaseModel):
 
 
 # =============================================================================
+# Orrery Settings Models
+# =============================================================================
+
+
+class OrreryBindingSettings(BaseModel):
+    """Binding composer settings for Orrery."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    window_chunks: int = Field(default=30, ge=1)
+
+
+class OrreryNarrationSettings(BaseModel):
+    """Frontier narration settings for promoted Orrery resolutions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["async", "sync"] = "async"
+    provider: str = "anthropic"
+    model_ref: str = Field(..., description="Model ID or @provider.role reference")
+
+
+class OrreryBleedSettings(BaseModel):
+    """Bleed selector settings for storyteller-time ambient candidates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latency_budget_ms: int = Field(default=2000, ge=1)
+    max_candidates: int = Field(default=3, ge=0)
+
+
+class OrreryPromoteSettings(BaseModel):
+    """Promotion discriminator settings for Orrery resolutions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["local"] = "local"
+
+
+class OrrerySettings(BaseModel):
+    """Orrery off-screen behavior subsystem settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
+    narration: OrreryNarrationSettings
+    bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
+    promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
+
+
+# =============================================================================
 # MEMNON Agent Settings Models
 # =============================================================================
 
+
 class DatabaseConfig(BaseModel):
     """Database connection configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     url: str = Field(..., description="PostgreSQL connection URL")
     create_tables: bool
@@ -252,7 +330,8 @@ class DatabaseConfig(BaseModel):
 
 class EmbeddingModelConfig(BaseModel):
     """Configuration for an individual embedding model."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     is_active: bool
     local_path: str
@@ -263,7 +342,8 @@ class EmbeddingModelConfig(BaseModel):
 
 class ImportConfig(BaseModel):
     """Settings for importing narrative chunks."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     base_directory: str
     file_pattern: str
@@ -275,7 +355,8 @@ class ImportConfig(BaseModel):
 
 class QueryConfig(BaseModel):
     """Default query settings."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     default_limit: int = Field(..., ge=1)
     include_vector_results: int = Field(..., ge=0)
@@ -285,7 +366,8 @@ class QueryConfig(BaseModel):
 
 class SourceWeights(BaseModel):
     """Relative weights for different retrieval sources."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     structured_data: float = Field(..., ge=0.0)
     vector_search: float = Field(..., ge=0.0)
@@ -294,7 +376,8 @@ class SourceWeights(BaseModel):
 
 class VectorNormalizationConfig(BaseModel):
     """Vector search score normalization settings."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool
     low_tier_map_enabled: bool
@@ -308,7 +391,8 @@ class VectorNormalizationConfig(BaseModel):
 
 class UserCharacterFocusBoost(BaseModel):
     """Boost settings for user character focus detection."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool
     action_patterns: List[str]
@@ -322,7 +406,8 @@ class UserCharacterFocusBoost(BaseModel):
 
 class QueryTypeWeights(BaseModel):
     """Vector/text weights for a query type."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     vector: float = Field(..., ge=0.0, le=1.0)
     text: float = Field(..., ge=0.0, le=1.0)
@@ -330,7 +415,8 @@ class QueryTypeWeights(BaseModel):
 
 class HybridSearchConfig(BaseModel):
     """Hybrid search (vector + text) configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool
     vector_weight_default: float = Field(..., ge=0.0, le=1.0)
@@ -355,7 +441,8 @@ class RerankerCandidate(BaseModel):
     flag on this candidate entry. This registry is for ir_eval bakeoff
     selection via ``ir_eval.runner create-run --reranker NAME``.
     """
-    model_config = ConfigDict(extra='forbid', protected_namespaces=())
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     local_path: str
     remote_path: str = ""
@@ -365,7 +452,8 @@ class RerankerCandidate(BaseModel):
 
 class CrossEncoderReranking(BaseModel):
     """Cross-encoder reranking configuration."""
-    model_config = ConfigDict(extra='forbid', protected_namespaces=())
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     enabled: bool
     model_path: str
@@ -384,7 +472,8 @@ class CrossEncoderReranking(BaseModel):
 
 class RetrievalConfig(BaseModel):
     """Main retrieval configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     max_results: int = Field(..., ge=1)
     relevance_threshold: float = Field(..., ge=0.0, le=1.0)
@@ -404,7 +493,8 @@ class RetrievalConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Logging configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     file: str
     level: str = Field(..., pattern="^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
@@ -413,7 +503,8 @@ class LoggingConfig(BaseModel):
 
 class MEMNONSettings(BaseModel):
     """MEMNON agent configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     debug: bool
     database: DatabaseConfig
@@ -428,9 +519,11 @@ class MEMNONSettings(BaseModel):
 # Memory Manager Settings Models
 # =============================================================================
 
+
 class DivergenceDetectionConfig(BaseModel):
     """Divergence detection configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     use_llm: bool
     use_local_llm: bool
@@ -441,7 +534,8 @@ class DivergenceDetectionConfig(BaseModel):
 
 class MemorySettings(BaseModel):
     """Memory manager configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     phase2_fraction: float = Field(..., ge=0.0, le=1.0)
     raw_search_k: int = Field(..., ge=1)
@@ -457,9 +551,11 @@ class MemorySettings(BaseModel):
 # APEX API Settings Models
 # =============================================================================
 
+
 class APEXSettings(BaseModel):
     """APEX API configuration for story generation."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     provider: str = Field(..., pattern="^(openai|anthropic)$")
     model: str
@@ -471,9 +567,11 @@ class APEXSettings(BaseModel):
 # Wizard Settings Models
 # =============================================================================
 
+
 class WizardSettings(BaseModel):
     """Wizard configuration for new story setup and structured responses."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     default_model: str = Field(..., description="Default model for wizard flow")
     fallback_model: Optional[str] = Field(
@@ -498,24 +596,24 @@ class WizardSettings(BaseModel):
 # API Constraints Settings Models
 # =============================================================================
 
+
 class APIConstraintsConfig(BaseModel):
     """API constraints configuration."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     max_choice_text_length: int = Field(
-        default=1000,
-        ge=1,
-        description="Maximum length of choice text"
+        default=1000, ge=1, description="Maximum length of choice text"
     )
 
 
 class APISettings(BaseModel):
     """Top-level API settings."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     constraints: Optional[APIConstraintsConfig] = Field(
-        default=None,
-        description="API constraints configuration"
+        default=None, description="API constraints configuration"
     )
 
 
@@ -523,9 +621,11 @@ class APISettings(BaseModel):
 # Root Settings Model
 # =============================================================================
 
+
 class IREvalJudgmentConfig(BaseModel):
     """LLM judgment-on-demand configuration for the IR eval V2 runner."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     model: str = Field(..., description="LLM model identifier for relevance judgments")
     reasoning_effort: str = Field(
@@ -536,7 +636,8 @@ class IREvalJudgmentConfig(BaseModel):
 
 class IREvalSettings(BaseModel):
     """Configuration for the IR evaluation V2 subsystem."""
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     judgment: IREvalJudgmentConfig
 
@@ -553,7 +654,8 @@ class SecretsConfig(BaseModel):
     * ``op-item:<item-id>:<field-name>`` -> resolved with ``op item get``.
     * ``op-read:<secret-reference>``     -> resolved with ``op read``.
     """
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     providers: Dict[str, str] = Field(
         default_factory=dict,
@@ -569,7 +671,8 @@ class Settings(BaseModel):
     type-safe access to all settings. All nested models use `extra='forbid'` to
     catch typos and invalid keys at load time.
     """
-    model_config = ConfigDict(extra='forbid')
+
+    model_config = ConfigDict(extra="forbid")
 
     global_: GlobalSettings = Field(..., alias="global")
     llm: Optional[LLMRoutingConfig] = Field(
@@ -581,6 +684,10 @@ class Settings(BaseModel):
         description="Provider -> 1Password reference mappings (sync_secrets.py only)",
     )
     lore: LORESettings
+    orrery: Optional[OrrerySettings] = Field(
+        default=None,
+        description="Off-screen behavior resolver settings",
+    )
     memnon: MEMNONSettings
     memory: MemorySettings
     apex: APEXSettings
@@ -607,6 +714,8 @@ class Settings(BaseModel):
             (self.wizard, "default_model", False),
             (self.wizard, "fallback_model", True),
         ]
+        if self.orrery is not None:
+            targets.append((self.orrery.narration, "model_ref", False))
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))
         # [llm.cloud] is the cloud-fallback routing target for the pluggable
@@ -693,7 +802,7 @@ def _resolve_model_reference(
         raise TypeError(f"{source}: expected string, got {type(value).__name__}")
 
     if value.startswith(MODEL_ROLE_PREFIX):
-        body = value[len(MODEL_ROLE_PREFIX):]
+        body = value[len(MODEL_ROLE_PREFIX) :]
         if "." not in body:
             raise ValueError(
                 f"{source}: malformed model role reference '{value}'. "

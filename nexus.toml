@@ -154,6 +154,28 @@ max_total_events = 15
 max_total_threats = 10
 
 # =============================================================================
+# Orrery Settings (Off-Screen Behavior Resolver)
+# =============================================================================
+
+[orrery]
+enabled = false
+
+[orrery.binding]
+window_chunks = 30
+
+[orrery.narration]
+mode = "async"
+provider = "anthropic"
+model_ref = "@anthropic.default"
+
+[orrery.bleed]
+latency_budget_ms = 2000
+max_candidates = 3
+
+[orrery.promote]
+provider = "local"
+
+# =============================================================================
 # MEMNON Agent Settings (Memory & Retrieval)
 # =============================================================================
 

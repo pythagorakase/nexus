@@ -16,11 +16,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import logging
 import os
 import re
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import List, Optional, Tuple
 
 import psycopg2
@@ -33,6 +35,9 @@ logging.basicConfig(
 
 # Migration directory relative to this script
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+SCRIPT_ONLY_MIGRATIONS = {
+    "008",  # migrations/008_populate_mock_database.py is a manual seed script.
+}
 
 # All target databases
 TEMPLATE_DB = "NEXUS_template"
@@ -97,9 +102,7 @@ def db_exists(dbname: str) -> bool:
         conn = get_connection("postgres")
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)
-                )
+                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,))
                 return cur.fetchone() is not None
         finally:
             conn.close()
@@ -126,7 +129,9 @@ def ensure_tracking_table(conn, dry_run: bool = False) -> bool:
         if columns and "version" not in columns:
             # Old schema exists - drop and recreate
             if dry_run:
-                LOG.info("  [DRY-RUN] Would drop old schema_migrations table (incompatible schema)")
+                LOG.info(
+                    "  [DRY-RUN] Would drop old schema_migrations table (incompatible schema)"
+                )
                 return False
             LOG.info("  Dropping old schema_migrations table (incompatible schema)")
             cur.execute("DROP TABLE schema_migrations")
@@ -159,7 +164,10 @@ def needs_bootstrap(conn) -> bool:
 def bootstrap_migrations(conn, dry_run: bool = False) -> None:
     """Seed schema_migrations with pre-existing migrations."""
     if dry_run:
-        LOG.info("  [DRY-RUN] Would bootstrap %d existing migrations", len(BOOTSTRAP_MIGRATIONS))
+        LOG.info(
+            "  [DRY-RUN] Would bootstrap %d existing migrations",
+            len(BOOTSTRAP_MIGRATIONS),
+        )
         return
 
     with conn.cursor() as cur:
@@ -185,23 +193,39 @@ def get_applied_migrations(conn) -> set:
 
 def discover_migrations() -> List[Tuple[str, str, Path]]:
     """
-    Discover SQL migration files.
+    Discover SQL and managed Python migration files.
 
     Returns list of (version, name, path) tuples sorted by version.
     """
     migrations = []
-    pattern = re.compile(r"^(\d{3})_(.+)\.sql$")
+    pattern = re.compile(r"^(\d{3})_(.+)\.(sql|py)$")
 
-    for path in MIGRATIONS_DIR.glob("*.sql"):
+    for path in MIGRATIONS_DIR.iterdir():
         match = pattern.match(path.name)
         if match:
-            version, name = match.groups()
+            version, name, _extension = match.groups()
+            if version in SCRIPT_ONLY_MIGRATIONS:
+                continue
             migrations.append((version, name, path))
 
     return sorted(migrations, key=lambda x: x[0])
 
 
-def apply_migration(conn, version: str, name: str, path: Path, dry_run: bool = False) -> bool:
+def _load_python_migration(path: Path) -> ModuleType:
+    """Load a Python migration module from a filesystem path."""
+
+    module_name = f"nexus_migration_{path.stem}"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load Python migration: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def apply_migration(
+    conn, version: str, name: str, path: Path, dry_run: bool = False
+) -> bool:
     """
     Apply a single migration.
 
@@ -212,24 +236,45 @@ def apply_migration(conn, version: str, name: str, path: Path, dry_run: bool = F
         return True
 
     try:
-        sql = path.read_text()
+        if path.suffix == ".sql":
+            sql = path.read_text()
+            with conn.cursor() as cur:
+                cur.execute(sql)
+        elif path.suffix == ".py":
+            # Python migrations may need to manage transaction boundaries
+            # internally (for example CREATE INDEX CONCURRENTLY), so ensure the
+            # connection is not inside an open transaction before handing it off.
+            conn.commit()
+            module = _load_python_migration(path)
+            run = getattr(module, "run", None)
+            if run is None:
+                raise RuntimeError(f"Python migration {path.name} has no run(conn)")
+            run(conn)
+        else:
+            raise RuntimeError(f"Unsupported migration type: {path}")
+
         with conn.cursor() as cur:
-            cur.execute(sql)
-            # Record the migration
             cur.execute(
-                "INSERT INTO schema_migrations (version, name) VALUES (%s, %s)",
+                """
+                INSERT INTO schema_migrations (version, name)
+                VALUES (%s, %s)
+                """,
                 (version, name),
             )
         conn.commit()
         LOG.info("  Applied: %s_%s", version, name)
         return True
-    except psycopg2.Error as e:
+    except Exception as e:
+        if getattr(conn, "autocommit", False):
+            conn.autocommit = False
         conn.rollback()
         LOG.error("  FAILED: %s_%s - %s", version, name, e)
         return False
 
 
-def migrate_database(dbname: str, dry_run: bool = False, skip_locked: bool = True) -> Tuple[int, int]:
+def migrate_database(
+    dbname: str, dry_run: bool = False, skip_locked: bool = True
+) -> Tuple[int, int]:
     """
     Apply pending migrations to a single database.
 
@@ -257,8 +302,15 @@ def migrate_database(dbname: str, dry_run: bool = False, skip_locked: bool = Tru
         if not table_ready:
             # In dry-run mode and table doesn't exist - show all migrations as pending
             all_migrations = discover_migrations()
-            LOG.info("  [DRY-RUN] Would bootstrap %d existing migrations", len(BOOTSTRAP_MIGRATIONS))
-            pending = [m for m in all_migrations if m[0] not in {v for v, _ in BOOTSTRAP_MIGRATIONS}]
+            LOG.info(
+                "  [DRY-RUN] Would bootstrap %d existing migrations",
+                len(BOOTSTRAP_MIGRATIONS),
+            )
+            pending = [
+                m
+                for m in all_migrations
+                if m[0] not in {v for v, _ in BOOTSTRAP_MIGRATIONS}
+            ]
             for version, name, _ in pending:
                 LOG.info("  [DRY-RUN] Would apply: %s_%s", version, name)
             return (len(pending), 0)
@@ -300,7 +352,7 @@ def migrate_database(dbname: str, dry_run: bool = False, skip_locked: bool = Tru
 def show_status() -> None:
     """Show migration status for all databases."""
     all_migrations = discover_migrations()
-    print(f"Found {len(all_migrations)} SQL migrations in {MIGRATIONS_DIR}\n")
+    print(f"Found {len(all_migrations)} managed migrations in {MIGRATIONS_DIR}\n")
 
     databases = [TEMPLATE_DB] + SLOT_DBS
 
