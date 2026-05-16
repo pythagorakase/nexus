@@ -288,7 +288,15 @@ def _render_brief(draft: OrreryResolutionDraft, entity_names: Mapping[int, str])
             )
         else:
             values[slot] = _entity_label(value, entity_names)
-    rendered = draft.narrative_stub.format(**values)
+    try:
+        rendered = draft.narrative_stub.format(**values)
+    except KeyError as exc:
+        missing_key = exc.args[0]
+        raise ValueError(
+            "Orrery template "
+            f"{draft.template_id!r} narrative_stub references missing binding "
+            f"{missing_key!r}"
+        ) from exc
     return " ".join(rendered.split())
 
 
@@ -381,7 +389,10 @@ def _apply_state_delta_sync(
             "UPDATE characters SET current_activity = %s WHERE entity_id = %s",
             (draft.state_delta["character.current_activity"], actor_entity_id),
         )
-        if getattr(cur, "rowcount", 1) == 0:
+        rowcount = getattr(cur, "rowcount", None)
+        if rowcount is None or rowcount < 0:
+            raise ValueError("Unable to verify Orrery character update rowcount")
+        if rowcount == 0:
             raise ValueError(
                 f"Orrery actor entity {actor_entity_id} has no character row"
             )
@@ -446,24 +457,14 @@ def _add_entity_tag_sync(
 
     cur.execute(
         """
-        SELECT 1
-        FROM entity_tags_current
-        WHERE entity_id = %s
-          AND tag = %s
-        """,
-        (entity_id, tag),
-    )
-    if cur.fetchone():
-        return False
-
-    cur.execute(
-        """
         INSERT INTO entity_tags (entity_id, tag_id, template_id, source_kind)
         VALUES (%s, %s, %s, 'template')
+        ON CONFLICT DO NOTHING
+        RETURNING id
         """,
         (entity_id, tag_id, template_id),
     )
-    return True
+    return cur.fetchone() is not None
 
 
 async def _add_entity_tag_async(
@@ -485,29 +486,18 @@ async def _add_entity_tag_async(
     if tag_id is None:
         raise ValueError(f"Orrery tag {tag!r} is not registered")
 
-    exists = await conn.fetchval(
-        """
-        SELECT 1
-        FROM entity_tags_current
-        WHERE entity_id = $1
-          AND tag = $2
-        """,
-        entity_id,
-        tag,
-    )
-    if exists:
-        return False
-
-    await conn.execute(
+    inserted_id = await conn.fetchval(
         """
         INSERT INTO entity_tags (entity_id, tag_id, template_id, source_kind)
         VALUES ($1, $2, $3, 'template')
+        ON CONFLICT DO NOTHING
+        RETURNING id
         """,
         entity_id,
         tag_id,
         template_id,
     )
-    return True
+    return inserted_id is not None
 
 
 def _emit_world_event_sync(

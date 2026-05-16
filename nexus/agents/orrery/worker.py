@@ -17,6 +17,9 @@ from nexus.config import load_settings_as_dict
 logger = logging.getLogger("nexus.orrery.worker")
 
 
+DEFAULT_NARRATION_MAX_ATTEMPTS = 3
+DEFAULT_NARRATION_RETRY_DELAY_SECONDS = 300
+
 PROMOTION_SYSTEM_PROMPT = (
     "You are the Orrery promotion discriminator. Decide whether an off-screen "
     "resolution deserves durable prose. Promote only events that create future "
@@ -159,6 +162,7 @@ def drain_narration_outbox_sync(
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
     settings_dict = dict(settings or load_settings_as_dict())
+    max_attempts, retry_delay_seconds = _narration_retry_settings(settings_dict)
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -168,6 +172,7 @@ def drain_narration_outbox_sync(
                         j.id AS job_id,
                         j.resolution_id,
                         j.slot,
+                        j.attempts,
                         r.tick_chunk_id,
                         r.template_id,
                         r.actor_entity_id,
@@ -194,6 +199,7 @@ def drain_narration_outbox_sync(
                 if not rows:
                     return (0, 0)
 
+                provider = narration_provider or _narration_provider(settings_dict)
                 for row in rows:
                     cur.execute(
                         """
@@ -206,7 +212,6 @@ def drain_narration_outbox_sync(
                         """,
                         (row["job_id"],),
                     )
-        provider = narration_provider or _narration_provider(settings_dict)
         narrated = 0
         failed = 0
         for row in rows:
@@ -226,7 +231,13 @@ def drain_narration_outbox_sync(
                 failed += 1
                 with conn:
                     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                        _mark_narration_failed(cur, row=row, error=str(exc))
+                        _mark_narration_failed(
+                            cur,
+                            row=row,
+                            error=str(exc),
+                            max_attempts=max_attempts,
+                            retry_delay_seconds=retry_delay_seconds,
+                        )
                 logger.exception("Failed to narrate Orrery job %s", row["job_id"])
         return (narrated, failed)
     finally:
@@ -284,7 +295,33 @@ def _mark_narration_failed(
     *,
     row: Mapping[str, Any],
     error: str,
+    max_attempts: int,
+    retry_delay_seconds: int,
 ) -> None:
+    attempt_count = int(row.get("attempts") or 0) + 1
+    if attempt_count < max_attempts:
+        cur.execute(
+            """
+            UPDATE orrery_narration_jobs
+            SET state = 'queued',
+                available_at = now() + (%s * interval '1 second'),
+                lease_until = NULL,
+                last_error = %s,
+                updated_at = now()
+            WHERE id = %s
+            """,
+            (retry_delay_seconds, error, row["job_id"]),
+        )
+        cur.execute(
+            """
+            UPDATE orrery_resolutions
+            SET narration_status = 'queued'
+            WHERE id = %s
+            """,
+            (row["resolution_id"],),
+        )
+        return
+
     cur.execute(
         """
         UPDATE orrery_narration_jobs
@@ -428,6 +465,19 @@ def _narration_provider(settings: Mapping[str, Any]) -> Any:
             system_prompt=NARRATION_SYSTEM_PROMPT,
         )
     raise ValueError(f"Unsupported Orrery narration provider: {provider_name}")
+
+
+def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
+    narration_settings = (settings.get("orrery") or {}).get("narration") or {}
+    max_attempts = int(
+        narration_settings.get("max_attempts", DEFAULT_NARRATION_MAX_ATTEMPTS)
+    )
+    retry_delay_seconds = int(
+        narration_settings.get(
+            "retry_delay_seconds", DEFAULT_NARRATION_RETRY_DELAY_SECONDS
+        )
+    )
+    return max(1, max_attempts), max(0, retry_delay_seconds)
 
 
 def _connect_for_slot(slot: Optional[int]) -> Any:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
@@ -54,11 +56,12 @@ class RecordingCursor:
             tag = params[0]
             if tag in self.known_tags:
                 self._fetchone = {"id": self.known_tags[tag]}
-        elif "FROM entity_tags_current" in normalized:
-            entity_id, tag = params
-            self._fetchone = (
-                {"exists": 1} if (entity_id, tag) in self.current_tags else None
-            )
+        elif "INSERT INTO entity_tags" in normalized:
+            entity_id, tag_id, _template_id = params
+            tags_by_id = {value: key for key, value in self.known_tags.items()}
+            tag = tags_by_id[tag_id]
+            if (entity_id, tag) not in self.current_tags:
+                self._fetchone = {"id": 88}
         elif "FROM event_types WHERE type" in normalized:
             self._fetchone = {"type": params[0]}
         elif "SELECT current_location FROM characters" in normalized:
@@ -213,3 +216,47 @@ def test_commit_orrery_tick_rejects_unregistered_tags() -> None:
             slot=5,
             world_layer="primary",
         )
+
+
+def test_commit_orrery_tick_reports_missing_template_binding() -> None:
+    """Template authoring errors identify the bad template and binding."""
+
+    proposal = _proposal()
+    broken = replace(
+        proposal.resolutions[0],
+        narrative_stub="{missing} vanishes into a maintenance corridor.",
+    )
+    broken_proposal = OrreryTickProposal(
+        anchor_chunk_id=proposal.anchor_chunk_id,
+        actor_count=proposal.actor_count,
+        resolutions=(broken,),
+        generated_at=proposal.generated_at,
+    )
+
+    with pytest.raises(ValueError, match="evade_pursuers.*missing binding 'missing'"):
+        commit_orrery_tick_sync(
+            RecordingConn(RecordingCursor()),
+            broken_proposal,
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
+
+
+def test_commit_orrery_tick_skips_duplicate_active_tag_insert() -> None:
+    """Active tag uniqueness conflicts do not double-count tag mutations."""
+
+    cursor = RecordingCursor(current_tags={(1, "off_grid")})
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert result.tag_mutation_count == 0
+    assert "ON CONFLICT DO NOTHING" in statements

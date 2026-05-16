@@ -254,9 +254,12 @@ def compose_actor_bindings(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
 ) -> Tuple[Bindings, ...]:
-    """Compose ACTOR-only bindings for recently relevant character entities."""
+    """Compose ACTOR-only bindings for recently relevant off-screen characters."""
 
     actor_ids: set[int] = set()
+    present_actor_ids = _present_actor_ids_at_anchor(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
 
     if anchor_chunk_id is not None:
         lower_bound = max(0, anchor_chunk_id - window_chunks + 1)
@@ -269,6 +272,7 @@ def compose_actor_bindings(
                 JOIN entities e ON e.id = cer.entity_id
                 WHERE e.kind = 'character'
                   AND e.is_active = true
+                  AND cer.reference_type IS DISTINCT FROM 'present'
                   AND cer.chunk_id BETWEEN :lower_bound AND :anchor_chunk_id
                 """
             ),
@@ -319,7 +323,37 @@ def compose_actor_bindings(
     ).mappings():
         actor_ids.add(row["entity_id"])
 
-    return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(actor_ids))
+    offscreen_actor_ids = actor_ids - present_actor_ids
+    return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(offscreen_actor_ids))
+
+
+def _present_actor_ids_at_anchor(
+    session: Any, *, anchor_chunk_id: Optional[int]
+) -> set[int]:
+    """Return character entities explicitly present in the current scene anchor."""
+
+    if anchor_chunk_id is None:
+        return set()
+
+    return {
+        row["entity_id"]
+        for row in session.execute(
+            text(
+                """
+                /* orrery:present_actor_ids_at_anchor */
+                SELECT DISTINCT c.entity_id
+                FROM chunk_character_references ccr
+                JOIN characters c ON c.id = ccr.character_id
+                JOIN entities e ON e.id = c.entity_id
+                WHERE ccr.chunk_id = :anchor_chunk_id
+                  AND ccr.reference = 'present'
+                  AND e.kind = 'character'
+                  AND e.is_active = true
+                """
+            ),
+            {"anchor_chunk_id": anchor_chunk_id},
+        ).mappings()
+    }
 
 
 def resolve_dry_run(

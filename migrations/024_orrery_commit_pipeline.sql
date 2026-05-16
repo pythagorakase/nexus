@@ -9,6 +9,11 @@ ADD COLUMN IF NOT EXISTS orrery_proposal JSONB;
 COMMENT ON COLUMN incubator.orrery_proposal IS
     'No-write OrreryTickProposal generated during preview; stamped into canonical Orrery tables only when the incubator chunk is accepted.';
 
+DROP INDEX IF EXISTS ix_entity_tags_current;
+CREATE UNIQUE INDEX ix_entity_tags_current
+    ON entity_tags (entity_id, tag_id)
+    WHERE cleared_at IS NULL;
+
 DROP VIEW IF EXISTS incubator_view;
 CREATE VIEW incubator_view AS
 SELECT

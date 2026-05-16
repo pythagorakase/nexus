@@ -95,6 +95,13 @@ class FakeNarrationProvider:
         return FakeProviderResponse()
 
 
+class FailingNarrationProvider:
+    """Provider stand-in that raises while generating narration."""
+
+    def get_completion(self, _prompt):
+        raise TimeoutError("temporary provider failure")
+
+
 def _settings():
     return {
         "orrery": {
@@ -140,6 +147,7 @@ def _job_row():
             "perceptual_summary": "street cameras briefly lose Mara",
         },
         "event_ids": [20],
+        "attempts": 0,
         "world_layer": "primary",
     }
 
@@ -207,3 +215,63 @@ def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     assert "INSERT INTO offscreen_narrations" in statements
     assert "narration_status = 'succeeded'" in statements
     assert "state = 'succeeded'" in statements
+
+
+def test_drain_narration_outbox_does_not_lease_before_provider_ready() -> None:
+    """Provider setup failures leave queued jobs available for a later drain."""
+
+    cursor = WorkerCursor(job_rows=[_job_row()])
+
+    with pytest.raises(ValueError, match="Unsupported Orrery narration provider"):
+        drain_narration_outbox_sync(
+            slot=5,
+            settings={"orrery": {"narration": {"provider": "missing"}}},
+            conn=WorkerConn(cursor),
+        )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert "state = 'leased'" not in statements
+
+
+def test_drain_narration_outbox_requeues_transient_failures() -> None:
+    """Narration attempts retry with backoff before becoming terminal."""
+
+    cursor = WorkerCursor(job_rows=[_job_row()])
+
+    narrated, failed = drain_narration_outbox_sync(
+        slot=5,
+        settings=_settings(),
+        narration_provider=FailingNarrationProvider(),
+        conn=WorkerConn(cursor),
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert narrated == 0
+    assert failed == 1
+    assert "state = 'queued'" in statements
+    assert "available_at = now() + (%s * interval '1 second')" in statements
+    assert "narration_status = 'queued'" in statements
+    assert "narration_status = 'failed'" not in statements
+
+
+def test_drain_narration_outbox_marks_terminal_after_max_attempts() -> None:
+    """Retries stop once the configured max attempts is reached."""
+
+    job = dict(_job_row(), attempts=2)
+    cursor = WorkerCursor(job_rows=[job])
+
+    narrated, failed = drain_narration_outbox_sync(
+        slot=5,
+        settings=_settings(),
+        narration_provider=FailingNarrationProvider(),
+        conn=WorkerConn(cursor),
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert narrated == 0
+    assert failed == 1
+    assert "state = 'failed'" in statements
+    assert "narration_status = 'failed'" in statements

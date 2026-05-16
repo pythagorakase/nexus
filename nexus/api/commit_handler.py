@@ -322,7 +322,7 @@ async def clear_incubator(conn: asyncpg.Connection, session_id: str = None) -> N
 
 
 async def commit_incubator_to_database(
-    conn: asyncpg.Connection, session_id: str
+    conn: asyncpg.Connection, session_id: str, slot: Optional[int] = None
 ) -> int:
     """
     Complete commit flow from incubator to production tables.
@@ -441,6 +441,7 @@ async def commit_incubator_to_database(
                 conn,
                 incubator.get("orrery_proposal"),
                 tick_chunk_id=chunk_id,
+                slot=slot,
                 world_layer=world_layer,
             )
             if orrery_result.resolution_count or orrery_result.skipped_existing_count:
