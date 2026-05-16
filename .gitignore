@@ -27,7 +27,7 @@
 !/.claude/commands/
 
 # Ignore logs and temporary files
-temp*.*
+/temp*.*
 *.log
 log.md
 /log.txt
