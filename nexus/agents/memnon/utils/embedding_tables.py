@@ -77,11 +77,11 @@ def ensure_embedding_table(connection: Connection, dimensions: int) -> str:
     Ensure the embedding table for ``dimensions`` exists.
 
     Embedding tables are created lazily by write paths. Read/retrieval paths
-    should inspect existing tables instead of calling this helper.
+    should inspect existing tables instead of calling this helper. The pgvector
+    extension is a database setup prerequisite and must already exist.
     """
     table_name = table_name_for_dimensions(dimensions)
 
-    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     connection.execute(
         text(
             f"""

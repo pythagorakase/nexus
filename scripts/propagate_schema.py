@@ -57,6 +57,7 @@ def ensure_schema_migrations_table(conn: PGConnection) -> None:
             """
         )
         if cur.fetchone()[0]:
+            conn.commit()
             return
 
         cur.execute(

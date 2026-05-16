@@ -11,6 +11,7 @@ DECLARE
     embedding_table RECORD;
     table_oid REGCLASS;
     row_count BIGINT;
+    null_count BIGINT;
     duplicate_count BIGINT;
     pk_name TEXT;
     unique_constraint RECORD;
@@ -37,6 +38,22 @@ BEGIN
             RAISE NOTICE 'Dropped empty embedding table %',
                 embedding_table.table_name;
             CONTINUE;
+        END IF;
+
+        EXECUTE format(
+            'SELECT COUNT(*)
+             FROM %I
+             WHERE chunk_id IS NULL
+                OR model IS NULL',
+            embedding_table.table_name
+        )
+            INTO null_count;
+
+        IF null_count > 0 THEN
+            RAISE EXCEPTION
+                'Cannot migrate %. Found % rows with NULL chunk_id or model.',
+                embedding_table.table_name,
+                null_count;
         END IF;
 
         EXECUTE format(

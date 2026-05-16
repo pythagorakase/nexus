@@ -468,7 +468,6 @@ class EmbeddingRegenerator:
 
         except Exception as e:
             logger.error(f"Error checking/creating table {table_name}: {e}")
-            connection.rollback()
             raise
 
     def get_table_name(self) -> str:

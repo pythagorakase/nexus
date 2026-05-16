@@ -20,6 +20,12 @@ def test_resolve_unknown_dimension_table() -> None:
     assert resolve_dimension_table(3072) == "chunk_embeddings_3072d"
 
 
+def test_sub_1000_dimension_table_name_is_zero_padded() -> None:
+    """Sub-1000 dimensions round-trip through the zero-padded table name."""
+    assert table_name_for_dimensions(384) == "chunk_embeddings_0384d"
+    assert parse_embedding_table_dimensions("chunk_embeddings_0384d") == 384
+
+
 def test_table_name_requires_positive_dimensions() -> None:
     """Invalid dimensions fail before producing unsafe SQL identifiers."""
     with pytest.raises(ValueError):

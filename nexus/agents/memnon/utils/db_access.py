@@ -796,26 +796,9 @@ def setup_database_indexes(db_url: str) -> bool:
                         logger.warning(f"Error creating index on {dim_table}: {e}")
                         continue
 
-                # Create vector indexes for dimension-specific tables
-                for dim_table in sorted(existing_dimension_tables):
+                # Create vector indexes for existing dimension-specific tables only.
+                for dim_table in _list_existing_embedding_tables(cursor):
                     try:
-                        # Check if table exists
-                        cursor.execute(
-                            f"""
-                        SELECT EXISTS (
-                            SELECT FROM information_schema.tables 
-                            WHERE table_name = '{dim_table}'
-                        )
-                        """
-                        )
-                        table_exists = cursor.fetchone()[0]
-
-                        if not table_exists:
-                            logger.warning(
-                                f"Table {dim_table} does not exist, skipping index creation"
-                            )
-                            continue
-
                         # Check for existing HNSW index
                         cursor.execute(
                             f"""
