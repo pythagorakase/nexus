@@ -30,6 +30,13 @@ class Slot(str, Enum):
     FACTION = "faction"
 
 
+class PresentTargetPolicy(str, Enum):
+    """How a package treats targets currently owned by the Storyteller scene."""
+
+    OFFSCREEN_ONLY = "offscreen_only"
+    STORYTELLER_PRESSURE = "storyteller_pressure"
+
+
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
 
@@ -484,6 +491,7 @@ class Branch:
     event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
+    scene_pressure_stub: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,6 +504,7 @@ class Template:
     required_slots: Tuple[Slot, ...]
     package_gate: Condition
     branches: Tuple[Branch, ...]
+    present_target_policy: PresentTargetPolicy = PresentTargetPolicy.OFFSCREEN_ONLY
 
 
 @dataclass(frozen=True, slots=True)
@@ -513,6 +522,7 @@ class Resolution:
     event_type: Optional[str] = None
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
+    scene_pressure_stub: Optional[str] = None
 
 
 def binding_hash(bindings: Bindings) -> str:
@@ -557,6 +567,7 @@ def evaluate(template: Template, state: WorldState, bindings: Bindings) -> Resol
                 event_type=branch.event_type,
                 changed_fields=branch.changed_fields,
                 magnitude=branch.magnitude,
+                scene_pressure_stub=branch.scene_pressure_stub,
             )
 
     return Resolution(

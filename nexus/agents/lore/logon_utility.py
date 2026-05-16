@@ -380,6 +380,24 @@ class LogonUtility:
             for passage in context["retrieved_passages"]["results"][:5]:  # Limit to top 5
                 sections.append(f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}")
 
+        scene_pressures = context.get("orrery_scene_pressures") or []
+        if scene_pressures:
+            sections.append("\n=== ORRERY SCENE PRESSURE ===")
+            sections.append(
+                "These are off-screen pressures involving current on-screen "
+                "characters. You may adapt, delay, ignore, or incorporate them. "
+                "Do not let Orrery decide what present characters do."
+            )
+            for pressure in scene_pressures[:5]:
+                if not isinstance(pressure, dict):
+                    continue
+                label = pressure.get("branch_label") or pressure.get("template_id")
+                prompt_text = pressure.get("prompt_text") or pressure.get(
+                    "pressure_stub", ""
+                )
+                if prompt_text:
+                    sections.append(f"- {label}: {prompt_text}")
+
         # Add author's note (soft out-of-character suggestion, used by regenerate).
         # Placed immediately before INSTRUCTIONS so recency bias gives it the influence
         # a soft nudge needs — entity/historical context above would otherwise bury it.

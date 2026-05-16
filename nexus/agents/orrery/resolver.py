@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable as IterableABC
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional, Tuple
@@ -11,6 +12,7 @@ from sqlalchemy import text
 from nexus.agents.orrery.substrate import (
     Bindings,
     EventRecord,
+    PresentTargetPolicy,
     Resolution,
     Slot,
     Template,
@@ -69,12 +71,57 @@ class OrreryResolutionDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class OrreryScenePressureDraft:
+    """Serializable Storyteller-facing pressure involving an on-screen target."""
+
+    template_id: str
+    priority: int
+    binding_hash: str
+    bindings: Mapping[str, Any]
+    branch_label: str
+    pressure_stub: str
+    prompt_text: str
+    magnitude: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation of this scene pressure."""
+
+        return {
+            "template_id": self.template_id,
+            "priority": self.priority,
+            "binding_hash": self.binding_hash,
+            "bindings": dict(self.bindings),
+            "branch_label": self.branch_label,
+            "pressure_stub": self.pressure_stub,
+            "prompt_text": self.prompt_text,
+            "magnitude": self.magnitude,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "OrreryScenePressureDraft":
+        """Hydrate a scene pressure draft from incubator JSONB data."""
+
+        pressure_stub = str(data["pressure_stub"])
+        return cls(
+            template_id=str(data["template_id"]),
+            priority=int(data["priority"]),
+            binding_hash=str(data["binding_hash"]),
+            bindings=dict(data.get("bindings") or {}),
+            branch_label=str(data["branch_label"]),
+            pressure_stub=pressure_stub,
+            prompt_text=str(data.get("prompt_text") or pressure_stub),
+            magnitude=float(data.get("magnitude") or 0.0),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class OrreryTickProposal:
     """No-write Orrery proposal produced before accepted chunk commit."""
 
     anchor_chunk_id: Optional[int]
     actor_count: int
     resolutions: Tuple[OrreryResolutionDraft, ...]
+    scene_pressures: Tuple[OrreryScenePressureDraft, ...] = ()
     generated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -85,6 +132,12 @@ class OrreryTickProposal:
 
         return len(self.resolutions)
 
+    @property
+    def pressure_count(self) -> int:
+        """Return the number of Storyteller-mediated scene pressures."""
+
+        return len(self.scene_pressures)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation of this proposal."""
 
@@ -93,6 +146,9 @@ class OrreryTickProposal:
             "actor_count": self.actor_count,
             "generated_at": self.generated_at,
             "resolutions": [draft.to_dict() for draft in self.resolutions],
+            "scene_pressures": [
+                pressure.to_dict() for pressure in self.scene_pressures
+            ],
         }
 
     @classmethod
@@ -106,6 +162,10 @@ class OrreryTickProposal:
             resolutions=tuple(
                 OrreryResolutionDraft.from_dict(item)
                 for item in data.get("resolutions", ())
+            ),
+            scene_pressures=tuple(
+                OrreryScenePressureDraft.from_dict(item)
+                for item in data.get("scene_pressures", ())
             ),
         )
 
@@ -359,6 +419,7 @@ def compose_actor_target_bindings(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
     actor_ids: Optional[Iterable[int]] = None,
+    target_presence: str = "offscreen",
 ) -> Tuple[Bindings, ...]:
     """Compose ACTOR+TARGET bindings from actors' relational neighborhoods.
 
@@ -376,7 +437,15 @@ def compose_actor_target_bindings(
     where the two binding passes could see different actor sets if rows
     change between reads. Direct callers (e.g., focused unit tests) may
     omit actor_ids and accept the implicit recomputation.
+
+    target_presence controls whether TARGET may be a character explicitly
+    present at the anchor chunk. The default preserves Orrery's hard
+    off-screen boundary; "present" is reserved for Storyteller-mediated
+    scene-pressure proposals and still never allows a present ACTOR.
     """
+
+    if target_presence not in {"offscreen", "present"}:
+        raise ValueError("target_presence must be 'offscreen' or 'present'")
 
     if actor_ids is None:
         actor_only = compose_actor_bindings(
@@ -415,11 +484,25 @@ def compose_actor_target_bindings(
     ).mappings():
         source = row["source_entity_id"]
         target = row["target_entity_id"]
-        if source in present_actor_ids or target in present_actor_ids:
-            continue
-        if source in actor_id_set:
+        source_present = source in present_actor_ids
+        target_present = target in present_actor_ids
+        if (
+            source in actor_id_set
+            and not source_present
+            and (
+                (target_presence == "offscreen" and not target_present)
+                or (target_presence == "present" and target_present)
+            )
+        ):
             pairs.add((source, target))
-        if target in actor_id_set:
+        if (
+            target in actor_id_set
+            and not target_present
+            and (
+                (target_presence == "offscreen" and not source_present)
+                or (target_presence == "present" and source_present)
+            )
+        ):
             pairs.add((target, source))
 
     return tuple(
@@ -469,6 +552,7 @@ def resolve_dry_run(
         )
 
     drafts: list[OrreryResolutionDraft] = []
+    scene_pressure_results: list[Resolution] = []
 
     actor_bindings = compose_actor_bindings(
         session,
@@ -481,26 +565,58 @@ def resolve_dry_run(
             drafts.append(_draft_from_resolution(resolution))
 
     actor_target_bindings: Tuple[Bindings, ...] = ()
+    present_target_bindings: Tuple[Bindings, ...] = ()
     if actor_target_templates:
         actor_target_bindings = compose_actor_target_bindings(
             session,
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+            target_presence="offscreen",
         )
         for bindings in actor_target_bindings:
             resolution = evaluate_stack(actor_target_templates, state, bindings)
             if resolution is not None and resolution.passes:
                 drafts.append(_draft_from_resolution(resolution))
 
+        pressure_templates = [
+            template
+            for template in actor_target_templates
+            if template.present_target_policy
+            is PresentTargetPolicy.STORYTELLER_PRESSURE
+        ]
+        if pressure_templates:
+            present_target_bindings = compose_actor_target_bindings(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids={bindings[Slot.ACTOR] for bindings in actor_bindings},
+                target_presence="present",
+            )
+            for bindings in present_target_bindings:
+                resolution = evaluate_stack(pressure_templates, state, bindings)
+                if resolution is not None and resolution.passes:
+                    scene_pressure_results.append(resolution)
+
+    pressure_entity_names = _load_entity_names(
+        session, _entity_ids_from_resolutions(scene_pressure_results)
+    )
+    scene_pressures = tuple(
+        _scene_pressure_from_resolution(resolution, pressure_entity_names)
+        for resolution in scene_pressure_results
+    )
+
     unique_actors = {bindings[Slot.ACTOR] for bindings in actor_bindings} | {
         bindings[Slot.ACTOR] for bindings in actor_target_bindings
+    } | {
+        bindings[Slot.ACTOR] for bindings in present_target_bindings
     }
 
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,
         actor_count=len(unique_actors),
         resolutions=tuple(drafts),
+        scene_pressures=scene_pressures,
     )
 
 
@@ -638,3 +754,99 @@ def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
         changed_fields=resolution.changed_fields,
         magnitude=resolution.magnitude,
     )
+
+
+def _scene_pressure_from_resolution(
+    resolution: Resolution,
+    entity_names: Mapping[int, str],
+) -> OrreryScenePressureDraft:
+    if resolution.branch_label is None or resolution.scene_pressure_stub is None:
+        raise RuntimeError(
+            f"Orrery pressure {resolution.template_id!r} passed gate but lacks "
+            "scene_pressure_stub"
+        )
+    bindings = {
+        slot.value if isinstance(slot, Slot) else str(slot): value
+        for slot, value in resolution.bindings.items()
+    }
+    return OrreryScenePressureDraft(
+        template_id=resolution.template_id,
+        priority=resolution.priority,
+        binding_hash=resolution.binding_hash,
+        bindings=bindings,
+        branch_label=resolution.branch_label,
+        pressure_stub=resolution.scene_pressure_stub,
+        prompt_text=_render_bound_text(
+            resolution.scene_pressure_stub,
+            bindings,
+            entity_names,
+            template_id=resolution.template_id,
+        ),
+        magnitude=resolution.magnitude,
+    )
+
+
+def _render_bound_text(
+    text_template: str,
+    bindings: Mapping[str, Any],
+    entity_names: Mapping[int, str],
+    *,
+    template_id: str,
+) -> str:
+    values = {
+        slot: _entity_label(value, entity_names) for slot, value in bindings.items()
+    }
+    try:
+        rendered = text_template.format(**values)
+    except KeyError as exc:
+        missing_key = exc.args[0]
+        raise ValueError(
+            "Orrery template "
+            f"{template_id!r} scene_pressure_stub references missing binding "
+            f"{missing_key!r}"
+        ) from exc
+    return " ".join(rendered.split())
+
+
+def _entity_label(value: Any, entity_names: Mapping[int, str]) -> str:
+    if isinstance(value, list):
+        return ", ".join(_entity_label(item, entity_names) for item in value)
+    if value is None:
+        return "unknown"
+    try:
+        entity_id = int(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return entity_names.get(entity_id, f"entity {entity_id}")
+
+
+def _entity_ids_from_resolutions(resolutions: Iterable[Resolution]) -> set[int]:
+    entity_ids: set[int] = set()
+    for resolution in resolutions:
+        for value in resolution.bindings.values():
+            if isinstance(value, IterableABC) and not isinstance(value, (str, bytes)):
+                for item in value:
+                    if isinstance(item, int):
+                        entity_ids.add(item)
+            elif isinstance(value, int):
+                entity_ids.add(value)
+    return entity_ids
+
+
+def _load_entity_names(session: Any, entity_ids: set[int]) -> dict[int, str]:
+    if not entity_ids:
+        return {}
+    return {
+        row["id"]: row["name"]
+        for row in session.execute(
+            text(
+                """
+                /* orrery:entity_names */
+                SELECT id, name
+                FROM entity_names_v
+                WHERE id = ANY(:entity_ids)
+                """
+            ),
+            {"entity_ids": sorted(entity_ids)},
+        ).mappings()
+    }

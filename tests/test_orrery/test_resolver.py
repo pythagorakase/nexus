@@ -13,6 +13,7 @@ from nexus.agents.orrery.resolver import (
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
+    PresentTargetPolicy,
     Slot,
     Template,
 )
@@ -53,6 +54,7 @@ class FakeSession:
         ephemeral_actor_rows=None,
         present_actor_rows=None,
         actor_target_relationship_rows=None,
+        entity_name_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -73,6 +75,11 @@ class FakeSession:
         self.ephemeral_actor_rows = ephemeral_actor_rows or []
         self.present_actor_rows = present_actor_rows or []
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
+        self.entity_name_rows = entity_name_rows or [
+            {"id": 1, "name": "Mara"},
+            {"id": 2, "name": "Vale"},
+            {"id": 3, "name": "Iris"},
+        ]
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -115,6 +122,8 @@ class FakeSession:
         if "/* orrery:actor_target_bindings_character_relationships */" in sql:
             assert "relationship_scope = 'character'" in sql
             return FakeResult(self.actor_target_relationship_rows)
+        if "/* orrery:entity_names */" in sql:
+            return FakeResult(self.entity_name_rows)
         if "/* orrery:anchor_world_time */" in sql:
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
@@ -416,6 +425,108 @@ def test_compose_actor_target_bindings_excludes_anchor_present_targets() -> None
 
     pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
     assert pairs == {(1, 3)}
+
+
+def test_compose_actor_target_bindings_can_select_present_targets_for_pressure() -> None:
+    """Scene-pressure binding allows present targets but still excludes actors."""
+
+    session = FakeSession(
+        chunk_ref_actor_rows=[{"entity_id": 1}, {"entity_id": 2}],
+        present_actor_rows=[{"entity_id": 2}],
+        actor_target_relationship_rows=[
+            {"source_entity_id": 1, "target_entity_id": 2},
+        ],
+    )
+
+    bindings = compose_actor_target_bindings(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        target_presence="present",
+    )
+
+    pairs = {(b[Slot.ACTOR], b[Slot.TARGET]) for b in bindings}
+    assert pairs == {(1, 2)}
+
+
+def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
+    """Opt-in packages produce prompt-only pressure instead of commit drafts."""
+
+    pressure_template = Template(
+        id="pressure_test",
+        priority=10,
+        blurb="test pressure",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="Press the scene",
+                conditions=ALWAYS,
+                narrative_stub="{actor} would commit a canonical event on {target}.",
+                state_delta={"character.current_activity": "pressuring target"},
+                scene_pressure_stub=(
+                    "{actor} is creating pressure around {target}, but the "
+                    "Storyteller controls whether it appears now."
+                ),
+            ),
+        ),
+        present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+    )
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 2}],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        [pressure_template],
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 1
+    pressure = proposal.scene_pressures[0]
+    assert pressure.template_id == "pressure_test"
+    assert pressure.bindings == {"actor": 1, "target": 2}
+    assert "Mara is creating pressure around Vale" in pressure.prompt_text
+    assert "state_delta" not in pressure.to_dict()
+
+
+def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets() -> None:
+    """Default multi-slot templates cannot pressure an on-screen target."""
+
+    default_template = Template(
+        id="default_present_target",
+        priority=10,
+        blurb="default policy",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="Would fire",
+                conditions=ALWAYS,
+                narrative_stub="{actor} affects {target}.",
+                scene_pressure_stub="{actor} pressures {target}.",
+            ),
+        ),
+    )
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 2}],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        [default_template],
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 0
 
 
 def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
