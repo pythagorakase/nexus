@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
 
+from nexus.api.chunk_workflow import ChunkWorkflow
 from nexus.api.db_pool import get_connection
 from nexus.api.narrative_schemas import (
     SlotStateResponse,
@@ -191,10 +192,13 @@ async def slot_undo_endpoint(slot: int):
             narrative = state.narrative_state
 
             if narrative.has_pending and narrative.session_id:
-                # Capture the parent chunk ID before deleting the incubator row,
-                # then delete the row. The parent chunk's choice fields will be
-                # reset below (closes the loop on the user's un-made choice).
+                # Single transaction spanning incubator delete + parent's
+                # choice-reset, so either both succeed or both roll back.
+                # (Codex P1 review on PR #205: a previously-split version
+                # left state inconsistent if revert_pending_choice raised.)
+                workflow = ChunkWorkflow(dbname=dbname)
                 parent_chunk_id: Optional[int] = None
+                reverted_parent = False
                 with get_connection(dbname) as conn:
                     with conn.cursor() as cur:
                         cur.execute(
@@ -210,15 +214,13 @@ async def slot_undo_endpoint(slot: int):
                             (narrative.session_id,),
                         )
 
-                # Reset the parent chunk's choice fields. Skipped for bootstrap
-                # (parent_chunk_id == 0): chunk 1 has no preceding choice to revert.
-                reverted_parent = False
-                if parent_chunk_id and parent_chunk_id > 0:
-                    from nexus.api.chunk_workflow import ChunkWorkflow
-
-                    workflow = ChunkWorkflow(dbname=dbname)
-                    workflow.revert_pending_choice(parent_chunk_id)
-                    reverted_parent = True
+                        # Reset the parent chunk's choice fields within the
+                        # same cursor/transaction. Skipped for bootstrap
+                        # (parent_chunk_id == 0): chunk 1 has no preceding
+                        # choice to revert.
+                        if parent_chunk_id and parent_chunk_id > 0:
+                            workflow.revert_pending_choice(cur, parent_chunk_id)
+                            reverted_parent = True
 
                 message = (
                     f"Deleted pending content and reverted choice on chunk {parent_chunk_id}"
