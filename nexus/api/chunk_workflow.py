@@ -13,9 +13,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import threading
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 import subprocess
 import re
@@ -32,6 +33,53 @@ VALID_DATABASES = {"save_01", "save_02", "save_03", "save_04", "save_05"}
 
 # Security: Valid model name pattern (alphanumeric, hyphens, dots, underscores only)
 VALID_MODEL_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
+
+EmbeddingScheduler = Callable[[int], Optional[str]]
+
+# BackgroundTasks are intentionally in-process for issue #206's minimum viable
+# async handoff. This guard prevents duplicate queueing inside one API worker;
+# a durable cross-process queue remains follow-up scope.
+_queued_embedding_jobs: set[tuple[str, int]] = set()
+_queued_embedding_jobs_lock = threading.Lock()
+
+
+def build_embedding_scheduler(
+    workflow: "ChunkWorkflow", add_task: Callable[..., Any]
+) -> EmbeddingScheduler:
+    """Create a scheduler that queues embedding generation in a background runner."""
+
+    def schedule_embedding(chunk_id: int) -> Optional[str]:
+        job_key = (workflow.dbname, chunk_id)
+        with _queued_embedding_jobs_lock:
+            if job_key in _queued_embedding_jobs:
+                logger.info(
+                    "Embedding generation already queued or running for chunk %s in %s",
+                    chunk_id,
+                    workflow.dbname,
+                )
+                return None
+            _queued_embedding_jobs.add(job_key)
+
+        job_id = workflow.create_embedding_job_id(chunk_id)
+        try:
+            add_task(_run_scheduled_embedding, workflow, chunk_id, job_id, job_key)
+        except Exception:
+            with _queued_embedding_jobs_lock:
+                _queued_embedding_jobs.discard(job_key)
+            raise
+        return job_id
+
+    return schedule_embedding
+
+
+def _run_scheduled_embedding(
+    workflow: "ChunkWorkflow", chunk_id: int, job_id: str, job_key: tuple[str, int]
+) -> None:
+    try:
+        workflow.trigger_embedding_generation(chunk_id, job_id)
+    finally:
+        with _queued_embedding_jobs_lock:
+            _queued_embedding_jobs.discard(job_key)
 
 
 class ChunkState(str, Enum):
@@ -172,13 +220,19 @@ class ChunkWorkflow:
                     )
                     logger.info("Added regeneration_count column to narrative_chunks")
 
-    def accept_chunk(self, chunk_id: int, session_id: str) -> ChunkAcceptResponse:
+    def accept_chunk(
+        self,
+        chunk_id: int,
+        session_id: str,
+        embedding_scheduler: Optional[EmbeddingScheduler] = None,
+    ) -> ChunkAcceptResponse:
         """
         Accept a Storyteller chunk, finalizing it and triggering embedding for the previous chunk.
 
         Args:
             chunk_id: The chunk to accept
             session_id: Session context
+            embedding_scheduler: Optional scheduler for async embedding generation
 
         Returns:
             Response with finalization status and embedding job info
@@ -239,22 +293,14 @@ class ChunkWorkflow:
                     # authoritative "not yet ironman" predicate; the old
                     # state=='embedded' value was a redundant proxy for this
                     # same signal and has been retired.
-                    #
-                    # CONCURRENCY PRE-CONDITION (sync-only): this gate is safe
-                    # today because trigger_embedding_generation blocks (single
-                    # thread, single subprocess at a time). When issue #206
-                    # async-ifies the embedding subprocess, this predicate ALONE
-                    # is no longer sufficient — two concurrent accept_chunk
-                    # calls would both see embedded_at IS NULL during the
-                    # subprocess window and launch duplicate workers. The #206
-                    # implementer MUST add a separate in-flight guard
-                    # (advisory lock, in-memory flag, or queued-job dedup)
-                    # before relaxing this site. The prior code's eager
-                    # state='embedded' write served as a de-facto optimistic
-                    # lock; that crutch is gone.
                     if prev_embedded_at is None:
-                        embedding_job_id = self.trigger_embedding_generation(prev_id)
-                        embedding_triggered = True
+                        if embedding_scheduler:
+                            embedding_job_id = embedding_scheduler(prev_id)
+                        else:
+                            embedding_job_id = self.trigger_embedding_generation(
+                                prev_id
+                            )
+                        embedding_triggered = embedding_job_id is not None
 
                 logger.info(
                     f"Accepted chunk {chunk_id}, embedding triggered: {embedding_triggered}"
@@ -489,27 +535,22 @@ class ChunkWorkflow:
             f"(raw_text recomputed from storyteller_text only)"
         )
 
-    def trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
-        """
-        Generate embeddings for a locked chunk.
+    def create_embedding_job_id(self, chunk_id: int) -> str:
+        """Create a client-visible identifier for an embedding generation job."""
+
+        return f"embed_{chunk_id}_{datetime.now(timezone.utc).timestamp()}"
+
+    def trigger_embedding_generation(
+        self, chunk_id: int, job_id: Optional[str] = None
+    ) -> Optional[str]:
+        """Trigger embedding generation for a finalized chunk.
 
         Args:
             chunk_id: The chunk to generate embeddings for
+            job_id: Optional preassigned job identifier
 
         Returns:
-            Job ID if generation succeeds, None otherwise
-        """
-        return self._trigger_embedding_generation(chunk_id)
-
-    def _trigger_embedding_generation(self, chunk_id: int) -> Optional[str]:
-        """
-        Trigger embedding generation for a finalized chunk.
-
-        Args:
-            chunk_id: The chunk to generate embeddings for
-
-        Returns:
-            Job ID if async, None if synchronous
+            Job ID string on success, None on failure.
         """
         try:
             # Load settings to get embedding configuration
@@ -550,8 +591,8 @@ class ChunkWorkflow:
 
             # Security: dbname already validated in __init__
 
-            # Run embedding generation script
-            # TODO: Make async with FastAPI BackgroundTasks or Celery to avoid blocking
+            # Run embedding generation script. API routes should schedule this method
+            # through FastAPI BackgroundTasks so accept calls can return immediately.
             result = subprocess.run(
                 [
                     sys.executable,
@@ -583,15 +624,18 @@ class ChunkWorkflow:
                         )
 
                 logger.info(f"Successfully generated embeddings for chunk {chunk_id}")
-                return f"embed_{chunk_id}_{datetime.now().timestamp()}"
+                return job_id or self.create_embedding_job_id(chunk_id)
             else:
                 logger.error(
-                    f"Embedding generation failed for chunk {chunk_id}: {result.stderr}"
+                    "Embedding generation failed for chunk %s; "
+                    "embedding_generated_at remains NULL for retry. stderr: %s",
+                    chunk_id,
+                    result.stderr,
                 )
                 return None
 
         except Exception as e:
-            logger.error(f"Error triggering embedding generation: {e}")
+            logger.exception("Error triggering embedding generation: %s", e)
             return None
 
     def get_chunk_states(

@@ -41,6 +41,7 @@ from nexus.api.chunk_workflow import (
     ChunkAcceptRequest,
     ChunkRejectRequest,
     EditPreviousRequest,
+    build_embedding_scheduler,
     default_workflow,
 )
 from nexus.api.conversations import ConversationsClient
@@ -1013,10 +1014,18 @@ async def clear_incubator(slot: Optional[int] = None):
 
 # Chunk Workflow Endpoints
 @app.post("/api/chunks/accept")
-async def accept_chunk_endpoint(request: ChunkAcceptRequest):
+async def accept_chunk_endpoint(
+    request: ChunkAcceptRequest, background_tasks: BackgroundTasks
+):
     """Accept a chunk and trigger embedding generation"""
     try:
-        return default_workflow.accept_chunk(request.chunk_id, request.session_id)
+        return default_workflow.accept_chunk(
+            request.chunk_id,
+            request.session_id,
+            embedding_scheduler=build_embedding_scheduler(
+                default_workflow, background_tasks.add_task
+            ),
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
