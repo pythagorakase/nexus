@@ -239,6 +239,19 @@ class ChunkWorkflow:
                     # authoritative "not yet ironman" predicate; the old
                     # state=='embedded' value was a redundant proxy for this
                     # same signal and has been retired.
+                    #
+                    # CONCURRENCY PRE-CONDITION (sync-only): this gate is safe
+                    # today because trigger_embedding_generation blocks (single
+                    # thread, single subprocess at a time). When issue #206
+                    # async-ifies the embedding subprocess, this predicate ALONE
+                    # is no longer sufficient — two concurrent accept_chunk
+                    # calls would both see embedded_at IS NULL during the
+                    # subprocess window and launch duplicate workers. The #206
+                    # implementer MUST add a separate in-flight guard
+                    # (advisory lock, in-memory flag, or queued-job dedup)
+                    # before relaxing this site. The prior code's eager
+                    # state='embedded' write served as a de-facto optimistic
+                    # lock; that crutch is gone.
                     if prev_embedded_at is None:
                         embedding_job_id = self.trigger_embedding_generation(prev_id)
                         embedding_triggered = True
