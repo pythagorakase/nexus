@@ -170,6 +170,16 @@ class OrreryTickProposal:
         )
 
 
+def _should_replace_trust_magnitude(current: Optional[int], candidate: int) -> bool:
+    """Choose a stable representative if a read surface emits duplicate pairs."""
+
+    if current is None:
+        return True
+    if abs(candidate) != abs(current):
+        return abs(candidate) > abs(current)
+    return candidate < current
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -237,11 +247,15 @@ def hydrate_world_state(
     }
 
     relationship_types: dict[tuple[int, int], set[str]] = {}
+    trust: dict[tuple[int, int], int] = {}
     for row in session.execute(
         text(
             """
             /* orrery:relationship_types */
-            SELECT source_entity_id, target_entity_id, relationship_type
+            SELECT source_entity_id,
+                   target_entity_id,
+                   relationship_type,
+                   valence_magnitude
             FROM entity_relationships_v
             WHERE relationship_scope = 'character'
               AND source_entity_id IS NOT NULL
@@ -250,9 +264,12 @@ def hydrate_world_state(
             """
         )
     ).mappings():
-        relationship_types.setdefault(
-            (row["source_entity_id"], row["target_entity_id"]), set()
-        ).add(row["relationship_type"])
+        key = (row["source_entity_id"], row["target_entity_id"])
+        relationship_types.setdefault(key, set()).add(row["relationship_type"])
+        if row.get("valence_magnitude") is not None:
+            valence_magnitude = int(row["valence_magnitude"])
+            if _should_replace_trust_magnitude(trust.get(key), valence_magnitude):
+                trust[key] = valence_magnitude
 
     faction_memberships: dict[int, set[int]] = {}
     for row in session.execute(
@@ -288,8 +305,9 @@ def hydrate_world_state(
         },
         locations=locations,
         activities=activities,
-        # TODO: Hydrate trust and orbit_distance when the resolver has an
-        # authoritative source. Current built-in packages do not use them.
+        trust=trust,
+        # TODO: Hydrate orbit_distance when the resolver has an authoritative
+        # source. Relationship trust is hydrated from entity_relationships_v.
         relationship_types={
             key: frozenset(values) for key, values in relationship_types.items()
         },
@@ -606,11 +624,11 @@ def resolve_dry_run(
         for resolution in scene_pressure_results
     )
 
-    unique_actors = {bindings[Slot.ACTOR] for bindings in actor_bindings} | {
-        bindings[Slot.ACTOR] for bindings in actor_target_bindings
-    } | {
-        bindings[Slot.ACTOR] for bindings in present_target_bindings
-    }
+    unique_actors = (
+        {bindings[Slot.ACTOR] for bindings in actor_bindings}
+        | {bindings[Slot.ACTOR] for bindings in actor_target_bindings}
+        | {bindings[Slot.ACTOR] for bindings in present_target_bindings}
+    )
 
     return OrreryTickProposal(
         anchor_chunk_id=anchor_chunk_id,

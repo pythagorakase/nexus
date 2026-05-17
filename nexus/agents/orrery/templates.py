@@ -250,12 +250,9 @@ MAINTAIN_COVER = Template(
 #   * present_target_policy=STORYTELLER_PRESSURE allows a present TARGET only
 #     as prompt-only scene pressure. Present ACTORs are still excluded, and
 #     pressure drafts never commit state deltas or world events directly.
-#   * Trust hydration is un-implemented (resolver.py:177 TODO). Any branch
-#     gated on trust_at_least(N) with N > 0 or trust_below(N) with N < 0
-#     is currently unreachable — WorldState.trust defaults to 0 for every
-#     pair. The affected branches are flagged with TODO comments below;
-#     they remain in the catalog because they're the intended firing
-#     paths once trust hydration lands.
+#   * Trust hydration reads entity_relationships_v.valence_magnitude. Keep
+#     package thresholds on the -5..+5 enum-derived integer scale unless a
+#     future package needs a separate normalized float at model-input time.
 # ----------------------------------------------------------------------------
 
 
@@ -273,9 +270,6 @@ EXTRACT_VENGEANCE = Template(
         OR(
             has_symmetric_relationship_of_type("enemy"),
             has_symmetric_relationship_of_type("rival"),
-            # TODO: trust_below(-2) is unreachable until resolver.py:177's
-            # trust hydration TODO is resolved. The OR keeps the predicate
-            # documented; the enemy/rival arms carry the gate today.
             trust_below(-2),
         ),
         since_last_event_at_least("retaliation_attempted", minimum_ticks=8),
@@ -511,9 +505,6 @@ CULTIVATE_INFORMANT = Template(
     branches=(
         Branch(
             label="Press for material intel when trust is sufficient",
-            # TODO: trust_at_least(2) is unreachable until resolver.py:177's
-            # trust hydration TODO is resolved. WorldState.trust defaults
-            # to 0, so this branch routes to the ALWAYS fallback today.
             conditions=AND(
                 co_located(Slot.ACTOR, Slot.TARGET),
                 trust_at_least(2),

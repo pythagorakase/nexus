@@ -8,14 +8,18 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
     compose_actor_target_bindings,
+    hydrate_world_state,
     resolve_dry_run,
 )
 from nexus.agents.orrery.substrate import (
     ALWAYS,
+    AND,
     Branch,
     PresentTargetPolicy,
     Slot,
     Template,
+    trust_at_least,
+    trust_below,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
@@ -102,6 +106,7 @@ class FakeSession:
         if "/* orrery:character_activities */" in sql:
             return FakeResult(self.activity_rows)
         if "/* orrery:relationship_types */" in sql:
+            assert "valence_magnitude" in sql
             return FakeResult(self.relationship_rows)
         if "/* orrery:faction_memberships */" in sql:
             return FakeResult(self.faction_rows)
@@ -283,6 +288,132 @@ def test_resolve_dry_run_exercises_priority_packages(
     assert proposal.resolutions[0].branch_label == branch_label
 
 
+def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
+    """Orrery trust reads the SQL-derived relationship valence magnitude."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "comrade",
+                    "valence_magnitude": 3,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "rival",
+                    "valence_magnitude": -3,
+                },
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.trust[(1, 2)] == 3
+    assert state.trust[(2, 1)] == -3
+    assert state.relationship_types[(1, 2)] == frozenset({"comrade"})
+    assert state.relationship_types[(2, 1)] == frozenset({"rival"})
+
+
+def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -> None:
+    """Defensively collapse duplicate pair rows without depending on row order."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "comrade",
+                    "valence_magnitude": 3,
+                },
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "enemy",
+                    "valence_magnitude": -4,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "ally",
+                    "valence_magnitude": 3,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "rival",
+                    "valence_magnitude": -3,
+                },
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.trust[(1, 2)] == -4
+    assert state.trust[(2, 1)] == -3
+    assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
+    assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
+@pytest.mark.parametrize(
+    ("valence_magnitude", "conditions", "expected_label"),
+    [
+        (3, trust_at_least(2), "Trust above threshold"),
+        (-3, trust_below(-2), "Trust below threshold"),
+    ],
+)
+def test_resolve_dry_run_trust_predicates_use_hydrated_valence(
+    valence_magnitude: int,
+    conditions,
+    expected_label: str,
+) -> None:
+    """Trust-gated packages can fire from entity_relationships_v magnitudes."""
+
+    template = Template(
+        id="trust_gate_test",
+        priority=10,
+        blurb="test trust hydration",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label=expected_label,
+                conditions=AND(conditions),
+                narrative_stub="{actor} acts on their trust toward {target}.",
+            ),
+        ),
+    )
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "comrade",
+                    "valence_magnitude": valence_magnitude,
+                }
+            ],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        [template],
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].branch_label == expected_label
+    assert proposal.resolutions[0].bindings == {"actor": 1, "target": 2}
+
+
 @pytest.mark.asyncio
 async def test_resolve_orrery_skips_when_disabled() -> None:
     """The LORE phase is inert unless Orrery is explicitly enabled."""
@@ -427,7 +558,9 @@ def test_compose_actor_target_bindings_excludes_anchor_present_targets() -> None
     assert pairs == {(1, 3)}
 
 
-def test_compose_actor_target_bindings_can_select_present_targets_for_pressure() -> None:
+def test_compose_actor_target_bindings_can_select_present_targets_for_pressure() -> (
+    None
+):
     """Scene-pressure binding allows present targets but still excludes actors."""
 
     session = FakeSession(
@@ -494,7 +627,9 @@ def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
     assert "state_delta" not in pressure.to_dict()
 
 
-def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets() -> None:
+def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets() -> (
+    None
+):
     """Default multi-slot templates cannot pressure an on-screen target."""
 
     default_template = Template(
