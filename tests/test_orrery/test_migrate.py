@@ -151,3 +151,51 @@ def test_slot2_semantic_vocab_documents_new_faction_categories() -> None:
         "power_posture",
         "hidden_agenda_class",
     } <= documented
+
+
+def test_interpersonal_need_migration_extends_need_vocab() -> None:
+    """Migration 032 seeds the interpersonal need vocabulary."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "032_orrery_interpersonal_needs.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert migration.NEED_TYPES == ("socialize", "intimacy")
+    assert {
+        "under_socialized_1_mild",
+        "under_socialized_4_critical",
+        "intimacy_starved_1_mild",
+        "intimacy_starved_4_critical",
+        "closeted",
+        "intimate_services_contact",
+        "libido_absent",
+    } <= {tag for tag, _category, _description in migration.SEVERITY_TAGS}
+    assert {
+        "socialized",
+        "socialized_alone",
+        "intimacy_fulfilled",
+        "intimacy_pursued",
+        "intimacy_partial",
+        "intimacy_deferred",
+    } <= {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }
+
+
+def test_interpersonal_need_migration_uses_safe_enum_extension_pattern() -> None:
+    """Migration 032 keeps enum extension compatible with earlier migrations."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "032_orrery_interpersonal_needs.py"
+    ).read_text()
+
+    assert "def _enum_value_exists" in migration_source
+    assert "ALTER TYPE character_need_type ADD VALUE {}" in migration_source
+    assert "sql.Literal(need_type)" in migration_source
+    assert "ADD VALUE IF NOT EXISTS" not in migration_source

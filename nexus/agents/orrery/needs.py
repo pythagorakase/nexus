@@ -10,11 +10,13 @@ from typing import Any, Mapping, Optional
 
 
 class NeedType(str, Enum):
-    """Basic physiological needs tracked by the Sunhelm substrate."""
+    """Need types tracked by the Orrery timestamp-plus-debt substrate."""
 
     SLEEP = "sleep"
     HUNGER = "hunger"
     THIRST = "thirst"
+    SOCIALIZE = "socialize"
+    INTIMACY = "intimacy"
 
 
 NEED_TYPES: tuple[str, ...] = tuple(item.value for item in NeedType)
@@ -22,6 +24,8 @@ NEED_SEVERITY_PREFIX: Mapping[str, str] = {
     NeedType.SLEEP.value: "sleep_deprived",
     NeedType.HUNGER.value: "hungry",
     NeedType.THIRST.value: "thirsty",
+    NeedType.SOCIALIZE.value: "under_socialized",
+    NeedType.INTIMACY.value: "intimacy_starved",
 }
 NEED_SEVERITY_LEVELS: tuple[tuple[int, str], ...] = (
     (4, "critical"),
@@ -33,6 +37,8 @@ DEFAULT_NEED_ACCRUAL_RATES: Mapping[str, float] = {
     NeedType.SLEEP.value: 1.0,
     NeedType.HUNGER.value: 1.0,
     NeedType.THIRST.value: 1.0,
+    NeedType.SOCIALIZE.value: 1.0,
+    NeedType.INTIMACY.value: 1.0,
 }
 DEFAULT_NEED_SEVERITY_THRESHOLDS: Mapping[str, Mapping[str, float]] = {
     NeedType.SLEEP.value: {
@@ -53,11 +59,25 @@ DEFAULT_NEED_SEVERITY_THRESHOLDS: Mapping[str, Mapping[str, float]] = {
         "severe": 16.0,
         "critical": 24.0,
     },
+    NeedType.SOCIALIZE.value: {
+        "mild": 24.0,
+        "moderate": 72.0,
+        "severe": 168.0,
+        "critical": 336.0,
+    },
+    NeedType.INTIMACY.value: {
+        "mild": 72.0,
+        "moderate": 168.0,
+        "severe": 336.0,
+        "critical": 720.0,
+    },
 }
 DEFAULT_NEED_PRIORITIES: Mapping[str, int] = {
     NeedType.SLEEP.value: 25,
     NeedType.THIRST.value: 24,
     NeedType.HUNGER.value: 22,
+    NeedType.SOCIALIZE.value: 18,
+    NeedType.INTIMACY.value: 16,
 }
 
 

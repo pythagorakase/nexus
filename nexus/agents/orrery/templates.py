@@ -13,8 +13,10 @@ from nexus.agents.orrery.substrate import (
     Template,
     co_located,
     count_co_located,
+    has_any_intimacy_suppressor,
     has_any_tag,
     has_ephemeral,
+    has_established_partner_co_located,
     has_need_debt_at_or_above,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
@@ -1926,6 +1928,298 @@ EAT = Template(
 )
 
 
+SOCIALIZE = Template(
+    id="socialize",
+    priority=18,
+    blurb="The need for the company of others, on whatever terms a character can have it.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_need_debt_at_or_above("socialize", 24),
+        since_last_event_at_least("socialized", minimum_ticks=4),
+        since_last_event_at_least("socialized_alone", minimum_ticks=4),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("wounded")),
+    ),
+    branches=(
+        Branch(
+            label="Seek company after extended isolation",
+            conditions=has_need_debt_at_or_above("socialize", 168),
+            narrative_stub=(
+                "{actor} feels the particular pressure that comes from going "
+                "too long without other people in their life, and moves "
+                "toward somewhere there will be voices, even if those voices "
+                "are not for them."
+            ),
+            state_delta={
+                "character.current_activity": "seeking company after isolation",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "sought_company_after_isolation",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.54,
+        ),
+        Branch(
+            label="Engage with company already present",
+            conditions=count_co_located(1),
+            narrative_stub=(
+                "{actor} spends real attention on the people around them — "
+                "not transactional attention, the other kind — for long "
+                "enough that the social need is briefly met without anyone "
+                "naming it as such."
+            ),
+            state_delta={
+                "character.current_activity": "engaging with present company",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "present_company",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.22,
+        ),
+        Branch(
+            label="Go where people are",
+            conditions=OR(
+                in_location_class("tavern"),
+                in_location_class("teahouse"),
+                in_location_class("market"),
+                in_location_class("town_square"),
+                in_location_class("public_space"),
+                in_location_class("general_social_venue"),
+            ),
+            narrative_stub=(
+                "{actor} goes to one of the places built around the fact "
+                "that people gather there, and stays long enough to become "
+                "part of the room's ordinary texture."
+            ),
+            state_delta={
+                "character.current_activity": "passing time in a populated place",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "public_company",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.20,
+        ),
+        Branch(
+            label="Reach out to a contact for no urgent reason",
+            conditions=has_tag("contacts_available"),
+            narrative_stub=(
+                "{actor} thinks of someone they have not spoken with in too "
+                "long and reaches out for no urgent reason, which is its "
+                "own kind of reason."
+            ),
+            state_delta={
+                "character.current_activity": "reconnecting with a contact",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "remote_contact",
+                    "discharge_debt": 72,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.24,
+        ),
+        Branch(
+            label="Practice parasocial company",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} spends an hour with the voice of a stranger — a "
+                "book, a serial, a recording — which is not the same as "
+                "company but is enough like company to take the worst edge "
+                "off."
+            ),
+            state_delta={
+                "character.current_activity": "spending time with a stranger's voice",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "parasocial",
+                    "discharge_debt": 12,
+                },
+            },
+            event_type="socialized_alone",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.16,
+        ),
+    ),
+)
+
+
+INTIMACY = Template(
+    id="intimacy",
+    priority=16,
+    blurb="The body asks for the kind of connection that is not conversation.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_need_debt_at_or_above("intimacy", 72),
+        NOT(has_any_intimacy_suppressor()),
+        since_last_event_at_least("intimacy_fulfilled", minimum_ticks=8),
+        since_last_event_at_least("intimacy_pursued", minimum_ticks=8),
+        since_last_event_at_least("intimacy_partial", minimum_ticks=8),
+        since_last_event_at_least("intimacy_deferred", minimum_ticks=8),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("wounded")),
+        NOT(has_ephemeral("bereaved")),
+    ),
+    branches=(
+        Branch(
+            label="Spend private time with an established partner",
+            conditions=AND(
+                in_location_class("home"),
+                has_established_partner_co_located(),
+            ),
+            narrative_stub=(
+                "{actor} closes the door on the day and lets private time "
+                "with an established partner answer a need the public world "
+                "has no claim on."
+            ),
+            state_delta={
+                "character.current_activity": "spending private time with partner",
+                "need.fulfill": {
+                    "type": "intimacy",
+                    "quality": "established_partner",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="intimacy_fulfilled",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.32,
+        ),
+        Branch(
+            label="Visit a place where compatible company gathers",
+            conditions=AND(
+                in_location_class("intimate_social_venue"),
+                has_need_debt_at_or_above("intimacy", 168),
+                NOT(has_tag("partnered_exclusively")),
+            ),
+            narrative_stub=(
+                "{actor} goes to the kind of place where someone like them "
+                "might meet someone they would want to meet, alert to the "
+                "possibility without presuming the outcome."
+            ),
+            state_delta={
+                "character.current_activity": "seeking compatible company",
+                "need.fulfill": {
+                    "type": "intimacy",
+                    "quality": "pursued_possibility",
+                    "discharge_debt": 24,
+                },
+            },
+            event_type="intimacy_pursued",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.48,
+        ),
+        Branch(
+            label="Engage contracted intimate company",
+            conditions=AND(
+                in_location_class("intimate_services_establishment"),
+                has_tag("intimate_services_contact"),
+                NOT(has_tag("partnered_exclusively")),
+                NOT(
+                    has_any_tag(
+                        "vow_of_celibacy",
+                        "religiously_abstinent",
+                        "ethically_opposed_to_contracted_intimacy",
+                    )
+                ),
+            ),
+            narrative_stub=(
+                "{actor} arranges what can be arranged, in one of the places "
+                "where the transaction is understood by everyone involved "
+                "and made ordinary by that clarity."
+            ),
+            state_delta={
+                "character.current_activity": "engaging contracted intimate company",
+                "need.fulfill": {
+                    "type": "intimacy",
+                    "quality": "contracted_companion",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="intimacy_fulfilled",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.28,
+        ),
+        Branch(
+            label="Attend to the need in private",
+            conditions=AND(
+                OR(in_location_class("home"), in_location_class("private_quarters")),
+                NOT(count_co_located(1)),
+            ),
+            narrative_stub=(
+                "{actor} attends to the body's quieter demands in private — "
+                "an unremarkable hour the rest of the world has no business "
+                "knowing about."
+            ),
+            state_delta={
+                "character.current_activity": "private personal time",
+                "need.fulfill": {
+                    "type": "intimacy",
+                    "quality": "private_solo",
+                    "discharge_debt": 48,
+                },
+            },
+            event_type="intimacy_partial",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.06,
+        ),
+        Branch(
+            label="Let the want stay where it is",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} does not pursue what the body is asking for — the "
+                "wrong company, the wrong hour, the wrong life — and the "
+                "want stays where it has been for a while now."
+            ),
+            state_delta={
+                "character.current_activity": "carrying an unaddressed want",
+            },
+            event_type="intimacy_deferred",
+            changed_fields=("character.current_activity",),
+            magnitude=0.10,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -1944,5 +2238,7 @@ BUILTIN_TEMPLATES = (
     SLEEP,
     DRINK,
     EAT,
+    SOCIALIZE,
+    INTIMACY,
     MAINTAIN_COVER,
 )

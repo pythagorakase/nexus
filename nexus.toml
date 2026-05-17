@@ -177,8 +177,8 @@ candidate_pool_multiplier = 4
 provider = "local"
 
 [orrery.sunhelm]
-accrual_rates = { sleep = 1.0, hunger = 1.0, thirst = 1.0 }
-priorities = { sleep = 25, thirst = 24, hunger = 22 }
+accrual_rates = { sleep = 1.0, hunger = 1.0, thirst = 1.0, socialize = 1.0, intimacy = 1.0 }
+priorities = { sleep = 25, thirst = 24, hunger = 22, socialize = 18, intimacy = 16 }
 
 [orrery.sunhelm.severity_thresholds.sleep]
 mild = 16.0
@@ -197,6 +197,18 @@ mild = 4.0
 moderate = 8.0
 severe = 16.0
 critical = 24.0
+
+[orrery.sunhelm.severity_thresholds.socialize]
+mild = 24.0
+moderate = 72.0
+severe = 168.0
+critical = 336.0
+
+[orrery.sunhelm.severity_thresholds.intimacy]
+mild = 72.0
+moderate = 168.0
+severe = 336.0
+critical = 720.0
 
 [orrery.sunhelm.pressure]
 min_severity_level = 2

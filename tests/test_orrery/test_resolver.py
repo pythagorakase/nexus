@@ -7,6 +7,7 @@ import pytest
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
+    _need_pressure_stub,
     compose_actor_target_bindings,
     hydrate_world_state,
     resolve_dry_run,
@@ -180,6 +181,9 @@ def test_resolve_dry_run_returns_inspectable_proposal() -> None:
     assert proposal.actor_count == 1
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "maintain_cover"
+    assert not any(
+        resolution.template_id == "intimacy" for resolution in proposal.resolutions
+    )
     assert proposal.resolutions[0].bindings == {"actor": 1}
 
 
@@ -322,6 +326,144 @@ def test_resolve_dry_run_fires_sunhelm_need_template() -> None:
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "sleep"
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "sleep"
+
+
+def test_resolve_dry_run_fires_socialize_need_template() -> None:
+    """Interpersonal need debt can resolve through SOCIALIZE."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "socialize",
+                    "debt_score": 200,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "socialize"
+    assert proposal.resolutions[0].branch_label == (
+        "Seek company after extended isolation"
+    )
+    assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "socialize"
+
+
+def test_resolve_dry_run_fires_intimacy_need_template_without_pairing() -> None:
+    """INTIMACY records pressure relief without selecting a partner target."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "intimacy"
+    assert proposal.resolutions[0].branch_label == "Attend to the need in private"
+    assert proposal.resolutions[0].bindings == {"actor": 1}
+    assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "intimacy"
+
+
+def test_intimacy_partner_branch_requires_partner_relationship() -> None:
+    """Established-partner intimacy uses relationship-aware co-location."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_rows=[
+                {"entity_id": 1, "current_location": 10},
+                {"entity_id": 2, "current_location": 10},
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "romantic",
+                    "valence_magnitude": 3,
+                }
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "intimacy"
+    assert proposal.resolutions[0].branch_label == (
+        "Spend private time with an established partner"
+    )
+
+
+def test_intimacy_suppressor_blocks_intimacy_template() -> None:
+    """Named suppressors close the INTIMACY gate without deleting need debt."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {
+                    "entity_id": 1,
+                    "tag": "closeted",
+                    "is_ephemeral": False,
+                }
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "maintain_cover"
 
 
 def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
@@ -738,6 +880,89 @@ def test_resolve_dry_run_routes_present_need_debt_to_scene_pressure() -> None:
     assert pressure.bindings == {"actor": 1, "resource": "sleep"}
     assert "Mara is carrying moderate sleep debt" in pressure.prompt_text
     assert "Orrery does not decide what Mara does" in pressure.prompt_text
+
+
+def test_need_pressure_stub_rejects_unhandled_need_types() -> None:
+    """Need prompt-pressure copy must not silently reuse intimacy wording."""
+
+    with pytest.raises(ValueError, match="Unhandled Orrery need pressure type"):
+        _need_pressure_stub("wanderlust", severity_name="moderate", debt_score=1)
+
+
+def test_resolve_dry_run_routes_present_intimacy_debt_to_scene_pressure() -> None:
+    """Unsuppressed on-screen intimacy pressure can reach the Storyteller."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            tag_rows=[
+                {"entity_id": 1, "tag": "libido_moderate", "is_ephemeral": False},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 168,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 1
+    pressure = proposal.scene_pressures[0]
+    assert pressure.template_id == "intimacy_need_pressure"
+    assert pressure.bindings == {"actor": 1, "resource": "intimacy"}
+    assert "Mara is carrying moderate intimacy debt" in pressure.prompt_text
+    assert "Orrery does not decide what Mara does" in pressure.prompt_text
+
+
+@pytest.mark.parametrize(
+    ("tag", "is_ephemeral"),
+    [
+        ("closeted", False),
+        ("libido_absent", False),
+        ("focus_committed", True),
+    ],
+)
+def test_resolve_dry_run_suppresses_present_intimacy_pressure(
+    tag: str,
+    is_ephemeral: bool,
+) -> None:
+    """Intimacy suppressors keep prompt pressure out of active scenes."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            tag_rows=[
+                {"entity_id": 1, "tag": tag, "is_ephemeral": is_ephemeral},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 720,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 0
 
 
 def test_resolve_dry_run_uses_configured_present_need_pressure_tuning() -> None:

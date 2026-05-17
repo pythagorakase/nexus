@@ -303,11 +303,17 @@ class OrreryPromoteSettings(BaseModel):
 
 
 def _default_need_accrual_rates() -> Dict[str, float]:
-    return {"sleep": 1.0, "hunger": 1.0, "thirst": 1.0}
+    return {
+        "sleep": 1.0,
+        "hunger": 1.0,
+        "thirst": 1.0,
+        "socialize": 1.0,
+        "intimacy": 1.0,
+    }
 
 
 def _default_need_priorities() -> Dict[str, int]:
-    return {"sleep": 25, "thirst": 24, "hunger": 22}
+    return {"sleep": 25, "thirst": 24, "hunger": 22, "socialize": 18, "intimacy": 16}
 
 
 def _default_need_severity_thresholds() -> Dict[str, "OrreryNeedThresholdSettings"]:
@@ -329,6 +335,18 @@ def _default_need_severity_thresholds() -> Dict[str, "OrreryNeedThresholdSetting
             moderate=8.0,
             severe=16.0,
             critical=24.0,
+        ),
+        "socialize": OrreryNeedThresholdSettings(
+            mild=24.0,
+            moderate=72.0,
+            severe=168.0,
+            critical=336.0,
+        ),
+        "intimacy": OrreryNeedThresholdSettings(
+            mild=72.0,
+            moderate=168.0,
+            severe=336.0,
+            critical=720.0,
         ),
     }
 
@@ -380,7 +398,7 @@ class OrrerySunhelmSettings(BaseModel):
 
     @model_validator(mode="after")
     def _validate_need_keys(self) -> "OrrerySunhelmSettings":
-        required = {"sleep", "hunger", "thirst"}
+        required = {"sleep", "hunger", "thirst", "socialize", "intimacy"}
         for field_name, mapping in (
             ("accrual_rates", self.accrual_rates),
             ("severity_thresholds", self.severity_thresholds),

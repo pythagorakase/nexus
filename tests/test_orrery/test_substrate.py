@@ -17,6 +17,8 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     count_co_located,
     evaluate_stack,
+    has_any_intimacy_suppressor,
+    has_established_partner_co_located,
     has_need_debt_at_or_above,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
@@ -292,6 +294,28 @@ def test_count_co_located_condition_filters_by_tag() -> None:
     assert not count_co_located(2, with_tag="pursuer")(state, {Slot.ACTOR: 1})
 
 
+def test_established_partner_co_location_uses_relationships() -> None:
+    """Partner co-location does not treat arbitrary co-presence as intimacy."""
+
+    predicate = has_established_partner_co_located()
+    partnered_state = WorldState(
+        relationship_types={(1, 2): frozenset({"romantic"})},
+        locations={1: 10, 2: 10, 3: 10},
+    )
+    bystander_state = WorldState(
+        relationship_types={(1, 2): frozenset({"romantic"})},
+        locations={1: 10, 2: 11, 3: 10},
+    )
+    reverse_partnered_state = WorldState(
+        relationship_types={(2, 1): frozenset({"romantic"})},
+        locations={1: 10, 2: 10},
+    )
+
+    assert predicate(partnered_state, {Slot.ACTOR: 1})
+    assert predicate(reverse_partnered_state, {Slot.ACTOR: 1})
+    assert not predicate(bystander_state, {Slot.ACTOR: 1})
+
+
 def test_need_debt_condition_reads_world_state_scores() -> None:
     """Sunhelm gates read effective need debt from hydrated world state."""
 
@@ -336,6 +360,29 @@ def test_severity_tag_threshold_parses_level_prefix() -> None:
 
     assert has_severity_tag_at_or_above("sleep_deprived", 2)(state, {Slot.ACTOR: 1})
     assert not has_severity_tag_at_or_above("sleep_deprived", 4)(state, {Slot.ACTOR: 1})
+
+
+def test_intimacy_suppressor_reads_durable_and_ephemeral_tags() -> None:
+    """Intimacy gates can honor named suppressors without generic tags."""
+
+    predicate = has_any_intimacy_suppressor()
+
+    assert predicate(
+        WorldState(tags={1: frozenset({"closeted"})}),
+        {Slot.ACTOR: 1},
+    )
+    assert predicate(
+        WorldState(ephemeral_tags={1: frozenset({"focus_committed"})}),
+        {Slot.ACTOR: 1},
+    )
+    assert predicate(
+        WorldState(tags={1: frozenset({"libido_absent"})}),
+        {Slot.ACTOR: 1},
+    )
+    assert not predicate(
+        WorldState(tags={1: frozenset({"libido_moderate"})}),
+        {Slot.ACTOR: 1},
+    )
 
 
 def test_recent_event_can_filter_by_changed_fields() -> None:
