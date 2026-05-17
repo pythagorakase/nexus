@@ -95,6 +95,12 @@ PR #222 adds deterministic review orchestration so newly opened PRs can schedule
 
 PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage. `INTIMACY` remains single-slot and substrate-only: it can notice established-partner co-location, private conditions, venues, suppressors, and deferral, but it does not autonomously pair characters or decide scene-level relationship outcomes.
 
+### Next Planned Slice
+
+After PR #243, the next Orrery slice should be **Work + Travel packages plus additive location semantics**. `WORK` should model routine livelihood, duty, household labor, maintenance, and organizational obligations without collapsing the existing `TEND_CRAFT` package, which is still about expressive practice and craft identity. `TRAVEL` should model off-screen movement at turn granularity: destination intent, provisions, route progress, arrival, delay, and travel risk.
+
+This slice should not replace `characters.current_location` or migrate it away from its existing `places(id)` role. The safer migration is additive: keep `characters.current_location` as the semantic place anchor, normalize resolver reads and Orrery state deltas around that place id, and add any travel-specific support tables or fields needed for destination, route, progress, adjacency, or coordinates. If richer geography becomes necessary, layer it onto `places` or a dedicated spatial side table instead of making every existing current-location caller absorb a high-blast-radius type change.
+
 ### Package Author Checkpoint
 
 Package authors can contribute now. The cleanest contribution format is a small template sketch or markdown catalog note that names: package goal, slots, gate, branches, event types, state deltas, required tags, and any pressure-only behavior. The current source of truth for implemented packages is `nexus/agents/orrery/templates.py`; the human-readable generated reference is `docs/orrery_packages.md`. New durable vocabulary still belongs in explicit migrations, and backfill/application of tags remains controlled data work rather than package-author side effects.
@@ -634,6 +640,8 @@ The alias-oriented hybrid remains the right future escape hatch if that pain app
 
 ## Phased Delivery
 
+This section is now mostly historical. The active queue is: finish PR #243's interpersonal need layer, then tackle **Work + Travel packages plus additive location semantics** as the next implementation slice. The PR 0-4 headings below are preserved as landing notes for the foundation, resolver, commit pipeline, and Bleed integration rather than as the current forward plan.
+
 ### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
 
 - Confirmed the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
@@ -658,9 +666,7 @@ The alias-oriented hybrid remains the right future escape hatch if that pain app
   - **Orrery tables**: `orrery_resolutions` (with `UNIQUE` idempotency key + surfacing bookkeeping columns), `orrery_narration_jobs`, `offscreen_narrations`
   - **Time denormalization**: `chunk_metadata.world_time` column + `refresh_world_time_from_chunk` trigger function
 - `EntityRef` Pydantic helper in `nexus/agents/orrery/entity_ref.py` (thin read-side type; uses `EntityKind` enum mirroring the new `entity_kind` Postgres type) remains deferred until a runtime reader needs it
-- Still needed before commit-time event emission: generator script deriving `changed_fields` vocabulary from `apex_schema.py::StateUpdates` Pydantic models (`apex_schema.py:631`)
-- Still needed before broad package authoring: durable tag backfill from existing entity records (LLM-assisted; reviewed before commit)
-- Still needed before event writes: seed initial `event_types` vocabulary
+- Follow-up slices now seed `event_types` and tag vocabulary through explicit migrations, and PR #237 applies the first reviewed slot 2 semantic tag backfill. `changed_fields` remains a controlled branch/template surface, with the longer-term generator from `apex_schema.py::StateUpdates` still useful but no longer a blocker for package delivery.
 - Demo: `python -m nexus.agents.orrery.demo` runs four presets against synthetic `WorldState`
 
 ### PR 2 — Hydration + Dry-Pass Resolver (implemented in PR #211; no canonical writes)
