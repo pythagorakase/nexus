@@ -398,6 +398,23 @@ class LogonUtility:
                 if prompt_text:
                     sections.append(f"- {label}: {prompt_text}")
 
+        bleed_menu = context.get("orrery_bleed_menu") or []
+        if bleed_menu:
+            sections.append("\n=== ORRERY AMBIENT PERIPHERALS ===")
+            sections.append(
+                "These are optional ambient peripherals from off-screen events. "
+                "Ignore freely, render subtly, or use them at any density that "
+                "fits the current scene. Do not explain Orrery."
+            )
+            for item in bleed_menu[:5]:
+                channel = item.get("channel") or "ambient"
+                summary = item.get("summary") or item.get("template_id")
+                actor = item.get("actor_name")
+                prefix = f"[{channel}]"
+                if actor:
+                    prefix = f"{prefix} {actor}:"
+                sections.append(f"- {prefix} {summary}")
+
         # Add author's note (soft out-of-character suggestion, used by regenerate).
         # Placed immediately before INSTRUCTIONS so recency bias gives it the influence
         # a soft nudge needs — entity/historical context above would otherwise bury it.
