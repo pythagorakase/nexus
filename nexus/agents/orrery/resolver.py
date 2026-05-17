@@ -228,19 +228,31 @@ def hydrate_world_state(
         ).mappings()
     }
 
-    location_class = {
-        row["id"]: row["location_class"]
-        for row in session.execute(
-            text(
-                """
-                /* orrery:location_classes */
-                SELECT id, type::text AS location_class
-                FROM places
-                WHERE type IS NOT NULL
-                """
-            )
-        ).mappings()
-    }
+    location_class: dict[int, str] = {}
+    location_classes: dict[int, set[str]] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:location_classes */
+            SELECT p.id, p.type::text AS location_class, true AS is_primary
+            FROM places p
+            WHERE p.type IS NOT NULL
+            UNION ALL
+            SELECT p.id, etc.tag AS location_class, false AS is_primary
+            FROM places p
+            JOIN entity_tags_current etc ON etc.entity_id = p.entity_id
+            WHERE etc.entity_kind = 'place'
+              AND etc.category = 'place_affordance'
+            """
+        )
+    ).mappings():
+        place_id = row["id"]
+        class_name = row["location_class"]
+        if class_name is None:
+            continue
+        location_classes.setdefault(place_id, set()).add(class_name)
+        if row.get("is_primary") or place_id not in location_class:
+            location_class[place_id] = class_name
 
     activities = {
         row["entity_id"]: row["current_activity"]
@@ -333,6 +345,10 @@ def hydrate_world_state(
             for entity_id, values in faction_memberships.items()
         },
         location_class=location_class,
+        location_classes={
+            location_id: frozenset(values)
+            for location_id, values in location_classes.items()
+        },
         need_debt_scores=need_debt_scores,
         recent_events=recent_events,
         time_of_day=time_of_day,

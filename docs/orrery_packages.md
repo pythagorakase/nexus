@@ -28,7 +28,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `the_roots` location class
+  - actor is in `the_roots` place affordance
   - weather is one of [rain]
 
 **Does:** activity → "hiding from active pursuit"; adds `off_grid` to actor
@@ -182,7 +182,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `contacts_available` tag
-  - actor is in `the_glow` location class
+  - actor is in `the_glow` place affordance
 
 **Does:** activity → "running a reputation attack"; adds `reputation_compromised` to target
 **Event:** `retaliation_attempted`
@@ -297,7 +297,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `ghostprint_active` tag
-  - actor is in `the_roots` location class
+  - actor is in `the_roots` place affordance
 
 **Does:** activity → "signaling through a sympathetic node"
 **Event:** `honor_debt`
@@ -390,7 +390,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Recon a hideout their body remembers  *(mag 0.64)*
 
-**When:** actor is in `the_roots` location class
+**When:** actor is in `the_roots` place affordance
 
 **Does:** activity → "reconning remembered terrain"
 **Event:** `pursue_identity_lead`
@@ -688,7 +688,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor and target are co-located
-  - actor is in `neutral_ground` location class
+  - actor is in `neutral_ground` place affordance
 
 **Does:** activity → "meeting a rival under truce"; adds `under_truce` to actor; adds `under_truce` to target
 **Event:** `rival_consulted`
@@ -742,7 +742,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Visit the place of remembrance  *(mag 0.42)*
 
-**When:** actor is in `place_of_remembrance` location class
+**When:** actor is in `place_of_remembrance` place affordance
 
 **Does:** activity → "tending the dead"
 **Event:** `mourning_act`
@@ -806,7 +806,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Sleep at home  *(mag 0.22)*
 
-**When:** actor is in `home` location class
+**When:** actor is in `home` place affordance
 
 **Does:** activity → "sleeping at home"; fulfills `sleep` need, quality `good`, discharge 10
 **Event:** `slept`
@@ -818,8 +818,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `lodgings` location class
-  - actor is in `safe_house` location class
+  - actor is in `lodgings` place affordance
+  - actor is in `safe_house` place affordance
 
 **Does:** activity → "sleeping in safe lodgings"; fulfills `sleep` need, quality `adequate`, discharge 7
 **Event:** `slept`
@@ -863,10 +863,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `tavern` location class
-  - actor is in `teahouse` location class
-  - actor is in `cafe` location class
-  - actor is in `market` location class
+  - actor is in `tavern` place affordance
+  - actor is in `teahouse` place affordance
+  - actor is in `cafe` place affordance
+  - actor is in `market` place affordance
 
 **Does:** activity → "drinking in company"; fulfills `thirst` need, quality `social`, discharge 9999
 **Event:** `drank`
@@ -878,8 +878,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `public_water` location class
-  - actor is in `wilderness` location class
+  - actor is in `public_water` place affordance
+  - actor is in `wilderness` place affordance
 
 **Does:** activity → "drinking from an available source"; fulfills `thirst` need, quality `available_source`, discharge 9999
 **Event:** `drank`
@@ -926,7 +926,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `home` location class
+  - actor is in `home` place affordance
   - actor has any of [`married`, `parent`, `extended_household`]
 
 **Does:** activity → "sharing a household meal"; fulfills `hunger` need, quality `household_meal`, discharge 9999
@@ -939,10 +939,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `tavern` location class
-  - actor is in `restaurant` location class
-  - actor is in `market` location class
-  - actor is in `cookshop` location class
+  - actor is in `tavern` place affordance
+  - actor is in `restaurant` place affordance
+  - actor is in `market` place affordance
+  - actor is in `cookshop` place affordance
 
 **Does:** activity → "eating in a public place"; fulfills `hunger` need, quality `public_meal`, discharge 9999
 **Event:** `ate`
@@ -954,7 +954,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `wilderness` location class
+  - actor is in `wilderness` place affordance
   - actor has any of [`forager`, `hunter`, `survivalist`, `ranger`, `scout`]
 
 **Does:** activity → "foraging for a meal"; fulfills `hunger` need, quality `wild_meal`, discharge 9999
@@ -1090,7 +1090,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*
 
-**When:** actor is in `the_glow` location class
+**When:** actor is in `the_glow` place affordance
 
 **Does:** activity → "running low-level cover work"
 **Event:** `maintain_cover`
@@ -1119,6 +1119,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/027_orrery_package_library_round2_vocab.py`
 - `migrations/028_orrery_sunhelm_needs.py`
 - `migrations/029_orrery_need_state_init_trigger.py`
+- `migrations/030_orrery_place_affordance_vocab.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -1232,6 +1233,24 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `warning_delivered`
 - `welfare_check`
 - `wound_healed`
+
+### Place affordances queried by location predicates
+
+- `cafe`
+- `cookshop`
+- `home`
+- `lodgings`
+- `market`
+- `neutral_ground`
+- `place_of_remembrance`
+- `public_water`
+- `restaurant`
+- `safe_house`
+- `tavern`
+- `teahouse`
+- `the_glow`
+- `the_roots`
+- `wilderness`
 
 ### Relationship types
 

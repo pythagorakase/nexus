@@ -105,7 +105,7 @@ _register(
 # Location predicates
 _register(
     r"in_location_class\((?P<lc>[^@()]+)@(?P<slot>\w+)\)",
-    lambda m: f"{_slot(m.group('slot'))} is in `{m.group('lc')}` location class",
+    lambda m: f"{_slot(m.group('slot'))} is in `{m.group('lc')}` place affordance",
 )
 _register(
     r"in_location\((?P<lid>\d+)@(?P<slot>\w+)\)",
@@ -402,6 +402,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
+    ("place_affordance", re.compile(r"in_location_class\(([^@()]+)@")),
     ("relationship", re.compile(r"has_relationship_of_type\(([^,()]+),")),
     (
         "relationship",
@@ -427,6 +428,7 @@ def _collect_vocabulary(
     ephemeral: set[str] = set()
     applied: set[str] = set()
     events: set[str] = set()
+    place_affordances: set[str] = set()
     relationships: set[str] = set()
 
     def visit(condition: Any) -> None:
@@ -449,6 +451,8 @@ def _collect_vocabulary(
                 ephemeral.add(captured)
             elif kind == "event_type":
                 events.add(captured)
+            elif kind == "place_affordance":
+                place_affordances.add(captured)
             elif kind == "relationship":
                 relationships.add(captured)
             # First-match-wins: prevents future overlapping patterns from
@@ -479,6 +483,7 @@ def _collect_vocabulary(
         "ephemeral_tags": sorted(ephemeral),
         "applied_tags": sorted(applied),
         "event_types": sorted(events),
+        "place_affordances": sorted(place_affordances),
         "relationship_types": sorted(relationships),
     }
 
@@ -525,6 +530,10 @@ def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
             vocab["applied_tags"],
         ),
         ("Event types", vocab["event_types"]),
+        (
+            "Place affordances queried by location predicates",
+            vocab["place_affordances"],
+        ),
         ("Relationship types", vocab["relationship_types"]),
     ]
     for heading, values in sections:

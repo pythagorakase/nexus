@@ -105,6 +105,7 @@ class FakeSession:
         if "/* orrery:character_locations */" in sql:
             return FakeResult(self.location_rows)
         if "/* orrery:location_classes */" in sql:
+            assert "place_affordance" in sql
             return FakeResult(self.location_class_rows)
         if "/* orrery:character_activities */" in sql:
             return FakeResult(self.activity_rows)
@@ -393,6 +394,27 @@ def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -
     assert state.trust[(2, 1)] == -3
     assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
     assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
+def test_hydrate_world_state_loads_semantic_place_affordances() -> None:
+    """Place tags supplement structural place types for location predicates."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            location_class_rows=[
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {"id": 10, "location_class": "home", "is_primary": False},
+                {"id": 10, "location_class": "safe_house", "is_primary": False},
+            ],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.location_class[10] == "fixed_location"
+    assert state.location_classes[10] == frozenset(
+        {"fixed_location", "home", "safe_house"}
+    )
 
 
 def test_hydrate_world_state_computes_effective_need_debt() -> None:

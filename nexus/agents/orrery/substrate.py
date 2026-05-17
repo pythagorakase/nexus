@@ -71,6 +71,7 @@ class WorldState:
     )
     faction_memberships: Mapping[int, frozenset[int]] = field(default_factory=dict)
     location_class: Mapping[int, str] = field(default_factory=dict)
+    location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     recent_events: Tuple[EventRecord, ...] = ()
@@ -208,16 +209,24 @@ def has_need_debt_at_or_above(
 
 
 def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition:
-    """Return whether an entity is currently in a place of the given class."""
+    """Return whether an entity is currently in a place of the given class.
+
+    Location classes are semantic place tags first. ``state.location_class``
+    remains as a single-value compatibility fallback for older harnesses and
+    structural ``places.type`` values.
+    """
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
         location_id = state.locations.get(entity_id)
+        if location_id is None:
+            return False
+        semantic_classes = state.location_classes.get(location_id, frozenset())
         return (
-            location_id is not None
-            and state.location_class.get(location_id) == location_class
+            location_class in semantic_classes
+            or state.location_class.get(location_id) == location_class
         )
 
     return _named(_condition, f"in_location_class({location_class}@{slot.value})")
