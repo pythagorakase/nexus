@@ -21,6 +21,8 @@ TARGET_ID = 2
 ROOTS_PLACE_ID = 101
 GLOW_PLACE_ID = 102
 STACKS_PLACE_ID = 103
+REMEMBRANCE_PLACE_ID = 104
+NEUTRAL_PLACE_ID = 105
 
 
 def build_presets() -> Dict[str, WorldState]:
@@ -35,6 +37,8 @@ def build_presets() -> Dict[str, WorldState]:
         ROOTS_PLACE_ID: "the_roots",
         GLOW_PLACE_ID: "the_glow",
         STACKS_PLACE_ID: "the_stacks",
+        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
+        NEUTRAL_PLACE_ID: "neutral_ground",
     }
     return {
         "hunted": WorldState(
@@ -89,6 +93,23 @@ def build_presets() -> Dict[str, WorldState]:
             weather="clear",
             current_tick=100,
         ),
+        # Round-2 solo presets
+        "mourning": WorldState(
+            ephemeral_tags={ACTOR_ID: frozenset({"bereaved"})},
+            locations={ACTOR_ID: REMEMBRANCE_PLACE_ID},
+            location_class=location_classes,
+            time_of_day="evening",
+            weather="clear",
+            current_tick=100,
+        ),
+        "craft_soldier": WorldState(
+            tags={ACTOR_ID: frozenset({"soldier"})},
+            locations={ACTOR_ID: STACKS_PLACE_ID},
+            location_class=location_classes,
+            time_of_day="evening",
+            weather="clear",
+            current_tick=100,
+        ),
     }
 
 
@@ -104,6 +125,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
         ROOTS_PLACE_ID: "the_roots",
         GLOW_PLACE_ID: "the_glow",
         STACKS_PLACE_ID: "the_stacks",
+        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
+        NEUTRAL_PLACE_ID: "neutral_ground",
     }
     return {
         "vengeance": {
@@ -137,6 +160,89 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"handler"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
                 location_class=location_classes,
+                time_of_day="evening",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        # Round-2 multi-slot presets
+        "wounded_healing": {
+            "state": WorldState(
+                tags={ACTOR_ID: frozenset({"magical_healing"})},
+                ephemeral_tags={TARGET_ID: frozenset({"wounded"})},
+                locations={ACTOR_ID: STACKS_PLACE_ID, TARGET_ID: STACKS_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="evening",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "vigil_devout": {
+            "state": WorldState(
+                tags={ACTOR_ID: frozenset({"devout"})},
+                ephemeral_tags={TARGET_ID: frozenset({"dying"})},
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
+                locations={ACTOR_ID: STACKS_PLACE_ID, TARGET_ID: STACKS_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="night",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "warning": {
+            "state": WorldState(
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"ally"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
+                location_class=location_classes,
+                recent_events=(
+                    EventRecord(
+                        event_type="threat_issued",
+                        tick=99,
+                        target_entity_id=TARGET_ID,
+                    ),
+                ),
+                time_of_day="evening",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "welfare_check": {
+            "state": WorldState(
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"mentor"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="afternoon",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "kin_visit": {
+            "state": WorldState(
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="afternoon",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
+        "rival_truce": {
+            "state": WorldState(
+                relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"rival"})},
+                locations={ACTOR_ID: NEUTRAL_PLACE_ID, TARGET_ID: NEUTRAL_PLACE_ID},
+                location_class=location_classes,
+                recent_events=(
+                    EventRecord(
+                        event_type="compliance_alert",
+                        tick=95,
+                    ),
+                ),
                 time_of_day="evening",
                 weather="clear",
                 current_tick=100,

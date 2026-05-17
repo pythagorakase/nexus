@@ -92,6 +92,47 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
             "cultivate_informant",
             "Routine contact to maintain the relationship",
         ),
+        # Round-2 templates
+        (
+            "mourning",
+            "mourn_loss",
+            "Visit the place of remembrance",
+        ),
+        (
+            "craft_soldier",
+            "tend_craft",
+            "Make the weapon ready for what comes next",
+        ),
+        (
+            "wounded_healing",
+            "tend_wounded",
+            "Channel restorative power through hands and voice",
+        ),
+        (
+            "vigil_devout",
+            "keep_vigil",
+            "Maintain prayerful or meditative presence",
+        ),
+        (
+            "warning",
+            "warn_ally",
+            "Reach the ally face-to-face before the word gets out",
+        ),
+        (
+            "welfare_check",
+            "check_on_dependent",
+            "Drop by in person when the moment allows",
+        ),
+        (
+            "kin_visit",
+            "reach_out_to_kin",
+            "Find the moment for a real face-to-face conversation",
+        ),
+        (
+            "rival_truce",
+            "consult_rival",
+            "Meet face-to-face on neutral ground",
+        ),
     ],
 )
 def test_demo_presets_fire_expected_package(
