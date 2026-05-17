@@ -432,6 +432,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor has `patron` relationship to target
     - actor has `guardian` relationship to target
   - ≥ 12 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 12 ticks since last `welfare_check` event for (actor, target) pair
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `grudge_active` ephemeral
 
@@ -620,6 +621,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor and target share `chosen_kin` relationship (either direction)
     - actor and target share `comrade` relationship (either direction)
   - ≥ 8 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 8 ticks since last `kin_visit` event for (actor, target) pair
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `grudge_active` ephemeral
 
@@ -673,6 +675,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - recent `threat_issued` event in last 10 ticks
     - recent `faction_realignment` event in last 15 ticks
   - ≥ 20 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 20 ticks since last `rival_consulted` event for (actor, target) pair
   - **NOT:** actor has `grudge_active` ephemeral
   - **NOT:** actor has `under_active_pursuit` ephemeral
 
@@ -745,7 +748,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Sit with others who carry the same loss  *(mag 0.38)*
 
-**When:** 1+ other entities with `bereaved` tag co-located with actor
+**When:** 1+ other entities with `bereaved` ephemeral co-located with actor
 
 **Does:** activity → "gathering with co-mourners"
 **Event:** `mourning_act`
@@ -781,7 +784,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Gate:**
 
 - **AND:**
-  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `arcane_caster`, `engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`, `musician`, `dancer`, `performer`, `artist`, `athlete`, `martial_artist`, `ranger`, `scout`, `monk`, `keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `matriarch`, `patriarch`, `scholar`, `researcher`, `academic`, `loremaster`]
+  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `arcane_caster`, `engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`, `musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`, `athlete`, `martial_artist`, `ranger`, `scout`, `monk`, `keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `matriarch`, `patriarch`, `scholar`, `researcher`, `academic`, `loremaster`]
   - ≥ 4 ticks since last `craft_tended` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `wounded` ephemeral
@@ -816,7 +819,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 4 — Run through the work that keeps the work possible  *(mag 0.18)*
 
-**When:** actor has any of [`musician`, `dancer`, `performer`, `artist`]
+**When:** actor has any of [`musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`]
 
 **Does:** activity → "practicing the unseen work"; adds `recently_tended_craft` to actor
 **Event:** `craft_tended`
@@ -863,7 +866,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 **When:** *(always)*
 
-**Does:** activity → "tending the work that is theirs"
+**Does:** activity → "tending the work that is theirs"; adds `recently_tended_craft` to actor
 **Event:** `craft_tended`
 
 > {actor} does a small thing for the work that defines them — they would not call it that, probably, but that is what it is — and the day is briefly better for it.

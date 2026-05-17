@@ -177,8 +177,14 @@ def count_co_located(
     slot: Slot = Slot.ACTOR,
     *,
     with_tag: Optional[str] = None,
+    with_ephemeral: Optional[str] = None,
 ) -> Condition:
-    """Return whether enough entities share the slot entity's current location."""
+    """Return whether enough entities share the slot entity's current location.
+
+    Filters by ``with_tag`` against the durable ``state.tags`` map; filters
+    by ``with_ephemeral`` against ``state.ephemeral_tags``. Both filters can
+    be combined; both default to None (no tag filter).
+    """
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         entity_id = _slot_entity(bindings, slot)
@@ -193,10 +199,19 @@ def count_co_located(
                 continue
             if with_tag and with_tag not in state.tags.get(other_id, frozenset()):
                 continue
+            if with_ephemeral and with_ephemeral not in state.ephemeral_tags.get(
+                other_id, frozenset()
+            ):
+                continue
             count += 1
         return count >= minimum
 
-    suffix = f",tag={with_tag}" if with_tag else ""
+    filters = []
+    if with_tag:
+        filters.append(f"tag={with_tag}")
+    if with_ephemeral:
+        filters.append(f"ephemeral={with_ephemeral}")
+    suffix = "," + ",".join(filters) if filters else ""
     return _named(_condition, f"count_co_located({minimum}@{slot.value}{suffix})")
 
 

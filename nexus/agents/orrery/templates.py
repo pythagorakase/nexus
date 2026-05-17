@@ -762,7 +762,7 @@ MOURN_LOSS = Template(
         ),
         Branch(
             label="Sit with others who carry the same loss",
-            conditions=count_co_located(1, with_tag="bereaved"),
+            conditions=count_co_located(1, with_ephemeral="bereaved"),
             narrative_stub=(
                 "{actor} finds the others who knew the dead and sits with "
                 "them — wordlessly, mostly. The presence of someone else "
@@ -953,6 +953,8 @@ TEND_CRAFT = Template(
             "dancer",
             "performer",
             "artist",
+            "writer",
+            "artisan",
             # athletic / physical
             "athlete",
             "martial_artist",
@@ -1038,7 +1040,9 @@ TEND_CRAFT = Template(
         ),
         Branch(
             label="Run through the work that keeps the work possible",
-            conditions=has_any_tag("musician", "dancer", "performer", "artist"),
+            conditions=has_any_tag(
+                "musician", "dancer", "performer", "artist", "writer", "artisan"
+            ),
             narrative_stub=(
                 "{actor} works through the practice that no one will ever "
                 "see — the scales, the exercises, the small motions that "
@@ -1139,9 +1143,10 @@ TEND_CRAFT = Template(
             ),
             state_delta={
                 "character.current_activity": "tending the work that is theirs",
+                "entity_tags.add": ["recently_tended_craft"],
             },
             event_type="craft_tended",
-            changed_fields=("character.current_activity",),
+            changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.12,
         ),
     ),
@@ -1246,6 +1251,11 @@ CHECK_ON_DEPENDENT = Template(
     # informant-tradecraft handler/asset relationship. Exclude actors
     # tagged informant_handler so welfare-check and intel-cultivation
     # don't fight over the same binding.
+    #
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (welfare_check from the face-to-face branch, contact_made from the
+    # remote branch). Checking only one lets the other bypass the
+    # cooldown — the gate-vs-event asymmetry caught by claude[bot] on PR #223.
     package_gate=AND(
         NOT(has_tag("informant_handler")),
         OR(
@@ -1256,6 +1266,9 @@ CHECK_ON_DEPENDENT = Template(
         ),
         since_last_event_at_least(
             "contact_made", minimum_ticks=12, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "welfare_check", minimum_ticks=12, target_slot=Slot.TARGET
         ),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("grudge_active")),
@@ -1320,6 +1333,9 @@ REACH_OUT_TO_KIN = Template(
     priority=40,
     blurb="A small thread of contact between people who hold each other.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (kin_visit from the face-to-face branch, contact_made from the
+    # remote branch). See CHECK_ON_DEPENDENT for the same pattern.
     package_gate=AND(
         OR(
             has_symmetric_relationship_of_type("family"),
@@ -1329,6 +1345,9 @@ REACH_OUT_TO_KIN = Template(
         ),
         since_last_event_at_least(
             "contact_made", minimum_ticks=8, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "kin_visit", minimum_ticks=8, target_slot=Slot.TARGET
         ),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("grudge_active")),
@@ -1396,6 +1415,11 @@ CONSULT_RIVAL = Template(
     # shared-circumstance OR; the same gate excludes it via NOT below. The
     # OR-arm is removed. EXTRACT_VENGEANCE (priority 90) owns grudge-active
     # space; the NOT here is the documented safety belt.
+    #
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (rival_consulted from the meaningful branches, contact_made from the
+    # ALWAYS fallback). Without the rival_consulted cooldown the high-
+    # magnitude branches could refire next tick — caught by Codex on PR #223.
     package_gate=AND(
         OR(
             has_relationship_of_type("rival"),
@@ -1408,6 +1432,9 @@ CONSULT_RIVAL = Template(
         ),
         since_last_event_at_least(
             "contact_made", minimum_ticks=20, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "rival_consulted", minimum_ticks=20, target_slot=Slot.TARGET
         ),
         NOT(has_ephemeral("grudge_active")),
         NOT(has_ephemeral("under_active_pursuit")),

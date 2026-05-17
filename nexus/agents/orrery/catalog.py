@@ -96,10 +96,17 @@ _register(
     lambda m: f"{_slot(m.group('a'))} and {_slot(m.group('b'))} are co-located",
 )
 _register(
-    r"count_co_located\((?P<n>\d+)@(?P<slot>\w+)(?:,tag=(?P<tag>[^)]+))?\)",
+    r"count_co_located\((?P<n>\d+)@(?P<slot>\w+)"
+    r"(?:,tag=(?P<tag>[^,)]+))?"
+    r"(?:,ephemeral=(?P<ephemeral>[^,)]+))?\)",
     lambda m: (
         f"{m.group('n')}+ other entities"
         + (f" with `{m.group('tag')}` tag" if m.group("tag") else "")
+        + (
+            f" with `{m.group('ephemeral')}` ephemeral"
+            if m.group("ephemeral")
+            else ""
+        )
         + f" co-located with {_slot(m.group('slot'))}"
     ),
 )
