@@ -3,14 +3,15 @@ name: Agent review orchestration
 # GitHub suppresses most workflow events created by GITHUB_TOKEN-authored
 # comments, so this dispatches the Claude review workflow directly instead of
 # relying on an automated `@claude` issue comment to trigger another action.
+# GitHub Actions also has no reaction-created trigger, so the PR-open path polls
+# for Codex's thumbs-up reaction while `pull_request_review` fast-paths Codex
+# review bodies that contain the "Codex Review" parent.
 on:
   pull_request_target:
     branches: [main]
     types: [opened, reopened, ready_for_review, synchronize]
-
-concurrency:
-  group: agent-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  pull_request_review:
+    types: [submitted]
 
 permissions:
   actions: write
@@ -21,15 +22,29 @@ jobs:
   orchestrate:
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (
+        github.event_name == 'pull_request_target' ||
+        (
+          github.event_name == 'pull_request_review' &&
+          startsWith(github.event.review.user.login, 'chatgpt-codex-connector') &&
+          contains(github.event.review.body, 'Codex Review')
+        )
+      )
+    concurrency:
+      group: agent-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       BASE_REF: ${{ github.event.pull_request.base.ref }}
-      FIRST_WAIT_SECONDS: ${{ vars.AGENT_REVIEW_FIRST_WAIT_SECONDS || '600' }}
+      FIRST_WAIT_SECONDS: ${{ vars.AGENT_REVIEW_FIRST_WAIT_SECONDS || '300' }}
       SECOND_WAIT_SECONDS: ${{ vars.AGENT_REVIEW_SECOND_WAIT_SECONDS || '600' }}
+      CODEX_SIGNAL_POLL_SECONDS: ${{ vars.AGENT_REVIEW_CODEX_SIGNAL_POLL_SECONDS || '30' }}
+      CODEX_SIGNAL_SETTLE_SECONDS: ${{ vars.AGENT_REVIEW_CODEX_SIGNAL_SETTLE_SECONDS || '30' }}
       REVIEW_PROMPT: "@claude please review this PR. Don't flag any issues already flagged by Codex. The target audience for your review is a coding agent, not a human."
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -39,24 +54,102 @@ jobs:
         run: |
           set -euo pipefail
 
-          for name in FIRST_WAIT_SECONDS SECOND_WAIT_SECONDS; do
+          for name in FIRST_WAIT_SECONDS SECOND_WAIT_SECONDS CODEX_SIGNAL_POLL_SECONDS CODEX_SIGNAL_SETTLE_SECONDS; do
             value="${!name}"
             if [[ ! "$value" =~ ^[0-9]+$ ]]; then
               echo "::error::${name} must be a non-negative integer number of seconds."
               exit 1
             fi
           done
+          if (( CODEX_SIGNAL_POLL_SECONDS == 0 )); then
+            echo "::error::CODEX_SIGNAL_POLL_SECONDS must be greater than zero."
+            exit 1
+          fi
 
-          total_wait=$((FIRST_WAIT_SECONDS + SECOND_WAIT_SECONDS))
+          total_wait=$((FIRST_WAIT_SECONDS + SECOND_WAIT_SECONDS + CODEX_SIGNAL_SETTLE_SECONDS))
           if (( total_wait > 1680 )); then
             echo "::error::Combined agent review waits must be <= 1680 seconds so the 30-minute job timeout has cleanup room."
             exit 1
           fi
 
-      - name: Wait for Codex review window
-        run: sleep "$FIRST_WAIT_SECONDS"
+      - name: Skip completed review windows
+        run: |
+          set -euo pipefail
+
+          ready_markers="$(
+            gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --paginate \
+              --jq '.[].body | select(contains("<!-- nexus-agent-review:ready:"))'
+          )"
+          if [[ -n "$ready_markers" ]]; then
+            echo "Agent review window already completed on this PR; skipping re-review orchestration."
+            echo "AGENT_REVIEW_SKIP=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          echo "AGENT_REVIEW_SKIP=false" >> "$GITHUB_ENV"
+
+      - name: Wait for Codex signal or review window
+        if: env.AGENT_REVIEW_SKIP != 'true' && github.event_name == 'pull_request_target'
+        run: |
+          set -euo pipefail
+
+          has_codex_signal() {
+            local review_signal reaction_signal
+
+            review_signal="$(
+              gh pr view "$PR_NUMBER" \
+                --json reviews \
+                --jq '.reviews[] | select((.author.login | startswith("chatgpt-codex-connector")) and (.body | contains("Codex Review"))) | .submittedAt' |
+                head -n 1
+            )"
+            if [[ -n "$review_signal" ]]; then
+              echo "Detected Codex review parent at ${review_signal}."
+              return 0
+            fi
+
+            reaction_signal="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/reactions" \
+                --paginate \
+                --jq '.[] | select(.content == "+1" and (.user.login | startswith("chatgpt-codex-connector"))) | .created_at' |
+                head -n 1
+            )"
+            if [[ -n "$reaction_signal" ]]; then
+              echo "Detected Codex thumbs-up reaction at ${reaction_signal}."
+              return 0
+            fi
+
+            return 1
+          }
+
+          if has_codex_signal; then
+            exit 0
+          fi
+
+          deadline=$((SECONDS + FIRST_WAIT_SECONDS))
+          while (( SECONDS < deadline )); do
+            sleep_for=$((deadline - SECONDS))
+            if (( sleep_for > CODEX_SIGNAL_POLL_SECONDS )); then
+              sleep_for=$CODEX_SIGNAL_POLL_SECONDS
+            fi
+            sleep "$sleep_for"
+
+            if has_codex_signal; then
+              exit 0
+            fi
+          done
+
+          echo "No Codex signal detected within ${FIRST_WAIT_SECONDS}s; continuing with Claude request fallback."
+
+      - name: Let Codex review threads settle
+        if: env.AGENT_REVIEW_SKIP != 'true' && github.event_name == 'pull_request_review'
+        run: sleep "$CODEX_SIGNAL_SETTLE_SECONDS"
 
       - name: Request Claude review
+        if: env.AGENT_REVIEW_SKIP != 'true'
         run: |
           set -euo pipefail
 
