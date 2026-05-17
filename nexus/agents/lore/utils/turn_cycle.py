@@ -598,14 +598,20 @@ class TurnCycleManager:
             "anchor_chunk_id": proposal.anchor_chunk_id,
             "actor_count": proposal.actor_count,
             "resolution_count": proposal.resolution_count,
+            "pressure_count": proposal.pressure_count,
             "template_ids": [
                 resolution.template_id for resolution in proposal.resolutions
             ],
+            "pressure_template_ids": [
+                pressure.template_id for pressure in proposal.scene_pressures
+            ],
         }
         logger.info(
-            "Orrery dry-run resolved %d actors into %d draft resolutions",
+            "Orrery dry-run resolved %d actors into %d draft resolutions "
+            "and %d scene pressures",
             proposal.actor_count,
             proposal.resolution_count,
+            proposal.pressure_count,
         )
 
     def _orrery_anchor_chunk_id(
@@ -667,6 +673,15 @@ class TurnCycleManager:
 
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
+
+        if (
+            turn_context.orrery_proposal
+            and turn_context.orrery_proposal.pressure_count
+        ):
+            turn_context.context_payload["orrery_scene_pressures"] = [
+                pressure.to_dict()
+                for pressure in turn_context.orrery_proposal.scene_pressures
+            ]
 
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"][

@@ -8,6 +8,7 @@ from nexus.agents.orrery.substrate import (
     NOT,
     OR,
     Branch,
+    PresentTargetPolicy,
     Slot,
     Template,
     co_located,
@@ -246,6 +247,9 @@ MAINTAIN_COVER = Template(
 #     routed by convention to Slot.TARGET by CommitOrreryTick. Define a
 #     state_delta TypedDict/dataclass if the implicit-string convention
 #     grows past this small vocabulary.
+#   * present_target_policy=STORYTELLER_PRESSURE allows a present TARGET only
+#     as prompt-only scene pressure. Present ACTORs are still excluded, and
+#     pressure drafts never commit state deltas or world events directly.
 #   * Trust hydration is un-implemented (resolver.py:177 TODO). Any branch
 #     gated on trust_at_least(N) with N > 0 or trust_below(N) with N < 0
 #     is currently unreachable — WorldState.trust defaults to 0 for every
@@ -302,6 +306,12 @@ EXTRACT_VENGEANCE = Template(
                 "world_events",
             ),
             magnitude=0.85,
+            scene_pressure_stub=(
+                "{actor}'s grudge is close enough to {target}'s current scene "
+                "to become immediate pressure. Treat it as a possible threat, "
+                "interruption, warning sign, or delayed consequence rather than "
+                "an automatic attack."
+            ),
         ),
         Branch(
             label="Surface a reputation attack in the right channels",
@@ -321,6 +331,12 @@ EXTRACT_VENGEANCE = Template(
             event_type="retaliation_attempted",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.58,
+            scene_pressure_stub=(
+                "{actor} is trying to compromise {target}'s reputation through "
+                "off-screen channels. If useful, let the current scene show a "
+                "rumor, message, social consequence, or pressure wave instead "
+                "of a direct state change."
+            ),
         ),
         Branch(
             label="Watch and document, waiting for a better window",
@@ -336,8 +352,14 @@ EXTRACT_VENGEANCE = Template(
             event_type="retaliation_attempted",
             changed_fields=("character.current_activity",),
             magnitude=0.34,
+            scene_pressure_stub=(
+                "{actor} is watching {target}'s current patterns from cover. "
+                "This can surface as unease, surveillance traces, or a later "
+                "setup, but {target}'s on-screen choices remain yours."
+            ),
         ),
     ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
 )
 
 
@@ -388,6 +410,11 @@ PROTECT_KIN = Template(
                 "world_events",
             ),
             magnitude=0.78,
+            scene_pressure_stub=(
+                "{actor} may be close enough to intervene around {target}'s "
+                "current danger. Treat this as potential off-screen support or "
+                "complication for the scene, not as an automatic rescue."
+            ),
         ),
         Branch(
             label="Travel toward the target's last known location",
@@ -406,6 +433,11 @@ PROTECT_KIN = Template(
             event_type="protective_intervention",
             changed_fields=("character.current_activity",),
             magnitude=0.52,
+            scene_pressure_stub=(
+                "{actor} is moving toward {target}'s current location because "
+                "they believe the danger is real. You may foreshadow, delay, "
+                "or ignore their arrival based on the active scene."
+            ),
         ),
         Branch(
             label="Signal kin networks to converge on the target",
@@ -421,6 +453,11 @@ PROTECT_KIN = Template(
             event_type="protective_intervention",
             changed_fields=("character.current_activity",),
             magnitude=0.41,
+            scene_pressure_stub=(
+                "{actor} has signaled a kin network around {target}. This can "
+                "become outside help, cross-traffic, noise, or a looming option "
+                "if it fits the live scene."
+            ),
         ),
         Branch(
             label="Maintain vigil and wait for resolution",
@@ -437,8 +474,14 @@ PROTECT_KIN = Template(
             event_type="protective_intervention",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.22,
+            scene_pressure_stub=(
+                "{actor} is monitoring {target}'s danger from off-screen. This "
+                "is emotional and logistical pressure, not a command to change "
+                "what {target} does in the scene."
+            ),
         ),
     ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
 )
 
 
@@ -493,6 +536,11 @@ CULTIVATE_INFORMANT = Template(
             event_type="intel_acquired",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.62,
+            scene_pressure_stub=(
+                "{actor} may be trying to extract material intel from {target} "
+                "while {target} is in the current scene. Use it only if it "
+                "creates a believable opening, signal, or complication."
+            ),
         ),
         Branch(
             label="Routine contact to maintain the relationship",
@@ -512,6 +560,11 @@ CULTIVATE_INFORMANT = Template(
             event_type="informant_contact",
             changed_fields=("character.current_activity",),
             magnitude=0.28,
+            scene_pressure_stub=(
+                "{actor} is maintaining contact with {target} through a subtle "
+                "off-screen channel. It can surface as a message, glance, coded "
+                "exchange, or be deferred."
+            ),
         ),
         Branch(
             label="Place a small overture from a distance",
@@ -528,8 +581,14 @@ CULTIVATE_INFORMANT = Template(
             event_type="informant_contact",
             changed_fields=("character.current_activity",),
             magnitude=0.18,
+            scene_pressure_stub=(
+                "{actor} has placed a small indirect overture for {target}. "
+                "Treat it as optional atmosphere or a hook the Storyteller can "
+                "choose to pick up."
+            ),
         ),
     ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
 )
 
 

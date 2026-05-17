@@ -7,7 +7,11 @@ from dataclasses import replace
 import pytest
 
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.resolver import OrreryResolutionDraft, OrreryTickProposal
+from nexus.agents.orrery.resolver import (
+    OrreryResolutionDraft,
+    OrreryScenePressureDraft,
+    OrreryTickProposal,
+)
 from nexus.api.lore_adapter import response_to_incubator
 
 
@@ -136,12 +140,36 @@ def _proposal() -> OrreryTickProposal:
     )
 
 
+def _scene_pressure() -> OrreryScenePressureDraft:
+    return OrreryScenePressureDraft(
+        template_id="protect_kin",
+        priority=95,
+        binding_hash="pressure-1",
+        bindings={"actor": 1, "target": 2},
+        branch_label="Travel toward the target's last known location",
+        pressure_stub="{actor} is moving toward {target}.",
+        prompt_text="Mara is moving toward Vale.",
+        magnitude=0.52,
+    )
+
+
 def test_proposal_round_trips_through_json_shape() -> None:
     """Commit can hydrate the exact proposal shape stored in incubator JSONB."""
 
     proposal = _proposal()
 
     assert OrreryTickProposal.from_dict(proposal.to_dict()) == proposal
+
+
+def test_proposal_round_trips_scene_pressures_without_state_delta() -> None:
+    """Scene pressure survives incubator JSONB without becoming commit state."""
+
+    base = _proposal()
+    proposal = replace(base, scene_pressures=(_scene_pressure(),))
+    payload = proposal.to_dict()
+
+    assert "state_delta" not in payload["scene_pressures"][0]
+    assert OrreryTickProposal.from_dict(payload) == proposal
 
 
 def test_response_to_incubator_serializes_orrery_proposal() -> None:
@@ -159,6 +187,33 @@ def test_response_to_incubator_serializes_orrery_proposal() -> None:
     assert incubator_data["orrery_proposal"]["resolutions"][0]["template_id"] == (
         "evade_pursuers"
     )
+    assert incubator_data["orrery_proposal"]["scene_pressures"] == []
+
+
+def test_commit_orrery_tick_ignores_scene_pressures() -> None:
+    """Prompt-only pressures do not materialize canonical Orrery writes."""
+
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(),
+        scene_pressures=(_scene_pressure(),),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor()
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    assert result.resolution_count == 0
+    assert result.event_count == 0
+    assert result.tag_mutation_count == 0
+    assert cursor.executed == []
 
 
 def test_commit_orrery_tick_materializes_resolution_event_and_tags() -> None:

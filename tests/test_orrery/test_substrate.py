@@ -6,6 +6,7 @@ from nexus.agents.orrery.demo import run_preset
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
+    PresentTargetPolicy,
     Slot,
     Template,
     WorldState,
@@ -46,6 +47,27 @@ def test_missing_always_fallback_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="bad_template"):
         validate_always_fallbacks((template,))
+
+
+def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
+    """Template authors must provide prompt text for every pressure branch."""
+
+    with pytest.raises(ValueError, match="scene_pressure_stub.*missing"):
+        Template(
+            id="bad_pressure_template",
+            priority=1,
+            blurb="Missing prompt-only pressure text.",
+            required_slots=(Slot.ACTOR, Slot.TARGET),
+            package_gate=ALWAYS,
+            branches=(
+                Branch(
+                    "missing pressure",
+                    ALWAYS,
+                    "{actor} affects {target}.",
+                ),
+            ),
+            present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+        )
 
 
 @pytest.mark.parametrize(
