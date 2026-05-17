@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import timedelta
 import json
 from typing import Any, Mapping, Optional
 
@@ -33,8 +34,31 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags_target.add",
         "entity_tags_target.remove",
         "need.fulfill",
+        "travel.start",
+        "travel.advance",
+        "travel.arrive",
+        "travel.delay",
     }
 )
+
+TRAVEL_MODE_DETOUR_FACTOR = {
+    "walking": 1.35,
+    "vehicle": 1.25,
+    "rail": 1.15,
+    "water": 1.40,
+    "air": 1.05,
+    "covert": 1.80,
+    "mixed": 1.40,
+}
+TRAVEL_MODE_SPEED_KMH = {
+    "walking": 5.0,
+    "vehicle": 45.0,
+    "rail": 75.0,
+    "water": 25.0,
+    "air": 450.0,
+    "covert": 3.5,
+    "mixed": 25.0,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,6 +494,34 @@ def _apply_state_delta_sync(
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
         )
+    if "travel.start" in draft.state_delta:
+        _apply_travel_start_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.start"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.advance" in draft.state_delta:
+        _apply_travel_advance_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.advance"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.delay" in draft.state_delta:
+        _apply_travel_delay_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.delay"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.arrive" in draft.state_delta:
+        _apply_travel_arrive_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.arrive"],
+            source_chunk_id=source_chunk_id,
+        )
     return tag_mutations
 
 
@@ -547,6 +599,34 @@ async def _apply_state_delta_async(
             template_id=draft.template_id,
             source_chunk_id=source_chunk_id,
             need_tuning=need_tuning,
+        )
+    if "travel.start" in draft.state_delta:
+        await _apply_travel_start_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.start"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.advance" in draft.state_delta:
+        await _apply_travel_advance_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.advance"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.delay" in draft.state_delta:
+        await _apply_travel_delay_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.delay"],
+            source_chunk_id=source_chunk_id,
+        )
+    if "travel.arrive" in draft.state_delta:
+        await _apply_travel_arrive_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            payload=draft.state_delta["travel.arrive"],
+            source_chunk_id=source_chunk_id,
         )
     return tag_mutations
 
@@ -682,6 +762,415 @@ async def _apply_need_fulfillment_async(
         template_id=template_id,
         source_chunk_id=source_chunk_id,
         need_tuning=need_tuning,
+    )
+
+
+def _coerce_travel_payload(raw: Any) -> dict[str, Any]:
+    """Normalize a template's typed travel effect."""
+
+    if raw is None or raw is True:
+        return {}
+    if isinstance(raw, Mapping):
+        return dict(raw)
+    raise ValueError("travel state_delta values must be mappings or true")
+
+
+def _travel_mode(payload: Mapping[str, Any], fallback: str = "mixed") -> str:
+    mode = str(payload.get("mode") or payload.get("travel_mode") or fallback)
+    if mode not in TRAVEL_MODE_DETOUR_FACTOR:
+        raise ValueError(f"Unsupported Orrery travel mode: {mode!r}")
+    return mode
+
+
+def _travel_risk(payload: Mapping[str, Any], fallback: str = "low") -> str:
+    risk = str(payload.get("risk") or fallback)
+    if risk not in {"low", "moderate", "high", "extreme"}:
+        raise ValueError(f"Unsupported Orrery travel risk: {risk!r}")
+    return risk
+
+
+def _apply_travel_start_sync(
+    cur: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.start requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    mode = _travel_mode(data)
+    risk = _travel_risk(data)
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    origin_place_id = data.get("origin_place_id") or _actor_location_sync(
+        cur, actor_entity_id
+    )
+    destination_place_id = data.get("destination_place_id")
+    if destination_place_id is None:
+        destination_place_id = _planned_destination_sync(cur, actor_entity_id)
+    if origin_place_id is None or destination_place_id is None:
+        raise ValueError("travel.start requires origin and destination places")
+
+    estimate = _estimate_route_sync(
+        cur,
+        origin_place_id=int(origin_place_id),
+        destination_place_id=int(destination_place_id),
+        mode=mode,
+    )
+    eta = _eta(world_time, estimate["duration_minutes"])
+    progress = float(data.get("initial_progress", 0.0))
+    cur.execute(
+        """
+        INSERT INTO character_travel_states (
+            character_entity_id, status, anchor_place_id,
+            origin_place_id, destination_place_id,
+            route_method, travel_mode, risk, progress_ratio,
+            estimated_distance_m, estimated_duration_minutes,
+            started_at_world_time, updated_at_world_time, eta_world_time,
+            route_metadata
+        ) VALUES (
+            %s, 'in_transit', %s,
+            %s, %s,
+            'estimated', %s::orrery_travel_mode, %s::orrery_travel_risk, %s,
+            %s, %s,
+            %s, %s, %s,
+            %s::jsonb
+        )
+        ON CONFLICT (character_entity_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            anchor_place_id = EXCLUDED.anchor_place_id,
+            origin_place_id = EXCLUDED.origin_place_id,
+            destination_place_id = EXCLUDED.destination_place_id,
+            route_method = EXCLUDED.route_method,
+            travel_mode = EXCLUDED.travel_mode,
+            risk = EXCLUDED.risk,
+            progress_ratio = EXCLUDED.progress_ratio,
+            estimated_distance_m = EXCLUDED.estimated_distance_m,
+            estimated_duration_minutes = EXCLUDED.estimated_duration_minutes,
+            started_at_world_time = EXCLUDED.started_at_world_time,
+            updated_at_world_time = EXCLUDED.updated_at_world_time,
+            eta_world_time = EXCLUDED.eta_world_time,
+            route_metadata = EXCLUDED.route_metadata,
+            updated_at = now()
+        """,
+        (
+            actor_entity_id,
+            origin_place_id,
+            origin_place_id,
+            destination_place_id,
+            mode,
+            risk,
+            progress,
+            estimate["distance_m"],
+            estimate["duration_minutes"],
+            world_time,
+            world_time,
+            eta,
+            json.dumps(estimate["metadata"]),
+        ),
+    )
+
+
+async def _apply_travel_start_async(
+    conn: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.start requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    mode = _travel_mode(data)
+    risk = _travel_risk(data)
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    origin_place_id = data.get("origin_place_id") or await _actor_location_async(
+        conn, actor_entity_id
+    )
+    destination_place_id = data.get("destination_place_id")
+    if destination_place_id is None:
+        destination_place_id = await _planned_destination_async(conn, actor_entity_id)
+    if origin_place_id is None or destination_place_id is None:
+        raise ValueError("travel.start requires origin and destination places")
+
+    estimate = await _estimate_route_async(
+        conn,
+        origin_place_id=int(origin_place_id),
+        destination_place_id=int(destination_place_id),
+        mode=mode,
+    )
+    eta = _eta(world_time, estimate["duration_minutes"])
+    progress = float(data.get("initial_progress", 0.0))
+    await conn.execute(
+        """
+        INSERT INTO character_travel_states (
+            character_entity_id, status, anchor_place_id,
+            origin_place_id, destination_place_id,
+            route_method, travel_mode, risk, progress_ratio,
+            estimated_distance_m, estimated_duration_minutes,
+            started_at_world_time, updated_at_world_time, eta_world_time,
+            route_metadata
+        ) VALUES (
+            $1, 'in_transit', $2,
+            $3, $4,
+            'estimated', $5::orrery_travel_mode, $6::orrery_travel_risk, $7,
+            $8, $9,
+            $10, $11, $12,
+            $13::jsonb
+        )
+        ON CONFLICT (character_entity_id) DO UPDATE SET
+            status = EXCLUDED.status,
+            anchor_place_id = EXCLUDED.anchor_place_id,
+            origin_place_id = EXCLUDED.origin_place_id,
+            destination_place_id = EXCLUDED.destination_place_id,
+            route_method = EXCLUDED.route_method,
+            travel_mode = EXCLUDED.travel_mode,
+            risk = EXCLUDED.risk,
+            progress_ratio = EXCLUDED.progress_ratio,
+            estimated_distance_m = EXCLUDED.estimated_distance_m,
+            estimated_duration_minutes = EXCLUDED.estimated_duration_minutes,
+            started_at_world_time = EXCLUDED.started_at_world_time,
+            updated_at_world_time = EXCLUDED.updated_at_world_time,
+            eta_world_time = EXCLUDED.eta_world_time,
+            route_metadata = EXCLUDED.route_metadata,
+            updated_at = now()
+        """,
+        actor_entity_id,
+        origin_place_id,
+        origin_place_id,
+        destination_place_id,
+        mode,
+        risk,
+        progress,
+        estimate["distance_m"],
+        estimate["duration_minutes"],
+        world_time,
+        world_time,
+        eta,
+        json.dumps(estimate["metadata"]),
+    )
+
+
+def _apply_travel_advance_sync(
+    cur: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.advance requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    progress_delta = float(data.get("progress_delta", 0.35))
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    current = _current_travel_progress_sync(cur, actor_entity_id)
+    new_progress = min(1.0, max(0.0, current + progress_delta))
+    cur.execute(
+        """
+        UPDATE character_travel_states
+        SET progress_ratio = %s,
+            updated_at_world_time = %s,
+            updated_at = now()
+        WHERE character_entity_id = %s
+          AND status = 'in_transit'
+        """,
+        (new_progress, world_time, actor_entity_id),
+    )
+    if getattr(cur, "rowcount", 0) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+
+
+async def _apply_travel_advance_async(
+    conn: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.advance requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    progress_delta = float(data.get("progress_delta", 0.35))
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    current = await _current_travel_progress_async(conn, actor_entity_id)
+    new_progress = min(1.0, max(0.0, current + progress_delta))
+    status = await conn.execute(
+        """
+        UPDATE character_travel_states
+        SET progress_ratio = $1,
+            updated_at_world_time = $2,
+            updated_at = now()
+        WHERE character_entity_id = $3
+          AND status = 'in_transit'
+        """,
+        new_progress,
+        world_time,
+        actor_entity_id,
+    )
+    if _affected_count(status) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+
+
+def _apply_travel_delay_sync(
+    cur: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.delay requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    risk = data.get("risk")
+    if risk is not None:
+        _travel_risk({"risk": risk})
+    cur.execute(
+        """
+        UPDATE character_travel_states
+        SET risk = COALESCE(%s::orrery_travel_risk, risk),
+            updated_at_world_time = %s,
+            route_metadata = route_metadata || %s::jsonb,
+            updated_at = now()
+        WHERE character_entity_id = %s
+          AND status = 'in_transit'
+        """,
+        (
+            risk,
+            world_time,
+            json.dumps({"last_delay": data}),
+            actor_entity_id,
+        ),
+    )
+    if getattr(cur, "rowcount", 0) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+
+
+async def _apply_travel_delay_async(
+    conn: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.delay requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    risk = data.get("risk")
+    if risk is not None:
+        _travel_risk({"risk": risk})
+    status = await conn.execute(
+        """
+        UPDATE character_travel_states
+        SET risk = COALESCE($1::orrery_travel_risk, risk),
+            updated_at_world_time = $2,
+            route_metadata = route_metadata || $3::jsonb,
+            updated_at = now()
+        WHERE character_entity_id = $4
+          AND status = 'in_transit'
+        """,
+        risk,
+        world_time,
+        json.dumps({"last_delay": data}),
+        actor_entity_id,
+    )
+    if _affected_count(status) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+
+
+def _apply_travel_arrive_sync(
+    cur: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.arrive requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    destination_place_id = data.get("destination_place_id")
+    if destination_place_id is None:
+        destination_place_id = _active_destination_sync(cur, actor_entity_id)
+    if destination_place_id is None:
+        raise ValueError("travel.arrive requires a destination place")
+    cur.execute(
+        "UPDATE characters SET current_location = %s WHERE entity_id = %s",
+        (destination_place_id, actor_entity_id),
+    )
+    if getattr(cur, "rowcount", 0) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} has no character row")
+    cur.execute(
+        """
+        UPDATE character_travel_states
+        SET status = 'at_place',
+            anchor_place_id = %s,
+            origin_place_id = NULL,
+            destination_place_id = NULL,
+            progress_ratio = 0,
+            estimated_distance_m = NULL,
+            estimated_duration_minutes = NULL,
+            started_at_world_time = NULL,
+            updated_at_world_time = %s,
+            eta_world_time = NULL,
+            route_metadata = route_metadata || %s::jsonb,
+            updated_at = now()
+        WHERE character_entity_id = %s
+        """,
+        (
+            destination_place_id,
+            world_time,
+            json.dumps({"last_arrived_place_id": destination_place_id}),
+            actor_entity_id,
+        ),
+    )
+
+
+async def _apply_travel_arrive_async(
+    conn: Any,
+    *,
+    actor_entity_id: Optional[int],
+    payload: Any,
+    source_chunk_id: int,
+) -> None:
+    if actor_entity_id is None:
+        raise ValueError("travel.arrive requires an actor binding")
+    data = _coerce_travel_payload(payload)
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    destination_place_id = data.get("destination_place_id")
+    if destination_place_id is None:
+        destination_place_id = await _active_destination_async(conn, actor_entity_id)
+    if destination_place_id is None:
+        raise ValueError("travel.arrive requires a destination place")
+    status = await conn.execute(
+        "UPDATE characters SET current_location = $1 WHERE entity_id = $2",
+        destination_place_id,
+        actor_entity_id,
+    )
+    if _affected_count(status) == 0:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} has no character row")
+    await conn.execute(
+        """
+        UPDATE character_travel_states
+        SET status = 'at_place',
+            anchor_place_id = $1,
+            origin_place_id = NULL,
+            destination_place_id = NULL,
+            progress_ratio = 0,
+            estimated_distance_m = NULL,
+            estimated_duration_minutes = NULL,
+            started_at_world_time = NULL,
+            updated_at_world_time = $2,
+            eta_world_time = NULL,
+            route_metadata = route_metadata || $3::jsonb,
+            updated_at = now()
+        WHERE character_entity_id = $4
+        """,
+        destination_place_id,
+        world_time,
+        json.dumps({"last_arrived_place_id": destination_place_id}),
+        actor_entity_id,
     )
 
 
@@ -1236,6 +1725,183 @@ async def _actor_location_async(
         "SELECT current_location FROM characters WHERE entity_id = $1",
         actor_entity_id,
     )
+
+
+def _planned_destination_sync(cur: Any, actor_entity_id: int) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT destination_place_id
+        FROM character_travel_states
+        WHERE character_entity_id = %s
+          AND status IN ('planned', 'at_place')
+        """,
+        (actor_entity_id,),
+    )
+    row = cur.fetchone()
+    return _row_get(row, "destination_place_id", 0) if row else None
+
+
+async def _planned_destination_async(conn: Any, actor_entity_id: int) -> Optional[int]:
+    return await conn.fetchval(
+        """
+        SELECT destination_place_id
+        FROM character_travel_states
+        WHERE character_entity_id = $1
+          AND status IN ('planned', 'at_place')
+        """,
+        actor_entity_id,
+    )
+
+
+def _active_destination_sync(cur: Any, actor_entity_id: int) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT destination_place_id
+        FROM character_travel_states
+        WHERE character_entity_id = %s
+          AND status = 'in_transit'
+        """,
+        (actor_entity_id,),
+    )
+    row = cur.fetchone()
+    return _row_get(row, "destination_place_id", 0) if row else None
+
+
+async def _active_destination_async(conn: Any, actor_entity_id: int) -> Optional[int]:
+    return await conn.fetchval(
+        """
+        SELECT destination_place_id
+        FROM character_travel_states
+        WHERE character_entity_id = $1
+          AND status = 'in_transit'
+        """,
+        actor_entity_id,
+    )
+
+
+def _current_travel_progress_sync(cur: Any, actor_entity_id: int) -> float:
+    cur.execute(
+        """
+        SELECT progress_ratio
+        FROM character_travel_states
+        WHERE character_entity_id = %s
+          AND status = 'in_transit'
+        """,
+        (actor_entity_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+    return float(_row_get(row, "progress_ratio", 0) or 0.0)
+
+
+async def _current_travel_progress_async(conn: Any, actor_entity_id: int) -> float:
+    progress = await conn.fetchval(
+        """
+        SELECT progress_ratio
+        FROM character_travel_states
+        WHERE character_entity_id = $1
+          AND status = 'in_transit'
+        """,
+        actor_entity_id,
+    )
+    if progress is None:
+        raise ValueError(f"Orrery actor entity {actor_entity_id} is not in transit")
+    return float(progress or 0.0)
+
+
+def _estimate_route_sync(
+    cur: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+) -> dict[str, Any]:
+    cur.execute(
+        """
+        SELECT ST_Distance(o.coordinates, d.coordinates) AS geodesic_distance_m
+        FROM places o
+        JOIN places d ON d.id = %s
+        WHERE o.id = %s
+          AND o.coordinates IS NOT NULL
+          AND d.coordinates IS NOT NULL
+        """,
+        (destination_place_id, origin_place_id),
+    )
+    row = cur.fetchone()
+    geodesic_distance_m = _row_get(row, "geodesic_distance_m", 0) if row else None
+    return _route_estimate_from_distance(
+        geodesic_distance_m,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+    )
+
+
+async def _estimate_route_async(
+    conn: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+) -> dict[str, Any]:
+    geodesic_distance_m = await conn.fetchval(
+        """
+        SELECT ST_Distance(o.coordinates, d.coordinates) AS geodesic_distance_m
+        FROM places o
+        JOIN places d ON d.id = $1
+        WHERE o.id = $2
+          AND o.coordinates IS NOT NULL
+          AND d.coordinates IS NOT NULL
+        """,
+        destination_place_id,
+        origin_place_id,
+    )
+    return _route_estimate_from_distance(
+        geodesic_distance_m,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+    )
+
+
+def _route_estimate_from_distance(
+    geodesic_distance_m: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+) -> dict[str, Any]:
+    detour_factor = TRAVEL_MODE_DETOUR_FACTOR[mode]
+    speed_kmh = TRAVEL_MODE_SPEED_KMH[mode]
+    if geodesic_distance_m is None:
+        distance_m = None
+        duration_minutes = None
+    else:
+        distance_m = max(0.0, float(geodesic_distance_m) * detour_factor)
+        duration_minutes = (distance_m / 1000.0) / speed_kmh * 60.0
+    metadata = {
+        "route_method": "estimated",
+        "origin_place_id": origin_place_id,
+        "destination_place_id": destination_place_id,
+        "travel_mode": mode,
+        "geodesic_distance_m": (
+            float(geodesic_distance_m) if geodesic_distance_m is not None else None
+        ),
+        "detour_factor": detour_factor,
+        "speed_kmh": speed_kmh,
+    }
+    return {
+        "distance_m": distance_m,
+        "duration_minutes": duration_minutes,
+        "metadata": metadata,
+    }
+
+
+def _eta(world_time: Any, duration_minutes: Optional[float]) -> Any:
+    if world_time is None or duration_minutes is None:
+        return None
+    return world_time + timedelta(minutes=float(duration_minutes))
 
 
 def _update_resolution_events_sync(

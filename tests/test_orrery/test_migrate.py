@@ -199,3 +199,60 @@ def test_interpersonal_need_migration_uses_safe_enum_extension_pattern() -> None
     assert "ALTER TYPE character_need_type ADD VALUE {}" in migration_source
     assert "sql.Literal(need_type)" in migration_source
     assert "ADD VALUE IF NOT EXISTS" not in migration_source
+
+
+def test_travel_work_migration_keeps_routing_schema_extensible() -> None:
+    """Migration 033 stores estimates now while leaving space for real routes."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent / "migrations" / "033_orrery_travel_work.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert migration.TRAVEL_STATUS_VALUES == ("at_place", "planned", "in_transit")
+    assert migration.TRAVEL_ROUTE_METHOD_VALUES == (
+        "estimated",
+        "authored_edge",
+        "osm_graph",
+    )
+    assert {
+        "walking",
+        "vehicle",
+        "rail",
+        "water",
+        "air",
+        "covert",
+        "mixed",
+    } <= set(migration.TRAVEL_MODE_VALUES)
+    assert "character_travel_states" in migration_source
+    assert "orrery_travel_edges" in migration_source
+    assert "route_geometry geometry(LineString, 4326)" in migration_source
+    assert "backfilled_from_current_location" in migration_source
+
+
+def test_travel_work_migration_seeds_work_travel_vocab() -> None:
+    """Migration 033 registers the tags and event types queried by templates."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent / "migrations" / "033_orrery_travel_work.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert {"work_obligation", "field_worker", "route_familiar", "travel_ready"} <= {
+        tag for tag, _category, _description in migration.DURABLE_TAGS
+    }
+    assert {"workplace", "worksite", "administrative_office", "transit_hub"} <= {
+        tag for tag, _description in migration.PLACE_AFFORDANCE_TAGS
+    }
+    assert {
+        "travel_departed",
+        "travel_progressed",
+        "travel_delayed",
+        "travel_arrived",
+        "work_performed",
+        "household_work_performed",
+    } <= {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }

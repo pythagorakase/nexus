@@ -21,11 +21,15 @@ from nexus.agents.orrery.substrate import (
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
     has_tag,
+    has_travel_destination,
     in_location_class,
+    is_in_transit,
     lacks_tag,
     recent_event,
     since_last_event_at_least,
     time_of_day_in,
+    travel_progress_at_or_above,
+    travel_risk_is,
     trust_at_least,
     trust_below,
     weather_is,
@@ -941,6 +945,249 @@ KEEP_VIGIL = Template(
 
 
 # Section B — Maintenance of self
+
+
+TRAVEL = Template(
+    id="travel",
+    priority=21,
+    blurb="A character moves between meaningful places without pretending the road is a room.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        OR(is_in_transit(), has_travel_destination()),
+        NOT(has_ephemeral("wounded")),
+        NOT(has_ephemeral("bereaved")),
+    ),
+    branches=(
+        Branch(
+            label="Arrive at the planned destination",
+            conditions=AND(is_in_transit(), travel_progress_at_or_above(0.95)),
+            narrative_stub=(
+                "{actor} reaches the destination at last. The route drops "
+                "away behind them into the ordinary unreliability of maps, "
+                "and the place ahead becomes immediate."
+            ),
+            state_delta={
+                "character.current_activity": "arriving at destination",
+                "travel.arrive": True,
+            },
+            event_type="travel_arrived",
+            changed_fields=(
+                "character.current_location",
+                "character.current_activity",
+                "character_travel_states.status",
+            ),
+            magnitude=0.34,
+        ),
+        Branch(
+            label="Lose time to bad conditions or route friction",
+            conditions=AND(
+                is_in_transit(),
+                OR(
+                    travel_risk_is("high", "extreme"),
+                    weather_is("rain", "snow", "fog"),
+                ),
+            ),
+            narrative_stub=(
+                "{actor} loses time to the route itself — weather, traffic, "
+                "closed access, or the thousand small refusals a city can "
+                "make when someone is trying to cross it."
+            ),
+            state_delta={
+                "character.current_activity": "delayed in transit",
+                "travel.delay": {"risk": "moderate"},
+            },
+            event_type="travel_delayed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.risk",
+            ),
+            magnitude=0.24,
+        ),
+        Branch(
+            label="Make steady progress along the route",
+            conditions=is_in_transit(),
+            narrative_stub=(
+                "{actor} keeps moving: transfers, crossings, service "
+                "corridors, streets whose names matter less than the fact "
+                "that each one puts the destination a little closer."
+            ),
+            state_delta={
+                "character.current_activity": "traveling toward destination",
+                "travel.advance": {"progress_delta": 0.35},
+            },
+            event_type="travel_progressed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Depart toward the planned destination",
+            conditions=AND(
+                has_travel_destination(),
+                NOT(is_in_transit()),
+                OR(
+                    has_tag("travel_ready"),
+                    has_tag("travel_provisioned"),
+                    has_tag("route_familiar"),
+                    in_location_class("transit_hub"),
+                ),
+            ),
+            narrative_stub=(
+                "{actor} starts the journey with enough of a route in mind "
+                "to make the first leg real. The exact path can change; the "
+                "destination no longer can."
+            ),
+            state_delta={
+                "character.current_activity": "departing toward destination",
+                "travel.start": {"mode": "mixed", "initial_progress": 0.05},
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.28,
+        ),
+        Branch(
+            label="Prepare the journey rather than starting badly",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} does not start badly. They check timing, supplies, "
+                "weather, access, and the parts of the route that might "
+                "betray them before they have earned the right to improvise."
+            ),
+            state_delta={
+                "character.current_activity": "preparing route and supplies",
+                "entity_tags.add": ["travel_ready"],
+            },
+            event_type="travel_delayed",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.12,
+        ),
+    ),
+)
+
+
+WORK = Template(
+    id="work",
+    priority=14,
+    blurb="The recurring work that keeps a life, household, or organization functioning.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        OR(
+            has_tag("work_obligation"),
+            has_any_tag(
+                "keeps_shop",
+                "merchant",
+                "innkeeper",
+                "trader",
+                "domestic_role",
+                "cares_for_household",
+                "field_worker",
+                "soldier",
+                "researcher",
+                "academic",
+            ),
+            in_location_class("workplace"),
+            in_location_class("worksite"),
+            in_location_class("administrative_office"),
+        ),
+        NOT(is_in_transit()),
+        since_last_event_at_least("work_performed", minimum_ticks=4),
+        since_last_event_at_least("household_work_performed", minimum_ticks=4),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("wounded")),
+        NOT(has_ephemeral("bereaved")),
+    ),
+    branches=(
+        Branch(
+            label="Work a public-facing shift",
+            conditions=OR(
+                in_location_class("workplace"),
+                in_location_class("market"),
+                has_any_tag("keeps_shop", "merchant", "innkeeper", "trader"),
+            ),
+            narrative_stub=(
+                "{actor} gives the day to work that other people can see: "
+                "the counter, the ledger, the bargaining, the small "
+                "maintenance of trust that keeps trade from becoming chaos."
+            ),
+            state_delta={
+                "character.current_activity": "working a public-facing shift",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Handle field or maintenance work",
+            conditions=OR(in_location_class("worksite"), has_tag("field_worker")),
+            narrative_stub=(
+                "{actor} spends the hour in practical labor: repairs, "
+                "inspection, hauling, checking systems whose importance "
+                "only becomes visible when they fail."
+            ),
+            state_delta={
+                "character.current_activity": "handling field maintenance work",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.20,
+        ),
+        Branch(
+            label="Keep administrative obligations moving",
+            conditions=OR(
+                in_location_class("administrative_office"),
+                has_any_tag("researcher", "academic", "soldier"),
+            ),
+            narrative_stub=(
+                "{actor} moves necessary work through the quiet machinery: "
+                "forms, messages, rosters, notes, approvals, the kind of "
+                "paper trail that decides what can happen tomorrow."
+            ),
+            state_delta={
+                "character.current_activity": "handling administrative work",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Do the labor that holds a household together",
+            conditions=has_any_tag("domestic_role", "cares_for_household"),
+            narrative_stub=(
+                "{actor} does household work with the competence of someone "
+                "who knows that ordinary life is not self-maintaining: food, "
+                "cleaning, repairs, care, the small logistics of everyone "
+                "getting through the day."
+            ),
+            state_delta={
+                "character.current_activity": "doing household work",
+            },
+            event_type="household_work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Keep the obligation from slipping",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} takes care of the work that would otherwise start "
+                "to fray — not enough to become a story by itself, but "
+                "enough that the world does not have to break here today."
+            ),
+            state_delta={
+                "character.current_activity": "keeping obligations current",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.10,
+        ),
+    ),
+)
 
 
 TEND_CRAFT = Template(
@@ -2234,6 +2481,8 @@ BUILTIN_TEMPLATES = (
     REACH_OUT_TO_KIN,
     CONSULT_RIVAL,
     MOURN_LOSS,
+    TRAVEL,
+    WORK,
     TEND_CRAFT,
     SLEEP,
     DRINK,

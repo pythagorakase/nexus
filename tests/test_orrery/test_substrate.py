@@ -13,8 +13,10 @@ from nexus.agents.orrery.substrate import (
     PresentTargetPolicy,
     Slot,
     Template,
+    TravelState,
     WorldState,
     binding_hash,
+    co_located,
     count_co_located,
     evaluate_stack,
     has_any_intimacy_suppressor,
@@ -22,6 +24,7 @@ from nexus.agents.orrery.substrate import (
     has_need_debt_at_or_above,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
+    in_location,
     in_location_class,
     recent_event,
     since_last_event_at_least,
@@ -251,6 +254,34 @@ def test_since_last_event_at_least_target_slot_scopes_cooldown() -> None:
     # Per-target: only the same (actor, target) pair sees the cooldown.
     assert not per_target(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
     assert per_target(state, {Slot.ACTOR: 1, Slot.TARGET: 3})
+
+
+def test_in_transit_entities_are_not_treated_as_at_anchor_location() -> None:
+    """Travel state keeps legacy current_location readable but non-physical."""
+
+    state = WorldState(
+        locations={1: 10, 2: 10},
+        location_class={10: "home"},
+        relationship_types={(1, 2): frozenset({"romantic"})},
+        travel_states={
+            1: TravelState(
+                status="in_transit",
+                anchor_place_id=10,
+                origin_place_id=10,
+                destination_place_id=20,
+                progress_ratio=0.5,
+            )
+        },
+    )
+    bindings = {Slot.ACTOR: 1, Slot.TARGET: 2}
+
+    assert not in_location(10)(state, bindings)
+    assert not in_location_class("home")(state, bindings)
+    assert not co_located()(state, bindings)
+    assert not count_co_located(1)(state, {Slot.ACTOR: 1})
+    assert not count_co_located(1)(state, {Slot.ACTOR: 2})
+    assert not has_established_partner_co_located()(state, {Slot.ACTOR: 1})
+    assert not has_established_partner_co_located()(state, {Slot.ACTOR: 2})
 
 
 def test_targeted_events_fire_builtin_package_gates() -> None:

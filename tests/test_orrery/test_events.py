@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import json
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -28,6 +29,11 @@ class RecordingCursor:
         clear_tag_ids=None,
         world_time=None,
         need_state=None,
+        current_location=99,
+        planned_destination=42,
+        active_destination=42,
+        travel_progress=0.4,
+        geodesic_distance_m=10000,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -35,6 +41,11 @@ class RecordingCursor:
         self.clear_tag_ids = [] if clear_tag_ids is None else clear_tag_ids
         self.world_time = world_time or datetime(2073, 10, 31, 18, tzinfo=timezone.utc)
         self.need_state = {} if need_state is None else need_state
+        self.current_location = current_location
+        self.planned_destination = planned_destination
+        self.active_destination = active_destination
+        self.travel_progress = travel_progress
+        self.geodesic_distance_m = geodesic_distance_m
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -106,8 +117,31 @@ class RecordingCursor:
             self._fetchall = [
                 {"tag": tag} for tag in tags if (entity_id, tag) in self.current_tags
             ]
+        elif (
+            "SELECT destination_place_id FROM character_travel_states" in normalized
+            and "status IN ('planned', 'at_place')" in normalized
+        ):
+            self._fetchone = {"destination_place_id": self.planned_destination}
+        elif (
+            "SELECT destination_place_id FROM character_travel_states" in normalized
+            and "status = 'in_transit'" in normalized
+        ):
+            self._fetchone = {"destination_place_id": self.active_destination}
+        elif (
+            "SELECT progress_ratio FROM character_travel_states" in normalized
+            and "status = 'in_transit'" in normalized
+        ):
+            self._fetchone = {"progress_ratio": self.travel_progress}
+        elif "SELECT ST_Distance(o.coordinates, d.coordinates)" in normalized:
+            self._fetchone = {"geodesic_distance_m": self.geodesic_distance_m}
         elif "SELECT current_location FROM characters" in normalized:
-            self._fetchone = {"current_location": 99}
+            self._fetchone = {"current_location": self.current_location}
+        elif "INSERT INTO character_travel_states" in normalized:
+            self.rowcount = 1
+        elif "UPDATE character_travel_states" in normalized:
+            self.rowcount = 1
+        elif "UPDATE characters SET current_location" in normalized:
+            self.rowcount = 1
         elif "INSERT INTO world_events" in normalized:
             self._fetchone = {"id": 20}
         elif "SELECT et.id FROM entity_tags et JOIN tags t" in normalized:
@@ -415,6 +449,169 @@ def test_commit_orrery_tick_applies_target_tag_deltas() -> None:
     assert "VALUES (%s, 'target', %s)" in statements
     assert "mechanism, justification, source_chunk_id" in statements
     assert event_params[3] == 2
+
+
+def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> None:
+    """Departure records route state; current_location remains the place anchor."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-start-1",
+        bindings={"actor": 1},
+        branch_label="Depart toward the planned destination",
+        narrative_stub="{actor} starts the journey.",
+        state_delta={
+            "character.current_activity": "departing toward destination",
+            "travel.start": {
+                "destination_place_id": 42,
+                "mode": "vehicle",
+                "initial_progress": 0.1,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=(
+            "character.current_activity",
+            "character_travel_states.status",
+        ),
+        magnitude=0.28,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(current_location=99, geodesic_distance_m=10000)
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    travel_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO character_travel_states" in sql
+    )
+    route_metadata = json.loads(travel_params[-1])
+
+    assert result.resolution_count == 1
+    assert result.event_count == 1
+    assert "UPDATE characters SET current_location" not in statements
+    assert travel_params[:4] == (1, 99, 99, 42)
+    assert travel_params[4] == "vehicle"
+    assert travel_params[6] == pytest.approx(0.1)
+    assert travel_params[7] > 10000
+    assert route_metadata["route_method"] == "estimated"
+    assert route_metadata["origin_place_id"] == 99
+    assert route_metadata["destination_place_id"] == 42
+    assert route_metadata["travel_mode"] == "vehicle"
+    assert route_metadata["detour_factor"] > 1
+
+
+def test_commit_orrery_tick_advances_travel_progress_without_moving_actor() -> None:
+    """Progress updates the route row but leaves arrival to an explicit branch."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-progress-1",
+        bindings={"actor": 1},
+        branch_label="Make steady progress along the route",
+        narrative_stub="{actor} keeps moving.",
+        state_delta={
+            "character.current_activity": "traveling toward destination",
+            "travel.advance": {"progress_delta": 0.35},
+        },
+        event_type="travel_progressed",
+        changed_fields=("character_travel_states.progress_ratio",),
+        magnitude=0.18,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(travel_progress=0.5)
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    advance_params = next(
+        params
+        for sql, params in cursor.executed
+        if "UPDATE character_travel_states" in sql and "progress_ratio = %s" in sql
+    )
+
+    assert result.resolution_count == 1
+    assert "UPDATE characters SET current_location" not in statements
+    assert advance_params[0] == pytest.approx(0.85)
+
+
+def test_commit_orrery_tick_arrival_moves_actor_to_destination() -> None:
+    """Arrival is the only travel effect that rewrites current_location."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-arrive-1",
+        bindings={"actor": 1},
+        branch_label="Arrive at the planned destination",
+        narrative_stub="{actor} arrives.",
+        state_delta={
+            "character.current_activity": "arriving at destination",
+            "travel.arrive": True,
+        },
+        event_type="travel_arrived",
+        changed_fields=(
+            "character.current_location",
+            "character_travel_states.status",
+        ),
+        magnitude=0.34,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(active_destination=42)
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    location_params = next(
+        params
+        for sql, params in cursor.executed
+        if "UPDATE characters SET current_location" in sql
+    )
+    travel_params = next(
+        params
+        for sql, params in cursor.executed
+        if "UPDATE character_travel_states" in sql and "status = 'at_place'" in sql
+    )
+
+    assert result.resolution_count == 1
+    assert result.event_count == 1
+    assert location_params == (42, 1)
+    assert travel_params[0] == 42
 
 
 def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:
