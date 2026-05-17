@@ -1,9 +1,15 @@
 """Tests for the reviewed slot 2 semantic tag applicator."""
 
+from datetime import datetime, timezone
+
+import pytest
+
 from scripts.apply_slot2_semantic_tags import (
+    Candidate,
     EntityDefinition,
     TagDefinition,
     _build_candidates,
+    _insert_candidates,
 )
 
 
@@ -76,3 +82,136 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
     assert skipped["incompatible_category:place_affordance"] == 1
     assert skipped["incompatible_category:state"] == 1
     assert skipped["unknown_tag"] == 1
+
+
+def test_slot2_tag_backfill_skips_existing_and_missing_entities() -> None:
+    """Current tags and missing entities are reported without insert candidates."""
+
+    manifest = {
+        "per_entity": [
+            {
+                "entity_id": 1,
+                "entity_kind": "character",
+                "entity_name": "Alex",
+                "registered_tag_proposals": [
+                    {"tag": "contacts_available", "confidence": "high"},
+                ],
+            },
+            {
+                "entity_id": 99,
+                "entity_kind": "character",
+                "entity_name": "Ghost",
+                "registered_tag_proposals": [
+                    {"tag": "contacts_available", "confidence": "high"},
+                    {"tag": "off_grid", "confidence": "medium"},
+                ],
+            },
+        ]
+    }
+    tags = {
+        "contacts_available": TagDefinition(
+            id=1, category="orrery_state", is_ephemeral=False
+        ),
+        "off_grid": TagDefinition(id=2, category="orrery_state", is_ephemeral=False),
+    }
+    entities = {1: EntityDefinition(kind="character", name="Alex")}
+
+    candidates, skipped = _build_candidates(
+        manifest,
+        tags=tags,
+        entities=entities,
+        current={(1, 1)},
+        min_confidence="medium",
+    )
+
+    assert candidates == []
+    assert skipped["already_current"] == 1
+    assert skipped["missing_entity"] == 2
+
+
+def test_slot2_tag_backfill_rejects_manifest_entity_kind_mismatch() -> None:
+    """Entity kind drift between the manifest and slot database fails loudly."""
+
+    manifest = {
+        "per_entity": [
+            {
+                "entity_id": 1,
+                "entity_kind": "character",
+                "entity_name": "Dynacorp",
+                "registered_tag_proposals": [
+                    {"tag": "contacts_available", "confidence": "high"},
+                ],
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="does not match database kind"):
+        _build_candidates(
+            manifest,
+            tags={
+                "contacts_available": TagDefinition(
+                    id=1, category="orrery_state", is_ephemeral=False
+                )
+            },
+            entities={1: EntityDefinition(kind="faction", name="Dynacorp")},
+            current=set(),
+            min_confidence="medium",
+        )
+
+
+def test_slot2_tag_backfill_insert_candidates_counts_rows_without_mutating_current() -> (
+    None
+):
+    """The insert helper counts DB rowcount and keeps caller state unchanged."""
+
+    cursor = FakeInsertCursor(conflicting={(2, 20)})
+    current = {(3, 30)}
+    candidates = [
+        _candidate(entity_id=1, tag_id=10),
+        _candidate(entity_id=2, tag_id=20),
+        _candidate(entity_id=3, tag_id=30),
+    ]
+
+    inserted = _insert_candidates(
+        cursor,
+        candidates,
+        current=current,
+        source_kind="llm_generated",
+        world_time=datetime(2073, 10, 31, 9, 44, tzinfo=timezone.utc),
+    )
+
+    assert inserted == 1
+    assert current == {(3, 30)}
+    assert cursor.inserted == [(1, 10)]
+
+
+def _candidate(*, entity_id: int, tag_id: int) -> Candidate:
+    return Candidate(
+        entity_id=entity_id,
+        entity_kind="character",
+        entity_name=f"entity-{entity_id}",
+        proposed_tag=f"tag-{tag_id}",
+        tag=f"tag-{tag_id}",
+        tag_id=tag_id,
+        category="state",
+        confidence="high",
+        proposal_source="registered",
+        evidence="",
+    )
+
+
+class FakeInsertCursor:
+    """Small cursor fake for the applicator's INSERT path."""
+
+    def __init__(self, *, conflicting: set[tuple[int, int]]) -> None:
+        self.conflicting = conflicting
+        self.inserted: list[tuple[int, int]] = []
+        self.rowcount = 0
+
+    def execute(self, _sql: str, params: tuple[object, ...]) -> None:
+        key = (int(params[0]), int(params[1]))
+        if key in self.conflicting:
+            self.rowcount = 0
+            return
+        self.inserted.append(key)
+        self.rowcount = 1

@@ -13,15 +13,17 @@ import argparse
 import json
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
 import psycopg2
-from psycopg2.extensions import connection
 from psycopg2.extras import DictCursor
 
+from nexus.api.slot_utils import get_slot_db_url
 
-DEFAULT_DATABASE_URL = "postgresql://pythagor@localhost:5432/save_02"
+
+DEFAULT_SLOT = 2
 DEFAULT_MANIFEST = Path("temp/slot2_backfill/manifest.json")
 DEFAULT_SOURCE_KIND = "llm_generated"
 
@@ -107,6 +109,8 @@ class Candidate:
     tag_id: int
     category: str
     confidence: str
+    # Summary-only origin from the proposal manifest; database provenance is
+    # the single entity_tag_source_kind supplied by --source-kind.
     proposal_source: str
     evidence: str
 
@@ -122,9 +126,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to slot2_backfill/manifest.json.",
     )
     parser.add_argument(
-        "--database-url",
-        default=DEFAULT_DATABASE_URL,
-        help="Target slot database URL.",
+        "--slot",
+        type=int,
+        help=(
+            "Target save slot. Defaults to NEXUS_SLOT when set, otherwise "
+            f"slot {DEFAULT_SLOT}."
+        ),
     )
     parser.add_argument(
         "--min-confidence",
@@ -155,8 +162,9 @@ def main() -> None:
 
     args = parse_args()
     manifest = _load_manifest(args.manifest)
+    database_url = _resolve_database_url(args.slot)
 
-    conn = psycopg2.connect(args.database_url)
+    conn = psycopg2.connect(database_url)
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
             tags = _load_tags(cur)
@@ -198,20 +206,32 @@ def main() -> None:
             inserted=inserted,
             apply=args.apply,
             manifest_path=args.manifest,
-            database_url=args.database_url,
+            database_url=database_url,
         )
         _print_summary(summary)
         if args.summary_json is not None:
             args.summary_json.parent.mkdir(parents=True, exist_ok=True)
-            args.summary_json.write_text(json.dumps(summary, indent=2, sort_keys=True))
+            args.summary_json.write_text(
+                json.dumps(summary, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
     finally:
         conn.close()
+
+
+def _resolve_database_url(slot: Optional[int]) -> str:
+    if slot is not None:
+        return get_slot_db_url(slot=slot)
+    try:
+        return get_slot_db_url()
+    except RuntimeError:
+        return get_slot_db_url(slot=DEFAULT_SLOT)
 
 
 def _load_manifest(path: Path) -> Mapping[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Slot 2 backfill manifest not found: {path}")
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, Mapping) or not isinstance(data.get("per_entity"), list):
         raise ValueError("Manifest must contain a per_entity list")
     return data
@@ -272,7 +292,7 @@ def _load_source_kinds(cur: DictCursor) -> set[str]:
     return {str(row["enumlabel"]) for row in cur.fetchall()}
 
 
-def _load_current_world_time(cur: DictCursor) -> Optional[Any]:
+def _load_current_world_time(cur: DictCursor) -> Optional[datetime]:
     cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
     row = cur.fetchone()
     if row is None:
@@ -347,7 +367,7 @@ def _build_candidates(
             ):
                 deduped[key] = candidate
             else:
-                skipped["duplicate_lower_confidence"] += 1
+                skipped["duplicate_not_higher_confidence"] += 1
 
     return (sorted(deduped.values(), key=_candidate_sort_key), skipped)
 
@@ -386,12 +406,13 @@ def _insert_candidates(
     *,
     current: set[tuple[int, int]],
     source_kind: str,
-    world_time: Optional[Any],
+    world_time: Optional[datetime],
 ) -> int:
     inserted = 0
+    seen = set(current)
     for candidate in candidates:
         key = (candidate.entity_id, candidate.tag_id)
-        if key in current:
+        if key in seen:
             continue
         cur.execute(
             """
@@ -415,7 +436,7 @@ def _insert_candidates(
         )
         if cur.rowcount:
             inserted += 1
-            current.add(key)
+            seen.add(key)
     return inserted
 
 
