@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, and retrieval-boundary hardening in PR #220. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch resolves issue #213 by adding the relationship-valence magnitude read surface and Orrery trust hydration.
+**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, retrieval-boundary hardening in PR #220, relationship-trust hydration in PR #221, and deterministic review orchestration in PR #222. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch completes the post-commit semantic tag-clearance worker pass and adds a compact Orrery worker status surface.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -74,9 +74,17 @@ PR #219 implements PR 4: Bleed selection at Storyteller time. It selects a bound
 
 PR #220 closes the retrieval-boundary audit: warm slices and normal MEMNON search remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
 
+### Landed in PR #221
+
+PR #221 resolves issue #213's consensus Option B: `character_relationships.emotional_valence` remains the canonical hybrid enum/label, `entity_relationships_v.valence_magnitude` exposes the explicit integer mapping, and `WorldState.trust` hydrates from that read surface.
+
+### Landed in PR #222
+
+PR #222 adds deterministic review orchestration so newly opened PRs can schedule the delayed review-check workflow without relying on a model-specific local hook.
+
 ### Current Slice
 
-This branch resolves issue #213's consensus Option B: keep `character_relationships.emotional_valence` as the canonical hybrid enum/label, expose `entity_relationships_v.valence_magnitude` as an explicit integer mapping, and hydrate `WorldState.trust` from that read surface.
+This branch adds batched post-commit semantic clearance for ephemeral tags and exposes `python -m nexus.agents.orrery.worker --slot N --status` as a compact operational snapshot for pending Orrery background work.
 
 ### Package Author Checkpoint
 
@@ -436,7 +444,7 @@ CREATE TABLE orrery_narration_jobs (
 );
 ```
 
-Durable outbox surviving process restart. Dispatched via `FastAPI BackgroundTasks` — mirror the established pattern at `nexus/api/narrative.py:281` and `nexus/api/storyteller.py:561, 666`. Concretely: after `commit_incubator_to_database_sync` returns successfully in `_approve_narrative_impl`, call `background_tasks.add_task(drain_narration_outbox, slot)`. Also drainable via standalone CLI: `python -m nexus.agents.orrery.worker --slot 5`.
+Durable outbox surviving process restart. Dispatched via `FastAPI BackgroundTasks` — mirror the established pattern at `nexus/api/narrative.py:281` and `nexus/api/storyteller.py:561, 666`. Concretely: after `commit_incubator_to_database_sync` returns successfully in `_approve_narrative_impl`, call `background_tasks.add_task(process_orrery_outbox_sync, slot)`. Also drainable via standalone CLI: `python -m nexus.agents.orrery.worker --slot 5`; status-only inspection is `python -m nexus.agents.orrery.worker --slot 5 --status`.
 
 ### Off-Screen Narration Storage (Structural Visibility Separation)
 
@@ -647,7 +655,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - **No canonical writes yet.** Proposal is buffered and inspectable, but does not mutate any table or enter the storyteller payload.
 - Verification: unit coverage for disabled/enabled phase behavior, anchor fallback, fallback/non-fallback packages, and SQL filters; live direct dry-runs against slot 5 (baby narrative state) and slot 2 (mature narrative state) with zero writes.
 
-### PR 3 — CommitOrreryTick + Promote + Narrate + Clear (implemented in PR #214)
+### PR 3 — CommitOrreryTick + Promote + Narrate + Clear (implemented in PR #214 plus semantic-clearance follow-up)
 
 - **`CommitOrreryTick` writer**: Step 8.5 inside `commit_incubator_to_database_sync` (L233 — the production path; insert between `apply_state_updates_sync` at L415 and incubator clear at L418) and parity inside `commit_incubator_to_database` (L320 — async, test-only; insert between `apply_state_updates` at L420 and `clear_incubator` at L423). Both call into the unified event writer in `nexus/agents/orrery/events.py`.
 - **Stamp `tick_chunk_id`** on every proposal row at this step, after `insert_narrative_chunk` returns the new chunk id.
@@ -655,7 +663,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - Deterministic brief generator → `orrery_resolutions.brief`.
 - Frontier narration via durable outbox; trigger drain via `BackgroundTasks` from `_approve_narrative_impl` after commit returns; standalone CLI worker for catch-up.
 - Narrator persistence to `offscreen_narrations` (not `narrative_chunks`); embedding pipeline shared with MEMNON.
-- Clear (event) in commit transaction; Clear (semantic) post-commit async, batched, filtered.
+- Clear (event) in commit transaction; Clear (semantic) post-commit async, batched, filtered, and logged through `tag_clearance_log`.
 - `tag_clearance_log` rows with justification.
 - Instrumented counters for the Orrery Stage 7 trigger metrics.
 - Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, local-LLM failure, async-worker state transitions.
