@@ -86,13 +86,13 @@ jobs:
           fi
 
           if [[ "$EVENT_NAME" == "pull_request_target" && "$EVENT_ACTION" == "synchronize" ]]; then
-            ready_markers="$(
+            review_window_markers="$(
               gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
                 --paginate \
-                --jq '.[].body | select(contains("<!-- nexus-agent-review:ready:"))'
+                --jq '.[].body | select(contains("<!-- nexus-agent-review:claude-request:") or contains("<!-- nexus-agent-review:ready:"))'
             )"
-            if [[ -n "$ready_markers" ]]; then
-              echo "Agent review window already completed on this PR; skipping automatic synchronize re-review."
+            if [[ -n "$review_window_markers" ]]; then
+              echo "Agent review window already started on this PR; skipping automatic synchronize re-review."
               echo "AGENT_REVIEW_SKIP=true" >> "$GITHUB_ENV"
               exit 0
             fi
