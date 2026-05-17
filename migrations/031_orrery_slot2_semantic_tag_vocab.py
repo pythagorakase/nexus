@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Sequence
 
 from psycopg2.extensions import connection
@@ -102,8 +103,9 @@ DURABLE_TAGS: Sequence[tuple[str, str, str]] = (
     (
         "digital_mind",
         "bodyform",
-        "Character's personhood substantially exists as software, upload, or "
-        "digital consciousness.",
+        "Character's personhood substantially exists as software or digital "
+        "consciousness. Sibling of uploaded_consciousness; prefer digital_mind "
+        "when current embodiment is primarily digital.",
     ),
     (
         "fixer",
@@ -179,7 +181,8 @@ DURABLE_TAGS: Sequence[tuple[str, str, str]] = (
         "uploaded_consciousness",
         "bodyform",
         "Character's consciousness has been uploaded, transferred, or hosted "
-        "outside their original body.",
+        "outside their original body. Sibling of digital_mind; prefer "
+        "uploaded_consciousness when the transfer history is the salient trait.",
     ),
     (
         "veteran",
@@ -311,13 +314,48 @@ DURABLE_TAGS: Sequence[tuple[str, str, str]] = (
 )
 
 
+FACTION_CATEGORY_DESCRIPTIONS: Sequence[tuple[str, str]] = (
+    (
+        "history_class",
+        "Durable faction tags describing institutional continuity and origin.",
+    ),
+    (
+        "ideology_axis",
+        "Durable faction tags describing worldview, political, or metaphysical "
+        "orientation.",
+    ),
+    (
+        "resource_class",
+        "Durable faction tags describing material, economic, or informational "
+        "resources.",
+    ),
+    (
+        "operational_secrecy",
+        "Durable faction tags describing secrecy model and compartmentalization.",
+    ),
+    (
+        "legitimacy_status",
+        "Durable faction tags describing public/legal legitimacy posture.",
+    ),
+    (
+        "power_posture",
+        "Durable faction tags describing how the faction projects power.",
+    ),
+    (
+        "hidden_agenda_class",
+        "Faction tags for active covert agendas or internal threats; may be "
+        "durable or ephemeral depending on the specific tag.",
+    ),
+)
+
+
 # (tag, category, clearance_kind, clear_on_json, description)
 EPHEMERAL_TAGS: Sequence[tuple[str, str, str, str | None, str]] = (
     (
         "schismatic_internal_threat",
         "hidden_agenda_class",
         "semantic",
-        None,
+        '{"description": "cleared when the internal schism, split, or factional threat is narratively resolved"}',
         "Faction currently faces an internal schism, split, or factional threat.",
     ),
 )
@@ -377,28 +415,56 @@ def run(conn: connection) -> None:
 
 
 def _assert_seeded_categories(cur: Any) -> None:
-    expected = {tag: (category, False) for tag, category, _description in DURABLE_TAGS}
+    expected = {
+        tag: (category, False, None, None, None)
+        for tag, category, _description in DURABLE_TAGS
+    }
     expected.update(
         {
-            tag: (category, True)
+            tag: (
+                category,
+                True,
+                clearance_kind,
+                "extend_expiry",
+                _normalize_clear_on(clear_on),
+            )
             for tag, category, _clearance, _clear_on, _description in EPHEMERAL_TAGS
+            for clearance_kind, clear_on in ((_clearance, _clear_on),)
         }
     )
     cur.execute(
         """
-        SELECT tag, category, is_ephemeral
+        SELECT tag,
+               category,
+               is_ephemeral,
+               clearance_kind::text,
+               reapplication_policy::text,
+               clear_on
         FROM tags
         WHERE tag = ANY(%s)
         ORDER BY tag
         """,
         (list(expected),),
     )
-    actual = {
-        tag: (category, is_ephemeral) for tag, category, is_ephemeral in cur.fetchall()
-    }
+    actual = {}
+    for (
+        tag,
+        category,
+        is_ephemeral,
+        clearance_kind,
+        reapplication_policy,
+        clear_on,
+    ) in cur.fetchall():
+        actual[tag] = (
+            category,
+            is_ephemeral,
+            clearance_kind,
+            reapplication_policy,
+            _normalize_clear_on(clear_on),
+        )
     missing = sorted(set(expected) - set(actual))
     mismatched = sorted(
-        f"{tag}=category:{actual[tag][0]},ephemeral:{actual[tag][1]}"
+        f"{tag}={actual[tag]}"
         for tag in set(expected) & set(actual)
         if actual[tag] != expected[tag]
     )
@@ -409,3 +475,9 @@ def _assert_seeded_categories(cur: Any) -> None:
         if mismatched:
             message += f"; mismatched={mismatched}"
         raise RuntimeError(message)
+
+
+def _normalize_clear_on(value: Any) -> Any:
+    if isinstance(value, str):
+        return json.loads(value)
+    return value

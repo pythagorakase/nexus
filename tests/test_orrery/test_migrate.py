@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 import scripts.migrate as migrate
 
 
@@ -79,6 +81,8 @@ def test_slot2_semantic_vocab_migration_seeds_template_gate_tags() -> None:
     migration = migrate._load_python_migration(migration_path)
     durable_tags = {tag for tag, _category, _description in migration.DURABLE_TAGS}
 
+    # The full migration self-check validates every seeded tag and category
+    # at execution time; this test pins the template-gate subset.
     assert {
         "extended_household",
         "forager",
@@ -88,3 +92,62 @@ def test_slot2_semantic_vocab_migration_seeds_template_gate_tags() -> None:
         "survivalist",
         "travel_provisioned",
     } <= durable_tags
+
+
+def test_slot2_semantic_vocab_assertion_rejects_runtime_drift() -> None:
+    """Migration 031 self-check catches bad ephemeral policy rows."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "031_orrery_slot2_semantic_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    class FakeCursor:
+        def execute(self, _sql, _params=None):
+            return None
+
+        def fetchall(self):
+            return [
+                (
+                    "schismatic_internal_threat",
+                    "hidden_agenda_class",
+                    True,
+                    "semantic",
+                    "new_row",
+                    {
+                        "description": (
+                            "cleared when the internal schism, split, or "
+                            "factional threat is narratively resolved"
+                        )
+                    },
+                )
+            ]
+
+    with pytest.raises(RuntimeError, match="mismatched"):
+        migration._assert_seeded_categories(FakeCursor())
+
+
+def test_slot2_semantic_vocab_documents_new_faction_categories() -> None:
+    """Migration 031 names the new faction category namespaces."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "031_orrery_slot2_semantic_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    documented = {
+        category for category, _description in migration.FACTION_CATEGORY_DESCRIPTIONS
+    }
+
+    assert {
+        "history_class",
+        "ideology_axis",
+        "resource_class",
+        "operational_secrecy",
+        "legitimacy_status",
+        "power_posture",
+        "hidden_agenda_class",
+    } <= documented
