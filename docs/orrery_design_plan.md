@@ -613,6 +613,14 @@ Unanimous. No fixed boolean columns. Controlled vocabulary auto-generated from `
 
 Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_time` becomes a JOIN at read time. Off-screen narrations never advance chronology.
 
+### [OPEN 8] `TEND_CRAFT` role-tag vocabulary — RESOLVED: Keep expressive tags for now
+
+Keep the expressive role-tag vocabulary seeded by migration 027 rather than collapsing it to a smaller canonical set yet.
+
+This preserves the narrative signal PR #223 intentionally kept in storyteller-side tagging: `musician`, `dancer`, `performer`, `artist`, `writer`, and `artisan` carry different social and world-state affordances even though the current package resolver gates them through the same `TEND_CRAFT` practice branch. Collapsing now would lose information before there is evidence that the vocabulary is hurting package authoring, UI workflows, or resolver performance.
+
+The alias-oriented hybrid remains the right future escape hatch if that pain appears: use `tags.synonym_for` to group expressive tags under canonical families, then teach substrate hydration to resolve both canonical tags and aliases. That is a real implementation change, with query semantics and tests, so it should be driven by observed need rather than folded into the current cleanup thread.
+
 ---
 
 ## Phased Delivery
