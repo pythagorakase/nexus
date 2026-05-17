@@ -69,24 +69,57 @@ jobs:
           fi
 
           marker="<!-- nexus-agent-review:claude-request:${PR_HEAD_SHA} -->"
-          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' | grep -Fq "$marker"; then
+          existing_request="$(
+            MARKER="$marker" gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+              --paginate \
+              --jq '.[] | select(.body | contains(env.MARKER)) | .body'
+          )"
+          if [[ -n "$existing_request" ]]; then
+            claude_run_id="$(
+              printf '%s\n' "$existing_request" |
+                sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' |
+                tail -n 1
+            )"
+            if [[ -z "$claude_run_id" ]]; then
+              echo "::error::Existing Claude request marker for ${PR_HEAD_SHA} does not include a workflow run id, so downstream completion cannot be verified."
+              exit 1
+            fi
+
             echo "Claude review already requested for ${PR_HEAD_SHA}."
+            echo "CLAUDE_RUN_ID=${claude_run_id}" >> "$GITHUB_ENV"
             echo "AGENT_REVIEW_REQUESTED=true" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          gh workflow run claude-code-review.yml \
-            --ref "$BASE_REF" \
-            -f pr_number="$PR_NUMBER" \
-            -f head_sha="$PR_HEAD_SHA" \
-            -f review_prompt="$REVIEW_PROMPT"
+          dispatch_output="$(
+            gh workflow run claude-code-review.yml \
+              --ref "$BASE_REF" \
+              -f pr_number="$PR_NUMBER" \
+              -f head_sha="$PR_HEAD_SHA" \
+              -f review_prompt="$REVIEW_PROMPT" \
+              2>&1
+          )"
+          printf '%s\n' "$dispatch_output"
 
-          printf '%s\n%s\n' \
+          claude_run_id="$(
+            printf '%s\n' "$dispatch_output" |
+              sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' |
+              tail -n 1
+          )"
+          if [[ -z "$claude_run_id" ]]; then
+            echo "::error::Unable to determine Claude review workflow run id from dispatch output."
+            exit 1
+          fi
+          claude_run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${claude_run_id}"
+
+          printf '%s\n%s\n%s\n' \
             "$marker" \
             "Agent review orchestration requested Claude review for commit \`${PR_HEAD_SHA}\`." \
+            "Claude review workflow run: ${claude_run_url}" \
             > /tmp/claude-review-request.md
 
           gh pr comment "$PR_NUMBER" --body-file /tmp/claude-review-request.md
+          echo "CLAUDE_RUN_ID=${claude_run_id}" >> "$GITHUB_ENV"
           echo "AGENT_REVIEW_REQUESTED=true" >> "$GITHUB_ENV"
 
       - name: Wait for Claude review window
@@ -97,6 +130,23 @@ jobs:
         if: env.AGENT_REVIEW_REQUESTED == 'true'
         run: |
           set -euo pipefail
+
+          if [[ -z "${CLAUDE_RUN_ID:-}" ]]; then
+            echo "::error::No Claude review workflow run id available; unable to verify downstream completion."
+            exit 1
+          fi
+
+          run_summary="$(
+            gh run view "$CLAUDE_RUN_ID" \
+              --json status,conclusion,url \
+              --jq '[.status, (.conclusion // ""), .url] | @tsv'
+          )"
+          IFS=$'\t' read -r claude_status claude_conclusion claude_url <<< "$run_summary"
+
+          if [[ "$claude_status" != "completed" || "$claude_conclusion" != "success" ]]; then
+            echo "::error::Claude review workflow ${CLAUDE_RUN_ID} did not complete successfully: status=${claude_status}, conclusion=${claude_conclusion:-none} (${claude_url})"
+            exit 1
+          fi
 
           marker="<!-- nexus-agent-review:ready:${PR_HEAD_SHA} -->"
           if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' | grep -Fq "$marker"; then
