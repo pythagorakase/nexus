@@ -27,6 +27,7 @@ try:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.agents.orrery.bleed import select_bleed_menu_async
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -44,6 +45,7 @@ except ImportError:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
+    from nexus.agents.orrery.bleed import select_bleed_menu_async
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -651,6 +653,8 @@ class TurnCycleManager:
         """
         logger.debug("Assembling context payload...")
 
+        await self.select_orrery_bleed(turn_context)
+
         # Build the context payload
         turn_context.context_payload = {
             "user_input": turn_context.user_input,
@@ -683,6 +687,11 @@ class TurnCycleManager:
                 for pressure in turn_context.orrery_proposal.scene_pressures
             ]
 
+        if turn_context.bleed_menu:
+            turn_context.context_payload["orrery_bleed_menu"] = [
+                candidate.to_prompt_dict() for candidate in turn_context.bleed_menu
+            ]
+
         if turn_context.target_chunk_id is not None:
             turn_context.context_payload["metadata"][
                 "target_chunk_id"
@@ -709,6 +718,58 @@ class TurnCycleManager:
         }
 
         logger.info(f"Context payload assembled: {utilization:.1f}% budget utilization")
+
+    async def select_orrery_bleed(self, turn_context: TurnContext) -> None:
+        """Populate optional Orrery Bleed menu before payload assembly."""
+
+        orrery_settings = self.settings.get("orrery", {})
+        if not orrery_settings.get("enabled", False):
+            return
+
+        bleed_settings = orrery_settings.get("bleed", {})
+        max_candidates = int(bleed_settings.get("max_candidates", 3))
+        if max_candidates <= 0:
+            turn_context.phase_states["orrery_bleed"] = {
+                "enabled": True,
+                "skipped": True,
+                "reason": "max_candidates_zero",
+            }
+            return
+
+        if not self.lore.memnon:
+            raise RuntimeError("Orrery bleed requires MEMNON database access")
+        if not self.lore.llm_manager:
+            raise RuntimeError("Orrery bleed requires local LLM access")
+
+        latency_budget_ms = int(bleed_settings.get("latency_budget_ms", 2000))
+        with self.lore.memnon.Session() as session:
+            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            if anchor_chunk_id is None:
+                turn_context.phase_states["orrery_bleed"] = {
+                    "enabled": True,
+                    "skipped": True,
+                    "reason": "no_anchor_chunk",
+                }
+                return
+
+            result = await select_bleed_menu_async(
+                session,
+                llm_manager=self.lore.llm_manager,
+                anchor_chunk_id=anchor_chunk_id,
+                user_input=turn_context.user_input,
+                warm_slice=turn_context.warm_slice,
+                max_candidates=max_candidates,
+                latency_budget_ms=latency_budget_ms,
+            )
+
+        turn_context.bleed_menu = result.selected
+        turn_context.phase_states["orrery_bleed"] = {
+            "enabled": True,
+            "anchor_chunk_id": anchor_chunk_id,
+            "candidate_count": result.candidates_considered,
+            "selected_count": len(result.selected),
+            "timed_out": result.timed_out,
+        }
 
     async def call_apex_ai(self, turn_context: TurnContext) -> str:
         """

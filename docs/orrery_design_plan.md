@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210. PR #211 adds the no-write hydration/dry-run resolver and the LORE Phase 4.5 hook. The runtime pipeline is still disabled by default (`orrery.enabled = false`), produces only an inspectable `OrreryTickProposal`, and performs no canonical Orrery writes or storyteller payload injection yet.
+**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, and generated human-readable catalog support in PR #217. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch adds the PR 4 Bleed selector and Storyteller payload surface.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -59,15 +59,16 @@
 - Live direct dry-run against slot 2: hydrated mature-state morning/clear context, produced proposals, and performed zero writes.
 - `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment.
 
-### Next Slice
+### Landed After PR #211
 
-PR 3 should wire commit-time persistence while preserving the accepted-chunk invariant:
+- PR #214 wires accepted-chunk commit-time persistence, stamps `tick_chunk_id`, materializes Orrery resolutions, world events, and tag mutations, and enqueues durable narration jobs after canonical commit succeeds.
+- PR #212 expands the package library with multi-slot templates and additional scene-pressure-aware package metadata.
+- PR #216 adds present-target scene pressure proposals that are Storyteller-facing only and ignored by canonical Orrery commit writers.
+- PR #217 adds generated human-readable catalog support for package authors and reviewers.
 
-- stamp `tick_chunk_id` onto the in-memory proposal inside the accepted-chunk commit transaction
-- materialize `orrery_resolutions`, related `world_events`, and tag mutations through one unified writer
-- enqueue durable narration jobs only after canonical commit succeeds
-- add Promote/Narrate/Clear plumbing with loud failure behavior
-- verify idempotency, incubator rejection, and warm-slice isolation against live slots
+### Current Slice
+
+This branch implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
 
 ### Package Author Checkpoint
 
@@ -637,7 +638,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - **No canonical writes yet.** Proposal is buffered and inspectable, but does not mutate any table or enter the storyteller payload.
 - Verification: unit coverage for disabled/enabled phase behavior, anchor fallback, fallback/non-fallback packages, and SQL filters; live direct dry-runs against slot 5 (baby narrative state) and slot 2 (mature narrative state) with zero writes.
 
-### PR 3 — CommitOrreryTick + Promote + Narrate + Clear
+### PR 3 — CommitOrreryTick + Promote + Narrate + Clear (implemented in PR #214)
 
 - **`CommitOrreryTick` writer**: Step 8.5 inside `commit_incubator_to_database_sync` (L233 — the production path; insert between `apply_state_updates_sync` at L415 and incubator clear at L418) and parity inside `commit_incubator_to_database` (L320 — async, test-only; insert between `apply_state_updates` at L420 and `clear_incubator` at L423). Both call into the unified event writer in `nexus/agents/orrery/events.py`.
 - **Stamp `tick_chunk_id`** on every proposal row at this step, after `insert_narrative_chunk` returns the new chunk id.
@@ -650,14 +651,14 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - Instrumented counters for the Orrery Stage 7 trigger metrics.
 - Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, local-LLM failure, async-worker state transitions.
 
-### PR 4 — Bleed Selector + Storyteller Integration
+### PR 4 — Bleed Selector + Storyteller Integration (this branch)
 
 - Bleed selector wired into LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); reads `turn_context.bleed_menu` populated by a new selector method invoked at the start of that phase.
 - Typed candidate query over `orrery_resolutions` ⋈ `world_events` ⋈ `offscreen_narrations`.
 - Hard 2-second latency budget enforced via `asyncio.wait_for`; overrun = empty menu + loud log.
 - Surfacing bookkeeping increments.
 - Menu injected into payload with framing "ambient peripherals — optional, ignore freely, render at any density".
-- System-prompt edit at `lore_system_prompt.md:253-265`.
+- Prompt framing injected by `LogonUtility._format_context_prompt` as optional Orrery ambient peripherals.
 - Verification: apt-bleed + null-bleed + spoiler-boundary + chronology tests.
 
 ### Orrery Stage 7 — Middle-Tier Journalistic Prose (Deferred, Metric-Gated)
@@ -709,7 +710,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 
 **Config + system prompt**
 - `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, `[orrery.bleed]`, `[orrery.promote]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
-- `nexus/agents/lore/lore_system_prompt.md:253-265` — minor edit in PR 4
+- `nexus/agents/lore/logon_utility.py::_format_context_prompt` — PR 4 Bleed prompt framing
 
 **New artifacts**
 - `migrations/023_orrery_schema.py` — Python migration (multi-transaction; SQL alone insufficient for staged FK backfill)
@@ -724,8 +725,8 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 - **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
 - **Remaining pre-Bleed audit:** Integration test asserting `query_memory` warm-slice is disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from each new public table and cannot select internal queue/raw tag tables.
 - **PR 2 (#211):** Dry-pass against slot 5 and slot 2; proposal contents inspected; zero writes observed; `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase. Optional full-turn acceptance before PR 3: enable Orrery for a live LORE pass and confirm the storyteller payload remains unaffected while the proposal is attached only to the turn context.
-- **PR 3:** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
-- **PR 4:** Apt-bleed (audible peripheral surfaces in distant scene); null-bleed (irrelevant resolutions produce empty menu); spoiler-boundary (resolutions before the player's current world-time are eligible; future resolutions are not); chronology tests (`offscreen_narrations` never advance `narrative_view.world_time`); latency-budget overrun produces empty menu and logs loudly.
+- **PR 3 (#214):** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
+- **PR 4:** Apt-bleed (ambient peripheral surfaces in the Storyteller payload); null-bleed (no candidates produces empty menu and no local-LLM call); chronology/surfacing boundary (only accepted prior narrated resolutions are eligible); latency-budget overrun produces empty menu and logs loudly.
 
 ---
 

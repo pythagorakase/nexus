@@ -24,3 +24,26 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     assert "You may adapt, delay, ignore, or incorporate them" in prompt
     assert "Do not let Orrery decide what present characters do" in prompt
     assert "Travel toward the target's last known location: Mara is moving" in prompt
+
+
+def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
+    """Selected Bleed peripherals are framed as optional ambient texture."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "orrery_bleed_menu": [
+                {
+                    "template_id": "evade_pursuers",
+                    "channel": "digital",
+                    "summary": "street cameras briefly lose Mara",
+                    "actor_name": "Mara",
+                }
+            ],
+        }
+    )
+
+    assert "=== ORRERY AMBIENT PERIPHERALS ===" in prompt
+    assert "optional ambient peripherals from off-screen events" in prompt
+    assert "Ignore freely, render subtly" in prompt
+    assert "[digital] Mara: street cameras briefly lose Mara" in prompt
