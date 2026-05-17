@@ -10,6 +10,7 @@ def test_memnon_allows_public_orrery_read_surfaces() -> None:
         "entities",
         "entity_names_v",
         "entity_tags_current",
+        "character_need_states",
         "world_events",
         "world_event_entities",
         "orrery_resolutions",

@@ -15,6 +15,7 @@ from nexus.agents.orrery.substrate import (
     count_co_located,
     has_any_tag,
     has_ephemeral,
+    has_need_debt_at_or_above,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
     has_tag,
@@ -1537,6 +1538,394 @@ CONSULT_RIVAL = Template(
 )
 
 
+SLEEP = Template(
+    id="sleep",
+    priority=25,
+    blurb="The body asks for the thing without which it cannot continue.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        OR(
+            AND(
+                time_of_day_in("night"),
+                has_need_debt_at_or_above("sleep", 8),
+            ),
+            has_need_debt_at_or_above("sleep", 16),
+        ),
+        NOT(has_ephemeral("cns_stimulated")),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Collapse into deferred sleep",
+            conditions=has_need_debt_at_or_above("sleep", 48),
+            narrative_stub=(
+                "{actor} stops negotiating with exhaustion. Whatever place "
+                "they have reached becomes the place where the body claims "
+                "its overdue sleep."
+            ),
+            state_delta={
+                "character.current_activity": "collapsing into deferred sleep",
+                "need.fulfill": {
+                    "type": "sleep",
+                    "duration_hours": 4,
+                    "quality": "collapse_rough",
+                    "discharge_debt": 4,
+                },
+            },
+            event_type="slept",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.74,
+        ),
+        Branch(
+            label="Sleep at home",
+            conditions=in_location_class("home"),
+            narrative_stub=(
+                "{actor} reaches familiar shelter and lets sleep take them "
+                "where the room already knows their shape."
+            ),
+            state_delta={
+                "character.current_activity": "sleeping at home",
+                "need.fulfill": {
+                    "type": "sleep",
+                    "duration_hours": 8,
+                    "quality": "good",
+                    "discharge_debt": 10,
+                },
+            },
+            event_type="slept",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.22,
+        ),
+        Branch(
+            label="Sleep in safe lodgings",
+            conditions=OR(
+                in_location_class("lodgings"),
+                in_location_class("safe_house"),
+            ),
+            narrative_stub=(
+                "{actor} finds a place secure enough to become temporary "
+                "shelter and lets the unfamiliar room do enough of the work."
+            ),
+            state_delta={
+                "character.current_activity": "sleeping in safe lodgings",
+                "need.fulfill": {
+                    "type": "sleep",
+                    "duration_hours": 7,
+                    "quality": "adequate",
+                    "discharge_debt": 7,
+                },
+            },
+            event_type="slept",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.28,
+        ),
+        Branch(
+            label="Sleep rough in cover or transit",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} sleeps in fragments, taking what rest the place "
+                "allows and waking with some part of the debt still unpaid."
+            ),
+            state_delta={
+                "character.current_activity": "sleeping rough",
+                "need.fulfill": {
+                    "type": "sleep",
+                    "duration_hours": 5,
+                    "quality": "rough",
+                    "discharge_debt": 3,
+                },
+            },
+            event_type="slept",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.36,
+        ),
+    ),
+)
+
+
+DRINK = Template(
+    id="drink",
+    priority=24,
+    blurb="The body asks for water; what it accepts shapes the small hour.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_need_debt_at_or_above("thirst", 2),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Drink desperately, whatever is available",
+            conditions=has_need_debt_at_or_above("thirst", 16),
+            narrative_stub=(
+                "{actor} drinks with the single-mindedness that severe "
+                "thirst produces, past concern for source or dignity."
+            ),
+            state_delta={
+                "character.current_activity": "drinking to relieve severe thirst",
+                "need.fulfill": {
+                    "type": "thirst",
+                    "quality": "desperate",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="drank",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.56,
+        ),
+        Branch(
+            label="Drink in a public room",
+            conditions=OR(
+                in_location_class("tavern"),
+                in_location_class("teahouse"),
+                in_location_class("cafe"),
+                in_location_class("market"),
+            ),
+            narrative_stub=(
+                "{actor} drinks what the room serves and lets the small "
+                "ritual of holding a cup make the hour easier."
+            ),
+            state_delta={
+                "character.current_activity": "drinking in company",
+                "need.fulfill": {
+                    "type": "thirst",
+                    "quality": "social",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="drank",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.22,
+        ),
+        Branch(
+            label="Drink from a public or wild source",
+            conditions=OR(
+                in_location_class("public_water"),
+                in_location_class("wilderness"),
+            ),
+            narrative_stub=(
+                "{actor} drinks from whatever the place provides, and the "
+                "relief of water makes the rest of the day briefly simpler."
+            ),
+            state_delta={
+                "character.current_activity": "drinking from an available source",
+                "need.fulfill": {
+                    "type": "thirst",
+                    "quality": "available_source",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="drank",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Drink routinely from what is at hand",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} drinks because the body has been quietly asking, "
+                "then returns to the shape of the hour."
+            ),
+            state_delta={
+                "character.current_activity": "drinking routinely",
+                "need.fulfill": {
+                    "type": "thirst",
+                    "quality": "routine",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="drank",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.10,
+        ),
+    ),
+)
+
+
+EAT = Template(
+    id="eat",
+    priority=22,
+    blurb="The body asks for fuel; what it gets matters more than the cookbook suggests.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_need_debt_at_or_above("hunger", 4),
+        OR(
+            time_of_day_in("morning", "afternoon", "evening"),
+            has_need_debt_at_or_above("hunger", 8),
+        ),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Eat ravenously, whatever is available",
+            conditions=has_need_debt_at_or_above("hunger", 16),
+            narrative_stub=(
+                "{actor} eats with the inattention of real hunger, relief "
+                "overtaking any concern about what the food ought to be."
+            ),
+            state_delta={
+                "character.current_activity": "eating to relieve severe hunger",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "desperate",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.62,
+        ),
+        Branch(
+            label="Eat at home with household",
+            conditions=AND(
+                in_location_class("home"),
+                has_any_tag("married", "parent", "extended_household"),
+            ),
+            narrative_stub=(
+                "{actor} sits down to the meal that home means and lets "
+                "being-with stand in for being-alone for a while."
+            ),
+            state_delta={
+                "character.current_activity": "sharing a household meal",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "household_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.22,
+        ),
+        Branch(
+            label="Eat in a public dining place",
+            conditions=OR(
+                in_location_class("tavern"),
+                in_location_class("restaurant"),
+                in_location_class("market"),
+                in_location_class("cookshop"),
+            ),
+            narrative_stub=(
+                "{actor} eats something the place can provide and watches "
+                "the room continue its public life around them."
+            ),
+            state_delta={
+                "character.current_activity": "eating in a public place",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "public_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.26,
+        ),
+        Branch(
+            label="Forage or hunt from the country",
+            conditions=AND(
+                in_location_class("wilderness"),
+                has_any_tag("forager", "hunter", "survivalist", "ranger", "scout"),
+            ),
+            narrative_stub=(
+                "{actor} works the country for what the season has put "
+                "within reach and makes a meal out of survival knowledge."
+            ),
+            state_delta={
+                "character.current_activity": "foraging for a meal",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "wild_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.38,
+        ),
+        Branch(
+            label="Eat from rations or what was packed",
+            conditions=has_tag("travel_provisioned"),
+            narrative_stub=(
+                "{actor} eats what was packed for exactly this kind of hour: "
+                "practical, portable, and enough."
+            ),
+            state_delta={
+                "character.current_activity": "eating travel rations",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "rations_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Find something and eat it",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} eats what is nearest and workable, attentive mostly "
+                "to the fact that the body can stop asking for now."
+            ),
+            state_delta={
+                "character.current_activity": "eating opportunistically",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "opportunistic_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.14,
+        ),
+    ),
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
@@ -1552,5 +1941,8 @@ BUILTIN_TEMPLATES = (
     CONSULT_RIVAL,
     MOURN_LOSS,
     TEND_CRAFT,
+    SLEEP,
+    DRINK,
+    EAT,
     MAINTAIN_COVER,
 )

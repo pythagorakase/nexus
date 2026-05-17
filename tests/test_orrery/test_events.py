@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 
 import pytest
@@ -25,11 +26,15 @@ class RecordingCursor:
         known_tags=None,
         current_tags=None,
         clear_tag_ids=None,
+        world_time=None,
+        need_state=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
         self.current_tags = set() if current_tags is None else current_tags
         self.clear_tag_ids = [] if clear_tag_ids is None else clear_tag_ids
+        self.world_time = world_time or datetime(2073, 10, 31, 18, tzinfo=timezone.utc)
+        self.need_state = {} if need_state is None else need_state
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -72,6 +77,30 @@ class RecordingCursor:
                 self._fetchone = {"id": 88}
         elif "FROM event_types WHERE type" in normalized:
             self._fetchone = {"type": params[0]}
+        elif "SELECT world_time FROM chunk_metadata" in normalized:
+            self._fetchone = {"world_time": self.world_time}
+        elif "SELECT now() AS world_time" in normalized:
+            self._fetchone = {"world_time": self.world_time}
+        elif "INSERT INTO character_need_states" in normalized:
+            entity_id, need_type, world_time = params
+            self.need_state.setdefault(
+                (entity_id, need_type),
+                {"debt_score": 0, "last_evaluated_at": world_time},
+            )
+        elif (
+            "SELECT debt_score, last_evaluated_at FROM character_need_states"
+            in normalized
+        ):
+            entity_id, need_type = params
+            self._fetchone = self.need_state.get((entity_id, need_type))
+        elif "UPDATE character_need_states" in normalized:
+            debt_score, world_time, _fulfilled_at, _metadata, entity_id, need_type = (
+                params
+            )
+            self.need_state[(entity_id, need_type)] = {
+                "debt_score": debt_score,
+                "last_evaluated_at": world_time,
+            }
         elif "SELECT current_location FROM characters" in normalized:
             self._fetchone = {"current_location": 99}
         elif "INSERT INTO world_events" in normalized:
@@ -381,3 +410,70 @@ def test_commit_orrery_tick_applies_target_tag_deltas() -> None:
     assert "VALUES (%s, 'target', %s)" in statements
     assert "mechanism, justification, source_chunk_id" in statements
     assert event_params[3] == 2
+
+
+def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:
+    """Need fulfillment accrues debt, discharges it, and syncs severity tags."""
+
+    world_time = datetime(2073, 10, 31, 18, tzinfo=timezone.utc)
+    draft = OrreryResolutionDraft(
+        template_id="sleep",
+        priority=25,
+        binding_hash="sleep-1",
+        bindings={"actor": 1},
+        branch_label="Sleep rough in cover or transit",
+        narrative_stub="{actor} sleeps in fragments.",
+        state_delta={
+            "character.current_activity": "sleeping rough",
+            "need.fulfill": {
+                "type": "sleep",
+                "quality": "rough",
+                "discharge_debt": 4,
+            },
+        },
+        event_type="slept",
+        changed_fields=(
+            "character.current_activity",
+            "character_need_states.debt_score",
+        ),
+        magnitude=0.36,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        known_tags={
+            "sleep_deprived_1_mild": 101,
+            "sleep_deprived_2_moderate": 102,
+            "sleep_deprived_3_severe": 103,
+            "sleep_deprived_4_critical": 104,
+        },
+        current_tags={(1, "sleep_deprived_2_moderate")},
+        world_time=world_time,
+        need_state={
+            (1, "sleep"): {
+                "debt_score": 20,
+                "last_evaluated_at": world_time - timedelta(hours=2),
+            }
+        },
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert result.resolution_count == 1
+    assert result.event_count == 1
+    assert result.tag_mutation_count == 2
+    assert cursor.need_state[(1, "sleep")]["debt_score"] == 18
+    assert "UPDATE character_need_states" in statements
+    assert "sleep_deprived_1_mild" in str(cursor.known_tags)
