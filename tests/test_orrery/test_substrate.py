@@ -16,17 +16,24 @@ from nexus.agents.orrery.substrate import (
     TravelState,
     WorldState,
     binding_hash,
+    can_move_publicly,
     co_located,
     count_co_located,
+    direct_contact_is_dramatic,
     evaluate_stack,
     has_any_intimacy_suppressor,
     has_established_partner_co_located,
+    has_minimal_context,
     has_need_debt_at_or_above,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
     in_location,
     in_location_class,
+    is_constrained,
+    is_hidden,
     recent_event,
+    relationship_is_asymmetric,
+    relationship_is_mutual_warm,
     since_last_event_at_least,
     validate_always_fallbacks,
 )
@@ -130,6 +137,7 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
         ("fragment", "pursue_ghost_lead", "Recon a hideout their body remembers"),
         ("debt", "honor_debt", "Fulfill obligation through a dead-drop"),
         ("quiet", "maintain_cover", "Run a low-level courier job"),
+        ("hiding", "hide", "Go dark and reduce signal exposure"),
         (
             "vengeance",
             "extract_vengeance",
@@ -144,6 +152,11 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
             "informant",
             "cultivate_informant",
             "Routine contact to maintain the relationship",
+        ),
+        (
+            "surveillance",
+            "surveil",
+            "Intercept signal traffic",
         ),
         # Round-2 templates
         (
@@ -216,6 +229,67 @@ def test_has_symmetric_relationship_of_type_matches_either_direction() -> None:
     assert predicate(forward_state, bindings)
     assert predicate(reverse_state, bindings)
     assert not predicate(empty_state, bindings)
+
+
+def test_context_and_constraint_predicates_read_current_tags() -> None:
+    """Package guards can distinguish hydrated actors from constrained ones."""
+
+    assert has_minimal_context()(
+        WorldState(tags={1: frozenset({"off_grid"})}), {Slot.ACTOR: 1}
+    )
+    assert has_minimal_context()(WorldState(locations={1: 10}), {Slot.ACTOR: 1})
+    assert not has_minimal_context()(WorldState(), {Slot.ACTOR: 1})
+    assert is_constrained()(
+        WorldState(ephemeral_tags={1: frozenset({"sandboxed"})}), {Slot.ACTOR: 1}
+    )
+    assert not is_constrained()(
+        WorldState(ephemeral_tags={1: frozenset({"wounded"})}), {Slot.ACTOR: 1}
+    )
+    assert is_hidden()(
+        WorldState(tags={1: frozenset({"presumed_dead"})}), {Slot.ACTOR: 1}
+    )
+    assert is_hidden()(WorldState(tags={1: frozenset({"deep_cover"})}), {Slot.ACTOR: 1})
+
+
+def test_public_mobility_requires_public_context_and_freedom() -> None:
+    """Public-flow package branches should not fire inside blacksites."""
+
+    public_state = WorldState(
+        locations={1: 10},
+        location_classes={10: frozenset({"market"})},
+    )
+    private_state = WorldState(
+        locations={1: 11},
+        location_classes={11: frozenset({"blacksite"})},
+    )
+    captive_state = WorldState(
+        tags={1: frozenset({"route_familiar"})},
+        ephemeral_tags={1: frozenset({"captive"})},
+        locations={1: 10},
+        location_classes={10: frozenset({"market"})},
+    )
+
+    assert can_move_publicly()(public_state, {Slot.ACTOR: 1})
+    assert not can_move_publicly()(private_state, {Slot.ACTOR: 1})
+    assert not can_move_publicly()(captive_state, {Slot.ACTOR: 1})
+
+
+def test_relationship_contact_predicates_capture_asymmetry() -> None:
+    """Kin/contact templates can distinguish warmth from loaded contact."""
+
+    warm_state = WorldState(trust={(1, 2): 3, (2, 1): 2})
+    estranged_state = WorldState(trust={(1, 2): 5, (2, 1): -3})
+    hidden_state = WorldState(
+        tags={1: frozenset({"presumed_dead"})},
+        trust={(1, 2): 3, (2, 1): 2},
+    )
+    bindings = {Slot.ACTOR: 1, Slot.TARGET: 2}
+
+    assert relationship_is_mutual_warm()(warm_state, bindings)
+    assert not relationship_is_mutual_warm()(estranged_state, bindings)
+    assert relationship_is_asymmetric()(estranged_state, bindings)
+    assert direct_contact_is_dramatic()(estranged_state, bindings)
+    assert direct_contact_is_dramatic()(hidden_state, bindings)
 
 
 def test_since_last_event_at_least_target_slot_scopes_cooldown() -> None:

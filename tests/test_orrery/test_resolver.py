@@ -173,8 +173,8 @@ class FakeLore:
         self.memnon = FakeMemnon(session)
 
 
-def test_resolve_dry_run_returns_inspectable_proposal() -> None:
-    """Dry-run resolution hydrates, binds, and produces no-write drafts."""
+def test_resolve_dry_run_allows_null_resolution() -> None:
+    """Dry-run resolution can skip under-specified actors without fallback noise."""
 
     proposal = resolve_dry_run(
         FakeSession(),
@@ -185,12 +185,8 @@ def test_resolve_dry_run_returns_inspectable_proposal() -> None:
 
     assert proposal.anchor_chunk_id == 100
     assert proposal.actor_count == 1
-    assert proposal.resolution_count == 1
-    assert proposal.resolutions[0].template_id == "maintain_cover"
-    assert not any(
-        resolution.template_id == "intimacy" for resolution in proposal.resolutions
-    )
-    assert proposal.resolutions[0].bindings == {"actor": 1}
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 0
 
 
 def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
@@ -202,6 +198,10 @@ def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
             event_actor_rows=[{"entity_id": 3}],
             ephemeral_actor_rows=[{"entity_id": 4}],
             present_actor_rows=[{"entity_id": 1}, {"entity_id": 3}],
+            tag_rows=[
+                {"entity_id": 2, "tag": "cover_identity", "is_ephemeral": False},
+                {"entity_id": 4, "tag": "cover_identity", "is_ephemeral": False},
+            ],
             location_rows=[
                 {"entity_id": 1, "current_location": 10},
                 {"entity_id": 2, "current_location": 10},
@@ -305,6 +305,212 @@ def test_resolve_dry_run_exercises_priority_packages(
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == template_id
     assert proposal.resolutions[0].branch_label == branch_label
+
+
+def test_maintain_cover_requires_positive_cover_context() -> None:
+    """MAINTAIN_COVER is not a generic fallback for every quiet actor."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "cover_identity", "is_ephemeral": False}],
+            location_class_rows=[
+                {"id": 10, "location_class": "fixed_location", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "maintain_cover"
+    assert proposal.resolutions[0].branch_label == "Maintain a specific cover identity"
+
+
+def test_maintain_cover_skips_constrained_actor() -> None:
+    """Captive/sandboxed actors should not drift through public cover."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {"entity_id": 1, "tag": "cover_identity", "is_ephemeral": False},
+                {"entity_id": 1, "tag": "sandboxed", "is_ephemeral": True},
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "the_glow", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+
+
+def test_evade_pursuers_skips_captive_public_flow() -> None:
+    """Active-pursuit fallback cannot make a captive actor blend into crowds."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {
+                    "entity_id": 1,
+                    "tag": "under_active_pursuit",
+                    "is_ephemeral": True,
+                },
+                {"entity_id": 1, "tag": "captive", "is_ephemeral": True},
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "blacksite", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+
+
+def test_hide_handles_steady_state_concealment() -> None:
+    """Off-grid concealment resolves through HIDE rather than cover fallback."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "off_grid", "is_ephemeral": False}],
+            location_class_rows=[
+                {"id": 10, "location_class": "safe_house", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "hide"
+    assert proposal.resolutions[0].branch_label == "Go dark and reduce signal exposure"
+
+
+def test_active_pursuit_beats_hide() -> None:
+    """EVADE owns hot pursuit while HIDE owns chronic concealment."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {"entity_id": 1, "tag": "off_grid", "is_ephemeral": False},
+                {"entity_id": 1, "tag": "contacts_available", "is_ephemeral": False},
+                {
+                    "entity_id": 1,
+                    "tag": "under_active_pursuit",
+                    "is_ephemeral": True,
+                },
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "safe_house", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "evade_pursuers"
+    assert proposal.resolutions[0].branch_label == "Reach a safe house through contacts"
+
+
+def test_surveillance_offscreen_target_commits_resolution() -> None:
+    """SURVEIL keeps tabs without creating contact."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            tag_rows=[
+                {"entity_id": 1, "tag": "signal_operator", "is_ephemeral": False}
+            ],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    surveil = [
+        draft for draft in proposal.resolutions if draft.template_id == "surveil"
+    ]
+    assert len(surveil) == 1
+    assert surveil[0].branch_label == "Intercept signal traffic"
+    assert surveil[0].event_type == "surveillance_performed"
+    assert not any(draft.event_type == "contact_made" for draft in proposal.resolutions)
+
+
+def test_surveillance_present_target_becomes_scene_pressure() -> None:
+    """SURVEIL may pressure an on-screen target but cannot commit it."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 2}],
+            tag_rows=[
+                {"entity_id": 1, "tag": "signal_operator", "is_ephemeral": False}
+            ],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert not any(draft.template_id == "surveil" for draft in proposal.resolutions)
+    assert proposal.pressure_count == 1
+    assert proposal.scene_pressures[0].template_id == "surveil"
+    assert "not as a canonical breach" in proposal.scene_pressures[0].prompt_text
+
+
+def test_asymmetric_kin_defers_contact_instead_of_affectionate_message() -> None:
+    """Kinship alone no longer implies ordinary warm contact."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "family",
+                    "valence_magnitude": 5,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "family",
+                    "valence_magnitude": -3,
+                },
+            ],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    kin = [
+        draft
+        for draft in proposal.resolutions
+        if draft.template_id == "reach_out_to_kin"
+    ]
+    assert len(kin) == 1
+    assert kin[0].branch_label == "Draft the message and leave it unsent"
+    assert kin[0].event_type == "contact_deferred"
+    assert not any(draft.event_type == "contact_made" for draft in proposal.resolutions)
 
 
 def test_resolve_dry_run_fires_sunhelm_need_template() -> None:
@@ -438,7 +644,7 @@ def test_intimacy_partner_branch_requires_partner_relationship() -> None:
 
 
 def test_intimacy_suppressor_blocks_intimacy_template() -> None:
-    """Named suppressors close the INTIMACY gate without deleting need debt."""
+    """Named suppressors close INTIMACY without falling into cover noise."""
 
     proposal = resolve_dry_run(
         FakeSession(
@@ -468,8 +674,7 @@ def test_intimacy_suppressor_blocks_intimacy_template() -> None:
         window_chunks=30,
     )
 
-    assert proposal.resolution_count == 1
-    assert proposal.resolutions[0].template_id == "maintain_cover"
+    assert proposal.resolution_count == 0
 
 
 def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
@@ -738,8 +943,7 @@ def test_work_template_uses_one_global_work_cooldown() -> None:
         window_chunks=30,
     )
 
-    assert proposal.resolution_count == 1
-    assert proposal.resolutions[0].template_id == "maintain_cover"
+    assert proposal.resolution_count == 0
 
 
 @pytest.mark.parametrize(
@@ -830,7 +1034,7 @@ async def test_resolve_orrery_attaches_proposal_when_enabled() -> None:
 
     assert context.orrery_proposal is not None
     assert context.orrery_proposal.anchor_chunk_id == 100
-    assert context.phase_states["orrery_resolve"]["resolution_count"] == 1
+    assert context.phase_states["orrery_resolve"]["resolution_count"] == 0
     assert context.context_payload == {}
 
 

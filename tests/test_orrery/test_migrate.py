@@ -263,3 +263,45 @@ def test_travel_work_migration_seeds_work_travel_vocab() -> None:
         event_type
         for event_type, _category, _severity, _description in migration.EVENT_TYPES
     }
+
+
+def test_concealment_surveillance_migration_seeds_package_vocab() -> None:
+    """Migration 034 registers tags/events for HIDE, SURVEIL, and contact risk."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "034_orrery_concealment_surveillance_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert {
+        "cover_identity",
+        "off_grid",
+        "undercover",
+        "presumed_dead",
+        "presumed_dead_by_some",
+        "long_hidden",
+        "long_absent",
+        "hidden_identity",
+        "wanted",
+        "signal_operator",
+        "surveillance_capable",
+        "safehouse_operator",
+    } <= {tag for tag, _category, _description in migration.DURABLE_TAGS}
+    ephemeral_tags = {row[0] for row in migration.EPHEMERAL_TAGS}
+    assert {"contained", "immobile"} <= ephemeral_tags
+    assert {"street"} <= {tag for tag, _description in migration.PLACE_AFFORDANCE_TAGS}
+    assert {
+        "hideout_maintained",
+        "signal_exposure_reduced",
+        "counter_surveillance_sweep",
+        "surveillance_performed",
+        "intel_reviewed",
+        "contact_deferred",
+    } <= {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }
+    migration_source = migration_path.read_text()
+    assert "ON CONFLICT (type) DO UPDATE SET" in migration_source

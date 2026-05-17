@@ -76,6 +76,7 @@ def test_catalog_vocabulary_appendix_collects_referenced_terms() -> None:
     # Sanity checks against known-present vocabulary from the templates:
     assert "vendetta_holder" in vocab["durable_tags"]
     assert "grudge_active" in vocab["ephemeral_tags"]
+    assert "intelligence_asset_active" in vocab["current_tags"]
     assert "retaliation_executed" in vocab["event_types"]
     assert "home" in vocab["place_affordances"]
     assert "wilderness" in vocab["place_affordances"]
@@ -96,6 +97,14 @@ def test_render_predicate_name_handles_known_predicates() -> None:
         (
             "co_located(actor,target)",
             "actor and target are co-located",
+        ),
+        (
+            "can_move_publicly(@actor)",
+            "actor can plausibly move through public flow",
+        ),
+        (
+            "relationship_is_asymmetric(3,actor<->target)",
+            "directional trust actor↔target differs by 3+ or is loaded",
         ),
         (
             "has_symmetric_relationship_of_type(family,actor<->target)",
