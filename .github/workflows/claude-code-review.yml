@@ -1,35 +1,32 @@
 name: Claude Code Review
 
-# Disabled: Automatic PR reviews disabled in favor of @claude mention-based reviews
-# To re-enable automatic reviews, uncomment the section below
-# on:
-#   pull_request:
-#     types: [opened, synchronize]
-#     # Optional: Only run on specific file changes
-#     # paths:
-#     #   - "src/**/*.ts"
-#     #   - "src/**/*.tsx"
-#     #   - "src/**/*.js"
-#     #   - "src/**/*.jsx"
-
-# This workflow is now inactive. Use @claude mentions in PRs to trigger reviews (see claude.yml)
 on:
-  workflow_dispatch:  # Only runs when manually triggered from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+      head_sha:
+        description: Pull request head SHA being reviewed
+        required: true
+        type: string
+      review_prompt:
+        description: Prompt to send to Claude for the review
+        required: false
+        type: string
+        default: "@claude please review this PR. Don't flag any issues already flagged by Codex. The target audience for your review is a coding agent, not a human."
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: read
-      issues: read
+      issues: write
       id-token: write
+      actions: read
 
     steps:
       - name: Checkout repository
@@ -40,24 +37,25 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ inputs.pr_number }}
+            HEAD SHA: ${{ inputs.head_sha }}
 
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            ${{ inputs.review_prompt }}
 
-            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
-
-            Use `gh pr comment` with your Bash tool to leave your review as a comment on the PR.
+            Use the repository's CLAUDE.md and AGENTS.md guidance for style and conventions.
+            Read existing PR comments and reviews first with `gh pr view --comments`.
+            Use `gh pr diff` to inspect this PR.
+            Leave your findings as a top-level PR comment with `gh pr comment`.
+            Do not edit files, push commits, merge the PR, or resolve review threads.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
           claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
-
