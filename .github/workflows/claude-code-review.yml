@@ -41,8 +41,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          additional_permissions: |
-            actions: read
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ inputs.pr_number }}
@@ -51,9 +49,9 @@ jobs:
             ${{ inputs.review_prompt }}
 
             Use the repository's CLAUDE.md and AGENTS.md guidance for style and conventions.
-            Read existing PR comments and reviews first with `gh pr view --comments`.
-            Use `gh pr diff` to inspect this PR.
-            Leave your findings as a top-level PR comment with `gh pr comment`.
+            Read existing PR comments and reviews first with `gh pr view ${{ inputs.pr_number }} --comments`.
+            Use `gh pr diff ${{ inputs.pr_number }}` to inspect this PR.
+            Leave your findings as a top-level PR comment with `gh pr comment ${{ inputs.pr_number }}`.
             Do not edit files, push commits, merge the PR, or resolve review threads.
 
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md

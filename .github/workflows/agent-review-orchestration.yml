@@ -10,7 +10,7 @@ on:
 
 concurrency:
   group: agent-review-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   actions: write
@@ -33,8 +33,27 @@ jobs:
       SECOND_WAIT_SECONDS: ${{ vars.AGENT_REVIEW_SECOND_WAIT_SECONDS || '600' }}
       REVIEW_PROMPT: "@claude please review this PR. Don't flag any issues already flagged by Codex. The target audience for your review is a coding agent, not a human."
       GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
 
     steps:
+      - name: Validate wait settings
+        run: |
+          set -euo pipefail
+
+          for name in FIRST_WAIT_SECONDS SECOND_WAIT_SECONDS; do
+            value="${!name}"
+            if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+              echo "::error::${name} must be a non-negative integer number of seconds."
+              exit 1
+            fi
+          done
+
+          total_wait=$((FIRST_WAIT_SECONDS + SECOND_WAIT_SECONDS))
+          if (( total_wait > 1680 )); then
+            echo "::error::Combined agent review waits must be <= 1680 seconds so the 30-minute job timeout has cleanup room."
+            exit 1
+          fi
+
       - name: Wait for Codex review window
         run: sleep "$FIRST_WAIT_SECONDS"
 
@@ -42,28 +61,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          marker="<!-- nexus-agent-review:claude-request:${PR_HEAD_SHA} -->"
-          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' | grep -Fq "$marker"; then
-            echo "Claude review already requested for ${PR_HEAD_SHA}."
+          current_head="$(gh pr view "$PR_NUMBER" --json headRefOid --jq .headRefOid)"
+          if [[ "$current_head" != "$PR_HEAD_SHA" ]]; then
+            echo "PR head changed from ${PR_HEAD_SHA} to ${current_head}; skipping stale Claude dispatch."
+            echo "AGENT_REVIEW_REQUESTED=false" >> "$GITHUB_ENV"
             exit 0
           fi
 
-          cat > /tmp/claude-review-request.md <<EOF
-          ${marker}
-          Agent review orchestration requested Claude review for commit \`${PR_HEAD_SHA}\`.
-          EOF
+          marker="<!-- nexus-agent-review:claude-request:${PR_HEAD_SHA} -->"
+          if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' | grep -Fq "$marker"; then
+            echo "Claude review already requested for ${PR_HEAD_SHA}."
+            echo "AGENT_REVIEW_REQUESTED=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
 
-          gh issue comment "$PR_NUMBER" --body-file /tmp/claude-review-request.md
           gh workflow run claude-code-review.yml \
             --ref "$BASE_REF" \
             -f pr_number="$PR_NUMBER" \
             -f head_sha="$PR_HEAD_SHA" \
             -f review_prompt="$REVIEW_PROMPT"
 
+          printf '%s\n%s\n' \
+            "$marker" \
+            "Agent review orchestration requested Claude review for commit \`${PR_HEAD_SHA}\`." \
+            > /tmp/claude-review-request.md
+
+          gh pr comment "$PR_NUMBER" --body-file /tmp/claude-review-request.md
+          echo "AGENT_REVIEW_REQUESTED=true" >> "$GITHUB_ENV"
+
       - name: Wait for Claude review window
+        if: env.AGENT_REVIEW_REQUESTED == 'true'
         run: sleep "$SECOND_WAIT_SECONDS"
 
       - name: Mark agent reviews ready
+        if: env.AGENT_REVIEW_REQUESTED == 'true'
         run: |
           set -euo pipefail
 
@@ -73,11 +104,10 @@ jobs:
             exit 0
           fi
 
-          cat > /tmp/agent-review-ready.md <<EOF
-          ${marker}
-          Agent review window complete for commit \`${PR_HEAD_SHA}\`.
+          printf '%s\n%s\n\n%s\n' \
+            "$marker" \
+            "Agent review window complete for commit \`${PR_HEAD_SHA}\`." \
+            "Local coding agent: pull current Codex and Claude review comments before continuing." \
+            > /tmp/agent-review-ready.md
 
-          Local coding agent: pull current Codex and Claude review comments before continuing.
-          EOF
-
-          gh issue comment "$PR_NUMBER" --body-file /tmp/agent-review-ready.md
+          gh pr comment "$PR_NUMBER" --body-file /tmp/agent-review-ready.md
