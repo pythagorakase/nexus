@@ -134,6 +134,25 @@ _register(
     r"has_established_partner_co_located\(@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has an established partner co-located",
 )
+_register(
+    r"is_in_transit\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} is in transit",
+)
+_register(
+    r"has_travel_destination\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} has a planned travel destination",
+)
+_register(
+    r"travel_progress_at_or_above\((?P<threshold>[\d.]+)@(?P<slot>\w+)\)",
+    lambda m: (f"{_slot(m.group('slot'))} travel progress ≥ {m.group('threshold')}"),
+)
+_register(
+    r"travel_risk_is\((?P<values>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} travel risk is one of "
+        f"[{', '.join(m.group('values').split(','))}]"
+    ),
+)
 
 # Trust predicates
 _register(
@@ -315,6 +334,24 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
                 parts.append(", ".join(bits))
             else:
                 parts.append(f"fulfills `{value}` need")
+            continue
+        if key == "travel.start":
+            parts.append("starts planned travel")
+            continue
+        if key == "travel.advance":
+            progress = (
+                value.get("progress_delta") if isinstance(value, Mapping) else None
+            )
+            if progress is None:
+                parts.append("advances travel")
+            else:
+                parts.append(f"advances travel by {progress}")
+            continue
+        if key == "travel.arrive":
+            parts.append("arrives at travel destination")
+            continue
+        if key == "travel.delay":
+            parts.append("records travel delay")
             continue
         parts.append(f"`{key}` = `{value}`")
     return "; ".join(parts)

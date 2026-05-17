@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** The Orrery build path is now past foundation and into package-library depth. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, and deterministic review orchestration. The runtime pipeline remains disabled by default (`orrery.enabled = false`). PR #243 is the active slice: it adds the interpersonal need layer (`SOCIALIZE` and `INTIMACY`) on top of the existing timestamp-plus-debt substrate.
+**Status:** The Orrery build path is now past foundation and into package-library depth. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, and the interpersonal need layer (`SOCIALIZE` and `INTIMACY`). The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **Work + Travel**: routine livelihood packages plus additive in-transit state that preserves `characters.current_location` as the semantic place anchor.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -90,16 +90,17 @@ PR #222 adds deterministic review orchestration so newly opened PRs can schedule
 - The location phase adds place-affordance semantics used by need and package gates.
 - PR #237 applies slot 2 semantic tag seeding so mature-state dry runs have real package vocabulary to work with.
 - PR #236/#238 tighten deterministic review orchestration so fix commits do not trigger duplicate review windows.
+- PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage.
 
 ### Current Slice
 
-PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage. `INTIMACY` remains single-slot and substrate-only: it can notice established-partner co-location, private conditions, venues, suppressors, and deferral, but it does not autonomously pair characters or decide scene-level relationship outcomes.
+The current slice adds **WORK** and **TRAVEL**. `WORK` models routine livelihood, duty, household labor, maintenance, and organizational obligations without displacing specialist packages like `TEND_CRAFT`. `TRAVEL` models off-screen movement at turn granularity: planned destination, departure, route progress, delay, arrival, travel mode, and route risk.
+
+The database change is intentionally additive. `characters.current_location` remains the readable `places(id)` anchor used by existing LORE/LOGON/MEMNON/Orrery callers. `character_travel_states` records whether a character is at a place, planning travel, or in transit; while in transit, location predicates treat the anchor as non-physical so the resolver does not pretend the character is still co-located there. `orrery_travel_edges` gives future authored/OSM routing somewhere to live, while the first implementation uses local coordinate distance plus mode-specific detour and speed estimates.
 
 ### Next Planned Slice
 
-After PR #243, the next Orrery slice should be **Work + Travel packages plus additive location semantics**. `WORK` should model routine livelihood, duty, household labor, maintenance, and organizational obligations without collapsing the existing `TEND_CRAFT` package, which is still about expressive practice and craft identity. `TRAVEL` should model off-screen movement at turn granularity: destination intent, provisions, route progress, arrival, delay, and travel risk.
-
-This slice should not replace `characters.current_location` or migrate it away from its existing `places(id)` role. The safer migration is additive: keep `characters.current_location` as the semantic place anchor, normalize resolver reads and Orrery state deltas around that place id, and add any travel-specific support tables or fields needed for destination, route, progress, adjacency, or coordinates. If richer geography becomes necessary, layer it onto `places` or a dedicated spatial side table instead of making every existing current-location caller absorb a high-blast-radius type change.
+After Work + Travel, the next useful slice is package-library tuning on top of the new movement substrate: packages that create or consume travel intent, work obligations that interact with relationship and faction pressure, and route realism improvements if estimated travel starts producing bad narrative beats. Richer routing should plug into the existing route-method seam (`authored_edge` or `osm_graph`) rather than replacing the additive travel state.
 
 ### Package Author Checkpoint
 
@@ -640,7 +641,7 @@ The alias-oriented hybrid remains the right future escape hatch if that pain app
 
 ## Phased Delivery
 
-This section is now mostly historical. The active queue is: finish PR #243's interpersonal need layer, then tackle **Work + Travel packages plus additive location semantics** as the next implementation slice. The PR 0-4 headings below are preserved as landing notes for the foundation, resolver, commit pipeline, and Bleed integration rather than as the current forward plan.
+This section is now mostly historical. The active queue has moved past the foundation, Bleed, needs, place semantics, semantic tag seeding, and interpersonal layers into **Work + Travel packages plus additive in-transit state**. The PR 0-4 headings below are preserved as landing notes for the foundation, resolver, commit pipeline, and Bleed integration rather than as the current forward plan.
 
 ### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
 

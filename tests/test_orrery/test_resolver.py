@@ -61,6 +61,7 @@ class FakeSession:
         actor_target_relationship_rows=None,
         entity_name_rows=None,
         need_debt_rows=None,
+        travel_state_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -87,6 +88,7 @@ class FakeSession:
             {"id": 3, "name": "Iris"},
         ]
         self.need_debt_rows = need_debt_rows or []
+        self.travel_state_rows = travel_state_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -138,6 +140,10 @@ class FakeSession:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
             return FakeResult(self.need_debt_rows)
+        if "/* orrery:travel_states */" in sql:
+            assert "JOIN entities e" in sql
+            assert "e.is_active = true" in sql
+            return FakeResult(self.travel_state_rows)
         if "/* orrery:anchor_world_time */" in sql:
             self.world_time_queries += 1
             return FakeResult([{"world_time": self.world_time}])
@@ -538,6 +544,43 @@ def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -
     assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
 
 
+def test_hydrate_world_state_loads_travel_states() -> None:
+    """Resolver snapshots keep additive travel state beside current_location."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            travel_state_rows=[
+                {
+                    "character_entity_id": 1,
+                    "status": "in_transit",
+                    "anchor_place_id": 10,
+                    "origin_place_id": 10,
+                    "destination_place_id": 20,
+                    "route_method": "estimated",
+                    "travel_mode": "vehicle",
+                    "risk": "moderate",
+                    "progress_ratio": "0.42",
+                    "estimated_distance_m": "13000",
+                    "estimated_duration_minutes": "18.6",
+                }
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    travel = state.travel_states[1]
+    assert travel.is_in_transit
+    assert travel.anchor_place_id == 10
+    assert travel.destination_place_id == 20
+    assert travel.route_method == "estimated"
+    assert travel.travel_mode == "vehicle"
+    assert travel.risk == "moderate"
+    assert travel.progress_ratio == pytest.approx(0.42)
+    assert travel.estimated_distance_m == pytest.approx(13000)
+    assert travel.estimated_duration_minutes == pytest.approx(18.6)
+
+
 def test_hydrate_world_state_loads_semantic_place_affordances() -> None:
     """Place tags supplement structural place types for location predicates."""
 
@@ -581,6 +624,122 @@ def test_hydrate_world_state_computes_effective_need_debt() -> None:
 
     assert state.need_debt_scores[(1, "sleep")] == 10
     assert session.world_time_queries == 1
+
+
+def test_resolve_dry_run_fires_travel_departure_from_planned_destination() -> None:
+    """Planned travel starts as in-transit state without moving current_location."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "travel_ready", "is_ephemeral": False}],
+            travel_state_rows=[
+                {
+                    "character_entity_id": 1,
+                    "status": "planned",
+                    "anchor_place_id": 10,
+                    "origin_place_id": 10,
+                    "destination_place_id": 20,
+                    "route_method": "estimated",
+                    "travel_mode": "mixed",
+                    "risk": "low",
+                    "progress_ratio": 0,
+                    "estimated_distance_m": None,
+                    "estimated_duration_minutes": None,
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "travel"
+    assert proposal.resolutions[0].branch_label == (
+        "Depart toward the planned destination"
+    )
+    assert proposal.resolutions[0].state_delta["travel.start"]["mode"] == "mixed"
+
+
+def test_resolve_dry_run_fires_travel_arrival_at_high_progress() -> None:
+    """In-transit characters arrive only when progress reaches the threshold."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            travel_state_rows=[
+                {
+                    "character_entity_id": 1,
+                    "status": "in_transit",
+                    "anchor_place_id": 10,
+                    "origin_place_id": 10,
+                    "destination_place_id": 20,
+                    "route_method": "estimated",
+                    "travel_mode": "mixed",
+                    "risk": "low",
+                    "progress_ratio": 0.96,
+                    "estimated_distance_m": 5000,
+                    "estimated_duration_minutes": 20,
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "travel"
+    assert proposal.resolutions[0].branch_label == "Arrive at the planned destination"
+    assert proposal.resolutions[0].state_delta["travel.arrive"] is True
+
+
+def test_resolve_dry_run_fires_work_for_obligation_without_craft_tags() -> None:
+    """General work remains below specialist packages but above cover fallback."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {"entity_id": 1, "tag": "work_obligation", "is_ephemeral": False}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "work"
+    assert proposal.resolutions[0].branch_label == "Keep the obligation from slipping"
+
+
+def test_work_template_uses_one_global_work_cooldown() -> None:
+    """Household work intentionally blocks all Work branches for a few ticks."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {"entity_id": 1, "tag": "work_obligation", "is_ephemeral": False}
+            ],
+            event_rows=[
+                {
+                    "event_type": "household_work_performed",
+                    "tick_chunk_id": 99,
+                    "actor_entity_id": 1,
+                    "target_entity_id": None,
+                    "location_id": None,
+                    "changed_fields": ["character.current_activity"],
+                    "world_layer": "primary",
+                    "payload": {},
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "maintain_cover"
 
 
 @pytest.mark.parametrize(

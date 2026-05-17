@@ -17,6 +17,7 @@ from nexus.agents.orrery.substrate import (
     Resolution,
     Slot,
     Template,
+    TravelState,
     WorldState,
     binding_hash,
     evaluate_stack,
@@ -327,6 +328,7 @@ def hydrate_world_state(
         current_world_time=world_time,
         need_tuning=need_tuning,
     )
+    travel_states = _load_travel_states(session)
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -351,11 +353,62 @@ def hydrate_world_state(
             for location_id, values in location_classes.items()
         },
         need_debt_scores=need_debt_scores,
+        travel_states=travel_states,
         recent_events=recent_events,
         time_of_day=time_of_day,
         weather=weather,
         current_tick=anchor_chunk_id or 0,
     )
+
+
+def _load_travel_states(session: Any) -> dict[int, TravelState]:
+    """Load additive in-transit state without replacing current_location."""
+
+    states: dict[int, TravelState] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:travel_states */
+            SELECT cts.character_entity_id,
+                   cts.status::text AS status,
+                   cts.anchor_place_id,
+                   cts.origin_place_id,
+                   cts.destination_place_id,
+                   cts.route_method::text AS route_method,
+                   cts.travel_mode::text AS travel_mode,
+                   cts.risk::text AS risk,
+                   cts.progress_ratio,
+                   cts.estimated_distance_m,
+                   cts.estimated_duration_minutes
+            FROM character_travel_states cts
+            JOIN entities e
+              ON e.id = cts.character_entity_id
+             AND e.kind = 'character'
+             AND e.is_active = true
+            """
+        )
+    ).mappings():
+        states[row["character_entity_id"]] = TravelState(
+            status=row["status"],
+            anchor_place_id=row["anchor_place_id"],
+            origin_place_id=row["origin_place_id"],
+            destination_place_id=row["destination_place_id"],
+            route_method=row["route_method"],
+            travel_mode=row["travel_mode"],
+            risk=row["risk"],
+            progress_ratio=float(row["progress_ratio"] or 0.0),
+            estimated_distance_m=(
+                float(row["estimated_distance_m"])
+                if row["estimated_distance_m"] is not None
+                else None
+            ),
+            estimated_duration_minutes=(
+                float(row["estimated_duration_minutes"])
+                if row["estimated_duration_minutes"] is not None
+                else None
+            ),
+        )
+    return states
 
 
 def compose_actor_bindings(

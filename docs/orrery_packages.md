@@ -982,6 +982,87 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## TRAVEL — priority 21
+
+> A character moves between meaningful places without pretending the road is a room.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - actor is in transit
+    - actor has a planned travel destination
+  - **NOT:** actor has `wounded` ephemeral
+  - **NOT:** actor has `bereaved` ephemeral
+
+### Branch 1 — Arrive at the planned destination  *(mag 0.34)*
+
+**When:**
+
+- **AND:**
+  - actor is in transit
+  - actor travel progress ≥ 0.95
+
+**Does:** activity → "arriving at destination"; arrives at travel destination
+**Event:** `travel_arrived`
+
+> {actor} reaches the destination at last. The route drops away behind them into the ordinary unreliability of maps, and the place ahead becomes immediate.
+
+### Branch 2 — Lose time to bad conditions or route friction  *(mag 0.24)*
+
+**When:**
+
+- **AND:**
+  - actor is in transit
+  - **OR:**
+    - actor travel risk is one of [high, extreme]
+    - weather is one of [rain, snow, fog]
+
+**Does:** activity → "delayed in transit"; records travel delay
+**Event:** `travel_delayed`
+
+> {actor} loses time to the route itself — weather, traffic, closed access, or the thousand small refusals a city can make when someone is trying to cross it.
+
+### Branch 3 — Make steady progress along the route  *(mag 0.18)*
+
+**When:** actor is in transit
+
+**Does:** activity → "traveling toward destination"; advances travel by 0.35
+**Event:** `travel_progressed`
+
+> {actor} keeps moving: transfers, crossings, service corridors, streets whose names matter less than the fact that each one puts the destination a little closer.
+
+### Branch 4 — Depart toward the planned destination  *(mag 0.28)*
+
+**When:**
+
+- **AND:**
+  - actor has a planned travel destination
+  - **NOT:** actor is in transit
+  - **OR:**
+    - actor has `travel_ready` tag
+    - actor has `travel_provisioned` tag
+    - actor has `route_familiar` tag
+    - actor is in `transit_hub` place affordance
+
+**Does:** activity → "departing toward destination"; starts planned travel
+**Event:** `travel_departed`
+
+> {actor} starts the journey with enough of a route in mind to make the first leg real. The exact path can change; the destination no longer can.
+
+### Branch 5 — Prepare the journey rather than starting badly  *(mag 0.12)*
+
+**When:** *(always)*
+
+**Does:** activity → "preparing route and supplies"; adds `travel_ready` to actor
+**Event:** `travel_prepared`
+
+> {actor} does not start badly. They check timing, supplies, weather, access, and the parts of the route that might betray them before they have earned the right to improvise.
+
+---
+
 ## SOCIALIZE — priority 18
 
 > The need for the company of others, on whatever terms a character can have it.
@@ -1238,6 +1319,88 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## WORK — priority 14
+
+> The recurring work that keeps a life, household, or organization functioning.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - actor has `work_obligation` tag
+    - actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `field_worker`, `soldier`, `researcher`, `academic`]
+    - actor is in `workplace` place affordance
+    - actor is in `worksite` place affordance
+    - actor is in `administrative_office` place affordance
+  - **NOT:** actor is in transit
+  - ≥ 4 ticks since last `work_performed` event for actor
+  - ≥ 4 ticks since last `household_work_performed` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `wounded` ephemeral
+  - **NOT:** actor has `bereaved` ephemeral
+
+### Branch 1 — Work a public-facing shift  *(mag 0.18)*
+
+**When:**
+
+- **OR:**
+  - actor is in `workplace` place affordance
+  - actor is in `market` place affordance
+  - actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`]
+
+**Does:** activity → "working a public-facing shift"
+**Event:** `work_performed`
+
+> {actor} gives the day to work that other people can see: the counter, the ledger, the bargaining, the small maintenance of trust that keeps trade from becoming chaos.
+
+### Branch 2 — Handle field or maintenance work  *(mag 0.2)*
+
+**When:**
+
+- **OR:**
+  - actor is in `worksite` place affordance
+  - actor has `field_worker` tag
+
+**Does:** activity → "handling field maintenance work"
+**Event:** `work_performed`
+
+> {actor} spends the hour in practical labor: repairs, inspection, hauling, checking systems whose importance only becomes visible when they fail.
+
+### Branch 3 — Keep administrative obligations moving  *(mag 0.16)*
+
+**When:**
+
+- **OR:**
+  - actor is in `administrative_office` place affordance
+  - actor has any of [`researcher`, `academic`, `soldier`]
+
+**Does:** activity → "handling administrative work"
+**Event:** `work_performed`
+
+> {actor} moves necessary work through the quiet machinery: forms, messages, rosters, notes, approvals, the kind of paper trail that decides what can happen tomorrow.
+
+### Branch 4 — Do the labor that holds a household together  *(mag 0.18)*
+
+**When:** actor has any of [`domestic_role`, `cares_for_household`]
+
+**Does:** activity → "doing household work"
+**Event:** `household_work_performed`
+
+> {actor} does household work with the competence of someone who knows that ordinary life is not self-maintaining: food, cleaning, repairs, care, the small logistics of everyone getting through the day.
+
+### Branch 5 — Keep the obligation from slipping  *(mag 0.1)*
+
+**When:** *(always)*
+
+**Does:** activity → "keeping obligations current"
+**Event:** `work_performed`
+
+> {actor} takes care of the work that would otherwise start to fray — not enough to become a story by itself, but enough that the world does not have to break here today.
+
+---
+
 ## MAINTAIN_COVER — priority 0
 
 > Baseline activity that keeps the behavioral ledger plausible.
@@ -1280,6 +1443,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/030_orrery_place_affordance_vocab.py`
 - `migrations/031_orrery_slot2_semantic_tag_vocab.py`
 - `migrations/032_orrery_interpersonal_needs.py`
+- `migrations/033_orrery_travel_work.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -1299,6 +1463,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `engineer`
 - `ethically_opposed_to_contracted_intimacy`
 - `extended_household`
+- `field_worker`
 - `fighter`
 - `first_aid_trained`
 - `forager`
@@ -1327,6 +1492,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `religiously_abstinent`
 - `researcher`
 - `ritual_practitioner`
+- `route_familiar`
 - `scholar`
 - `scout`
 - `seeking_identity`
@@ -1336,11 +1502,13 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `tinkerer`
 - `trader`
 - `travel_provisioned`
+- `travel_ready`
 - `under_active_pursuit`
 - `vendetta_holder`
 - `violent_history`
 - `vow_of_celibacy`
 - `warrior`
+- `work_obligation`
 - `writer`
 
 ### Tags queried as ephemeral (via `has_ephemeral`)
@@ -1381,6 +1549,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `evade_pursuit`
 - `faction_realignment`
 - `honor_debt`
+- `household_work_performed`
 - `informant_contact`
 - `intel_acquired`
 - `intimacy_deferred`
@@ -1400,13 +1569,20 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `socialized_alone`
 - `tended_wound`
 - `threat_issued`
+- `travel_arrived`
+- `travel_delayed`
+- `travel_departed`
+- `travel_prepared`
+- `travel_progressed`
 - `vigil_held`
 - `warning_delivered`
 - `welfare_check`
+- `work_performed`
 - `wound_healed`
 
 ### Place affordances queried by location predicates
 
+- `administrative_office`
 - `cafe`
 - `cookshop`
 - `general_social_venue`
@@ -1427,7 +1603,10 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `the_glow`
 - `the_roots`
 - `town_square`
+- `transit_hub`
 - `wilderness`
+- `workplace`
+- `worksite`
 
 ### Relationship types
 

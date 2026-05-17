@@ -65,6 +65,28 @@ ESTABLISHED_PARTNER_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
+class TravelState:
+    """Read-side travel state for one character entity."""
+
+    status: str = "at_place"
+    anchor_place_id: Optional[int] = None
+    origin_place_id: Optional[int] = None
+    destination_place_id: Optional[int] = None
+    route_method: str = "estimated"
+    travel_mode: str = "mixed"
+    risk: str = "low"
+    progress_ratio: float = 0.0
+    estimated_distance_m: Optional[float] = None
+    estimated_duration_minutes: Optional[float] = None
+
+    @property
+    def is_in_transit(self) -> bool:
+        """Return whether the character is currently between places."""
+
+        return self.status == "in_transit"
+
+
+@dataclass(frozen=True, slots=True)
 class EventRecord:
     """Compact read-side event shape consumed by condition predicates."""
 
@@ -95,6 +117,7 @@ class WorldState:
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
+    travel_states: Mapping[int, TravelState] = field(default_factory=dict)
     recent_events: Tuple[EventRecord, ...] = ()
     time_of_day: str = "midday"
     weather: str = "clear"
@@ -109,6 +132,11 @@ def _slot_entity(bindings: Bindings, slot: Slot) -> Optional[int]:
 def _named(condition: Condition, name: str) -> Condition:
     condition.__name__ = name
     return condition
+
+
+def _is_in_transit(state: WorldState, entity_id: int) -> bool:
+    travel_state = state.travel_states.get(entity_id)
+    return bool(travel_state and travel_state.is_in_transit)
 
 
 def has_tag(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
@@ -262,6 +290,8 @@ def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
+        if _is_in_transit(state, entity_id):
+            return False
         location_id = state.locations.get(entity_id)
         if location_id is None:
             return False
@@ -279,7 +309,11 @@ def in_location(location_id: int, slot: Slot = Slot.ACTOR) -> Condition:
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         entity_id = _slot_entity(bindings, slot)
-        return entity_id is not None and state.locations.get(entity_id) == location_id
+        return (
+            entity_id is not None
+            and not _is_in_transit(state, entity_id)
+            and state.locations.get(entity_id) == location_id
+        )
 
     return _named(_condition, f"in_location({location_id}@{slot.value})")
 
@@ -291,6 +325,8 @@ def co_located(slot_a: Slot = Slot.ACTOR, slot_b: Slot = Slot.TARGET) -> Conditi
         left = _slot_entity(bindings, slot_a)
         right = _slot_entity(bindings, slot_b)
         if left is None or right is None:
+            return False
+        if _is_in_transit(state, left) or _is_in_transit(state, right):
             return False
         location_id = state.locations.get(left)
         return location_id is not None and location_id == state.locations.get(right)
@@ -316,12 +352,16 @@ def count_co_located(
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
+        if _is_in_transit(state, entity_id):
+            return False
         location_id = state.locations.get(entity_id)
         if location_id is None:
             return False
         count = 0
         for other_id, other_location in state.locations.items():
             if other_id == entity_id or other_location != location_id:
+                continue
+            if _is_in_transit(state, other_id):
                 continue
             if with_tag and with_tag not in state.tags.get(other_id, frozenset()):
                 continue
@@ -353,6 +393,8 @@ def has_established_partner_co_located(slot: Slot = Slot.ACTOR) -> Condition:
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
+        if _is_in_transit(state, entity_id):
+            return False
         location_id = state.locations.get(entity_id)
         if location_id is None:
             return False
@@ -362,11 +404,76 @@ def has_established_partner_co_located(slot: Slot = Slot.ACTOR) -> Condition:
             if not (ESTABLISHED_PARTNER_RELATIONSHIP_TYPES & relationship_types):
                 continue
             partner_id = target if source == entity_id else source
-            if state.locations.get(partner_id) == location_id:
+            if (
+                not _is_in_transit(state, partner_id)
+                and state.locations.get(partner_id) == location_id
+            ):
                 return True
         return False
 
     return _named(_condition, f"has_established_partner_co_located(@{slot.value})")
+
+
+def is_in_transit(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound character is currently between places."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        return entity_id is not None and _is_in_transit(state, entity_id)
+
+    return _named(_condition, f"is_in_transit(@{slot.value})")
+
+
+def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound character has a planned destination."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        travel_state = state.travel_states.get(entity_id)
+        return bool(travel_state and travel_state.destination_place_id is not None)
+
+    return _named(_condition, f"has_travel_destination(@{slot.value})")
+
+
+def travel_progress_at_or_above(
+    threshold: float,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether travel progress is at or above a ratio threshold."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        travel_state = state.travel_states.get(entity_id)
+        if travel_state is None:
+            return False
+        return travel_state.progress_ratio >= threshold
+
+    return _named(
+        _condition,
+        f"travel_progress_at_or_above({threshold:g}@{slot.value})",
+    )
+
+
+def travel_risk_is(*risks: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether current travel state has one of the given risk labels."""
+
+    candidates = frozenset(risks)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        travel_state = state.travel_states.get(entity_id)
+        return bool(travel_state and travel_state.risk in candidates)
+
+    return _named(
+        _condition,
+        f"travel_risk_is({','.join(risks)}@{slot.value})",
+    )
 
 
 def trust_at_least(
