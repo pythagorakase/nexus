@@ -6,17 +6,34 @@ import pytest
 
 from nexus.agents.orrery.worker import (
     PromotionVerdict,
+    SemanticClearanceVerdict,
+    clear_semantic_tags_sync,
     drain_narration_outbox_sync,
+    load_orrery_status_sync,
     promote_pending_resolutions_sync,
+    process_orrery_outbox_sync,
 )
 
 
 class WorkerCursor:
     """Recording cursor for worker SQL branches."""
 
-    def __init__(self, *, promotion_rows=None, job_rows=None):
+    def __init__(
+        self,
+        *,
+        promotion_rows=None,
+        job_rows=None,
+        semantic_rows=None,
+        semantic_chunk_rows=None,
+        semantic_event_rows=None,
+        count_rows=None,
+    ):
         self.promotion_rows = promotion_rows or []
         self.job_rows = job_rows or []
+        self.semantic_rows = semantic_rows or []
+        self.semantic_chunk_rows = semantic_chunk_rows or []
+        self.semantic_event_rows = semantic_event_rows or []
+        self.count_rows = list(count_rows or [])
         self.executed = []
         self._fetchall = []
         self._fetchone = None
@@ -32,12 +49,24 @@ class WorkerCursor:
         self._fetchall = []
         self._fetchone = None
         normalized = " ".join(str(sql).split())
-        if "FROM orrery_resolutions r" in normalized:
+        if "SELECT count(*) AS count" in normalized:
+            self._fetchone = {"count": self.count_rows.pop(0)}
+        elif "FROM orrery_resolutions r" in normalized:
             self._fetchall = self.promotion_rows
         elif "FROM orrery_narration_jobs j" in normalized:
             self._fetchall = self.job_rows
+        elif (
+            "WITH recent_ticks AS" in normalized and "FROM entity_tags et" in normalized
+        ):
+            self._fetchall = self.semantic_rows
+        elif "FROM chunk_entity_references_v cer" in normalized:
+            self._fetchall = self.semantic_chunk_rows
+        elif "FROM world_events we" in normalized:
+            self._fetchall = self.semantic_event_rows
         elif "INSERT INTO offscreen_narrations" in normalized:
             self._fetchone = {"id": 501}
+        elif "UPDATE entity_tags et SET cleared_at = now()" in normalized:
+            self._fetchone = {"id": params[0]}
 
     def fetchall(self):
         return self._fetchall
@@ -70,12 +99,12 @@ class FakeLLM:
     """Local LLM stand-in returning one structured verdict."""
 
     def __init__(self, verdict):
-        self.verdict = verdict
+        self.verdicts = list(verdict) if isinstance(verdict, list) else [verdict]
         self.prompts = []
 
     def structured_query(self, prompt, response_model, **_kwargs):
         self.prompts.append((prompt, response_model))
-        return self.verdict
+        return self.verdicts.pop(0)
 
 
 class FakeProviderResponse:
@@ -149,6 +178,52 @@ def _job_row():
         "event_ids": [20],
         "attempts": 0,
         "world_layer": "primary",
+    }
+
+
+def _semantic_tag_row():
+    return {
+        "entity_tag_id": 700,
+        "entity_id": 1,
+        "entity_name": "Mara",
+        "applied_at": "2073-10-31T18:00:00+00:00",
+        "applied_at_world_time": None,
+        "template_id": "evade_pursuers",
+        "tag": "wounded",
+        "category": "state",
+        "description": "Entity has a recent physical injury.",
+    }
+
+
+def _semantic_tag_row_2():
+    row = dict(_semantic_tag_row())
+    row.update(
+        {
+            "entity_tag_id": 701,
+            "entity_id": 2,
+            "entity_name": "Toma",
+            "tag": "recently_violent",
+            "description": "Actor has executed violence in the recent past.",
+        }
+    )
+    return row
+
+
+def _semantic_chunk_row():
+    return {
+        "id": 105,
+        "text": "Mara limps at first, then steadies herself and keeps moving.",
+    }
+
+
+def _semantic_event_row():
+    return {
+        "id": 20,
+        "tick_chunk_id": 104,
+        "event_type": "evade_pursuit",
+        "changed_fields": ["character.current_activity"],
+        "magnitude": 0.72,
+        "payload": {"branch_label": "Go to ground"},
     }
 
 
@@ -275,3 +350,163 @@ def test_drain_narration_outbox_marks_terminal_after_max_attempts() -> None:
     assert failed == 1
     assert "state = 'failed'" in statements
     assert "narration_status = 'failed'" in statements
+
+
+def test_clear_semantic_tags_clears_when_verdict_true() -> None:
+    """Semantic ephemeral tags clear only after a structured positive verdict."""
+
+    cursor = WorkerCursor(
+        semantic_rows=[_semantic_tag_row()],
+        semantic_chunk_rows=[_semantic_chunk_row()],
+        semantic_event_rows=[_semantic_event_row()],
+    )
+    verdict = SemanticClearanceVerdict(clear=True, reason="Mara recovered.")
+    llm = FakeLLM(verdict)
+
+    cleared = clear_semantic_tags_sync(
+        slot=5,
+        settings=_settings(),
+        llm_manager=llm,
+        conn=WorkerConn(cursor),
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert cleared == 1
+    assert "WITH recent_ticks AS" in statements
+    assert "FOR UPDATE OF et SKIP LOCKED" not in statements
+    assert "UPDATE entity_tags et" in statements
+    assert "SET cleared_at = now()" in statements
+    assert "INSERT INTO tag_clearance_log" in statements
+    assert "VALUES (%s, 'semantic', %s::jsonb, %s)" in statements
+    assert cursor.executed[-1][1][2] == 105
+    assert llm.prompts[0][1] is SemanticClearanceVerdict
+    assert "Tag: wounded" in llm.prompts[0][0]
+    assert "Mara limps at first" in llm.prompts[0][0]
+
+
+def test_clear_semantic_tags_keeps_when_verdict_false() -> None:
+    """A negative semantic verdict leaves the current tag untouched."""
+
+    cursor = WorkerCursor(
+        semantic_rows=[_semantic_tag_row()],
+        semantic_chunk_rows=[_semantic_chunk_row()],
+        semantic_event_rows=[_semantic_event_row()],
+    )
+    verdict = SemanticClearanceVerdict(clear=False, reason="Recovery is ambiguous.")
+
+    cleared = clear_semantic_tags_sync(
+        slot=5,
+        settings=_settings(),
+        llm_manager=FakeLLM(verdict),
+        conn=WorkerConn(cursor),
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert cleared == 0
+    assert "UPDATE entity_tags SET cleared_at" not in statements
+    assert "INSERT INTO tag_clearance_log" not in statements
+
+
+def test_clear_semantic_tags_rejects_malformed_llm_output() -> None:
+    """Malformed semantic-clearance data fails after prior row commits survive."""
+
+    cursor = WorkerCursor(
+        semantic_rows=[_semantic_tag_row(), _semantic_tag_row_2()],
+        semantic_chunk_rows=[_semantic_chunk_row()],
+        semantic_event_rows=[_semantic_event_row()],
+    )
+    llm = FakeLLM(
+        [
+            SemanticClearanceVerdict(clear=True, reason="Mara recovered."),
+            {"answer": "maybe"},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="Malformed Orrery semantic clearance verdict"):
+        clear_semantic_tags_sync(
+            slot=5,
+            settings=_settings(),
+            llm_manager=llm,
+            conn=WorkerConn(cursor),
+        )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert statements.count("UPDATE entity_tags et") == 1
+    assert statements.count("INSERT INTO tag_clearance_log") == 1
+
+
+def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
+    """The background entry point drains semantic clearance with other work."""
+
+    calls = []
+
+    def fake_promote(*_args, **kwargs):
+        calls.append(("promote", kwargs["limit"]))
+        return (1, 2)
+
+    def fake_drain(*_args, **kwargs):
+        calls.append(("drain", kwargs["limit"]))
+        return (3, 4)
+
+    def fake_clear(*_args, **kwargs):
+        calls.append(
+            (
+                "clear",
+                kwargs["limit"],
+                kwargs["recent_chunk_window"],
+                kwargs["evidence_chunk_limit"],
+                kwargs["evidence_event_limit"],
+            )
+        )
+        return 5
+
+    monkeypatch.setattr(
+        "nexus.agents.orrery.worker.promote_pending_resolutions_sync",
+        fake_promote,
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.worker.drain_narration_outbox_sync",
+        fake_drain,
+    )
+    monkeypatch.setattr(
+        "nexus.agents.orrery.worker.clear_semantic_tags_sync",
+        fake_clear,
+    )
+
+    result = process_orrery_outbox_sync(
+        slot=5,
+        promotion_limit=6,
+        narration_limit=7,
+        semantic_clearance_limit=8,
+        semantic_clearance_recent_chunks=9,
+        semantic_clearance_evidence_chunks=10,
+        semantic_clearance_evidence_events=11,
+    )
+
+    assert result.promoted == 1
+    assert result.skipped == 2
+    assert result.narrated == 3
+    assert result.failed == 4
+    assert result.semantically_cleared == 5
+    assert calls == [("promote", 6), ("drain", 7), ("clear", 8, 9, 10, 11)]
+
+
+def test_load_orrery_status_sync_counts_background_work() -> None:
+    """Status snapshots expose the background-work backlog."""
+
+    cursor = WorkerCursor(count_rows=[1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    status = load_orrery_status_sync(conn=WorkerConn(cursor))
+
+    assert status.pending_promotions == 1
+    assert status.queued_narration_jobs == 2
+    assert status.leased_narration_jobs == 3
+    assert status.failed_narration_jobs == 4
+    assert status.pending_offscreen_embeddings == 5
+    assert status.failed_offscreen_embeddings == 6
+    assert status.active_semantic_tags == 7
+    assert status.recent_resolutions == 8
+    assert status.recent_narrations == 9

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -19,6 +20,10 @@ logger = logging.getLogger("nexus.orrery.worker")
 
 DEFAULT_NARRATION_MAX_ATTEMPTS = 3
 DEFAULT_NARRATION_RETRY_DELAY_SECONDS = 300
+DEFAULT_SEMANTIC_CLEARANCE_LIMIT = 20
+DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS = 10
+DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS = 5
+DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS = 6
 
 PROMOTION_SYSTEM_PROMPT = (
     "You are the Orrery promotion discriminator. Decide whether an off-screen "
@@ -31,6 +36,13 @@ NARRATION_SYSTEM_PROMPT = (
     "You write concise off-screen narrative records for NEXUS. The prose is "
     "canonical but not directly shown to the player. Keep it specific, sensory "
     "where useful, and free of second-person address."
+)
+
+SEMANTIC_CLEARANCE_SYSTEM_PROMPT = (
+    "You are the Orrery semantic tag-clearance judge. Decide whether an "
+    "ephemeral off-screen state tag is no longer active based only on the "
+    "recent canonical narrative and Orrery events provided. Clear tags only "
+    "when the evidence is concrete; uncertainty means keep the tag."
 )
 
 
@@ -49,6 +61,13 @@ class PromotionVerdict(BaseModel):
     )
 
 
+class SemanticClearanceVerdict(BaseModel):
+    """Structured local-LLM verdict for semantic ephemeral-tag clearance."""
+
+    clear: bool
+    reason: str = Field(min_length=1)
+
+
 class OrreryWorkerResult(BaseModel):
     """Summary of one worker drain."""
 
@@ -56,6 +75,21 @@ class OrreryWorkerResult(BaseModel):
     skipped: int = 0
     narrated: int = 0
     failed: int = 0
+    semantically_cleared: int = 0
+
+
+class OrreryStatus(BaseModel):
+    """Operational snapshot for Orrery outbox and tag-clearance state."""
+
+    pending_promotions: int = 0
+    queued_narration_jobs: int = 0
+    leased_narration_jobs: int = 0
+    failed_narration_jobs: int = 0
+    pending_offscreen_embeddings: int = 0
+    failed_offscreen_embeddings: int = 0
+    active_semantic_tags: int = 0
+    recent_resolutions: int = 0
+    recent_narrations: int = 0
 
 
 def process_orrery_outbox_sync(
@@ -63,11 +97,19 @@ def process_orrery_outbox_sync(
     *,
     promotion_limit: int = 20,
     narration_limit: int = 5,
+    semantic_clearance_limit: int = DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
+    semantic_clearance_recent_chunks: int = DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
+    semantic_clearance_evidence_chunks: int = (
+        DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS
+    ),
+    semantic_clearance_evidence_events: int = (
+        DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS
+    ),
     settings: Optional[Mapping[str, Any]] = None,
     llm_manager: Optional[Any] = None,
     narration_provider: Optional[Any] = None,
 ) -> OrreryWorkerResult:
-    """Promote pending resolutions, then drain queued narration jobs."""
+    """Promote, narrate, and clear pending Orrery background work."""
 
     promoted, skipped = promote_pending_resolutions_sync(
         slot,
@@ -81,11 +123,21 @@ def process_orrery_outbox_sync(
         settings=settings,
         narration_provider=narration_provider,
     )
+    semantically_cleared = clear_semantic_tags_sync(
+        slot,
+        limit=semantic_clearance_limit,
+        recent_chunk_window=semantic_clearance_recent_chunks,
+        evidence_chunk_limit=semantic_clearance_evidence_chunks,
+        evidence_event_limit=semantic_clearance_evidence_events,
+        settings=settings,
+        llm_manager=llm_manager,
+    )
     return OrreryWorkerResult(
         promoted=promoted,
         skipped=skipped,
         narrated=narrated,
         failed=failed,
+        semantically_cleared=semantically_cleared,
     )
 
 
@@ -240,6 +292,161 @@ def drain_narration_outbox_sync(
                         )
                 logger.exception("Failed to narrate Orrery job %s", row["job_id"])
         return (narrated, failed)
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def clear_semantic_tags_sync(
+    slot: Optional[int] = None,
+    *,
+    limit: int = DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
+    recent_chunk_window: int = DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
+    evidence_chunk_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
+    evidence_event_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
+    settings: Optional[Mapping[str, Any]] = None,
+    llm_manager: Optional[Any] = None,
+    conn: Optional[Any] = None,
+) -> int:
+    """Use the local LLM to clear stale semantic ephemeral tags."""
+
+    if (
+        limit <= 0
+        or recent_chunk_window <= 0
+        or evidence_chunk_limit <= 0
+        or evidence_event_limit <= 0
+    ):
+        return 0
+
+    owns_conn = conn is None
+    conn = conn or _connect_for_slot(slot)
+    settings_dict = dict(settings or load_settings_as_dict())
+    try:
+        rows = _semantic_clearance_candidates_sync(
+            conn,
+            limit=limit,
+            recent_chunk_window=recent_chunk_window,
+        )
+        if not rows:
+            return 0
+
+        manager = llm_manager or LocalLLMManager(settings_dict)
+        cleared = 0
+        for row in rows:
+            with conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    evidence = _semantic_clearance_evidence_sync(
+                        cur,
+                        entity_id=int(row["entity_id"]),
+                        chunk_limit=evidence_chunk_limit,
+                        event_limit=evidence_event_limit,
+                    )
+            verdict = _semantic_clearance_verdict(manager, row, evidence)
+            if verdict.clear:
+                did_clear = _mark_semantic_tag_cleared_sync(
+                    conn,
+                    row=row,
+                    verdict=verdict,
+                    source_chunk_id=_latest_evidence_chunk_id(evidence),
+                )
+                if did_clear:
+                    cleared += 1
+        return cleared
+    finally:
+        if owns_conn:
+            conn.close()
+
+
+def load_orrery_status_sync(
+    slot: Optional[int] = None,
+    *,
+    conn: Optional[Any] = None,
+) -> OrreryStatus:
+    """Return a compact operational snapshot for Orrery background work."""
+
+    owns_conn = conn is None
+    conn = conn or _connect_for_slot(slot)
+    try:
+        with conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                return OrreryStatus(
+                    pending_promotions=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_resolutions
+                        WHERE promotion_status = 'pending'
+                        """,
+                    ),
+                    queued_narration_jobs=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_narration_jobs
+                        WHERE state = 'queued'
+                        """,
+                    ),
+                    leased_narration_jobs=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_narration_jobs
+                        WHERE state = 'leased'
+                        """,
+                    ),
+                    failed_narration_jobs=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_narration_jobs
+                        WHERE state = 'failed'
+                        """,
+                    ),
+                    pending_offscreen_embeddings=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM offscreen_narrations
+                        WHERE embedding_status = 'pending'
+                        """,
+                    ),
+                    failed_offscreen_embeddings=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM offscreen_narrations
+                        WHERE embedding_status = 'failed'
+                        """,
+                    ),
+                    active_semantic_tags=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM entity_tags et
+                        JOIN tags t ON t.id = et.tag_id
+                        WHERE et.cleared_at IS NULL
+                          AND t.deprecated = false
+                          AND t.is_ephemeral = true
+                          AND t.clearance_kind = 'semantic'
+                        """,
+                    ),
+                    recent_resolutions=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM orrery_resolutions
+                        WHERE created_at >= now() - interval '24 hours'
+                        """,
+                    ),
+                    recent_narrations=_count_sync(
+                        cur,
+                        """
+                        SELECT count(*) AS count
+                        FROM offscreen_narrations
+                        WHERE created_at >= now() - interval '24 hours'
+                        """,
+                    ),
+                )
     finally:
         if owns_conn:
             conn.close()
@@ -412,6 +619,236 @@ def _mark_skipped(cur: Any, row: Mapping[str, Any], verdict: PromotionVerdict) -
     )
 
 
+def _semantic_clearance_candidates_sync(
+    conn: Any,
+    *,
+    limit: int,
+    recent_chunk_window: int,
+) -> list[Mapping[str, Any]]:
+    """Load semantic tag candidates without holding row locks across inference."""
+
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                WITH recent_ticks AS (
+                    SELECT id
+                    FROM narrative_chunks
+                    ORDER BY id DESC
+                    LIMIT %s
+                )
+                SELECT
+                    et.id AS entity_tag_id,
+                    et.entity_id,
+                    et.applied_at,
+                    et.applied_at_world_time,
+                    et.template_id,
+                    t.tag,
+                    t.category,
+                    t.description,
+                    n.name AS entity_name
+                FROM entity_tags et
+                JOIN tags t ON t.id = et.tag_id
+                LEFT JOIN entity_names_v n ON n.id = et.entity_id
+                WHERE et.cleared_at IS NULL
+                  AND t.deprecated = false
+                  AND t.is_ephemeral = true
+                  AND t.clearance_kind = 'semantic'
+                  AND (
+                      EXISTS (
+                          SELECT 1
+                          FROM chunk_entity_references_v cer
+                          JOIN recent_ticks rt ON rt.id = cer.chunk_id
+                          WHERE cer.entity_id = et.entity_id
+                      )
+                      OR EXISTS (
+                          SELECT 1
+                          FROM world_events we
+                          JOIN recent_ticks rt ON rt.id = we.tick_chunk_id
+                          WHERE we.actor_entity_id = et.entity_id
+                             OR we.target_entity_id = et.entity_id
+                             OR EXISTS (
+                                  SELECT 1
+                                  FROM world_event_entities wee
+                                  WHERE wee.event_id = we.id
+                                    AND wee.entity_id = et.entity_id
+                             )
+                      )
+                  )
+                ORDER BY et.applied_at, et.id
+                LIMIT %s
+                """,
+                (recent_chunk_window, limit),
+            )
+            return list(cur.fetchall())
+
+
+def _semantic_clearance_evidence_sync(
+    cur: Any,
+    *,
+    entity_id: int,
+    chunk_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
+    event_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
+) -> dict[str, Any]:
+    """Load bounded canonical evidence, not only the candidate trigger window."""
+
+    cur.execute(
+        """
+        SELECT nc.id, left(nc.raw_text, 1200) AS text
+        FROM chunk_entity_references_v cer
+        JOIN narrative_chunks nc ON nc.id = cer.chunk_id
+        WHERE cer.entity_id = %s
+        ORDER BY nc.id DESC
+        LIMIT %s
+        """,
+        (entity_id, chunk_limit),
+    )
+    chunks = [
+        {"chunk_id": row["id"], "text": row.get("text")} for row in cur.fetchall()
+    ]
+
+    cur.execute(
+        """
+        SELECT
+            we.id,
+            we.tick_chunk_id,
+            we.event_type,
+            we.changed_fields,
+            we.magnitude,
+            we.payload
+        FROM world_events we
+        WHERE we.actor_entity_id = %s
+           OR we.target_entity_id = %s
+           OR EXISTS (
+                SELECT 1
+                FROM world_event_entities wee
+                WHERE wee.event_id = we.id
+                  AND wee.entity_id = %s
+           )
+        ORDER BY we.tick_chunk_id DESC, we.id DESC
+        LIMIT %s
+        """,
+        (entity_id, entity_id, entity_id, event_limit),
+    )
+    events = [
+        {
+            "event_id": row["id"],
+            "tick_chunk_id": row["tick_chunk_id"],
+            "event_type": row["event_type"],
+            "changed_fields": list(row.get("changed_fields") or ()),
+            "magnitude": _json_scalar(row.get("magnitude")),
+            "payload": row.get("payload") or {},
+        }
+        for row in cur.fetchall()
+    ]
+    return {"recent_chunks": chunks, "recent_events": events}
+
+
+def _semantic_clearance_verdict(
+    manager: Any, row: Mapping[str, Any], evidence: Mapping[str, Any]
+) -> SemanticClearanceVerdict:
+    prompt = (
+        "Evaluate whether this semantic ephemeral Orrery tag should be cleared.\n\n"
+        f"Entity: {row.get('entity_name') or row['entity_id']}\n"
+        f"Tag: {row['tag']}\n"
+        f"Category: {row.get('category')}\n"
+        f"Description: {row.get('description')}\n"
+        f"Applied at: {row.get('applied_at')}\n"
+        f"Applied world time: {row.get('applied_at_world_time')}\n"
+        f"Template source: {row.get('template_id')}\n\n"
+        "Evidence:\n"
+        f"{json.dumps(evidence, sort_keys=True, default=str)}\n\n"
+        "Return clear=true only if the tag is now stale, resolved, or no "
+        "longer active. Return clear=false when evidence is missing, weak, "
+        "ambiguous, or the state still plausibly applies."
+    )
+    raw = manager.structured_query(
+        prompt,
+        SemanticClearanceVerdict,
+        temperature=0.1,
+        max_tokens=512,
+        system_prompt=SEMANTIC_CLEARANCE_SYSTEM_PROMPT,
+    )
+    try:
+        if isinstance(raw, SemanticClearanceVerdict):
+            return raw
+        return SemanticClearanceVerdict.model_validate(raw)
+    except ValidationError as exc:
+        raise ValueError(f"Malformed Orrery semantic clearance verdict: {raw}") from exc
+
+
+def _mark_semantic_tag_cleared_sync(
+    conn: Any,
+    *,
+    row: Mapping[str, Any],
+    verdict: SemanticClearanceVerdict,
+    source_chunk_id: Optional[int],
+) -> bool:
+    with conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                UPDATE entity_tags et
+                SET cleared_at = now()
+                FROM tags t
+                WHERE et.id = %s
+                  AND t.id = et.tag_id
+                  AND et.cleared_at IS NULL
+                  AND t.deprecated = false
+                  AND t.is_ephemeral = true
+                  AND t.clearance_kind = 'semantic'
+                RETURNING et.id
+                """,
+                (row["entity_tag_id"],),
+            )
+            updated = cur.fetchone()
+            if not updated:
+                return False
+            cur.execute(
+                """
+                INSERT INTO tag_clearance_log (
+                    entity_tag_id, mechanism, justification, source_chunk_id
+                ) VALUES (%s, 'semantic', %s::jsonb, %s)
+                """,
+                (
+                    row["entity_tag_id"],
+                    json.dumps(
+                        {
+                            "tag": row["tag"],
+                            "reason": verdict.reason,
+                        }
+                    ),
+                    source_chunk_id,
+                ),
+            )
+            return True
+
+
+def _latest_evidence_chunk_id(evidence: Mapping[str, Any]) -> Optional[int]:
+    chunk_ids: list[int] = []
+    for chunk in evidence.get("recent_chunks") or ():
+        chunk_id = chunk.get("chunk_id")
+        if chunk_id is not None:
+            chunk_ids.append(int(chunk_id))
+    for event in evidence.get("recent_events") or ():
+        chunk_id = event.get("tick_chunk_id")
+        if chunk_id is not None:
+            chunk_ids.append(int(chunk_id))
+    return max(chunk_ids) if chunk_ids else None
+
+
+def _count_sync(cur: Any, sql: str) -> int:
+    cur.execute(sql)
+    row = cur.fetchone()
+    return int((row or {}).get("count") or 0)
+
+
+def _json_scalar(value: Any) -> Any:
+    if hasattr(value, "as_tuple"):
+        return float(value)
+    return value
+
+
 def _generate_narration(provider: Any, row: Mapping[str, Any]) -> str:
     prompt = (
         "Write one concise off-screen narration record.\n\n"
@@ -499,3 +936,71 @@ def _slot_label(slot: Optional[int]) -> str:
     if value:
         return value
     return "default"
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point for Orrery worker catch-up and status checks."""
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--slot", type=int, default=None, help="Save slot to inspect.")
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Print an Orrery background-work status snapshot instead of draining.",
+    )
+    parser.add_argument(
+        "--promotion-limit",
+        type=int,
+        default=20,
+        help="Maximum pending resolutions to promote in this run.",
+    )
+    parser.add_argument(
+        "--narration-limit",
+        type=int,
+        default=5,
+        help="Maximum queued narration jobs to drain in this run.",
+    )
+    parser.add_argument(
+        "--semantic-clearance-limit",
+        type=int,
+        default=DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
+        help="Maximum semantic ephemeral tags to evaluate in this run.",
+    )
+    parser.add_argument(
+        "--semantic-clearance-recent-chunks",
+        type=int,
+        default=DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
+        help="Recent chunk window used to find relevant semantic tag evidence.",
+    )
+    parser.add_argument(
+        "--semantic-clearance-evidence-chunks",
+        type=int,
+        default=DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
+        help="Maximum recent narrative chunks included per semantic tag verdict.",
+    )
+    parser.add_argument(
+        "--semantic-clearance-evidence-events",
+        type=int,
+        default=DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
+        help="Maximum recent Orrery events included per semantic tag verdict.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.status:
+        payload = load_orrery_status_sync(args.slot).model_dump()
+    else:
+        payload = process_orrery_outbox_sync(
+            args.slot,
+            promotion_limit=args.promotion_limit,
+            narration_limit=args.narration_limit,
+            semantic_clearance_limit=args.semantic_clearance_limit,
+            semantic_clearance_recent_chunks=args.semantic_clearance_recent_chunks,
+            semantic_clearance_evidence_chunks=args.semantic_clearance_evidence_chunks,
+            semantic_clearance_evidence_events=args.semantic_clearance_evidence_events,
+        ).model_dump()
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
