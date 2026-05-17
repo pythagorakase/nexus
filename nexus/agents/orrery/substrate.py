@@ -42,6 +42,27 @@ class PresentTargetPolicy(str, Enum):
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
 
+INTIMACY_SUPPRESSOR_TAGS: frozenset[str] = frozenset(
+    {
+        "closeted",
+        "vow_of_celibacy",
+        "religiously_abstinent",
+        "grieving_recent_partner",
+        "recently_traumatized_intimate",
+        "focus_committed",
+        "libido_absent",
+    }
+)
+ESTABLISHED_PARTNER_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
+    {
+        "romantic",
+        "spouse",
+        "lover",
+        "partner",
+        "romantic_partner",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class EventRecord:
@@ -134,6 +155,27 @@ def has_ephemeral(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
         )
 
     return _named(_condition, f"has_ephemeral({tag}@{slot.value})")
+
+
+def has_any_intimacy_suppressor(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity carries an intimacy suppressor.
+
+    Suppressors may be durable identity/context tags or ephemeral conditions.
+    The predicate intentionally treats ``libido_absent`` as a suppressor so
+    intimacy rows can exist without forcing intimacy behavior for characters
+    whose identity makes the need inapplicable.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        tags = state.tags.get(entity_id, frozenset()) | state.ephemeral_tags.get(
+            entity_id, frozenset()
+        )
+        return bool(INTIMACY_SUPPRESSOR_TAGS & tags)
+
+    return _named(_condition, f"has_any_intimacy_suppressor(@{slot.value})")
 
 
 def has_severity_tag(prefix: str, slot: Slot = Slot.ACTOR) -> Condition:
@@ -297,6 +339,34 @@ def count_co_located(
         filters.append(f"ephemeral={with_ephemeral}")
     suffix = "," + ",".join(filters) if filters else ""
     return _named(_condition, f"count_co_located({minimum}@{slot.value}{suffix})")
+
+
+def has_established_partner_co_located(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the actor is co-located with an established partner.
+
+    This intentionally reads existing relationship rows rather than deriving
+    intimate compatibility. Orrery may notice an established relationship and
+    shared place; it does not choose a new partner.
+    """
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        location_id = state.locations.get(entity_id)
+        if location_id is None:
+            return False
+        for (source, target), relationship_types in state.relationship_types.items():
+            if entity_id not in (source, target):
+                continue
+            if not (ESTABLISHED_PARTNER_RELATIONSHIP_TYPES & relationship_types):
+                continue
+            partner_id = target if source == entity_id else source
+            if state.locations.get(partner_id) == location_id:
+                return True
+        return False
+
+    return _named(_condition, f"has_established_partner_co_located(@{slot.value})")
 
 
 def trust_at_least(

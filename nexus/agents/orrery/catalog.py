@@ -82,6 +82,10 @@ _register(
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('tag')}` ephemeral",
 )
 _register(
+    r"has_any_intimacy_suppressor\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} has an intimacy suppressor",
+)
+_register(
     r"has_severity_tag\((?P<prefix>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('prefix')}` severity",
 )
@@ -125,6 +129,10 @@ _register(
         + (f" with `{m.group('ephemeral')}` ephemeral" if m.group("ephemeral") else "")
         + f" co-located with {_slot(m.group('slot'))}"
     ),
+)
+_register(
+    r"has_established_partner_co_located\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} has an established partner co-located",
 )
 
 # Trust predicates

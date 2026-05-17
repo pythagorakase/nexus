@@ -982,6 +982,164 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## SOCIALIZE — priority 18
+
+> The need for the company of others, on whatever terms a character can have it.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has `socialize` debt ≥ 24
+  - ≥ 4 ticks since last `socialized` event for actor
+  - ≥ 4 ticks since last `socialized_alone` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `wounded` ephemeral
+
+### Branch 1 — Seek company after extended isolation  *(mag 0.54)*
+
+**When:** actor has `socialize` debt ≥ 168
+
+**Does:** activity → "seeking company after isolation"; fulfills `socialize` need, quality `sought_company_after_isolation`, discharge 9999
+**Event:** `socialized`
+
+> {actor} feels the particular pressure that comes from going too long without other people in their life, and moves toward somewhere there will be voices, even if those voices are not for them.
+
+### Branch 2 — Engage with company already present  *(mag 0.22)*
+
+**When:** 1+ other entities co-located with actor
+
+**Does:** activity → "engaging with present company"; fulfills `socialize` need, quality `present_company`, discharge 9999
+**Event:** `socialized`
+
+> {actor} spends real attention on the people around them — not transactional attention, the other kind — for long enough that the social need is briefly met without anyone naming it as such.
+
+### Branch 3 — Go where people are  *(mag 0.2)*
+
+**When:**
+
+- **OR:**
+  - actor is in `tavern` place affordance
+  - actor is in `teahouse` place affordance
+  - actor is in `market` place affordance
+  - actor is in `town_square` place affordance
+  - actor is in `public_space` place affordance
+  - actor is in `general_social_venue` place affordance
+
+**Does:** activity → "passing time in a populated place"; fulfills `socialize` need, quality `public_company`, discharge 9999
+**Event:** `socialized`
+
+> {actor} goes to one of the places built around the fact that people gather there, and stays long enough to become part of the room's ordinary texture.
+
+### Branch 4 — Reach out to a contact for no urgent reason  *(mag 0.24)*
+
+**When:** actor has `contacts_available` tag
+
+**Does:** activity → "reconnecting with a contact"; fulfills `socialize` need, quality `remote_contact`, discharge 72
+**Event:** `socialized`
+
+> {actor} thinks of someone they have not spoken with in too long and reaches out for no urgent reason, which is its own kind of reason.
+
+### Branch 5 — Practice parasocial company  *(mag 0.16)*
+
+**When:** *(always)*
+
+**Does:** activity → "spending time with a stranger's voice"; fulfills `socialize` need, quality `parasocial`, discharge 12
+**Event:** `socialized_alone`
+
+> {actor} spends an hour with the voice of a stranger — a book, a serial, a recording — which is not the same as company but is enough like company to take the worst edge off.
+
+---
+
+## INTIMACY — priority 16
+
+> The body asks for the kind of connection that is not conversation.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has `intimacy` debt ≥ 72
+  - **NOT:** actor has an intimacy suppressor
+  - ≥ 8 ticks since last `intimacy_fulfilled` event for actor
+  - ≥ 8 ticks since last `intimacy_pursued` event for actor
+  - ≥ 8 ticks since last `intimacy_partial` event for actor
+  - ≥ 8 ticks since last `intimacy_deferred` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `wounded` ephemeral
+  - **NOT:** actor has `bereaved` ephemeral
+
+### Branch 1 — Spend private time with an established partner  *(mag 0.32)*
+
+**When:**
+
+- **AND:**
+  - actor is in `home` place affordance
+  - actor has an established partner co-located
+
+**Does:** activity → "spending private time with partner"; fulfills `intimacy` need, quality `established_partner`, discharge 9999
+**Event:** `intimacy_fulfilled`
+
+> {actor} closes the door on the day and lets private time with an established partner answer a need the public world has no claim on.
+
+### Branch 2 — Visit a place where compatible company gathers  *(mag 0.48)*
+
+**When:**
+
+- **AND:**
+  - actor is in `intimate_social_venue` place affordance
+  - actor has `intimacy` debt ≥ 168
+  - **NOT:** actor has `partnered_exclusively` tag
+
+**Does:** activity → "seeking compatible company"; fulfills `intimacy` need, quality `pursued_possibility`, discharge 24
+**Event:** `intimacy_pursued`
+
+> {actor} goes to the kind of place where someone like them might meet someone they would want to meet, alert to the possibility without presuming the outcome.
+
+### Branch 3 — Engage contracted intimate company  *(mag 0.28)*
+
+**When:**
+
+- **AND:**
+  - actor is in `intimate_services_establishment` place affordance
+  - actor has `contacts_available` tag
+  - **NOT:** actor has `partnered_exclusively` tag
+  - **NOT:** actor has any of [`vow_of_celibacy`, `religiously_abstinent`, `ethically_opposed_to_contracted_intimacy`]
+
+**Does:** activity → "engaging contracted intimate company"; fulfills `intimacy` need, quality `contracted_companion`, discharge 9999
+**Event:** `intimacy_fulfilled`
+
+> {actor} arranges what can be arranged, in one of the places where the transaction is understood by everyone involved and made ordinary by that clarity.
+
+### Branch 4 — Attend to the need in private  *(mag 0.06)*
+
+**When:**
+
+- **AND:**
+  - **OR:**
+    - actor is in `home` place affordance
+    - actor is in `private_quarters` place affordance
+  - **NOT:** 1+ other entities co-located with actor
+
+**Does:** activity → "private personal time"; fulfills `intimacy` need, quality `private_solo`, discharge 48
+**Event:** `intimacy_partial`
+
+> {actor} attends to the body's quieter demands in private — an unremarkable hour the rest of the world has no business knowing about.
+
+### Branch 5 — Let the want stay where it is  *(mag 0.1)*
+
+**When:** *(always)*
+
+**Does:** activity → "carrying an unaddressed want"
+**Event:** `intimacy_deferred`
+
+> {actor} does not pursue what the body is asking for — the wrong company, the wrong hour, the wrong life — and the want stays where it has been for a while now.
+
+---
+
 ## TEND_CRAFT — priority 15
 
 > A small act of care for the work that defines them.
@@ -1121,6 +1279,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/029_orrery_need_state_init_trigger.py`
 - `migrations/030_orrery_place_affordance_vocab.py`
 - `migrations/031_orrery_slot2_semantic_tag_vocab.py`
+- `migrations/032_orrery_interpersonal_needs.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -1138,6 +1297,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `devout`
 - `domestic_role`
 - `engineer`
+- `ethically_opposed_to_contracted_intimacy`
 - `extended_household`
 - `fighter`
 - `first_aid_trained`
@@ -1159,9 +1319,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `monk`
 - `musician`
 - `parent`
+- `partnered_exclusively`
 - `patriarch`
 - `performer`
 - `ranger`
+- `religiously_abstinent`
 - `researcher`
 - `ritual_practitioner`
 - `scholar`
@@ -1176,6 +1338,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `under_active_pursuit`
 - `vendetta_holder`
 - `violent_history`
+- `vow_of_celibacy`
 - `warrior`
 - `writer`
 
@@ -1219,6 +1382,10 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `honor_debt`
 - `informant_contact`
 - `intel_acquired`
+- `intimacy_deferred`
+- `intimacy_fulfilled`
+- `intimacy_partial`
+- `intimacy_pursued`
 - `kin_visit`
 - `maintain_cover`
 - `mourning_act`
@@ -1228,6 +1395,8 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `retaliation_executed`
 - `rival_consulted`
 - `slept`
+- `socialized`
+- `socialized_alone`
 - `tended_wound`
 - `threat_issued`
 - `vigil_held`
@@ -1239,11 +1408,16 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 - `cafe`
 - `cookshop`
+- `general_social_venue`
 - `home`
+- `intimate_services_establishment`
+- `intimate_social_venue`
 - `lodgings`
 - `market`
 - `neutral_ground`
 - `place_of_remembrance`
+- `private_quarters`
+- `public_space`
 - `public_water`
 - `restaurant`
 - `safe_house`
@@ -1251,6 +1425,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `teahouse`
 - `the_glow`
 - `the_roots`
+- `town_square`
 - `wilderness`
 
 ### Relationship types

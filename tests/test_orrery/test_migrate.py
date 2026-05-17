@@ -151,3 +151,35 @@ def test_slot2_semantic_vocab_documents_new_faction_categories() -> None:
         "power_posture",
         "hidden_agenda_class",
     } <= documented
+
+
+def test_interpersonal_need_migration_extends_need_vocab() -> None:
+    """Migration 032 seeds the interpersonal need vocabulary."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "032_orrery_interpersonal_needs.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert migration.NEED_TYPES == ("socialize", "intimacy")
+    assert {
+        "under_socialized_1_mild",
+        "under_socialized_4_critical",
+        "intimacy_starved_1_mild",
+        "intimacy_starved_4_critical",
+        "closeted",
+        "libido_absent",
+    } <= {tag for tag, _category, _description in migration.SEVERITY_TAGS}
+    assert {
+        "socialized",
+        "socialized_alone",
+        "intimacy_fulfilled",
+        "intimacy_pursued",
+        "intimacy_partial",
+        "intimacy_deferred",
+    } <= {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }

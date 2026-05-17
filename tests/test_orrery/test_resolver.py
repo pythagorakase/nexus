@@ -324,6 +324,144 @@ def test_resolve_dry_run_fires_sunhelm_need_template() -> None:
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "sleep"
 
 
+def test_resolve_dry_run_fires_socialize_need_template() -> None:
+    """Interpersonal need debt can resolve through SOCIALIZE."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "socialize",
+                    "debt_score": 200,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "socialize"
+    assert proposal.resolutions[0].branch_label == (
+        "Seek company after extended isolation"
+    )
+    assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "socialize"
+
+
+def test_resolve_dry_run_fires_intimacy_need_template_without_pairing() -> None:
+    """INTIMACY records pressure relief without selecting a partner target."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "intimacy"
+    assert proposal.resolutions[0].branch_label == "Attend to the need in private"
+    assert proposal.resolutions[0].bindings == {"actor": 1}
+    assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "intimacy"
+
+
+def test_intimacy_partner_branch_requires_partner_relationship() -> None:
+    """Established-partner intimacy uses relationship-aware co-location."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_rows=[
+                {"entity_id": 1, "current_location": 10},
+                {"entity_id": 2, "current_location": 10},
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "romantic",
+                    "valence_magnitude": 3,
+                }
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "intimacy"
+    assert proposal.resolutions[0].branch_label == (
+        "Spend private time with an established partner"
+    )
+
+
+def test_intimacy_suppressor_blocks_intimacy_template() -> None:
+    """Named suppressors close the INTIMACY gate without deleting need debt."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {
+                    "entity_id": 1,
+                    "tag": "closeted",
+                    "is_ephemeral": False,
+                }
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "home", "is_primary": True}
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 100,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "maintain_cover"
+
+
 def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
     """Orrery trust reads the SQL-derived relationship valence magnitude."""
 

@@ -20,11 +20,17 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "sleep": 1.0,
         "hunger": 1.0,
         "thirst": 1.0,
+        "socialize": 1.0,
+        "intimacy": 1.0,
     }
     assert settings.orrery.sunhelm.severity_thresholds["sleep"].moderate == 30.0
+    assert settings.orrery.sunhelm.severity_thresholds["socialize"].severe == 168.0
+    assert settings.orrery.sunhelm.severity_thresholds["intimacy"].critical == 720.0
     assert settings.orrery.sunhelm.priorities == {
         "sleep": 25,
         "thirst": 24,
         "hunger": 22,
+        "socialize": 18,
+        "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2

@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, retrieval-boundary hardening in PR #220, relationship-trust hydration in PR #221, and deterministic review orchestration in PR #222. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch completes the post-commit semantic tag-clearance worker pass and adds a compact Orrery worker status surface.
+**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212/#223, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, retrieval-boundary hardening in PR #220, relationship-trust hydration in PR #221, deterministic review orchestration in PR #222/#236/#238, semantic-clearance worker/status in PR #224, Sunhelm need-state packages in the Sunhelm phase, place affordance semantics in the location phase, and slot 2 semantic tag seeding in PR #237. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch adds the interpersonal need layer (`SOCIALIZE` and `INTIMACY`) on top of the existing timestamp-plus-debt substrate.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -82,9 +82,18 @@ PR #221 resolves issue #213's consensus Option B: `character_relationships.emoti
 
 PR #222 adds deterministic review orchestration so newly opened PRs can schedule the delayed review-check workflow without relying on a model-specific local hook.
 
+### Landed After PR #222
+
+- PR #223 expands the package library with round-2 care, craft, and contact templates.
+- PR #224 adds batched post-commit semantic clearance for ephemeral tags and exposes `python -m nexus.agents.orrery.worker --slot N --status` as a compact operational snapshot for pending Orrery background work.
+- The Sunhelm phase adds `character_need_states`, timestamp-plus-debt need tracking, and SLEEP/DRINK/EAT packages.
+- The location phase adds place-affordance semantics used by need and package gates.
+- PR #237 applies slot 2 semantic tag seeding so mature-state dry runs have real package vocabulary to work with.
+- PR #236/#238 tighten deterministic review orchestration so fix commits do not trigger duplicate review windows.
+
 ### Current Slice
 
-This branch adds batched post-commit semantic clearance for ephemeral tags and exposes `python -m nexus.agents.orrery.worker --slot N --status` as a compact operational snapshot for pending Orrery background work.
+This branch extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage. The INTIMACY template records pressure and partial fulfillment conditions only; it does not autonomously pair characters or decide scene-level relationship outcomes.
 
 ### Package Author Checkpoint
 

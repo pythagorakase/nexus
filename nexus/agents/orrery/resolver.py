@@ -983,11 +983,25 @@ def _need_pressure_stub(
             "irritability, or interest in food, but Orrery does not decide "
             "what {actor} does in scene."
         )
+    if need_type == "thirst":
+        return (
+            "{actor} is carrying "
+            f"{label} ({debt_score:.1f}). You may render thirst, discomfort, "
+            "or urgency around water, but Orrery does not decide what {actor} "
+            "does in scene."
+        )
+    if need_type == "socialize":
+        return (
+            "{actor} is carrying "
+            f"{label} ({debt_score:.1f}). You may render loneliness, social "
+            "friction, relief at being seen, or the pull toward company, but "
+            "Orrery does not decide what {actor} does in scene."
+        )
     return (
         "{actor} is carrying "
-        f"{label} ({debt_score:.1f}). You may render thirst, discomfort, "
-        "or urgency around water, but Orrery does not decide what {actor} "
-        "does in scene."
+        f"{label} ({debt_score:.1f}). You may render wanting, suppression, "
+        "privacy-seeking, or deferral with appropriate restraint, but Orrery "
+        "does not decide what {actor} does in scene or who they choose."
     )
 
 
