@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from psycopg2 import sql
+
 
 NEED_TYPES = ("socialize", "intimacy")
 
@@ -162,13 +164,37 @@ def run(conn) -> None:
     _backfill_need_states(conn)
 
 
-def _extend_need_type_enum(conn) -> None:
+def _enum_value_exists(conn, type_name: str, value: str) -> bool:
     with conn.cursor() as cur:
-        for need_type in NEED_TYPES:
+        cur.execute(
+            """
+            SELECT 1
+            FROM pg_enum
+            WHERE enumtypid = %s::regtype
+              AND enumlabel = %s
+            """,
+            (type_name, value),
+        )
+        return cur.fetchone() is not None
+
+
+def _extend_need_type_enum(conn) -> None:
+    """Add character_need_type enum values needed by interpersonal needs.
+
+    Keep the one-value-per-commit pattern used by earlier enum-extension
+    migrations so new values are usable before later seed/backfill statements.
+    """
+
+    for need_type in NEED_TYPES:
+        if _enum_value_exists(conn, "character_need_type", need_type):
+            continue
+        with conn.cursor() as cur:
             cur.execute(
-                f"ALTER TYPE character_need_type ADD VALUE IF NOT EXISTS '{need_type}'"
+                sql.SQL("ALTER TYPE character_need_type ADD VALUE {}").format(
+                    sql.Literal(need_type)
+                )
             )
-    conn.commit()
+        conn.commit()
 
 
 def _seed_durable_tags(conn) -> None:

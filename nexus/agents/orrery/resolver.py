@@ -12,6 +12,7 @@ from sqlalchemy import text
 from nexus.agents.orrery.substrate import (
     Bindings,
     EventRecord,
+    INTIMACY_SUPPRESSOR_TAGS,
     PresentTargetPolicy,
     Resolution,
     Slot,
@@ -907,6 +908,8 @@ def _present_need_pressure_specs(
     specs: list[dict[str, Any]] = []
     for actor_id in sorted(present_actor_ids):
         for need_type, prefix in NEED_SEVERITY_PREFIX.items():
+            if _present_need_pressure_suppressed(state, actor_id, need_type):
+                continue
             debt_score = state.need_debt_scores.get((actor_id, need_type), 0.0)
             severity = severity_for_debt(
                 need_type,
@@ -929,6 +932,21 @@ def _present_need_pressure_specs(
                 }
             )
     return tuple(specs)
+
+
+def _present_need_pressure_suppressed(
+    state: WorldState,
+    actor_id: int,
+    need_type: str,
+) -> bool:
+    """Return whether a present-character need should stay out of prompt pressure."""
+
+    if need_type != "intimacy":
+        return False
+    actor_tags = state.tags.get(actor_id, frozenset()) | state.ephemeral_tags.get(
+        actor_id, frozenset()
+    )
+    return bool(INTIMACY_SUPPRESSOR_TAGS & actor_tags)
 
 
 def _scene_pressure_from_need_spec(

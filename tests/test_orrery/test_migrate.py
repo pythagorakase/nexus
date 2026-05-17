@@ -183,3 +183,18 @@ def test_interpersonal_need_migration_extends_need_vocab() -> None:
         event_type
         for event_type, _category, _severity, _description in migration.EVENT_TYPES
     }
+
+
+def test_interpersonal_need_migration_uses_safe_enum_extension_pattern() -> None:
+    """Migration 032 keeps enum extension compatible with earlier migrations."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "032_orrery_interpersonal_needs.py"
+    ).read_text()
+
+    assert "def _enum_value_exists" in migration_source
+    assert "ALTER TYPE character_need_type ADD VALUE {}" in migration_source
+    assert "sql.Literal(need_type)" in migration_source
+    assert "ADD VALUE IF NOT EXISTS" not in migration_source

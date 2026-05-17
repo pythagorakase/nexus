@@ -878,6 +878,82 @@ def test_resolve_dry_run_routes_present_need_debt_to_scene_pressure() -> None:
     assert "Orrery does not decide what Mara does" in pressure.prompt_text
 
 
+def test_resolve_dry_run_routes_present_intimacy_debt_to_scene_pressure() -> None:
+    """Unsuppressed on-screen intimacy pressure can reach the Storyteller."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            tag_rows=[
+                {"entity_id": 1, "tag": "libido_moderate", "is_ephemeral": False},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 168,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 1
+    pressure = proposal.scene_pressures[0]
+    assert pressure.template_id == "intimacy_need_pressure"
+    assert pressure.bindings == {"actor": 1, "resource": "intimacy"}
+    assert "Mara is carrying moderate intimacy debt" in pressure.prompt_text
+    assert "Orrery does not decide what Mara does" in pressure.prompt_text
+
+
+@pytest.mark.parametrize(
+    ("tag", "is_ephemeral"),
+    [
+        ("closeted", False),
+        ("libido_absent", False),
+        ("focus_committed", True),
+    ],
+)
+def test_resolve_dry_run_suppresses_present_intimacy_pressure(
+    tag: str,
+    is_ephemeral: bool,
+) -> None:
+    """Intimacy suppressors keep prompt pressure out of active scenes."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            tag_rows=[
+                {"entity_id": 1, "tag": tag, "is_ephemeral": is_ephemeral},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "intimacy",
+                    "debt_score": 720,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 0
+
+
 def test_resolve_dry_run_uses_configured_present_need_pressure_tuning() -> None:
     """Present-character need pressure uses config thresholds and priorities."""
 
