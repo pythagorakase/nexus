@@ -299,7 +299,33 @@ def _render_branch(idx: int, branch: Branch) -> List[str]:
     if branch.narrative_stub:
         lines.append("")
         lines.extend(_render_narrative_stub(branch.narrative_stub))
+    scene_stub = getattr(branch, "scene_pressure_stub", None)
+    if scene_stub:
+        lines.append("")
+        lines.append(
+            "**Scene-pressure prompt** (storyteller-LLM-only; no " "state mutation):"
+        )
+        lines.append("")
+        lines.extend(_render_narrative_stub(scene_stub))
     return lines
+
+
+def _render_present_target_policy(template: Template) -> str | None:
+    """Render the present-target policy as prose, or None if default/missing."""
+
+    policy = getattr(template, "present_target_policy", None)
+    if policy is None:
+        return None
+    value = getattr(policy, "value", str(policy))
+    if value == "offscreen_only":
+        return None  # default — omit to keep the catalog terse
+    if value == "storyteller_pressure":
+        return (
+            "may target an on-screen entity — but only as a prompt-only "
+            "scene-pressure draft routed through storyteller LLM review "
+            "(no direct state mutation, no canonical event)"
+        )
+    return f"`{value}`"
 
 
 def _render_template(template: Template) -> List[str]:
@@ -310,8 +336,11 @@ def _render_template(template: Template) -> List[str]:
         f"> {template.blurb}",
         "",
         f"**Slots:** {slots}",
-        "",
     ]
+    policy_prose = _render_present_target_policy(template)
+    if policy_prose:
+        lines.append(f"**Present-target policy:** {policy_prose}")
+    lines.append("")
     if isinstance(template.package_gate, CompoundCondition):
         lines.extend(["**Gate:**", ""])
         lines.extend(_render_condition_lines(template.package_gate))
@@ -385,6 +414,9 @@ def _collect_vocabulary(
                 events.add(captured)
             elif kind == "relationship":
                 relationships.add(captured)
+            # First-match-wins: prevents future overlapping patterns from
+            # silently double-classifying a predicate.
+            break
 
     for template in templates:
         visit(template.package_gate)
@@ -414,6 +446,21 @@ def _collect_vocabulary(
     }
 
 
+def _discover_orrery_migrations() -> List[str]:
+    """Find every migration file in migrations/ whose name mentions orrery.
+
+    Globbed rather than hardcoded so renames (or net-new orrery vocabulary
+    migrations) keep the catalog cross-reference accurate without manual
+    edits. Returns paths relative to repo root, sorted lexically.
+    """
+
+    migrations_dir = Path(__file__).resolve().parents[3] / "migrations"
+    if not migrations_dir.exists():
+        return []
+    candidates = sorted(migrations_dir.glob("*orrery*"))
+    return [f"migrations/{path.name}" for path in candidates]
+
+
 def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
     vocab = _collect_vocabulary(templates)
     lines = [
@@ -422,12 +469,10 @@ def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
         "Vocabulary referenced by the templates above. Cross-reference with",
         "the seeding migrations to confirm catalog ↔ schema agreement:",
         "",
-        "- `migrations/024_orrery_commit_pipeline.sql` — initial vocabulary "
-        "for the four solo-actor templates",
-        "- `migrations/025_orrery_package_library_vocab.py` — vocabulary "
-        "for the multi-slot templates",
-        "",
     ]
+    for migration_path in _discover_orrery_migrations():
+        lines.append(f"- `{migration_path}`")
+    lines.append("")
     sections = [
         (
             "Tags queried as durable (via `has_tag` / `lacks_tag` / " "`has_any_tag`)",
@@ -486,7 +531,10 @@ def render_catalog(templates: Iterable[Template]) -> str:
         lines.extend(_render_template(template))
         lines.append("---")
         lines.append("")
-    lines.extend(_render_vocabulary_appendix(templates))
+    # Pass the already-materialized sorted list, not the original iterable:
+    # sorted() exhausts a generator and the appendix would silently render
+    # empty.
+    lines.extend(_render_vocabulary_appendix(sorted_templates))
     return "\n".join(lines).rstrip() + "\n"
 
 

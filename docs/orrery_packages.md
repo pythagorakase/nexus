@@ -61,6 +61,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 > A bond pulls the actor toward someone in active danger.
 
 **Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
 **Gate:**
 
@@ -89,6 +90,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} reaches {target} as the noose tightens — pulling them off the line of sight, into a service corridor whose layout {actor} has memorized for exactly this kind of moment.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may be close enough to intervene around {target}'s current danger. Treat this as potential off-screen support or complication for the scene, not as an automatic rescue.
+
 ### Branch 2 — Travel toward the target's last known location  *(mag 0.52)*
 
 **When:**
@@ -102,6 +107,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} drops what they were doing and starts moving — calling in favors at every transit checkpoint to shave minutes off the route to {target}, knowing the minutes might matter.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is moving toward {target}'s current location because they believe the danger is real. You may foreshadow, delay, or ignore their arrival based on the active scene.
+
 ### Branch 3 — Signal kin networks to converge on the target  *(mag 0.41)*
 
 **When:** actor and target share `comrade` relationship (either direction)
@@ -110,6 +119,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Event:** `protective_intervention`
 
 > {actor} pushes a coded distress beacon through the kin network — the kind of signal that pulls three or four people toward {target} from different directions without coordination.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has signaled a kin network around {target}. This can become outside help, cross-traffic, noise, or a looming option if it fits the live scene.
 
 ### Branch 4 — Maintain vigil and wait for resolution  *(mag 0.22)*
 
@@ -120,6 +133,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} can't reach {target} in time, can't call who they would need to call — and stays close to a comm, monitoring channels, waiting for the news that will determine what comes next.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is monitoring {target}'s danger from off-screen. This is emotional and logistical pressure, not a command to change what {target} does in the scene.
+
 ---
 
 ## EXTRACT_VENGEANCE — priority 90
@@ -127,6 +144,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 > A grudge ripens until the moment is right to settle it.
 
 **Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
 **Gate:**
 
@@ -153,6 +171,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} moves on {target} in the moment the corridor clears — no warning, no negotiation, the years of waiting compressed into the time it takes to close a few meters of distance.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor}'s grudge is close enough to {target}'s current scene to become immediate pressure. Treat it as a possible threat, interruption, warning sign, or delayed consequence rather than an automatic attack.
+
 ### Branch 2 — Surface a reputation attack in the right channels  *(mag 0.58)*
 
 **When:**
@@ -166,6 +188,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} feeds a curated dossier on {target} into three brokers in the Glow, taking pains to make the leak look like an accident of incautious clients rather than deliberate sabotage.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is trying to compromise {target}'s reputation through off-screen channels. If useful, let the current scene show a rumor, message, social consequence, or pressure wave instead of a direct state change.
+
 ### Branch 3 — Watch and document, waiting for a better window  *(mag 0.34)*
 
 **When:** *(always)*
@@ -174,6 +200,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Event:** `retaliation_attempted`
 
 > {actor} continues to observe {target}'s patterns from cover — shift changes, contacts, the geometry of their movements — letting the grudge stay sharp without spending it prematurely.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is watching {target}'s current patterns from cover. This can surface as unease, surveillance traces, or a later setup, but {target}'s on-screen choices remain yours.
 
 ---
 
@@ -270,6 +300,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 > Patient intelligence work with a specific asset.
 
 **Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
 **Gate:**
 
@@ -297,6 +328,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} meets {target} in a place that looks ordinary to anyone watching and asks the question they've been working toward for weeks. {target} doesn't answer immediately. Then they do.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may be trying to extract material intel from {target} while {target} is in the current scene. Use it only if it creates a believable opening, signal, or complication.
+
 ### Branch 2 — Routine contact to maintain the relationship  *(mag 0.28)*
 
 **When:**
@@ -310,6 +345,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} sees {target} in passing — a transactional exchange with nothing to it, except that the exchange itself is the point. The relationship needs maintenance whether or not there is anything to report.
 
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is maintaining contact with {target} through a subtle off-screen channel. It can surface as a message, glance, coded exchange, or be deferred.
+
 ### Branch 3 — Place a small overture from a distance  *(mag 0.18)*
 
 **When:** *(always)*
@@ -318,6 +357,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Event:** `informant_contact`
 
 > {actor} routes a small gift or unexpected courtesy to {target} through indirect channels — the kind of gesture that lands without obligation but accumulates over time into something the asset will eventually want to repay.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has placed a small indirect overture for {target}. Treat it as optional atmosphere or a hook the Storyteller can choose to pick up.
 
 ---
 
@@ -354,8 +397,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 Vocabulary referenced by the templates above. Cross-reference with
 the seeding migrations to confirm catalog ↔ schema agreement:
 
-- `migrations/024_orrery_commit_pipeline.sql` — initial vocabulary for the four solo-actor templates
-- `migrations/025_orrery_package_library_vocab.py` — vocabulary for the multi-slot templates
+- `migrations/023_orrery_schema.py`
+- `migrations/024_orrery_commit_pipeline.sql`
+- `migrations/025_orrery_package_library_vocab.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

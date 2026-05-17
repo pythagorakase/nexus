@@ -26,15 +26,22 @@ def test_catalog_includes_all_templates() -> None:
 
 
 def test_catalog_includes_every_branch() -> None:
-    """Every branch label appears with its magnitude."""
+    """Every branch label appears with its own magnitude on the same line.
+
+    Substring-matching label and magnitude separately would trivially pass
+    if two branches share the same magnitude — the second's "mag X.XX"
+    would just find the first's line. Asserting the exact header form
+    rules that out and pins the formatting too.
+    """
 
     content = render_catalog(BUILTIN_TEMPLATES)
     for template in BUILTIN_TEMPLATES:
         for branch in template.branches:
-            assert (
-                branch.label in content
-            ), f"Branch '{branch.label}' missing from catalog"
-            assert f"mag {branch.magnitude}" in content
+            expected = f"{branch.label}  *(mag {branch.magnitude})*"
+            assert expected in content, (
+                f"Expected branch header {expected!r} not found in catalog "
+                f"for template {template.id!r}"
+            )
 
 
 def test_catalog_renders_compound_structure() -> None:
@@ -110,6 +117,27 @@ def test_render_predicate_name_falls_back_visibly() -> None:
 
     rendered = _render_predicate_name("some_unknown_predicate(args)")
     assert "*(no prose renderer)*" in rendered
+
+
+def test_render_catalog_accepts_a_generator() -> None:
+    """Regression: sorted() consumes the iterable; appendix must reuse the list.
+
+    The renderer signature claims Iterable[Template], which includes
+    generators. Earlier versions exhausted the iterable via sorted() then
+    passed the empty original to _render_vocabulary_appendix, silently
+    producing an empty vocabulary section. Passing the materialized
+    sorted list to both phases fixes this.
+    """
+
+    def template_generator():
+        yield from BUILTIN_TEMPLATES
+
+    content = render_catalog(template_generator())
+    # Smoke-check: vocabulary appendix must be populated, not empty.
+    assert "## Vocabulary Reference" in content
+    assert "vendetta_holder" in content
+    assert "grudge_active" in content
+    assert "retaliation_executed" in content
 
 
 def test_orrery_packages_md_is_up_to_date() -> None:

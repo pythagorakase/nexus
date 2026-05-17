@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha256
 import json
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 
 class EntityKind(str, Enum):
@@ -448,7 +448,7 @@ class CompoundCondition:
     catalog renderer in nexus/agents/orrery/catalog.py.
     """
 
-    op: str  # "AND" | "OR" | "NOT"
+    op: Literal["AND", "OR", "NOT"]
     children: Tuple[Condition, ...]
 
     def __call__(self, state: WorldState, bindings: Bindings) -> bool:
@@ -535,9 +535,7 @@ class Template:
             return
 
         missing = [
-            branch.label
-            for branch in self.branches
-            if not branch.scene_pressure_stub
+            branch.label for branch in self.branches if not branch.scene_pressure_stub
         ]
         if missing:
             raise ValueError(
