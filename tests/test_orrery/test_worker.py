@@ -55,7 +55,9 @@ class WorkerCursor:
             self._fetchall = self.promotion_rows
         elif "FROM orrery_narration_jobs j" in normalized:
             self._fetchall = self.job_rows
-        elif "FROM entity_tags et JOIN tags t" in normalized:
+        elif (
+            "WITH recent_ticks AS" in normalized and "FROM entity_tags et" in normalized
+        ):
             self._fetchall = self.semantic_rows
         elif "FROM chunk_entity_references_v cer" in normalized:
             self._fetchall = self.semantic_chunk_rows
@@ -63,6 +65,8 @@ class WorkerCursor:
             self._fetchall = self.semantic_event_rows
         elif "INSERT INTO offscreen_narrations" in normalized:
             self._fetchone = {"id": 501}
+        elif "UPDATE entity_tags et SET cleared_at = now()" in normalized:
+            self._fetchone = {"id": params[0]}
 
     def fetchall(self):
         return self._fetchall
@@ -189,6 +193,20 @@ def _semantic_tag_row():
         "category": "state",
         "description": "Entity has a recent physical injury.",
     }
+
+
+def _semantic_tag_row_2():
+    row = dict(_semantic_tag_row())
+    row.update(
+        {
+            "entity_tag_id": 701,
+            "entity_id": 2,
+            "entity_name": "Toma",
+            "tag": "recently_violent",
+            "description": "Actor has executed violence in the recent past.",
+        }
+    )
+    return row
 
 
 def _semantic_chunk_row():
@@ -356,8 +374,9 @@ def test_clear_semantic_tags_clears_when_verdict_true() -> None:
 
     assert cleared == 1
     assert "WITH recent_ticks AS" in statements
-    assert "FOR UPDATE OF et SKIP LOCKED" in statements
-    assert "UPDATE entity_tags SET cleared_at = now()" in statements
+    assert "FOR UPDATE OF et SKIP LOCKED" not in statements
+    assert "UPDATE entity_tags et" in statements
+    assert "SET cleared_at = now()" in statements
     assert "INSERT INTO tag_clearance_log" in statements
     assert "VALUES (%s, 'semantic', %s::jsonb, %s)" in statements
     assert cursor.executed[-1][1][2] == 105
@@ -391,21 +410,32 @@ def test_clear_semantic_tags_keeps_when_verdict_false() -> None:
 
 
 def test_clear_semantic_tags_rejects_malformed_llm_output() -> None:
-    """Malformed semantic-clearance data fails visibly."""
+    """Malformed semantic-clearance data fails after prior row commits survive."""
 
     cursor = WorkerCursor(
-        semantic_rows=[_semantic_tag_row()],
+        semantic_rows=[_semantic_tag_row(), _semantic_tag_row_2()],
         semantic_chunk_rows=[_semantic_chunk_row()],
         semantic_event_rows=[_semantic_event_row()],
+    )
+    llm = FakeLLM(
+        [
+            SemanticClearanceVerdict(clear=True, reason="Mara recovered."),
+            {"answer": "maybe"},
+        ]
     )
 
     with pytest.raises(ValueError, match="Malformed Orrery semantic clearance verdict"):
         clear_semantic_tags_sync(
             slot=5,
             settings=_settings(),
-            llm_manager=FakeLLM({"answer": "maybe"}),
+            llm_manager=llm,
             conn=WorkerConn(cursor),
         )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert statements.count("UPDATE entity_tags et") == 1
+    assert statements.count("INSERT INTO tag_clearance_log") == 1
 
 
 def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
@@ -422,7 +452,15 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
         return (3, 4)
 
     def fake_clear(*_args, **kwargs):
-        calls.append(("clear", kwargs["limit"], kwargs["recent_chunk_window"]))
+        calls.append(
+            (
+                "clear",
+                kwargs["limit"],
+                kwargs["recent_chunk_window"],
+                kwargs["evidence_chunk_limit"],
+                kwargs["evidence_event_limit"],
+            )
+        )
         return 5
 
     monkeypatch.setattr(
@@ -444,6 +482,8 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
         narration_limit=7,
         semantic_clearance_limit=8,
         semantic_clearance_recent_chunks=9,
+        semantic_clearance_evidence_chunks=10,
+        semantic_clearance_evidence_events=11,
     )
 
     assert result.promoted == 1
@@ -451,7 +491,7 @@ def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
     assert result.narrated == 3
     assert result.failed == 4
     assert result.semantically_cleared == 5
-    assert calls == [("promote", 6), ("drain", 7), ("clear", 8, 9)]
+    assert calls == [("promote", 6), ("drain", 7), ("clear", 8, 9, 10, 11)]
 
 
 def test_load_orrery_status_sync_counts_background_work() -> None:
