@@ -300,6 +300,13 @@ def test_need_debt_condition_reads_world_state_scores() -> None:
     assert not has_need_debt_at_or_above("sleep", 16)(state, {Slot.ACTOR: 1})
 
 
+def test_need_debt_condition_rejects_unknown_need_type() -> None:
+    """Typos in authored need predicates fail at construction time."""
+
+    with pytest.raises(ValueError, match="Unsupported Orrery need type"):
+        has_need_debt_at_or_above("hungr", 8)
+
+
 def test_severity_tag_threshold_parses_level_prefix() -> None:
     """Severity predicates compare the numeric segment of graduated tags."""
 

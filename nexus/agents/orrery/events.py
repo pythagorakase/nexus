@@ -409,6 +409,11 @@ def _apply_state_delta_sync(
     if not draft.state_delta:
         return 0
     if actor_entity_id is None:
+        if "need.fulfill" in draft.state_delta:
+            raise ValueError(
+                f"need.fulfill in template {draft.template_id!r} "
+                "requires an actor binding"
+            )
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
@@ -480,6 +485,11 @@ async def _apply_state_delta_async(
     if not draft.state_delta:
         return 0
     if actor_entity_id is None:
+        if "need.fulfill" in draft.state_delta:
+            raise ValueError(
+                f"need.fulfill in template {draft.template_id!r} "
+                "requires an actor binding"
+            )
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
@@ -568,12 +578,17 @@ def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:
 def _apply_need_fulfillment_sync(
     cur: Any,
     *,
-    actor_entity_id: int,
+    actor_entity_id: Optional[int],
     fulfillment: Any,
     template_id: str,
     source_chunk_id: int,
     need_tuning: NeedTuning,
 ) -> int:
+    if actor_entity_id is None:
+        raise ValueError(
+            f"need.fulfill in template {template_id!r} requires an actor binding"
+        )
+
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
     world_time = _tick_world_time_sync(cur, source_chunk_id)
@@ -619,12 +634,17 @@ def _apply_need_fulfillment_sync(
 async def _apply_need_fulfillment_async(
     conn: Any,
     *,
-    actor_entity_id: int,
+    actor_entity_id: Optional[int],
     fulfillment: Any,
     template_id: str,
     source_chunk_id: int,
     need_tuning: NeedTuning,
 ) -> int:
+    if actor_entity_id is None:
+        raise ValueError(
+            f"need.fulfill in template {template_id!r} requires an actor binding"
+        )
+
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
     world_time = await _tick_world_time_async(conn, source_chunk_id)
@@ -783,7 +803,14 @@ def _sync_need_severity_tags_sync(
 ) -> int:
     mutations = 0
     desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
-    for tag in severity_tags_for_need(need_type):
+    current_tags = _current_need_severity_tags_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    )
+    for tag in current_tags:
+        if tag == desired:
+            continue
         mutations += _remove_entity_tag_sync(
             cur,
             actor_entity_id,
@@ -792,7 +819,11 @@ def _sync_need_severity_tags_sync(
             source_chunk_id=source_chunk_id,
             delta_key="need.fulfill",
         )
-    if desired and _add_entity_tag_sync(cur, actor_entity_id, desired, template_id):
+    if (
+        desired
+        and desired not in current_tags
+        and _add_entity_tag_sync(cur, actor_entity_id, desired, template_id)
+    ):
         mutations += 1
     return mutations
 
@@ -809,7 +840,14 @@ async def _sync_need_severity_tags_async(
 ) -> int:
     mutations = 0
     desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
-    for tag in severity_tags_for_need(need_type):
+    current_tags = await _current_need_severity_tags_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    )
+    for tag in current_tags:
+        if tag == desired:
+            continue
         mutations += await _remove_entity_tag_async(
             conn,
             actor_entity_id,
@@ -818,11 +856,56 @@ async def _sync_need_severity_tags_async(
             source_chunk_id=source_chunk_id,
             delta_key="need.fulfill",
         )
-    if desired and await _add_entity_tag_async(
-        conn, actor_entity_id, desired, template_id
+    if (
+        desired
+        and desired not in current_tags
+        and await _add_entity_tag_async(conn, actor_entity_id, desired, template_id)
     ):
         mutations += 1
     return mutations
+
+
+def _current_need_severity_tags_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> frozenset[str]:
+    tags = severity_tags_for_need(need_type)
+    cur.execute(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = %s
+          AND t.tag = ANY(%s)
+          AND et.cleared_at IS NULL
+        """,
+        (actor_entity_id, list(tags)),
+    )
+    return frozenset(str(_row_get(row, "tag", 0)) for row in cur.fetchall())
+
+
+async def _current_need_severity_tags_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> frozenset[str]:
+    tags = severity_tags_for_need(need_type)
+    rows = await conn.fetch(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = $1
+          AND t.tag = ANY($2::text[])
+          AND et.cleared_at IS NULL
+        """,
+        actor_entity_id,
+        list(tags),
+    )
+    return frozenset(str(_row_get(row, "tag", 0)) for row in rows)
 
 
 def _add_entity_tag_sync(

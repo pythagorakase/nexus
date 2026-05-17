@@ -101,6 +101,11 @@ class RecordingCursor:
                 "debt_score": debt_score,
                 "last_evaluated_at": world_time,
             }
+        elif "SELECT t.tag FROM entity_tags et JOIN tags t" in normalized:
+            entity_id, tags = params
+            self._fetchall = [
+                {"tag": tag} for tag in tags if (entity_id, tag) in self.current_tags
+            ]
         elif "SELECT current_location FROM characters" in normalized:
             self._fetchone = {"current_location": 99}
         elif "INSERT INTO world_events" in normalized:
@@ -476,7 +481,10 @@ def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:
     assert result.tag_mutation_count == 2
     assert cursor.need_state[(1, "sleep")]["debt_score"] == 18
     assert "UPDATE character_need_states" in statements
-    assert "sleep_deprived_1_mild" in str(cursor.known_tags)
+    assert any(
+        "INSERT INTO entity_tags" in sql and params == (1, 101, "sleep")
+        for sql, params in cursor.executed
+    )
 
 
 def test_commit_orrery_tick_reports_missing_need_type() -> None:
@@ -502,6 +510,38 @@ def test_commit_orrery_tick_reports_missing_need_type() -> None:
     )
 
     with pytest.raises(ValueError, match="must include a 'type' or 'need' field"):
+        commit_orrery_tick_sync(
+            RecordingConn(RecordingCursor()),
+            proposal,
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
+
+
+def test_commit_orrery_tick_reports_missing_need_actor() -> None:
+    """Malformed need.fulfill templates fail before database integrity errors."""
+
+    draft = OrreryResolutionDraft(
+        template_id="sleep",
+        priority=25,
+        binding_hash="sleep-1",
+        bindings={},
+        branch_label="Sleep rough in cover or transit",
+        narrative_stub="Someone sleeps in fragments.",
+        state_delta={"need.fulfill": {"type": "sleep", "quality": "rough"}},
+        event_type="slept",
+        changed_fields=("character_need_states.debt_score",),
+        magnitude=0.36,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+
+    with pytest.raises(ValueError, match="requires an actor binding"):
         commit_orrery_tick_sync(
             RecordingConn(RecordingCursor()),
             proposal,

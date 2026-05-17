@@ -60,9 +60,6 @@ DEFAULT_NEED_PRIORITIES: Mapping[str, int] = {
     NeedType.HUNGER.value: 22,
 }
 
-# Backward-compatible aliases for older tests and scripts that import constants.
-NEED_ACCRUAL_RATES = DEFAULT_NEED_ACCRUAL_RATES
-
 
 @dataclass(frozen=True, slots=True)
 class NeedPressureTuning:

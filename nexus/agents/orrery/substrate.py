@@ -8,6 +8,8 @@ from hashlib import sha256
 import json
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
+from nexus.agents.orrery.needs import normalize_need_type
+
 
 class EntityKind(str, Enum):
     """Entity kinds supported by the Orrery identity spine."""
@@ -191,7 +193,7 @@ def has_need_debt_at_or_above(
 ) -> Condition:
     """Return whether a slot-bound entity has need debt at the threshold."""
 
-    normalized = str(need_type).lower()
+    normalized = normalize_need_type(need_type)
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         entity_id = _slot_entity(bindings, slot)
