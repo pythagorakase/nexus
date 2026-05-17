@@ -598,6 +598,7 @@ class TurnCycleManager:
                 BUILTIN_TEMPLATES,
                 anchor_chunk_id=anchor_chunk_id,
                 window_chunks=window_chunks,
+                sunhelm_settings=orrery_settings.get("sunhelm"),
             )
 
         turn_context.orrery_proposal = proposal
@@ -684,10 +685,7 @@ class TurnCycleManager:
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
 
-        if (
-            turn_context.orrery_proposal
-            and turn_context.orrery_proposal.pressure_count
-        ):
+        if turn_context.orrery_proposal and turn_context.orrery_proposal.pressure_count:
             turn_context.context_payload["orrery_scene_pressures"] = [
                 pressure.to_dict()
                 for pressure in turn_context.orrery_proposal.scene_pressures

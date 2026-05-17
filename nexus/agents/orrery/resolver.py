@@ -22,6 +22,8 @@ from nexus.agents.orrery.substrate import (
 )
 from nexus.agents.orrery.needs import (
     NEED_SEVERITY_PREFIX,
+    NeedTuning,
+    coerce_need_tuning,
     effective_debt_score,
     severity_for_debt,
 )
@@ -191,8 +193,11 @@ def hydrate_world_state(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    need_tuning: Optional[NeedTuning] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables."""
+
+    need_tuning = coerce_need_tuning(need_tuning)
 
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
@@ -301,10 +306,14 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    time_of_day = _load_time_of_day(session, anchor_chunk_id=anchor_chunk_id)
-    weather = _load_weather(session)
     world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
-    need_debt_scores = _load_need_debt_scores(session, current_world_time=world_time)
+    time_of_day = _load_time_of_day(world_time)
+    weather = _load_weather(session)
+    need_debt_scores = _load_need_debt_scores(
+        session,
+        current_world_time=world_time,
+        need_tuning=need_tuning,
+    )
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -548,13 +557,16 @@ def resolve_dry_run(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    sunhelm_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        need_tuning=need_tuning,
     )
 
     templates_list = list(templates)
@@ -630,6 +642,7 @@ def resolve_dry_run(
         present_actor_ids=_present_actor_ids_at_anchor(
             session, anchor_chunk_id=anchor_chunk_id
         ),
+        need_tuning=need_tuning,
     )
     pressure_entity_ids = _entity_ids_from_resolutions(scene_pressure_results) | {
         spec["actor_entity_id"] for spec in present_need_pressure_specs
@@ -639,7 +652,11 @@ def resolve_dry_run(
         _scene_pressure_from_resolution(resolution, pressure_entity_names)
         for resolution in scene_pressure_results
     ) + tuple(
-        _scene_pressure_from_need_spec(spec, pressure_entity_names)
+        _scene_pressure_from_need_spec(
+            spec,
+            pressure_entity_names,
+            need_tuning=need_tuning,
+        )
         for spec in present_need_pressure_specs
     )
 
@@ -704,8 +721,7 @@ def _load_recent_events(
     return tuple(events)
 
 
-def _load_time_of_day(session: Any, *, anchor_chunk_id: Optional[int]) -> str:
-    world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+def _load_time_of_day(world_time: Optional[datetime]) -> str:
     if world_time is None:
         return "midday"
 
@@ -743,7 +759,10 @@ def _load_world_time(
 
 
 def _load_need_debt_scores(
-    session: Any, *, current_world_time: Optional[datetime]
+    session: Any,
+    *,
+    current_world_time: Optional[datetime],
+    need_tuning: NeedTuning,
 ) -> dict[tuple[int, str], float]:
     """Load effective need debt scores without mutating canonical state."""
 
@@ -756,7 +775,11 @@ def _load_need_debt_scores(
                    need_type::text AS need_type,
                    debt_score,
                    last_evaluated_at
-            FROM character_need_states
+            FROM character_need_states cns
+            JOIN entities e
+              ON e.id = cns.character_entity_id
+             AND e.kind = 'character'
+             AND e.is_active = true
             """
         )
     ).mappings():
@@ -766,6 +789,7 @@ def _load_need_debt_scores(
             float(row["debt_score"] or 0.0),
             last_evaluated_at=row["last_evaluated_at"],
             current_world_time=current_world_time,
+            tuning=need_tuning,
         )
     return scores
 
@@ -857,7 +881,10 @@ def _scene_pressure_from_resolution(
 
 
 def _present_need_pressure_specs(
-    state: WorldState, *, present_actor_ids: set[int]
+    state: WorldState,
+    *,
+    present_actor_ids: set[int],
+    need_tuning: NeedTuning,
 ) -> tuple[dict[str, Any], ...]:
     """Build prompt-only pressure specs from present-character need debt."""
 
@@ -865,12 +892,15 @@ def _present_need_pressure_specs(
     for actor_id in sorted(present_actor_ids):
         for need_type, prefix in NEED_SEVERITY_PREFIX.items():
             debt_score = state.need_debt_scores.get((actor_id, need_type), 0.0)
-            severity = severity_for_debt(need_type, debt_score)
+            severity = severity_for_debt(
+                need_type,
+                debt_score,
+                tuning=need_tuning,
+            )
             if severity is None:
                 continue
             level, severity_name = severity
-            # Mild need pressure is too chatty for every visible scene.
-            if level < 2:
+            if level < need_tuning.pressure.min_severity_level:
                 continue
             specs.append(
                 {
@@ -888,6 +918,8 @@ def _present_need_pressure_specs(
 def _scene_pressure_from_need_spec(
     spec: Mapping[str, Any],
     entity_names: Mapping[int, str],
+    *,
+    need_tuning: NeedTuning,
 ) -> OrreryScenePressureDraft:
     """Convert present-character need pressure into Storyteller prompt data."""
 
@@ -907,13 +939,13 @@ def _scene_pressure_from_need_spec(
     )
     return OrreryScenePressureDraft(
         template_id=f"{need_type}_need_pressure",
-        priority=25,
+        priority=need_tuning.priorities[need_type],
         binding_hash=binding_hash({Slot.ACTOR: actor_id, Slot.RESOURCE: need_type}),
         bindings=bindings,
         branch_label=f"Present-character {need_type} pressure",
         pressure_stub=pressure_stub,
         prompt_text=prompt_text,
-        magnitude=min(0.85, 0.35 + float(spec["severity_level"]) * 0.1),
+        magnitude=need_tuning.pressure.magnitude_for_level(int(spec["severity_level"])),
     )
 
 

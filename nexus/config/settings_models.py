@@ -302,6 +302,99 @@ class OrreryPromoteSettings(BaseModel):
     provider: Literal["local"] = "local"
 
 
+def _default_need_accrual_rates() -> Dict[str, float]:
+    return {"sleep": 1.0, "hunger": 1.0, "thirst": 1.0}
+
+
+def _default_need_priorities() -> Dict[str, int]:
+    return {"sleep": 25, "thirst": 24, "hunger": 22}
+
+
+def _default_need_severity_thresholds() -> Dict[str, "OrreryNeedThresholdSettings"]:
+    return {
+        "sleep": OrreryNeedThresholdSettings(
+            mild=16.0,
+            moderate=30.0,
+            severe=48.0,
+            critical=72.0,
+        ),
+        "hunger": OrreryNeedThresholdSettings(
+            mild=8.0,
+            moderate=16.0,
+            severe=30.0,
+            critical=48.0,
+        ),
+        "thirst": OrreryNeedThresholdSettings(
+            mild=4.0,
+            moderate=8.0,
+            severe=16.0,
+            critical=24.0,
+        ),
+    }
+
+
+class OrreryNeedThresholdSettings(BaseModel):
+    """Debt thresholds for one Sunhelm need severity track."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    mild: float = Field(..., ge=0.0)
+    moderate: float = Field(..., ge=0.0)
+    severe: float = Field(..., ge=0.0)
+    critical: float = Field(..., ge=0.0)
+
+    @model_validator(mode="after")
+    def _validate_monotonic(self) -> "OrreryNeedThresholdSettings":
+        if not (self.mild <= self.moderate <= self.severe <= self.critical):
+            raise ValueError(
+                "Need severity thresholds must be monotonic: "
+                "mild <= moderate <= severe <= critical"
+            )
+        return self
+
+
+class OrreryNeedPressureSettings(BaseModel):
+    """Present-character need pressure tuning for Storyteller prompt injection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_severity_level: int = Field(default=2, ge=1, le=4)
+    magnitude_base: float = Field(default=0.35, ge=0.0)
+    magnitude_per_level: float = Field(default=0.10, ge=0.0)
+    magnitude_cap: float = Field(default=0.85, ge=0.0, le=1.0)
+
+
+class OrrerySunhelmSettings(BaseModel):
+    """Timestamp-plus-debt tuning for Orrery basic needs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accrual_rates: Dict[str, float] = Field(default_factory=_default_need_accrual_rates)
+    severity_thresholds: Dict[str, OrreryNeedThresholdSettings] = Field(
+        default_factory=_default_need_severity_thresholds
+    )
+    priorities: Dict[str, int] = Field(default_factory=_default_need_priorities)
+    pressure: OrreryNeedPressureSettings = Field(
+        default_factory=OrreryNeedPressureSettings
+    )
+
+    @model_validator(mode="after")
+    def _validate_need_keys(self) -> "OrrerySunhelmSettings":
+        required = {"sleep", "hunger", "thirst"}
+        for field_name, mapping in (
+            ("accrual_rates", self.accrual_rates),
+            ("severity_thresholds", self.severity_thresholds),
+            ("priorities", self.priorities),
+        ):
+            keys = set(mapping)
+            if keys != required:
+                raise ValueError(
+                    f"orrery.sunhelm.{field_name} must define exactly "
+                    f"{sorted(required)}; got {sorted(keys)}"
+                )
+        return self
+
+
 class OrrerySettings(BaseModel):
     """Orrery off-screen behavior subsystem settings."""
 
@@ -312,6 +405,7 @@ class OrrerySettings(BaseModel):
     narration: OrreryNarrationSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
+    sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
 
 
 # =============================================================================

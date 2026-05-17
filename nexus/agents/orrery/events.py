@@ -12,7 +12,8 @@ import json
 from typing import Any, Mapping, Optional
 
 from nexus.agents.orrery.needs import (
-    NEED_ACCRUAL_RATES,
+    NeedTuning,
+    coerce_need_tuning,
     severity_tag_for_debt,
     severity_tags_for_need,
     normalize_need_type,
@@ -68,6 +69,7 @@ def commit_orrery_tick_sync(
     tick_chunk_id: int,
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
+    sunhelm_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -75,6 +77,7 @@ def commit_orrery_tick_sync(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
     with conn.cursor() as cur:
         entity_ids = _entity_ids_from_proposal(coerced)
@@ -109,6 +112,7 @@ def commit_orrery_tick_sync(
                 actor_entity_id=actor_entity_id,
                 target_entity_id=target_entity_id,
                 source_chunk_id=tick_chunk_id,
+                need_tuning=need_tuning,
             )
             event_id = _emit_world_event_sync(
                 cur,
@@ -147,6 +151,7 @@ async def commit_orrery_tick_async(
     tick_chunk_id: int,
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
+    sunhelm_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -154,6 +159,7 @@ async def commit_orrery_tick_async(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
     entity_ids = _entity_ids_from_proposal(coerced)
     await _validate_entity_ids_async(conn, entity_ids)
@@ -187,6 +193,7 @@ async def commit_orrery_tick_async(
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
             source_chunk_id=tick_chunk_id,
+            need_tuning=need_tuning,
         )
         event_id = await _emit_world_event_async(
             conn,
@@ -397,6 +404,7 @@ def _apply_state_delta_sync(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -455,6 +463,7 @@ def _apply_state_delta_sync(
             fulfillment=draft.state_delta["need.fulfill"],
             template_id=draft.template_id,
             source_chunk_id=source_chunk_id,
+            need_tuning=need_tuning,
         )
     return tag_mutations
 
@@ -466,6 +475,7 @@ async def _apply_state_delta_async(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     if not draft.state_delta:
         return 0
@@ -526,6 +536,7 @@ async def _apply_state_delta_async(
             fulfillment=draft.state_delta["need.fulfill"],
             template_id=draft.template_id,
             source_chunk_id=source_chunk_id,
+            need_tuning=need_tuning,
         )
     return tag_mutations
 
@@ -540,7 +551,11 @@ def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:
     else:
         raise ValueError("need.fulfill must be a string or mapping")
 
-    need_type = normalize_need_type(str(payload.get("type") or payload.get("need")))
+    raw_need_type = payload.get("type") or payload.get("need")
+    if raw_need_type is None:
+        raise ValueError("need.fulfill must include a 'type' or 'need' field")
+
+    need_type = normalize_need_type(str(raw_need_type))
     discharge = payload.get("discharge_debt", payload.get("discharge", 9999.0))
     try:
         payload["discharge_debt"] = float(discharge)
@@ -557,6 +572,7 @@ def _apply_need_fulfillment_sync(
     fulfillment: Any,
     template_id: str,
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
@@ -566,6 +582,7 @@ def _apply_need_fulfillment_sync(
         actor_entity_id=actor_entity_id,
         need_type=need_type,
         world_time=world_time,
+        need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
     cur.execute(
@@ -595,6 +612,7 @@ def _apply_need_fulfillment_sync(
         debt_score=new_debt,
         template_id=template_id,
         source_chunk_id=source_chunk_id,
+        need_tuning=need_tuning,
     )
 
 
@@ -605,6 +623,7 @@ async def _apply_need_fulfillment_async(
     fulfillment: Any,
     template_id: str,
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     payload = _coerce_need_fulfillment(fulfillment)
     need_type = payload["type"]
@@ -614,6 +633,7 @@ async def _apply_need_fulfillment_async(
         actor_entity_id=actor_entity_id,
         need_type=need_type,
         world_time=world_time,
+        need_tuning=need_tuning,
     )
     new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
     await conn.execute(
@@ -641,6 +661,7 @@ async def _apply_need_fulfillment_async(
         debt_score=new_debt,
         template_id=template_id,
         source_chunk_id=source_chunk_id,
+        need_tuning=need_tuning,
     )
 
 
@@ -672,6 +693,7 @@ def _load_or_create_need_debt_sync(
     actor_entity_id: int,
     need_type: str,
     world_time: Any,
+    need_tuning: NeedTuning,
 ) -> float:
     cur.execute(
         """
@@ -703,7 +725,7 @@ def _load_or_create_need_debt_sync(
     elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
     if elapsed <= 0:
         return max(0.0, debt_score)
-    return max(0.0, debt_score + elapsed * NEED_ACCRUAL_RATES[need_type])
+    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
 
 
 async def _load_or_create_need_debt_async(
@@ -712,6 +734,7 @@ async def _load_or_create_need_debt_async(
     actor_entity_id: int,
     need_type: str,
     world_time: Any,
+    need_tuning: NeedTuning,
 ) -> float:
     await conn.execute(
         """
@@ -745,7 +768,7 @@ async def _load_or_create_need_debt_async(
     elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
     if elapsed <= 0:
         return max(0.0, debt_score)
-    return max(0.0, debt_score + elapsed * NEED_ACCRUAL_RATES[need_type])
+    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
 
 
 def _sync_need_severity_tags_sync(
@@ -756,9 +779,10 @@ def _sync_need_severity_tags_sync(
     debt_score: float,
     template_id: str,
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     mutations = 0
-    desired = severity_tag_for_debt(need_type, debt_score)
+    desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
     for tag in severity_tags_for_need(need_type):
         mutations += _remove_entity_tag_sync(
             cur,
@@ -781,9 +805,10 @@ async def _sync_need_severity_tags_async(
     debt_score: float,
     template_id: str,
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     mutations = 0
-    desired = severity_tag_for_debt(need_type, debt_score)
+    desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
     for tag in severity_tags_for_need(need_type):
         mutations += await _remove_entity_tag_async(
             conn,
