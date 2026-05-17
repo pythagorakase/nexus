@@ -41,6 +41,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # This workflow is dispatched by the orchestration workflow with the
+          # default GITHUB_TOKEN, so Claude sees github-actions as the initiator.
+          allowed_bots: github-actions,github-actions[bot]
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ inputs.pr_number }}

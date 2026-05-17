@@ -75,11 +75,26 @@ jobs:
             exit 0
           fi
 
-          gh workflow run claude-code-review.yml \
-            --ref "$BASE_REF" \
-            -f pr_number="$PR_NUMBER" \
-            -f head_sha="$PR_HEAD_SHA" \
-            -f review_prompt="$REVIEW_PROMPT"
+          dispatch_output="$(
+            gh workflow run claude-code-review.yml \
+              --ref "$BASE_REF" \
+              -f pr_number="$PR_NUMBER" \
+              -f head_sha="$PR_HEAD_SHA" \
+              -f review_prompt="$REVIEW_PROMPT" \
+              2>&1
+          )"
+          printf '%s\n' "$dispatch_output"
+
+          claude_run_id="$(
+            printf '%s\n' "$dispatch_output" |
+              sed -nE 's#.*actions/runs/([0-9]+).*#\1#p' |
+              tail -n 1
+          )"
+          if [[ -z "$claude_run_id" ]]; then
+            echo "::error::Unable to determine Claude review workflow run id from dispatch output."
+            exit 1
+          fi
+          echo "CLAUDE_RUN_ID=${claude_run_id}" >> "$GITHUB_ENV"
 
           printf '%s\n%s\n' \
             "$marker" \
@@ -97,6 +112,19 @@ jobs:
         if: env.AGENT_REVIEW_REQUESTED == 'true'
         run: |
           set -euo pipefail
+
+          if [[ -n "${CLAUDE_RUN_ID:-}" ]]; then
+            claude_status="$(gh run view "$CLAUDE_RUN_ID" --json status --jq .status)"
+            claude_conclusion="$(gh run view "$CLAUDE_RUN_ID" --json conclusion --jq '.conclusion // ""')"
+            claude_url="$(gh run view "$CLAUDE_RUN_ID" --json url --jq .url)"
+
+            if [[ "$claude_status" != "completed" || "$claude_conclusion" != "success" ]]; then
+              echo "::error::Claude review workflow ${CLAUDE_RUN_ID} did not complete successfully: status=${claude_status}, conclusion=${claude_conclusion:-none} (${claude_url})"
+              exit 1
+            fi
+          else
+            echo "::warning::No Claude review workflow run id available; unable to verify downstream completion."
+          fi
 
           marker="<!-- nexus-agent-review:ready:${PR_HEAD_SHA} -->"
           if gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' | grep -Fq "$marker"; then
