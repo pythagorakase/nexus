@@ -4,11 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run Commands
 - Install dependencies: `poetry install`
+- Register pre-commit hooks (once per checkout): `poetry run pre-commit install`
 - Run tests: `poetry run pytest`
 - Run specific test: `poetry run pytest tests/path/to/test.py::test_name`
 - Format code: `poetry run black .`
 - Typecheck: `poetry run mypy .`
 - Lint: `poetry run flake8`
+
+## Pre-commit hooks
+
+Config in `.pre-commit-config.yaml`. Hooks fire on `git commit` when matching
+files are staged. Currently:
+
+- **regenerate-orrery-catalog** — when `nexus/agents/orrery/{templates,substrate,catalog}.py` changes, regenerates `docs/orrery_packages.md` so the human-readable catalog stays in lockstep with the canonical Python source. The hook modifies the file; if it does, pre-commit aborts the commit and prompts you to re-stage the regenerated doc + commit again.
+
+Bypass (use sparingly): `git commit --no-verify`. CI staleness tests still gate merges.
 
 ## Code Style Guidelines
 - Use Black for formatting with default line length (88 chars)
