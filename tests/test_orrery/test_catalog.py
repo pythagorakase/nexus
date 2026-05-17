@@ -98,6 +98,14 @@ def test_render_predicate_name_handles_known_predicates() -> None:
             "actor and target are co-located",
         ),
         (
+            "can_move_publicly(@actor)",
+            "actor can plausibly move through public flow",
+        ),
+        (
+            "relationship_is_asymmetric(3,actor<->target)",
+            "directional trust actor↔target differs by 3+ or is loaded",
+        ),
+        (
             "has_symmetric_relationship_of_type(family,actor<->target)",
             "actor and target share `family` relationship (either direction)",
         ),

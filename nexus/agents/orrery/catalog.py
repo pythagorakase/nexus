@@ -78,8 +78,32 @@ _register(
     ),
 )
 _register(
+    r"has_any_current_tag\((?P<tags>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has any current tag of ["
+        + ", ".join(f"`{t}`" for t in m.group("tags").split(","))
+        + "]"
+    ),
+)
+_register(
     r"has_ephemeral\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('tag')}` ephemeral",
+)
+_register(
+    r"has_minimal_context\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} has enough hydrated context",
+)
+_register(
+    r"is_constrained\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} is constrained or immobilized",
+)
+_register(
+    r"is_hidden\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} is hidden or off-grid",
+)
+_register(
+    r"can_move_publicly\(@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} can plausibly move through public flow",
 )
 _register(
     r"has_any_intimacy_suppressor\(@(?P<slot>\w+)\)",
@@ -165,6 +189,25 @@ _register(
     r"trust_below\((?P<thresh>-?\d+),(?P<a>\w+)->(?P<b>\w+)\)",
     lambda m: (
         f"trust {_slot(m.group('a'))}→{_slot(m.group('b'))} < {m.group('thresh')}"
+    ),
+)
+_register(
+    r"relationship_is_mutual_warm\((?P<a>\w+)<->(?P<b>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('a'))} and {_slot(m.group('b'))} have mutual warm trust"
+    ),
+)
+_register(
+    r"relationship_is_asymmetric\((?P<thresh>\d+),(?P<a>\w+)<->(?P<b>\w+)\)",
+    lambda m: (
+        f"directional trust {_slot(m.group('a'))}↔{_slot(m.group('b'))} "
+        f"differs by {m.group('thresh')}+ or is loaded"
+    ),
+)
+_register(
+    r"direct_contact_is_dramatic\((?P<a>\w+)->(?P<b>\w+)\)",
+    lambda m: (
+        f"direct contact {_slot(m.group('a'))}→{_slot(m.group('b'))} is dramatic"
     ),
 )
 
@@ -444,6 +487,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("durable_tag", re.compile(r"has_tag\(([^@()]+)@")),
     ("durable_tag", re.compile(r"lacks_tag\(([^@()]+)@")),
     ("durable_tag_list", re.compile(r"has_any_tag\(([^@()]+)@")),
+    ("durable_tag_list", re.compile(r"has_any_current_tag\(([^@()]+)@")),
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),

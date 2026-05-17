@@ -19,9 +19,15 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 **Gate:**
 
-- **OR:**
-  - actor has `under_active_pursuit` ephemeral
-  - recent `compliance_alert` event targeting actor in last 5 ticks
+- **AND:**
+  - **OR:**
+    - actor has `under_active_pursuit` ephemeral
+    - recent `compliance_alert` event targeting actor in last 5 ticks
+  - **NOT:** actor is constrained or immobilized
+  - **OR:**
+    - actor is in `the_roots` place affordance
+    - actor has `contacts_available` tag
+    - actor can plausibly move through public flow
 
 ### Branch 1 — Go to ground in flooded tunnels  *(mag 0.72)*
 
@@ -47,12 +53,21 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 3 — Keep moving, blend into public flow  *(mag 0.42)*
 
-**When:** *(always)*
+**When:** actor can plausibly move through public flow
 
 **Does:** activity → "blending into public flow"
 **Event:** `evade_pursuit`
 
 > {actor} joins the densest pedestrian current nearby, never stopping long enough to make a clean pattern.
+
+### Branch 4 — Break line of sight without a clean route  *(mag 0.28)*
+
+**When:** *(always)*
+
+**Does:** activity → "breaking pursuit pattern"
+**Event:** `evade_pursuit`
+
+> {actor} cannot rely on a clean public path, so they buy seconds instead: doors, stairwells, service gaps, and any angle that keeps the pursuit from becoming certain.
 
 ---
 
@@ -279,6 +294,84 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## HIDE — priority 84
+
+> Steady-state concealment for people who are already living out of sight.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - actor is hidden or off-grid
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor is constrained or immobilized
+  - ≥ 6 ticks since last `hideout_maintained` event for actor
+  - ≥ 6 ticks since last `signal_exposure_reduced` event for actor
+  - ≥ 6 ticks since last `counter_surveillance_sweep` event for actor
+
+### Branch 1 — Harden or sanitize a safehouse  *(mag 0.4)*
+
+**When:**
+
+- **AND:**
+  - actor is in `safe_house` place affordance
+  - actor has any current tag of [`contacts_available`, `fixer`, `route_familiar`, `safehouse_operator`, `survivalist`]
+
+**Does:** activity → "hardening a safehouse"
+**Event:** `hideout_maintained`
+
+> {actor} spends the turn making the safe place safer: cleaning traces, changing habits, checking exits, and removing the small comforts that become evidence.
+
+### Branch 2 — Go dark and reduce signal exposure  *(mag 0.36)*
+
+**When:** actor has any current tag of [`contacts_available`, `ghostprint_active`, `hacker`, `off_grid`, `paranoid`, `signal_operator`]
+
+**Does:** activity → "reducing signal exposure"
+**Event:** `signal_exposure_reduced`
+
+> {actor} trims their signal down to almost nothing — no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.
+
+### Branch 3 — Run a counter-surveillance sweep  *(mag 0.34)*
+
+**When:**
+
+- **OR:**
+  - actor has any current tag of [`combat_trained`, `hacker`, `informant_handler`, `paranoid`, `scout`, `surveillance_capable`]
+  - recent `compliance_alert` event targeting actor in last 8 ticks
+
+**Does:** activity → "running counter-surveillance"
+**Event:** `counter_surveillance_sweep`
+
+> {actor} checks whether anyone has learned the shape of their absence: doubled-back routes, watcher positions, unusual queries, and the tiny repetitions that turn hiding into a map.
+
+### Branch 4 — Shift a mobile route without surfacing  *(mag 0.3)*
+
+**When:**
+
+- **AND:**
+  - **OR:**
+    - actor is in transit
+    - actor has a planned travel destination
+  - actor has any current tag of [`fugitive`, `route_familiar`, `travel_ready`, `wanted`]
+
+**Does:** activity → "shifting concealed route"
+**Event:** `hideout_maintained`
+
+> {actor} changes the route without making the change look like a change, letting timing and terrain do what panic would ruin.
+
+### Branch 5 — Preserve the silence another day  *(mag 0.22)*
+
+**When:** *(always)*
+
+**Does:** activity → "preserving concealment"
+**Event:** `hideout_maintained`
+
+> {actor} does the unglamorous work of staying missing: small routines, smaller footprints, and the discipline not to reach toward the people who would make the silence easier to bear.
+
+---
+
 ## HONOR_DEBT — priority 80
 
 > A binding obligation surfaces from the blank years.
@@ -348,7 +441,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Reach the ally face-to-face before the word gets out  *(mag 0.66)*
 
-**When:** actor and target are co-located
+**When:**
+
+- **AND:**
+  - actor and target are co-located
+  - **NOT:** direct contact actor→target is dramatic
 
 **Does:** activity → "delivering urgent warning in person"; adds `forewarned` to target
 **Event:** `warning_delivered`
@@ -361,7 +458,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Send word through whatever channel will reach them quickest  *(mag 0.52)*
 
-**When:** *(always)*
+**When:**
+
+- **NOT:** direct contact actor→target is dramatic
 
 **Does:** activity → "sending urgent warning"; adds `forewarned` to target
 **Event:** `warning_delivered`
@@ -371,6 +470,19 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
 
 > {actor} has sent {target} an urgent warning by remote means. The scene may show this as an incoming message, a vague disturbance, a half-heard signal, or it may not land in time.
+
+### Branch 3 — Leak the warning without breaking cover  *(mag 0.4)*
+
+**When:** *(always)*
+
+**Does:** activity → "leaking urgent warning"; adds `forewarned` to target
+**Event:** `warning_delivered`
+
+> {actor} still sends the warning, but strips their own hand from it: a proxy, a coded leak, an anonymous ping, something that can reach {target} without making contact itself the story.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sent {target} an indirect warning. It may appear as a leak, proxy message, coded signal, or not land in time; Orrery is not deciding how {target} responds.
 
 ---
 
@@ -608,6 +720,115 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## SURVEIL — priority 48
+
+> Watching from afar without turning observation into contact.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `grudge_active` ephemeral
+  - **OR:**
+    - actor is hidden or off-grid
+    - actor has any current tag of [`broker`, `contacts_available`, `hacker`, `informant_handler`, `intelligence_asset_active`, `paranoid`, `researcher`, `signal_operator`, `surveillance_capable`]
+    - actor has `captor` relationship to target
+    - actor has `guardian` relationship to target
+    - actor has `handler` relationship to target
+    - trust actor→target < -2
+    - recent `threat_issued` event targeting target in last 8 ticks
+  - ≥ 6 ticks since last `surveillance_performed` event for (actor, target) pair
+  - ≥ 6 ticks since last `intel_reviewed` event for (actor, target) pair
+
+### Branch 1 — Keep tabs from a distance  *(mag 0.44)*
+
+**When:**
+
+- **OR:**
+  - actor is hidden or off-grid
+  - trust actor→target < -2
+
+**Does:** activity → "keeping tabs from a distance"
+**Event:** `surveillance_performed`
+
+> {actor} keeps tabs on {target} without touching the line between them: a pattern noticed, a channel checked, a small confirmation that does not become contact.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is keeping tabs on {target} from off-screen. Treat this as possible pressure, unease, traces, or delayed setup; do not turn it into automatic contact or control of {target}'s choices.
+
+### Branch 2 — Intercept signal traffic  *(mag 0.48)*
+
+**When:** actor has any current tag of [`ghostprint_active`, `hacker`, `researcher`, `signal_operator`, `surveillance_capable`]
+
+**Does:** activity → "intercepting target signals"
+**Event:** `surveillance_performed`
+
+> {actor} watches the signal field around {target}: not the person directly, not yet, but the traffic and absences that make a life legible to someone patient enough.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may be reading signal traffic around {target}'s current scene. Use it as optional pressure or atmosphere, not as a canonical breach unless the scene earns it.
+
+### Branch 3 — Collect a proxy watcher report  *(mag 0.38)*
+
+**When:** actor has any current tag of [`broker`, `contacts_available`, `fixer`, `informant_handler`]
+
+**Does:** activity → "collecting a proxy watcher report"
+**Event:** `surveillance_performed`
+
+> {actor} does not go near {target}. They let someone else look, then read the report for what the watcher understood and what they were too ordinary to notice.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has someone off-screen watching for signs around {target}. This can surface as a watcher, rumor, false alarm, or nothing at all.
+
+### Branch 4 — Review accumulated intel  *(mag 0.34)*
+
+**When:** actor has any current tag of [`academic`, `intelligence_asset_active`, `paranoid`, `researcher`]
+
+**Does:** activity → "reviewing accumulated intel"
+**Event:** `intel_reviewed`
+
+> {actor} stops gathering and starts reading: old logs, half-useful reports, fragments whose meaning only appears after the same question has been asked too many times.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is reviewing accumulated intel related to {target}. If useful, let the scene feel watched or anticipated; the review itself does not force new facts into canon.
+
+### Branch 5 — Follow the public pattern  *(mag 0.3)*
+
+**When:** target can plausibly move through public flow
+
+**Does:** activity → "following target public pattern"
+**Event:** `surveillance_performed`
+
+> {actor} follows the public shape of {target}'s life: where they appear, what routes repeat, which absences look chosen and which look imposed.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may have mapped the public pattern around {target}. Use this only as Storyteller-controlled scene pressure or a future setup.
+
+### Branch 6 — Keep the target in view without contact  *(mag 0.24)*
+
+**When:** *(always)*
+
+**Does:** activity → "surveilling without contact"
+**Event:** `surveillance_performed`
+
+> {actor} keeps {target} in view at the lowest useful resolution, choosing continued uncertainty over the kind of move that would make the watching visible.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is watching around {target} but has not made contact. The Storyteller may adapt, delay, ignore, or incorporate that pressure without letting Orrery decide what {target} does.
+
+---
+
 ## REACH_OUT_TO_KIN — priority 40
 
 > A small thread of contact between people who hold each other.
@@ -623,8 +844,13 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor and target share `romantic` relationship (either direction)
     - actor and target share `chosen_kin` relationship (either direction)
     - actor and target share `comrade` relationship (either direction)
+  - **OR:**
+    - actor and target have mutual warm trust
+    - directional trust actor↔target differs by 3+ or is loaded
+    - direct contact actor→target is dramatic
   - ≥ 8 ticks since last `contact_made` event for (actor, target) pair
   - ≥ 8 ticks since last `kin_visit` event for (actor, target) pair
+  - ≥ 8 ticks since last `contact_deferred` event for (actor, target) pair
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `grudge_active` ephemeral
 
@@ -634,6 +860,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor and target are co-located
+  - actor and target have mutual warm trust
+  - **NOT:** direct contact actor→target is dramatic
   - ≥ 5 ticks since last `kin_visit` event for (actor, target) pair
 
 **Does:** activity → "spending real time with kin"
@@ -647,7 +875,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Send a message that says less than it means  *(mag 0.16)*
 
-**When:** *(always)*
+**When:**
+
+- **AND:**
+  - actor and target have mutual warm trust
+  - **NOT:** direct contact actor→target is dramatic
 
 **Does:** activity → "keeping kin contact warm"
 **Event:** `contact_made`
@@ -657,6 +889,36 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
 
 > {actor} has sent {target} a small affectionate message. Treat as ambient relationship-warmth — possibly an incoming notification, possibly not surfaced at all.
+
+### Branch 3 — Draft the message and leave it unsent  *(mag 0.18)*
+
+**When:**
+
+- **OR:**
+  - directional trust actor↔target differs by 3+ or is loaded
+  - direct contact actor→target is dramatic
+
+**Does:** activity → "drafting unsent kin contact"
+**Event:** `contact_deferred`
+
+> {actor} writes the message anyway, or composes the call in their head, and then does not send it. The wanting is real; so is the cost of turning it into contact.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is holding back a loaded attempt to reach {target}. Use this as optional emotional pressure or a future story beat; Orrery has not made contact happen.
+
+### Branch 4 — Let the silence stand for now  *(mag 0.08)*
+
+**When:** *(always)*
+
+**Does:** activity → "deferring kin contact"
+**Event:** `contact_deferred`
+
+> {actor} lets the thread remain unpulled. Whatever exists between them and {target}, it is not made warmer by forcing the wrong kind of contact today.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is choosing not to contact {target} for now. Treat this as optional subtext, not as a visible scene event.
 
 ---
 
@@ -1403,29 +1665,73 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ## MAINTAIN_COVER — priority 0
 
-> Baseline activity that keeps the behavioral ledger plausible.
+> Specific public-cover maintenance, not a universal fallback.
 
 **Slots:** ACTOR
 
-**Gate:** *(always)*
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor is hidden or off-grid
+  - **NOT:** actor is in transit
+  - **OR:**
+    - actor has any current tag of [`broker`, `cover_identity`, `deep_cover`, `fixer`, `operative`, `public_role`, `undercover`]
+    - actor is in `the_glow` place affordance
+    - actor is in `market` place affordance
+    - actor is in `transit_hub` place affordance
+    - recent `maintain_cover` event with actor=actor in last 10 ticks
+  - ≥ 6 ticks since last `maintain_cover` event for actor
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*
 
-**When:** actor is in `the_glow` place affordance
+**When:**
+
+- **AND:**
+  - actor is in `the_glow` place affordance
+  - actor can plausibly move through public flow
 
 **Does:** activity → "running low-level cover work"
 **Event:** `maintain_cover`
 
 > {actor} picks up a benign data packet, walks it across the district, and earns just enough to register as ordinary.
 
-### Branch 2 — Drift through public space  *(mag 0.1)*
+### Branch 2 — Maintain a specific cover identity  *(mag 0.14)*
 
-**When:** *(always)*
+**When:** actor has any current tag of [`cover_identity`, `deep_cover`, `public_role`, `undercover`]
+
+**Does:** activity → "maintaining cover identity"
+**Event:** `maintain_cover`
+
+> {actor} services the identity that keeps questions from forming: one believable errand, one ordinary exchange, one small proof that the mask has a life of its own.
+
+### Branch 3 — Keep a public role legible  *(mag 0.12)*
+
+**When:** actor has any current tag of [`broker`, `fixer`, `operative`]
+
+**Does:** activity → "keeping public role legible"
+**Event:** `maintain_cover`
+
+> {actor} keeps their visible role legible to the people who expect to see it — enough routine, enough responsiveness, enough plausible friction to look like a life.
+
+### Branch 4 — Drift through public space  *(mag 0.1)*
+
+**When:** actor can plausibly move through public flow
 
 **Does:** activity → "maintaining public cover"
 **Event:** `maintain_cover`
 
 > {actor} moves through public space at the pace of someone with somewhere to be, generating forgettable civilian noise.
+
+### Branch 5 — Keep the ledger plausible from a fixed post  *(mag 0.08)*
+
+**When:** *(always)*
+
+**Does:** activity → "maintaining fixed cover"
+**Event:** `maintain_cover`
+
+> {actor} makes no dramatic move. They answer what must be answered, neglect what can be neglected, and keep their visible life plausible without pretending to be free of it.
 
 ---
 
@@ -1444,6 +1750,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/031_orrery_slot2_semantic_tag_vocab.py`
 - `migrations/032_orrery_interpersonal_needs.py`
 - `migrations/033_orrery_travel_work.py`
+- `migrations/034_orrery_concealment_surveillance_vocab.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -1453,11 +1760,14 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `artisan`
 - `artist`
 - `athlete`
+- `broker`
 - `cares_for_household`
 - `combat_trained`
 - `contacts_available`
 - `contemplative`
+- `cover_identity`
 - `dancer`
+- `deep_cover`
 - `devout`
 - `domestic_role`
 - `engineer`
@@ -1466,12 +1776,15 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `field_worker`
 - `fighter`
 - `first_aid_trained`
+- `fixer`
 - `forager`
+- `fugitive`
 - `ghostprint_active`
 - `hacker`
 - `hunter`
 - `informant_handler`
 - `innkeeper`
+- `intelligence_asset_active`
 - `intimate_services_contact`
 - `keeps_shop`
 - `loremaster`
@@ -1484,29 +1797,38 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `merchant`
 - `monk`
 - `musician`
+- `off_grid`
+- `operative`
+- `paranoid`
 - `parent`
 - `partnered_exclusively`
 - `patriarch`
 - `performer`
+- `public_role`
 - `ranger`
 - `religiously_abstinent`
 - `researcher`
 - `ritual_practitioner`
 - `route_familiar`
+- `safehouse_operator`
 - `scholar`
 - `scout`
 - `seeking_identity`
+- `signal_operator`
 - `soldier`
 - `surgical_training`
+- `surveillance_capable`
 - `survivalist`
 - `tinkerer`
 - `trader`
 - `travel_provisioned`
 - `travel_ready`
 - `under_active_pursuit`
+- `undercover`
 - `vendetta_holder`
 - `violent_history`
 - `vow_of_celibacy`
+- `wanted`
 - `warrior`
 - `work_obligation`
 - `writer`
@@ -1528,8 +1850,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `at_vigil`
 - `distressed`
 - `forewarned`
-- `intelligence_asset_active`
-- `off_grid`
 - `recently_drained`
 - `recently_protective`
 - `recently_tended`
@@ -1542,16 +1862,20 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 - `ate`
 - `compliance_alert`
+- `contact_deferred`
 - `contact_made`
+- `counter_surveillance_sweep`
 - `craft_tended`
 - `drank`
 - `encoded_message`
 - `evade_pursuit`
 - `faction_realignment`
+- `hideout_maintained`
 - `honor_debt`
 - `household_work_performed`
 - `informant_contact`
 - `intel_acquired`
+- `intel_reviewed`
 - `intimacy_deferred`
 - `intimacy_fulfilled`
 - `intimacy_partial`
@@ -1564,9 +1888,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `retaliation_attempted`
 - `retaliation_executed`
 - `rival_consulted`
+- `signal_exposure_reduced`
 - `slept`
 - `socialized`
 - `socialized_alone`
+- `surveillance_performed`
 - `tended_wound`
 - `threat_issued`
 - `travel_arrived`

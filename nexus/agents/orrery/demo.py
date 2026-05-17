@@ -93,6 +93,14 @@ def build_presets() -> Dict[str, WorldState]:
             weather="clear",
             current_tick=100,
         ),
+        "hiding": WorldState(
+            tags={ACTOR_ID: frozenset({"off_grid"})},
+            locations={ACTOR_ID: ROOTS_PLACE_ID},
+            location_class=location_classes,
+            time_of_day="night",
+            weather="clear",
+            current_tick=100,
+        ),
         # Round-2 solo presets
         "mourning": WorldState(
             ephemeral_tags={ACTOR_ID: frozenset({"bereaved"})},
@@ -166,6 +174,17 @@ def build_multi_slot_presets() -> Dict[str, dict]:
             ),
             "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
         },
+        "surveillance": {
+            "state": WorldState(
+                tags={ACTOR_ID: frozenset({"signal_operator"})},
+                locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: ROOTS_PLACE_ID},
+                location_class=location_classes,
+                time_of_day="night",
+                weather="clear",
+                current_tick=100,
+            ),
+            "bindings": {Slot.ACTOR: ACTOR_ID, Slot.TARGET: TARGET_ID},
+        },
         # Round-2 multi-slot presets
         "wounded_healing": {
             "state": WorldState(
@@ -224,6 +243,7 @@ def build_multi_slot_presets() -> Dict[str, dict]:
         "kin_visit": {
             "state": WorldState(
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
+                trust={(ACTOR_ID, TARGET_ID): 3, (TARGET_ID, ACTOR_ID): 2},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
                 location_class=location_classes,
                 time_of_day="afternoon",

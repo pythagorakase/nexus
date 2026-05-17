@@ -62,6 +62,59 @@ ESTABLISHED_PARTNER_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
         "romantic_partner",
     }
 )
+CONSTRAINED_TAGS: frozenset[str] = frozenset(
+    {
+        "captive",
+        "contained",
+        "dying",
+        "immobile",
+        "sandboxed",
+        "unconscious",
+        "wounded",
+    }
+)
+HIDDEN_TAGS: frozenset[str] = frozenset(
+    {
+        "fugitive",
+        "hidden_identity",
+        "long_absent",
+        "long_hidden",
+        "off_grid",
+        "presumed_dead",
+        "presumed_dead_by_some",
+        "wanted",
+    }
+)
+PUBLIC_MOBILITY_TAGS: frozenset[str] = frozenset(
+    {
+        "broker",
+        "contacts_available",
+        "courier",
+        "field_worker",
+        "fixer",
+        "public_role",
+        "route_familiar",
+        "scout",
+        "travel_ready",
+    }
+)
+PUBLIC_PLACE_AFFORDANCES: frozenset[str] = frozenset(
+    {
+        "market",
+        "public_space",
+        "street",
+        "the_glow",
+        "the_roots",
+        "transit_hub",
+        "workplace",
+    }
+)
+DRAMATIC_CONTACT_TAGS: frozenset[str] = HIDDEN_TAGS | frozenset(
+    {
+        "deep_cover",
+        "long_estranged",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +226,23 @@ def has_any_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
     return _named(_condition, f"has_any_tag({','.join(tags)}@{slot.value})")
 
 
+def has_any_current_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity has any durable or ephemeral tag."""
+
+    candidates = frozenset(tags)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        current_tags = state.tags.get(
+            entity_id, frozenset()
+        ) | state.ephemeral_tags.get(entity_id, frozenset())
+        return bool(candidates & current_tags)
+
+    return _named(_condition, f"has_any_current_tag({','.join(tags)}@{slot.value})")
+
+
 def has_ephemeral(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound entity has a current ephemeral tag."""
 
@@ -183,6 +253,83 @@ def has_ephemeral(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
         )
 
     return _named(_condition, f"has_ephemeral({tag}@{slot.value})")
+
+
+def has_minimal_context(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether Orrery has enough substrate to reason about an entity."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        if state.tags.get(entity_id) or state.ephemeral_tags.get(entity_id):
+            return True
+        if entity_id in state.locations or entity_id in state.activities:
+            return True
+        if entity_id in state.travel_states:
+            return True
+        return any(
+            event.actor_entity_id == entity_id or event.target_entity_id == entity_id
+            for event in state.recent_events
+        )
+
+    return _named(_condition, f"has_minimal_context(@{slot.value})")
+
+
+def is_constrained(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity is not free to act off-screen."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        current_tags = state.tags.get(
+            entity_id, frozenset()
+        ) | state.ephemeral_tags.get(entity_id, frozenset())
+        return bool(CONSTRAINED_TAGS & current_tags)
+
+    return _named(_condition, f"is_constrained(@{slot.value})")
+
+
+def is_hidden(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity is living under concealment."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        current_tags = state.tags.get(
+            entity_id, frozenset()
+        ) | state.ephemeral_tags.get(entity_id, frozenset())
+        return bool(HIDDEN_TAGS & current_tags)
+
+    return _named(_condition, f"is_hidden(@{slot.value})")
+
+
+def can_move_publicly(slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether public-flow movement is plausible for the entity."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None or _is_in_transit(state, entity_id):
+            return False
+        current_tags = state.tags.get(
+            entity_id, frozenset()
+        ) | state.ephemeral_tags.get(entity_id, frozenset())
+        if CONSTRAINED_TAGS & current_tags:
+            return False
+        if PUBLIC_MOBILITY_TAGS & current_tags:
+            return True
+        location_id = state.locations.get(entity_id)
+        if location_id is None:
+            return False
+        semantic_classes = state.location_classes.get(location_id, frozenset())
+        if PUBLIC_PLACE_AFFORDANCES & semantic_classes:
+            return True
+        location_class = state.location_class.get(location_id)
+        return bool(location_class and location_class in PUBLIC_PLACE_AFFORDANCES)
+
+    return _named(_condition, f"can_move_publicly(@{slot.value})")
 
 
 def has_any_intimacy_suppressor(slot: Slot = Slot.ACTOR) -> Condition:
@@ -511,6 +658,81 @@ def trust_below(
 
     return _named(
         _condition, f"trust_below({threshold},{slot_from.value}->{slot_to.value})"
+    )
+
+
+def relationship_is_mutual_warm(
+    slot_a: Slot = Slot.ACTOR,
+    slot_b: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether two entities have enough mutual trust for warm contact."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        source = _slot_entity(bindings, slot_a)
+        target = _slot_entity(bindings, slot_b)
+        if source is None or target is None:
+            return False
+        return (
+            state.trust.get((source, target), 0) >= 2
+            and state.trust.get((target, source), 0) >= 1
+        )
+
+    return _named(
+        _condition,
+        f"relationship_is_mutual_warm({slot_a.value}<->{slot_b.value})",
+    )
+
+
+def relationship_is_asymmetric(
+    threshold: int = 3,
+    slot_a: Slot = Slot.ACTOR,
+    slot_b: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether directional trust is dramatically lopsided."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        source = _slot_entity(bindings, slot_a)
+        target = _slot_entity(bindings, slot_b)
+        if source is None or target is None:
+            return False
+        forward = state.trust.get((source, target), 0)
+        reverse = state.trust.get((target, source), 0)
+        return abs(forward - reverse) >= threshold or (forward >= 2 and reverse <= -1)
+
+    return _named(
+        _condition,
+        f"relationship_is_asymmetric({threshold},{slot_a.value}<->{slot_b.value})",
+    )
+
+
+def direct_contact_is_dramatic(
+    slot_from: Slot = Slot.ACTOR,
+    slot_to: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether direct contact should be treated as a story beat."""
+
+    asymmetric = relationship_is_asymmetric(slot_a=slot_from, slot_b=slot_to)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        source = _slot_entity(bindings, slot_from)
+        target = _slot_entity(bindings, slot_to)
+        if source is None or target is None:
+            return False
+        source_tags = state.tags.get(source, frozenset()) | state.ephemeral_tags.get(
+            source, frozenset()
+        )
+        target_tags = state.tags.get(target, frozenset()) | state.ephemeral_tags.get(
+            target, frozenset()
+        )
+        if DRAMATIC_CONTACT_TAGS & (source_tags | target_tags):
+            return True
+        if state.trust.get((target, source), 0) <= -2:
+            return True
+        return asymmetric(state, bindings)
+
+    return _named(
+        _condition,
+        f"direct_contact_is_dramatic({slot_from.value}->{slot_to.value})",
     )
 
 

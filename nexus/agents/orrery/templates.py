@@ -11,21 +11,29 @@ from nexus.agents.orrery.substrate import (
     PresentTargetPolicy,
     Slot,
     Template,
+    can_move_publicly,
     co_located,
     count_co_located,
+    direct_contact_is_dramatic,
     has_any_intimacy_suppressor,
+    has_any_current_tag,
     has_any_tag,
     has_ephemeral,
     has_established_partner_co_located,
+    has_minimal_context,
     has_need_debt_at_or_above,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
     has_tag,
     has_travel_destination,
     in_location_class,
+    is_constrained,
+    is_hidden,
     is_in_transit,
     lacks_tag,
     recent_event,
+    relationship_is_asymmetric,
+    relationship_is_mutual_warm,
     since_last_event_at_least,
     time_of_day_in,
     travel_progress_at_or_above,
@@ -41,9 +49,17 @@ EVADE_PURSUERS = Template(
     priority=100,
     blurb="When the city is closing in.",
     required_slots=(Slot.ACTOR,),
-    package_gate=OR(
-        has_ephemeral("under_active_pursuit"),
-        recent_event("compliance_alert", within_ticks=5, target_slot=Slot.ACTOR),
+    package_gate=AND(
+        OR(
+            has_ephemeral("under_active_pursuit"),
+            recent_event("compliance_alert", within_ticks=5, target_slot=Slot.ACTOR),
+        ),
+        NOT(is_constrained()),
+        OR(
+            in_location_class("the_roots"),
+            has_tag("contacts_available"),
+            can_move_publicly(),
+        ),
     ),
     branches=(
         Branch(
@@ -77,7 +93,7 @@ EVADE_PURSUERS = Template(
         ),
         Branch(
             label="Keep moving, blend into public flow",
-            conditions=ALWAYS,
+            conditions=can_move_publicly(),
             narrative_stub=(
                 "{actor} joins the densest pedestrian current nearby, never "
                 "stopping long enough to make a clean pattern."
@@ -86,6 +102,150 @@ EVADE_PURSUERS = Template(
             event_type="evade_pursuit",
             changed_fields=("character.current_activity",),
             magnitude=0.42,
+        ),
+        Branch(
+            label="Break line of sight without a clean route",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} cannot rely on a clean public path, so they buy "
+                "seconds instead: doors, stairwells, service gaps, and any "
+                "angle that keeps the pursuit from becoming certain."
+            ),
+            state_delta={"character.current_activity": "breaking pursuit pattern"},
+            event_type="evade_pursuit",
+            changed_fields=("character.current_activity",),
+            magnitude=0.28,
+        ),
+    ),
+)
+
+
+HIDE = Template(
+    id="hide",
+    priority=84,
+    blurb="Steady-state concealment for people who are already living out of sight.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_minimal_context(),
+        is_hidden(),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(is_constrained()),
+        since_last_event_at_least("hideout_maintained", minimum_ticks=6),
+        since_last_event_at_least("signal_exposure_reduced", minimum_ticks=6),
+        since_last_event_at_least("counter_surveillance_sweep", minimum_ticks=6),
+    ),
+    branches=(
+        Branch(
+            label="Harden or sanitize a safehouse",
+            conditions=AND(
+                in_location_class("safe_house"),
+                has_any_current_tag(
+                    "contacts_available",
+                    "fixer",
+                    "route_familiar",
+                    "safehouse_operator",
+                    "survivalist",
+                ),
+            ),
+            narrative_stub=(
+                "{actor} spends the turn making the safe place safer: "
+                "cleaning traces, changing habits, checking exits, and "
+                "removing the small comforts that become evidence."
+            ),
+            state_delta={
+                "character.current_activity": "hardening a safehouse",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.40,
+        ),
+        Branch(
+            label="Go dark and reduce signal exposure",
+            conditions=has_any_current_tag(
+                "contacts_available",
+                "ghostprint_active",
+                "hacker",
+                "off_grid",
+                "paranoid",
+                "signal_operator",
+            ),
+            narrative_stub=(
+                "{actor} trims their signal down to almost nothing — no "
+                "unnecessary pings, no sentimental check-ins, no pattern "
+                "that would let a watcher say yes, there."
+            ),
+            state_delta={
+                "character.current_activity": "reducing signal exposure",
+            },
+            event_type="signal_exposure_reduced",
+            changed_fields=("character.current_activity",),
+            magnitude=0.36,
+        ),
+        Branch(
+            label="Run a counter-surveillance sweep",
+            conditions=OR(
+                has_any_current_tag(
+                    "combat_trained",
+                    "hacker",
+                    "informant_handler",
+                    "paranoid",
+                    "scout",
+                    "surveillance_capable",
+                ),
+                recent_event(
+                    "compliance_alert",
+                    within_ticks=8,
+                    target_slot=Slot.ACTOR,
+                ),
+            ),
+            narrative_stub=(
+                "{actor} checks whether anyone has learned the shape of their "
+                "absence: doubled-back routes, watcher positions, unusual "
+                "queries, and the tiny repetitions that turn hiding into a map."
+            ),
+            state_delta={
+                "character.current_activity": "running counter-surveillance",
+            },
+            event_type="counter_surveillance_sweep",
+            changed_fields=("character.current_activity",),
+            magnitude=0.34,
+        ),
+        Branch(
+            label="Shift a mobile route without surfacing",
+            conditions=AND(
+                OR(is_in_transit(), has_travel_destination()),
+                has_any_current_tag(
+                    "fugitive",
+                    "route_familiar",
+                    "travel_ready",
+                    "wanted",
+                ),
+            ),
+            narrative_stub=(
+                "{actor} changes the route without making the change look like "
+                "a change, letting timing and terrain do what panic would ruin."
+            ),
+            state_delta={
+                "character.current_activity": "shifting concealed route",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.30,
+        ),
+        Branch(
+            label="Preserve the silence another day",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} does the unglamorous work of staying missing: small "
+                "routines, smaller footprints, and the discipline not to reach "
+                "toward the people who would make the silence easier to bear."
+            ),
+            state_delta={
+                "character.current_activity": "preserving concealment",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.22,
         ),
     ),
 )
@@ -200,13 +360,34 @@ PURSUE_GHOST_LEAD = Template(
 MAINTAIN_COVER = Template(
     id="maintain_cover",
     priority=0,
-    blurb="Baseline activity that keeps the behavioral ledger plausible.",
+    blurb="Specific public-cover maintenance, not a universal fallback.",
     required_slots=(Slot.ACTOR,),
-    package_gate=ALWAYS,
+    package_gate=AND(
+        has_minimal_context(),
+        NOT(is_constrained()),
+        NOT(is_hidden()),
+        NOT(is_in_transit()),
+        OR(
+            has_any_current_tag(
+                "broker",
+                "cover_identity",
+                "deep_cover",
+                "fixer",
+                "operative",
+                "public_role",
+                "undercover",
+            ),
+            in_location_class("the_glow"),
+            in_location_class("market"),
+            in_location_class("transit_hub"),
+            recent_event("maintain_cover", within_ticks=10, actor_slot=Slot.ACTOR),
+        ),
+        since_last_event_at_least("maintain_cover", minimum_ticks=6),
+    ),
     branches=(
         Branch(
             label="Run a low-level courier job",
-            conditions=in_location_class("the_glow"),
+            conditions=AND(in_location_class("the_glow"), can_move_publicly()),
             narrative_stub=(
                 "{actor} picks up a benign data packet, walks it across the "
                 "district, and earns just enough to register as ordinary."
@@ -217,8 +398,39 @@ MAINTAIN_COVER = Template(
             magnitude=0.16,
         ),
         Branch(
+            label="Maintain a specific cover identity",
+            conditions=has_any_current_tag(
+                "cover_identity",
+                "deep_cover",
+                "public_role",
+                "undercover",
+            ),
+            narrative_stub=(
+                "{actor} services the identity that keeps questions from "
+                "forming: one believable errand, one ordinary exchange, one "
+                "small proof that the mask has a life of its own."
+            ),
+            state_delta={"character.current_activity": "maintaining cover identity"},
+            event_type="maintain_cover",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Keep a public role legible",
+            conditions=has_any_current_tag("broker", "fixer", "operative"),
+            narrative_stub=(
+                "{actor} keeps their visible role legible to the people who "
+                "expect to see it — enough routine, enough responsiveness, "
+                "enough plausible friction to look like a life."
+            ),
+            state_delta={"character.current_activity": "keeping public role legible"},
+            event_type="maintain_cover",
+            changed_fields=("character.current_activity",),
+            magnitude=0.12,
+        ),
+        Branch(
             label="Drift through public space",
-            conditions=ALWAYS,
+            conditions=can_move_publicly(),
             narrative_stub=(
                 "{actor} moves through public space at the pace of someone "
                 "with somewhere to be, generating forgettable civilian noise."
@@ -227,6 +439,19 @@ MAINTAIN_COVER = Template(
             event_type="maintain_cover",
             changed_fields=("character.current_activity",),
             magnitude=0.1,
+        ),
+        Branch(
+            label="Keep the ledger plausible from a fixed post",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} makes no dramatic move. They answer what must be "
+                "answered, neglect what can be neglected, and keep their "
+                "visible life plausible without pretending to be free of it."
+            ),
+            state_delta={"character.current_activity": "maintaining fixed cover"},
+            event_type="maintain_cover",
+            changed_fields=("character.current_activity",),
+            magnitude=0.08,
         ),
     ),
 )
@@ -483,6 +708,185 @@ PROTECT_KIN = Template(
                 "{actor} is monitoring {target}'s danger from off-screen. This "
                 "is emotional and logistical pressure, not a command to change "
                 "what {target} does in the scene."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+SURVEIL = Template(
+    id="surveil",
+    priority=48,
+    blurb="Watching from afar without turning observation into contact.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    package_gate=AND(
+        has_minimal_context(),
+        NOT(is_constrained()),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("grudge_active")),
+        OR(
+            is_hidden(),
+            has_any_current_tag(
+                "broker",
+                "contacts_available",
+                "hacker",
+                "informant_handler",
+                "intelligence_asset_active",
+                "paranoid",
+                "researcher",
+                "signal_operator",
+                "surveillance_capable",
+            ),
+            has_relationship_of_type("captor", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("guardian", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("handler", Slot.ACTOR, Slot.TARGET),
+            trust_below(-2),
+            recent_event("threat_issued", within_ticks=8, target_slot=Slot.TARGET),
+        ),
+        since_last_event_at_least(
+            "surveillance_performed", minimum_ticks=6, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "intel_reviewed", minimum_ticks=6, target_slot=Slot.TARGET
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Keep tabs from a distance",
+            conditions=OR(is_hidden(), trust_below(-2)),
+            narrative_stub=(
+                "{actor} keeps tabs on {target} without touching the line "
+                "between them: a pattern noticed, a channel checked, a "
+                "small confirmation that does not become contact."
+            ),
+            state_delta={
+                "character.current_activity": "keeping tabs from a distance",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.44,
+            scene_pressure_stub=(
+                "{actor} is keeping tabs on {target} from off-screen. Treat "
+                "this as possible pressure, unease, traces, or delayed setup; "
+                "do not turn it into automatic contact or control of "
+                "{target}'s choices."
+            ),
+        ),
+        Branch(
+            label="Intercept signal traffic",
+            conditions=has_any_current_tag(
+                "ghostprint_active",
+                "hacker",
+                "researcher",
+                "signal_operator",
+                "surveillance_capable",
+            ),
+            narrative_stub=(
+                "{actor} watches the signal field around {target}: not the "
+                "person directly, not yet, but the traffic and absences that "
+                "make a life legible to someone patient enough."
+            ),
+            state_delta={
+                "character.current_activity": "intercepting target signals",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.48,
+            scene_pressure_stub=(
+                "{actor} may be reading signal traffic around {target}'s "
+                "current scene. Use it as optional pressure or atmosphere, "
+                "not as a canonical breach unless the scene earns it."
+            ),
+        ),
+        Branch(
+            label="Collect a proxy watcher report",
+            conditions=has_any_current_tag(
+                "broker",
+                "contacts_available",
+                "fixer",
+                "informant_handler",
+            ),
+            narrative_stub=(
+                "{actor} does not go near {target}. They let someone else "
+                "look, then read the report for what the watcher understood "
+                "and what they were too ordinary to notice."
+            ),
+            state_delta={
+                "character.current_activity": "collecting a proxy watcher report",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.38,
+            scene_pressure_stub=(
+                "{actor} has someone off-screen watching for signs around "
+                "{target}. This can surface as a watcher, rumor, false alarm, "
+                "or nothing at all."
+            ),
+        ),
+        Branch(
+            label="Review accumulated intel",
+            conditions=has_any_current_tag(
+                "academic",
+                "intelligence_asset_active",
+                "paranoid",
+                "researcher",
+            ),
+            narrative_stub=(
+                "{actor} stops gathering and starts reading: old logs, "
+                "half-useful reports, fragments whose meaning only appears "
+                "after the same question has been asked too many times."
+            ),
+            state_delta={
+                "character.current_activity": "reviewing accumulated intel",
+            },
+            event_type="intel_reviewed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.34,
+            scene_pressure_stub=(
+                "{actor} is reviewing accumulated intel related to {target}. "
+                "If useful, let the scene feel watched or anticipated; the "
+                "review itself does not force new facts into canon."
+            ),
+        ),
+        Branch(
+            label="Follow the public pattern",
+            conditions=can_move_publicly(slot=Slot.TARGET),
+            narrative_stub=(
+                "{actor} follows the public shape of {target}'s life: where "
+                "they appear, what routes repeat, which absences look chosen "
+                "and which look imposed."
+            ),
+            state_delta={
+                "character.current_activity": "following target public pattern",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.30,
+            scene_pressure_stub=(
+                "{actor} may have mapped the public pattern around {target}. "
+                "Use this only as Storyteller-controlled scene pressure or a "
+                "future setup."
+            ),
+        ),
+        Branch(
+            label="Keep the target in view without contact",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} keeps {target} in view at the lowest useful "
+                "resolution, choosing continued uncertainty over the kind of "
+                "move that would make the watching visible."
+            ),
+            state_delta={
+                "character.current_activity": "surveilling without contact",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.24,
+            scene_pressure_stub=(
+                "{actor} is watching around {target} but has not made contact. "
+                "The Storyteller may adapt, delay, ignore, or incorporate that "
+                "pressure without letting Orrery decide what {target} does."
             ),
         ),
     ),
@@ -1459,7 +1863,10 @@ WARN_ALLY = Template(
     branches=(
         Branch(
             label="Reach the ally face-to-face before the word gets out",
-            conditions=co_located(Slot.ACTOR, Slot.TARGET),
+            conditions=AND(
+                co_located(Slot.ACTOR, Slot.TARGET),
+                NOT(direct_contact_is_dramatic()),
+            ),
             narrative_stub=(
                 "{actor} catches {target} before they have time to "
                 "compose themselves and tells them quickly, in a voice "
@@ -1482,7 +1889,7 @@ WARN_ALLY = Template(
         ),
         Branch(
             label="Send word through whatever channel will reach them quickest",
-            conditions=ALWAYS,
+            conditions=NOT(direct_contact_is_dramatic()),
             narrative_stub=(
                 "{actor} sends the warning through whatever channel will "
                 "reach {target} fastest — a call, a runner, a sealed "
@@ -1502,6 +1909,28 @@ WARN_ALLY = Template(
                 "means. The scene may show this as an incoming message, "
                 "a vague disturbance, a half-heard signal, or it may not "
                 "land in time."
+            ),
+        ),
+        Branch(
+            label="Leak the warning without breaking cover",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} still sends the warning, but strips their own hand "
+                "from it: a proxy, a coded leak, an anonymous ping, something "
+                "that can reach {target} without making contact itself the "
+                "story."
+            ),
+            state_delta={
+                "character.current_activity": "leaking urgent warning",
+                "entity_tags_target.add": ["forewarned"],
+            },
+            event_type="warning_delivered",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.40,
+            scene_pressure_stub=(
+                "{actor} has sent {target} an indirect warning. It may appear "
+                "as a leak, proxy message, coded signal, or not land in time; "
+                "Orrery is not deciding how {target} responds."
             ),
         ),
     ),
@@ -1610,11 +2039,19 @@ REACH_OUT_TO_KIN = Template(
             has_symmetric_relationship_of_type("chosen_kin"),
             has_symmetric_relationship_of_type("comrade"),
         ),
+        OR(
+            relationship_is_mutual_warm(),
+            relationship_is_asymmetric(),
+            direct_contact_is_dramatic(),
+        ),
         since_last_event_at_least(
             "contact_made", minimum_ticks=8, target_slot=Slot.TARGET
         ),
         since_last_event_at_least(
             "kin_visit", minimum_ticks=8, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "contact_deferred", minimum_ticks=8, target_slot=Slot.TARGET
         ),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("grudge_active")),
@@ -1624,6 +2061,8 @@ REACH_OUT_TO_KIN = Template(
             label="Find the moment for a real face-to-face conversation",
             conditions=AND(
                 co_located(Slot.ACTOR, Slot.TARGET),
+                relationship_is_mutual_warm(),
+                NOT(direct_contact_is_dramatic()),
                 since_last_event_at_least(
                     "kin_visit", minimum_ticks=5, target_slot=Slot.TARGET
                 ),
@@ -1649,7 +2088,10 @@ REACH_OUT_TO_KIN = Template(
         ),
         Branch(
             label="Send a message that says less than it means",
-            conditions=ALWAYS,
+            conditions=AND(
+                relationship_is_mutual_warm(),
+                NOT(direct_contact_is_dramatic()),
+            ),
             narrative_stub=(
                 "{actor} sends {target} the small message that means "
                 "more than the words it contains — a check-in, a shared "
@@ -1666,6 +2108,45 @@ REACH_OUT_TO_KIN = Template(
                 "{actor} has sent {target} a small affectionate message. "
                 "Treat as ambient relationship-warmth — possibly an "
                 "incoming notification, possibly not surfaced at all."
+            ),
+        ),
+        Branch(
+            label="Draft the message and leave it unsent",
+            conditions=OR(relationship_is_asymmetric(), direct_contact_is_dramatic()),
+            narrative_stub=(
+                "{actor} writes the message anyway, or composes the call in "
+                "their head, and then does not send it. The wanting is real; "
+                "so is the cost of turning it into contact."
+            ),
+            state_delta={
+                "character.current_activity": "drafting unsent kin contact",
+            },
+            event_type="contact_deferred",
+            changed_fields=("character.current_activity",),
+            magnitude=0.18,
+            scene_pressure_stub=(
+                "{actor} is holding back a loaded attempt to reach {target}. "
+                "Use this as optional emotional pressure or a future story "
+                "beat; Orrery has not made contact happen."
+            ),
+        ),
+        Branch(
+            label="Let the silence stand for now",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} lets the thread remain unpulled. Whatever exists "
+                "between them and {target}, it is not made warmer by forcing "
+                "the wrong kind of contact today."
+            ),
+            state_delta={
+                "character.current_activity": "deferring kin contact",
+            },
+            event_type="contact_deferred",
+            changed_fields=("character.current_activity",),
+            magnitude=0.08,
+            scene_pressure_stub=(
+                "{actor} is choosing not to contact {target} for now. Treat "
+                "this as optional subtext, not as a visible scene event."
             ),
         ),
     ),
@@ -2472,8 +2953,10 @@ BUILTIN_TEMPLATES = (
     PROTECT_KIN,
     EXTRACT_VENGEANCE,
     TEND_WOUNDED,
+    HIDE,
     HONOR_DEBT,
     WARN_ALLY,
+    SURVEIL,
     PURSUE_GHOST_LEAD,
     CHECK_ON_DEPENDENT,
     CULTIVATE_INFORMANT,
