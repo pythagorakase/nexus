@@ -170,6 +170,7 @@ def test_interpersonal_need_migration_extends_need_vocab() -> None:
         "intimacy_starved_1_mild",
         "intimacy_starved_4_critical",
         "closeted",
+        "intimate_services_contact",
         "libido_absent",
     } <= {tag for tag, _category, _description in migration.SEVERITY_TAGS}
     assert {

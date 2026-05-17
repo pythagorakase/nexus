@@ -62,6 +62,11 @@ SEVERITY_TAGS = (
         "Excludes contracted-intimacy branches.",
     ),
     (
+        "intimate_services_contact",
+        "orrery_intimacy_context",
+        "Has contacts at an intimate services establishment.",
+    ),
+    (
         "vow_of_celibacy",
         "orrery_intimacy_suppressor",
         "Principled abstention suppressing intimacy-package fulfillment.",

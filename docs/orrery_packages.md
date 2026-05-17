@@ -1105,7 +1105,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor is in `intimate_services_establishment` place affordance
-  - actor has `contacts_available` tag
+  - actor has `intimate_services_contact` tag
   - **NOT:** actor has `partnered_exclusively` tag
   - **NOT:** actor has any of [`vow_of_celibacy`, `religiously_abstinent`, `ethically_opposed_to_contracted_intimacy`]
 
@@ -1307,6 +1307,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `hunter`
 - `informant_handler`
 - `innkeeper`
+- `intimate_services_contact`
 - `keeps_shop`
 - `loremaster`
 - `magical_healing`

@@ -306,8 +306,13 @@ def test_established_partner_co_location_uses_relationships() -> None:
         relationship_types={(1, 2): frozenset({"romantic"})},
         locations={1: 10, 2: 11, 3: 10},
     )
+    reverse_partnered_state = WorldState(
+        relationship_types={(2, 1): frozenset({"romantic"})},
+        locations={1: 10, 2: 10},
+    )
 
     assert predicate(partnered_state, {Slot.ACTOR: 1})
+    assert predicate(reverse_partnered_state, {Slot.ACTOR: 1})
     assert not predicate(bystander_state, {Slot.ACTOR: 1})
 
 

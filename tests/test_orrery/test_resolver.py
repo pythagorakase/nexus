@@ -7,6 +7,7 @@ import pytest
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
+    _need_pressure_stub,
     compose_actor_target_bindings,
     hydrate_world_state,
     resolve_dry_run,
@@ -180,6 +181,9 @@ def test_resolve_dry_run_returns_inspectable_proposal() -> None:
     assert proposal.actor_count == 1
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "maintain_cover"
+    assert not any(
+        resolution.template_id == "intimacy" for resolution in proposal.resolutions
+    )
     assert proposal.resolutions[0].bindings == {"actor": 1}
 
 
@@ -876,6 +880,13 @@ def test_resolve_dry_run_routes_present_need_debt_to_scene_pressure() -> None:
     assert pressure.bindings == {"actor": 1, "resource": "sleep"}
     assert "Mara is carrying moderate sleep debt" in pressure.prompt_text
     assert "Orrery does not decide what Mara does" in pressure.prompt_text
+
+
+def test_need_pressure_stub_rejects_unhandled_need_types() -> None:
+    """Need prompt-pressure copy must not silently reuse intimacy wording."""
+
+    with pytest.raises(ValueError, match="Unhandled Orrery need pressure type"):
+        _need_pressure_stub("wanderlust", severity_name="moderate", debt_score=1)
 
 
 def test_resolve_dry_run_routes_present_intimacy_debt_to_scene_pressure() -> None:

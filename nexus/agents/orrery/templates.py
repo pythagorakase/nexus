@@ -2145,7 +2145,7 @@ INTIMACY = Template(
             label="Engage contracted intimate company",
             conditions=AND(
                 in_location_class("intimate_services_establishment"),
-                has_tag("contacts_available"),
+                has_tag("intimate_services_contact"),
                 NOT(has_tag("partnered_exclusively")),
                 NOT(
                     has_any_tag(

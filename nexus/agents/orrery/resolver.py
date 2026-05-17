@@ -1015,12 +1015,14 @@ def _need_pressure_stub(
             "friction, relief at being seen, or the pull toward company, but "
             "Orrery does not decide what {actor} does in scene."
         )
-    return (
-        "{actor} is carrying "
-        f"{label} ({debt_score:.1f}). You may render wanting, suppression, "
-        "privacy-seeking, or deferral with appropriate restraint, but Orrery "
-        "does not decide what {actor} does in scene or who they choose."
-    )
+    if need_type == "intimacy":
+        return (
+            "{actor} is carrying "
+            f"{label} ({debt_score:.1f}). You may render wanting, suppression, "
+            "privacy-seeking, or deferral with appropriate restraint, but Orrery "
+            "does not decide what {actor} does in scene or who they choose."
+        )
+    raise ValueError(f"Unhandled Orrery need pressure type: {need_type!r}")
 
 
 def _render_bound_text(
