@@ -242,9 +242,13 @@ def test_context_and_constraint_predicates_read_current_tags() -> None:
     assert is_constrained()(
         WorldState(ephemeral_tags={1: frozenset({"sandboxed"})}), {Slot.ACTOR: 1}
     )
+    assert not is_constrained()(
+        WorldState(ephemeral_tags={1: frozenset({"wounded"})}), {Slot.ACTOR: 1}
+    )
     assert is_hidden()(
         WorldState(tags={1: frozenset({"presumed_dead"})}), {Slot.ACTOR: 1}
     )
+    assert is_hidden()(WorldState(tags={1: frozenset({"deep_cover"})}), {Slot.ACTOR: 1})
 
 
 def test_public_mobility_requires_public_context_and_freedom() -> None:

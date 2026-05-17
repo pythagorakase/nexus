@@ -371,7 +371,6 @@ MAINTAIN_COVER = Template(
             has_any_current_tag(
                 "broker",
                 "cover_identity",
-                "deep_cover",
                 "fixer",
                 "operative",
                 "public_role",
@@ -380,7 +379,6 @@ MAINTAIN_COVER = Template(
             in_location_class("the_glow"),
             in_location_class("market"),
             in_location_class("transit_hub"),
-            recent_event("maintain_cover", within_ticks=10, actor_slot=Slot.ACTOR),
         ),
         since_last_event_at_least("maintain_cover", minimum_ticks=6),
     ),
@@ -401,7 +399,6 @@ MAINTAIN_COVER = Template(
             label="Maintain a specific cover identity",
             conditions=has_any_current_tag(
                 "cover_identity",
-                "deep_cover",
                 "public_role",
                 "undercover",
             ),
@@ -753,27 +750,6 @@ SURVEIL = Template(
     ),
     branches=(
         Branch(
-            label="Keep tabs from a distance",
-            conditions=OR(is_hidden(), trust_below(-2)),
-            narrative_stub=(
-                "{actor} keeps tabs on {target} without touching the line "
-                "between them: a pattern noticed, a channel checked, a "
-                "small confirmation that does not become contact."
-            ),
-            state_delta={
-                "character.current_activity": "keeping tabs from a distance",
-            },
-            event_type="surveillance_performed",
-            changed_fields=("character.current_activity",),
-            magnitude=0.44,
-            scene_pressure_stub=(
-                "{actor} is keeping tabs on {target} from off-screen. Treat "
-                "this as possible pressure, unease, traces, or delayed setup; "
-                "do not turn it into automatic contact or control of "
-                "{target}'s choices."
-            ),
-        ),
-        Branch(
             label="Intercept signal traffic",
             conditions=has_any_current_tag(
                 "ghostprint_active",
@@ -797,6 +773,27 @@ SURVEIL = Template(
                 "{actor} may be reading signal traffic around {target}'s "
                 "current scene. Use it as optional pressure or atmosphere, "
                 "not as a canonical breach unless the scene earns it."
+            ),
+        ),
+        Branch(
+            label="Keep tabs from a distance",
+            conditions=OR(is_hidden(), trust_below(-2)),
+            narrative_stub=(
+                "{actor} keeps tabs on {target} without touching the line "
+                "between them: a pattern noticed, a channel checked, a "
+                "small confirmation that does not become contact."
+            ),
+            state_delta={
+                "character.current_activity": "keeping tabs from a distance",
+            },
+            event_type="surveillance_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.44,
+            scene_pressure_stub=(
+                "{actor} is keeping tabs on {target} from off-screen. Treat "
+                "this as possible pressure, unease, traces, or delayed setup; "
+                "do not turn it into automatic contact or control of "
+                "{target}'s choices."
             ),
         ),
         Branch(

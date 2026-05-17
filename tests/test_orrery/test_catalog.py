@@ -76,6 +76,7 @@ def test_catalog_vocabulary_appendix_collects_referenced_terms() -> None:
     # Sanity checks against known-present vocabulary from the templates:
     assert "vendetta_holder" in vocab["durable_tags"]
     assert "grudge_active" in vocab["ephemeral_tags"]
+    assert "intelligence_asset_active" in vocab["current_tags"]
     assert "retaliation_executed" in vocab["event_types"]
     assert "home" in vocab["place_affordances"]
     assert "wilderness" in vocab["place_affordances"]

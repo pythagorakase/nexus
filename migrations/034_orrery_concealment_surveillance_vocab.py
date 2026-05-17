@@ -36,6 +36,12 @@ DURABLE_TAGS: Sequence[tuple[str, str, str]] = (
         "Character performs covert, paramilitary, intelligence, or field work.",
     ),
     (
+        "off_grid",
+        "orrery_state",
+        "Entity has reduced their observable footprint for concealment; this "
+        "is durable until narrative action or semantic review removes it.",
+    ),
+    (
         "presumed_dead",
         "orrery_concealment",
         "Character is broadly believed dead or unavailable in a way that makes "
@@ -261,7 +267,10 @@ def _seed_event_types(conn: connection) -> None:
                 ) VALUES (
                     %s, %s, %s::event_severity_kind, %s
                 )
-                ON CONFLICT (type) DO NOTHING
+                ON CONFLICT (type) DO UPDATE SET
+                    category = EXCLUDED.category,
+                    severity = EXCLUDED.severity,
+                    description = EXCLUDED.description
                 """,
                 (event_type, category, severity, description),
             )

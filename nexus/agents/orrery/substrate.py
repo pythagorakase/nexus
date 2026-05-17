@@ -70,11 +70,11 @@ CONSTRAINED_TAGS: frozenset[str] = frozenset(
         "immobile",
         "sandboxed",
         "unconscious",
-        "wounded",
     }
 )
 HIDDEN_TAGS: frozenset[str] = frozenset(
     {
+        "deep_cover",
         "fugitive",
         "hidden_identity",
         "long_absent",
@@ -111,10 +111,11 @@ PUBLIC_PLACE_AFFORDANCES: frozenset[str] = frozenset(
 )
 DRAMATIC_CONTACT_TAGS: frozenset[str] = HIDDEN_TAGS | frozenset(
     {
-        "deep_cover",
         "long_estranged",
     }
 )
+LOADED_TRUST_FORWARD_MIN = 2
+LOADED_TRUST_REVERSE_MAX = -1
 
 
 @dataclass(frozen=True, slots=True)
@@ -697,7 +698,7 @@ def relationship_is_asymmetric(
             return False
         forward = state.trust.get((source, target), 0)
         reverse = state.trust.get((target, source), 0)
-        return abs(forward - reverse) >= threshold or (forward >= 2 and reverse <= -1)
+        return _trust_values_are_asymmetric(forward, reverse, threshold)
 
     return _named(
         _condition,
@@ -710,8 +711,6 @@ def direct_contact_is_dramatic(
     slot_to: Slot = Slot.TARGET,
 ) -> Condition:
     """Return whether direct contact should be treated as a story beat."""
-
-    asymmetric = relationship_is_asymmetric(slot_a=slot_from, slot_b=slot_to)
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
         source = _slot_entity(bindings, slot_from)
@@ -726,13 +725,27 @@ def direct_contact_is_dramatic(
         )
         if DRAMATIC_CONTACT_TAGS & (source_tags | target_tags):
             return True
-        if state.trust.get((target, source), 0) <= -2:
+        forward = state.trust.get((source, target), 0)
+        reverse = state.trust.get((target, source), 0)
+        if reverse <= -2:
             return True
-        return asymmetric(state, bindings)
+        return _trust_values_are_asymmetric(forward, reverse)
 
     return _named(
         _condition,
         f"direct_contact_is_dramatic({slot_from.value}->{slot_to.value})",
+    )
+
+
+def _trust_values_are_asymmetric(
+    forward: int,
+    reverse: int,
+    threshold: int = 3,
+) -> bool:
+    """Return whether trust values are lopsided or one-sided warm/resentful."""
+
+    return abs(forward - reverse) >= threshold or (
+        forward >= LOADED_TRUST_FORWARD_MIN and reverse <= LOADED_TRUST_REVERSE_MAX
     )
 
 

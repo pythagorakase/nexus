@@ -487,7 +487,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("durable_tag", re.compile(r"has_tag\(([^@()]+)@")),
     ("durable_tag", re.compile(r"lacks_tag\(([^@()]+)@")),
     ("durable_tag_list", re.compile(r"has_any_tag\(([^@()]+)@")),
-    ("durable_tag_list", re.compile(r"has_any_current_tag\(([^@()]+)@")),
+    ("current_tag_list", re.compile(r"has_any_current_tag\(([^@()]+)@")),
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
@@ -515,6 +515,7 @@ def _collect_vocabulary(
 
     durable: set[str] = set()
     ephemeral: set[str] = set()
+    current: set[str] = set()
     applied: set[str] = set()
     events: set[str] = set()
     place_affordances: set[str] = set()
@@ -536,6 +537,9 @@ def _collect_vocabulary(
             elif kind == "durable_tag_list":
                 for tag in captured.split(","):
                     durable.add(tag.strip())
+            elif kind == "current_tag_list":
+                for tag in captured.split(","):
+                    current.add(tag.strip())
             elif kind == "ephemeral_tag":
                 ephemeral.add(captured)
             elif kind == "event_type":
@@ -566,10 +570,12 @@ def _collect_vocabulary(
     # duplicated; classification by query wins.
     applied -= durable
     applied -= ephemeral
+    applied -= current
 
     return {
         "durable_tags": sorted(durable),
         "ephemeral_tags": sorted(ephemeral),
+        "current_tags": sorted(current),
         "applied_tags": sorted(applied),
         "event_types": sorted(events),
         "place_affordances": sorted(place_affordances),
@@ -612,6 +618,11 @@ def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
         (
             "Tags queried as ephemeral (via `has_ephemeral`)",
             vocab["ephemeral_tags"],
+        ),
+        (
+            "Tags queried as current durable-or-ephemeral state "
+            "(via `has_any_current_tag`)",
+            vocab["current_tags"],
         ),
         (
             "Tags applied by branch effects (durable vs ephemeral "

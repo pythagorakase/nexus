@@ -277,6 +277,7 @@ def test_concealment_surveillance_migration_seeds_package_vocab() -> None:
 
     assert {
         "cover_identity",
+        "off_grid",
         "undercover",
         "presumed_dead",
         "presumed_dead_by_some",
@@ -302,3 +303,5 @@ def test_concealment_surveillance_migration_seeds_package_vocab() -> None:
         event_type
         for event_type, _category, _severity, _description in migration.EVENT_TYPES
     }
+    migration_source = migration_path.read_text()
+    assert "ON CONFLICT (type) DO UPDATE SET" in migration_source

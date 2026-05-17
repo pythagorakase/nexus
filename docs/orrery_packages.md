@@ -745,7 +745,20 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 6 ticks since last `surveillance_performed` event for (actor, target) pair
   - ≥ 6 ticks since last `intel_reviewed` event for (actor, target) pair
 
-### Branch 1 — Keep tabs from a distance  *(mag 0.44)*
+### Branch 1 — Intercept signal traffic  *(mag 0.48)*
+
+**When:** actor has any current tag of [`ghostprint_active`, `hacker`, `researcher`, `signal_operator`, `surveillance_capable`]
+
+**Does:** activity → "intercepting target signals"
+**Event:** `surveillance_performed`
+
+> {actor} watches the signal field around {target}: not the person directly, not yet, but the traffic and absences that make a life legible to someone patient enough.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may be reading signal traffic around {target}'s current scene. Use it as optional pressure or atmosphere, not as a canonical breach unless the scene earns it.
+
+### Branch 2 — Keep tabs from a distance  *(mag 0.44)*
 
 **When:**
 
@@ -761,19 +774,6 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
 
 > {actor} is keeping tabs on {target} from off-screen. Treat this as possible pressure, unease, traces, or delayed setup; do not turn it into automatic contact or control of {target}'s choices.
-
-### Branch 2 — Intercept signal traffic  *(mag 0.48)*
-
-**When:** actor has any current tag of [`ghostprint_active`, `hacker`, `researcher`, `signal_operator`, `surveillance_capable`]
-
-**Does:** activity → "intercepting target signals"
-**Event:** `surveillance_performed`
-
-> {actor} watches the signal field around {target}: not the person directly, not yet, but the traffic and absences that make a life legible to someone patient enough.
-
-**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
-
-> {actor} may be reading signal traffic around {target}'s current scene. Use it as optional pressure or atmosphere, not as a canonical breach unless the scene earns it.
 
 ### Branch 3 — Collect a proxy watcher report  *(mag 0.38)*
 
@@ -1677,11 +1677,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is hidden or off-grid
   - **NOT:** actor is in transit
   - **OR:**
-    - actor has any current tag of [`broker`, `cover_identity`, `deep_cover`, `fixer`, `operative`, `public_role`, `undercover`]
+    - actor has any current tag of [`broker`, `cover_identity`, `fixer`, `operative`, `public_role`, `undercover`]
     - actor is in `the_glow` place affordance
     - actor is in `market` place affordance
     - actor is in `transit_hub` place affordance
-    - recent `maintain_cover` event with actor=actor in last 10 ticks
   - ≥ 6 ticks since last `maintain_cover` event for actor
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*
@@ -1699,7 +1698,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Maintain a specific cover identity  *(mag 0.14)*
 
-**When:** actor has any current tag of [`cover_identity`, `deep_cover`, `public_role`, `undercover`]
+**When:** actor has any current tag of [`cover_identity`, `public_role`, `undercover`]
 
 **Does:** activity → "maintaining cover identity"
 **Event:** `maintain_cover`
@@ -1760,14 +1759,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `artisan`
 - `artist`
 - `athlete`
-- `broker`
 - `cares_for_household`
 - `combat_trained`
 - `contacts_available`
 - `contemplative`
-- `cover_identity`
 - `dancer`
-- `deep_cover`
 - `devout`
 - `domestic_role`
 - `engineer`
@@ -1776,15 +1772,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `field_worker`
 - `fighter`
 - `first_aid_trained`
-- `fixer`
 - `forager`
-- `fugitive`
 - `ghostprint_active`
 - `hacker`
 - `hunter`
 - `informant_handler`
 - `innkeeper`
-- `intelligence_asset_active`
 - `intimate_services_contact`
 - `keeps_shop`
 - `loremaster`
@@ -1797,38 +1790,29 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `merchant`
 - `monk`
 - `musician`
-- `off_grid`
-- `operative`
-- `paranoid`
 - `parent`
 - `partnered_exclusively`
 - `patriarch`
 - `performer`
-- `public_role`
 - `ranger`
 - `religiously_abstinent`
 - `researcher`
 - `ritual_practitioner`
 - `route_familiar`
-- `safehouse_operator`
 - `scholar`
 - `scout`
 - `seeking_identity`
-- `signal_operator`
 - `soldier`
 - `surgical_training`
-- `surveillance_capable`
 - `survivalist`
 - `tinkerer`
 - `trader`
 - `travel_provisioned`
 - `travel_ready`
 - `under_active_pursuit`
-- `undercover`
 - `vendetta_holder`
 - `violent_history`
 - `vow_of_celibacy`
-- `wanted`
 - `warrior`
 - `work_obligation`
 - `writer`
@@ -1844,6 +1828,34 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `unconscious`
 - `under_active_pursuit`
 - `wounded`
+
+### Tags queried as current durable-or-ephemeral state (via `has_any_current_tag`)
+
+- `academic`
+- `broker`
+- `combat_trained`
+- `contacts_available`
+- `cover_identity`
+- `fixer`
+- `fugitive`
+- `ghostprint_active`
+- `hacker`
+- `informant_handler`
+- `intelligence_asset_active`
+- `off_grid`
+- `operative`
+- `paranoid`
+- `public_role`
+- `researcher`
+- `route_familiar`
+- `safehouse_operator`
+- `scout`
+- `signal_operator`
+- `surveillance_capable`
+- `survivalist`
+- `travel_ready`
+- `undercover`
+- `wanted`
 
 ### Tags applied by branch effects (durable vs ephemeral classification per migration)
 
