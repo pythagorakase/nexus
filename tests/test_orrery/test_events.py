@@ -34,6 +34,7 @@ class RecordingCursor:
         active_destination=42,
         travel_progress=0.4,
         geodesic_distance_m=10000,
+        travel_state_update_rowcount=1,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -46,6 +47,7 @@ class RecordingCursor:
         self.active_destination = active_destination
         self.travel_progress = travel_progress
         self.geodesic_distance_m = geodesic_distance_m
+        self.travel_state_update_rowcount = travel_state_update_rowcount
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -119,7 +121,7 @@ class RecordingCursor:
             ]
         elif (
             "SELECT destination_place_id FROM character_travel_states" in normalized
-            and "status IN ('planned', 'at_place')" in normalized
+            and "status = 'planned'" in normalized
         ):
             self._fetchone = {"destination_place_id": self.planned_destination}
         elif (
@@ -139,7 +141,7 @@ class RecordingCursor:
         elif "INSERT INTO character_travel_states" in normalized:
             self.rowcount = 1
         elif "UPDATE character_travel_states" in normalized:
-            self.rowcount = 1
+            self.rowcount = self.travel_state_update_rowcount
         elif "UPDATE characters SET current_location" in normalized:
             self.rowcount = 1
         elif "INSERT INTO world_events" in normalized:
@@ -560,6 +562,53 @@ def test_commit_orrery_tick_advances_travel_progress_without_moving_actor() -> N
     assert advance_params[0] == pytest.approx(0.85)
 
 
+def test_commit_orrery_tick_records_travel_delay_risk() -> None:
+    """Travel delay validates and stores risk escalation explicitly."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-delay-1",
+        bindings={"actor": 1},
+        branch_label="Lose time to bad conditions or route friction",
+        narrative_stub="{actor} loses time.",
+        state_delta={
+            "character.current_activity": "delayed in transit",
+            "travel.delay": {"risk": "high", "reason": "storm"},
+        },
+        event_type="travel_delayed",
+        changed_fields=("character_travel_states.risk",),
+        magnitude=0.24,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor()
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    delay_params = next(
+        params
+        for sql, params in cursor.executed
+        if "UPDATE character_travel_states" in sql and "COALESCE" in sql
+    )
+
+    assert result.resolution_count == 1
+    assert delay_params[0] == "high"
+    assert json.loads(delay_params[2]) == {
+        "last_delay": {"risk": "high", "reason": "storm"}
+    }
+
+
 def test_commit_orrery_tick_arrival_moves_actor_to_destination() -> None:
     """Arrival is the only travel effect that rewrites current_location."""
 
@@ -612,6 +661,44 @@ def test_commit_orrery_tick_arrival_moves_actor_to_destination() -> None:
     assert result.event_count == 1
     assert location_params == (42, 1)
     assert travel_params[0] == 42
+
+
+def test_commit_orrery_tick_arrival_requires_travel_state_row() -> None:
+    """Arrival cannot move location while leaving travel state unsynchronized."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-arrive-missing-state",
+        bindings={"actor": 1},
+        branch_label="Arrive at the planned destination",
+        narrative_stub="{actor} arrives.",
+        state_delta={
+            "character.current_activity": "arriving at destination",
+            "travel.arrive": {"destination_place_id": 42},
+        },
+        event_type="travel_arrived",
+        changed_fields=(
+            "character.current_location",
+            "character_travel_states.status",
+        ),
+        magnitude=0.34,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+
+    with pytest.raises(ValueError, match="has no travel state row"):
+        commit_orrery_tick_sync(
+            RecordingConn(RecordingCursor(travel_state_update_rowcount=0)),
+            proposal,
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
 
 
 def test_commit_orrery_tick_applies_need_fulfillment_delta() -> None:

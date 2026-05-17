@@ -227,8 +227,14 @@ def test_travel_work_migration_keeps_routing_schema_extensible() -> None:
     } <= set(migration.TRAVEL_MODE_VALUES)
     assert "character_travel_states" in migration_source
     assert "orrery_travel_edges" in migration_source
+    assert "CREATE EXTENSION IF NOT EXISTS postgis" in migration_source
     assert "route_geometry geometry(LineString, 4326)" in migration_source
     assert "backfilled_from_current_location" in migration_source
+    assert "COMMENT ON COLUMN character_travel_states.anchor_place_id" in (
+        migration_source
+    )
+    assert "COMMENT ON COLUMN orrery_travel_edges.route_geometry" in migration_source
+    assert "status <> 'planned'" in migration_source
 
 
 def test_travel_work_migration_seeds_work_travel_vocab() -> None:
@@ -247,6 +253,7 @@ def test_travel_work_migration_seeds_work_travel_vocab() -> None:
     }
     assert {
         "travel_departed",
+        "travel_prepared",
         "travel_progressed",
         "travel_delayed",
         "travel_arrived",

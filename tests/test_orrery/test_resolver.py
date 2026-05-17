@@ -712,6 +712,36 @@ def test_resolve_dry_run_fires_work_for_obligation_without_craft_tags() -> None:
     assert proposal.resolutions[0].branch_label == "Keep the obligation from slipping"
 
 
+def test_work_template_uses_one_global_work_cooldown() -> None:
+    """Household work intentionally blocks all Work branches for a few ticks."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[
+                {"entity_id": 1, "tag": "work_obligation", "is_ephemeral": False}
+            ],
+            event_rows=[
+                {
+                    "event_type": "household_work_performed",
+                    "tick_chunk_id": 99,
+                    "actor_entity_id": 1,
+                    "target_entity_id": None,
+                    "location_id": None,
+                    "changed_fields": ["character.current_activity"],
+                    "world_layer": "primary",
+                    "payload": {},
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "maintain_cover"
+
+
 @pytest.mark.parametrize(
     ("valence_magnitude", "conditions", "expected_label"),
     [

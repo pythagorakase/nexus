@@ -1063,7 +1063,7 @@ TRAVEL = Template(
                 "character.current_activity": "preparing route and supplies",
                 "entity_tags.add": ["travel_ready"],
             },
-            event_type="travel_delayed",
+            event_type="travel_prepared",
             changed_fields=("character.current_activity", "entity_tags"),
             magnitude=0.12,
         ),

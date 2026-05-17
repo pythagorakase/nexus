@@ -1057,7 +1057,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:** *(always)*
 
 **Does:** activity → "preparing route and supplies"; adds `travel_ready` to actor
-**Event:** `travel_delayed`
+**Event:** `travel_prepared`
 
 > {actor} does not start badly. They check timing, supplies, weather, access, and the parts of the route that might betray them before they have earned the right to improvise.
 
@@ -1572,6 +1572,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `travel_arrived`
 - `travel_delayed`
 - `travel_departed`
+- `travel_prepared`
 - `travel_progressed`
 - `vigil_held`
 - `warning_delivered`

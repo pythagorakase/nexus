@@ -1024,7 +1024,7 @@ def _apply_travel_delay_sync(
     world_time = _tick_world_time_sync(cur, source_chunk_id)
     risk = data.get("risk")
     if risk is not None:
-        _travel_risk({"risk": risk})
+        risk = _travel_risk(data)
     cur.execute(
         """
         UPDATE character_travel_states
@@ -1059,7 +1059,7 @@ async def _apply_travel_delay_async(
     world_time = await _tick_world_time_async(conn, source_chunk_id)
     risk = data.get("risk")
     if risk is not None:
-        _travel_risk({"risk": risk})
+        risk = _travel_risk(data)
     status = await conn.execute(
         """
         UPDATE character_travel_states
@@ -1125,6 +1125,10 @@ def _apply_travel_arrive_sync(
             actor_entity_id,
         ),
     )
+    if getattr(cur, "rowcount", 0) == 0:
+        raise ValueError(
+            f"Orrery actor entity {actor_entity_id} has no travel state row"
+        )
 
 
 async def _apply_travel_arrive_async(
@@ -1150,7 +1154,7 @@ async def _apply_travel_arrive_async(
     )
     if _affected_count(status) == 0:
         raise ValueError(f"Orrery actor entity {actor_entity_id} has no character row")
-    await conn.execute(
+    status = await conn.execute(
         """
         UPDATE character_travel_states
         SET status = 'at_place',
@@ -1172,6 +1176,10 @@ async def _apply_travel_arrive_async(
         json.dumps({"last_arrived_place_id": destination_place_id}),
         actor_entity_id,
     )
+    if _affected_count(status) == 0:
+        raise ValueError(
+            f"Orrery actor entity {actor_entity_id} has no travel state row"
+        )
 
 
 def _tick_world_time_sync(cur: Any, source_chunk_id: int) -> Any:
@@ -1728,12 +1736,14 @@ async def _actor_location_async(
 
 
 def _planned_destination_sync(cur: Any, actor_entity_id: int) -> Optional[int]:
+    # Only explicit planned rows start travel. Completed at_place rows keep
+    # destination NULL so stale arrivals cannot silently start a new route.
     cur.execute(
         """
         SELECT destination_place_id
         FROM character_travel_states
         WHERE character_entity_id = %s
-          AND status IN ('planned', 'at_place')
+          AND status = 'planned'
         """,
         (actor_entity_id,),
     )
@@ -1747,7 +1757,7 @@ async def _planned_destination_async(conn: Any, actor_entity_id: int) -> Optiona
         SELECT destination_place_id
         FROM character_travel_states
         WHERE character_entity_id = $1
-          AND status IN ('planned', 'at_place')
+          AND status = 'planned'
         """,
         actor_entity_id,
     )
