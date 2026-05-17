@@ -207,6 +207,76 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## TEND_WOUNDED — priority 88
+
+> A wounded body pulls the actor toward the small work of mending.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - target has `wounded` ephemeral
+  - actor and target are co-located
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** target has `under_active_pursuit` ephemeral
+  - ≥ 2 ticks since last `tended_wound` event for (actor, target) pair
+
+### Branch 1 — Channel restorative power through hands and voice  *(mag 0.74)*
+
+**When:** actor has `magical_healing` tag
+
+**Does:** activity → "channeling restorative power"; removes `wounded` from target; adds `recently_drained` to actor
+**Event:** `wound_healed`
+
+> {actor} kneels beside {target} and places hands where the damage lives. Something passes between them — a quiet exchange of warmth and pain — and the body begins to remember how to be whole.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} may be close enough to attempt restorative work on {target}'s wound in the active scene. Treat as offered help the scene can accept, defer, or complicate, not as automatic healing.
+
+### Branch 2 — Work the wound with trained hands  *(mag 0.58)*
+
+**When:** actor has any of [`surgical_training`, `medical_skill`]
+
+**Does:** activity → "providing skilled medical care"; removes `wounded` from target; adds `recently_tended` to target
+**Event:** `tended_wound`
+
+> {actor} cleans the wound by feel, finds what needs to be found, and does the work the body cannot do for itself. {target} watches the ceiling and counts something silently.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is moving to provide skilled medical care to {target}. The scene may show this as a quiet competent interruption, a wait for stabilization, or a beat of trust between them.
+
+### Branch 3 — Apply what first-aid the moment allows  *(mag 0.42)*
+
+**When:** actor has `first_aid_trained` tag
+
+**Does:** activity → "applying field first aid"; adds `recently_tended` to target
+**Event:** `tended_wound`
+
+> {actor} works from memory — pressure here, elevation there, the things that buy time when time is the thing you need. It won't be enough on its own, but it's enough for now.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has practical first-aid training and is at {target}'s side. Treat as a stabilizing presence the scene can use without granting full recovery.
+
+### Branch 4 — Stay with the wound and do what can be done  *(mag 0.24)*
+
+**When:** *(always)*
+
+**Does:** activity → "keeping watch over the wounded"
+**Event:** `tended_wound`
+
+> {actor} has no real skill for this. They press a cloth where there is bleeding and speak softly so {target} has a voice to follow back from wherever the body has gone.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is present at {target}'s side without medical ability. Use this as accompaniment and witness — not as intervention.
+
+---
+
 ## HONOR_DEBT — priority 80
 
 > A binding obligation surfaces from the blank years.
@@ -252,6 +322,56 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## WARN_ALLY — priority 75
+
+> A threat surfaces; word reaches the people who need to know.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - actor and target share `family` relationship (either direction)
+    - actor and target share `romantic` relationship (either direction)
+    - actor and target share `chosen_kin` relationship (either direction)
+    - actor and target share `comrade` relationship (either direction)
+    - actor and target share `ally` relationship (either direction)
+  - **OR:**
+    - recent `threat_issued` event targeting target in last 3 ticks
+    - recent `compliance_alert` event targeting target in last 3 ticks
+    - target has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Reach the ally face-to-face before the word gets out  *(mag 0.66)*
+
+**When:** actor and target are co-located
+
+**Does:** activity → "delivering urgent warning in person"; adds `forewarned` to target
+**Event:** `warning_delivered`
+
+> {actor} catches {target} before they have time to compose themselves and tells them quickly, in a voice stripped to the load-bearing words, what is coming and what they should do about it.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is moving to deliver an urgent warning to {target}. The scene may show this as interruption, intrusion, or a beat the storyteller folds into the current moment.
+
+### Branch 2 — Send word through whatever channel will reach them quickest  *(mag 0.52)*
+
+**When:** *(always)*
+
+**Does:** activity → "sending urgent warning"; adds `forewarned` to target
+**Event:** `warning_delivered`
+
+> {actor} sends the warning through whatever channel will reach {target} fastest — a call, a runner, a sealed message, a coded signal, a prayer through a familiar spirit — and hopes the gap between sending and receiving is short enough to matter.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sent {target} an urgent warning by remote means. The scene may show this as an incoming message, a vague disturbance, a half-heard signal, or it may not land in time.
+
+---
+
 ## PURSUE_GHOST_LEAD — priority 60
 
 > The fragments of a buried identity tug at the actor.
@@ -292,6 +412,59 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Event:** `pursue_identity_lead`
 
 > {actor} visits a broker who owes them a favor and leaves with one new question and one dangerous name.
+
+---
+
+## CHECK_ON_DEPENDENT — priority 55
+
+> A duty of care surfaces between the actor and someone in their charge.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - **NOT:** actor has `informant_handler` tag
+  - **OR:**
+    - actor has `handler` relationship to target
+    - actor has `mentor` relationship to target
+    - actor has `patron` relationship to target
+    - actor has `guardian` relationship to target
+  - ≥ 12 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 12 ticks since last `welfare_check` event for (actor, target) pair
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `grudge_active` ephemeral
+
+### Branch 1 — Drop by in person when the moment allows  *(mag 0.44)*
+
+**When:**
+
+- **AND:**
+  - actor and target are co-located
+  - ≥ 6 ticks since last `welfare_check` event for (actor, target) pair
+
+**Does:** activity → "checking on a dependent in person"
+**Event:** `welfare_check`
+
+> {actor} stops by — ostensibly for something else, the way these visits often are — and uses the small window to read {target}'s state: how they look, what they say without saying, what they decline to mention. It will be enough information for now.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is making a casual welfare check on {target}. Treat as a low-key social presence the scene can absorb or use as a beat of relationship texture.
+
+### Branch 2 — Reach out through customary channels  *(mag 0.22)*
+
+**When:** *(always)*
+
+**Does:** activity → "checking in on a dependent"
+**Event:** `contact_made`
+
+> {actor} sends the kind of message they always send — brief, light in tone, asking nothing real but leaving the door open for {target} to say something real if they want to — and watches for what comes back.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sent {target} a routine welfare-check message. The scene may use this as an unread notification, an answered exchange, or texture for {target}'s decisions.
 
 ---
 
@@ -364,6 +537,342 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## KEEP_VIGIL — priority 50
+
+> The actor remains present through a slow, uncertain hour.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - actor and target are co-located
+  - **OR:**
+    - target has `wounded` ephemeral
+    - target has `dying` ephemeral
+    - target has `unconscious` ephemeral
+    - target has `captive` ephemeral
+  - **OR:**
+    - actor has `family` relationship to target
+    - actor has `romantic` relationship to target
+    - actor has `chosen_kin` relationship to target
+    - actor has `comrade` relationship to target
+    - actor has `ward` relationship to target
+    - actor has `guardian` relationship to target
+    - actor has `captor` relationship to target
+  - ≥ 2 ticks since last `vigil_held` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Maintain prayerful or meditative presence  *(mag 0.46)*
+
+**When:** actor has any of [`devout`, `contemplative`, `ritual_practitioner`]
+
+**Does:** activity → "holding meditative vigil"; adds `at_vigil` to actor
+**Event:** `vigil_held`
+
+> {actor} sits beside {target} with hands quiet, breathing matched to whatever rhythm {target}'s body is still finding. The prayers — if they are prayers — are not for any audience but for the work of staying.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is keeping a contemplative vigil over {target}. Use this as an emotional anchor in the scene, not an active intervention.
+
+### Branch 2 — Speak softly through the long hours  *(mag 0.38)*
+
+**When:** target has `unconscious` ephemeral
+
+**Does:** activity → "speaking through the long hours"; adds `at_vigil` to actor
+**Event:** `vigil_held`
+
+> {actor} tells {target} small things — what the light is doing outside, what the others said today, the kind of stories one tells someone who may or may not be hearing — in the belief that whatever can be reached should be reached.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is speaking to an unresponsive {target} through a long stretch. Treat as audible presence the scene can thread through quieter moments.
+
+### Branch 3 — Stand watch with attention but without intervention  *(mag 0.32)*
+
+**When:** *(always)*
+
+**Does:** activity → "standing vigil"; adds `at_vigil` to actor
+**Event:** `vigil_held`
+
+> {actor} stays. Not doing anything — that's the point of being here. {target} is alone with whatever is happening to them, and {actor} is the witness who makes that aloneness less complete.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is keeping silent vigil over {target}. Use this as ambient presence — a witness who shapes the scene by being there, not by acting.
+
+---
+
+## REACH_OUT_TO_KIN — priority 40
+
+> A small thread of contact between people who hold each other.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - actor and target share `family` relationship (either direction)
+    - actor and target share `romantic` relationship (either direction)
+    - actor and target share `chosen_kin` relationship (either direction)
+    - actor and target share `comrade` relationship (either direction)
+  - ≥ 8 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 8 ticks since last `kin_visit` event for (actor, target) pair
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `grudge_active` ephemeral
+
+### Branch 1 — Find the moment for a real face-to-face conversation  *(mag 0.36)*
+
+**When:**
+
+- **AND:**
+  - actor and target are co-located
+  - ≥ 5 ticks since last `kin_visit` event for (actor, target) pair
+
+**Does:** activity → "spending real time with kin"
+**Event:** `kin_visit`
+
+> {actor} makes the small effort that finding-time-for-someone requires — clearing a half hour, choosing a place, showing up — and {target} arrives, and for a while they are the kind of present together that distance erodes.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is meeting {target} in person for a real conversation. Use this as a relationship beat the scene can fold in or hold for later, not as a guaranteed off-screen event.
+
+### Branch 2 — Send a message that says less than it means  *(mag 0.16)*
+
+**When:** *(always)*
+
+**Does:** activity → "keeping kin contact warm"
+**Event:** `contact_made`
+
+> {actor} sends {target} the small message that means more than the words it contains — a check-in, a shared joke, a question that doesn't really need answering — and the thread between them stays warm for another while.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sent {target} a small affectionate message. Treat as ambient relationship-warmth — possibly an incoming notification, possibly not surfaced at all.
+
+---
+
+## CONSULT_RIVAL — priority 35
+
+> Two people who do not trust each other are forced into contact anyway.
+
+**Slots:** ACTOR, TARGET
+**Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - actor has `rival` relationship to target
+    - trust actor→target < 0
+  - **OR:**
+    - recent `compliance_alert` event in last 10 ticks
+    - recent `threat_issued` event in last 10 ticks
+    - recent `faction_realignment` event in last 15 ticks
+  - ≥ 20 ticks since last `contact_made` event for (actor, target) pair
+  - ≥ 20 ticks since last `rival_consulted` event for (actor, target) pair
+  - **NOT:** actor has `grudge_active` ephemeral
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Meet face-to-face on neutral ground  *(mag 0.62)*
+
+**When:**
+
+- **AND:**
+  - actor and target are co-located
+  - actor is in `neutral_ground` location class
+
+**Does:** activity → "meeting a rival under truce"; adds `under_truce` to actor; adds `under_truce` to target
+**Event:** `rival_consulted`
+
+> {actor} and {target} arrange to be in the same place at the same time without quite arranging it — both of them drinking something they don't particularly want, both of them speaking carefully — because whatever is happening is bigger than what they have between them, and they both know it.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} is in a tense face-to-face meeting with {target}, a known rival. Treat as charged co-presence — the scene can show this as observed truce, ambient discomfort, or delayed consequence.
+
+### Branch 2 — Send a carefully-worded message through indirect channels  *(mag 0.48)*
+
+**When:** actor has `contacts_available` tag
+
+**Does:** activity → "reaching out to a rival via intermediary"
+**Event:** `rival_consulted`
+
+> {actor} sends {target} a message routed through an intermediary they both trust slightly more than they trust each other — a message worded with enough care that the indirect-channel relay can be denied later, but with enough substance that {target} cannot reasonably ignore it.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has sent {target} a carefully-routed message via intermediary. Treat as off-screen pressure — the scene may show {target} reacting to it, or it may resurface later.
+
+### Branch 3 — Leave a sign the rival will recognize and a door they can open  *(mag 0.34)*
+
+**When:** *(always)*
+
+**Does:** activity → "leaving a tentative overture for a rival"
+**Event:** `contact_made`
+
+> {actor} doesn't quite reach out — but they place a sign where {target} will see it, the kind of signal that says *I am willing to talk if you are*, without committing to anything. If {target} reads the sign, the contact has begun. If they don't, it hasn't.
+
+**Scene-pressure prompt** (storyteller-LLM-only; no state mutation):
+
+> {actor} has placed a discreet overture for {target} to find. Treat as a passive hook the scene can pick up if useful, or leave dormant.
+
+---
+
+## MOURN_LOSS — priority 25
+
+> A loss settles into the body across many quiet days.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has `bereaved` ephemeral
+  - ≥ 3 ticks since last `mourning_act` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Visit the place of remembrance  *(mag 0.42)*
+
+**When:** actor is in `place_of_remembrance` location class
+
+**Does:** activity → "tending the dead"
+**Event:** `mourning_act`
+
+> {actor} returns to the place where the dead are kept — stone, name, photograph, marker, whatever this world has made for the purpose — and stands long enough to be still and remember, before going back to the work of being alive.
+
+### Branch 2 — Sit with others who carry the same loss  *(mag 0.38)*
+
+**When:** 1+ other entities with `bereaved` ephemeral co-located with actor
+
+**Does:** activity → "gathering with co-mourners"
+**Event:** `mourning_act`
+
+> {actor} finds the others who knew the dead and sits with them — wordlessly, mostly. The presence of someone else who is also not over it makes the grief feel less like evidence of personal failure.
+
+### Branch 3 — Pour the loss into the day's work  *(mag 0.28)*
+
+**When:** actor has any of [`musician`, `writer`, `artisan`, `scholar`, `arcane_caster`, `soldier`, `keeps_shop`, `domestic_role`]
+
+**Does:** activity → "working through grief"
+**Event:** `mourning_act`
+
+> {actor} returns to their work — the thing the loss hasn't taken — and does it with the dead person sitting somewhere just behind them, watching the work with the particular silence the dead have.
+
+### Branch 4 — Carry the weight in private  *(mag 0.14)*
+
+**When:** *(always)*
+
+**Does:** activity → "carrying private grief"
+**Event:** `mourning_act`
+
+> {actor} goes through the day's motions with the loss settled inside them like a second heartbeat — not louder than the day, just underneath it, the way these things tend to be once the first weeks are past.
+
+---
+
+## TEND_CRAFT — priority 15
+
+> A small act of care for the work that defines them.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `arcane_caster`, `engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`, `musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`, `athlete`, `martial_artist`, `ranger`, `scout`, `monk`, `keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `matriarch`, `patriarch`, `scholar`, `researcher`, `academic`, `loremaster`]
+  - ≥ 4 ticks since last `craft_tended` event for actor
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has `wounded` ephemeral
+  - **NOT:** actor has `bereaved` ephemeral
+
+### Branch 1 — Make the weapon ready for what comes next  *(mag 0.18)*
+
+**When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`]
+
+**Does:** activity → "making the weapon ready"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} takes the weapon apart with the slow patience of someone who has done this enough times to know the geometry of each piece by feel, and puts it back together the same way, attentive to small things only they will notice.
+
+### Branch 2 — Lay hands on the arcane work-in-progress  *(mag 0.18)*
+
+**When:** actor has `arcane_caster` tag
+
+**Does:** activity → "tending arcane work"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} spends an unhurried hour with whatever is currently between their hands and the world's underlying grammar — checking small things, adjusting smaller things, letting the work tell them what it still needs.
+
+### Branch 3 — Maintain and improve the tools of the trade  *(mag 0.18)*
+
+**When:** actor has any of [`engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`]
+
+**Does:** activity → "maintaining equipment"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} attends to the equipment — the part that's been annoying them for weeks, the upgrade they keep meaning to install, the calibration that's been just slightly off — and emerges with the tools a small degree better than they were.
+
+### Branch 4 — Run through the work that keeps the work possible  *(mag 0.18)*
+
+**When:** actor has any of [`musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`]
+
+**Does:** activity → "practicing the unseen work"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} works through the practice that no one will ever see — the scales, the exercises, the small motions that the public version of the art rests on — for an hour, the way the practice has to be done if the work is to stay alive.
+
+### Branch 5 — Move the body through its daily reckoning  *(mag 0.18)*
+
+**When:** actor has any of [`athlete`, `martial_artist`, `ranger`, `scout`, `monk`]
+
+**Does:** activity → "conditioning the body"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} puts the body through its daily reckoning — the run, the forms, the small punishments that keep the body ready for whatever the next demand will be — and finishes marginally sharper than they began.
+
+### Branch 6 — Tend the small shop's quiet machinery  *(mag 0.18)*
+
+**When:** actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`]
+
+**Does:** activity → "tending the shop's rhythms"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} does the things a place of business needs in order to keep being a place of business: the count, the ledger, the small repairs, the conversations with regulars who came in for something other than the thing they actually bought.
+
+### Branch 7 — Keep the household running  *(mag 0.18)*
+
+**When:** actor has any of [`domestic_role`, `cares_for_household`, `matriarch`, `patriarch`]
+
+**Does:** activity → "tending the household"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} does the work that holds a household together — the meals, the cleaning, the small attentions no one particularly thanks anyone for but whose absence would be felt immediately. It is enough work for a full day, every day, by itself.
+
+### Branch 8 — Return to the unfinished study  *(mag 0.18)*
+
+**When:** actor has any of [`scholar`, `researcher`, `academic`, `loremaster`]
+
+**Does:** activity → "advancing the long study"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} returns to the long work that is always almost but never finished — reading carefully, taking notes that may yet matter, following a thread that may yet lead somewhere — and gives the work another quiet evening of the only thing it really needs.
+
+### Branch 9 — Take a small action of care for the work that is theirs  *(mag 0.12)*
+
+**When:** *(always)*
+
+**Does:** activity → "tending the work that is theirs"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} does a small thing for the work that defines them — they would not call it that, probably, but that is what it is — and the day is briefly better for it.
+
+---
+
 ## MAINTAIN_COVER — priority 0
 
 > Baseline activity that keeps the behavioral ledger plausible.
@@ -400,55 +909,123 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/023_orrery_schema.py`
 - `migrations/024_orrery_commit_pipeline.sql`
 - `migrations/025_orrery_package_library_vocab.py`
+- `migrations/027_orrery_package_library_round2_vocab.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
+- `academic`
+- `arcane_caster`
+- `artificer`
+- `artisan`
+- `artist`
+- `athlete`
+- `cares_for_household`
+- `combat_trained`
 - `contacts_available`
+- `contemplative`
+- `dancer`
+- `devout`
+- `domestic_role`
+- `engineer`
+- `fighter`
+- `first_aid_trained`
 - `ghostprint_active`
+- `hacker`
 - `informant_handler`
+- `innkeeper`
+- `keeps_shop`
+- `loremaster`
+- `magical_healing`
+- `martial_artist`
+- `matriarch`
+- `mechanic`
+- `medical_skill`
+- `merchant`
+- `monk`
+- `musician`
+- `patriarch`
+- `performer`
+- `ranger`
+- `researcher`
+- `ritual_practitioner`
+- `scholar`
+- `scout`
 - `seeking_identity`
+- `soldier`
+- `surgical_training`
+- `tinkerer`
+- `trader`
 - `under_active_pursuit`
 - `vendetta_holder`
 - `violent_history`
+- `warrior`
+- `writer`
 
 ### Tags queried as ephemeral (via `has_ephemeral`)
 
+- `bereaved`
+- `captive`
 - `debt_pulse_active`
+- `dying`
 - `grudge_active`
+- `unconscious`
 - `under_active_pursuit`
 - `wounded`
 
 ### Tags applied by branch effects (durable vs ephemeral classification per migration)
 
+- `at_vigil`
 - `distressed`
+- `forewarned`
 - `intelligence_asset_active`
 - `off_grid`
+- `recently_drained`
 - `recently_protective`
+- `recently_tended`
+- `recently_tended_craft`
 - `recently_violent`
 - `reputation_compromised`
+- `under_truce`
 
 ### Event types
 
 - `compliance_alert`
+- `contact_made`
+- `craft_tended`
 - `encoded_message`
 - `evade_pursuit`
+- `faction_realignment`
 - `honor_debt`
 - `informant_contact`
 - `intel_acquired`
+- `kin_visit`
 - `maintain_cover`
+- `mourning_act`
 - `protective_intervention`
 - `pursue_identity_lead`
 - `retaliation_attempted`
 - `retaliation_executed`
+- `rival_consulted`
+- `tended_wound`
 - `threat_issued`
+- `vigil_held`
+- `warning_delivered`
+- `welfare_check`
+- `wound_healed`
 
 ### Relationship types
 
+- `ally`
 - `asset`
+- `captor`
 - `chosen_kin`
 - `comrade`
 - `enemy`
 - `family`
+- `guardian`
 - `handler`
+- `mentor`
+- `patron`
 - `rival`
 - `romantic`
+- `ward`

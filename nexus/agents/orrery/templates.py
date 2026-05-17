@@ -583,12 +583,957 @@ CULTIVATE_INFORMANT = Template(
 )
 
 
+# ----------------------------------------------------------------------------
+# Round 2 expansion (universal care + maintenance + contact quartet)
+#
+# Eight templates drafted by the frontier-model conversation partner in
+# temp/orrery/orrery_package_contributions_round2.md, integrated here with
+# the divergences documented below. Authoring intent: universal shape with
+# culturally-specific branches — the same gate fires in fantasy, cyberpunk,
+# contemporary, or pigeon-dating-sim contexts; tag-discriminated branches
+# express the cultural specifics.
+#
+# Deliberate divergences from the contribution draft:
+#
+#   * CONSULT_RIVAL gate: the contribution had `has_ephemeral("grudge_active")`
+#     in the shared-circumstance OR clause AND `NOT(has_ephemeral("grudge_active"))`
+#     in the same gate's AND list — a logical contradiction. The NOT is the
+#     intended exclusion (EXTRACT_VENGEANCE owns grudge-active space; priority
+#     90 vs CONSULT_RIVAL's 35 ensures vengeance fires first anyway, but the
+#     NOT is the documented safety belt). The contradictory OR-arm is removed
+#     here.
+#
+#   * KEEP_VIGIL gate: the contribution used `has_tag("captive", slot=TARGET)`
+#     for the captive-vigil case. The migration seeds `captive` as ephemeral
+#     (captivity is a condition, not an identity — escape/freedom/death ends
+#     it), so this gate uses `has_ephemeral` instead. Branch prose unchanged.
+#
+#   * TEND_WOUNDED's magical-healing branch clears `wounded` from the target
+#     via `entity_tags_target.remove` — closing the loop with PROTECT_KIN
+#     (which reads `wounded` but had no template emitting `wound_healed`
+#     until now).
+#
+#   * `bereaved` / `dying` / `unconscious` ephemerals are seeded with
+#     event-based clearance pointing at `mourning_completed` / `death_recorded`
+#     / `regained_consciousness`. These events are authored externally
+#     (CommitOrreryTick or future world-state systems); MOURN_LOSS and
+#     KEEP_VIGIL never emit them. The framework will need to honor the
+#     clearance predicates when those events eventually fire.
+# ----------------------------------------------------------------------------
+
+
+# Section A — Universal care behaviors
+
+
+TEND_WOUNDED = Template(
+    id="tend_wounded",
+    priority=88,
+    blurb="A wounded body pulls the actor toward the small work of mending.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    package_gate=AND(
+        has_ephemeral("wounded", slot=Slot.TARGET),
+        co_located(Slot.ACTOR, Slot.TARGET),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("under_active_pursuit", slot=Slot.TARGET)),
+        since_last_event_at_least(
+            "tended_wound", minimum_ticks=2, target_slot=Slot.TARGET
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Channel restorative power through hands and voice",
+            conditions=has_tag("magical_healing"),
+            narrative_stub=(
+                "{actor} kneels beside {target} and places hands where the "
+                "damage lives. Something passes between them — a quiet "
+                "exchange of warmth and pain — and the body begins to "
+                "remember how to be whole."
+            ),
+            state_delta={
+                "character.current_activity": "channeling restorative power",
+                "entity_tags_target.remove": ["wounded"],
+                "entity_tags.add": ["recently_drained"],
+            },
+            event_type="wound_healed",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.74,
+            scene_pressure_stub=(
+                "{actor} may be close enough to attempt restorative work on "
+                "{target}'s wound in the active scene. Treat as offered help "
+                "the scene can accept, defer, or complicate, not as automatic "
+                "healing."
+            ),
+        ),
+        Branch(
+            label="Work the wound with trained hands",
+            conditions=has_any_tag("surgical_training", "medical_skill"),
+            narrative_stub=(
+                "{actor} cleans the wound by feel, finds what needs to be "
+                "found, and does the work the body cannot do for itself. "
+                "{target} watches the ceiling and counts something silently."
+            ),
+            state_delta={
+                "character.current_activity": "providing skilled medical care",
+                "entity_tags_target.remove": ["wounded"],
+                "entity_tags_target.add": ["recently_tended"],
+            },
+            event_type="tended_wound",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.58,
+            scene_pressure_stub=(
+                "{actor} is moving to provide skilled medical care to "
+                "{target}. The scene may show this as a quiet competent "
+                "interruption, a wait for stabilization, or a beat of "
+                "trust between them."
+            ),
+        ),
+        Branch(
+            label="Apply what first-aid the moment allows",
+            conditions=has_tag("first_aid_trained"),
+            narrative_stub=(
+                "{actor} works from memory — pressure here, elevation there, "
+                "the things that buy time when time is the thing you need. "
+                "It won't be enough on its own, but it's enough for now."
+            ),
+            state_delta={
+                "character.current_activity": "applying field first aid",
+                "entity_tags_target.add": ["recently_tended"],
+            },
+            event_type="tended_wound",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.42,
+            scene_pressure_stub=(
+                "{actor} has practical first-aid training and is at "
+                "{target}'s side. Treat as a stabilizing presence the scene "
+                "can use without granting full recovery."
+            ),
+        ),
+        Branch(
+            label="Stay with the wound and do what can be done",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} has no real skill for this. They press a cloth "
+                "where there is bleeding and speak softly so {target} has "
+                "a voice to follow back from wherever the body has gone."
+            ),
+            state_delta={
+                "character.current_activity": "keeping watch over the wounded",
+            },
+            event_type="tended_wound",
+            changed_fields=("character.current_activity",),
+            magnitude=0.24,
+            scene_pressure_stub=(
+                "{actor} is present at {target}'s side without medical "
+                "ability. Use this as accompaniment and witness — not as "
+                "intervention."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+MOURN_LOSS = Template(
+    id="mourn_loss",
+    priority=25,
+    blurb="A loss settles into the body across many quiet days.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_ephemeral("bereaved"),
+        since_last_event_at_least("mourning_act", minimum_ticks=3),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Visit the place of remembrance",
+            conditions=in_location_class("place_of_remembrance"),
+            narrative_stub=(
+                "{actor} returns to the place where the dead are kept — "
+                "stone, name, photograph, marker, whatever this world has "
+                "made for the purpose — and stands long enough to be still "
+                "and remember, before going back to the work of being alive."
+            ),
+            state_delta={
+                "character.current_activity": "tending the dead",
+            },
+            event_type="mourning_act",
+            changed_fields=("character.current_activity",),
+            magnitude=0.42,
+        ),
+        Branch(
+            label="Sit with others who carry the same loss",
+            conditions=count_co_located(1, with_ephemeral="bereaved"),
+            narrative_stub=(
+                "{actor} finds the others who knew the dead and sits with "
+                "them — wordlessly, mostly. The presence of someone else "
+                "who is also not over it makes the grief feel less like "
+                "evidence of personal failure."
+            ),
+            state_delta={
+                "character.current_activity": "gathering with co-mourners",
+            },
+            event_type="mourning_act",
+            changed_fields=("character.current_activity",),
+            magnitude=0.38,
+        ),
+        Branch(
+            label="Pour the loss into the day's work",
+            conditions=has_any_tag(
+                "musician",
+                "writer",
+                "artisan",
+                "scholar",
+                "arcane_caster",
+                "soldier",
+                "keeps_shop",
+                "domestic_role",
+            ),
+            narrative_stub=(
+                "{actor} returns to their work — the thing the loss hasn't "
+                "taken — and does it with the dead person sitting somewhere "
+                "just behind them, watching the work with the particular "
+                "silence the dead have."
+            ),
+            state_delta={
+                "character.current_activity": "working through grief",
+            },
+            event_type="mourning_act",
+            changed_fields=("character.current_activity",),
+            magnitude=0.28,
+        ),
+        Branch(
+            label="Carry the weight in private",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} goes through the day's motions with the loss "
+                "settled inside them like a second heartbeat — not louder "
+                "than the day, just underneath it, the way these things "
+                "tend to be once the first weeks are past."
+            ),
+            state_delta={
+                "character.current_activity": "carrying private grief",
+            },
+            event_type="mourning_act",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
+    ),
+)
+
+
+KEEP_VIGIL = Template(
+    id="keep_vigil",
+    priority=50,
+    blurb="The actor remains present through a slow, uncertain hour.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Divergence: `captive` is ephemeral (per migration 027), so the captive
+    # case uses has_ephemeral rather than the draft's has_tag.
+    package_gate=AND(
+        co_located(Slot.ACTOR, Slot.TARGET),
+        OR(
+            has_ephemeral("wounded", slot=Slot.TARGET),
+            has_ephemeral("dying", slot=Slot.TARGET),
+            has_ephemeral("unconscious", slot=Slot.TARGET),
+            has_ephemeral("captive", slot=Slot.TARGET),
+        ),
+        OR(
+            has_relationship_of_type("family"),
+            has_relationship_of_type("romantic"),
+            has_relationship_of_type("chosen_kin"),
+            has_relationship_of_type("comrade"),
+            has_relationship_of_type("ward"),
+            has_relationship_of_type("guardian"),
+            has_relationship_of_type("captor"),
+        ),
+        since_last_event_at_least("vigil_held", minimum_ticks=2),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Maintain prayerful or meditative presence",
+            conditions=has_any_tag("devout", "contemplative", "ritual_practitioner"),
+            narrative_stub=(
+                "{actor} sits beside {target} with hands quiet, breathing "
+                "matched to whatever rhythm {target}'s body is still "
+                "finding. The prayers — if they are prayers — are not for "
+                "any audience but for the work of staying."
+            ),
+            state_delta={
+                "character.current_activity": "holding meditative vigil",
+                "entity_tags.add": ["at_vigil"],
+            },
+            event_type="vigil_held",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.46,
+            scene_pressure_stub=(
+                "{actor} is keeping a contemplative vigil over {target}. "
+                "Use this as an emotional anchor in the scene, not an "
+                "active intervention."
+            ),
+        ),
+        Branch(
+            label="Speak softly through the long hours",
+            conditions=has_ephemeral("unconscious", slot=Slot.TARGET),
+            narrative_stub=(
+                "{actor} tells {target} small things — what the light is "
+                "doing outside, what the others said today, the kind of "
+                "stories one tells someone who may or may not be hearing — "
+                "in the belief that whatever can be reached should be reached."
+            ),
+            state_delta={
+                "character.current_activity": "speaking through the long hours",
+                "entity_tags.add": ["at_vigil"],
+            },
+            event_type="vigil_held",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.38,
+            scene_pressure_stub=(
+                "{actor} is speaking to an unresponsive {target} through "
+                "a long stretch. Treat as audible presence the scene can "
+                "thread through quieter moments."
+            ),
+        ),
+        Branch(
+            label="Stand watch with attention but without intervention",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} stays. Not doing anything — that's the point of "
+                "being here. {target} is alone with whatever is happening "
+                "to them, and {actor} is the witness who makes that "
+                "aloneness less complete."
+            ),
+            state_delta={
+                "character.current_activity": "standing vigil",
+                "entity_tags.add": ["at_vigil"],
+            },
+            event_type="vigil_held",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.32,
+            scene_pressure_stub=(
+                "{actor} is keeping silent vigil over {target}. Use this "
+                "as ambient presence — a witness who shapes the scene by "
+                "being there, not by acting."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+# Section B — Maintenance of self
+
+
+TEND_CRAFT = Template(
+    id="tend_craft",
+    priority=15,
+    blurb="A small act of care for the work that defines them.",
+    required_slots=(Slot.ACTOR,),
+    # Discipline: TEND_CRAFT is for characters with identity-defining
+    # craft. Without this gate filter, the ALWAYS-fallback branch would
+    # fire for every actor every tick and displace MAINTAIN_COVER
+    # (priority 0) entirely. Restrict to actors carrying at least one
+    # craft tag; non-craft actors fall through to MAINTAIN_COVER.
+    package_gate=AND(
+        has_any_tag(
+            # combat
+            "combat_trained",
+            "soldier",
+            "warrior",
+            "fighter",
+            # arcane
+            "arcane_caster",
+            # engineering / tinkering
+            "engineer",
+            "mechanic",
+            "tinkerer",
+            "hacker",
+            "artificer",
+            # creative
+            "musician",
+            "dancer",
+            "performer",
+            "artist",
+            "writer",
+            "artisan",
+            # athletic / physical
+            "athlete",
+            "martial_artist",
+            "ranger",
+            "scout",
+            "monk",
+            # commerce
+            "keeps_shop",
+            "merchant",
+            "innkeeper",
+            "trader",
+            # domestic
+            "domestic_role",
+            "cares_for_household",
+            "matriarch",
+            "patriarch",
+            # scholarly
+            "scholar",
+            "researcher",
+            "academic",
+            "loremaster",
+        ),
+        since_last_event_at_least("craft_tended", minimum_ticks=4),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("wounded")),
+        NOT(has_ephemeral("bereaved")),
+    ),
+    branches=(
+        Branch(
+            label="Make the weapon ready for what comes next",
+            conditions=has_any_tag("combat_trained", "soldier", "warrior", "fighter"),
+            narrative_stub=(
+                "{actor} takes the weapon apart with the slow patience of "
+                "someone who has done this enough times to know the "
+                "geometry of each piece by feel, and puts it back together "
+                "the same way, attentive to small things only they will "
+                "notice."
+            ),
+            state_delta={
+                "character.current_activity": "making the weapon ready",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Lay hands on the arcane work-in-progress",
+            conditions=has_tag("arcane_caster"),
+            narrative_stub=(
+                "{actor} spends an unhurried hour with whatever is "
+                "currently between their hands and the world's underlying "
+                "grammar — checking small things, adjusting smaller things, "
+                "letting the work tell them what it still needs."
+            ),
+            state_delta={
+                "character.current_activity": "tending arcane work",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Maintain and improve the tools of the trade",
+            conditions=has_any_tag(
+                "engineer", "mechanic", "tinkerer", "hacker", "artificer"
+            ),
+            narrative_stub=(
+                "{actor} attends to the equipment — the part that's been "
+                "annoying them for weeks, the upgrade they keep meaning to "
+                "install, the calibration that's been just slightly off — "
+                "and emerges with the tools a small degree better than "
+                "they were."
+            ),
+            state_delta={
+                "character.current_activity": "maintaining equipment",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Run through the work that keeps the work possible",
+            conditions=has_any_tag(
+                "musician", "dancer", "performer", "artist", "writer", "artisan"
+            ),
+            narrative_stub=(
+                "{actor} works through the practice that no one will ever "
+                "see — the scales, the exercises, the small motions that "
+                "the public version of the art rests on — for an hour, the "
+                "way the practice has to be done if the work is to stay "
+                "alive."
+            ),
+            state_delta={
+                "character.current_activity": "practicing the unseen work",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Move the body through its daily reckoning",
+            conditions=has_any_tag(
+                "athlete", "martial_artist", "ranger", "scout", "monk"
+            ),
+            narrative_stub=(
+                "{actor} puts the body through its daily reckoning — the "
+                "run, the forms, the small punishments that keep the body "
+                "ready for whatever the next demand will be — and finishes "
+                "marginally sharper than they began."
+            ),
+            state_delta={
+                "character.current_activity": "conditioning the body",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Tend the small shop's quiet machinery",
+            conditions=has_any_tag("keeps_shop", "merchant", "innkeeper", "trader"),
+            narrative_stub=(
+                "{actor} does the things a place of business needs in "
+                "order to keep being a place of business: the count, the "
+                "ledger, the small repairs, the conversations with regulars "
+                "who came in for something other than the thing they "
+                "actually bought."
+            ),
+            state_delta={
+                "character.current_activity": "tending the shop's rhythms",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Keep the household running",
+            conditions=has_any_tag(
+                "domestic_role", "cares_for_household", "matriarch", "patriarch"
+            ),
+            narrative_stub=(
+                "{actor} does the work that holds a household together — "
+                "the meals, the cleaning, the small attentions no one "
+                "particularly thanks anyone for but whose absence would be "
+                "felt immediately. It is enough work for a full day, every "
+                "day, by itself."
+            ),
+            state_delta={
+                "character.current_activity": "tending the household",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Return to the unfinished study",
+            conditions=has_any_tag("scholar", "researcher", "academic", "loremaster"),
+            narrative_stub=(
+                "{actor} returns to the long work that is always almost "
+                "but never finished — reading carefully, taking notes that "
+                "may yet matter, following a thread that may yet lead "
+                "somewhere — and gives the work another quiet evening of "
+                "the only thing it really needs."
+            ),
+            state_delta={
+                "character.current_activity": "advancing the long study",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
+        Branch(
+            label="Take a small action of care for the work that is theirs",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} does a small thing for the work that defines "
+                "them — they would not call it that, probably, but that "
+                "is what it is — and the day is briefly better for it."
+            ),
+            state_delta={
+                "character.current_activity": "tending the work that is theirs",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.12,
+        ),
+    ),
+)
+
+
+# Section C — The contact quartet
+#
+# All four templates set present_target_policy=STORYTELLER_PRESSURE so contact
+# with an on-screen target manifests as scene pressure (a ring, a knock, an
+# arriving message) instead of silent off-screen state mutation.
+
+
+WARN_ALLY = Template(
+    id="warn_ally",
+    priority=75,
+    blurb="A threat surfaces; word reaches the people who need to know.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    # No contact cooldown — urgency overrides ordinary contact pacing.
+    package_gate=AND(
+        OR(
+            has_symmetric_relationship_of_type("family"),
+            has_symmetric_relationship_of_type("romantic"),
+            has_symmetric_relationship_of_type("chosen_kin"),
+            has_symmetric_relationship_of_type("comrade"),
+            has_symmetric_relationship_of_type("ally"),
+        ),
+        OR(
+            recent_event(
+                "threat_issued",
+                within_ticks=3,
+                target_slot=Slot.TARGET,
+            ),
+            recent_event(
+                "compliance_alert",
+                within_ticks=3,
+                target_slot=Slot.TARGET,
+            ),
+            has_ephemeral("under_active_pursuit", slot=Slot.TARGET),
+        ),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Reach the ally face-to-face before the word gets out",
+            conditions=co_located(Slot.ACTOR, Slot.TARGET),
+            narrative_stub=(
+                "{actor} catches {target} before they have time to "
+                "compose themselves and tells them quickly, in a voice "
+                "stripped to the load-bearing words, what is coming and "
+                "what they should do about it."
+            ),
+            state_delta={
+                "character.current_activity": "delivering urgent warning in person",
+                "entity_tags_target.add": ["forewarned"],
+            },
+            event_type="warning_delivered",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.66,
+            scene_pressure_stub=(
+                "{actor} is moving to deliver an urgent warning to "
+                "{target}. The scene may show this as interruption, "
+                "intrusion, or a beat the storyteller folds into the "
+                "current moment."
+            ),
+        ),
+        Branch(
+            label="Send word through whatever channel will reach them quickest",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} sends the warning through whatever channel will "
+                "reach {target} fastest — a call, a runner, a sealed "
+                "message, a coded signal, a prayer through a familiar "
+                "spirit — and hopes the gap between sending and receiving "
+                "is short enough to matter."
+            ),
+            state_delta={
+                "character.current_activity": "sending urgent warning",
+                "entity_tags_target.add": ["forewarned"],
+            },
+            event_type="warning_delivered",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.52,
+            scene_pressure_stub=(
+                "{actor} has sent {target} an urgent warning by remote "
+                "means. The scene may show this as an incoming message, "
+                "a vague disturbance, a half-heard signal, or it may not "
+                "land in time."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+CHECK_ON_DEPENDENT = Template(
+    id="check_on_dependent",
+    priority=55,
+    blurb="A duty of care surfaces between the actor and someone in their charge.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Discipline: CULTIVATE_INFORMANT (priority 50) owns the
+    # informant-tradecraft handler/asset relationship. Exclude actors
+    # tagged informant_handler so welfare-check and intel-cultivation
+    # don't fight over the same binding.
+    #
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (welfare_check from the face-to-face branch, contact_made from the
+    # remote branch). Checking only one lets the other bypass the
+    # cooldown — the gate-vs-event asymmetry caught by claude[bot] on PR #223.
+    package_gate=AND(
+        NOT(has_tag("informant_handler")),
+        OR(
+            has_relationship_of_type("handler", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("mentor", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("patron", Slot.ACTOR, Slot.TARGET),
+            has_relationship_of_type("guardian", Slot.ACTOR, Slot.TARGET),
+        ),
+        since_last_event_at_least(
+            "contact_made", minimum_ticks=12, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "welfare_check", minimum_ticks=12, target_slot=Slot.TARGET
+        ),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("grudge_active")),
+    ),
+    branches=(
+        Branch(
+            label="Drop by in person when the moment allows",
+            conditions=AND(
+                co_located(Slot.ACTOR, Slot.TARGET),
+                since_last_event_at_least(
+                    "welfare_check", minimum_ticks=6, target_slot=Slot.TARGET
+                ),
+            ),
+            narrative_stub=(
+                "{actor} stops by — ostensibly for something else, the way "
+                "these visits often are — and uses the small window to "
+                "read {target}'s state: how they look, what they say "
+                "without saying, what they decline to mention. It will "
+                "be enough information for now."
+            ),
+            state_delta={
+                "character.current_activity": "checking on a dependent in person",
+            },
+            event_type="welfare_check",
+            changed_fields=("character.current_activity",),
+            magnitude=0.44,
+            scene_pressure_stub=(
+                "{actor} is making a casual welfare check on {target}. "
+                "Treat as a low-key social presence the scene can absorb "
+                "or use as a beat of relationship texture."
+            ),
+        ),
+        Branch(
+            label="Reach out through customary channels",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} sends the kind of message they always send — "
+                "brief, light in tone, asking nothing real but leaving the "
+                "door open for {target} to say something real if they "
+                "want to — and watches for what comes back."
+            ),
+            state_delta={
+                "character.current_activity": "checking in on a dependent",
+            },
+            event_type="contact_made",
+            changed_fields=("character.current_activity",),
+            magnitude=0.22,
+            scene_pressure_stub=(
+                "{actor} has sent {target} a routine welfare-check "
+                "message. The scene may use this as an unread notification, "
+                "an answered exchange, or texture for {target}'s "
+                "decisions."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+REACH_OUT_TO_KIN = Template(
+    id="reach_out_to_kin",
+    priority=40,
+    blurb="A small thread of contact between people who hold each other.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (kin_visit from the face-to-face branch, contact_made from the
+    # remote branch). See CHECK_ON_DEPENDENT for the same pattern.
+    package_gate=AND(
+        OR(
+            has_symmetric_relationship_of_type("family"),
+            has_symmetric_relationship_of_type("romantic"),
+            has_symmetric_relationship_of_type("chosen_kin"),
+            has_symmetric_relationship_of_type("comrade"),
+        ),
+        since_last_event_at_least(
+            "contact_made", minimum_ticks=8, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "kin_visit", minimum_ticks=8, target_slot=Slot.TARGET
+        ),
+        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_ephemeral("grudge_active")),
+    ),
+    branches=(
+        Branch(
+            label="Find the moment for a real face-to-face conversation",
+            conditions=AND(
+                co_located(Slot.ACTOR, Slot.TARGET),
+                since_last_event_at_least(
+                    "kin_visit", minimum_ticks=5, target_slot=Slot.TARGET
+                ),
+            ),
+            narrative_stub=(
+                "{actor} makes the small effort that finding-time-for-someone "
+                "requires — clearing a half hour, choosing a place, "
+                "showing up — and {target} arrives, and for a while they "
+                "are the kind of present together that distance erodes."
+            ),
+            state_delta={
+                "character.current_activity": "spending real time with kin",
+            },
+            event_type="kin_visit",
+            changed_fields=("character.current_activity",),
+            magnitude=0.36,
+            scene_pressure_stub=(
+                "{actor} is meeting {target} in person for a real "
+                "conversation. Use this as a relationship beat the scene "
+                "can fold in or hold for later, not as a guaranteed "
+                "off-screen event."
+            ),
+        ),
+        Branch(
+            label="Send a message that says less than it means",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} sends {target} the small message that means "
+                "more than the words it contains — a check-in, a shared "
+                "joke, a question that doesn't really need answering — "
+                "and the thread between them stays warm for another while."
+            ),
+            state_delta={
+                "character.current_activity": "keeping kin contact warm",
+            },
+            event_type="contact_made",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+            scene_pressure_stub=(
+                "{actor} has sent {target} a small affectionate message. "
+                "Treat as ambient relationship-warmth — possibly an "
+                "incoming notification, possibly not surfaced at all."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
+CONSULT_RIVAL = Template(
+    id="consult_rival",
+    priority=35,
+    blurb="Two people who do not trust each other are forced into contact anyway.",
+    required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Divergence: the draft included `has_ephemeral("grudge_active")` in the
+    # shared-circumstance OR; the same gate excludes it via NOT below. The
+    # OR-arm is removed. EXTRACT_VENGEANCE (priority 90) owns grudge-active
+    # space; the NOT here is the documented safety belt.
+    #
+    # Cooldown: gate must check BOTH events any branch can emit
+    # (rival_consulted from the meaningful branches, contact_made from the
+    # ALWAYS fallback). Without the rival_consulted cooldown the high-
+    # magnitude branches could refire next tick — caught by Codex on PR #223.
+    package_gate=AND(
+        OR(
+            has_relationship_of_type("rival"),
+            trust_below(0),
+        ),
+        OR(
+            recent_event("compliance_alert", within_ticks=10),
+            recent_event("threat_issued", within_ticks=10),
+            recent_event("faction_realignment", within_ticks=15),
+        ),
+        since_last_event_at_least(
+            "contact_made", minimum_ticks=20, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "rival_consulted", minimum_ticks=20, target_slot=Slot.TARGET
+        ),
+        NOT(has_ephemeral("grudge_active")),
+        NOT(has_ephemeral("under_active_pursuit")),
+    ),
+    branches=(
+        Branch(
+            label="Meet face-to-face on neutral ground",
+            conditions=AND(
+                co_located(Slot.ACTOR, Slot.TARGET),
+                in_location_class("neutral_ground"),
+            ),
+            narrative_stub=(
+                "{actor} and {target} arrange to be in the same place at "
+                "the same time without quite arranging it — both of them "
+                "drinking something they don't particularly want, both of "
+                "them speaking carefully — because whatever is happening "
+                "is bigger than what they have between them, and they "
+                "both know it."
+            ),
+            state_delta={
+                "character.current_activity": "meeting a rival under truce",
+                "entity_tags.add": ["under_truce"],
+                "entity_tags_target.add": ["under_truce"],
+            },
+            event_type="rival_consulted",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.62,
+            scene_pressure_stub=(
+                "{actor} is in a tense face-to-face meeting with {target}, "
+                "a known rival. Treat as charged co-presence — the scene "
+                "can show this as observed truce, ambient discomfort, or "
+                "delayed consequence."
+            ),
+        ),
+        Branch(
+            label="Send a carefully-worded message through indirect channels",
+            conditions=has_tag("contacts_available"),
+            narrative_stub=(
+                "{actor} sends {target} a message routed through an "
+                "intermediary they both trust slightly more than they "
+                "trust each other — a message worded with enough care "
+                "that the indirect-channel relay can be denied later, "
+                "but with enough substance that {target} cannot reasonably "
+                "ignore it."
+            ),
+            state_delta={
+                "character.current_activity": "reaching out to a rival via intermediary",
+            },
+            event_type="rival_consulted",
+            changed_fields=("character.current_activity",),
+            magnitude=0.48,
+            scene_pressure_stub=(
+                "{actor} has sent {target} a carefully-routed message via "
+                "intermediary. Treat as off-screen pressure — the scene "
+                "may show {target} reacting to it, or it may resurface "
+                "later."
+            ),
+        ),
+        Branch(
+            label="Leave a sign the rival will recognize and a door they can open",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} doesn't quite reach out — but they place a sign "
+                "where {target} will see it, the kind of signal that says "
+                "*I am willing to talk if you are*, without committing to "
+                "anything. If {target} reads the sign, the contact has "
+                "begun. If they don't, it hasn't."
+            ),
+            state_delta={
+                "character.current_activity": "leaving a tentative overture for a rival",
+            },
+            event_type="contact_made",
+            changed_fields=("character.current_activity",),
+            magnitude=0.34,
+            scene_pressure_stub=(
+                "{actor} has placed a discreet overture for {target} to "
+                "find. Treat as a passive hook the scene can pick up if "
+                "useful, or leave dormant."
+            ),
+        ),
+    ),
+    present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+)
+
+
 BUILTIN_TEMPLATES = (
     EVADE_PURSUERS,
     PROTECT_KIN,
     EXTRACT_VENGEANCE,
+    TEND_WOUNDED,
     HONOR_DEBT,
+    WARN_ALLY,
     PURSUE_GHOST_LEAD,
+    CHECK_ON_DEPENDENT,
     CULTIVATE_INFORMANT,
+    KEEP_VIGIL,
+    REACH_OUT_TO_KIN,
+    CONSULT_RIVAL,
+    MOURN_LOSS,
+    TEND_CRAFT,
     MAINTAIN_COVER,
 )
