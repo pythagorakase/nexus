@@ -251,7 +251,7 @@ def hydrate_world_state(
         if class_name is None:
             continue
         location_classes.setdefault(place_id, set()).add(class_name)
-        if row.get("is_primary") or place_id not in location_class:
+        if row["is_primary"]:
             location_class[place_id] = class_name
 
     activities = {

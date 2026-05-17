@@ -212,8 +212,8 @@ def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition
     """Return whether an entity is currently in a place of the given class.
 
     Location classes are semantic place tags first. ``state.location_class``
-    remains as a single-value compatibility fallback for older harnesses and
-    structural ``places.type`` values.
+    remains as a single-value fallback for directly constructed ``WorldState``
+    instances and structural ``places.type`` values.
     """
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:

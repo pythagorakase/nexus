@@ -67,7 +67,7 @@ class FakeSession:
         self.tag_rows = tag_rows or []
         self.location_rows = location_rows or [{"entity_id": 1, "current_location": 10}]
         self.location_class_rows = location_class_rows or [
-            {"id": 10, "location_class": "the_roots"}
+            {"id": 10, "location_class": "the_roots", "is_primary": True}
         ]
         self.activity_rows = activity_rows or [
             {"entity_id": 1, "current_activity": "idle"}
@@ -402,9 +402,9 @@ def test_hydrate_world_state_loads_semantic_place_affordances() -> None:
     state = hydrate_world_state(
         FakeSession(
             location_class_rows=[
-                {"id": 10, "location_class": "fixed_location", "is_primary": True},
                 {"id": 10, "location_class": "home", "is_primary": False},
                 {"id": 10, "location_class": "safe_house", "is_primary": False},
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
             ],
         ),
         anchor_chunk_id=100,
@@ -899,7 +899,9 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
             {"entity_id": 1, "current_location": 10},
             {"entity_id": 2, "current_location": 10},
         ],
-        location_class_rows=[{"id": 10, "location_class": "the_glow"}],
+        location_class_rows=[
+            {"id": 10, "location_class": "the_glow", "is_primary": True}
+        ],
         activity_rows=[],
         tag_rows=[
             {"entity_id": 2, "tag": "under_active_pursuit", "is_ephemeral": True},

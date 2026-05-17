@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Sequence
 
+from psycopg2.extensions import connection
+
 
 # (tag, description)
 PLACE_AFFORDANCE_TAGS: Sequence[tuple[str, str]] = (
@@ -74,7 +76,7 @@ PLACE_AFFORDANCE_TAGS: Sequence[tuple[str, str]] = (
 )
 
 
-def run(conn) -> None:
+def run(conn: connection) -> None:
     """Apply the place-affordance vocabulary migration."""
 
     with conn.cursor() as cur:
@@ -90,8 +92,29 @@ def run(conn) -> None:
                     NULL, NULL,
                     NULL, %s
                 )
-                ON CONFLICT (tag) DO NOTHING
+                ON CONFLICT (tag) DO UPDATE SET
+                    category = EXCLUDED.category,
+                    is_ephemeral = EXCLUDED.is_ephemeral,
+                    clearance_kind = EXCLUDED.clearance_kind,
+                    reapplication_policy = EXCLUDED.reapplication_policy,
+                    clear_on = EXCLUDED.clear_on,
+                    description = EXCLUDED.description
                 """,
                 (tag, description),
             )
+        cur.execute(
+            """
+            SELECT tag, category
+            FROM tags
+            WHERE tag = ANY(%s)
+              AND category <> 'place_affordance'
+            ORDER BY tag
+            """,
+            ([tag for tag, _description in PLACE_AFFORDANCE_TAGS],),
+        )
+        mismatches = cur.fetchall()
+        if mismatches:
+            detail = ", ".join(f"{tag}={category}" for tag, category in mismatches)
+            message = f"Unexpected Orrery place-affordance categories: {detail}"
+            raise RuntimeError(message)
     conn.commit()
