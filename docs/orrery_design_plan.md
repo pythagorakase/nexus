@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212/#223, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, retrieval-boundary hardening in PR #220, relationship-trust hydration in PR #221, deterministic review orchestration in PR #222/#236/#238, semantic-clearance worker/status in PR #224, Sunhelm need-state packages in the Sunhelm phase, place affordance semantics in the location phase, and slot 2 semantic tag seeding in PR #237. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch adds the interpersonal need layer (`SOCIALIZE` and `INTIMACY`) on top of the existing timestamp-plus-debt substrate.
+**Status:** The Orrery build path is now past foundation and into package-library depth. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, and deterministic review orchestration. The runtime pipeline remains disabled by default (`orrery.enabled = false`). PR #243 is the active slice: it adds the interpersonal need layer (`SOCIALIZE` and `INTIMACY`) on top of the existing timestamp-plus-debt substrate.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -40,7 +40,7 @@
 - `save_01` intentionally remains locked and unmodified
 - `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment
 
-### In PR #211
+### Landed in PR #211
 
 - Added `OrreryTickProposal` and `OrreryResolutionDraft` as in-memory proposal carriers with no `tick_chunk_id` during resolve.
 - Hydrates read-side `WorldState` from current tags, ephemeral tags, character locations and activities, place classes, relationships, faction memberships, recent primary unsuperseded events, and coarse time/weather context.
@@ -93,11 +93,11 @@ PR #222 adds deterministic review orchestration so newly opened PRs can schedule
 
 ### Current Slice
 
-This branch extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage. The INTIMACY template records pressure and partial fulfillment conditions only; it does not autonomously pair characters or decide scene-level relationship outcomes.
+PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage. `INTIMACY` remains single-slot and substrate-only: it can notice established-partner co-location, private conditions, venues, suppressors, and deferral, but it does not autonomously pair characters or decide scene-level relationship outcomes.
 
 ### Package Author Checkpoint
 
-Start soliciting additional package-library contributions **after PR #211 merges**. At that point, package authors can target a real hydrated `WorldState`, binding composer, and `OrreryTickProposal` shape validated against both slot 5 and slot 2, while still avoiding the higher-risk commit/promote/narrate pipeline. The best contribution format is pure template/condition/action logic plus any proposed tag or event-type vocabulary it requires; durable tag backfill and event-type seeding remain controlled schema/data work.
+Package authors can contribute now. The cleanest contribution format is a small template sketch or markdown catalog note that names: package goal, slots, gate, branches, event types, state deltas, required tags, and any pressure-only behavior. The current source of truth for implemented packages is `nexus/agents/orrery/templates.py`; the human-readable generated reference is `docs/orrery_packages.md`. New durable vocabulary still belongs in explicit migrations, and backfill/application of tags remains controlled data work rather than package-author side effects.
 
 ---
 
