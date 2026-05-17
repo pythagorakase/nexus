@@ -1120,6 +1120,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/028_orrery_sunhelm_needs.py`
 - `migrations/029_orrery_need_state_init_trigger.py`
 - `migrations/030_orrery_place_affordance_vocab.py`
+- `migrations/031_orrery_slot2_semantic_tag_vocab.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

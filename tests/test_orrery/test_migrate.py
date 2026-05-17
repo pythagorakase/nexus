@@ -66,3 +66,25 @@ def test_place_affordance_migration_corrects_category_conflicts() -> None:
     assert "ON CONFLICT (tag) DO UPDATE SET" in migration_source
     assert "category = EXCLUDED.category" in migration_source
     assert "category <> 'place_affordance'" in migration_source
+
+
+def test_slot2_semantic_vocab_migration_seeds_template_gate_tags() -> None:
+    """Slot-2 vocabulary seed covers tags already queried by built-in templates."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "031_orrery_slot2_semantic_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    durable_tags = {tag for tag, _category, _description in migration.DURABLE_TAGS}
+
+    assert {
+        "extended_household",
+        "forager",
+        "hunter",
+        "married",
+        "parent",
+        "survivalist",
+        "travel_provisioned",
+    } <= durable_tags
