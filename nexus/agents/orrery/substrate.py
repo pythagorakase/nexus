@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from hashlib import sha256
 import json
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 
 class EntityKind(str, Enum):
@@ -437,31 +437,53 @@ def since_last_event_at_least(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class CompoundCondition:
+    """Self-describing AND / OR / NOT composition.
+
+    Compound conditions used to be closures whose __name__ carried only the
+    child count, hiding the structure from introspection. CompoundCondition
+    keeps the runtime semantics identical (it is still callable) while
+    exposing children for tools that need to walk the gate tree — e.g., the
+    catalog renderer in nexus/agents/orrery/catalog.py.
+    """
+
+    op: Literal["AND", "OR", "NOT"]
+    children: Tuple[Condition, ...]
+
+    def __call__(self, state: WorldState, bindings: Bindings) -> bool:
+        if self.op == "AND":
+            return all(child(state, bindings) for child in self.children)
+        if self.op == "OR":
+            return any(child(state, bindings) for child in self.children)
+        if self.op == "NOT":
+            return not self.children[0](state, bindings)
+        raise ValueError(f"Unknown compound op: {self.op}")
+
+    @property
+    def __name__(self) -> str:
+        if self.op == "NOT":
+            inner = getattr(self.children[0], "__name__", "<lambda>")
+            return f"NOT({inner})"
+        return f"{self.op}({len(self.children)})"
+
+
 def AND(*conditions: Condition) -> Condition:
     """Compose conditions with logical AND."""
 
-    def _condition(state: WorldState, bindings: Bindings) -> bool:
-        return all(condition(state, bindings) for condition in conditions)
-
-    return _named(_condition, f"AND({len(conditions)})")
+    return CompoundCondition("AND", tuple(conditions))
 
 
 def OR(*conditions: Condition) -> Condition:
     """Compose conditions with logical OR."""
 
-    def _condition(state: WorldState, bindings: Bindings) -> bool:
-        return any(condition(state, bindings) for condition in conditions)
-
-    return _named(_condition, f"OR({len(conditions)})")
+    return CompoundCondition("OR", tuple(conditions))
 
 
 def NOT(condition: Condition) -> Condition:
     """Compose a condition with logical NOT."""
 
-    def _condition(state: WorldState, bindings: Bindings) -> bool:
-        return not condition(state, bindings)
-
-    return _named(_condition, f"NOT({condition.__name__})")
+    return CompoundCondition("NOT", (condition,))
 
 
 def ALWAYS(_state: WorldState, _bindings: Bindings) -> bool:
@@ -513,9 +535,7 @@ class Template:
             return
 
         missing = [
-            branch.label
-            for branch in self.branches
-            if not branch.scene_pressure_stub
+            branch.label for branch in self.branches if not branch.scene_pressure_stub
         ]
         if missing:
             raise ValueError(
