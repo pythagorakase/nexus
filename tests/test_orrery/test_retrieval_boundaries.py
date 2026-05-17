@@ -93,7 +93,7 @@ def test_text_search_reads_only_narrative_chunks() -> None:
     session = CapturingSession()
 
     results = SearchManager.query_text_search(
-        object(),
+        SimpleNamespace(),
         query_text="distant sirens",
         session=session,
         filters={"world_layer": "physical"},
@@ -102,13 +102,37 @@ def test_text_search_reads_only_narrative_chunks() -> None:
 
     issued_sql = "\n".join(sql.lower() for sql, _ in session.executed)
     assert results == []
-    assert "from \n                narrative_chunks" in issued_sql
+    assert "narrative_chunks" in issued_sql
+    assert "offscreen_narrations" not in issued_sql
+
+
+def test_text_search_like_fallback_reads_only_narrative_chunks() -> None:
+    """Single-token LIKE fallback stays on accepted narrative chunks."""
+
+    session = CapturingSession()
+
+    results = SearchManager.query_text_search(
+        SimpleNamespace(),
+        query_text="sirens",
+        session=session,
+        filters={"world_layer": "physical"},
+        limit=5,
+    )
+
+    issued_sql = "\n".join(sql.lower() for sql, _ in session.executed)
+    assert results == []
+    assert len(session.executed) == 2
+    assert "ilike" in issued_sql
+    assert issued_sql.count("narrative_chunks") >= 2
     assert "offscreen_narrations" not in issued_sql
 
 
 def test_query_memory_vector_search_uses_only_narrative_collection() -> None:
     """The vector-search fallback cannot request an off-screen collection."""
 
+    # TODO: add a hybrid-path boundary test if hybrid search becomes enabled
+    # by default; that path uses SearchManager.perform_hybrid_search instead
+    # of explicit vector collection routing.
     search_manager = RecordingSearchManager()
     memnon = SimpleNamespace(
         retrieval_settings={"default_top_k": 5},
