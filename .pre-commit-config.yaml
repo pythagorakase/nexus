@@ -1,0 +1,23 @@
+# Pre-commit hooks for NEXUS.
+#
+# Bootstrap (once per checkout, after `poetry install`):
+#     poetry run pre-commit install
+#
+# Subsequent commits automatically run the hooks below; bypass with
+# `--no-verify` only when you have a specific reason (CI still gates).
+
+repos:
+  - repo: local
+    hooks:
+      - id: regenerate-orrery-catalog
+        name: Regenerate Orrery package catalog
+        entry: poetry run python -m nexus.agents.orrery.catalog --write
+        language: system
+        pass_filenames: false
+        files: ^nexus/agents/orrery/(templates|substrate|catalog)\.py$
+        description: >
+          When templates.py, substrate.py, or catalog.py changes, regenerate
+          docs/orrery_packages.md so the human-readable catalog stays in
+          lockstep with the canonical Python source. If the doc changes,
+          pre-commit aborts the commit; re-stage the regenerated file and
+          commit again.
