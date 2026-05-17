@@ -8,6 +8,8 @@ from hashlib import sha256
 import json
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
+from nexus.agents.orrery.needs import normalize_need_type
+
 
 class EntityKind(str, Enum):
     """Entity kinds supported by the Orrery identity spine."""
@@ -70,6 +72,7 @@ class WorldState:
     faction_memberships: Mapping[int, frozenset[int]] = field(default_factory=dict)
     location_class: Mapping[int, str] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
+    need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     recent_events: Tuple[EventRecord, ...] = ()
     time_of_day: str = "midday"
     weather: str = "clear"
@@ -130,6 +133,78 @@ def has_ephemeral(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
         )
 
     return _named(_condition, f"has_ephemeral({tag}@{slot.value})")
+
+
+def has_severity_tag(prefix: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity has any tag in a severity track."""
+
+    marker = f"{prefix}_"
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        tags = state.tags.get(entity_id, frozenset()) | state.ephemeral_tags.get(
+            entity_id, frozenset()
+        )
+        return any(tag.startswith(marker) for tag in tags)
+
+    return _named(_condition, f"has_severity_tag({prefix}@{slot.value})")
+
+
+def has_severity_tag_at_or_above(
+    prefix: str,
+    level: int,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether a slot-bound entity has a severity tag at a threshold."""
+
+    marker = f"{prefix}_"
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        tags = state.tags.get(entity_id, frozenset()) | state.ephemeral_tags.get(
+            entity_id, frozenset()
+        )
+        for tag in tags:
+            if not tag.startswith(marker):
+                continue
+            remainder = tag.removeprefix(marker)
+            numeric, _sep, _label = remainder.partition("_")
+            try:
+                if int(numeric) >= level:
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    return _named(
+        _condition,
+        f"has_severity_tag_at_or_above({prefix},{level}@{slot.value})",
+    )
+
+
+def has_need_debt_at_or_above(
+    need_type: str,
+    threshold: float,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether a slot-bound entity has need debt at the threshold."""
+
+    normalized = normalize_need_type(need_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return state.need_debt_scores.get((entity_id, normalized), 0.0) >= threshold
+
+    return _named(
+        _condition,
+        f"has_need_debt_at_or_above({normalized},{threshold:g}@{slot.value})",
+    )
 
 
 def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition:

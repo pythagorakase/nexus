@@ -81,6 +81,26 @@ _register(
     r"has_ephemeral\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('tag')}` ephemeral",
 )
+_register(
+    r"has_severity_tag\((?P<prefix>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: f"{_slot(m.group('slot'))} has `{m.group('prefix')}` severity",
+)
+_register(
+    r"has_severity_tag_at_or_above\("
+    r"(?P<prefix>[^,()]+),(?P<level>\d+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has `{m.group('prefix')}` severity "
+        f"level {m.group('level')}+"
+    ),
+)
+_register(
+    r"has_need_debt_at_or_above\("
+    r"(?P<need>[^,()]+),(?P<threshold>[\d.]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has `{m.group('need')}` debt ≥ "
+        f"{m.group('threshold')}"
+    ),
+)
 
 # Location predicates
 _register(
@@ -102,11 +122,7 @@ _register(
     lambda m: (
         f"{m.group('n')}+ other entities"
         + (f" with `{m.group('tag')}` tag" if m.group("tag") else "")
-        + (
-            f" with `{m.group('ephemeral')}` ephemeral"
-            if m.group("ephemeral")
-            else ""
-        )
+        + (f" with `{m.group('ephemeral')}` ephemeral" if m.group("ephemeral") else "")
         + f" co-located with {_slot(m.group('slot'))}"
     ),
 )
@@ -277,6 +293,20 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             target = "actor" if key == "entity_tags.remove" else "target"
             tags = ", ".join(f"`{t}`" for t in value)
             parts.append(f"removes {tags} from {target}")
+            continue
+        if key == "need.fulfill":
+            if isinstance(value, Mapping):
+                need = value.get("type") or value.get("need")
+                quality = value.get("quality")
+                discharge = value.get("discharge_debt") or value.get("discharge")
+                bits = [f"fulfills `{need}` need"]
+                if quality:
+                    bits.append(f"quality `{quality}`")
+                if discharge is not None:
+                    bits.append(f"discharge {discharge}")
+                parts.append(", ".join(bits))
+            else:
+                parts.append(f"fulfills `{value}` need")
             continue
         parts.append(f"`{key}` = `{value}`")
     return "; ".join(parts)

@@ -176,6 +176,34 @@ candidate_pool_multiplier = 4
 [orrery.promote]
 provider = "local"
 
+[orrery.sunhelm]
+accrual_rates = { sleep = 1.0, hunger = 1.0, thirst = 1.0 }
+priorities = { sleep = 25, thirst = 24, hunger = 22 }
+
+[orrery.sunhelm.severity_thresholds.sleep]
+mild = 16.0
+moderate = 30.0
+severe = 48.0
+critical = 72.0
+
+[orrery.sunhelm.severity_thresholds.hunger]
+mild = 8.0
+moderate = 16.0
+severe = 30.0
+critical = 48.0
+
+[orrery.sunhelm.severity_thresholds.thirst]
+mild = 4.0
+moderate = 8.0
+severe = 16.0
+critical = 24.0
+
+[orrery.sunhelm.pressure]
+min_severity_level = 2
+magnitude_base = 0.35
+magnitude_per_level = 0.10
+magnitude_cap = 0.85
+
 # =============================================================================
 # MEMNON Agent Settings (Memory & Retrieval)
 # =============================================================================

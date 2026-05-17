@@ -59,6 +59,7 @@ class FakeSession:
         present_actor_rows=None,
         actor_target_relationship_rows=None,
         entity_name_rows=None,
+        need_debt_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -84,10 +85,12 @@ class FakeSession:
             {"id": 2, "name": "Vale"},
             {"id": 3, "name": "Iris"},
         ]
+        self.need_debt_rows = need_debt_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
         self.max_id_queries = 0
+        self.world_time_queries = 0
 
     def __enter__(self):
         return self
@@ -129,7 +132,12 @@ class FakeSession:
             return FakeResult(self.actor_target_relationship_rows)
         if "/* orrery:entity_names */" in sql:
             return FakeResult(self.entity_name_rows)
+        if "/* orrery:need_debt_scores */" in sql:
+            assert "JOIN entities e" in sql
+            assert "e.is_active = true" in sql
+            return FakeResult(self.need_debt_rows)
         if "/* orrery:anchor_world_time */" in sql:
+            self.world_time_queries += 1
             return FakeResult([{"world_time": self.world_time}])
         if "/* orrery:seed_weather */" in sql:
             return FakeResult([{"weather": self.weather}])
@@ -288,6 +296,33 @@ def test_resolve_dry_run_exercises_priority_packages(
     assert proposal.resolutions[0].branch_label == branch_label
 
 
+def test_resolve_dry_run_fires_sunhelm_need_template() -> None:
+    """Off-screen need debt resolves through SLEEP/EAT/DRINK packages."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            world_time=datetime(2073, 10, 31, 23, tzinfo=timezone.utc),
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "sleep",
+                    "debt_score": 10,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 23, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "sleep"
+    assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "sleep"
+
+
 def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
     """Orrery trust reads the SQL-derived relationship valence magnitude."""
 
@@ -358,6 +393,30 @@ def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -
     assert state.trust[(2, 1)] == -3
     assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
     assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
+def test_hydrate_world_state_computes_effective_need_debt() -> None:
+    """Need debt accrues from last_evaluated_at without resolver writes."""
+
+    session = FakeSession(
+        world_time=datetime(2073, 10, 31, 12, tzinfo=timezone.utc),
+        need_debt_rows=[
+            {
+                "character_entity_id": 1,
+                "need_type": "sleep",
+                "debt_score": 6,
+                "last_evaluated_at": datetime(2073, 10, 31, 8, tzinfo=timezone.utc),
+            }
+        ],
+    )
+    state = hydrate_world_state(
+        session,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.need_debt_scores[(1, "sleep")] == 10
+    assert session.world_time_queries == 1
 
 
 @pytest.mark.parametrize(
@@ -625,6 +684,84 @@ def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
     assert pressure.bindings == {"actor": 1, "target": 2}
     assert "Mara is creating pressure around Vale" in pressure.prompt_text
     assert "state_delta" not in pressure.to_dict()
+
+
+def test_resolve_dry_run_routes_present_need_debt_to_scene_pressure() -> None:
+    """On-screen actors get prompt-only need pressure, not resolutions."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "sleep",
+                    "debt_score": 30,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 1
+    pressure = proposal.scene_pressures[0]
+    assert pressure.template_id == "sleep_need_pressure"
+    assert pressure.bindings == {"actor": 1, "resource": "sleep"}
+    assert "Mara is carrying moderate sleep debt" in pressure.prompt_text
+    assert "Orrery does not decide what Mara does" in pressure.prompt_text
+
+
+def test_resolve_dry_run_uses_configured_present_need_pressure_tuning() -> None:
+    """Present-character need pressure uses config thresholds and priorities."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[{"entity_id": 1}],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "thirst",
+                    "debt_score": 3,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+        sunhelm_settings={
+            "accrual_rates": {"sleep": 1, "hunger": 1, "thirst": 1},
+            "severity_thresholds": {
+                "sleep": {"mild": 16, "moderate": 30, "severe": 48, "critical": 72},
+                "hunger": {"mild": 8, "moderate": 16, "severe": 30, "critical": 48},
+                "thirst": {"mild": 1, "moderate": 3, "severe": 6, "critical": 9},
+            },
+            "priorities": {"sleep": 25, "thirst": 7, "hunger": 22},
+            "pressure": {
+                "min_severity_level": 2,
+                "magnitude_base": 0.2,
+                "magnitude_per_level": 0.05,
+                "magnitude_cap": 0.5,
+            },
+        },
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 1
+    pressure = proposal.scene_pressures[0]
+    assert pressure.template_id == "thirst_need_pressure"
+    assert pressure.priority == 7
+    assert pressure.magnitude == pytest.approx(0.3)
 
 
 def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets() -> (

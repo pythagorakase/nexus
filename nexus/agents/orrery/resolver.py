@@ -17,7 +17,15 @@ from nexus.agents.orrery.substrate import (
     Slot,
     Template,
     WorldState,
+    binding_hash,
     evaluate_stack,
+)
+from nexus.agents.orrery.needs import (
+    NEED_SEVERITY_PREFIX,
+    NeedTuning,
+    coerce_need_tuning,
+    effective_debt_score,
+    severity_for_debt,
 )
 
 
@@ -185,8 +193,11 @@ def hydrate_world_state(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    need_tuning: Optional[NeedTuning] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables."""
+
+    need_tuning = coerce_need_tuning(need_tuning)
 
     tags: dict[int, set[str]] = {}
     ephemeral_tags: dict[int, set[str]] = {}
@@ -295,8 +306,14 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    time_of_day = _load_time_of_day(session, anchor_chunk_id=anchor_chunk_id)
+    world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+    time_of_day = _load_time_of_day(world_time)
     weather = _load_weather(session)
+    need_debt_scores = _load_need_debt_scores(
+        session,
+        current_world_time=world_time,
+        need_tuning=need_tuning,
+    )
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -316,6 +333,7 @@ def hydrate_world_state(
             for entity_id, values in faction_memberships.items()
         },
         location_class=location_class,
+        need_debt_scores=need_debt_scores,
         recent_events=recent_events,
         time_of_day=time_of_day,
         weather=weather,
@@ -539,13 +557,16 @@ def resolve_dry_run(
     *,
     anchor_chunk_id: Optional[int],
     window_chunks: int,
+    sunhelm_settings: Optional[Any] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     state = hydrate_world_state(
         session,
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
+        need_tuning=need_tuning,
     )
 
     templates_list = list(templates)
@@ -616,12 +637,27 @@ def resolve_dry_run(
                 if resolution is not None and resolution.passes:
                     scene_pressure_results.append(resolution)
 
-    pressure_entity_names = _load_entity_names(
-        session, _entity_ids_from_resolutions(scene_pressure_results)
+    present_need_pressure_specs = _present_need_pressure_specs(
+        state,
+        present_actor_ids=_present_actor_ids_at_anchor(
+            session, anchor_chunk_id=anchor_chunk_id
+        ),
+        need_tuning=need_tuning,
     )
+    pressure_entity_ids = _entity_ids_from_resolutions(scene_pressure_results) | {
+        spec["actor_entity_id"] for spec in present_need_pressure_specs
+    }
+    pressure_entity_names = _load_entity_names(session, pressure_entity_ids)
     scene_pressures = tuple(
         _scene_pressure_from_resolution(resolution, pressure_entity_names)
         for resolution in scene_pressure_results
+    ) + tuple(
+        _scene_pressure_from_need_spec(
+            spec,
+            pressure_entity_names,
+            need_tuning=need_tuning,
+        )
+        for spec in present_need_pressure_specs
     )
 
     unique_actors = (
@@ -685,10 +721,25 @@ def _load_recent_events(
     return tuple(events)
 
 
-def _load_time_of_day(session: Any, *, anchor_chunk_id: Optional[int]) -> str:
-    if anchor_chunk_id is None:
+def _load_time_of_day(world_time: Optional[datetime]) -> str:
+    if world_time is None:
         return "midday"
 
+    hour = world_time.hour
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 16:
+        return "afternoon"
+    if 16 <= hour < 21:
+        return "evening"
+    return "night"
+
+
+def _load_world_time(
+    session: Any, *, anchor_chunk_id: Optional[int]
+) -> Optional[datetime]:
+    if anchor_chunk_id is None:
+        return None
     row = (
         session.execute(
             text(
@@ -704,18 +755,43 @@ def _load_time_of_day(session: Any, *, anchor_chunk_id: Optional[int]) -> str:
         .mappings()
         .first()
     )
-    world_time = row["world_time"] if row else None
-    if world_time is None:
-        return "midday"
+    return row["world_time"] if row else None
 
-    hour = world_time.hour
-    if 5 <= hour < 12:
-        return "morning"
-    if 12 <= hour < 16:
-        return "afternoon"
-    if 16 <= hour < 21:
-        return "evening"
-    return "night"
+
+def _load_need_debt_scores(
+    session: Any,
+    *,
+    current_world_time: Optional[datetime],
+    need_tuning: NeedTuning,
+) -> dict[tuple[int, str], float]:
+    """Load effective need debt scores without mutating canonical state."""
+
+    scores: dict[tuple[int, str], float] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:need_debt_scores */
+            SELECT character_entity_id,
+                   need_type::text AS need_type,
+                   debt_score,
+                   last_evaluated_at
+            FROM character_need_states cns
+            JOIN entities e
+              ON e.id = cns.character_entity_id
+             AND e.kind = 'character'
+             AND e.is_active = true
+            """
+        )
+    ).mappings():
+        need_type = str(row["need_type"])
+        scores[(row["character_entity_id"], need_type)] = effective_debt_score(
+            need_type,
+            float(row["debt_score"] or 0.0),
+            last_evaluated_at=row["last_evaluated_at"],
+            current_world_time=current_world_time,
+            tuning=need_tuning,
+        )
+    return scores
 
 
 def _load_weather(session: Any) -> str:
@@ -801,6 +877,101 @@ def _scene_pressure_from_resolution(
             template_id=resolution.template_id,
         ),
         magnitude=resolution.magnitude,
+    )
+
+
+def _present_need_pressure_specs(
+    state: WorldState,
+    *,
+    present_actor_ids: set[int],
+    need_tuning: NeedTuning,
+) -> tuple[dict[str, Any], ...]:
+    """Build prompt-only pressure specs from present-character need debt."""
+
+    specs: list[dict[str, Any]] = []
+    for actor_id in sorted(present_actor_ids):
+        for need_type, prefix in NEED_SEVERITY_PREFIX.items():
+            debt_score = state.need_debt_scores.get((actor_id, need_type), 0.0)
+            severity = severity_for_debt(
+                need_type,
+                debt_score,
+                tuning=need_tuning,
+            )
+            if severity is None:
+                continue
+            level, severity_name = severity
+            if level < need_tuning.pressure.min_severity_level:
+                continue
+            specs.append(
+                {
+                    "actor_entity_id": actor_id,
+                    "need_type": need_type,
+                    "severity_prefix": prefix,
+                    "severity_level": level,
+                    "severity_name": severity_name,
+                    "debt_score": debt_score,
+                }
+            )
+    return tuple(specs)
+
+
+def _scene_pressure_from_need_spec(
+    spec: Mapping[str, Any],
+    entity_names: Mapping[int, str],
+    *,
+    need_tuning: NeedTuning,
+) -> OrreryScenePressureDraft:
+    """Convert present-character need pressure into Storyteller prompt data."""
+
+    actor_id = int(spec["actor_entity_id"])
+    need_type = str(spec["need_type"])
+    severity_name = str(spec["severity_name"])
+    debt_score = float(spec["debt_score"])
+    bindings = {"actor": actor_id, "resource": need_type}
+    pressure_stub = _need_pressure_stub(
+        need_type, severity_name=severity_name, debt_score=debt_score
+    )
+    prompt_text = _render_bound_text(
+        pressure_stub,
+        bindings,
+        entity_names,
+        template_id=f"{need_type}_need_pressure",
+    )
+    return OrreryScenePressureDraft(
+        template_id=f"{need_type}_need_pressure",
+        priority=need_tuning.priorities[need_type],
+        binding_hash=binding_hash({Slot.ACTOR: actor_id, Slot.RESOURCE: need_type}),
+        bindings=bindings,
+        branch_label=f"Present-character {need_type} pressure",
+        pressure_stub=pressure_stub,
+        prompt_text=prompt_text,
+        magnitude=need_tuning.pressure.magnitude_for_level(int(spec["severity_level"])),
+    )
+
+
+def _need_pressure_stub(
+    need_type: str, *, severity_name: str, debt_score: float
+) -> str:
+    label = f"{severity_name} {need_type} debt"
+    if need_type == "sleep":
+        return (
+            "{actor} is carrying "
+            f"{label} ({debt_score:.1f}). You may render fatigue, dulled "
+            "judgment, irritability, or the pull toward rest, but Orrery "
+            "does not decide what {actor} does in scene."
+        )
+    if need_type == "hunger":
+        return (
+            "{actor} is carrying "
+            f"{label} ({debt_score:.1f}). You may render distraction, "
+            "irritability, or interest in food, but Orrery does not decide "
+            "what {actor} does in scene."
+        )
+    return (
+        "{actor} is carrying "
+        f"{label} ({debt_score:.1f}). You may render thirst, discomfort, "
+        "or urgency around water, but Orrery does not decide what {actor} "
+        "does in scene."
     )
 
 

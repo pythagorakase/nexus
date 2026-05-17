@@ -133,6 +133,7 @@ READONLY_SQL_ALLOWED_TABLES = {
     "entities",
     "entity_names_v",
     "entity_tags_current",
+    "character_need_states",
     "world_events",
     "world_event_entities",
     "orrery_resolutions",

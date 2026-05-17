@@ -17,6 +17,8 @@ from nexus.agents.orrery.substrate import (
     binding_hash,
     count_co_located,
     evaluate_stack,
+    has_need_debt_at_or_above,
+    has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
     recent_event,
     since_last_event_at_least,
@@ -287,6 +289,31 @@ def test_count_co_located_condition_filters_by_tag() -> None:
 
     assert count_co_located(1, with_tag="pursuer")(state, {Slot.ACTOR: 1})
     assert not count_co_located(2, with_tag="pursuer")(state, {Slot.ACTOR: 1})
+
+
+def test_need_debt_condition_reads_world_state_scores() -> None:
+    """Sunhelm gates read effective need debt from hydrated world state."""
+
+    state = WorldState(need_debt_scores={(1, "sleep"): 12.5})
+
+    assert has_need_debt_at_or_above("sleep", 8)(state, {Slot.ACTOR: 1})
+    assert not has_need_debt_at_or_above("sleep", 16)(state, {Slot.ACTOR: 1})
+
+
+def test_need_debt_condition_rejects_unknown_need_type() -> None:
+    """Typos in authored need predicates fail at construction time."""
+
+    with pytest.raises(ValueError, match="Unsupported Orrery need type"):
+        has_need_debt_at_or_above("hungr", 8)
+
+
+def test_severity_tag_threshold_parses_level_prefix() -> None:
+    """Severity predicates compare the numeric segment of graduated tags."""
+
+    state = WorldState(tags={1: frozenset({"sleep_deprived_3_severe"})})
+
+    assert has_severity_tag_at_or_above("sleep_deprived", 2)(state, {Slot.ACTOR: 1})
+    assert not has_severity_tag_at_or_above("sleep_deprived", 4)(state, {Slot.ACTOR: 1})
 
 
 def test_recent_event_can_filter_by_changed_fields() -> None:

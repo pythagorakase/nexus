@@ -245,7 +245,7 @@ class LogonUtility:
             return StorytellerResponseBootstrap
 
         return StorytellerResponseExtended
-    
+
     def _format_context_prompt(self, context: Dict) -> str:
         """Format context payload into a prompt for the Apex AI"""
         sections = []
@@ -384,9 +384,11 @@ class LogonUtility:
         if scene_pressures:
             sections.append("\n=== ORRERY SCENE PRESSURE ===")
             sections.append(
-                "These are off-screen pressures involving current on-screen "
-                "characters. You may adapt, delay, ignore, or incorporate them. "
-                "Do not let Orrery decide what present characters do."
+                "These are Storyteller-mediated pressures involving current "
+                "on-screen characters. Some may originate from off-screen "
+                "actors; some may be present-character need pressure. You may "
+                "adapt, delay, ignore, or incorporate them. Do not let Orrery "
+                "decide what present characters do."
             )
             for pressure in scene_pressures[:5]:
                 if not isinstance(pressure, dict):

@@ -11,6 +11,13 @@ from dataclasses import dataclass
 import json
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.needs import (
+    NeedTuning,
+    coerce_need_tuning,
+    severity_tag_for_debt,
+    severity_tags_for_need,
+    normalize_need_type,
+)
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     OrreryTickProposal,
@@ -25,6 +32,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags.remove",
         "entity_tags_target.add",
         "entity_tags_target.remove",
+        "need.fulfill",
     }
 )
 
@@ -61,6 +69,7 @@ def commit_orrery_tick_sync(
     tick_chunk_id: int,
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
+    sunhelm_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -68,6 +77,7 @@ def commit_orrery_tick_sync(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
     with conn.cursor() as cur:
         entity_ids = _entity_ids_from_proposal(coerced)
@@ -102,6 +112,7 @@ def commit_orrery_tick_sync(
                 actor_entity_id=actor_entity_id,
                 target_entity_id=target_entity_id,
                 source_chunk_id=tick_chunk_id,
+                need_tuning=need_tuning,
             )
             event_id = _emit_world_event_sync(
                 cur,
@@ -140,6 +151,7 @@ async def commit_orrery_tick_async(
     tick_chunk_id: int,
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
+    sunhelm_settings: Optional[Any] = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -147,6 +159,7 @@ async def commit_orrery_tick_async(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
     entity_ids = _entity_ids_from_proposal(coerced)
     await _validate_entity_ids_async(conn, entity_ids)
@@ -180,6 +193,7 @@ async def commit_orrery_tick_async(
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
             source_chunk_id=tick_chunk_id,
+            need_tuning=need_tuning,
         )
         event_id = await _emit_world_event_async(
             conn,
@@ -390,10 +404,16 @@ def _apply_state_delta_sync(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     if not draft.state_delta:
         return 0
     if actor_entity_id is None:
+        if "need.fulfill" in draft.state_delta:
+            raise ValueError(
+                f"need.fulfill in template {draft.template_id!r} "
+                "requires an actor binding"
+            )
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
@@ -441,6 +461,15 @@ def _apply_state_delta_sync(
             source_chunk_id=source_chunk_id,
             delta_key="entity_tags_target.remove",
         )
+    if "need.fulfill" in draft.state_delta:
+        tag_mutations += _apply_need_fulfillment_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            fulfillment=draft.state_delta["need.fulfill"],
+            template_id=draft.template_id,
+            source_chunk_id=source_chunk_id,
+            need_tuning=need_tuning,
+        )
     return tag_mutations
 
 
@@ -451,10 +480,16 @@ async def _apply_state_delta_async(
     actor_entity_id: Optional[int],
     target_entity_id: Optional[int],
     source_chunk_id: int,
+    need_tuning: NeedTuning,
 ) -> int:
     if not draft.state_delta:
         return 0
     if actor_entity_id is None:
+        if "need.fulfill" in draft.state_delta:
+            raise ValueError(
+                f"need.fulfill in template {draft.template_id!r} "
+                "requires an actor binding"
+            )
         raise ValueError(f"Orrery draft {draft.template_id} has no actor binding")
 
     tag_mutations = 0
@@ -504,7 +539,373 @@ async def _apply_state_delta_async(
             source_chunk_id=source_chunk_id,
             delta_key="entity_tags_target.remove",
         )
+    if "need.fulfill" in draft.state_delta:
+        tag_mutations += await _apply_need_fulfillment_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            fulfillment=draft.state_delta["need.fulfill"],
+            template_id=draft.template_id,
+            source_chunk_id=source_chunk_id,
+            need_tuning=need_tuning,
+        )
     return tag_mutations
+
+
+def _coerce_need_fulfillment(raw: Any) -> dict[str, Any]:
+    """Normalize a template's typed need-fulfillment effect."""
+
+    if isinstance(raw, str):
+        payload: dict[str, Any] = {"type": raw}
+    elif isinstance(raw, Mapping):
+        payload = dict(raw)
+    else:
+        raise ValueError("need.fulfill must be a string or mapping")
+
+    raw_need_type = payload.get("type") or payload.get("need")
+    if raw_need_type is None:
+        raise ValueError("need.fulfill must include a 'type' or 'need' field")
+
+    need_type = normalize_need_type(str(raw_need_type))
+    discharge = payload.get("discharge_debt", payload.get("discharge", 9999.0))
+    try:
+        payload["discharge_debt"] = float(discharge)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("need.fulfill discharge_debt must be numeric") from exc
+    payload["type"] = need_type
+    return payload
+
+
+def _apply_need_fulfillment_sync(
+    cur: Any,
+    *,
+    actor_entity_id: Optional[int],
+    fulfillment: Any,
+    template_id: str,
+    source_chunk_id: int,
+    need_tuning: NeedTuning,
+) -> int:
+    if actor_entity_id is None:
+        raise ValueError(
+            f"need.fulfill in template {template_id!r} requires an actor binding"
+        )
+
+    payload = _coerce_need_fulfillment(fulfillment)
+    need_type = payload["type"]
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    current_debt = _load_or_create_need_debt_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        world_time=world_time,
+        need_tuning=need_tuning,
+    )
+    new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    cur.execute(
+        """
+        UPDATE character_need_states
+        SET debt_score = %s,
+            last_evaluated_at = %s,
+            last_fulfilled_at = %s,
+            updated_at = now(),
+            metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
+        WHERE character_entity_id = %s
+          AND need_type = %s::character_need_type
+        """,
+        (
+            new_debt,
+            world_time,
+            world_time,
+            json.dumps({"last_fulfillment": payload}),
+            actor_entity_id,
+            need_type,
+        ),
+    )
+    return _sync_need_severity_tags_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        need_tuning=need_tuning,
+    )
+
+
+async def _apply_need_fulfillment_async(
+    conn: Any,
+    *,
+    actor_entity_id: Optional[int],
+    fulfillment: Any,
+    template_id: str,
+    source_chunk_id: int,
+    need_tuning: NeedTuning,
+) -> int:
+    if actor_entity_id is None:
+        raise ValueError(
+            f"need.fulfill in template {template_id!r} requires an actor binding"
+        )
+
+    payload = _coerce_need_fulfillment(fulfillment)
+    need_type = payload["type"]
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    current_debt = await _load_or_create_need_debt_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        world_time=world_time,
+        need_tuning=need_tuning,
+    )
+    new_debt = max(0.0, current_debt - float(payload["discharge_debt"]))
+    await conn.execute(
+        """
+        UPDATE character_need_states
+        SET debt_score = $1,
+            last_evaluated_at = $2,
+            last_fulfilled_at = $3,
+            updated_at = now(),
+            metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
+        WHERE character_entity_id = $5
+          AND need_type = $6::character_need_type
+        """,
+        new_debt,
+        world_time,
+        world_time,
+        json.dumps({"last_fulfillment": payload}),
+        actor_entity_id,
+        need_type,
+    )
+    return await _sync_need_severity_tags_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+        debt_score=new_debt,
+        template_id=template_id,
+        source_chunk_id=source_chunk_id,
+        need_tuning=need_tuning,
+    )
+
+
+def _tick_world_time_sync(cur: Any, source_chunk_id: int) -> Any:
+    cur.execute(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = %s",
+        (source_chunk_id,),
+    )
+    row = cur.fetchone()
+    if row and _row_get(row, "world_time", 0) is not None:
+        return _row_get(row, "world_time", 0)
+    cur.execute("SELECT now() AS world_time")
+    return _row_get(cur.fetchone(), "world_time", 0)
+
+
+async def _tick_world_time_async(conn: Any, source_chunk_id: int) -> Any:
+    world_time = await conn.fetchval(
+        "SELECT world_time FROM chunk_metadata WHERE chunk_id = $1",
+        source_chunk_id,
+    )
+    if world_time is not None:
+        return world_time
+    return await conn.fetchval("SELECT now()")
+
+
+def _load_or_create_need_debt_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    world_time: Any,
+    need_tuning: NeedTuning,
+) -> float:
+    cur.execute(
+        """
+        INSERT INTO character_need_states (
+            character_entity_id, need_type, debt_score, last_evaluated_at
+        ) VALUES (
+            %s, %s::character_need_type, 0, %s
+        )
+        ON CONFLICT (character_entity_id, need_type) DO NOTHING
+        """,
+        (actor_entity_id, need_type, world_time),
+    )
+    cur.execute(
+        """
+        SELECT debt_score, last_evaluated_at
+        FROM character_need_states
+        WHERE character_entity_id = %s
+          AND need_type = %s::character_need_type
+        """,
+        (actor_entity_id, need_type),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(
+            f"Orrery need state missing for actor {actor_entity_id} {need_type}"
+        )
+    debt_score = float(_row_get(row, "debt_score", 0) or 0.0)
+    last_evaluated_at = _row_get(row, "last_evaluated_at", 1)
+    elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
+    if elapsed <= 0:
+        return max(0.0, debt_score)
+    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
+
+
+async def _load_or_create_need_debt_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    world_time: Any,
+    need_tuning: NeedTuning,
+) -> float:
+    await conn.execute(
+        """
+        INSERT INTO character_need_states (
+            character_entity_id, need_type, debt_score, last_evaluated_at
+        ) VALUES (
+            $1, $2::character_need_type, 0, $3
+        )
+        ON CONFLICT (character_entity_id, need_type) DO NOTHING
+        """,
+        actor_entity_id,
+        need_type,
+        world_time,
+    )
+    row = await conn.fetchrow(
+        """
+        SELECT debt_score, last_evaluated_at
+        FROM character_need_states
+        WHERE character_entity_id = $1
+          AND need_type = $2::character_need_type
+        """,
+        actor_entity_id,
+        need_type,
+    )
+    if row is None:
+        raise ValueError(
+            f"Orrery need state missing for actor {actor_entity_id} {need_type}"
+        )
+    debt_score = float(_row_get(row, "debt_score", 0) or 0.0)
+    last_evaluated_at = _row_get(row, "last_evaluated_at", 1)
+    elapsed = (world_time - last_evaluated_at).total_seconds() / 3600.0
+    if elapsed <= 0:
+        return max(0.0, debt_score)
+    return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
+
+
+def _sync_need_severity_tags_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    debt_score: float,
+    template_id: str,
+    source_chunk_id: int,
+    need_tuning: NeedTuning,
+) -> int:
+    mutations = 0
+    desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
+    current_tags = _current_need_severity_tags_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    )
+    for tag in current_tags:
+        if tag == desired:
+            continue
+        mutations += _remove_entity_tag_sync(
+            cur,
+            actor_entity_id,
+            tag,
+            template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="need.fulfill",
+        )
+    if (
+        desired
+        and desired not in current_tags
+        and _add_entity_tag_sync(cur, actor_entity_id, desired, template_id)
+    ):
+        mutations += 1
+    return mutations
+
+
+async def _sync_need_severity_tags_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+    debt_score: float,
+    template_id: str,
+    source_chunk_id: int,
+    need_tuning: NeedTuning,
+) -> int:
+    mutations = 0
+    desired = severity_tag_for_debt(need_type, debt_score, tuning=need_tuning)
+    current_tags = await _current_need_severity_tags_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    )
+    for tag in current_tags:
+        if tag == desired:
+            continue
+        mutations += await _remove_entity_tag_async(
+            conn,
+            actor_entity_id,
+            tag,
+            template_id,
+            source_chunk_id=source_chunk_id,
+            delta_key="need.fulfill",
+        )
+    if (
+        desired
+        and desired not in current_tags
+        and await _add_entity_tag_async(conn, actor_entity_id, desired, template_id)
+    ):
+        mutations += 1
+    return mutations
+
+
+def _current_need_severity_tags_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> frozenset[str]:
+    tags = severity_tags_for_need(need_type)
+    cur.execute(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = %s
+          AND t.tag = ANY(%s)
+          AND et.cleared_at IS NULL
+        """,
+        (actor_entity_id, list(tags)),
+    )
+    return frozenset(str(_row_get(row, "tag", 0)) for row in cur.fetchall())
+
+
+async def _current_need_severity_tags_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> frozenset[str]:
+    tags = severity_tags_for_need(need_type)
+    rows = await conn.fetch(
+        """
+        SELECT t.tag
+        FROM entity_tags et
+        JOIN tags t ON t.id = et.tag_id
+        WHERE et.entity_id = $1
+          AND t.tag = ANY($2::text[])
+          AND et.cleared_at IS NULL
+        """,
+        actor_entity_id,
+        list(tags),
+    )
+    return frozenset(str(_row_get(row, "tag", 0)) for row in rows)
 
 
 def _add_entity_tag_sync(

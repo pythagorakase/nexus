@@ -778,6 +778,210 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## SLEEP — priority 25
+
+> The body asks for the thing without which it cannot continue.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - **OR:**
+    - **AND:**
+      - time of day is one of [night]
+      - actor has `sleep` debt ≥ 8
+    - actor has `sleep` debt ≥ 16
+  - **NOT:** actor has `cns_stimulated` ephemeral
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Collapse into deferred sleep  *(mag 0.74)*
+
+**When:** actor has `sleep` debt ≥ 48
+
+**Does:** activity → "collapsing into deferred sleep"; fulfills `sleep` need, quality `collapse_rough`, discharge 4
+**Event:** `slept`
+
+> {actor} stops negotiating with exhaustion. Whatever place they have reached becomes the place where the body claims its overdue sleep.
+
+### Branch 2 — Sleep at home  *(mag 0.22)*
+
+**When:** actor is in `home` location class
+
+**Does:** activity → "sleeping at home"; fulfills `sleep` need, quality `good`, discharge 10
+**Event:** `slept`
+
+> {actor} reaches familiar shelter and lets sleep take them where the room already knows their shape.
+
+### Branch 3 — Sleep in safe lodgings  *(mag 0.28)*
+
+**When:**
+
+- **OR:**
+  - actor is in `lodgings` location class
+  - actor is in `safe_house` location class
+
+**Does:** activity → "sleeping in safe lodgings"; fulfills `sleep` need, quality `adequate`, discharge 7
+**Event:** `slept`
+
+> {actor} finds a place secure enough to become temporary shelter and lets the unfamiliar room do enough of the work.
+
+### Branch 4 — Sleep rough in cover or transit  *(mag 0.36)*
+
+**When:** *(always)*
+
+**Does:** activity → "sleeping rough"; fulfills `sleep` need, quality `rough`, discharge 3
+**Event:** `slept`
+
+> {actor} sleeps in fragments, taking what rest the place allows and waking with some part of the debt still unpaid.
+
+---
+
+## DRINK — priority 24
+
+> The body asks for water; what it accepts shapes the small hour.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has `thirst` debt ≥ 2
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Drink desperately, whatever is available  *(mag 0.56)*
+
+**When:** actor has `thirst` debt ≥ 16
+
+**Does:** activity → "drinking to relieve severe thirst"; fulfills `thirst` need, quality `desperate`, discharge 9999
+**Event:** `drank`
+
+> {actor} drinks with the single-mindedness that severe thirst produces, past concern for source or dignity.
+
+### Branch 2 — Drink in a public room  *(mag 0.22)*
+
+**When:**
+
+- **OR:**
+  - actor is in `tavern` location class
+  - actor is in `teahouse` location class
+  - actor is in `cafe` location class
+  - actor is in `market` location class
+
+**Does:** activity → "drinking in company"; fulfills `thirst` need, quality `social`, discharge 9999
+**Event:** `drank`
+
+> {actor} drinks what the room serves and lets the small ritual of holding a cup make the hour easier.
+
+### Branch 3 — Drink from a public or wild source  *(mag 0.14)*
+
+**When:**
+
+- **OR:**
+  - actor is in `public_water` location class
+  - actor is in `wilderness` location class
+
+**Does:** activity → "drinking from an available source"; fulfills `thirst` need, quality `available_source`, discharge 9999
+**Event:** `drank`
+
+> {actor} drinks from whatever the place provides, and the relief of water makes the rest of the day briefly simpler.
+
+### Branch 4 — Drink routinely from what is at hand  *(mag 0.1)*
+
+**When:** *(always)*
+
+**Does:** activity → "drinking routinely"; fulfills `thirst` need, quality `routine`, discharge 9999
+**Event:** `drank`
+
+> {actor} drinks because the body has been quietly asking, then returns to the shape of the hour.
+
+---
+
+## EAT — priority 22
+
+> The body asks for fuel; what it gets matters more than the cookbook suggests.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has `hunger` debt ≥ 4
+  - **OR:**
+    - time of day is one of [morning, afternoon, evening]
+    - actor has `hunger` debt ≥ 8
+  - **NOT:** actor has `under_active_pursuit` ephemeral
+
+### Branch 1 — Eat ravenously, whatever is available  *(mag 0.62)*
+
+**When:** actor has `hunger` debt ≥ 16
+
+**Does:** activity → "eating to relieve severe hunger"; fulfills `hunger` need, quality `desperate`, discharge 9999
+**Event:** `ate`
+
+> {actor} eats with the inattention of real hunger, relief overtaking any concern about what the food ought to be.
+
+### Branch 2 — Eat at home with household  *(mag 0.22)*
+
+**When:**
+
+- **AND:**
+  - actor is in `home` location class
+  - actor has any of [`married`, `parent`, `extended_household`]
+
+**Does:** activity → "sharing a household meal"; fulfills `hunger` need, quality `household_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} sits down to the meal that home means and lets being-with stand in for being-alone for a while.
+
+### Branch 3 — Eat in a public dining place  *(mag 0.26)*
+
+**When:**
+
+- **OR:**
+  - actor is in `tavern` location class
+  - actor is in `restaurant` location class
+  - actor is in `market` location class
+  - actor is in `cookshop` location class
+
+**Does:** activity → "eating in a public place"; fulfills `hunger` need, quality `public_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} eats something the place can provide and watches the room continue its public life around them.
+
+### Branch 4 — Forage or hunt from the country  *(mag 0.38)*
+
+**When:**
+
+- **AND:**
+  - actor is in `wilderness` location class
+  - actor has any of [`forager`, `hunter`, `survivalist`, `ranger`, `scout`]
+
+**Does:** activity → "foraging for a meal"; fulfills `hunger` need, quality `wild_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} works the country for what the season has put within reach and makes a meal out of survival knowledge.
+
+### Branch 5 — Eat from rations or what was packed  *(mag 0.18)*
+
+**When:** actor has `travel_provisioned` tag
+
+**Does:** activity → "eating travel rations"; fulfills `hunger` need, quality `rations_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} eats what was packed for exactly this kind of hour: practical, portable, and enough.
+
+### Branch 6 — Find something and eat it  *(mag 0.14)*
+
+**When:** *(always)*
+
+**Does:** activity → "eating opportunistically"; fulfills `hunger` need, quality `opportunistic_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} eats what is nearest and workable, attentive mostly to the fact that the body can stop asking for now.
+
+---
+
 ## TEND_CRAFT — priority 15
 
 > A small act of care for the work that defines them.
@@ -913,6 +1117,8 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/024_orrery_commit_pipeline.sql`
 - `migrations/025_orrery_package_library_vocab.py`
 - `migrations/027_orrery_package_library_round2_vocab.py`
+- `migrations/028_orrery_sunhelm_needs.py`
+- `migrations/029_orrery_need_state_init_trigger.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -930,15 +1136,19 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `devout`
 - `domestic_role`
 - `engineer`
+- `extended_household`
 - `fighter`
 - `first_aid_trained`
+- `forager`
 - `ghostprint_active`
 - `hacker`
+- `hunter`
 - `informant_handler`
 - `innkeeper`
 - `keeps_shop`
 - `loremaster`
 - `magical_healing`
+- `married`
 - `martial_artist`
 - `matriarch`
 - `mechanic`
@@ -946,6 +1156,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `merchant`
 - `monk`
 - `musician`
+- `parent`
 - `patriarch`
 - `performer`
 - `ranger`
@@ -956,8 +1167,10 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `seeking_identity`
 - `soldier`
 - `surgical_training`
+- `survivalist`
 - `tinkerer`
 - `trader`
+- `travel_provisioned`
 - `under_active_pursuit`
 - `vendetta_holder`
 - `violent_history`
@@ -968,6 +1181,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 - `bereaved`
 - `captive`
+- `cns_stimulated`
 - `debt_pulse_active`
 - `dying`
 - `grudge_active`
@@ -992,9 +1206,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 ### Event types
 
+- `ate`
 - `compliance_alert`
 - `contact_made`
 - `craft_tended`
+- `drank`
 - `encoded_message`
 - `evade_pursuit`
 - `faction_realignment`
@@ -1009,6 +1225,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `retaliation_attempted`
 - `retaliation_executed`
 - `rival_consulted`
+- `slept`
 - `tended_wound`
 - `threat_issued`
 - `vigil_held`

@@ -20,7 +20,11 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     )
 
     assert "=== ORRERY SCENE PRESSURE ===" in prompt
-    assert "off-screen pressures involving current on-screen characters" in prompt
+    assert (
+        "Storyteller-mediated pressures involving current on-screen characters"
+        in prompt
+    )
+    assert "present-character need pressure" in prompt
     assert "You may adapt, delay, ignore, or incorporate them" in prompt
     assert "Do not let Orrery decide what present characters do" in prompt
     assert "Travel toward the target's last known location: Mara is moving" in prompt
