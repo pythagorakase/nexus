@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, and generated human-readable catalog support in PR #217. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch adds the PR 4 Bleed selector and Storyteller payload surface.
+**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, and Bleed selector/Storyteller integration in PR #219. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch hardens the remaining retrieval-boundary audit around `offscreen_narrations`.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -66,9 +66,13 @@
 - PR #216 adds present-target scene pressure proposals that are Storyteller-facing only and ignored by canonical Orrery commit writers.
 - PR #217 adds generated human-readable catalog support for package authors and reviewers.
 
+### Landed in PR #219
+
+PR #219 implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping only after successful generation, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
+
 ### Current Slice
 
-This branch implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
+This branch closes the lingering retrieval-boundary audit: warm slices and normal MEMNON search must remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
 
 ### Package Author Checkpoint
 
@@ -600,7 +604,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 ### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
 
 - Confirmed the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
-- Still needed before Bleed ships: confirm `query_memory` and `SearchManager` retrieval surfaces never join or union `offscreen_narrations` into warm-slice results; add an integration test asserting the warm slice is disjoint from `offscreen_narrations`. (Note: `memnon.py::get_recent_chunks` at L1486 is already safe — it queries only `narrative_chunks`.)
+- Retrieval-boundary audit in this branch: confirm `query_memory`, `SearchManager`, and warm-slice retrieval surfaces never join or union `offscreen_narrations` into standard narrative context. Explicit read-only SQL access to public Orrery tables remains allowed.
 - Updated `nexus/agents/memnon/memnon.py::execute_readonly_sql` allowed-tables list. Additions: `entities`, `entity_names_v`, `entity_tags_current`, `world_events`, `world_event_entities`, `orrery_resolutions`, `offscreen_narrations`, `event_types`, `tags`. Excluded (internal-only): `orrery_narration_jobs`, `tag_clearance_log`, raw `entity_tags`.
 - Confirmed or created `world_layer_type` via `migrations/023_orrery_schema.py`.
 - Note that `chunk_workflow.py` is *not* on the commit path — it manages downstream embedding state transitions only. Do not hook `CommitOrreryTick` there.
@@ -652,7 +656,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 - Instrumented counters for the Orrery Stage 7 trigger metrics.
 - Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, local-LLM failure, async-worker state transitions.
 
-### PR 4 — Bleed Selector + Storyteller Integration (this branch)
+### PR 4 — Bleed Selector + Storyteller Integration (implemented in PR #219)
 
 - Bleed selector wired into LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); reads `turn_context.bleed_menu` populated by a new selector method invoked at the start of that phase.
 - Typed candidate query over `orrery_resolutions` ⋈ `world_events` ⋈ `offscreen_narrations`.
@@ -724,7 +728,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 Verification should use live NEXUS flows where the feature touches LORE, LOGON, MEMNON, or database state. Pure substrate/package tests remain deterministic unit tests because their purpose is to validate package logic without paying model or API costs.
 
 - **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
-- **Remaining pre-Bleed audit:** Integration test asserting `query_memory` warm-slice is disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from each new public table and cannot select internal queue/raw tag tables.
+- **Retrieval-boundary hardening:** Regression tests assert warm-slice retrieval, text search, and vector-search collection routing remain disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from public Orrery tables and cannot select internal queue/raw tag tables.
 - **PR 2 (#211):** Dry-pass against slot 5 and slot 2; proposal contents inspected; zero writes observed; `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase. Optional full-turn acceptance before PR 3: enable Orrery for a live LORE pass and confirm the storyteller payload remains unaffected while the proposal is attached only to the turn context.
 - **PR 3 (#214):** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
 - **PR 4:** Apt-bleed (ambient peripheral surfaces in the Storyteller payload); null-bleed (no candidates produces empty menu and no local-LLM call); chronology/surfacing boundary (only accepted prior narrated resolutions are eligible); latency-budget overrun produces empty menu and logs loudly.
