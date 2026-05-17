@@ -506,6 +506,23 @@ class Template:
     branches: Tuple[Branch, ...]
     present_target_policy: PresentTargetPolicy = PresentTargetPolicy.OFFSCREEN_ONLY
 
+    def __post_init__(self) -> None:
+        """Validate authoring invariants that affect resolver routing."""
+
+        if self.present_target_policy is not PresentTargetPolicy.STORYTELLER_PRESSURE:
+            return
+
+        missing = [
+            branch.label
+            for branch in self.branches
+            if not branch.scene_pressure_stub
+        ]
+        if missing:
+            raise ValueError(
+                f"Template {self.id!r}: STORYTELLER_PRESSURE branches must set "
+                f"scene_pressure_stub; missing on: {missing}"
+            )
+
 
 @dataclass(frozen=True, slots=True)
 class Resolution:

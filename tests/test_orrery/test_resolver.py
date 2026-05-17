@@ -529,6 +529,47 @@ def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targ
     assert proposal.pressure_count == 0
 
 
+def test_pressure_templates_still_commit_for_offscreen_targets() -> None:
+    """Pressure opt-in is dual-mode: off-screen targets still commit normally."""
+
+    pressure_template = Template(
+        id="dual_mode_pressure",
+        priority=10,
+        blurb="dual-mode policy",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=ALWAYS,
+        branches=(
+            Branch(
+                label="Off-screen action",
+                conditions=ALWAYS,
+                narrative_stub="{actor} acts around {target}.",
+                state_delta={"character.current_activity": "acting off-screen"},
+                scene_pressure_stub="{actor} pressures {target}.",
+            ),
+        ),
+        present_target_policy=PresentTargetPolicy.STORYTELLER_PRESSURE,
+    )
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[{"entity_id": 1}],
+            present_actor_rows=[],
+            actor_target_relationship_rows=[
+                {"source_entity_id": 1, "target_entity_id": 2},
+            ],
+        ),
+        [pressure_template],
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.pressure_count == 0
+    assert proposal.resolutions[0].template_id == "dual_mode_pressure"
+    assert proposal.resolutions[0].state_delta == {
+        "character.current_activity": "acting off-screen"
+    }
+
+
 def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
     """Templates with non-(ACTOR,)/non-(ACTOR,TARGET) slot tuples fail loud."""
 
@@ -600,3 +641,4 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
         "Physically intervene at the target's location"
     )
     assert protect_kin_drafts[0].bindings == {"actor": 1, "target": 2}
+    assert proposal.pressure_count == 0
