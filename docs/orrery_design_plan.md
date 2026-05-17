@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, and Bleed selector/Storyteller integration in PR #219. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch hardens the remaining retrieval-boundary audit around `offscreen_narrations`.
+**Status:** Foundation implemented in PR #210, dry-run resolve in PR #211, commit/promote/narrate/clear in PR #214, expanded package library in PR #212, present-target scene pressure in PR #216, generated human-readable catalog support in PR #217/#218, Bleed selector/Storyteller integration in PR #219, and retrieval-boundary hardening in PR #220. The runtime pipeline remains disabled by default (`orrery.enabled = false`). This branch resolves issue #213 by adding the relationship-valence magnitude read surface and Orrery trust hydration.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -70,9 +70,13 @@
 
 PR #219 implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping only after successful generation, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
 
+### Landed in PR #220
+
+PR #220 closes the retrieval-boundary audit: warm slices and normal MEMNON search remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
+
 ### Current Slice
 
-This branch closes the lingering retrieval-boundary audit: warm slices and normal MEMNON search must remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
+This branch resolves issue #213's consensus Option B: keep `character_relationships.emotional_valence` as the canonical hybrid enum/label, expose `entity_relationships_v.valence_magnitude` as an explicit integer mapping, and hydrate `WorldState.trust` from that read surface.
 
 ### Package Author Checkpoint
 
@@ -604,7 +608,7 @@ Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_t
 ### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
 
 - Confirmed the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
-- Retrieval-boundary audit in this branch: confirm `query_memory`, `SearchManager`, and warm-slice retrieval surfaces never join or union `offscreen_narrations` into standard narrative context. Explicit read-only SQL access to public Orrery tables remains allowed.
+- Retrieval-boundary audit in PR #220: confirm `query_memory`, `SearchManager`, and warm-slice retrieval surfaces never join or union `offscreen_narrations` into standard narrative context. Explicit read-only SQL access to public Orrery tables remains allowed.
 - Updated `nexus/agents/memnon/memnon.py::execute_readonly_sql` allowed-tables list. Additions: `entities`, `entity_names_v`, `entity_tags_current`, `world_events`, `world_event_entities`, `orrery_resolutions`, `offscreen_narrations`, `event_types`, `tags`. Excluded (internal-only): `orrery_narration_jobs`, `tag_clearance_log`, raw `entity_tags`.
 - Confirmed or created `world_layer_type` via `migrations/023_orrery_schema.py`.
 - Note that `chunk_workflow.py` is *not* on the commit path — it manages downstream embedding state transitions only. Do not hook `CommitOrreryTick` there.
