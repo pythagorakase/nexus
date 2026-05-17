@@ -534,6 +534,10 @@ When a tag or event_type is referenced that the registry hasn't seen:
 
 Every template MUST end with an `ALWAYS`-conditioned branch. Validated at template-load time via pytest fixture.
 
+### Gate-Cooldown Coverage Invariant for Templates
+
+If a template package gate includes `since_last_event_at_least(...)` cooldowns, every `event_type` emitted by any branch MUST appear in that gate's cooldown chain. Otherwise one branch can bypass the template's pacing intent by emitting an event the outer gate never checks. Validated by `tests/test_orrery/test_substrate.py::test_gate_cooldown_chain_covers_branch_events`.
+
 ### Sliding-Window Binding Scope
 
 Binding composer filters to recently-relevant entities: (referenced in `chunk_character_references` in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded `world_events` in last N chunks). N config-tunable via `nexus.toml` `[orrery.binding] window_chunks`. Default suggested: 30.

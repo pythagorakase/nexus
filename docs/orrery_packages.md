@@ -155,6 +155,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor and target share `rival` relationship (either direction)
     - trust actor→target < -2
   - ≥ 8 ticks since last `retaliation_attempted` event for actor
+  - ≥ 8 ticks since last `retaliation_executed` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
 
 ### Branch 1 — Strike directly when opportunity opens  *(mag 0.85)*
@@ -222,6 +223,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** target has `under_active_pursuit` ephemeral
   - ≥ 2 ticks since last `tended_wound` event for (actor, target) pair
+  - ≥ 2 ticks since last `wound_healed` event for (actor, target) pair
 
 ### Branch 1 — Channel restorative power through hands and voice  *(mag 0.74)*
 
@@ -483,6 +485,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor has `handler` relationship to target
     - target has `asset` relationship to actor
   - ≥ 4 ticks since last `informant_contact` event for (actor, target) pair
+  - ≥ 4 ticks since last `intel_acquired` event for (actor, target) pair
   - time of day is one of [evening, night]
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `grudge_active` ephemeral
