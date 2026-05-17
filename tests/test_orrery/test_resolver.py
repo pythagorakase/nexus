@@ -318,6 +318,48 @@ def test_hydrate_world_state_populates_trust_from_valence_magnitude() -> None:
     assert state.relationship_types[(2, 1)] == frozenset({"rival"})
 
 
+def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -> None:
+    """Defensively collapse duplicate pair rows without depending on row order."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            relationship_rows=[
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "comrade",
+                    "valence_magnitude": 3,
+                },
+                {
+                    "source_entity_id": 1,
+                    "target_entity_id": 2,
+                    "relationship_type": "enemy",
+                    "valence_magnitude": -4,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "ally",
+                    "valence_magnitude": 3,
+                },
+                {
+                    "source_entity_id": 2,
+                    "target_entity_id": 1,
+                    "relationship_type": "rival",
+                    "valence_magnitude": -3,
+                },
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.trust[(1, 2)] == -4
+    assert state.trust[(2, 1)] == -3
+    assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
+    assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
 @pytest.mark.parametrize(
     ("valence_magnitude", "conditions", "expected_label"),
     [

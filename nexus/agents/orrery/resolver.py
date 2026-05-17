@@ -170,6 +170,16 @@ class OrreryTickProposal:
         )
 
 
+def _should_replace_trust_magnitude(current: Optional[int], candidate: int) -> bool:
+    """Choose a stable representative if a read surface emits duplicate pairs."""
+
+    if current is None:
+        return True
+    if abs(candidate) != abs(current):
+        return abs(candidate) > abs(current)
+    return candidate < current
+
+
 def hydrate_world_state(
     session: Any,
     *,
@@ -257,7 +267,9 @@ def hydrate_world_state(
         key = (row["source_entity_id"], row["target_entity_id"])
         relationship_types.setdefault(key, set()).add(row["relationship_type"])
         if row.get("valence_magnitude") is not None:
-            trust[key] = int(row["valence_magnitude"])
+            valence_magnitude = int(row["valence_magnitude"])
+            if _should_replace_trust_magnitude(trust.get(key), valence_magnitude):
+                trust[key] = valence_magnitude
 
     faction_memberships: dict[int, set[int]] = {}
     for row in session.execute(

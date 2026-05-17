@@ -62,3 +62,6 @@ UNION ALL
     FROM faction_character_relationships fcr
     JOIN factions f ON f.id = fcr.faction_id
     JOIN characters c ON c.id = fcr.character_id;
+
+COMMENT ON COLUMN entity_relationships_v.valence_magnitude IS
+    'Signed integer in -5..+5 derived from character_relationships.emotional_valence; NULL for faction and faction_character scopes.';

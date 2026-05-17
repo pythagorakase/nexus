@@ -26,13 +26,18 @@ def test_discover_migrations_includes_python_and_skips_seed_script(
 def test_relationship_valence_migration_uses_explicit_mapping() -> None:
     """Issue #213's view column uses an explicit enum-to-int contract."""
 
-    migration_sql = Path(
-        "migrations/026_relationship_valence_magnitude.sql"
+    migration_sql = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "026_relationship_valence_magnitude.sql"
     ).read_text()
 
     assert "valence_magnitude" in migration_sql
     assert "SUBSTRING" not in migration_sql.upper()
     assert "CASE cr.emotional_valence::text" in migration_sql
+    assert "COMMENT ON COLUMN entity_relationships_v.valence_magnitude" in (
+        migration_sql
+    )
     for label, magnitude in {
         "+5|devoted": "5",
         "+4|admiring": "4",
