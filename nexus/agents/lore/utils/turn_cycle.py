@@ -27,7 +27,10 @@ try:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-    from nexus.agents.orrery.bleed import select_bleed_menu_async
+    from nexus.agents.orrery.bleed import (
+        record_bleed_offers,
+        select_bleed_menu_async,
+    )
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -45,7 +48,10 @@ except ImportError:
     )
     from nexus.agents.orrery.resolver import resolve_dry_run
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
-    from nexus.agents.orrery.bleed import select_bleed_menu_async
+    from nexus.agents.orrery.bleed import (
+        record_bleed_offers,
+        select_bleed_menu_async,
+    )
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -728,6 +734,9 @@ class TurnCycleManager:
 
         bleed_settings = orrery_settings.get("bleed", {})
         max_candidates = int(bleed_settings.get("max_candidates", 3))
+        candidate_pool_multiplier = int(
+            bleed_settings.get("candidate_pool_multiplier", 4)
+        )
         if max_candidates <= 0:
             turn_context.phase_states["orrery_bleed"] = {
                 "enabled": True,
@@ -743,7 +752,10 @@ class TurnCycleManager:
 
         latency_budget_ms = int(bleed_settings.get("latency_budget_ms", 2000))
         with self.lore.memnon.Session() as session:
-            anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
+            if turn_context.orrery_proposal is not None:
+                anchor_chunk_id = turn_context.orrery_proposal.anchor_chunk_id
+            else:
+                anchor_chunk_id = self._orrery_anchor_chunk_id(session, turn_context)
             if anchor_chunk_id is None:
                 turn_context.phase_states["orrery_bleed"] = {
                     "enabled": True,
@@ -759,6 +771,7 @@ class TurnCycleManager:
                 user_input=turn_context.user_input,
                 warm_slice=turn_context.warm_slice,
                 max_candidates=max_candidates,
+                candidate_pool_multiplier=candidate_pool_multiplier,
                 latency_budget_ms=latency_budget_ms,
             )
 
@@ -769,7 +782,33 @@ class TurnCycleManager:
             "candidate_count": result.candidates_considered,
             "selected_count": len(result.selected),
             "timed_out": result.timed_out,
+            "offers_recorded": 0,
         }
+
+    def record_orrery_bleed_offers(self, turn_context: TurnContext) -> None:
+        """Record Bleed offer bookkeeping after successful generation."""
+
+        if not turn_context.bleed_menu:
+            return
+
+        phase_state = turn_context.phase_states.setdefault("orrery_bleed", {})
+        if phase_state.get("offers_recorded"):
+            return
+
+        anchor_chunk_id = phase_state.get("anchor_chunk_id")
+        if anchor_chunk_id is None:
+            raise RuntimeError("Orrery bleed selected candidates without an anchor")
+        if not self.lore.memnon:
+            raise RuntimeError("Orrery bleed offer recording requires MEMNON")
+
+        with self.lore.memnon.Session() as session:
+            record_bleed_offers(
+                session,
+                turn_context.bleed_menu,
+                anchor_chunk_id=int(anchor_chunk_id),
+            )
+
+        phase_state["offers_recorded"] = len(turn_context.bleed_menu)
 
     async def call_apex_ai(self, turn_context: TurnContext) -> str:
         """
@@ -833,6 +872,8 @@ class TurnCycleManager:
                 "has_state_updates": state_updates is not None,
                 "narrative_length": len(narrative_text),
             }
+
+            self.record_orrery_bleed_offers(turn_context)
 
             return story_response  # Return the full StoryTurnResponse
 

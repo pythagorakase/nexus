@@ -687,3 +687,68 @@ Each query should be a complete question or search phrase."""
         except Exception:
             # Return raw content in a dict-like shape
             return {"answer": raw, "reasoning": "unstructured"}
+
+    async def structured_query_async(
+        self,
+        prompt: str,
+        response_model: Type[BaseModel],
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        system_prompt: Optional[str] = None,
+        timeout: Optional[float] = None,
+    ) -> Union[BaseModel, Dict[str, Any]]:
+        """Query the local LLM through the HTTP API with an async timeout."""
+        import httpx
+
+        request_timeout = timeout if timeout is not None else 60.0
+        schema = response_model.model_json_schema()
+        model_id = self.loaded_model_id or self.model_name
+        prompt_with_schema = (
+            f"{prompt}\n\nReturn only valid JSON matching this schema:\n"
+            f"{json.dumps(schema, sort_keys=True)}"
+        )
+        payload = {
+            "model": model_id,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                    or "You are LORE, a narrative intelligence system.",
+                },
+                {"role": "user", "content": prompt_with_schema},
+            ],
+            "temperature": temperature
+            if temperature is not None
+            else self.llm_config.get("temperature", 0.3),
+            "max_tokens": max_tokens
+            if max_tokens is not None
+            else self.llm_config.get("max_tokens", 1024),
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": schema,
+                },
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=request_timeout) as client:
+                response = await client.post(
+                    f"{self.base_url.rstrip('/')}/chat/completions",
+                    json=payload,
+                )
+                response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise TimeoutError(
+                f"Local structured query exceeded {request_timeout:.3f}s timeout"
+            ) from exc
+
+        data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        if isinstance(content, str):
+            parsed = json.loads(content)
+        else:
+            parsed = content
+        return response_model.model_validate(parsed)

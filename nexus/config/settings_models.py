@@ -291,6 +291,7 @@ class OrreryBleedSettings(BaseModel):
 
     latency_budget_ms: int = Field(default=2000, ge=1)
     max_candidates: int = Field(default=3, ge=0)
+    candidate_pool_multiplier: int = Field(default=4, ge=1)
 
 
 class OrreryPromoteSettings(BaseModel):

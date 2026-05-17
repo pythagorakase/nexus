@@ -134,6 +134,7 @@ async def select_bleed_menu_async(
     user_input: str,
     warm_slice: list[dict[str, Any]],
     max_candidates: int,
+    candidate_pool_multiplier: int,
     latency_budget_ms: int,
 ) -> BleedSelectorResult:
     """Select a spoiler-safe ambient Bleed menu under a hard latency budget."""
@@ -144,7 +145,7 @@ async def select_bleed_menu_async(
     candidate_pool = load_bleed_candidates(
         session,
         anchor_chunk_id=anchor_chunk_id,
-        limit=max(max_candidates * 4, max_candidates),
+        limit=max_candidates * max(1, candidate_pool_multiplier),
     )
     if not candidate_pool:
         return BleedSelectorResult()
@@ -157,17 +158,15 @@ async def select_bleed_menu_async(
     )
 
     try:
-        selected = await asyncio.wait_for(
-            asyncio.to_thread(
-                _select_candidates_sync,
+        async with asyncio.timeout(latency_budget_ms / 1000):
+            selected = await _select_candidates_async(
                 llm_manager,
                 prompt,
                 candidate_pool,
                 max_candidates,
-            ),
-            timeout=latency_budget_ms / 1000,
-        )
-    except asyncio.TimeoutError:
+                latency_budget_ms / 1000,
+            )
+    except (TimeoutError, asyncio.TimeoutError):
         logger.error(
             "Orrery Bleed selector exceeded %sms latency budget",
             latency_budget_ms,
@@ -175,13 +174,6 @@ async def select_bleed_menu_async(
         return BleedSelectorResult(
             candidates_considered=len(candidate_pool),
             timed_out=True,
-        )
-
-    if selected:
-        record_bleed_offers(
-            session,
-            selected,
-            anchor_chunk_id=anchor_chunk_id,
         )
 
     return BleedSelectorResult(
@@ -283,6 +275,8 @@ def _build_bleed_prompt(
             "channel": candidate.channel,
             "summary": candidate.summary,
             "brief": candidate.brief,
+            # Full narration text is only for selector-side spoiler judgment.
+            # Storyteller injection must use BleedCandidate.to_prompt_dict().
             "text": candidate.text,
             "magnitude": candidate.magnitude,
         }
@@ -303,18 +297,20 @@ def _build_bleed_prompt(
     )
 
 
-def _select_candidates_sync(
+async def _select_candidates_async(
     llm_manager: Any,
     prompt: str,
     candidates: list[BleedCandidate],
     max_candidates: int,
+    timeout_seconds: float,
 ) -> list[BleedCandidate]:
-    raw = llm_manager.structured_query(
+    raw = await llm_manager.structured_query_async(
         prompt,
         BleedSelection,
         temperature=0.1,
         max_tokens=512,
         system_prompt=BLEED_SYSTEM_PROMPT,
+        timeout=timeout_seconds,
     )
     try:
         selection = (

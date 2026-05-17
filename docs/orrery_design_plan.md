@@ -456,7 +456,7 @@ CREATE TABLE offscreen_narrations (
 
 **Hook point.** Bleed runs at the start of LORE Phase 5 (`assemble_context_payload`, `nexus/agents/lore/utils/turn_cycle.py:489`). Its output populates `turn_context.bleed_menu`, which `assemble_context_payload` then reads when building the payload. Concretely, the Bleed entry point is a new method on `TurnCycleManager` invoked from `assemble_context_payload` before payload assembly proper begins.
 
-**Latency budget: hard 2-second cap, enforced via `asyncio.wait_for`.** If the local-LLM call exceeds budget, the bleed menu for this turn is empty and the overrun logged loudly. Empty bleed is a valid outcome.
+**Latency budget: hard 2-second cap, enforced via an async local-LLM request timeout.** If the local-LLM call exceeds budget, the bleed menu for this turn is empty and the overrun logged loudly. Empty bleed is a valid outcome.
 
 **Candidate query is typed**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, surfacing history. The local LLM call uses `LocalLLMManager.structured_query(prompt, response_model)` (`nexus/agents/lore/utils/local_llm.py:642`) — signature is `(prompt, response_model, *, temperature=None, max_tokens=None, system_prompt=None)`. The existing helper handles SDK-vs-fallback parsing; no new structured-output plumbing required.
 
@@ -541,6 +541,7 @@ model_ref = "@anthropic.default"                        # resolved via [global.m
 [orrery.bleed]
 latency_budget_ms = 2000
 max_candidates = 3
+candidate_pool_multiplier = 4
 
 [orrery.promote]
 provider = "local"
@@ -735,7 +736,7 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 1. **Hook seams corrected.** `CommitOrreryTick` hooks the *transaction-wrapping* functions (`commit_incubator_to_database` L320 async; `commit_incubator_to_database_sync` L233 sync) at Step 8.5, not the `apply_state_updates*` workers at L223/L451.
 2. **Sync path called out as production.** Only `narrative.py:407` calls a commit function in production code, and it calls the sync variant. Async kept in parity for tests.
 3. **`chunk_workflow.py` removed from PR 0 audit.** It is not on the commit path; replaced with an audit of `narrative.py::_approve_narrative_impl` (L387).
-4. **Bleed hook point named.** Runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); 2s budget enforced via `asyncio.wait_for`.
+4. **Bleed hook point named.** Runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); 2s budget enforced by the async local-LLM request timeout.
 5. **Pipeline stages renamed.** "Phase N" reserved for LORE turn cycle; Orrery pipeline uses "Stage N". Deferred "Phase 7" → "Orrery Stage 7".
 6. **`TurnContext` extension spelled out.** Two new dataclass fields + one new `TurnPhase` enum value.
 7. **`world_layer_type` precondition.** Postgres ENUM not in tracked migrations; PR 0 confirms or PR 1 declares.

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
-import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -71,7 +72,7 @@ class FakeLLM:
         self.selection = selection
         self.prompts = []
 
-    def structured_query(self, prompt, response_model, **_kwargs):
+    async def structured_query_async(self, prompt, response_model, **_kwargs):
         self.prompts.append((prompt, response_model))
         return self.selection
 
@@ -79,9 +80,17 @@ class FakeLLM:
 class SlowLLM(FakeLLM):
     """Local LLM stand-in that exceeds the latency budget."""
 
-    def structured_query(self, prompt, response_model, **kwargs):
-        time.sleep(0.05)
-        return super().structured_query(prompt, response_model, **kwargs)
+    def __init__(self, selection):
+        super().__init__(selection)
+        self.cancelled = False
+
+    async def structured_query_async(self, prompt, response_model, **kwargs):
+        try:
+            await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return await super().structured_query_async(prompt, response_model, **kwargs)
 
 
 class FakeMemnon:
@@ -94,15 +103,43 @@ class FakeMemnon:
         return self.session
 
 
+class FakeStoryResponse:
+    """Minimal structured response stand-in for LOGON."""
+
+    narrative = "Rain ticks against the glass."
+    chunk_metadata = None
+    referenced_entities = None
+    state_updates = None
+
+
+class FakeLogon:
+    """LOGON stand-in returning a successful structured narrative."""
+
+    async def generate_narrative_async(self, _payload):
+        return FakeStoryResponse()
+
+
+class FailingLogon:
+    """LOGON stand-in that raises before a response is surfaced."""
+
+    async def generate_narrative_async(self, _payload):
+        raise RuntimeError("generation failed")
+
+
 class FakeLore:
     """Minimal LORE stand-in for TurnCycleManager tests."""
 
     token_manager = None
+    enable_logon = True
 
-    def __init__(self, settings, session, llm_manager):
+    def __init__(self, settings, session, llm_manager, logon=None):
         self.settings = settings
         self.memnon = FakeMemnon(session)
         self.llm_manager = llm_manager
+        self.logon = logon or FakeLogon()
+
+    def ensure_logon(self):
+        return None
 
 
 def _candidate_row():
@@ -132,6 +169,7 @@ def _settings():
             "bleed": {
                 "latency_budget_ms": 2000,
                 "max_candidates": 3,
+                "candidate_pool_multiplier": 4,
             },
         }
     }
@@ -154,8 +192,8 @@ def test_load_bleed_candidates_coerces_descriptor() -> None:
 
 
 @pytest.mark.asyncio
-async def test_select_bleed_menu_records_selected_offers() -> None:
-    """Selected ambient candidates update surfacing bookkeeping."""
+async def test_select_bleed_menu_returns_selected_without_recording_offers() -> None:
+    """Selection is pure; offer bookkeeping waits until generation succeeds."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
     llm = FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt"))
@@ -167,19 +205,16 @@ async def test_select_bleed_menu_records_selected_offers() -> None:
         user_input="Continue.",
         warm_slice=[{"text": "Rain ticks against the transit glass."}],
         max_candidates=3,
+        candidate_pool_multiplier=4,
         latency_budget_ms=2000,
-    )
-
-    update_params = next(
-        params
-        for sql, params in session.executed
-        if "/* orrery:record_bleed_offers */" in sql
     )
 
     assert result.candidates_considered == 1
     assert result.selected[0].resolution_id == 10
-    assert session.commits == 1
-    assert update_params["resolution_ids"] == [10]
+    assert session.commits == 0
+    assert not any(
+        "/* orrery:record_bleed_offers */" in sql for sql, _ in session.executed
+    )
 
 
 @pytest.mark.asyncio
@@ -196,6 +231,7 @@ async def test_select_bleed_menu_returns_empty_without_candidates() -> None:
         user_input="Continue.",
         warm_slice=[],
         max_candidates=3,
+        candidate_pool_multiplier=4,
         latency_budget_ms=2000,
     )
 
@@ -210,19 +246,43 @@ async def test_select_bleed_menu_timeout_returns_empty() -> None:
     """Latency overruns produce an empty menu and no offer bookkeeping."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
+    llm = SlowLLM(BleedSelection(selected_resolution_ids=[10]))
 
     result = await select_bleed_menu_async(
         session,
-        llm_manager=SlowLLM(BleedSelection(selected_resolution_ids=[10])),
+        llm_manager=llm,
         anchor_chunk_id=100,
         user_input="Continue.",
         warm_slice=[],
         max_candidates=3,
+        candidate_pool_multiplier=4,
         latency_budget_ms=1,
     )
 
     assert result.timed_out is True
     assert result.selected == []
+    assert llm.cancelled is True
+    assert session.commits == 0
+
+
+@pytest.mark.asyncio
+async def test_select_bleed_menu_rejects_unknown_resolution_ids() -> None:
+    """Hallucinated structured IDs fail loudly instead of silently disappearing."""
+
+    session = FakeSession(candidate_rows=[_candidate_row()])
+
+    with pytest.raises(ValueError, match="unknown resolutions"):
+        await select_bleed_menu_async(
+            session,
+            llm_manager=FakeLLM(BleedSelection(selected_resolution_ids=[9999])),
+            anchor_chunk_id=100,
+            user_input="Continue.",
+            warm_slice=[],
+            max_candidates=3,
+            candidate_pool_multiplier=4,
+            latency_budget_ms=2000,
+        )
+
     assert session.commits == 0
 
 
@@ -250,4 +310,99 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
     assert context.phase_states["orrery_bleed"]["selected_count"] == 1
     assert context.context_payload["orrery_bleed_menu"][0]["summary"] == (
         "street cameras briefly lose Mara"
+    )
+
+
+@pytest.mark.asyncio
+async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
+    """Bleed uses the existing resolve anchor instead of recomputing max chunk."""
+
+    session = FakeSession(candidate_rows=[_candidate_row()])
+    manager = TurnCycleManager(
+        FakeLore(
+            _settings(),
+            session,
+            FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt")),
+        )
+    )
+    context = TurnContext(
+        turn_id="t1",
+        user_input="Continue.",
+        start_time=0,
+        warm_slice=[],
+    )
+    context.orrery_proposal = SimpleNamespace(anchor_chunk_id=77, pressure_count=0)
+
+    await manager.assemble_context_payload(context)
+
+    candidate_params = next(
+        params
+        for sql, params in session.executed
+        if "/* orrery:bleed_candidates */" in sql
+    )
+    assert candidate_params["anchor_chunk_id"] == 77
+    assert not any("SELECT max(id) AS max_id" in sql for sql, _ in session.executed)
+
+
+@pytest.mark.asyncio
+async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> None:
+    """Surfacing bookkeeping is written only after LOGON returns a response."""
+
+    session = FakeSession()
+    manager = TurnCycleManager(
+        FakeLore(_settings(), session, FakeLLM(BleedSelection()), logon=FakeLogon())
+    )
+    context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
+    context.context_payload = {"user_input": "Continue."}
+    context.bleed_menu = load_bleed_candidates(
+        FakeSession(candidate_rows=[_candidate_row()]),
+        anchor_chunk_id=100,
+        limit=1,
+    )
+    context.phase_states["orrery_bleed"] = {
+        "anchor_chunk_id": 100,
+        "offers_recorded": 0,
+    }
+
+    response = await manager.call_apex_ai(context)
+    update_params = next(
+        params
+        for sql, params in session.executed
+        if "/* orrery:record_bleed_offers */" in sql
+    )
+
+    assert response.narrative == "Rain ticks against the glass."
+    assert session.commits == 1
+    assert update_params["resolution_ids"] == [10]
+    assert context.phase_states["orrery_bleed"]["offers_recorded"] == 1
+
+
+@pytest.mark.asyncio
+async def test_call_apex_ai_does_not_record_bleed_offers_on_generation_failure() -> (
+    None
+):
+    """Failed LOGON generation does not consume a Bleed opportunity."""
+
+    session = FakeSession()
+    manager = TurnCycleManager(
+        FakeLore(_settings(), session, FakeLLM(BleedSelection()), logon=FailingLogon())
+    )
+    context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
+    context.context_payload = {"user_input": "Continue."}
+    context.bleed_menu = load_bleed_candidates(
+        FakeSession(candidate_rows=[_candidate_row()]),
+        anchor_chunk_id=100,
+        limit=1,
+    )
+    context.phase_states["orrery_bleed"] = {
+        "anchor_chunk_id": 100,
+        "offers_recorded": 0,
+    }
+
+    with pytest.raises(RuntimeError, match="generation failed"):
+        await manager.call_apex_ai(context)
+
+    assert session.commits == 0
+    assert not any(
+        "/* orrery:record_bleed_offers */" in sql for sql, _ in session.executed
     )
