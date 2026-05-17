@@ -1,11 +1,15 @@
 """Tests for the Orrery pure-Python behavior substrate."""
 
+import re
+from typing import Any
+
 import pytest
 
 from nexus.agents.orrery.demo import run_preset
 from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
+    CompoundCondition,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -21,10 +25,51 @@ from nexus.agents.orrery.substrate import (
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
+_SINCE_LAST_EVENT_RE = re.compile(r"since_last_event_at_least\(([^,()]+),")
+
+
+def _collect_since_last_event_types(condition: Any) -> set[str]:
+    """Walk a condition tree and collect package-gate cooldown event types."""
+
+    if isinstance(condition, CompoundCondition):
+        event_types: set[str] = set()
+        for child in condition.children:
+            event_types.update(_collect_since_last_event_types(child))
+        return event_types
+
+    match = _SINCE_LAST_EVENT_RE.search(getattr(condition, "__name__", ""))
+    if not match:
+        return set()
+    return {match.group(1)}
+
+
 def test_builtin_templates_have_always_fallbacks() -> None:
     """Built-in templates must end in a deterministic fallback branch."""
 
     validate_always_fallbacks(BUILTIN_TEMPLATES)
+
+
+def test_gate_cooldown_chain_covers_branch_events() -> None:
+    """Template-level cooldown gates must cover every branch event type."""
+
+    for template in BUILTIN_TEMPLATES:
+        branch_event_types = {
+            branch.event_type for branch in template.branches if branch.event_type
+        }
+        gate_cooldown_event_types = _collect_since_last_event_types(
+            template.package_gate
+        )
+        if not gate_cooldown_event_types:
+            continue
+
+        missing = branch_event_types - gate_cooldown_event_types
+
+        assert not missing, (
+            f"Template {template.id}: branches emit {sorted(missing)} but "
+            "the gate doesn't include them in any "
+            "since_last_event_at_least(...) cooldown. This lets those "
+            "branches bypass the template's pacing intent."
+        )
 
 
 def test_missing_always_fallback_is_rejected() -> None:

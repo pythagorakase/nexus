@@ -265,6 +265,9 @@ EXTRACT_VENGEANCE = Template(
     # grudge has a refractory period after any attempt regardless of
     # target — the actor needs to "calm down," not just back off a
     # specific target.
+    #
+    # Gate must cover both emitted retaliation events; otherwise a direct
+    # execution branch can bypass the attempted-retaliation cooldown.
     package_gate=AND(
         has_ephemeral("grudge_active"),
         OR(
@@ -273,6 +276,7 @@ EXTRACT_VENGEANCE = Template(
             trust_below(-2),
         ),
         since_last_event_at_least("retaliation_attempted", minimum_ticks=8),
+        since_last_event_at_least("retaliation_executed", minimum_ticks=8),
         NOT(has_ephemeral("under_active_pursuit")),
     ),
     branches=(
@@ -487,6 +491,9 @@ CULTIVATE_INFORMANT = Template(
     # Cooldowns here are per-(actor, target) via target_slot=: handler A
     # contacting informant B must not block A from contacting informant C.
     # Contrast with EXTRACT_VENGEANCE's actor-global retaliation cooldown.
+    #
+    # Gate must cover both emitted contact events: material intel and routine
+    # contact are different event types, but both should pace this package.
     package_gate=AND(
         has_tag("informant_handler"),
         OR(
@@ -495,6 +502,11 @@ CULTIVATE_INFORMANT = Template(
         ),
         since_last_event_at_least(
             "informant_contact",
+            minimum_ticks=4,
+            target_slot=Slot.TARGET,
+        ),
+        since_last_event_at_least(
+            "intel_acquired",
             minimum_ticks=4,
             target_slot=Slot.TARGET,
         ),
@@ -630,6 +642,8 @@ TEND_WOUNDED = Template(
     priority=88,
     blurb="A wounded body pulls the actor toward the small work of mending.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
+    # Gate must cover both emitted care events: healing the wound is higher
+    # impact than tending it, but both should reset the package's cadence.
     package_gate=AND(
         has_ephemeral("wounded", slot=Slot.TARGET),
         co_located(Slot.ACTOR, Slot.TARGET),
@@ -637,6 +651,9 @@ TEND_WOUNDED = Template(
         NOT(has_ephemeral("under_active_pursuit", slot=Slot.TARGET)),
         since_last_event_at_least(
             "tended_wound", minimum_ticks=2, target_slot=Slot.TARGET
+        ),
+        since_last_event_at_least(
+            "wound_healed", minimum_ticks=2, target_slot=Slot.TARGET
         ),
     ),
     branches=(
