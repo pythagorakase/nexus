@@ -52,3 +52,17 @@ def test_relationship_valence_migration_uses_explicit_mapping() -> None:
         "-5|hateful": "-5",
     }.items():
         assert f"WHEN '{label}' THEN {magnitude}" in migration_sql
+
+
+def test_place_affordance_migration_corrects_category_conflicts() -> None:
+    """Place affordance vocabulary must not silently keep wrong categories."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "030_orrery_place_affordance_vocab.py"
+    ).read_text()
+
+    assert "ON CONFLICT (tag) DO UPDATE SET" in migration_source
+    assert "category = EXCLUDED.category" in migration_source
+    assert "category <> 'place_affordance'" in migration_source
