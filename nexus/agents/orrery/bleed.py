@@ -48,7 +48,6 @@ class BleedSelectorResult(BaseModel):
 
     candidates_considered: int = 0
     selected: list[BleedCandidate] = Field(default_factory=list)
-    timed_out: bool = False
 
 
 def load_bleed_candidates(
@@ -110,12 +109,11 @@ def load_bleed_candidates(
     return [_candidate_from_row(row) for row in rows]
 
 
-async def select_bleed_menu_async(
+def select_bleed_menu(
     session: Any,
     *,
     anchor_chunk_id: int,
     max_candidates: int,
-    candidate_pool_multiplier: int,
 ) -> BleedSelectorResult:
     """Select a deterministic ambient Bleed menu from eligible candidates."""
 
@@ -125,7 +123,7 @@ async def select_bleed_menu_async(
     candidate_pool = load_bleed_candidates(
         session,
         anchor_chunk_id=anchor_chunk_id,
-        limit=max_candidates * max(1, candidate_pool_multiplier),
+        limit=max_candidates,
     )
     if not candidate_pool:
         return BleedSelectorResult()

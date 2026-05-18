@@ -1,6 +1,7 @@
 """Tests for Orrery configuration loading."""
 
 from nexus.config import load_settings
+from nexus.config.settings_models import OrreryBleedSettings
 
 
 def test_orrery_settings_resolve_model_reference() -> None:
@@ -13,7 +14,6 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.binding.window_chunks == 30
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
-    assert settings.orrery.bleed.candidate_pool_multiplier == 4
     assert settings.orrery.promote.provider == "local"
     assert settings.orrery.sunhelm.accrual_rates == {
         "sleep": 1.0,
@@ -33,3 +33,17 @@ def test_orrery_settings_resolve_model_reference() -> None:
         "intimacy": 16,
     }
     assert settings.orrery.sunhelm.pressure.min_severity_level == 2
+
+
+def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:
+    """Old Bleed config keys should still validate but stay out of dumps."""
+
+    settings = OrreryBleedSettings(
+        latency_budget_ms=2000,
+        candidate_pool_multiplier=4,
+    )
+
+    assert settings.max_candidates == 3
+    dumped = settings.model_dump()
+    assert "latency_budget_ms" not in dumped
+    assert "candidate_pool_multiplier" not in dumped

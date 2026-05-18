@@ -29,7 +29,7 @@ try:
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
-        select_bleed_menu_async,
+        select_bleed_menu,
     )
     from nexus.config.settings_models import LORERetrievalSettings
     from nexus.util.authorial_directives import normalize_authorial_directives
@@ -52,7 +52,7 @@ except ImportError:
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
-        select_bleed_menu_async,
+        select_bleed_menu,
     )
     from nexus.config.settings_models import LORERetrievalSettings
     from nexus.util.authorial_directives import normalize_authorial_directives
@@ -822,9 +822,6 @@ class TurnCycleManager:
 
         bleed_settings = orrery_settings.get("bleed", {})
         max_candidates = int(bleed_settings.get("max_candidates", 3))
-        candidate_pool_multiplier = int(
-            bleed_settings.get("candidate_pool_multiplier", 4)
-        )
         if max_candidates <= 0:
             turn_context.phase_states["orrery_bleed"] = {
                 "enabled": True,
@@ -849,11 +846,10 @@ class TurnCycleManager:
                 }
                 return
 
-            result = await select_bleed_menu_async(
+            result = select_bleed_menu(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
                 max_candidates=max_candidates,
-                candidate_pool_multiplier=candidate_pool_multiplier,
             )
 
         turn_context.bleed_menu = result.selected
@@ -862,7 +858,6 @@ class TurnCycleManager:
             "anchor_chunk_id": anchor_chunk_id,
             "candidate_count": result.candidates_considered,
             "selected_count": len(result.selected),
-            "timed_out": result.timed_out,
             "offers_recorded": 0,
         }
 

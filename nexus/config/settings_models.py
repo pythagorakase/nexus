@@ -315,8 +315,19 @@ class OrreryBleedSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    latency_budget_ms: Optional[int] = Field(
+        default=None,
+        ge=1,
+        exclude=True,
+        description="Deprecated and ignored; Bleed selection is deterministic.",
+    )
+    candidate_pool_multiplier: Optional[int] = Field(
+        default=None,
+        ge=1,
+        exclude=True,
+        description="Deprecated and ignored; Bleed fetches max_candidates.",
+    )
     max_candidates: int = Field(default=3, ge=0)
-    candidate_pool_multiplier: int = Field(default=4, ge=1)
 
 
 class OrreryPromoteSettings(BaseModel):

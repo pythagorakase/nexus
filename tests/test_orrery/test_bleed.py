@@ -11,7 +11,7 @@ from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.bleed import (
     load_bleed_candidates,
-    select_bleed_menu_async,
+    select_bleed_menu,
 )
 
 
@@ -52,7 +52,7 @@ class FakeSession:
         if "/* orrery:bleed_candidates */" in sql:
             assert "r.tick_chunk_id <= :anchor_chunk_id" in sql
             assert "r.offer_count < 3" in sql
-            return FakeResult(self.candidate_rows)
+            return FakeResult(self.candidate_rows[: params["limit"]])
         if "/* orrery:record_bleed_offers */" in sql:
             return FakeResult([])
         if "SELECT max(id) AS max_id" in sql:
@@ -111,9 +111,6 @@ class FakeLore:
     def ensure_logon(self):
         return None
 
-    def _ensure_local_llm_manager(self):
-        raise AssertionError("Orrery Bleed must not initialize a local LLM")
-
 
 def _candidate_row():
     return {
@@ -148,7 +145,6 @@ def _settings():
             "enabled": True,
             "bleed": {
                 "max_candidates": 3,
-                "candidate_pool_multiplier": 4,
             },
         }
     }
@@ -170,19 +166,15 @@ def test_load_bleed_candidates_coerces_descriptor() -> None:
     assert candidates[0].magnitude == 0.72
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_returns_top_candidate_without_recording_offers() -> (
-    None
-):
+def test_select_bleed_menu_returns_top_candidate_without_recording_offers() -> None:
     """Selection is pure; offer bookkeeping waits until generation succeeds."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
 
-    result = await select_bleed_menu_async(
+    result = select_bleed_menu(
         session,
         anchor_chunk_id=100,
         max_candidates=3,
-        candidate_pool_multiplier=4,
     )
 
     assert result.candidates_considered == 1
@@ -193,17 +185,15 @@ async def test_select_bleed_menu_returns_top_candidate_without_recording_offers(
     )
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_returns_empty_without_candidates() -> None:
+def test_select_bleed_menu_returns_empty_without_candidates() -> None:
     """No candidates means no bookkeeping writes."""
 
     session = FakeSession(candidate_rows=[])
 
-    result = await select_bleed_menu_async(
+    result = select_bleed_menu(
         session,
         anchor_chunk_id=100,
         max_candidates=3,
-        candidate_pool_multiplier=4,
     )
 
     assert result.candidates_considered == 0
@@ -211,8 +201,7 @@ async def test_select_bleed_menu_returns_empty_without_candidates() -> None:
     assert session.commits == 0
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_caps_deterministic_selection() -> None:
+def test_select_bleed_menu_caps_deterministic_selection() -> None:
     """Deterministic Bleed preserves SQL ordering and max-candidate caps."""
 
     session = FakeSession(
@@ -222,15 +211,13 @@ async def test_select_bleed_menu_caps_deterministic_selection() -> None:
         ]
     )
 
-    result = await select_bleed_menu_async(
+    result = select_bleed_menu(
         session,
         anchor_chunk_id=100,
         max_candidates=1,
-        candidate_pool_multiplier=4,
     )
 
-    assert result.timed_out is False
-    assert result.candidates_considered == 2
+    assert result.candidates_considered == 1
     assert [candidate.resolution_id for candidate in result.selected] == [10]
     assert session.commits == 0
 

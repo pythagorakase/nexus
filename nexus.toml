@@ -177,7 +177,6 @@ model_ref = "@anthropic.default"
 
 [orrery.bleed]
 max_candidates = 3
-candidate_pool_multiplier = 4
 
 [orrery.promote]
 provider = "local"

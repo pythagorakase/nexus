@@ -495,6 +495,8 @@ CREATE TABLE offscreen_narrations (
 
 **No inference budget.** Bleed no longer makes a storyteller-time model call; empty bleed remains a valid outcome when no eligible narration exists.
 
+Older configs may still include `[orrery.bleed] latency_budget_ms` or `candidate_pool_multiplier`; the settings model accepts those keys as deprecated/ignored so existing slots keep booting.
+
 **Candidate query is typed**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, and surfacing history. Selection is deterministic from the SQL ordering, capped by `[orrery.bleed] max_candidates`; Storyteller remains free to adapt, delay, or ignore the offered peripherals.
 
 **Surfacing bookkeeping** prevents nag (Codex): `last_offered_chunk_id`, `offer_count`, `first_surfaced_chunk_id` (on `orrery_resolutions`). Distinguish "offered to storyteller" from "actually surfaced" — only the latter creates a visible-world surfacing record.
@@ -581,7 +583,6 @@ model_ref = "@anthropic.default"                        # resolved via [global.m
 
 [orrery.bleed]
 max_candidates = 3
-candidate_pool_multiplier = 4
 
 [orrery.promote]
 provider = "local"
