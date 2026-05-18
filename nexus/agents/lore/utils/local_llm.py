@@ -43,6 +43,7 @@ _META_QUERY_PREFIXES = (
     "key entities",
     "let's ",
     "locations:",
+    "make sure",
     "no numbering",
     "output exactly",
     "the user wants",
@@ -55,6 +56,8 @@ _META_QUERY_FRAGMENTS = (
     "complete question or search phrase",
     "generate retrieval queries",
     "generate queries",
+    "no bullet",
+    "query phrase",
     "one per line",
     "retrieval queries to search",
 )
@@ -63,6 +66,7 @@ _GENERIC_RETRIEVAL_QUERIES = {
     "character relationships and interactions",
     "relevant past events involving these characters",
 }
+_MIN_RETRIEVAL_QUERIES = 3
 
 
 # Pydantic models for structured responses
@@ -180,6 +184,10 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
         return None
     if len(re.findall(r"[A-Za-z0-9]+", cleaned)) < 3:
         return None
+    if cleaned.count('"') % 2 == 1:
+        return None
+    if cleaned.count('"') >= 4:
+        return None
 
     return cleaned
 
@@ -205,6 +213,11 @@ def _sanitize_retrieval_queries(queries: List[Any], limit: int = 5) -> List[str]
             break
 
     return valid_queries
+
+
+def _has_complete_retrieval_query_set(queries: List[str]) -> bool:
+    """Return whether a generated query set is complete enough for deep search."""
+    return len(queries) >= _MIN_RETRIEVAL_QUERIES
 
 
 class LocalLLMManager:
@@ -674,14 +687,14 @@ Each query should be a complete search phrase that captures what information you
 
                 valid_queries = _sanitize_retrieval_queries(queries)
 
-                if valid_queries:
+                if _has_complete_retrieval_query_set(valid_queries):
                     logger.info(
                         f"Generated {len(valid_queries)} valid retrieval queries via structured output"
                     )
                     return valid_queries
                 else:
                     logger.warning(
-                        "Structured output returned only empty/invalid queries, falling back to text parsing"
+                        "Structured output returned fewer than 3 valid queries, falling back to text parsing"
                     )
                     raise ValueError("Invalid structured output")
 
