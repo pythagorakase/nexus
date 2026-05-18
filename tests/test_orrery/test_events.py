@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import pytest
 
+import nexus.agents.orrery.events as orrery_events
 from nexus.agents.orrery.events import commit_orrery_tick_sync
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
@@ -34,6 +36,8 @@ class RecordingCursor:
         active_destination=42,
         travel_progress=0.4,
         geodesic_distance_m=10000,
+        route_graph_nodes=None,
+        route_graph_edges=None,
         authored_route_edges=None,
         travel_state_update_rowcount=1,
     ):
@@ -48,6 +52,8 @@ class RecordingCursor:
         self.active_destination = active_destination
         self.travel_progress = travel_progress
         self.geodesic_distance_m = geodesic_distance_m
+        self.route_graph_nodes = list(route_graph_nodes or [])
+        self.route_graph_edges = list(route_graph_edges or [])
         self.authored_route_edges = list(authored_route_edges or [])
         self.travel_state_update_rowcount = travel_state_update_rowcount
         self.executed = []
@@ -136,6 +142,63 @@ class RecordingCursor:
             and "status = 'in_transit'" in normalized
         ):
             self._fetchone = {"progress_ratio": self.travel_progress}
+        elif "FROM orrery_place_route_graph_nodes" in normalized:
+            place_id, graph_key, travel_mode, _order_travel_mode = params
+            candidates = []
+            for node in self.route_graph_nodes:
+                if node.get("place_id") != place_id:
+                    continue
+                if node.get("graph_key", "default") != graph_key:
+                    continue
+                node_travel_mode = node.get("travel_mode", "mixed")
+                if node_travel_mode not in {travel_mode, "mixed"}:
+                    continue
+                candidates.append(
+                    (
+                        node_travel_mode != travel_mode,
+                        node.get("distance_m") is None,
+                        node.get("distance_m") or 0,
+                        node.get("node_id"),
+                        node,
+                    )
+                )
+            if candidates:
+                _is_mixed, _distance_null, _distance, _node_id, node = sorted(
+                    candidates
+                )[0]
+                self._fetchone = {
+                    "node_id": node["node_id"],
+                    "travel_mode": node.get("travel_mode", "mixed"),
+                    "distance_m": node.get("distance_m"),
+                    "source": node.get("source"),
+                    "metadata": node.get("metadata", {}),
+                    "node_key": node.get("node_key", str(node["node_id"])),
+                    "node_geojson": node.get("node_geojson"),
+                }
+        elif "FROM orrery_route_graph_edges" in normalized:
+            graph_key, travel_mode, *limit_params = params
+            edge_limit = limit_params[0] if limit_params else None
+            self._fetchall = []
+            for edge in self.route_graph_edges:
+                if edge.get("graph_key", "default") != graph_key:
+                    continue
+                edge_travel_mode = edge.get("travel_mode", "mixed")
+                if edge_travel_mode not in {travel_mode, "mixed"}:
+                    continue
+                self._fetchall.append(
+                    {
+                        "id": edge.get("id", 100),
+                        "from_node_id": edge["from_node_id"],
+                        "to_node_id": edge["to_node_id"],
+                        "travel_mode": edge_travel_mode,
+                        "risk": edge.get("risk", "low"),
+                        "bidirectional": edge.get("bidirectional", True),
+                        "distance_m": edge["distance_m"],
+                        "duration_minutes": edge.get("duration_minutes"),
+                    }
+                )
+            if edge_limit is not None:
+                self._fetchall = self._fetchall[:edge_limit]
         elif "FROM orrery_travel_edges" in normalized:
             (
                 origin_place_id,
@@ -286,6 +349,7 @@ def _travel_start_proposal(
     destination_place_id: int = 42,
     mode: str = "vehicle",
     risk: str | None = None,
+    route_graph: str | None = None,
 ) -> OrreryTickProposal:
     travel_start = {
         "destination_place_id": destination_place_id,
@@ -294,6 +358,8 @@ def _travel_start_proposal(
     }
     if risk is not None:
         travel_start["risk"] = risk
+    if route_graph is not None:
+        travel_start["route_graph"] = route_graph
     draft = OrreryResolutionDraft(
         template_id="travel",
         priority=21,
@@ -318,6 +384,31 @@ def _travel_start_proposal(
         resolutions=(draft,),
         generated_at="2073-10-31T18:00:00+00:00",
     )
+
+
+def _inserted_travel_params(cursor: RecordingCursor) -> tuple[Any, ...]:
+    return next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO character_travel_states" in sql
+    )
+
+
+def _travel_insert_row(cursor: RecordingCursor) -> dict[str, Any]:
+    params = _inserted_travel_params(cursor)
+    return {
+        "character_entity_id": params[0],
+        "anchor_place_id": params[1],
+        "origin_place_id": params[2],
+        "destination_place_id": params[3],
+        "route_method": params[4],
+        "travel_mode": params[5],
+        "risk": params[6],
+        "progress_ratio": params[7],
+        "estimated_distance_m": params[8],
+        "estimated_duration_minutes": params[9],
+        "route_metadata": json.loads(params[-1]),
+    }
 
 
 def test_proposal_round_trips_through_json_shape() -> None:
@@ -612,6 +703,273 @@ def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> No
     assert route_metadata["destination_place_id"] == 42
     assert route_metadata["travel_mode"] == "vehicle"
     assert route_metadata["detour_factor"] > 1
+
+
+def test_commit_orrery_tick_prefers_osm_graph_route() -> None:
+    """Local graph routing wins before authored edges or coarse estimates."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        geodesic_distance_m=999999,
+        route_graph_nodes=[
+            {
+                "place_id": 99,
+                "node_id": 1001,
+                "travel_mode": "vehicle",
+                "distance_m": 12,
+                "node_key": "origin-road",
+                "node_geojson": '{"type":"Point","coordinates":[0,0]}',
+            },
+            {
+                "place_id": 42,
+                "node_id": 1003,
+                "travel_mode": "vehicle",
+                "distance_m": 18,
+                "node_key": "destination-road",
+            },
+        ],
+        route_graph_edges=[
+            {
+                "id": 501,
+                "from_node_id": 1001,
+                "to_node_id": 1002,
+                "travel_mode": "vehicle",
+                "distance_m": 3000,
+                "duration_minutes": 4,
+            },
+            {
+                "id": 502,
+                "from_node_id": 1002,
+                "to_node_id": 1003,
+                "travel_mode": "vehicle",
+                "risk": "moderate",
+                "distance_m": 7000,
+                "duration_minutes": 11,
+            },
+        ],
+        authored_route_edges=[
+            {
+                "id": 17,
+                "from_place_id": 99,
+                "to_place_id": 42,
+                "travel_mode": "vehicle",
+                "distance_m": 12345,
+                "duration_minutes": 37.5,
+            }
+        ],
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+    route_metadata = travel_row["route_metadata"]
+
+    assert result.resolution_count == 1
+    assert not any("FROM orrery_travel_edges" in sql for sql, _ in cursor.executed)
+    assert not any(
+        "ST_Distance(o.coordinates, d.coordinates)" in sql for sql, _ in cursor.executed
+    )
+    assert travel_row["route_method"] == "osm_graph"
+    assert travel_row["travel_mode"] == "vehicle"
+    assert travel_row["risk"] == "moderate"
+    assert travel_row["estimated_distance_m"] == pytest.approx(10000)
+    assert travel_row["estimated_duration_minutes"] == pytest.approx(15)
+    assert route_metadata["route_method"] == "osm_graph"
+    assert route_metadata["route_edge_ids"] == [501, 502]
+    assert route_metadata["route_node_ids"] == [1001, 1002, 1003]
+    assert route_metadata["origin_node_key"] == "origin-road"
+    assert route_metadata["destination_node_key"] == "destination-road"
+    assert route_metadata["origin_node_geometry"]["type"] == "Point"
+
+
+def test_commit_orrery_tick_uses_mixed_osm_graph_edges_for_concrete_mode() -> None:
+    """Generic graph edges can route concrete mode requests."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        route_graph_nodes=[
+            {"place_id": 99, "node_id": 1001, "travel_mode": "mixed"},
+            {"place_id": 42, "node_id": 1002, "travel_mode": "mixed"},
+        ],
+        route_graph_edges=[
+            {
+                "id": 501,
+                "from_node_id": 1001,
+                "to_node_id": 1002,
+                "travel_mode": "mixed",
+                "distance_m": 9000,
+                "duration_minutes": 12,
+            }
+        ],
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+    route_metadata = travel_row["route_metadata"]
+
+    assert travel_row["route_method"] == "osm_graph"
+    assert travel_row["travel_mode"] == "vehicle"
+    assert route_metadata["edge_travel_modes"] == ["mixed"]
+
+
+def test_commit_orrery_tick_propagates_non_default_route_graph_key() -> None:
+    """Travel starts can request a named graph namespace."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        route_graph_nodes=[
+            {
+                "place_id": 99,
+                "node_id": 1001,
+                "travel_mode": "vehicle",
+                "graph_key": "regional",
+            },
+            {
+                "place_id": 42,
+                "node_id": 1002,
+                "travel_mode": "vehicle",
+                "graph_key": "regional",
+            },
+        ],
+        route_graph_edges=[
+            {
+                "id": 501,
+                "from_node_id": 1001,
+                "to_node_id": 1002,
+                "travel_mode": "vehicle",
+                "graph_key": "regional",
+                "distance_m": 7200,
+                "duration_minutes": 9,
+            }
+        ],
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle", route_graph="regional"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+
+    assert travel_row["route_method"] == "osm_graph"
+    assert travel_row["route_metadata"]["graph_key"] == "regional"
+    assert travel_row["estimated_distance_m"] == pytest.approx(7200)
+
+
+def test_commit_orrery_tick_rejects_oversized_route_graph(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bounded graph extracts fail fast instead of silently falling back."""
+
+    monkeypatch.setattr(orrery_events, "_route_graph_max_edges_per_query", lambda: 1)
+    cursor = RecordingCursor(
+        current_location=99,
+        route_graph_nodes=[
+            {"place_id": 99, "node_id": 1001, "travel_mode": "vehicle"},
+            {"place_id": 42, "node_id": 1003, "travel_mode": "vehicle"},
+        ],
+        route_graph_edges=[
+            {
+                "id": 501,
+                "from_node_id": 1001,
+                "to_node_id": 1002,
+                "travel_mode": "vehicle",
+                "distance_m": 3000,
+            },
+            {
+                "id": 502,
+                "from_node_id": 1002,
+                "to_node_id": 1003,
+                "travel_mode": "vehicle",
+                "distance_m": 7000,
+            },
+        ],
+        authored_route_edges=[
+            {
+                "id": 17,
+                "from_place_id": 99,
+                "to_place_id": 42,
+                "travel_mode": "vehicle",
+                "distance_m": 12345,
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="route graph query exceeded"):
+        commit_orrery_tick_sync(
+            RecordingConn(cursor),
+            _travel_start_proposal(mode="vehicle"),
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
+
+
+def test_commit_orrery_tick_falls_back_to_authored_when_osm_unreachable() -> None:
+    """Graph anchors without a connecting path do not block authored routes."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        route_graph_nodes=[
+            {"place_id": 99, "node_id": 1001, "travel_mode": "vehicle"},
+            {"place_id": 42, "node_id": 1003, "travel_mode": "vehicle"},
+        ],
+        route_graph_edges=[
+            {
+                "id": 501,
+                "from_node_id": 1001,
+                "to_node_id": 1002,
+                "travel_mode": "vehicle",
+                "distance_m": 3000,
+                "duration_minutes": 4,
+            }
+        ],
+        authored_route_edges=[
+            {
+                "id": 17,
+                "from_place_id": 99,
+                "to_place_id": 42,
+                "travel_mode": "vehicle",
+                "distance_m": 12345,
+                "duration_minutes": 37.5,
+            }
+        ],
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO character_travel_states" in sql
+    )
+    route_metadata = json.loads(travel_params[-1])
+
+    assert travel_params[4] == "authored_edge"
+    assert route_metadata["route_method"] == "authored_edge"
+    assert route_metadata["route_edge_id"] == 17
 
 
 def test_commit_orrery_tick_prefers_direct_authored_route_edge() -> None:

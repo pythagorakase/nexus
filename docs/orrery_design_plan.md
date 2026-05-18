@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** The Orrery build path is now past foundation and into package-library depth. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, interpersonal needs (`SOCIALIZE` and `INTIMACY`), Work + Travel, and concealment/contact package tuning. The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **routing phase 2**: using authored travel edges before falling back to coarse local distance estimates.
+**Status:** The Orrery build path is now past foundation and into route realism. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, interpersonal needs (`SOCIALIZE` and `INTIMACY`), Work + Travel, concealment/contact package tuning, and authored travel edges. The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **routing phase 3**: local OSM-derived graph routing before falling back to authored edges and coarse estimates.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -93,16 +93,19 @@ PR #222 adds deterministic review orchestration so newly opened PRs can schedule
 - PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage.
 - PR #244 adds additive WORK and TRAVEL state: `characters.current_location` remains the readable place anchor, while `character_travel_states` records planned/in-transit movement and route estimates.
 - PR #247 tunes concealment, surveillance, and cautious contact packages around hidden or relationship-loaded actors so mature-slot resolutions are less narratively blunt.
+- PR #248 activates `orrery_travel_edges` for authored route selection, including bidirectional reverse traversal, `mixed` generic edges, and route provenance metadata.
 
 ### Current Slice
 
-The current slice is **routing phase 2** for TRAVEL. Travel starts now prefer explicit `orrery_travel_edges` when a compatible authored edge exists, including deliberately bidirectional reverse traversal. Worlds without authored routing data still fall back to the local coordinate-distance estimate introduced with PR #244.
+The current slice is **routing phase 3** for TRAVEL. Travel starts now attempt local `osm_graph` routing from imported route-graph tables before falling back to authored `orrery_travel_edges`, then to the coordinate-distance estimate introduced with PR #244. The graph path is intentionally offline: normal Orrery ticks read only local tables and never call map APIs or inference.
 
-The database posture remains additive. `characters.current_location` is still the `places(id)` anchor used by existing LORE/LOGON/MEMNON/Orrery callers. `character_travel_states` records whether a character is at a place, planning travel, or in transit; while in transit, location predicates treat the anchor as non-physical so the resolver does not pretend the character is still co-located there. `orrery_travel_edges` is now active for authored route selection, while `route_method = osm_graph` remains reserved for a later offline routing pass.
+The database posture remains additive. `characters.current_location` is still the `places(id)` anchor used by existing LORE/LOGON/MEMNON/Orrery callers. `character_travel_states` records whether a character is at a place, planning travel, or in transit; while in transit, location predicates treat the anchor as non-physical so the resolver does not pretend the character is still co-located there. `orrery_route_graph_nodes`, `orrery_route_graph_edges`, and `orrery_place_route_graph_nodes` provide bounded local graph data; `orrery_travel_edges` remains the authored override/exception surface.
+
+For routing purposes, NEXUS embraces an Earth/Earth-mirror geography constraint. Future non-Earth or alien settings still choose Earth analogue coordinates in `places.coordinates`; this keeps GIS tooling, OSM-derived graph imports, and travel-time estimates available without inventing alternate map projections per world.
 
 ### Next Planned Slice
 
-After authored route edges, the next useful routing slice is phase 3: an offline OSM-backed route graph that can populate or supplement route edges without adding a map API or inference dependency to normal Orrery ticks. Package-library tuning remains an ongoing parallel lane: new packages should create or consume travel intent through the additive travel state rather than mutating `characters.current_location` directly.
+After local OSM graph routing, the next useful work is operational: seed real graph data for mature test slots, profile route-graph size limits, and tune package behavior that creates or consumes travel intent. The route graph setup and importer contract live in `docs/orrery_route_graph.md`.
 
 ### Package Author Checkpoint
 

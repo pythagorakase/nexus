@@ -23,6 +23,12 @@ from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     OrreryTickProposal,
 )
+from nexus.agents.orrery.routing import (
+    DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY,
+    ROUTE_GRAPH_MODES,
+    RouteGraphEdge,
+    shortest_route,
+)
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
@@ -59,6 +65,7 @@ TRAVEL_MODE_SPEED_KMH = {
     "covert": 3.5,
     "mixed": 25.0,
 }
+ROUTE_GRAPH_DEFAULT_KEY = "default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -789,6 +796,27 @@ def _travel_risk(payload: Mapping[str, Any], fallback: str = "low") -> str:
     return risk
 
 
+def _route_graph_key(payload: Mapping[str, Any]) -> str:
+    """Return the local route graph namespace requested by this travel effect."""
+
+    return str(
+        payload.get("route_graph")
+        or payload.get("graph_key")
+        or ROUTE_GRAPH_DEFAULT_KEY
+    )
+
+
+def _route_graph_max_edges_per_query() -> int:
+    """Return the configured fail-fast cap for in-process graph routing."""
+
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.orrery is None:
+        return DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY
+    return int(settings.orrery.route_graph.max_edges_per_query)
+
+
 def _apply_travel_start_sync(
     cur: Any,
     *,
@@ -801,6 +829,7 @@ def _apply_travel_start_sync(
     data = _coerce_travel_payload(payload)
     mode = _travel_mode(data)
     risk = _travel_risk(data)
+    route_graph_key = _route_graph_key(data)
     world_time = _tick_world_time_sync(cur, source_chunk_id)
     origin_place_id = data.get("origin_place_id") or _actor_location_sync(
         cur, actor_entity_id
@@ -817,6 +846,7 @@ def _apply_travel_start_sync(
         destination_place_id=int(destination_place_id),
         mode=mode,
         risk=risk,
+        route_graph_key=route_graph_key,
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
@@ -886,6 +916,7 @@ async def _apply_travel_start_async(
     data = _coerce_travel_payload(payload)
     mode = _travel_mode(data)
     risk = _travel_risk(data)
+    route_graph_key = _route_graph_key(data)
     world_time = await _tick_world_time_async(conn, source_chunk_id)
     origin_place_id = data.get("origin_place_id") or await _actor_location_async(
         conn, actor_entity_id
@@ -902,6 +933,7 @@ async def _apply_travel_start_async(
         destination_place_id=int(destination_place_id),
         mode=mode,
         risk=risk,
+        route_graph_key=route_graph_key,
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
@@ -1833,7 +1865,18 @@ def _select_route_sync(
     destination_place_id: int,
     mode: str,
     risk: str,
+    route_graph_key: str,
 ) -> dict[str, Any]:
+    graph_route = _osm_graph_route_sync(
+        cur,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+        graph_key=route_graph_key,
+    )
+    if graph_route is not None:
+        return graph_route
+
     edge = _authored_route_edge_sync(
         cur,
         origin_place_id=origin_place_id,
@@ -1865,7 +1908,18 @@ async def _select_route_async(
     destination_place_id: int,
     mode: str,
     risk: str,
+    route_graph_key: str,
 ) -> dict[str, Any]:
+    graph_route = await _osm_graph_route_async(
+        conn,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+        graph_key=route_graph_key,
+    )
+    if graph_route is not None:
+        return graph_route
+
     edge = await _authored_route_edge_async(
         conn,
         origin_place_id=origin_place_id,
@@ -1888,6 +1942,309 @@ async def _select_route_async(
         mode=mode,
         risk=risk,
     )
+
+
+def _osm_graph_route_sync(
+    cur: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+    graph_key: str,
+) -> Optional[dict[str, Any]]:
+    if mode not in ROUTE_GRAPH_MODES:
+        return None
+    origin_node = _place_route_graph_node_sync(
+        cur,
+        place_id=origin_place_id,
+        mode=mode,
+        graph_key=graph_key,
+    )
+    destination_node = _place_route_graph_node_sync(
+        cur,
+        place_id=destination_place_id,
+        mode=mode,
+        graph_key=graph_key,
+    )
+    if origin_node is None or destination_node is None:
+        return None
+    edges = _route_graph_edges_sync(cur, mode=mode, graph_key=graph_key)
+    if not edges:
+        return None
+    route = shortest_route(
+        edges,
+        origin_node_id=int(_row_get(origin_node, "node_id", 0)),
+        destination_node_id=int(_row_get(destination_node, "node_id", 0)),
+        requested_mode=mode,
+        speed_kmh=TRAVEL_MODE_SPEED_KMH[mode],
+    )
+    if route is None:
+        return None
+    return _route_from_osm_graph(
+        route,
+        origin_node=origin_node,
+        destination_node=destination_node,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        requested_mode=mode,
+        graph_key=graph_key,
+    )
+
+
+async def _osm_graph_route_async(
+    conn: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+    graph_key: str,
+) -> Optional[dict[str, Any]]:
+    if mode not in ROUTE_GRAPH_MODES:
+        return None
+    origin_node = await _place_route_graph_node_async(
+        conn,
+        place_id=origin_place_id,
+        mode=mode,
+        graph_key=graph_key,
+    )
+    destination_node = await _place_route_graph_node_async(
+        conn,
+        place_id=destination_place_id,
+        mode=mode,
+        graph_key=graph_key,
+    )
+    if origin_node is None or destination_node is None:
+        return None
+    edges = await _route_graph_edges_async(conn, mode=mode, graph_key=graph_key)
+    if not edges:
+        return None
+    route = shortest_route(
+        edges,
+        origin_node_id=int(_row_get(origin_node, "node_id", 0)),
+        destination_node_id=int(_row_get(destination_node, "node_id", 0)),
+        requested_mode=mode,
+        speed_kmh=TRAVEL_MODE_SPEED_KMH[mode],
+    )
+    if route is None:
+        return None
+    return _route_from_osm_graph(
+        route,
+        origin_node=origin_node,
+        destination_node=destination_node,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        requested_mode=mode,
+        graph_key=graph_key,
+    )
+
+
+def _place_route_graph_node_sync(
+    cur: Any,
+    *,
+    place_id: int,
+    mode: str,
+    graph_key: str,
+) -> Optional[Any]:
+    cur.execute(
+        """
+        SELECT prgn.node_id,
+               prgn.travel_mode::text AS travel_mode,
+               prgn.distance_m,
+               prgn.source,
+               prgn.metadata,
+               n.node_key,
+               ST_AsGeoJSON(n.coordinates) AS node_geojson
+        FROM orrery_place_route_graph_nodes prgn
+        JOIN orrery_route_graph_nodes n ON n.id = prgn.node_id
+        WHERE prgn.place_id = %s
+          AND prgn.graph_key = %s
+          AND prgn.travel_mode IN (%s::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY (prgn.travel_mode = %s::orrery_travel_mode) DESC,
+                 prgn.distance_m NULLS LAST,
+                 prgn.node_id
+        LIMIT 1
+        """,
+        (place_id, graph_key, mode, mode),
+    )
+    return cur.fetchone()
+
+
+async def _place_route_graph_node_async(
+    conn: Any,
+    *,
+    place_id: int,
+    mode: str,
+    graph_key: str,
+) -> Optional[Any]:
+    return await conn.fetchrow(
+        """
+        SELECT prgn.node_id,
+               prgn.travel_mode::text AS travel_mode,
+               prgn.distance_m,
+               prgn.source,
+               prgn.metadata,
+               n.node_key,
+               ST_AsGeoJSON(n.coordinates) AS node_geojson
+        FROM orrery_place_route_graph_nodes prgn
+        JOIN orrery_route_graph_nodes n ON n.id = prgn.node_id
+        WHERE prgn.place_id = $1
+          AND prgn.graph_key = $2
+          AND prgn.travel_mode IN ($3::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY (prgn.travel_mode = $3::orrery_travel_mode) DESC,
+                 prgn.distance_m NULLS LAST,
+                 prgn.node_id
+        LIMIT 1
+        """,
+        place_id,
+        graph_key,
+        mode,
+    )
+
+
+def _route_graph_edges_sync(
+    cur: Any,
+    *,
+    mode: str,
+    graph_key: str,
+) -> list[RouteGraphEdge]:
+    max_edges = _route_graph_max_edges_per_query()
+    cur.execute(
+        """
+        SELECT id,
+               from_node_id,
+               to_node_id,
+               travel_mode::text AS travel_mode,
+               risk::text AS risk,
+               bidirectional,
+               distance_m,
+               duration_minutes
+        FROM orrery_route_graph_edges
+        WHERE graph_key = %s
+          AND travel_mode IN (%s::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY id
+        LIMIT %s
+        """,
+        (graph_key, mode, max_edges + 1),
+    )
+    rows = cur.fetchall()
+    _raise_if_route_graph_too_large(
+        rows, graph_key=graph_key, mode=mode, max_edges=max_edges
+    )
+    return [_route_graph_edge_from_row(row) for row in rows]
+
+
+async def _route_graph_edges_async(
+    conn: Any,
+    *,
+    mode: str,
+    graph_key: str,
+) -> list[RouteGraphEdge]:
+    max_edges = _route_graph_max_edges_per_query()
+    rows = await conn.fetch(
+        """
+        SELECT id,
+               from_node_id,
+               to_node_id,
+               travel_mode::text AS travel_mode,
+               risk::text AS risk,
+               bidirectional,
+               distance_m,
+               duration_minutes
+        FROM orrery_route_graph_edges
+        WHERE graph_key = $1
+          AND travel_mode IN ($2::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY id
+        LIMIT $3
+        """,
+        graph_key,
+        mode,
+        max_edges + 1,
+    )
+    _raise_if_route_graph_too_large(
+        rows, graph_key=graph_key, mode=mode, max_edges=max_edges
+    )
+    return [_route_graph_edge_from_row(row) for row in rows]
+
+
+def _raise_if_route_graph_too_large(
+    rows: Any,
+    *,
+    graph_key: str,
+    mode: str,
+    max_edges: int,
+) -> None:
+    if len(rows) <= max_edges:
+        return
+    raise ValueError(
+        "Orrery route graph query exceeded "
+        f"{max_edges} edges for graph_key={graph_key!r}, mode={mode!r}; "
+        "trim the offline extract or raise orrery.route_graph.max_edges_per_query"
+    )
+
+
+def _route_graph_edge_from_row(row: Any) -> RouteGraphEdge:
+    return RouteGraphEdge(
+        edge_id=int(_row_get(row, "id", 0)),
+        from_node_id=int(_row_get(row, "from_node_id", 1)),
+        to_node_id=int(_row_get(row, "to_node_id", 2)),
+        travel_mode=str(_row_get(row, "travel_mode", 3)),
+        risk=str(_row_get(row, "risk", 4)),
+        bidirectional=bool(_row_get(row, "bidirectional", 5)),
+        distance_m=float(_row_get(row, "distance_m", 6)),
+        duration_minutes=_float_or_none(_row_get(row, "duration_minutes", 7)),
+    )
+
+
+def _route_from_osm_graph(
+    route: Any,
+    *,
+    origin_node: Any,
+    destination_node: Any,
+    origin_place_id: int,
+    destination_place_id: int,
+    requested_mode: str,
+    graph_key: str,
+) -> dict[str, Any]:
+    metadata = {
+        "route_method": "osm_graph",
+        "origin_place_id": origin_place_id,
+        "destination_place_id": destination_place_id,
+        "requested_travel_mode": requested_mode,
+        "travel_mode": requested_mode,
+        "graph_key": graph_key,
+        "route_node_ids": list(route.node_ids),
+        "route_edge_ids": list(route.edge_ids),
+        "route_edge_count": len(route.edge_ids),
+        "edge_travel_modes": list(route.edge_travel_modes),
+        "origin_graph_node_id": _row_get(origin_node, "node_id", 0),
+        "destination_graph_node_id": _row_get(destination_node, "node_id", 0),
+        "origin_node_key": _row_get_optional(origin_node, "node_key", 5),
+        "destination_node_key": _row_get_optional(destination_node, "node_key", 5),
+        "origin_graph_distance_m": _float_or_none(
+            _row_get_optional(origin_node, "distance_m", 2)
+        ),
+        "destination_graph_distance_m": _float_or_none(
+            _row_get_optional(destination_node, "distance_m", 2)
+        ),
+    }
+    origin_geojson = _decode_json_value(
+        _row_get_optional(origin_node, "node_geojson", 6)
+    )
+    destination_geojson = _decode_json_value(
+        _row_get_optional(destination_node, "node_geojson", 6)
+    )
+    if origin_geojson is not None:
+        metadata["origin_node_geometry"] = origin_geojson
+    if destination_geojson is not None:
+        metadata["destination_node_geometry"] = destination_geojson
+    return {
+        "route_method": "osm_graph",
+        "travel_mode": requested_mode,
+        "risk": route.risk,
+        "distance_m": route.distance_m,
+        "duration_minutes": route.duration_minutes,
+        "metadata": metadata,
+    }
 
 
 def _authored_route_edge_sync(

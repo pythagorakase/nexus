@@ -305,3 +305,21 @@ def test_concealment_surveillance_migration_seeds_package_vocab() -> None:
     }
     migration_source = migration_path.read_text()
     assert "ON CONFLICT (type) DO UPDATE SET" in migration_source
+
+
+def test_osm_route_graph_migration_adds_local_graph_tables() -> None:
+    """Migration 035 adds offline graph tables instead of map API calls."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "035_orrery_osm_route_graph.py"
+    ).read_text()
+
+    assert "orrery_route_graph_nodes" in migration_source
+    assert "orrery_route_graph_edges" in migration_source
+    assert "orrery_place_route_graph_nodes" in migration_source
+    assert "coordinates geometry(Point, 4326)" in migration_source
+    assert "route_geometry geometry(LineString, 4326)" in migration_source
+    assert "travel_mode orrery_travel_mode" in migration_source
+    assert "COMMENT ON TABLE orrery_route_graph_nodes" in migration_source
