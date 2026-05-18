@@ -80,12 +80,14 @@ Orrery is the deterministic resolver layer that decides what off-screen entities
   - `tags_to_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
   - `new_tag_proposals` — propose vocabulary the genre needs that doesn't yet exist
 
-**Tag categories** (apply registered or propose new):
-- **Character**: `bodyform`, `capacity`, `disposition`, `role`, `state`, `orrery_state`, `orrery_signal`, `orrery_need_modifier`, `profession_lite`
-- **Place**: `place_affordance` (`sheltered`, `public`, `defensible`, `isolated`, `ritually_charged`)
-- **Faction**: `ideology_axis`, `power_posture`, `legitimacy_status`, `operational_secrecy`, `resource_class`, `hidden_agenda_class`, `history_class`
-
-**Proposing new tags**: the existing vocab was seeded from cyberpunk; new genres need new vocab (`bodyform:elf` for fantasy, `airship_captain` for steampunk). Propose freely — proposals auto-insert into the vocabulary and are immediately queryable. Each proposal needs `tag` (snake_case), `category`, `scope` (`durable` or `ephemeral`), and `evidence` (rationale + near-quote from the prose).
+**Tag library and proposals**: the current registered tag library is appended to
+this prompt at runtime. Use it as your starting ontology and prefer exact
+registered tags when they fit the entity cleanly. If the existing library does
+not fit the world you are writing, add to it with `new_tag_proposals`. Fantasy,
+historical, alien, and other non-cyberpunk genres are expected to need
+reasonable additions. Each proposal needs `tag` (snake_case), `category`,
+`scope` (`durable` or `ephemeral`), and `evidence` (rationale + near-quote from
+the prose).
 
 **Bestowed tags are immediately live** — gates can fire on them in this chunk's resolution. Apply conservatively (over-tagging produces wrong matches), but don't withhold genuinely-applicable tags — silent gates produce no resolutions at all.
 

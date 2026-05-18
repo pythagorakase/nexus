@@ -1751,6 +1751,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/033_orrery_travel_work.py`
 - `migrations/034_orrery_concealment_surveillance_vocab.py`
 - `migrations/035_orrery_osm_route_graph.py`
+- `migrations/037_orrery_tag_category_registry.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

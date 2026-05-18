@@ -323,3 +323,24 @@ def test_osm_route_graph_migration_adds_local_graph_tables() -> None:
     assert "route_geometry geometry(LineString, 4326)" in migration_source
     assert "travel_mode orrery_travel_mode" in migration_source
     assert "COMMENT ON TABLE orrery_route_graph_nodes" in migration_source
+
+
+def test_tag_category_registry_migration_covers_current_vocab_categories() -> None:
+    """Migration 037 owns the entity-kind/category compatibility contract."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "037_orrery_tag_category_registry.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    registered = {
+        (category, entity_kind)
+        for category, entity_kind, _order, _description in migration.CATEGORY_REGISTRY
+    }
+
+    assert ("orrery_need", "character") in registered
+    assert ("orrery_concealment", "character") in registered
+    assert ("place_affordance", "place") in registered
+    assert ("power_posture", "faction") in registered
+    assert "tag_category_registry" in migration_path.read_text()

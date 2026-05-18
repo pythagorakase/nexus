@@ -18,9 +18,10 @@ Depends on migration 036 making ``ix_entity_tags_current`` UNIQUE so the
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
-from nexus.agents.orrery.tag_constants import ALLOWED_CATEGORIES, CANONICAL_TAGS
+from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
+from nexus.agents.orrery.tag_library import VALID_ENTITY_KINDS
 from nexus.agents.orrery.tag_schemas import NewTagProposal, OrreryTagBestowal
 
 
@@ -61,13 +62,17 @@ def apply_tag_bestowal(
     if bestowal is None:
         return counters
 
-    if entity_kind not in ALLOWED_CATEGORIES:
+    if entity_kind not in VALID_ENTITY_KINDS:
         raise ValueError(
             f"Unknown entity_kind={entity_kind!r}; expected one of "
-            f"{sorted(ALLOWED_CATEGORIES)}"
+            f"{sorted(VALID_ENTITY_KINDS)}"
         )
 
-    allowed = ALLOWED_CATEGORIES[entity_kind]
+    allowed = _lookup_allowed_categories(cur, entity_kind)
+    if not allowed:
+        raise ValueError(
+            f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
+        )
 
     if world_time is None:
         cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
@@ -75,13 +80,26 @@ def apply_tag_bestowal(
         if row is not None:
             world_time = _row_value(row, "world_time", 0)
 
+    apply_names = list(bestowal.applied_tags)
+
     # 1. insert new tag proposals into the vocabulary
     for proposal in bestowal.new_tag_proposals:
+        if proposal.category not in allowed:
+            status = _category_registry_status(cur, proposal.category, entity_kind)
+            if status == "unknown":
+                _insert_category_registry_row(
+                    cur, category=proposal.category, entity_kind=entity_kind
+                )
+                allowed.add(proposal.category)
+            else:
+                counters["skipped_category"] += 1
+                continue
         _insert_new_tag(cur, proposal)
         counters["proposed"] += 1
+        apply_names.append(proposal.tag)
 
     # 2. apply tags (registered + just-proposed) to the entity
-    for proposed_name in _iter_apply_names(bestowal):
+    for proposed_name in apply_names:
         canonical_name = CANONICAL_TAGS.get(proposed_name, proposed_name)
         tag_row = _lookup_tag(cur, canonical_name)
         if tag_row is None:
@@ -116,9 +134,51 @@ def apply_tag_bestowal(
     return counters
 
 
-def _iter_apply_names(bestowal: OrreryTagBestowal) -> Iterable[str]:
-    yield from bestowal.applied_tags
-    yield from (p.tag for p in bestowal.new_tag_proposals)
+def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
+    cur.execute(
+        """
+        SELECT category
+        FROM tag_category_registry
+        WHERE entity_kind = %s::entity_kind
+        """,
+        (entity_kind,),
+    )
+    return {_row_value(row, "category", 0) for row in cur.fetchall()}
+
+
+def _category_registry_status(cur: Any, category: str, entity_kind: str) -> str:
+    cur.execute(
+        """
+        SELECT entity_kind::text AS entity_kind
+        FROM tag_category_registry
+        WHERE category = %s
+        """,
+        (category,),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return "unknown"
+    if any(_row_value(row, "entity_kind", 0) == entity_kind for row in rows):
+        return "compatible"
+    return "incompatible"
+
+
+def _insert_category_registry_row(cur: Any, *, category: str, entity_kind: str) -> None:
+    cur.execute(
+        """
+        INSERT INTO tag_category_registry (
+            category, entity_kind, prompt_order, description
+        ) VALUES (
+            %s, %s::entity_kind, 1000, %s
+        )
+        ON CONFLICT (category, entity_kind) DO NOTHING
+        """,
+        (
+            category,
+            entity_kind,
+            f"Skald-proposed {entity_kind} tag category.",
+        ),
+    )
 
 
 def _insert_new_tag(cur: Any, proposal: NewTagProposal) -> None:

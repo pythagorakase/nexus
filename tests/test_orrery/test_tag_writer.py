@@ -54,18 +54,22 @@ class FakeCursor:
         *,
         tags: Optional[dict[str, dict[str, Any]]] = None,
         entity_tags: Optional[list[dict[str, Any]]] = None,
+        category_registry: Optional[dict[str, set[str]]] = None,
         world_time: Optional[datetime] = _WORLD_TIME,
     ):
         self.tags = dict(
             tags or {}
         )  # name → {id, category, is_ephemeral, deprecated, synonym_for}
         self.entity_tags = list(entity_tags or [])
+        self.category_registry = category_registry or _default_category_registry()
         self.world_time = world_time
         self.rowcount = 0
         self._next_row: Any = None
+        self._next_rows: list[Any] = []
         self._next_id = 1000
         self.inserted_tag_rows: list[dict[str, Any]] = []
         self.inserted_entity_tag_rows: list[dict[str, Any]] = []
+        self.inserted_category_rows: list[dict[str, Any]] = []
         self.cleared_keys: list[tuple[int, int]] = []
 
     def execute(self, sql: str, params: Optional[tuple] = None) -> None:
@@ -74,6 +78,37 @@ class FakeCursor:
         sql_upper = sql_trimmed.upper()
         if sql_upper.startswith("SELECT MAX(WORLD_TIME)"):
             self._next_row = _FakeRow({"world_time": self.world_time}, ["world_time"])
+            self.rowcount = 1
+            return
+        if (
+            "FROM TAG_CATEGORY_REGISTRY" in sql_upper
+            and "WHERE ENTITY_KIND" in sql_upper
+        ):
+            (entity_kind,) = params
+            rows = [
+                _FakeRow({"category": category}, ["category"])
+                for category, kinds in self.category_registry.items()
+                if entity_kind in kinds
+            ]
+            self._next_rows = rows
+            self.rowcount = len(rows)
+            return
+        if "FROM TAG_CATEGORY_REGISTRY" in sql_upper and "WHERE CATEGORY" in sql_upper:
+            (category,) = params
+            kinds = self.category_registry.get(category, set())
+            rows = [
+                _FakeRow({"entity_kind": entity_kind}, ["entity_kind"])
+                for entity_kind in sorted(kinds)
+            ]
+            self._next_rows = rows
+            self.rowcount = len(rows)
+            return
+        if sql_upper.startswith("INSERT INTO TAG_CATEGORY_REGISTRY"):
+            category, entity_kind, _description = params
+            self.category_registry.setdefault(category, set()).add(entity_kind)
+            self.inserted_category_rows.append(
+                {"category": category, "entity_kind": entity_kind}
+            )
             self.rowcount = 1
             return
         if sql_upper.startswith("INSERT INTO TAGS"):
@@ -165,6 +200,11 @@ class FakeCursor:
         self._next_row = None
         return row
 
+    def fetchall(self):
+        rows = self._next_rows
+        self._next_rows = []
+        return rows
+
 
 def _registered(*entries):
     """Quick helper to build the vocabulary dict for the fake cursor."""
@@ -180,6 +220,20 @@ def _registered(*entries):
             "synonym_for": None,
         }
     return table
+
+
+def _default_category_registry() -> dict[str, set[str]]:
+    return {
+        "bodyform": {"character"},
+        "capacity": {"character"},
+        "disposition": {"character"},
+        "orrery_need": {"character"},
+        "orrery_state": {"character"},
+        "place_affordance": {"place"},
+        "power_posture": {"faction"},
+        "profession_lite": {"character"},
+        "state": {"character"},
+    }
 
 
 def test_applies_registered_character_tag():
@@ -254,6 +308,59 @@ def test_new_tag_proposal_inserts_both_tag_and_entity_tag():
     assert cur.inserted_tag_rows[0]["is_ephemeral"] is False
     assert cur.inserted_tag_rows[0]["clearance_kind"] is None
     assert cur.inserted_entity_tag_rows[0]["entity_id"] == 99
+
+
+def test_new_tag_proposal_registers_new_category_for_entity_kind():
+    cur = FakeCursor(tags={})
+    bestowal = OrreryTagBestowal(
+        new_tag_proposals=[
+            NewTagProposal(
+                tag="oath_bound",
+                category="fantasy_oath_state",
+                scope="durable",
+                evidence="The oath-sigil burns when the knight speaks a vow.",
+            )
+        ]
+    )
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=99,
+        entity_kind="character",
+        bestowal=bestowal,
+    )
+
+    assert counters["proposed"] == 1
+    assert counters["applied"] == 1
+    assert cur.inserted_category_rows == [
+        {"category": "fantasy_oath_state", "entity_kind": "character"}
+    ]
+
+
+def test_new_tag_proposal_rejects_existing_category_for_wrong_entity_kind():
+    cur = FakeCursor(tags={})
+    bestowal = OrreryTagBestowal(
+        new_tag_proposals=[
+            NewTagProposal(
+                tag="hidden_gallery",
+                category="place_affordance",
+                scope="durable",
+                evidence="The person is standing in a hall with hidden galleries.",
+            )
+        ]
+    )
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=99,
+        entity_kind="character",
+        bestowal=bestowal,
+    )
+
+    assert counters["proposed"] == 0
+    assert counters["applied"] == 0
+    assert counters["skipped_category"] == 1
+    assert cur.inserted_tag_rows == []
 
 
 def test_ephemeral_proposal_sets_clearance_kind_semantic():

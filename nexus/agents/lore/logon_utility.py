@@ -22,6 +22,7 @@ from nexus.agents.logon.apex_schema import (
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
 )
+from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
 from nexus.config.loader import get_provider_for_model
 
 logger = logging.getLogger("nexus.lore.logon")
@@ -60,25 +61,29 @@ class LogonUtility:
         from nexus.api.slot_utils import require_slot_dbname
 
         # Load storyteller core prompt
-        core_prompt_path = Path(__file__).parent.parent.parent.parent / "prompts" / "storyteller_core.md"
+        core_prompt_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "prompts"
+            / "storyteller_core.md"
+        )
 
         try:
-            with open(core_prompt_path, 'r') as f:
+            with open(core_prompt_path, "r") as f:
                 core_prompt = f.read()
             logger.info(f"Loaded storyteller core prompt ({len(core_prompt)} chars)")
         except FileNotFoundError:
-            logger.warning(f"Core prompt not found at {core_prompt_path}, using minimal fallback")
+            logger.warning(
+                f"Core prompt not found at {core_prompt_path}, using minimal fallback"
+            )
             core_prompt = "You are a narrative intelligence system generating interactive fiction."
+
+        db = require_slot_dbname(dbname=self.dbname)
+        tag_library_prompt = format_tag_library_for_prompt(db)
+        core_prompt = f"{core_prompt}\n\n---\n\n{tag_library_prompt}"
 
         # Query setting from global_variables
         try:
-            # Use slot-aware database connection
-            db = require_slot_dbname(dbname=self.dbname)
-            conn = psycopg2.connect(
-                host="localhost",
-                database=db,
-                user="pythagor"
-            )
+            conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
             with conn.cursor() as cur:
                 cur.execute("SELECT setting FROM global_variables WHERE id = true")
                 result = cur.fetchone()
@@ -90,18 +95,24 @@ class LogonUtility:
                     setting_title = setting_data.get("title", "Setting Context")
 
                     # Combine core prompt with setting
-                    combined_prompt = f"{core_prompt}\n\n## {setting_title}\n\n{setting_content}"
-                    logger.info(f"Combined prompt with setting context ({len(setting_content)} chars)")
+                    combined_prompt = (
+                        f"{core_prompt}\n\n## {setting_title}\n\n{setting_content}"
+                    )
+                    logger.info(
+                        f"Combined prompt with setting context ({len(setting_content)} chars)"
+                    )
                     return combined_prompt
                 else:
-                    logger.warning("No setting data found in global_variables, using core prompt only")
+                    logger.warning(
+                        "No setting data found in global_variables, using core prompt only"
+                    )
                     return core_prompt
 
         except Exception as e:
             logger.error(f"Failed to load setting from database: {e}")
             return core_prompt
         finally:
-            if 'conn' in locals():
+            if "conn" in locals():
                 conn.close()
 
     def _get_slot_model(self) -> Optional[str]:
@@ -133,7 +144,9 @@ class LogonUtility:
         if not model:
             model = apex_settings.get("model", "gpt-4o")
 
-        provider_type = get_provider_for_model(model) or apex_settings.get("provider", "openai")
+        provider_type = get_provider_for_model(model) or apex_settings.get(
+            "provider", "openai"
+        )
 
         # Determine base_url for TEST model routing
         base_url = None
@@ -159,15 +172,19 @@ class LogonUtility:
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(
                 model=model,
-                max_tokens=apex_settings.get("max_output_tokens", apex_settings.get("max_tokens", 4000)),
-                system_prompt=system_prompt
+                max_tokens=apex_settings.get(
+                    "max_output_tokens", apex_settings.get("max_tokens", 4000)
+                ),
+                system_prompt=system_prompt,
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
 
-        logger.info(f"LOGON initialized with {provider_type} provider using model {model}")
+        logger.info(
+            f"LOGON initialized with {provider_type} provider using model {model}"
+        )
         logger.info(f"System prompt loaded: {len(system_prompt)} chars")
-    
+
     def _ensure_provider(self) -> None:
         """Ensure the provider is initialized before use."""
         if self.provider is None:
@@ -176,16 +193,17 @@ class LogonUtility:
 
         resolved_model = self.model_override or self._get_slot_model()
         if resolved_model and getattr(self.provider, "model", None) != resolved_model:
-            logger.info("Model override detected. Reinitializing provider for model %s", resolved_model)
+            logger.info(
+                "Model override detected. Reinitializing provider for model %s",
+                resolved_model,
+            )
             self._initialize_provider()
 
     def ensure_provider(self) -> None:
         """Public wrapper for provider initialization."""
         self._ensure_provider()
-    
-    def generate_narrative(
-        self, context_payload: Dict[str, Any]
-    ) -> StoryTurnResponse:
+
+    def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
         self._ensure_provider()
         # Format the context into a prompt
@@ -267,7 +285,9 @@ class LogonUtility:
 
             # Check if using hierarchical structure
             characters = entity_data.get("characters", [])
-            is_hierarchical = isinstance(characters, dict) and ("baseline" in characters or "featured" in characters)
+            is_hierarchical = isinstance(characters, dict) and (
+                "baseline" in characters or "featured" in characters
+            )
 
             if is_hierarchical:
                 # New hierarchical format
@@ -295,7 +315,9 @@ class LogonUtility:
                         if char.get("personality"):
                             sections.append(f"  Personality: {char['personality']}")
                         if char.get("emotional_state"):
-                            sections.append(f"  Emotional State: {char['emotional_state']}")
+                            sections.append(
+                                f"  Emotional State: {char['emotional_state']}"
+                            )
 
                 # Locations (hierarchical)
                 locations = entity_data.get("locations", {})
@@ -340,13 +362,17 @@ class LogonUtility:
                 if characters:
                     sections.append("\nCharacters:")
                     for char in characters:
-                        sections.append(f"- {char.get('name', 'Unknown')}: {char.get('summary', '')}")
+                        sections.append(
+                            f"- {char.get('name', 'Unknown')}: {char.get('summary', '')}"
+                        )
 
                 locations = entity_data.get("locations", [])
                 if locations:
                     sections.append("\nLocations:")
                     for loc in locations:
-                        sections.append(f"- {loc.get('name', 'Unknown')}: {loc.get('description', '') or loc.get('summary', '')}")
+                        sections.append(
+                            f"- {loc.get('name', 'Unknown')}: {loc.get('description', '') or loc.get('summary', '')}"
+                        )
 
             # Relationships, events, threats (same for both formats)
             relationships = entity_data.get("relationships", [])
@@ -377,8 +403,12 @@ class LogonUtility:
         # Add retrieved passages
         if context.get("retrieved_passages"):
             sections.append("\n=== HISTORICAL CONTEXT ===")
-            for passage in context["retrieved_passages"]["results"][:5]:  # Limit to top 5
-                sections.append(f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}")
+            for passage in context["retrieved_passages"]["results"][
+                :5
+            ]:  # Limit to top 5
+                sections.append(
+                    f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}"
+                )
 
         scene_pressures = context.get("orrery_scene_pressures") or []
         if scene_pressures:
@@ -432,7 +462,11 @@ class LogonUtility:
 
         # Add instructions
         sections.append("\n=== INSTRUCTIONS ===")
-        sections.append("Continue the narrative based on the provided context and user input.")
-        sections.append("Maintain consistency with established characters, locations, and plot.")
+        sections.append(
+            "Continue the narrative based on the provided context and user input."
+        )
+        sections.append(
+            "Maintain consistency with established characters, locations, and plot."
+        )
 
         return "\n".join(sections)

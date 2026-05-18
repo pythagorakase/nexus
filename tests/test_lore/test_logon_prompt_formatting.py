@@ -51,3 +51,48 @@ def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     assert "optional ambient peripherals from off-screen events" in prompt
     assert "Ignore freely, render subtly" in prompt
     assert "[digital] Mara: street cameras briefly lose Mara" in prompt
+
+
+def test_system_prompt_includes_runtime_tag_library(monkeypatch) -> None:
+    """Storyteller prompt receives the slot's live Orrery tag library."""
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
+        lambda _dbname: "TAG LIBRARY",
+    )
+    monkeypatch.setattr(
+        "nexus.api.slot_utils.require_slot_dbname",
+        lambda dbname=None: dbname or "save_05",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.psycopg2.connect",
+        lambda **_kwargs: _Conn(),
+    )
+
+    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+
+    assert "TAG LIBRARY" in prompt
+    assert "## Test Setting" in prompt
+    assert "Setting body." in prompt
+
+
+class _Conn:
+    def cursor(self) -> "_Cursor":
+        return _Cursor()
+
+    def close(self) -> None:
+        return None
+
+
+class _Cursor:
+    def __enter__(self) -> "_Cursor":
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def execute(self, _sql: str) -> None:
+        return None
+
+    def fetchone(self):
+        return ({"title": "Test Setting", "content": "Setting body."},)

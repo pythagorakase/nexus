@@ -362,32 +362,19 @@ You are the only writer in the pipeline who can apply tags. Apply them as you bu
 - **`submit_wildcard_trait`**: include `orrery_tags` for the protagonist. This is the right moment because you now have the full concept + traits + wildcard — the richest tagging context.
 - **`submit_starting_scenario`**: include `orrery_tags` in the `location` (`PlaceProfile`) for the starting place's `place_affordance:*` tags.
 
-### Tag categories
+### Tag library and proposals
 
-| Entity | Categories | Examples |
-|---|---|---|
-| Character | `bodyform`, `capacity`, `disposition`, `role`, `state`, `orrery_state`, `orrery_signal`, `orrery_need_modifier`, `profession_lite` | `bodyform:human`, `bodyform:elf`, `corporate_exile`, `informant_handler`, `disinherited_heir`, `arcane_attuned` |
-| Place | `place_affordance` | `sheltered`, `public`, `defensible`, `isolated`, `ritually_charged`, `consecrated` |
-| Faction | `ideology_axis`, `power_posture`, `legitimacy_status`, `operational_secrecy`, `resource_class`, `hidden_agenda_class`, `history_class` | `militarized`, `state_sanctioned`, `cellular_clandestine`, `capital_intensive`, `theocratic_reform` |
-
-### Proposing new tags
-
-The existing vocabulary was seeded from a cyberpunk corpus. A fantasy story needs `bodyform:elf`, a steampunk story needs `airship_captain`, a Regency story needs `lady_in_waiting`. **You are encouraged to propose tags freely** — proposals auto-insert into the vocabulary and become immediately queryable by Orrery gates.
+The current registered tag library is appended to this prompt at runtime. Use it
+as your starting ontology and prefer exact registered tags when they fit the
+entity cleanly. If the existing library does not fit the world you are building,
+add to it with `new_tag_proposals`. Fantasy, historical, alien, and other
+non-cyberpunk genres are expected to need reasonable additions.
 
 Each proposal needs:
 - `tag` — snake_case, lowercase, no spaces (`sworn_liege`, `bodyform:elf`)
 - `category` — reuse an existing category when it fits; propose a new namespace when none do
 - `scope` — `durable` (stable property like bodyform/role/ideology) or `ephemeral` (temporary state that can clear, like `cursed` or `scrying_target`)
 - `evidence` — one sentence rationale + a short near-quote from the structured prose you're filling in. Without evidence, the proposal is noise.
-
-### Cyberpunk vs fantasy contrast
-
-| Concept | Apply (registered) | Propose (likely new) |
-|---|---|---|
-| Cyberpunk corp defector | `corporate_exile`, `informant_handler`, `contacts_available` | (vocab is mature) |
-| Feudal disinherited heir | (few applicable) | `disinherited_heir`, `sworn_liege`, `bloodline_heir` |
-| Half-elven scholar | (none yet) | `bodyform:elf`, `arcane_attuned`, `scholarly` |
-| Sacred grove | (none yet) | `ritually_charged`, `sacred_ground`, `fey_warded` |
 
 Apply tags conservatively — better to omit a marginal tag than to apply with weak evidence. Durable mistakes stick around; only ephemeral tags can be cleared later.
 
