@@ -24,6 +24,7 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.db_pool import get_connection
 from nexus.api.new_story_cache import clear_cache
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 
 logger = logging.getLogger("nexus.api.new_story_db_mapper")
 
@@ -244,7 +245,9 @@ class NewStoryDatabaseMapper:
                 with get_connection(self.dbname) as conn:
                     with conn.cursor() as cur:
                         # Read existing setting, merge story_seed, save back
-                        cur.execute("SELECT setting FROM global_variables WHERE id = true")
+                        cur.execute(
+                            "SELECT setting FROM global_variables WHERE id = true"
+                        )
                         row = cur.fetchone()
                         setting = row[0] if row and row[0] else {}
                         setting["story_seed"] = seed_data
@@ -298,18 +301,28 @@ class NewStoryDatabaseMapper:
                         %(personality)s, %(emotional_state)s, %(current_activity)s,
                         %(extra_data)s::jsonb
                     )
-                    RETURNING id
+                    RETURNING id, entity_id
                 """,
                     db_record,
                 )
 
-                character_id = cursor.fetchone()[0]
+                character_id, entity_id = cursor.fetchone()
 
                 # Update global_variables to point to this character
                 cursor.execute(
                     "UPDATE global_variables SET user_character = %s WHERE id = true",
                     (character_id,),
                 )
+
+                tag_counters = apply_tag_bestowal(
+                    cursor,
+                    entity_id=entity_id,
+                    entity_kind="character",
+                    bestowal=character.orrery_tags,
+                    source_kind="skald_inline",
+                )
+                if tag_counters["applied"] or tag_counters["proposed"]:
+                    logger.info(f"Tag bestowal for {character.name}: {tag_counters}")
 
                 logger.info(
                     f"Created protagonist: {character.name} (ID: {character_id})"
@@ -334,18 +347,30 @@ class NewStoryDatabaseMapper:
                                 %(personality)s, %(emotional_state)s, %(current_activity)s,
                                 %(extra_data)s::jsonb
                             )
-                            RETURNING id
+                            RETURNING id, entity_id
                         """,
                             db_record,
                         )
 
-                        character_id = cur.fetchone()[0]
+                        character_id, entity_id = cur.fetchone()
 
                         # Update global_variables to point to this character
                         cur.execute(
                             "UPDATE global_variables SET user_character = %s WHERE id = true",
                             (character_id,),
                         )
+
+                        tag_counters = apply_tag_bestowal(
+                            cur,
+                            entity_id=entity_id,
+                            entity_kind="character",
+                            bestowal=character.orrery_tags,
+                            source_kind="skald_inline",
+                        )
+                        if tag_counters["applied"] or tag_counters["proposed"]:
+                            logger.info(
+                                f"Tag bestowal for {character.name}: {tag_counters}"
+                            )
 
                     logger.info(
                         f"Created protagonist: {character.name} (ID: {character_id})"
@@ -440,11 +465,11 @@ class NewStoryDatabaseMapper:
                     %(history)s, %(current_status)s, %(secrets)s, %(extra_data)s::jsonb,
                     ST_SetSRID(ST_MakePoint(%(lon)s, %(lat)s, 0, 0), 4326)::geography
                 )
-                RETURNING id
+                RETURNING id, entity_id
             """,
                 place_record,
             )  # Note: PostGIS takes (lon, lat) not (lat, lon)
-            place_id = cur.fetchone()[0]
+            place_id, place_entity_id = cur.fetchone()
             logger.debug(
                 f"Created place: {place.name} (ID: {place_id}) at ({lat}, {lon})"
             )
@@ -458,6 +483,17 @@ class NewStoryDatabaseMapper:
             """,
                 (place_id, character_id),
             )
+
+            # Apply Skald-bestowed place_affordance tags
+            tag_counters = apply_tag_bestowal(
+                cur,
+                entity_id=place_entity_id,
+                entity_kind="place",
+                bestowal=place.orrery_tags,
+                source_kind="skald_inline",
+            )
+            if tag_counters["applied"] or tag_counters["proposed"]:
+                logger.info(f"Tag bestowal for place {place.name}: {tag_counters}")
 
             # Generate a default circular boundary for the zone
             # Using a 50-mile radius (approximately 80km) centered on the place
@@ -547,11 +583,13 @@ class NewStoryDatabaseMapper:
             try:
                 with conn.cursor() as cur:
                     # Ensure global_variables row exists (may have been deleted by previous CASCADE)
-                    cur.execute("""
+                    cur.execute(
+                        """
                         INSERT INTO global_variables (id, new_story)
                         VALUES (true, true)
                         ON CONFLICT (id) DO NOTHING
-                    """)
+                    """
+                    )
 
                     # Clean slate: DELETE all entity data and reset sequences
                     # NOTE: Can't use TRUNCATE because global_variables has FK to characters,
@@ -562,7 +600,8 @@ class NewStoryDatabaseMapper:
                     )
 
                     # Delete in reverse dependency order (children before parents)
-                    cur.execute("""
+                    cur.execute(
+                        """
                         DELETE FROM chunk_character_references;
                         DELETE FROM chunk_faction_references;
                         DELETE FROM place_chunk_references;
@@ -577,17 +616,20 @@ class NewStoryDatabaseMapper:
                         DELETE FROM places;
                         DELETE FROM zones;
                         DELETE FROM layers;
-                    """)
+                    """
+                    )
 
                     # Reset identity sequences so protagonist gets ID=1
-                    cur.execute("""
+                    cur.execute(
+                        """
                         ALTER SEQUENCE characters_id_seq RESTART WITH 1;
                         ALTER SEQUENCE places_id_seq RESTART WITH 1;
                         ALTER SEQUENCE zones_id_seq RESTART WITH 1;
                         ALTER SEQUENCE layers_id_seq RESTART WITH 1;
                         ALTER SEQUENCE items_id_seq RESTART WITH 1;
                         ALTER SEQUENCE character_relationships_id_seq RESTART WITH 1;
-                    """)
+                    """
+                    )
                     logger.info("Truncated entity tables for clean slate")
 
                     # Save setting (using shared cursor)

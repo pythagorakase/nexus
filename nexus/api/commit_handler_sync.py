@@ -22,6 +22,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
     SummaryTask,
@@ -99,7 +100,7 @@ def create_new_place_sync(cur, new_place):
             name, type, summary, history, current_status, secrets,
             extra_data
         ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
+        RETURNING id, entity_id
     """,
         (
             new_place.name,
@@ -112,7 +113,15 @@ def create_new_place_sync(cur, new_place):
         ),
     )
 
-    return cur.fetchone()[0]
+    place_id, entity_id = cur.fetchone()
+    apply_tag_bestowal(
+        cur,
+        entity_id=entity_id,
+        entity_kind="place",
+        bestowal=getattr(new_place, "orrery_tags", None),
+        source_kind="skald_inline",
+    )
+    return place_id
 
 
 def resolve_character_references_sync(
@@ -166,7 +175,7 @@ def create_new_character_sync(cur, new_char):
             name, summary, appearance, background, personality,
             emotional_state, current_activity, current_location, extra_data
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
+        RETURNING id, entity_id
     """,
         (
             new_char.name,
@@ -181,7 +190,15 @@ def create_new_character_sync(cur, new_char):
         ),
     )
 
-    return cur.fetchone()[0]
+    char_id, entity_id = cur.fetchone()
+    apply_tag_bestowal(
+        cur,
+        entity_id=entity_id,
+        entity_kind="character",
+        bestowal=getattr(new_char, "orrery_tags", None),
+        source_kind="skald_inline",
+    )
+    return char_id
 
 
 def resolve_faction_references_sync(
@@ -240,7 +257,7 @@ def create_new_faction_sync(cur, new_faction):
             hidden_agenda, territory, power_level, resources,
             primary_location, extra_data
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
+        RETURNING id, entity_id
     """,
         (
             faction_id,
@@ -258,7 +275,15 @@ def create_new_faction_sync(cur, new_faction):
         ),
     )
 
-    return cur.fetchone()[0]
+    inserted_faction_id, entity_id = cur.fetchone()
+    apply_tag_bestowal(
+        cur,
+        entity_id=entity_id,
+        entity_kind="faction",
+        bestowal=getattr(new_faction, "orrery_tags", None),
+        source_kind="skald_inline",
+    )
+    return inserted_faction_id
 
 
 # ============================================================================
@@ -561,6 +586,16 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     )
                     logger.info(f"Updated character {char_update.character_id}")
 
+                bestowal = getattr(char_update, "orrery_tags", None)
+                if bestowal is not None:
+                    _apply_state_tags(
+                        cur,
+                        kind="character",
+                        subtype_table="characters",
+                        subtype_id=char_update.character_id,
+                        bestowal=bestowal,
+                    )
+
         # Update place states
         for place_update in state_updates.locations:
             if place_update.place_id and place_update.current_status:
@@ -570,6 +605,16 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                 )
                 logger.info(f"Updated place {place_update.place_id}")
 
+            bestowal = getattr(place_update, "orrery_tags", None)
+            if place_update.place_id and bestowal is not None:
+                _apply_state_tags(
+                    cur,
+                    kind="place",
+                    subtype_table="places",
+                    subtype_id=place_update.place_id,
+                    bestowal=bestowal,
+                )
+
         # Update faction states
         for faction_update in state_updates.factions:
             if faction_update.faction_id and faction_update.current_activity:
@@ -578,3 +623,35 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     (faction_update.current_activity, faction_update.faction_id),
                 )
                 logger.info(f"Updated faction {faction_update.faction_id}")
+
+            bestowal = getattr(faction_update, "orrery_tags", None)
+            if faction_update.faction_id and bestowal is not None:
+                _apply_state_tags(
+                    cur,
+                    kind="faction",
+                    subtype_table="factions",
+                    subtype_id=faction_update.faction_id,
+                    bestowal=bestowal,
+                )
+
+
+def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None:
+    """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
+    cur.execute(
+        f"SELECT entity_id FROM {subtype_table} WHERE id = %s",
+        (subtype_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        logger.warning(f"Skipping tag bestowal: no {kind} row for id={subtype_id}")
+        return
+    entity_id = row[0]
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=entity_id,
+        entity_kind=kind,
+        bestowal=bestowal,
+        source_kind="skald_inline",
+    )
+    if any(counters.values()):
+        logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")

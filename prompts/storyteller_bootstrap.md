@@ -44,3 +44,15 @@ Even without a predecessor, populate `authorial_directives` to guide chunk #2. W
 ## First Impressions Matter
 
 This chunk sets expectations for everything that follows. Be bold. Be vivid. Be true to the world and character you've been given. Your successors will build on the foundation you lay here.
+
+---
+
+## Orrery Awareness for Chunk #1
+
+Orrery (Bethesda Creation Engine × Dwarf Fortress: radiant routines, autonomous agents with needs, emergent off-screen events) decides what off-screen entities are doing each tick by matching `entity_tags` against package gates.
+
+The protagonist's tags and the starting location's `place_affordance` tags were already bestowed during the wizard (in `submit_wildcard_trait` and `submit_starting_scenario`). Don't re-apply them.
+
+For **new entities you introduce in the opening scene** — NPCs the protagonist encounters, places they pass through, factions named in the prose — populate `orrery_tags` on the corresponding `new_character` / `new_place` / `new_faction` payloads in `referenced_entities`. The fields work the same way as in ongoing narrative (see `storyteller_core.md`'s Orrery Awareness section). The opening scene typically introduces 1–3 NPCs and 1–2 places — tag them with the same care you'd give the protagonist.
+
+If the world is non-cyberpunk (the existing vocabulary was seeded from cyberpunk slot 2), expect to propose new tags freely. `bodyform:elf`, `sworn_liege`, `ritually_charged`, `arcane_attuned` — these all need to be created the first time you meet an entity that warrants them. Proposals auto-insert; the vocabulary grows with the world.

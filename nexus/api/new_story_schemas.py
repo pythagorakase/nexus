@@ -13,6 +13,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+
 
 class Genre(str, Enum):
     """Supported story genres."""
@@ -204,6 +206,13 @@ class CharacterSheet(BaseModel):
         ...,
         min_length=20,
         description="What this trait means for the character - capability, possession, relationship, or curse",
+    )
+
+    # Orrery tag bestowal, populated from the wildcard subphase during
+    # to_character_sheet() assembly.
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description="Semantic Orrery tags bestowed by Skald during the wizard wildcard step.",
     )
 
     @model_validator(mode="after")
@@ -470,6 +479,19 @@ class WildcardTrait(BaseModel):
         description="What this trait means - capability, possession, relationship, blessing, or curse",
     )
 
+    # Orrery tag bestowal for the protagonist. Submit-wildcard time is the
+    # richest tagging context — full concept + traits + wildcard are known.
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Semantic tags for this protagonist (bodyform, capacity, "
+            "disposition, role, state, etc.). Apply registered tags by name; "
+            "propose new ones when the genre needs vocabulary that doesn't yet "
+            "exist (e.g., bodyform:elf for a fantasy elf). See the Orrery "
+            "Awareness section of your system prompt for category guidance."
+        ),
+    )
+
 
 class CharacterCreationState(BaseModel):
     """
@@ -552,6 +574,7 @@ class CharacterCreationState(BaseModel):
             trait_1=trait_entries[0],
             trait_2=trait_entries[1],
             trait_3=trait_entries[2],
+            orrery_tags=self.wildcard.orrery_tags,
         )
 
 
@@ -815,6 +838,17 @@ class PlaceProfile(BaseModel):
     # Optional attributes stored in extra_data JSONB
     extra_data: Optional[PlaceExtraData] = Field(
         None, description="Additional attributes stored in places.extra_data"
+    )
+
+    # Orrery place_affordance tagging for the starting location.
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Semantic place_affordance tags for this location (e.g., "
+            "sheltered, public, isolated, defensible, ritually_charged). "
+            "Propose new ones when the setting needs vocabulary that doesn't "
+            "yet exist. See the Orrery Awareness section of your system prompt."
+        ),
     )
 
 

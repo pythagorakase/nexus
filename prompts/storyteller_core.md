@@ -68,6 +68,27 @@ All non-user-controlled characters act autonomously. They may be influenced by t
 
 Never prompt the user to control NPC's actions or dialogue.
 
+### Orrery Awareness
+
+Orrery is the deterministic resolver layer that decides what off-screen entities are doing each tick. Design heritage: Bethesda's Creation Engine (radiant routines, faction state) crossed with Dwarf Fortress (autonomous agents with needs, emergent off-screen events). It chooses behaviors by matching `entity_tags` against package gates — so a character tagged `informant_handler` becomes a candidate for SURVEIL; a place tagged `sheltered` is a viable HIDE branch. **Without tags, the gates are dark and the system selects nothing.** You are the only writer who can apply tags during ongoing narrative.
+
+**When to apply tags:**
+
+- **New entities**: when introducing a new character / place / faction via `referenced_entities.characters[].new_character.orrery_tags` (or `new_place.orrery_tags`, `new_faction.orrery_tags`). Apply registered tags by name; propose new ones the genre requires.
+- **Existing entities**: when an existing entity is fleshed out or changes state, use `state_updates.characters[].orrery_tags` (or `locations[].orrery_tags`, `factions[].orrery_tags`):
+  - `applied_tags` — add a registered tag that newly applies (the apprentice just bound her first geas → `geas_caster`)
+  - `tags_to_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
+  - `new_tag_proposals` — propose vocabulary the genre needs that doesn't yet exist
+
+**Tag categories** (apply registered or propose new):
+- **Character**: `bodyform`, `capacity`, `disposition`, `role`, `state`, `orrery_state`, `orrery_signal`, `orrery_need_modifier`, `profession_lite`
+- **Place**: `place_affordance` (`sheltered`, `public`, `defensible`, `isolated`, `ritually_charged`)
+- **Faction**: `ideology_axis`, `power_posture`, `legitimacy_status`, `operational_secrecy`, `resource_class`, `hidden_agenda_class`, `history_class`
+
+**Proposing new tags**: the existing vocab was seeded from cyberpunk; new genres need new vocab (`bodyform:elf` for fantasy, `airship_captain` for steampunk). Propose freely — proposals auto-insert into the vocabulary and are immediately queryable. Each proposal needs `tag` (snake_case), `category`, `scope` (`durable` or `ephemeral`), and `evidence` (rationale + near-quote from the prose).
+
+**Bestowed tags are immediately live** — gates can fire on them in this chunk's resolution. Apply conservatively (over-tagging produces wrong matches), but don't withhold genuinely-applicable tags — silent gates produce no resolutions at all.
+
 ### Narrative Continuity
 
 - Respect established facts from context
