@@ -216,6 +216,19 @@ class TestQueryGeneration:
             "Hollow Choir obligation conflict",
         ]
 
+    def test_sanitize_retrieval_queries_rejects_structured_planner_leaks(self):
+        """Structured SQL/planner leakage should not become a MEMNON query."""
+        queries = _sanitize_retrieval_queries(
+            [
+                '{"action":"sql","sql":"SELECT * FROM events ..."}',
+                "Character relationships and interactions",
+                "Background info on key entities",
+                "Lantern Court trapdoor history",
+            ]
+        )
+
+        assert queries == ["Lantern Court trapdoor history"]
+
     def test_parse_structured_json_text_uses_final_channel_json(self):
         """Structured fallback parsing should recover JSON from leaked transcripts."""
         raw = (

@@ -58,6 +58,11 @@ _META_QUERY_FRAGMENTS = (
     "one per line",
     "retrieval queries to search",
 )
+_GENERIC_RETRIEVAL_QUERIES = {
+    "background info on key entities",
+    "character relationships and interactions",
+    "relevant past events involving these characters",
+}
 
 
 # Pydantic models for structured responses
@@ -158,6 +163,15 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
         return None
 
     lowered = cleaned.lower()
+    normalized_lowered = lowered.rstrip(" .:")
+    if normalized_lowered in _GENERIC_RETRIEVAL_QUERIES:
+        return None
+    if cleaned.startswith(("{", "[")):
+        return None
+    if lowered.startswith(("select ", "with ")):
+        return None
+    if '"action"' in lowered or '"sql"' in lowered:
+        return None
     if lowered.startswith(_META_QUERY_PREFIXES):
         return None
     if any(fragment in lowered for fragment in _META_QUERY_FRAGMENTS):
