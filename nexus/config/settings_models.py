@@ -91,7 +91,11 @@ class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     default_model: str = Field(
-        ..., description="Default model label shown by legacy settings consumers"
+        ...,
+        description=(
+            "Display-only model ID exposed to legacy settings consumers. "
+            "Inference callers must use role-resolved agent fields instead."
+        ),
     )
     default_slot_model: str = Field(
         default="TEST", description="Default model for newly created/reset slots"
@@ -100,6 +104,23 @@ class ModelConfig(BaseModel):
         default_factory=dict,
         description="API models grouped by provider (openai, anthropic, test)",
     )
+
+    @model_validator(mode="after")
+    def _validate_defaults_reference_known_models(self) -> "ModelConfig":
+        """Legacy/default UI fields must stay anchored to registered model IDs."""
+        known_ids = {
+            entry.id
+            for provider in self.api_models.values()
+            for entry in provider.models
+        }
+        for field_name in ("default_model", "default_slot_model"):
+            model_id = getattr(self, field_name)
+            if model_id not in known_ids:
+                raise ValueError(
+                    f"{field_name} references unknown model id '{model_id}'. "
+                    f"Known IDs: {sorted(known_ids)}"
+                )
+        return self
 
 
 class NarrativeConfig(BaseModel):

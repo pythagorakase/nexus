@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Union, Dict, Any, List, Optional
 import json
+import logging
 
 import tomlkit
 
@@ -26,6 +27,8 @@ except ModuleNotFoundError:
         )
 
 from .settings_models import Settings
+
+logger = logging.getLogger("nexus.config.loader")
 
 
 def save_settings(
@@ -263,6 +266,8 @@ def _load_from_json(path: Path) -> Settings:
     legacy_model = dict(legacy_global.get("model", {}))
     legacy_model.pop("possible_values", None)
     legacy_model.pop("description", None)
+    if "llm" in data or "llm" in legacy_agent_settings:
+        logger.debug("Ignoring legacy local LLM router config from settings.json")
     # If api_models is missing from legacy JSON, the Settings validator will
     # surface a clear error rather than silently filling in stale defaults.
 

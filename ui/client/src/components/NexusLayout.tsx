@@ -471,18 +471,12 @@ export function NexusLayout() {
       <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in">
         <StatusBar
           model={currentModel}
-          season={latestChunk?.metadata?.season ?? 1}
-          episode={latestChunk?.metadata?.episode ?? 1}
-          scene={latestChunk?.metadata?.scene ?? 1}
           apexStatus={apexStatus}
           isStoryMode={isStoryMode}
           isTestModeEnabled={isTestModeEnabled}
           activeSlot={activeSlot ?? undefined}
           userCharacterName={userCharacter?.name}
           onNavigate={setActiveTab}
-          onHamburgerClick={() => {
-            // Can be used for mobile menu in the future
-          }}
         />
 
         <Tabs

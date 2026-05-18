@@ -16,15 +16,11 @@ import { cn } from "@/lib/utils";
 
 interface StatusBarProps {
   model: string;
-  season: number;
-  episode: number;
-  scene: number;
   apexStatus: "OFFLINE" | "READY" | "TRANSMITTING" | "GENERATING" | "RECEIVING";
   isStoryMode: boolean;
   isTestModeEnabled?: boolean;
   activeSlot?: number;
   userCharacterName?: string;
-  onHamburgerClick?: () => void;
   onNavigate?: (tab: string) => void;
 }
 

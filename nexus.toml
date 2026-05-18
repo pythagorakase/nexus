@@ -6,7 +6,8 @@
 # =============================================================================
 
 [global.model]
-# Default model label for legacy settings consumers
+# Display-only model ID for legacy settings consumers.
+# Inference callers must use role-resolved agent fields such as @openai.default.
 default_model = "gpt-5.5"
 
 # Default model for newly created/reset slots
