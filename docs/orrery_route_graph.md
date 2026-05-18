@@ -58,7 +58,16 @@ poetry run python scripts/import_orrery_route_graph.py path/to/graph.json --data
 ```
 
 The JSON is deliberately not raw `.osm.pbf`. Convert OSM extracts offline into a
-small graph that matches the campaign region, then import that graph.
+small graph that matches the campaign region, then import that graph. The graph
+router currently accepts only `walking`, `vehicle`, `covert`, and `mixed` edges;
+`rail`, `water`, and `air` still route through authored edges or coordinate
+estimates until they get dedicated graph support.
+
+Imports and turn-time graph queries are bounded by
+`orrery.route_graph.max_edges_per_query` in `nexus.toml` (default `5000`). If a
+graph extract exceeds the cap, NEXUS raises instead of falling through to an
+estimate. Trim the regional extract, split it by `graph_key`, or raise the cap
+deliberately after profiling.
 
 ## Route Selection
 

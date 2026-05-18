@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from nexus.agents.orrery.routing import RouteGraphEdge, shortest_route
+from scripts.import_orrery_route_graph import _mode, _validate_edge_count
 
 
 def test_shortest_route_uses_lowest_duration_path() -> None:
@@ -59,3 +60,19 @@ def test_shortest_route_rejects_unreachable_graph() -> None:
     )
 
     assert route is None
+
+
+def test_route_graph_importer_rejects_non_routable_modes() -> None:
+    """The importer only accepts modes the graph router will query."""
+
+    with pytest.raises(ValueError, match="rail"):
+        _mode("rail")
+
+
+def test_route_graph_importer_rejects_oversized_extract() -> None:
+    """The importer applies the same bounded-extract posture as routing."""
+
+    edges = [{"from": "a", "to": "b"}, {"from": "b", "to": "c"}]
+
+    with pytest.raises(ValueError, match="exceeding the configured cap"):
+        _validate_edge_count(edges, max_edges=1, graph_key="default")

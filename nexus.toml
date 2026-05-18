@@ -163,6 +163,9 @@ enabled = false
 [orrery.binding]
 window_chunks = 30
 
+[orrery.route_graph]
+max_edges_per_query = 5000
+
 [orrery.narration]
 mode = "async"
 provider = "anthropic"

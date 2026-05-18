@@ -7,7 +7,10 @@ import heapq
 from typing import Optional
 
 
+DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY = 5000
+ROUTE_GRAPH_MODES = frozenset({"walking", "vehicle", "covert", "mixed"})
 RISK_RANK = {"low": 0, "moderate": 1, "high": 2, "extreme": 3}
+RANK_RISK = {rank: risk for risk, rank in RISK_RANK.items()}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,49 +67,53 @@ def shortest_route(
         if edge.bidirectional:
             adjacency.setdefault(edge.to_node_id, []).append((edge.from_node_id, edge))
 
-    heap: list[
-        tuple[float, int, tuple[int, ...], tuple[int, ...], tuple[str, ...], int]
-    ]
-    heap = [(0.0, origin_node_id, (origin_node_id,), (), (), RISK_RANK["low"])]
-    best: dict[int, float] = {}
+    heap: list[tuple[float, int]] = [(0.0, origin_node_id)]
+    best: dict[int, float] = {origin_node_id: 0.0}
+    came_from: dict[int, tuple[int, RouteGraphEdge]] = {}
 
     while heap:
-        duration, node_id, node_path, edge_path, mode_path, risk_rank = heapq.heappop(
-            heap
-        )
-        if node_id in best and duration >= best[node_id]:
+        duration, node_id = heapq.heappop(heap)
+        if duration > best.get(node_id, float("inf")):
             continue
-        best[node_id] = duration
 
         if node_id == destination_node_id:
-            distance = sum(edge.distance_m for edge in _edges_by_id(edges, edge_path))
-            return RouteGraphRoute(
-                node_ids=node_path,
-                edge_ids=edge_path,
-                distance_m=distance,
-                duration_minutes=duration,
-                risk=_risk_for_rank(risk_rank),
-                edge_travel_modes=mode_path,
-            )
+            break
 
         for next_node_id, edge in adjacency.get(node_id, ()):
             edge_duration = _edge_duration_minutes(edge, speed_kmh=speed_kmh)
             next_duration = duration + edge_duration
-            if next_node_id in best and next_duration >= best[next_node_id]:
+            if next_duration >= best.get(next_node_id, float("inf")):
                 continue
-            heapq.heappush(
-                heap,
-                (
-                    next_duration,
-                    next_node_id,
-                    node_path + (next_node_id,),
-                    edge_path + (edge.edge_id,),
-                    mode_path + (edge.travel_mode,),
-                    max(risk_rank, RISK_RANK.get(edge.risk, RISK_RANK["low"])),
-                ),
-            )
+            best[next_node_id] = next_duration
+            came_from[next_node_id] = (node_id, edge)
+            heapq.heappush(heap, (next_duration, next_node_id))
 
-    return None
+    if destination_node_id not in best:
+        return None
+
+    node_ids: list[int] = [destination_node_id]
+    edge_ids: list[int] = []
+    edge_travel_modes: list[str] = []
+    distance_m = 0.0
+    risk_rank = RISK_RANK["low"]
+    node_id = destination_node_id
+    while node_id != origin_node_id:
+        previous_node_id, edge = came_from[node_id]
+        edge_ids.append(edge.edge_id)
+        edge_travel_modes.append(edge.travel_mode)
+        distance_m += float(edge.distance_m)
+        risk_rank = max(risk_rank, RISK_RANK.get(edge.risk, RISK_RANK["low"]))
+        node_ids.append(previous_node_id)
+        node_id = previous_node_id
+
+    return RouteGraphRoute(
+        node_ids=tuple(reversed(node_ids)),
+        edge_ids=tuple(reversed(edge_ids)),
+        distance_m=distance_m,
+        duration_minutes=best[destination_node_id],
+        risk=_risk_for_rank(risk_rank),
+        edge_travel_modes=tuple(reversed(edge_travel_modes)),
+    )
 
 
 def _edge_duration_minutes(edge: RouteGraphEdge, *, speed_kmh: float) -> float:
@@ -115,15 +122,5 @@ def _edge_duration_minutes(edge: RouteGraphEdge, *, speed_kmh: float) -> float:
     return (float(edge.distance_m) / 1000.0) / speed_kmh * 60.0
 
 
-def _edges_by_id(
-    edges: list[RouteGraphEdge], edge_ids: tuple[int, ...]
-) -> list[RouteGraphEdge]:
-    by_id = {edge.edge_id: edge for edge in edges}
-    return [by_id[edge_id] for edge_id in edge_ids]
-
-
 def _risk_for_rank(rank: int) -> str:
-    for risk, candidate_rank in RISK_RANK.items():
-        if candidate_rank == rank:
-            return risk
-    return "low"
+    return RANK_RISK.get(rank, "low")

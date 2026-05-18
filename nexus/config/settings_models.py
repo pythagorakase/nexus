@@ -274,6 +274,14 @@ class OrreryBindingSettings(BaseModel):
     window_chunks: int = Field(default=30, ge=1)
 
 
+class OrreryRouteGraphSettings(BaseModel):
+    """Offline route graph safety settings for Orrery travel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_edges_per_query: int = Field(default=5000, ge=1)
+
+
 class OrreryNarrationSettings(BaseModel):
     """Frontier narration settings for promoted Orrery resolutions."""
 
@@ -420,6 +428,9 @@ class OrrerySettings(BaseModel):
 
     enabled: bool = False
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
+    route_graph: OrreryRouteGraphSettings = Field(
+        default_factory=OrreryRouteGraphSettings
+    )
     narration: OrreryNarrationSettings
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)

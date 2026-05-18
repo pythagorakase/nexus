@@ -23,7 +23,12 @@ from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     OrreryTickProposal,
 )
-from nexus.agents.orrery.routing import RouteGraphEdge, shortest_route
+from nexus.agents.orrery.routing import (
+    DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY,
+    ROUTE_GRAPH_MODES,
+    RouteGraphEdge,
+    shortest_route,
+)
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
@@ -61,7 +66,6 @@ TRAVEL_MODE_SPEED_KMH = {
     "mixed": 25.0,
 }
 ROUTE_GRAPH_DEFAULT_KEY = "default"
-ROUTE_GRAPH_MODES = frozenset({"walking", "vehicle", "covert", "mixed"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -800,6 +804,17 @@ def _route_graph_key(payload: Mapping[str, Any]) -> str:
         or payload.get("graph_key")
         or ROUTE_GRAPH_DEFAULT_KEY
     )
+
+
+def _route_graph_max_edges_per_query() -> int:
+    """Return the configured fail-fast cap for in-process graph routing."""
+
+    from nexus.config import load_settings
+
+    settings = load_settings()
+    if settings.orrery is None:
+        return DEFAULT_ROUTE_GRAPH_MAX_EDGES_PER_QUERY
+    return int(settings.orrery.route_graph.max_edges_per_query)
 
 
 def _apply_travel_start_sync(
@@ -2092,6 +2107,7 @@ def _route_graph_edges_sync(
     mode: str,
     graph_key: str,
 ) -> list[RouteGraphEdge]:
+    max_edges = _route_graph_max_edges_per_query()
     cur.execute(
         """
         SELECT id,
@@ -2105,10 +2121,16 @@ def _route_graph_edges_sync(
         FROM orrery_route_graph_edges
         WHERE graph_key = %s
           AND travel_mode IN (%s::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY id
+        LIMIT %s
         """,
-        (graph_key, mode),
+        (graph_key, mode, max_edges + 1),
     )
-    return [_route_graph_edge_from_row(row) for row in cur.fetchall()]
+    rows = cur.fetchall()
+    _raise_if_route_graph_too_large(
+        rows, graph_key=graph_key, mode=mode, max_edges=max_edges
+    )
+    return [_route_graph_edge_from_row(row) for row in rows]
 
 
 async def _route_graph_edges_async(
@@ -2117,6 +2139,7 @@ async def _route_graph_edges_async(
     mode: str,
     graph_key: str,
 ) -> list[RouteGraphEdge]:
+    max_edges = _route_graph_max_edges_per_query()
     rows = await conn.fetch(
         """
         SELECT id,
@@ -2130,11 +2153,33 @@ async def _route_graph_edges_async(
         FROM orrery_route_graph_edges
         WHERE graph_key = $1
           AND travel_mode IN ($2::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+        ORDER BY id
+        LIMIT $3
         """,
         graph_key,
         mode,
+        max_edges + 1,
+    )
+    _raise_if_route_graph_too_large(
+        rows, graph_key=graph_key, mode=mode, max_edges=max_edges
     )
     return [_route_graph_edge_from_row(row) for row in rows]
+
+
+def _raise_if_route_graph_too_large(
+    rows: Any,
+    *,
+    graph_key: str,
+    mode: str,
+    max_edges: int,
+) -> None:
+    if len(rows) <= max_edges:
+        return
+    raise ValueError(
+        "Orrery route graph query exceeded "
+        f"{max_edges} edges for graph_key={graph_key!r}, mode={mode!r}; "
+        "trim the offline extract or raise orrery.route_graph.max_edges_per_query"
+    )
 
 
 def _route_graph_edge_from_row(row: Any) -> RouteGraphEdge:
