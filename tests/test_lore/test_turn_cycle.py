@@ -23,14 +23,6 @@ class DummyLore:
         self.memnon = None
         self.memory_manager = ContextMemoryManager(self.settings)
         self.token_manager = None
-        self.llm_manager = None
-
-
-class DummyLLMManager:
-    """Legacy local LLM stub that would fail if retrieval called removed methods."""
-
-    def is_available(self) -> bool:
-        return True
 
 
 @pytest.fixture()
@@ -136,7 +128,6 @@ def test_warm_analysis_loads_parent_authorial_directives(
             return {"results": []}
 
     turn_manager.lore.memnon = DummyMemnon()
-    turn_manager.lore.llm_manager = None
     ctx = TurnContext(
         turn_id="turn_parent_directives",
         user_input="Continue.",
@@ -155,7 +146,7 @@ def test_warm_analysis_loads_parent_authorial_directives(
     assert ctx.phase_states["warm_analysis"]["authorial_directive_count"] == 1
 
 
-def test_deep_queries_use_authorial_directives_without_local_llm(
+def test_deep_queries_use_authorial_directives_without_generated_queries(
     turn_manager: TurnCycleManager,
 ):
     class DummyMemnon:
@@ -177,9 +168,7 @@ def test_deep_queries_use_authorial_directives_without_local_llm(
             }
 
     memnon = DummyMemnon()
-    llm_manager = DummyLLMManager()
     turn_manager.lore.memnon = memnon
-    turn_manager.lore.llm_manager = llm_manager
 
     ctx = TurnContext(
         turn_id="turn_deep_directives",
@@ -226,9 +215,7 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
             }
 
     memnon = DummyMemnon()
-    llm_manager = DummyLLMManager()
     turn_manager.lore.memnon = memnon
-    turn_manager.lore.llm_manager = llm_manager
 
     ctx = TurnContext(
         turn_id="turn_deep_raw_chunk",
@@ -287,9 +274,7 @@ def test_deep_queries_warn_when_raw_chunk_suppresses_directives(
             }
 
     memnon = DummyMemnon()
-    llm_manager = DummyLLMManager()
     turn_manager.lore.memnon = memnon
-    turn_manager.lore.llm_manager = llm_manager
     turn_manager.lore.settings["lore"] = {"retrieval": {"max_deep_queries": 1}}
 
     ctx = TurnContext(
@@ -343,9 +328,7 @@ def test_deep_queries_obey_configured_query_budget(
             }
 
     memnon = DummyMemnon()
-    llm_manager = DummyLLMManager()
     turn_manager.lore.memnon = memnon
-    turn_manager.lore.llm_manager = llm_manager
     turn_manager.lore.settings["lore"] = {"retrieval": {"max_deep_queries": 3}}
 
     ctx = TurnContext(
@@ -369,11 +352,11 @@ def test_deep_queries_obey_configured_query_budget(
     }
 
 
-def test_deep_queries_can_skip_without_local_llm_or_queries(
+def test_deep_queries_can_skip_without_raw_text_or_directives(
     turn_manager: TurnCycleManager,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Missing raw text and directives should skip rather than summon a local LLM."""
+    """Missing raw text and directives should skip retrieval."""
 
     class DummyMemnon:
         def query_memory(
@@ -382,7 +365,6 @@ def test_deep_queries_can_skip_without_local_llm_or_queries(
             raise AssertionError("query_memory should not be called")
 
     turn_manager.lore.memnon = DummyMemnon()
-    turn_manager.lore.llm_manager = None
 
     ctx = TurnContext(
         turn_id="turn_deep_no_queries",

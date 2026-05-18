@@ -19,19 +19,14 @@ def _apply_marker_skip(items: Iterable[pytest.Item], marker: str, reason: str) -
             item.add_marker(skip_marker)
 
 
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
     if not _flag_enabled("NEXUS_RUN_POSTGRES"):
         _apply_marker_skip(
             items,
             "requires_postgres",
             "Set NEXUS_RUN_POSTGRES=1 to run PostgreSQL integration tests.",
-        )
-
-    if not _flag_enabled("NEXUS_RUN_LOCAL_LLM"):
-        _apply_marker_skip(
-            items,
-            "requires_local_llm",
-            "Set NEXUS_RUN_LOCAL_LLM=1 to run local LM Studio tests.",
         )
 
     if not _flag_enabled("NEXUS_RUN_LIVE_LLM"):

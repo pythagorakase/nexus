@@ -114,7 +114,6 @@ class LORE:
         self.logon: Optional[LogonUtility] = None
         self.enable_logon = enable_logon
         self._logon_initialized = False
-        self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
         self.memory_manager = None
@@ -670,9 +669,8 @@ async def main():
     parser.add_argument(
         "--keep-model",
         action="store_true",
-        help="Ignored; contextual retrieval no longer loads LM Studio",
+        help="Deprecated no-op; contextual retrieval no longer loads a local model",
     )
-
     args = parser.parse_args()
 
     # Configure logging
@@ -709,10 +707,9 @@ async def main():
             )
             return
 
-        # Set keep-model flag BEFORE retrieval
         if args.keep_model:
             logger.info(
-                "--keep-model ignored; contextual retrieval no longer loads LM Studio"
+                "--keep-model ignored; contextual retrieval no longer loads a local model"
             )
 
         logger.info(
