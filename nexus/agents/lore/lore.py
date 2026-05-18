@@ -62,6 +62,7 @@ from nexus.memory.user_confirmation import request_input
 # Import MEMNON if available
 try:
     from nexus.agents.memnon.memnon import MEMNON
+
     MEMNON_AVAILABLE = True
 except ImportError:
     MEMNON_AVAILABLE = False
@@ -77,7 +78,7 @@ class LORE:
     Central orchestration agent for the NEXUS system.
     Manages the complete turn cycle and coordinates all utility modules.
     """
-    
+
     def __init__(
         self,
         settings_path: Optional[str] = None,
@@ -101,13 +102,13 @@ class LORE:
         self.dbname = dbname
         self.slot = slot
         self.settings = self._load_settings(settings_path)
-        
+
         # Configure logging
         if debug:
             logger.setLevel(logging.DEBUG)
         else:
             logger.setLevel(logging.INFO)
-        
+
         # Initialize components
         self.memnon = None
         self.logon: Optional[LogonUtility] = None
@@ -127,9 +128,9 @@ class LORE:
 
         # Initialize utilities
         self._initialize_components()
-        
+
         logger.info("LORE agent initialized successfully")
-    
+
     def _load_settings(self, settings_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Load and validate settings from nexus.toml (or legacy settings.json).
@@ -163,38 +164,50 @@ class LORE:
         system_prompt_path = Path(__file__).parent / "lore_system_prompt.md"
 
         try:
-            with open(system_prompt_path, 'r') as f:
+            with open(system_prompt_path, "r") as f:
                 prompt = f.read()
-                logger.info(f"Loaded system prompt from {system_prompt_path} ({len(prompt)} bytes)")
+                logger.info(
+                    f"Loaded system prompt from {system_prompt_path} ({len(prompt)} bytes)"
+                )
                 return prompt
         except FileNotFoundError:
-            logger.warning(f"System prompt file not found at default location: {system_prompt_path}")
+            logger.warning(
+                f"System prompt file not found at default location: {system_prompt_path}"
+            )
 
             # Ask user for alternative path
             user_path = request_input(
                 f"System prompt not found at:\n  {system_prompt_path}\n\nPlease enter the path to lore_system_prompt.md",
                 validation_func=lambda p: Path(p).exists() and Path(p).is_file(),
-                hook_type="system_prompt_path"
+                hook_type="system_prompt_path",
             )
 
             if user_path:
                 try:
-                    with open(user_path, 'r') as f:
+                    with open(user_path, "r") as f:
                         prompt = f.read()
-                        logger.info(f"Loaded system prompt from user-provided path: {user_path} ({len(prompt)} bytes)")
+                        logger.info(
+                            f"Loaded system prompt from user-provided path: {user_path} ({len(prompt)} bytes)"
+                        )
                         return prompt
                 except Exception as e:
                     logger.error(f"Failed to load system prompt from user path: {e}")
-                    raise RuntimeError(f"FATAL: Could not load system prompt from {user_path}: {e}")
+                    raise RuntimeError(
+                        f"FATAL: Could not load system prompt from {user_path}: {e}"
+                    )
             else:
-                raise RuntimeError(f"FATAL: System prompt required but not provided. LORE cannot operate without instructions.")
+                raise RuntimeError(
+                    f"FATAL: System prompt required but not provided. LORE cannot operate without instructions."
+                )
         except Exception as e:
-            raise RuntimeError(f"FATAL: Failed to load system prompt: {e}! LORE cannot operate without instructions.")
+            raise RuntimeError(
+                f"FATAL: Failed to load system prompt: {e}! LORE cannot operate without instructions."
+            )
 
     def _initialize_components(self):
         """Initialize all components and utilities - FAILS HARD if any component unavailable"""
         logger.info("Initializing LORE components...")
-        
+
         # Initialize managers - all required
         self.token_manager = TokenBudgetManager(self.settings)
         self.turn_manager = TurnCycleManager(self)
@@ -202,14 +215,18 @@ class LORE:
             "LORE turn cycle uses deterministic retrieval planning; local LLM "
             "manager will be initialized on demand for legacy retrieval tools."
         )
-        
+
         # MEMNON is REQUIRED
         if not MEMNON_AVAILABLE:
-            raise RuntimeError("FATAL: MEMNON module not available! Cannot proceed without memory retrieval.")
+            raise RuntimeError(
+                "FATAL: MEMNON module not available! Cannot proceed without memory retrieval."
+            )
         self._initialize_memnon()
         if not self.memnon:
-            raise RuntimeError("FATAL: MEMNON initialization failed! Check database connection.")
-        
+            raise RuntimeError(
+                "FATAL: MEMNON initialization failed! Check database connection."
+            )
+
         # LOGON is initialized lazily on first use when enabled
         if self.enable_logon and not self._logon_initialized:
             apex_settings = self.settings.get("API Settings", {}).get("apex")
@@ -217,7 +234,9 @@ class LORE:
                 logger.warning(
                     "LOGON enabled but no explicit apex configuration found; using default provider settings"
                 )
-            logger.info("LOGON lazy initialization enabled; provider will be created on first use")
+            logger.info(
+                "LOGON lazy initialization enabled; provider will be created on first use"
+            )
 
         # Memory manager orchestrates Pass 1/Pass 2 state
         self.memory_manager = ContextMemoryManager(
@@ -234,21 +253,29 @@ class LORE:
         if self.llm_manager is None:
             from utils.local_llm import LocalLLMManager
 
-            settings_path = self.settings_path if hasattr(self, 'settings_path') else None
-            self.llm_manager = LocalLLMManager(self.settings, settings_path, self.system_prompt)
+            settings_path = (
+                self.settings_path if hasattr(self, "settings_path") else None
+            )
+            self.llm_manager = LocalLLMManager(
+                self.settings, settings_path, self.system_prompt
+            )
         return self.llm_manager
-    
+
     def _initialize_memnon(self):
         """Initialize MEMNON utility for memory retrieval"""
         try:
             # Create a minimal interface for MEMNON
             class MinimalInterface:
-                def assistant_message(self, msg): logger.info(f"MEMNON: {msg}")
-                def error_message(self, msg): logger.error(f"MEMNON Error: {msg}")
+                def assistant_message(self, msg):
+                    logger.info(f"MEMNON: {msg}")
+
+                def error_message(self, msg):
+                    logger.error(f"MEMNON Error: {msg}")
 
             # Get database URL - use slot-aware resolution
             # Priority: explicit dbname > slot > NEXUS_SLOT env var
             from nexus.api.slot_utils import get_slot_db_url
+
             db_url = get_slot_db_url(dbname=self.dbname, slot=self.slot)
 
             # Create minimal agent state and user objects
@@ -264,18 +291,19 @@ class LORE:
                 agent_state=MinimalAgentState(),
                 user=MinimalUser(),
                 db_url=db_url,
-                debug=self.debug
+                debug=self.debug,
             )
             logger.info("MEMNON utility initialized with database: %s", db_url)
         except Exception as e:
             logger.error(f"Failed to initialize MEMNON: {e}")
             self.memnon = None
-    
+
     def _initialize_logon(self):
         """Initialize LOGON utility for API communication"""
         try:
             # Pass dbname for slot-aware database connections
             from nexus.api.slot_utils import require_slot_dbname
+
             db = require_slot_dbname(dbname=self.dbname, slot=self.slot)
             self.logon = LogonUtility(self.settings, dbname=db)
             self._logon_initialized = True
@@ -294,8 +322,13 @@ class LORE:
 
         if self.logon is None:
             self._initialize_logon()
-    
-    async def process_turn(self, user_input: str, parent_chunk_id: Optional[int] = None, note: Optional[str] = None):
+
+    async def process_turn(
+        self,
+        user_input: str,
+        parent_chunk_id: Optional[int] = None,
+        note: Optional[str] = None,
+    ):
         """
         Process a complete turn cycle.
 
@@ -320,20 +353,20 @@ class LORE:
             target_chunk_id=parent_chunk_id,
             note=note,
         )
-        
+
         try:
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
             await self.turn_manager.process_user_input(self.turn_context)
-            
+
             # Phase 2: Warm Analysis
             self.current_phase = TurnPhase.WARM_ANALYSIS
             await self.turn_manager.perform_warm_analysis(self.turn_context)
-            
+
             # Phase 3: Entity State Queries
             self.current_phase = TurnPhase.ENTITY_STATE
             await self.turn_manager.query_entity_states(self.turn_context)
-            
+
             # Phase 4: Deep Queries
             self.current_phase = TurnPhase.DEEP_QUERIES
             await self.turn_manager.execute_deep_queries(self.turn_context)
@@ -341,28 +374,28 @@ class LORE:
             # Phase 4.5: Orrery dry-run resolution (optional; no canonical writes)
             self.current_phase = TurnPhase.ORRERY_RESOLVE
             await self.turn_manager.resolve_orrery(self.turn_context)
-            
+
             # Phase 5: Payload Assembly
             self.current_phase = TurnPhase.PAYLOAD_ASSEMBLY
             await self.turn_manager.assemble_context_payload(self.turn_context)
-            
+
             # Phase 6: Apex AI Generation
             self.current_phase = TurnPhase.APEX_GENERATION
             response = await self.turn_manager.call_apex_ai(self.turn_context)
-            
+
             # Phase 7: Response Integration
             self.current_phase = TurnPhase.INTEGRATION
             await self.turn_manager.integrate_response(self.turn_context, response)
-            
+
             # Return to idle
             self.current_phase = TurnPhase.IDLE
-            
+
             # Log completion
             elapsed = time.time() - self.turn_context.start_time
             logger.info(f"Turn cycle completed in {elapsed:.2f} seconds")
-            
+
             return response
-            
+
         except Exception as e:
             failed_phase = self.current_phase
             logger.error(f"Error in turn cycle phase {failed_phase}: {e}")
@@ -371,30 +404,37 @@ class LORE:
             if failed_phase == TurnPhase.APEX_GENERATION:
                 raise
             return f"Error processing turn: {str(e)}"
-        
+
         finally:
             # Clean up legacy local-LLM resources if they were initialized by
             # deprecated retrieval tools during this process.
             if (
                 self.llm_manager
                 and self.llm_manager.unload_on_exit  # allow --keep-model to disable
-                and self.settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {}).get("unload_after_turn", True)
+                and self.settings.get("Agent Settings", {})
+                .get("LORE", {})
+                .get("llm", {})
+                .get("unload_after_turn", True)
             ):
                 logger.debug("Unloading model after turn cycle to free resources")
                 self.llm_manager.unload_model()
 
-    async def retrieve_context(self, retrieval_directives: Union[str, List[str]], chunk_id: Optional[int] = None) -> Dict[str, Any]:
+    async def retrieve_context(
+        self,
+        retrieval_directives: Union[str, List[str]],
+        chunk_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Process retrieval directives to assemble narrative context for a specific chunk.
-        
+
         This legacy helper now performs direct MEMNON retrieval without local
         LLM query expansion or synthesis.
-        
+
         Args:
-            retrieval_directives: One or more continuity elements/context requests 
+            retrieval_directives: One or more continuity elements/context requests
                                   (e.g., ["Alex & Emilia's relationship history", "What happened to Victor?"])
             chunk_id: The narrative chunk this context is being assembled for
-            
+
         Returns dict with:
         - retrieved_context: The assembled contextual information (dict keyed by directive)
         - sources: List of chunk IDs used
@@ -404,25 +444,23 @@ class LORE:
         # Normalize to list
         if isinstance(retrieval_directives, str):
             retrieval_directives = [retrieval_directives]
-        
-        qa_logger.info(f"Processing {len(retrieval_directives)} retrieval directive(s) for chunk {chunk_id}")
 
-        # Load the specific chunk and surrounding context if chunk_id provided
-        warm_slice = []
+        qa_logger.info(
+            f"Processing {len(retrieval_directives)} retrieval directive(s) for chunk {chunk_id}"
+        )
+
+        # Load the specific chunk text when this helper is anchoring retrieval to
+        # a continuation point. The text is used as an additional direct query.
         target_chunk_text = ""
         if chunk_id:
             try:
-                # Get the specific chunk - this is our continuation point
-                chunk_result = self.memnon.get_chunk_by_id(chunk_id) if self.memnon else None
+                chunk_result = (
+                    self.memnon.get_chunk_by_id(chunk_id) if self.memnon else None
+                )
                 if chunk_result:
-                    target_chunk_text = chunk_result.get("full_text", chunk_result.get("text", ""))
-                    
-                    # Add it to warm slice with a clear marker
-                    warm_slice.append({
-                        "id": chunk_id,
-                        "text": target_chunk_text,
-                        "is_target": True
-                    })
+                    target_chunk_text = chunk_result.get(
+                        "full_text", chunk_result.get("text", "")
+                    )
                     qa_logger.info(f"Loaded target chunk {chunk_id}")
                 else:
                     qa_logger.warning(f"Could not find chunk {chunk_id}")
@@ -430,89 +468,98 @@ class LORE:
             except Exception as e:
                 qa_logger.error(f"Failed to retrieve chunk {chunk_id}: {e}")
                 raise
-        
-        if not warm_slice:
-            # Fallback to recent chunks if no specific chunk
-            try:
-                recent = self.memnon.get_recent_chunks(limit=5) if self.memnon else {"results": []}
-                warm_slice = recent.get("results", [])
-            except Exception as e:
-                qa_logger.error(f"Failed to retrieve recent chunks: {e}")
-                warm_slice = []
-
         # Process each directive sequentially and aggregate results
         all_results = {
             "chunk_id": chunk_id,
             "directives": {},  # Store all per-directive data here
-            "sources": [],     # Combined sources from all directives
-            "queries": []      # Combined queries from all directives
+            "sources": [],  # Combined sources from all directives
+            "queries": [],  # Combined queries from all directives
         }
-        
+
         # Process each retrieval directive independently
         for directive in retrieval_directives:
-            directive_result = await self._process_single_directive(directive, chunk_id, warm_slice, target_chunk_text)
-            
+            directive_result = await self._process_single_directive(
+                directive, chunk_id, target_chunk_text
+            )
+
             # Store per-directive results
             all_results["directives"][directive] = {
                 "retrieved_context": directive_result["retrieved_context"],
                 "reasoning": directive_result["reasoning"],
                 "sql_attempts": directive_result.get("sql_attempts", []),
                 "search_progress": directive_result.get("search_progress", []),
-                "sources": directive_result["sources"]
+                "sources": directive_result["sources"],
             }
-            
+
             # Also aggregate sources and queries for convenience
             all_results["sources"].extend(directive_result["sources"])
             all_results["queries"].extend(directive_result["queries"])
-        
+
         # Deduplicate sources while preserving order
         all_results["sources"] = list(dict.fromkeys(all_results["sources"]))
-        
+
         return all_results
-    
+
     async def answer_question(self, question: str) -> Dict[str, Any]:
         """
         Backward compatibility wrapper for retrieve_context.
         Converts old-style question into a retrieval directive.
         """
-        qa_logger.warning("answer_question is deprecated. Use retrieve_context with directives instead.")
+        qa_logger.warning(
+            "answer_question is deprecated. Use retrieve_context with directives instead."
+        )
         return await self.retrieve_context([question], chunk_id=None)
 
-    async def _process_single_directive(self, directive: str, chunk_id: Optional[int], warm_slice: List[Dict], target_chunk_text: str = "") -> Dict[str, Any]:
+    async def _process_single_directive(
+        self,
+        directive: str,
+        chunk_id: Optional[int],
+        target_chunk_text: str = "",
+    ) -> Dict[str, Any]:
         """
         Process a single retrieval directive with direct MEMNON search.
-        
+
         Args:
             directive: The specific continuity element to retrieve
             chunk_id: The narrative chunk this is for
-            warm_slice: Context chunks to use for analysis
-            
+            target_chunk_text: Text from the target chunk, when available
+
         Returns:
-            Dict with retrieved_context, sources, queries, and reasoning for this directive
+            Dict with retrieved_context, sources, queries, deterministic reasoning,
+            and direct MEMNON search metadata for this directive.
         """
         qa_logger.info(f"Processing directive: {directive[:50]}...")
+        max_query_text_chars = 500
 
         def sanitize_query(q: str) -> str:
             import re
+
             q = re.sub(r"[\n\r\t]+", " ", q)
             q = re.sub(r"[\"'()?:;<>\\]", " ", q)
             q = re.sub(r"\s+", " ", q).strip()
             return q
-        
+
         raw_queries: List[str] = [directive]
         if target_chunk_text:
-            raw_queries.append(target_chunk_text)
+            raw_queries.append(target_chunk_text[:max_query_text_chars])
         queries: List[str] = [sanitize_query(q) for q in raw_queries if q and q.strip()]
         queries = list(dict.fromkeys(queries))  # Deduplicate
-        
+
         # Execute queries via MEMNON
         aggregated_results: Dict[str, Dict[str, Any]] = {}
         search_progress: List[Dict[str, Any]] = []
-        
+
         for q in queries:
             try:
                 result = self.memnon.query_memory(q, filters=None, k=8, use_hybrid=True)
-                search_progress.append({"query": q, "result_count": result.get("metadata", {}).get("result_count", 0)})
+                search_progress.append(
+                    {
+                        "query": q,
+                        "result_count": result.get("metadata", {}).get(
+                            "result_count", 0
+                        ),
+                    }
+                )
                 for item in result.get("results", []):
                     result_chunk_id = str(item.get("chunk_id") or item.get("id"))
                     if not result_chunk_id:
@@ -522,28 +569,27 @@ class LORE:
                             "chunk_id": result_chunk_id,
                             "text": item.get("text", ""),
                             "metadata": item.get("metadata", {}),
-                            "score": float(item.get("score", 0.0))
+                            "score": float(item.get("score", 0.0)),
                         }
                     else:
                         aggregated_results[result_chunk_id]["score"] = max(
-                            aggregated_results[result_chunk_id]["score"], 
-                            float(item.get("score", 0.0))
+                            aggregated_results[result_chunk_id]["score"],
+                            float(item.get("score", 0.0)),
                         )
             except Exception as e:
                 qa_logger.error(f"Search error for query '{q}': {e}")
-        
+
         # Sort results by score and prepare for synthesis
         sorted_results = sorted(
-            aggregated_results.values(), 
-            key=lambda x: x["score"], 
-            reverse=True
-        )[:10]  # Top 10 results
-        
+            aggregated_results.values(), key=lambda x: x["score"], reverse=True
+        )[
+            :10
+        ]  # Top 10 results
+
         reasoning = {
             "mode": "direct_memnon_retrieval",
             "query_count": len(queries),
             "target_chunk_id": chunk_id,
-            "warm_slice_chunks": len(warm_slice),
         }
 
         if not sorted_results:
@@ -564,38 +610,40 @@ class LORE:
                 f"(score: {result['score']:.2f})\n{result['text'][:700]}"
             )
 
-        retrieved_context = (
-            f"Retrieval directive: {directive}\n\n" + "\n\n".join(context_parts)
+        retrieved_context = f"Retrieval directive: {directive}\n\n" + "\n\n".join(
+            context_parts
         )
         if target_chunk_text:
-            retrieved_context += (
-                "\n\nContinuation anchor:\n" + target_chunk_text[:1000]
-            )
-        
+            retrieved_context += "\n\nContinuation anchor:\n" + target_chunk_text[:1000]
+
         # Extract chunk IDs from results
-        source_ids = [int(r["chunk_id"]) for r in sorted_results if r["chunk_id"].isdigit()]
-        
+        source_ids = [
+            int(r["chunk_id"]) for r in sorted_results if r["chunk_id"].isdigit()
+        ]
+
         return {
             "retrieved_context": retrieved_context,
             "sources": source_ids,
             "queries": queries,
             "reasoning": reasoning,
             "sql_attempts": [],
-            "search_progress": search_progress
+            "search_progress": search_progress,
         }
-    
+
     def get_turn_summary(self) -> Dict[str, Any]:
         """Get a summary of the last turn cycle"""
         if not self.turn_context:
             return {"status": "No turn processed yet"}
-        
+
         elapsed = time.time() - self.turn_context.start_time
-        
+
         return {
             "turn_id": self.turn_context.turn_id,
             "elapsed_time": f"{elapsed:.2f} seconds",
             "phases_completed": list(self.turn_context.phase_states.keys()),
-            "token_utilization": self.turn_context.phase_states.get("payload_assembly", {}).get("utilization_percentage", 0),
+            "token_utilization": self.turn_context.phase_states.get(
+                "payload_assembly", {}
+            ).get("utilization_percentage", 0),
             "errors": self.turn_context.error_log,
             "apex_tokens": self.turn_context.phase_states.get("apex_generation", {}),
             "components": {
@@ -604,13 +652,15 @@ class LORE:
                 "llm": (
                     "not initialized"
                     if self.llm_manager is None
-                    else "available"
-                    if self.llm_manager.is_available()
-                    else "unavailable"
-                )
-            }
+                    else (
+                        "available"
+                        if self.llm_manager.is_available()
+                        else "unavailable"
+                    )
+                ),
+            },
         }
-    
+
     def get_status(self) -> Dict[str, Any]:
         """Get current status of LORE and its components"""
         return {
@@ -618,14 +668,18 @@ class LORE:
             "components": {
                 "memnon": self.memnon is not None,
                 "logon": self.logon is not None,
-                "local_llm": self.llm_manager.is_available() if self.llm_manager else False,
+                "local_llm": (
+                    self.llm_manager.is_available() if self.llm_manager else False
+                ),
                 "token_manager": self.token_manager is not None,
                 "turn_manager": self.turn_manager is not None,
-                "memory_manager": self.memory_manager is not None
+                "memory_manager": self.memory_manager is not None,
             },
             "settings_loaded": bool(self.settings),
             "debug_mode": self.debug,
-            "memory": self.memory_manager.get_memory_summary() if self.memory_manager else {}
+            "memory": (
+                self.memory_manager.get_memory_summary() if self.memory_manager else {}
+            ),
         }
 
 
@@ -633,95 +687,123 @@ class LORE:
 async def main():
     """Main entry point for testing LORE"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="LORE Agent - NEXUS Orchestrator")
-    parser.add_argument("retrieval_directives", nargs="*", help="One or more retrieval directives/continuity elements to process")
-    parser.add_argument("--chunk", type=int, required=False, help="Narrative chunk ID to build context for")
+    parser.add_argument(
+        "retrieval_directives",
+        nargs="*",
+        help="One or more retrieval directives/continuity elements to process",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        required=False,
+        help="Narrative chunk ID to build context for",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--settings", help="Path to settings.json")
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
     parser.add_argument("--status", action="store_true", help="Show component status")
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
-    parser.add_argument("--keep-model", action="store_true", help="Ignored; contextual retrieval no longer loads LM Studio")
-    
+    parser.add_argument(
+        "--keep-model",
+        action="store_true",
+        help="Ignored; contextual retrieval no longer loads LM Studio",
+    )
+
     args = parser.parse_args()
-    
+
     # Configure logging
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
-    
+
     # Initialize LORE
     lore = LORE(settings_path=args.settings, debug=args.debug)
-    
+
     if args.status:
         # Show status
         status = lore.get_status()
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("LORE STATUS")
-        print("="*60)
+        print("=" * 60)
         print(json.dumps(status, indent=2))
-        
+
     elif args.qa or args.retrieval_directives:
         # Contextual retrieval mode (formerly Q&A)
-        directives = args.retrieval_directives if args.retrieval_directives else [args.qa] if args.qa else []
-        
+        directives = (
+            args.retrieval_directives
+            if args.retrieval_directives
+            else [args.qa] if args.qa else []
+        )
+
         if directives and not args.chunk:
-            print("Error: --chunk parameter is required when providing retrieval directives")
-            print("Usage: python lore.py 'directive1' 'directive2' ... --chunk <chunk_id>")
+            print(
+                "Error: --chunk parameter is required when providing retrieval directives"
+            )
+            print(
+                "Usage: python lore.py 'directive1' 'directive2' ... --chunk <chunk_id>"
+            )
             return
-        
+
         # Set keep-model flag BEFORE retrieval
         if args.keep_model:
-            logger.info("--keep-model ignored; contextual retrieval no longer loads LM Studio")
-        
-        logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")
+            logger.info(
+                "--keep-model ignored; contextual retrieval no longer loads LM Studio"
+            )
+
+        logger.info(
+            f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}"
+        )
         result = await lore.retrieve_context(directives, chunk_id=args.chunk)
-        
+
         # Format output to follow the actual reasoning flow
         print(f"\n{'='*60}")
         print(f"CONTEXTUAL RETRIEVAL FOR CHUNK {args.chunk}")
         print(f"{'='*60}\n")
-        
+
         # For each directive, show only the final synthesis (queries were output in real-time)
         for directive, directive_data in result.get("directives", {}).items():
             print(f"\n🎯 DIRECTIVE: {directive}")
             print("=" * 50)
-            
+
             # The SQL queries and reasoning have already been output in real-time
             # during the _process_single_directive() function
             # Just show the final synthesis here
-            
+
             print(f"\nFinal Synthesis:")
             print("-" * 40)
-            
+
             # Just output the synthesis as-is - TUI will handle formatting
             synthesis = directive_data.get("retrieved_context", "No context retrieved")
             print("\nResponse:")
             print(synthesis)
             print()
-        
+
         # Summary statistics
         print(f"📊 Summary:")
         if result.get("sources"):
             print(f"   Total chunks used: {len(result['sources'])}")
-        
+
         # Count SQL queries across all directives
-        total_sql = sum(len(d.get("sql_attempts", [])) for d in result.get("directives", {}).values())
+        total_sql = sum(
+            len(d.get("sql_attempts", []))
+            for d in result.get("directives", {}).values()
+        )
         if total_sql:
             print(f"   SQL queries executed: {total_sql}")
-        
-        # Count text search results across all directives  
+
+        # Count text search results across all directives
         total_search = sum(
             sum(sp.get("result_count", 0) for sp in d.get("search_progress", []))
             for d in result.get("directives", {}).values()
         )
         if total_search:
             print(f"   Text search results: {total_search}")
-        
+
         print(f"\n{'='*60}\n")
-        
+
         # Optionally save full JSON if requested
         if args.debug:
             print("Full JSON response (debug mode):")
@@ -731,41 +813,41 @@ async def main():
         # Run a test turn
         test_input = "I examine the neural implant carefully, looking for any markings."
         logger.info(f"Running test turn with input: {test_input}")
-        
+
         response = await lore.process_turn(test_input)
-        
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
         print("LORE TEST RESULTS")
-        print("="*60)
+        print("=" * 60)
         print(f"\nUser Input: {test_input}")
         print(f"\nGenerated Response:\n{response}")
         print(f"\nTurn Summary:\n{json.dumps(lore.get_turn_summary(), indent=2)}")
-        
+
     else:
         # Interactive mode
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("LORE AGENT - Interactive Mode")
-        print("="*60)
+        print("=" * 60)
         print("Commands: 'quit', 'status', 'summary'\n")
-        
+
         while True:
             try:
                 user_input = input("\n> ").strip()
-                
-                if user_input.lower() == 'quit':
+
+                if user_input.lower() == "quit":
                     break
-                elif user_input.lower() == 'status':
+                elif user_input.lower() == "status":
                     print(json.dumps(lore.get_status(), indent=2))
                     continue
-                elif user_input.lower() == 'summary':
+                elif user_input.lower() == "summary":
                     print(json.dumps(lore.get_turn_summary(), indent=2))
                     continue
                 elif not user_input:
                     continue
-                
+
                 response = await lore.process_turn(user_input)
                 print(f"\nLORE: {response}")
-                
+
             except KeyboardInterrupt:
                 print("\nExiting...")
                 break
