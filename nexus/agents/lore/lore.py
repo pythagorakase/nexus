@@ -201,7 +201,7 @@ class LORE:
         self.turn_manager = TurnCycleManager(self)
         logger.info(
             "LORE turn cycle uses deterministic retrieval planning; local LLM "
-            "manager is initialized only for legacy retrieval tools."
+            "manager will be initialized on demand for legacy retrieval tools."
         )
         
         # MEMNON is REQUIRED
@@ -410,6 +410,8 @@ class LORE:
 
         # Ensure the default LM Studio model is loaded (auto load/unload as needed)
         llm_manager = self._ensure_local_llm_manager()
+        if getattr(self, "_keep_legacy_local_llm_loaded", False):
+            llm_manager.unload_on_exit = False
         try:
             manager = ModelManager(
                 self.settings_path if hasattr(self, 'settings_path') else None,
@@ -838,9 +840,11 @@ class LORE:
                 "memnon": "available" if self.memnon else "unavailable",
                 "logon": "available" if self.logon else "unavailable",
                 "llm": (
-                    "available"
-                    if self.llm_manager and self.llm_manager.is_available()
-                    else "not initialized"
+                    "not initialized"
+                    if self.llm_manager is None
+                    else "available"
+                    if self.llm_manager.is_available()
+                    else "unavailable"
                 )
             }
         }
@@ -913,7 +917,7 @@ async def main():
         
         # Set keep-model flag BEFORE retrieval
         if args.keep_model:
-            lore._ensure_local_llm_manager().unload_on_exit = False
+            lore._keep_legacy_local_llm_loaded = True
             logger.info("Model will be kept loaded after retrieval (--keep-model)")
         
         logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")

@@ -136,10 +136,17 @@ class FakeLore:
         self.settings = settings
         self.memnon = FakeMemnon(session)
         self.llm_manager = llm_manager
+        self.lazy_llm_manager = llm_manager
+        self.ensure_llm_calls = 0
         self.logon = logon or FakeLogon()
 
     def ensure_logon(self):
         return None
+
+    def _ensure_local_llm_manager(self):
+        self.ensure_llm_calls += 1
+        self.llm_manager = self.lazy_llm_manager
+        return self.llm_manager
 
 
 def _candidate_row():
@@ -311,6 +318,29 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
     assert context.context_payload["orrery_bleed_menu"][0]["summary"] == (
         "street cameras briefly lose Mara"
     )
+
+
+@pytest.mark.asyncio
+async def test_assemble_context_payload_initializes_bleed_llm_lazily() -> None:
+    """Orrery Bleed may still opt into the legacy local manager on demand."""
+
+    session = FakeSession(candidate_rows=[_candidate_row()])
+    llm = FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt"))
+    lore = FakeLore(_settings(), session, llm)
+    lore.llm_manager = None
+    manager = TurnCycleManager(lore)
+    context = TurnContext(
+        turn_id="t1",
+        user_input="Continue.",
+        start_time=0,
+        warm_slice=[{"id": 100, "text": "Rain ticks against the glass."}],
+    )
+
+    await manager.assemble_context_payload(context)
+
+    assert lore.ensure_llm_calls == 1
+    assert lore.llm_manager is llm
+    assert context.phase_states["orrery_bleed"]["selected_count"] == 1
 
 
 @pytest.mark.asyncio
