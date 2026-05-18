@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from nexus.agents.orrery.worker import (
@@ -254,18 +256,51 @@ def test_promote_pending_resolutions_queues_narration_job() -> None:
     assert "INSERT INTO orrery_narration_jobs" in statements
 
 
-def test_promote_pending_resolutions_rejects_malformed_llm_output() -> None:
-    """Malformed local-LLM promotion data fails visibly."""
+def test_promote_pending_resolutions_skips_malformed_llm_output() -> None:
+    """Malformed local-LLM promotion data is skipped conservatively."""
 
     cursor = WorkerCursor(promotion_rows=[_promotion_row()])
 
-    with pytest.raises(ValueError, match="Malformed Orrery promotion verdict"):
-        promote_pending_resolutions_sync(
-            slot=5,
-            settings=_settings(),
-            llm_manager=FakeLLM({"answer": "sure"}),
-            conn=WorkerConn(cursor),
-        )
+    promoted, skipped = promote_pending_resolutions_sync(
+        slot=5,
+        settings=_settings(),
+        llm_manager=FakeLLM({"answer": "sure"}),
+        conn=WorkerConn(cursor),
+    )
+
+    verdict = json.loads(cursor.executed[-1][1][0])
+
+    assert promoted == 0
+    assert skipped == 1
+    assert verdict["promote"] is False
+    assert "Malformed local promotion verdict" in verdict["reason"]
+
+
+def test_promote_pending_resolutions_recovers_bare_final_channel_json() -> None:
+    """Leaked final-channel JSON with no reason gets a durable skip reason."""
+
+    cursor = WorkerCursor(promotion_rows=[_promotion_row()])
+    raw = {
+        "answer": (
+            "<|channel|>analysis<|message|>routine maintenance\n"
+            '<|channel|>final<|message|>{"promote": false}'
+        ),
+        "reasoning": "unstructured",
+    }
+
+    promoted, skipped = promote_pending_resolutions_sync(
+        slot=5,
+        settings=_settings(),
+        llm_manager=FakeLLM(raw),
+        conn=WorkerConn(cursor),
+    )
+
+    verdict = json.loads(cursor.executed[-1][1][0])
+
+    assert promoted == 0
+    assert skipped == 1
+    assert verdict["promote"] is False
+    assert verdict["reason"] == "Local model returned a bare promotion decision."
 
 
 def test_drain_narration_outbox_persists_offscreen_narration() -> None:
@@ -409,8 +444,8 @@ def test_clear_semantic_tags_keeps_when_verdict_false() -> None:
     assert "INSERT INTO tag_clearance_log" not in statements
 
 
-def test_clear_semantic_tags_rejects_malformed_llm_output() -> None:
-    """Malformed semantic-clearance data fails after prior row commits survive."""
+def test_clear_semantic_tags_keeps_on_malformed_llm_output() -> None:
+    """Malformed semantic-clearance data keeps the tag without losing prior commits."""
 
     cursor = WorkerCursor(
         semantic_rows=[_semantic_tag_row(), _semantic_tag_row_2()],
@@ -424,16 +459,16 @@ def test_clear_semantic_tags_rejects_malformed_llm_output() -> None:
         ]
     )
 
-    with pytest.raises(ValueError, match="Malformed Orrery semantic clearance verdict"):
-        clear_semantic_tags_sync(
-            slot=5,
-            settings=_settings(),
-            llm_manager=llm,
-            conn=WorkerConn(cursor),
-        )
+    cleared = clear_semantic_tags_sync(
+        slot=5,
+        settings=_settings(),
+        llm_manager=llm,
+        conn=WorkerConn(cursor),
+    )
 
     statements = "\n".join(sql for sql, _params in cursor.executed)
 
+    assert cleared == 1
     assert statements.count("UPDATE entity_tags et") == 1
     assert statements.count("INSERT INTO tag_clearance_log") == 1
 

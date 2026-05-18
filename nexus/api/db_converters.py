@@ -7,6 +7,7 @@ Handles time conversion, episode/season calculation, and entity resolution.
 """
 
 import json
+import logging
 from datetime import timedelta
 from typing import Optional, Tuple, List, Dict, Any
 import asyncpg
@@ -22,6 +23,8 @@ from nexus.agents.logon.apex_schema import (
     ReferenceType,
     ReferencedEntities
 )
+
+logger = logging.getLogger("nexus.api.db_converters")
 
 
 def _json_dumps_model(value: Any) -> Optional[str]:
@@ -164,7 +167,12 @@ async def resolve_place_references(
             if not place_id and ref.new_place:
                 place_id = await create_new_place(conn, ref.new_place)
             elif not place_id:
-                raise ValueError(f"Place '{ref.place_name}' not found in database")
+                logger.warning(
+                    "Skipping unresolved place reference %r; provide place_id "
+                    "or new_place to persist place_chunk_references",
+                    ref.place_name,
+                )
+                continue
         elif ref.new_place:
             # Create new place and get ID
             place_id = await create_new_place(conn, ref.new_place)
@@ -243,7 +251,13 @@ async def resolve_character_references(
             if not char_id and ref.new_character:
                 char_id = await create_new_character(conn, ref.new_character)
             elif not char_id:
-                raise ValueError(f"Character '{ref.character_name}' not found")
+                logger.warning(
+                    "Skipping unresolved character reference %r; provide "
+                    "character_id or new_character to persist "
+                    "chunk_character_references",
+                    ref.character_name,
+                )
+                continue
         elif ref.new_character:
             # Create new character
             char_id = await create_new_character(conn, ref.new_character)
@@ -331,7 +345,12 @@ async def resolve_faction_references(
             if not faction_id and ref.new_faction:
                 faction_id = await create_new_faction(conn, ref.new_faction)
             elif not faction_id:
-                raise ValueError(f"Faction '{ref.faction_name}' not found")
+                logger.warning(
+                    "Skipping unresolved faction reference %r; provide faction_id "
+                    "or new_faction to persist chunk_faction_references",
+                    ref.faction_name,
+                )
+                continue
         elif ref.new_faction:
             # Create new faction
             faction_id = await create_new_faction(conn, ref.new_faction)

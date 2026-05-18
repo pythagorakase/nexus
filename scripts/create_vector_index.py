@@ -22,7 +22,11 @@ logger = logging.getLogger("nexus.embeddings")
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from nexus.agents.memnon.utils.embedding_tables import table_name_for_dimensions
+from nexus.agents.memnon.utils.embedding_tables import (
+    PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+    supports_pgvector_ann_index,
+    table_name_for_dimensions,
+)
 
 # Try to load settings using centralized config loader
 try:
@@ -136,6 +140,15 @@ def create_vector_indexes(model_name: str, db_url: str = None):
             logger.warning("No embeddings found for this model!")
             return False
 
+        if not supports_pgvector_ann_index(dimensions):
+            logger.info(
+                "Skipping ANN vector index for %s: pgvector supports HNSW/IVFFlat "
+                "indexes up to %sd locally, and exact search remains available",
+                table_name,
+                PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+            )
+            return True
+
         # Check for existing vector indexes
         index_sql = f"""
         SELECT indexname, indexdef
@@ -200,25 +213,6 @@ def create_vector_indexes(model_name: str, db_url: str = None):
                 except Exception as e2:
                     logger.error(f"Failed to create plain index: {e2}")
 
-        else:
-            # For super high dimensions, try but don't expect success
-            logger.warning(
-                f"Dimensions ({dimensions}) exceed 2000, vector indexes may not work"
-            )
-
-            try:
-                logger.info("Attempting to create plain vector index anyway...")
-                plain_sql = f"""
-                CREATE INDEX IF NOT EXISTS {table_name}_vector_idx
-                ON {table_name} (embedding vector_cosine_ops);
-                """
-                conn.execute(text(plain_sql))
-                logger.info("✓ Successfully created plain vector index")
-                success = True
-            except Exception as e:
-                logger.error(f"Failed to create vector index: {e}")
-                logger.info("Will use sequential scan for searches")
-
     return success
 
 
@@ -234,7 +228,7 @@ def main():
     try:
         success = create_vector_indexes(args.model, args.db_url)
         if success:
-            print("\nVector indexes created successfully!")
+            print("\nVector index setup completed.")
             return 0
         else:
             print("\nFailed to create vector indexes.")

@@ -74,7 +74,12 @@ def resolve_place_references_sync(
                 elif ref.new_place:
                     place_id = create_new_place_sync(cur, ref.new_place)
                 else:
-                    raise ValueError(f"Place '{ref.place_name}' not found in database")
+                    logger.warning(
+                        "Skipping unresolved place reference %r; provide place_id "
+                        "or new_place to persist place_chunk_references",
+                        ref.place_name,
+                    )
+                    continue
             elif ref.new_place:
                 # Create new place and get ID
                 place_id = create_new_place_sync(cur, ref.new_place)
@@ -146,7 +151,13 @@ def resolve_character_references_sync(
                 elif ref.new_character:
                     char_id = create_new_character_sync(cur, ref.new_character)
                 else:
-                    raise ValueError(f"Character '{ref.character_name}' not found")
+                    logger.warning(
+                        "Skipping unresolved character reference %r; provide "
+                        "character_id or new_character to persist "
+                        "chunk_character_references",
+                        ref.character_name,
+                    )
+                    continue
             elif ref.new_character:
                 char_id = create_new_character_sync(cur, ref.new_character)
 
@@ -223,7 +234,13 @@ def resolve_faction_references_sync(
                 elif ref.new_faction:
                     faction_id = create_new_faction_sync(cur, ref.new_faction)
                 else:
-                    raise ValueError(f"Faction '{ref.faction_name}' not found")
+                    logger.warning(
+                        "Skipping unresolved faction reference %r; provide "
+                        "faction_id or new_faction to persist "
+                        "chunk_faction_references",
+                        ref.faction_name,
+                    )
+                    continue
             elif ref.new_faction:
                 faction_id = create_new_faction_sync(cur, ref.new_faction)
 

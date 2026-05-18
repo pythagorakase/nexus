@@ -12,7 +12,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, Field, ValidationError
 
-from nexus.agents.lore.utils.local_llm import LocalLLMManager
+from nexus.agents.lore.utils.local_llm import (
+    LocalLLMManager,
+    _parse_structured_json_text,
+)
 from nexus.config import load_settings_as_dict
 
 logger = logging.getLogger("nexus.orrery.worker")
@@ -568,12 +571,46 @@ def _promotion_verdict(manager: Any, row: Mapping[str, Any]) -> PromotionVerdict
         max_tokens=512,
         system_prompt=PROMOTION_SYSTEM_PROMPT,
     )
+    return _coerce_promotion_verdict(raw)
+
+
+def _structured_payload_from_raw(raw: Any) -> Any:
+    """Recover structured JSON when a local model leaks chat text wrappers."""
+    if isinstance(raw, Mapping):
+        answer = raw.get("answer")
+        if isinstance(answer, str):
+            parsed = _parse_structured_json_text(answer)
+            if parsed is not None:
+                return parsed
+    elif isinstance(raw, str):
+        parsed = _parse_structured_json_text(raw)
+        if parsed is not None:
+            return parsed
+    return raw
+
+
+def _coerce_promotion_verdict(raw: Any) -> PromotionVerdict:
+    """Return a conservative promotion verdict from noisy local-model output."""
     try:
         if isinstance(raw, PromotionVerdict):
             return raw
-        return PromotionVerdict.model_validate(raw)
+        payload = _structured_payload_from_raw(raw)
+        if isinstance(payload, Mapping) and "promote" in payload:
+            payload = dict(payload)
+            payload.setdefault(
+                "reason", "Local model returned a bare promotion decision."
+            )
+        return PromotionVerdict.model_validate(payload)
     except ValidationError as exc:
-        raise ValueError(f"Malformed Orrery promotion verdict: {raw}") from exc
+        logger.warning(
+            "Malformed Orrery promotion verdict; skipping conservatively: %s",
+            raw,
+            exc_info=True,
+        )
+        return PromotionVerdict(
+            promote=False,
+            reason="Malformed local promotion verdict; skipped conservatively.",
+        )
 
 
 def _mark_promoted(
@@ -769,12 +806,31 @@ def _semantic_clearance_verdict(
         max_tokens=512,
         system_prompt=SEMANTIC_CLEARANCE_SYSTEM_PROMPT,
     )
+    return _coerce_semantic_clearance_verdict(raw)
+
+
+def _coerce_semantic_clearance_verdict(raw: Any) -> SemanticClearanceVerdict:
+    """Keep semantic tags when local clearance output is malformed."""
     try:
         if isinstance(raw, SemanticClearanceVerdict):
             return raw
-        return SemanticClearanceVerdict.model_validate(raw)
+        payload = _structured_payload_from_raw(raw)
+        if isinstance(payload, Mapping) and "clear" in payload:
+            payload = dict(payload)
+            payload.setdefault(
+                "reason", "Local model returned a bare semantic-clearance decision."
+            )
+        return SemanticClearanceVerdict.model_validate(payload)
     except ValidationError as exc:
-        raise ValueError(f"Malformed Orrery semantic clearance verdict: {raw}") from exc
+        logger.warning(
+            "Malformed Orrery semantic clearance verdict; keeping tag: %s",
+            raw,
+            exc_info=True,
+        )
+        return SemanticClearanceVerdict(
+            clear=False,
+            reason="Malformed local semantic-clearance verdict; kept conservatively.",
+        )
 
 
 def _mark_semantic_tag_cleared_sync(

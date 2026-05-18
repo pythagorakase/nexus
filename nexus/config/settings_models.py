@@ -249,6 +249,18 @@ class EntityInclusionConfig(BaseModel):
     max_total_threats: int = Field(..., ge=1)
 
 
+class LORERetrievalSettings(BaseModel):
+    """LORE retrieval query generation settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fallback_query: str = Field(
+        default="Recent narrative events",
+        min_length=1,
+        description="Fallback MEMNON query when local query generation yields none",
+    )
+
+
 class LORESettings(BaseModel):
     """LORE agent configuration."""
 
@@ -259,6 +271,7 @@ class LORESettings(BaseModel):
     token_budget: TokenBudgetConfig
     payload_percent_budget: PayloadPercentBudget
     entity_inclusion: EntityInclusionConfig
+    retrieval: LORERetrievalSettings = Field(default_factory=LORERetrievalSettings)
 
 
 # =============================================================================

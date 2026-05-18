@@ -10,6 +10,10 @@ from sqlalchemy.engine import Connection
 
 EMBEDDING_TABLE_PATTERN = re.compile(r"^chunk_embeddings_(?P<dimensions>\d+)d$")
 
+# pgvector 0.8.x caps HNSW/IVFFlat indexes at 2000 dimensions in this local
+# deployment. Higher-dimensional tables still support exact vector search.
+PGVECTOR_ANN_INDEX_MAX_DIMENSIONS = 2000
+
 # Historical dimensions that may exist in older slots. New dimensions should not
 # be added here; table names are generated from the model output dimensionality.
 LEGACY_EMBEDDING_DIMENSIONS = (1024, 1536, 2560, 4096)
@@ -36,6 +40,11 @@ def parse_embedding_table_dimensions(table_name: str) -> Optional[int]:
     if not match:
         return None
     return int(match.group("dimensions"))
+
+
+def supports_pgvector_ann_index(dimensions: int) -> bool:
+    """Return whether pgvector ANN indexes support ``dimensions`` locally."""
+    return 0 < dimensions <= PGVECTOR_ANN_INDEX_MAX_DIMENSIONS
 
 
 def list_embedding_tables(connection: Connection) -> List[str]:

@@ -11,7 +11,12 @@ import psycopg2
 from typing import Dict, List, Tuple, Optional, Union, Any
 from urllib.parse import urlparse
 
-from .embedding_tables import resolve_dimension_table
+from .embedding_tables import (
+    PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+    parse_embedding_table_dimensions,
+    resolve_dimension_table,
+    supports_pgvector_ann_index,
+)
 
 # Set up logging
 logger = logging.getLogger("nexus.memnon.db_access")
@@ -798,7 +803,22 @@ def setup_database_indexes(db_url: str) -> bool:
 
                 # Create vector indexes for existing dimension-specific tables only.
                 for dim_table in _list_existing_embedding_tables(cursor):
+                    dimensions = parse_embedding_table_dimensions(dim_table)
+                    if dimensions is None:
+                        raise ValueError(
+                            f"Cannot parse dimensions from table name: {dim_table!r}"
+                        )
                     try:
+                        if not supports_pgvector_ann_index(dimensions):
+                            logger.info(
+                                "Skipping ANN vector index for %s: pgvector "
+                                "supports HNSW/IVFFlat indexes up to %sd "
+                                "locally, and exact search remains available",
+                                dim_table,
+                                PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+                            )
+                            continue
+
                         # Check for existing HNSW index
                         cursor.execute(
                             f"""

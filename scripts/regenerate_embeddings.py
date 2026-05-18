@@ -98,8 +98,10 @@ except ImportError:
 
 
 from nexus.agents.memnon.utils.embedding_tables import (
+    PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
     embedding_table_exists,
     ensure_embedding_table,
+    supports_pgvector_ann_index,
     table_name_for_dimensions,
 )
 
@@ -743,6 +745,15 @@ class EmbeddingRegenerator:
                 logger.error(f"Table {table_name} does not exist")
                 return False
 
+        if not supports_pgvector_ann_index(dimensions):
+            logger.info(
+                "Skipping ANN vector index for %s: pgvector supports HNSW/IVFFlat "
+                "indexes up to %sd locally, and exact search remains available",
+                table_name,
+                PGVECTOR_ANN_INDEX_MAX_DIMENSIONS,
+            )
+            return True
+
         # Now create specialized vector indexes in a separate transaction
         with self.engine.begin() as idx_conn:
             # First try HNSW index (preferred for performance)
@@ -964,7 +975,7 @@ class EmbeddingRegenerator:
             logger.info("Creating vector indexes now that data is loaded...")
             index_success = self.create_vector_indexes()
             if index_success:
-                logger.info("✅ Successfully created vector indexes")
+                logger.info("✅ Vector index setup completed")
             else:
                 logger.warning("⚠️ Failed to create vector indexes")
                 logger.info(
