@@ -211,24 +211,30 @@ def _has_well_formed_double_quotes(query: str) -> bool:
     return True
 
 
-def _normalized_query_terms(query: str) -> list[str]:
-    """Return content-ish query terms for lightweight quality checks."""
-    terms: list[str] = []
-    for token in re.findall(r"[A-Za-z0-9]+", query.casefold()):
-        if len(token) < 4 or token in _QUERY_STUTTER_STOPWORDS:
-            continue
-        if len(token) > 4 and token.endswith("ies"):
-            token = f"{token[:-3]}y"
-        elif len(token) > 4 and token.endswith("s"):
-            token = token[:-1]
-        terms.append(token)
-    return terms
+def _normalized_query_term(token: str) -> Optional[str]:
+    """Return a comparable content term, preserving ignored tokens as boundaries."""
+    token = token.casefold()
+    if len(token) < 4 or token in _QUERY_STUTTER_STOPWORDS:
+        return None
+    if len(token) > 4 and token.endswith("ies"):
+        return f"{token[:-3]}y"
+    if (
+        len(token) > 4
+        and token.endswith("s")
+        and not token.endswith(("ss", "is", "os", "us"))
+    ):
+        return token[:-1]
+    return token
 
 
 def _has_adjacent_duplicate_query_terms(query: str) -> bool:
     """Return whether a candidate looks like local-model keyword stutter."""
     previous: Optional[str] = None
-    for term in _normalized_query_terms(query):
+    for token in re.findall(r"[A-Za-z0-9]+", query):
+        term = _normalized_query_term(token)
+        if term is None:
+            previous = None
+            continue
         if term == previous:
             return True
         previous = term
