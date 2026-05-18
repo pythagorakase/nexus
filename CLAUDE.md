@@ -20,6 +20,11 @@ files are staged. Currently:
 
 Bypass (use sparingly): `git commit --no-verify`. CI staleness tests still gate merges.
 
+## Shared Agent Workflow
+
+Follow `docs/agent_workflow.md` for the repository's autonomous branch, PR,
+review-orchestration, heartbeat, merge, and cleanup workflow.
+
 ## Code Style Guidelines
 - Use Black for formatting with default line length (88 chars)
 - Imports: standard library, third-party, local (alphabetized within groups)
