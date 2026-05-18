@@ -44,19 +44,25 @@ _META_QUERY_PREFIXES = (
     "let's ",
     "locations:",
     "no numbering",
-    "output exactly",
     "the user wants",
     "thus produce",
     "user input",
     "we need",
+    "we must",
     "we should",
+    "we'll produce",
 )
 _META_QUERY_FRAGMENTS = (
     "complete question or search phrase",
+    "exactly 3-5",
     "generate retrieval queries",
     "generate queries",
     "make sure",
+    "need 3-5 queries",
     "no bullet",
+    "numbering or bullets",
+    "output exactly",
+    "produce 4 queries",
     "query phrase",
     "one per line",
     "retrieval queries to search",
@@ -64,8 +70,14 @@ _META_QUERY_FRAGMENTS = (
 _GENERIC_RETRIEVAL_QUERIES = {
     "background info on key entities",
     "character relationships and interactions",
+    "past events at",
     "relevant past events involving these characters",
 }
+_TEMPLATE_PLACEHOLDER_QUERY_PREFIXES = (
+    "background information on key entities (",
+    "history of locations (",
+    "so there is a scene where someone maybe",
+)
 _MIN_RETRIEVAL_QUERIES = 3
 
 
@@ -200,6 +212,11 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
     lowered = cleaned.lower()
     normalized_lowered = lowered.rstrip(" .:")
     if normalized_lowered in _GENERIC_RETRIEVAL_QUERIES:
+        return None
+    # Use the raw lowered text: normalized_lowered strips the trailing dots.
+    if lowered.endswith("..."):
+        return None
+    if normalized_lowered.startswith(_TEMPLATE_PLACEHOLDER_QUERY_PREFIXES):
         return None
     if cleaned.startswith(("{", "[")):
         return None
