@@ -9,6 +9,8 @@ import pytest
 from nexus.agents.orrery.worker import (
     PromotionVerdict,
     SemanticClearanceVerdict,
+    _coerce_promotion_verdict,
+    _coerce_semantic_clearance_verdict,
     clear_semantic_tags_sync,
     drain_narration_outbox_sync,
     load_orrery_status_sync,
@@ -303,6 +305,17 @@ def test_promote_pending_resolutions_recovers_bare_final_channel_json() -> None:
     assert verdict["reason"] == "Local model returned a bare promotion decision."
 
 
+def test_coerce_promotion_verdict_recovers_markdown_boolean() -> None:
+    """Markdown-ish local fallback text should not become malformed noise."""
+
+    verdict = _coerce_promotion_verdict(
+        {"answer": "**promote:** false", "reasoning": "Routine maintenance."}
+    )
+
+    assert verdict.promote is False
+    assert verdict.reason == "Routine maintenance."
+
+
 def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     """Queued narration jobs persist into offscreen_narrations."""
 
@@ -471,6 +484,17 @@ def test_clear_semantic_tags_keeps_on_malformed_llm_output() -> None:
     assert cleared == 1
     assert statements.count("UPDATE entity_tags et") == 1
     assert statements.count("INSERT INTO tag_clearance_log") == 1
+
+
+def test_coerce_semantic_clearance_verdict_recovers_markdown_boolean() -> None:
+    """Markdown-ish local fallback text should produce a normal keep verdict."""
+
+    verdict = _coerce_semantic_clearance_verdict(
+        {"answer": "**clear:** false", "reasoning": "Evidence still supports tag."}
+    )
+
+    assert verdict.clear is False
+    assert verdict.reason == "Evidence still supports tag."
 
 
 def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
