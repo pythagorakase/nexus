@@ -132,7 +132,7 @@ The proposal is a Bethesda-inspired off-screen behavior subsystem: a pipeline (`
 | **Clear** (Stage 3) | Local-LLM (batched) + deterministic | Event-based clearance runs in the commit transaction; semantic clearance runs post-commit, async, results available for next tick | Commit (event) + post-commit (semantic) |
 | **Promote** (Stage 4) | Local-LLM (batched) | Decide which resolutions deserve frontier prose | Post-commit |
 | **Narrate** (Stage 5) | Frontier-LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` (separate from `narrative_chunks`) | Async after commit; durable across process restart |
-| **Bleed** (Stage 6) | Local-LLM at storyteller-time, hard 2s budget | Filter recent narrated resolutions for perceptibility; produce optional menu | LORE Phase 5 (`payload_assembly`), each player turn |
+| **Bleed** (Stage 6) | Deterministic storyteller-time selection | Offer a bounded menu from already-filtered, succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
 | **Stage 7 (deferred)** | — | Middle-tier journalistic prose | Metric-gated; see "Deferred — Orrery Stage 7" |
 
 **Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survived two earlier gates.
@@ -489,13 +489,13 @@ CREATE TABLE offscreen_narrations (
 
 ### Bleed Selector
 
-**Local LLM produces a menu, never a decision.** Perceptibility filtering only: given the player's current location, time, activity — which recent narrated off-screen events could plausibly register at all? Output is a curated list of N candidates (typically N ≤ 3), each annotated with sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor — *not* the narrator's full prose.
+**Bleed offers a menu, never a decision.** Perceptibility filtering happens before narration promotion and in the candidate query; storyteller-time Bleed now chooses deterministically from eligible narrated events. Output is a bounded list of N candidates (typically N ≤ 3), each annotated with sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor — *not* the narrator's full prose.
 
 **Hook point.** Bleed runs at the start of LORE Phase 5 (`assemble_context_payload`, `nexus/agents/lore/utils/turn_cycle.py:489`). Its output populates `turn_context.bleed_menu`, which `assemble_context_payload` then reads when building the payload. Concretely, the Bleed entry point is a new method on `TurnCycleManager` invoked from `assemble_context_payload` before payload assembly proper begins.
 
-**Latency budget: hard 2-second cap, enforced via an async local-LLM request timeout.** If the local-LLM call exceeds budget, the bleed menu for this turn is empty and the overrun logged loudly. Empty bleed is a valid outcome.
+**No inference budget.** Bleed no longer makes a storyteller-time model call; empty bleed remains a valid outcome when no eligible narration exists.
 
-**Candidate query is typed**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, surfacing history. The local LLM call uses `LocalLLMManager.structured_query(prompt, response_model)` (`nexus/agents/lore/utils/local_llm.py:642`) — signature is `(prompt, response_model, *, temperature=None, max_tokens=None, system_prompt=None)`. The existing helper handles SDK-vs-fallback parsing; no new structured-output plumbing required.
+**Candidate query is typed**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, and surfacing history. Selection is deterministic from the SQL ordering, capped by `[orrery.bleed] max_candidates`; Storyteller remains free to adapt, delay, or ignore the offered peripherals.
 
 **Surfacing bookkeeping** prevents nag (Codex): `last_offered_chunk_id`, `offer_count`, `first_surfaced_chunk_id` (on `orrery_resolutions`). Distinguish "offered to storyteller" from "actually surfaced" — only the latter creates a visible-world surfacing record.
 
@@ -510,7 +510,7 @@ CREATE TABLE offscreen_narrations (
 - **Clear (semantic)** runs post-commit, async, batched, filtered to entities with recent relevant events.
 - **Promote** runs post-commit, async, batched per tick.
 - **Narrate** is async via durable outbox. Bleed reads only `state='succeeded'` narrations + deterministic briefs.
-- **Bleed** runs synchronously at storyteller-time (LORE Phase 5) with hard latency budget.
+- **Bleed** runs synchronously at storyteller-time (LORE Phase 5) without inference.
 
 ### World Time Denormalization
 
@@ -580,7 +580,6 @@ provider = "anthropic"
 model_ref = "@anthropic.default"                        # resolved via [global.model.api_models]
 
 [orrery.bleed]
-latency_budget_ms = 2000
 max_candidates = 3
 candidate_pool_multiplier = 4
 
@@ -727,7 +726,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 - `nexus/agents/lore/lore.py:289` — `process_turn`; new LORE Phase 4.5 inserts here
 - `nexus/agents/lore/utils/turn_context.py:12-41` — `TurnPhase` enum (add `ORRERY_RESOLVE`) and `TurnContext` dataclass (add `orrery_proposal`, `bleed_menu`)
 - `nexus/agents/lore/utils/turn_cycle.py:489` — `assemble_context_payload` (LORE Phase 5); Bleed selector hooks at the start
-- `nexus/agents/lore/utils/local_llm.py:642` — `structured_query(prompt, response_model, *, temperature=None, max_tokens=None, system_prompt=None)` — used by Promote, Clear (semantic), Bleed
+- `nexus/agents/lore/utils/local_llm.py:642` — `structured_query(prompt, response_model, *, temperature=None, max_tokens=None, system_prompt=None)` — used by Promote and Clear (semantic)
 
 **Commit path (production = sync)**
 - `nexus/api/narrative.py:281` — existing `BackgroundTasks` pattern to mirror
@@ -785,7 +784,7 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 1. **Hook seams corrected.** `CommitOrreryTick` hooks the *transaction-wrapping* functions (`commit_incubator_to_database` L320 async; `commit_incubator_to_database_sync` L233 sync) at Step 8.5, not the `apply_state_updates*` workers at L223/L451.
 2. **Sync path called out as production.** Only `narrative.py:407` calls a commit function in production code, and it calls the sync variant. Async kept in parity for tests.
 3. **`chunk_workflow.py` removed from PR 0 audit.** It is not on the commit path; replaced with an audit of `narrative.py::_approve_narrative_impl` (L387).
-4. **Bleed hook point named.** Runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); 2s budget enforced by the async local-LLM request timeout.
+4. **Bleed hook point named.** Runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); current implementation is deterministic and inference-free.
 5. **Pipeline stages renamed.** "Phase N" reserved for LORE turn cycle; Orrery pipeline uses "Stage N". Deferred "Phase 7" → "Orrery Stage 7".
 6. **`TurnContext` extension spelled out.** Two new dataclass fields + one new `TurnPhase` enum value.
 7. **`world_layer_type` precondition.** Postgres ENUM not in tracked migrations; PR 0 confirms or PR 1 declares.
@@ -793,7 +792,7 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 9. **`source_kind` enum gains `'auto_registered'`** to satisfy the Vocabulary Growth contract.
 10. **Backfill pattern spelled out.** `NOT VALID → batch backfill → VALIDATE → CONCURRENTLY UNIQUE INDEX → SET NOT NULL`. Migration becomes Python, not SQL, because `scripts/migrate.py` is single-transaction-per-file.
 11. **`world_events.source` and `world_event_entities.role` promoted to real enums** (`event_source_kind`, `event_role_kind`), consistent with the rest of the controlled vocabulary.
-12. **`LocalLLMManager.structured_query` signature noted.** Existing API at `local_llm.py:642`; no new structured-output plumbing needed.
+12. **`LocalLLMManager.structured_query` signature noted.** Existing API at `local_llm.py:642`; no new structured-output plumbing needed for the remaining Promote/Clear paths.
 13. **`BackgroundTasks` pattern cross-referenced** to existing call sites (`narrative.py:281`, `storyteller.py:561, 666`).
 14. **`tick_chunk_id` timing clarified.** Not known during Resolve (Stage 1); stamped during CommitOrreryTick (Stage 2) after `insert_narrative_chunk` returns the new chunk's id. The UNIQUE idempotency constraint fires at write time.
 15. **MEMNON safety claim sharpened.** `get_recent_chunks` is already safe; real audit target is `query_memory` / `SearchManager`.
