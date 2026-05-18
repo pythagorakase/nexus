@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 import sqlalchemy as sa
 from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect
-from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 logger = logging.getLogger("nexus.memnon.db_schema")
@@ -23,6 +23,9 @@ class NarrativeChunk(Base):
 
     id = Column(sa.BigInteger, primary_key=True)
     raw_text = Column(sa.Text, nullable=False)
+    authorial_directives = Column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
     created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 

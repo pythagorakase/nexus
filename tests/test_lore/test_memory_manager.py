@@ -36,7 +36,9 @@ class DummyMemnon:
         self.queries: List[str] = []
         self.recent_calls: List[int] = []
 
-    def query_memory(self, query: str, k: int = 5, use_hybrid: bool = True) -> Dict[str, object]:
+    def query_memory(
+        self, query: str, k: int = 5, use_hybrid: bool = True
+    ) -> Dict[str, object]:
         self.queries.append(query)
         # Return a deep copy so downstream mutations don't affect subsequent checks
         return {"results": copy.deepcopy(self._gap_results)}
@@ -53,16 +55,12 @@ def dummy_memnon() -> DummyMemnon:
 
 @pytest.fixture
 def baseline_inputs() -> Dict[str, object]:
-    narrative = (
-        "Alex and Emilia secure the Crystal Orb inside the sealed vault while Pete monitors the perimeter."
-    )
+    narrative = "Alex and Emilia secure the Crystal Orb inside the sealed vault while Pete monitors the perimeter."
     warm_slice = [
         {"chunk_id": 101, "text": "Setup: extraction plan finalised."},
         {"chunk_id": 102, "text": "Alex briefs Emilia on the vault sequence."},
     ]
-    retrieved = [
-        {"id": 201, "text": "Intel dossier on Dynacorp vault design."}
-    ]
+    retrieved = [{"id": 201, "text": "Intel dossier on Dynacorp vault design."}]
     token_usage = {
         "total_available": 1200,
         "warm_slice": 360,
@@ -77,7 +75,9 @@ def baseline_inputs() -> Dict[str, object]:
     }
 
 
-def test_pass1_baseline_tracks_chunks_and_budget(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass1_baseline_tracks_chunks_and_budget(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     package = manager.handle_storyteller_response(
@@ -103,7 +103,9 @@ def test_pass1_baseline_tracks_chunks_and_budget(minimal_settings, dummy_memnon,
     assert "Emilia" in package.baseline_entities.get("characters", [])
 
 
-def test_pass1_records_reserve_shortfall(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass1_records_reserve_shortfall(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     tight_tokens = {
@@ -129,7 +131,9 @@ def test_pass1_records_reserve_shortfall(minimal_settings, dummy_memnon, baselin
     assert transition.remaining_budget == max(0, 1000 - 940)
 
 
-def test_pass2_divergence_triggers_incremental_retrieval(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass2_divergence_triggers_incremental_retrieval(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     manager.handle_storyteller_response(
@@ -163,12 +167,19 @@ def test_pass2_divergence_triggers_incremental_retrieval(minimal_settings, dummy
     assert post_budget == max(0, pre_budget - update.tokens_used)
     assert manager.context_state.context.gap_analysis == update.divergence.gaps
 
-    reserve = int(token_counts["total_available"] * minimal_settings["memory"]["pass2_budget_reserve"])
+    reserve = int(
+        token_counts["total_available"]
+        * minimal_settings["memory"]["pass2_budget_reserve"]
+    )
     assert manager.context_state.context.token_usage["reserved_for_pass2"] == reserve
-    assert manager.context_state.context.token_usage["reserve_shortfall"] == max(0, reserve - post_budget)
+    assert manager.context_state.context.token_usage["reserve_shortfall"] == max(
+        0, reserve - post_budget
+    )
 
 
-def test_pass1_stores_authorial_directives(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass1_stores_authorial_directives(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     directives = [
@@ -200,7 +211,30 @@ def test_pass1_stores_authorial_directives(minimal_settings, dummy_memnon, basel
     assert history["pass2"] == []
 
 
-def test_pass1_separates_structured_passages(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass1_can_store_authorial_directives_without_executing_queries(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
+    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+
+    package = manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=baseline_inputs["retrieved"],
+        token_usage=baseline_inputs["token_usage"],
+        authorial_directives=["Retrieve next-turn context."],
+        execute_authorial_directives=False,
+    )
+
+    assert package.authorial_directives == ["Retrieve next-turn context."]
+    assert dummy_memnon.queries == []
+
+    history = manager.query_memory.snapshot()
+    assert history["pass1"] == ["Retrieve next-turn context."]
+
+
+def test_pass1_separates_structured_passages(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     structured = {
@@ -208,7 +242,10 @@ def test_pass1_separates_structured_passages(minimal_settings, dummy_memnon, bas
         "name": "Alex Navarro",
         "summary": "Lead infiltrator, tracking The Ghost",
     }
-    retrieved = baseline_inputs["retrieved"] + [structured, {"chunk_id": 305, "text": "Bridge diagnostics memo."}]
+    retrieved = baseline_inputs["retrieved"] + [
+        structured,
+        {"chunk_id": 305, "text": "Bridge diagnostics memo."},
+    ]
 
     package = manager.handle_storyteller_response(
         narrative=baseline_inputs["narrative"],
@@ -227,7 +264,9 @@ def test_pass1_separates_structured_passages(minimal_settings, dummy_memnon, bas
     assert all(entry.get("chunk_id") is not None for entry in chunk_details)
 
 
-def test_pass2_warm_slice_expansion_without_divergence(minimal_settings, dummy_memnon, baseline_inputs):
+def test_pass2_warm_slice_expansion_without_divergence(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     manager.handle_storyteller_response(
@@ -254,7 +293,9 @@ def test_pass2_warm_slice_expansion_without_divergence(minimal_settings, dummy_m
     assert 501 in manager.context_state.context.additional_chunks
 
 
-def test_augment_warm_slice_merges_incremental_additions(minimal_settings, dummy_memnon, baseline_inputs):
+def test_augment_warm_slice_merges_incremental_additions(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     manager.handle_storyteller_response(
@@ -264,25 +305,31 @@ def test_augment_warm_slice_merges_incremental_additions(minimal_settings, dummy
         token_usage=baseline_inputs["token_usage"],
     )
 
-    manager.divergence_detector.detect = lambda text, context, transition: DivergenceResult(
-        detected=True,
-        confidence=1.0,
-        gaps={"Data Shard": "Reference not present"},
-        unmatched_entities={"Data Shard"},
-        references_seen={"Data Shard"},
+    manager.divergence_detector.detect = (
+        lambda text, context, transition: DivergenceResult(
+            detected=True,
+            confidence=1.0,
+            gaps={"Data Shard": "Reference not present"},
+            unmatched_entities={"Data Shard"},
+            references_seen={"Data Shard"},
+        )
     )
 
     manager.handle_user_input("Need the Data Shard briefing.")
 
-    augmented = manager.augment_warm_slice([
-        {"chunk_id": 101, "text": "Setup: extraction plan finalised."},
-    ])
+    augmented = manager.augment_warm_slice(
+        [
+            {"chunk_id": 101, "text": "Setup: extraction plan finalised."},
+        ]
+    )
 
     chunk_ids = {chunk["chunk_id"] for chunk in augmented if "chunk_id" in chunk}
     assert {101, 501}.issubset(chunk_ids)
 
 
-def test_get_memory_summary_reports_state(minimal_settings, dummy_memnon, baseline_inputs):
+def test_get_memory_summary_reports_state(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
     manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
 
     manager.handle_storyteller_response(

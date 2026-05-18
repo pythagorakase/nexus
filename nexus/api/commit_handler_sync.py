@@ -331,6 +331,7 @@ def commit_incubator_to_database_sync(
                     """
                     SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
                            choice_object, choice_text, orrery_proposal,
+                           COALESCE(authorial_directives, '[]'::jsonb) AS authorial_directives,
                            metadata_updates, entity_updates, reference_updates,
                            llm_response_id, status
                     FROM incubator
@@ -432,9 +433,10 @@ def commit_incubator_to_database_sync(
                 cur.execute(
                     """
                     INSERT INTO narrative_chunks (
-                        raw_text, storyteller_text, choice_object, choice_text
+                        raw_text, storyteller_text, choice_object, choice_text,
+                        authorial_directives
                     )
-                    VALUES (%s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                 """,
                     (
@@ -442,6 +444,7 @@ def commit_incubator_to_database_sync(
                         storyteller_text,
                         json.dumps(choice_object) if choice_object else None,
                         choice_text,
+                        json.dumps(incubator.get("authorial_directives") or []),
                     ),
                 )
                 chunk_id = cur.fetchone()[0]

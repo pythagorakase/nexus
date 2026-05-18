@@ -115,6 +115,7 @@ debug = true
 agentic_sql = true  # Enable agent to generate SQL queries dynamically
 
 [lore.retrieval]
+max_deep_queries = 5
 fallback_query = "Recent narrative events"
 
 [lore.token_budget]

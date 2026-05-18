@@ -29,7 +29,7 @@ from pathlib import Path
 
 import sqlalchemy as sa
 from sqlalchemy import create_engine, Column, Table, MetaData, text, inspect, func, or_
-from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, BYTEA, ARRAY, JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 # Import utility modules
@@ -175,6 +175,9 @@ class NarrativeChunk(Base):
 
     id = Column(sa.BigInteger, primary_key=True)
     raw_text = Column(sa.Text, nullable=False)
+    authorial_directives = Column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
     created_at = Column(sa.DateTime(timezone=True), server_default=sa.func.now())
 
 
@@ -1656,6 +1659,7 @@ class MEMNON:
                     SELECT 
                         nc.id,
                         nc.raw_text,
+                        COALESCE(nc.authorial_directives, '[]'::jsonb) AS authorial_directives,
                         cm.season,
                         cm.episode,
                         cm.scene,
@@ -1671,6 +1675,7 @@ class MEMNON:
                     GROUP BY
                         nc.id,
                         nc.raw_text,
+                        nc.authorial_directives,
                         cm.season,
                         cm.episode,
                         cm.scene,
@@ -1692,6 +1697,10 @@ class MEMNON:
                     return {
                         "id": result.id,
                         "text": result.raw_text,
+                        "authorial_directives": getattr(
+                            result, "authorial_directives", []
+                        )
+                        or [],
                         "header": header,
                         "full_text": header + "\n" + result.raw_text,
                     }
@@ -1715,7 +1724,9 @@ class MEMNON:
             with self.Session() as session:
                 query = text(
                     """
-                    SELECT nc.id, nc.raw_text, cm.season, cm.episode, cm.scene AS scene_number,
+                    SELECT nc.id, nc.raw_text,
+                           COALESCE(nc.authorial_directives, '[]'::jsonb) AS authorial_directives,
+                           cm.season, cm.episode, cm.scene AS scene_number,
                            cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
@@ -1732,6 +1743,10 @@ class MEMNON:
                         {
                             "id": result.id,
                             "text": result.raw_text,
+                            "authorial_directives": getattr(
+                                result, "authorial_directives", []
+                            )
+                            or [],
                             "metadata": {
                                 "season": result.season,
                                 "episode": result.episode,

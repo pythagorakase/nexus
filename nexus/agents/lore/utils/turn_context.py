@@ -43,6 +43,7 @@ class TurnContext:
     token_counts: Dict[str, int] = field(default_factory=dict)
     memory_state: Dict[str, Any] = field(default_factory=dict)
     authorial_directives: List[str] = field(default_factory=list)
+    generated_authorial_directives: List[str] = field(default_factory=list)
     target_chunk_id: Optional[int] = None
     # Soft author's note / suggestion for the storyteller.
     note: Optional[str] = None

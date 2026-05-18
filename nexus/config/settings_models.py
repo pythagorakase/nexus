@@ -254,6 +254,11 @@ class LORERetrievalSettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    max_deep_queries: int = Field(
+        default=5,
+        ge=1,
+        description="Maximum MEMNON queries to execute during LORE deep-query pass",
+    )
     fallback_query: str = Field(
         default="Recent narrative events",
         min_length=1,

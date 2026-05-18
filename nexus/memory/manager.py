@@ -105,7 +105,10 @@ class Pass2Update:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "divergence": self.divergence.to_dict(),
-            "retrieved_chunk_ids": [chunk.get("chunk_id") or chunk.get("id") for chunk in self.retrieved_chunks],
+            "retrieved_chunk_ids": [
+                chunk.get("chunk_id") or chunk.get("id")
+                for chunk in self.retrieved_chunks
+            ],
             "tokens_used": self.tokens_used,
             "baseline_available": self.baseline_available,
             "llm_unavailable": self.llm_unavailable,
@@ -128,20 +131,33 @@ class ContextMemoryManager:
         memory_settings = settings.get("memory", {})
 
         # Phase 2 configuration
-        self.phase2_fraction = float(memory_settings.get("phase2_fraction", 0.1))  # 10% of apex window
-        self.raw_search_k = int(memory_settings.get("raw_search_k", 30))  # Overretrieve for curation
-        self.skip_simple_choices = bool(memory_settings.get("skip_simple_choices", True))
+        self.phase2_fraction = float(
+            memory_settings.get("phase2_fraction", 0.1)
+        )  # 10% of apex window
+        self.raw_search_k = int(
+            memory_settings.get("raw_search_k", 30)
+        )  # Overretrieve for curation
+        self.skip_simple_choices = bool(
+            memory_settings.get("skip_simple_choices", True)
+        )
 
         # Calculate actual Phase 2 budget from apex window
-        apex_context_window = settings.get("Agent Settings", {}).get("LORE", {}).get(
-            "token_budget", {}
-        ).get("apex_context_window", 75000)
+        apex_context_window = (
+            settings.get("Agent Settings", {})
+            .get("LORE", {})
+            .get("token_budget", {})
+            .get("apex_context_window", 75000)
+        )
         self.phase2_budget = int(apex_context_window * self.phase2_fraction)
-        logger.info(f"Phase 2 budget: {self.phase2_budget} tokens ({self.phase2_fraction * 100:.0f}% of {apex_context_window})")
+        logger.info(
+            f"Phase 2 budget: {self.phase2_budget} tokens ({self.phase2_fraction * 100:.0f}% of {apex_context_window})"
+        )
 
         # Legacy settings (kept for compatibility but may be deprecated)
         self.pass2_reserve = float(memory_settings.get("pass2_budget_reserve", 0.25))
-        self.divergence_threshold = float(memory_settings.get("divergence_threshold", 0.7))
+        self.divergence_threshold = float(
+            memory_settings.get("divergence_threshold", 0.7)
+        )
         self.warm_slice_default = bool(memory_settings.get("warm_slice_default", True))
         self.max_sql_iterations = int(memory_settings.get("max_sql_iterations", 5))
 
@@ -156,13 +172,16 @@ class ContextMemoryManager:
         self.entity_detector = None
 
         if use_llm_requested and not llm_manager:
-            self.degraded_mode_reason = "LLM manager not available - using entity-based fallback detector"
+            self.degraded_mode_reason = (
+                "LLM manager not available - using entity-based fallback detector"
+            )
             logger.warning(
-                "\n" + "="*80 +
-                "\n⚠️  DEGRADED MODE WARNING: LLM-based divergence detection unavailable!\n" +
-                "    Falling back to entity-based detector with reduced capabilities.\n" +
-                "    Narrative callbacks and references may not be detected properly.\n" +
-                "="*80
+                "\n"
+                + "=" * 80
+                + "\n⚠️  DEGRADED MODE WARNING: LLM-based divergence detection unavailable!\n"
+                + "    Falling back to entity-based detector with reduced capabilities.\n"
+                + "    Narrative callbacks and references may not be detected properly.\n"
+                + "=" * 80
             )
             use_llm_requested = False
 
@@ -174,27 +193,35 @@ class ContextMemoryManager:
                 use_local_llm=use_local,
             )
             self.using_llm_detector = True
-            logger.info("✅ Using LLM-based divergence detector (threshold=%.2f)", self.divergence_threshold)
+            logger.info(
+                "✅ Using LLM-based divergence detector (threshold=%.2f)",
+                self.divergence_threshold,
+            )
         else:
             # Import and use high-specificity entity detector as fallback
             from .entity_detector import HighSpecificityEntityDetector
 
             # Try to get database connection from memnon
             db_connection = None
-            if self.memnon and hasattr(self.memnon, 'db'):
+            if self.memnon and hasattr(self.memnon, "db"):
                 db_connection = self.memnon.db
 
             self.entity_detector = HighSpecificityEntityDetector(db_connection)
-            self.divergence_detector = DivergenceDetector(threshold=self.divergence_threshold)
+            self.divergence_detector = DivergenceDetector(
+                threshold=self.divergence_threshold
+            )
 
             if not self.degraded_mode_reason:
-                self.degraded_mode_reason = "LLM divergence detection disabled - using entity-based fallback"
+                self.degraded_mode_reason = (
+                    "LLM divergence detection disabled - using entity-based fallback"
+                )
 
             logger.warning(
-                "\n" + "="*80 +
-                "\n⚠️  DEGRADED MODE: Using entity-based detector as fallback\n" +
-                "    Limited to known entities from database, may miss narrative references\n" +
-                "="*80
+                "\n"
+                + "=" * 80
+                + "\n⚠️  DEGRADED MODE: Using entity-based detector as fallback\n"
+                + "    Limited to known entities from database, may miss narrative references\n"
+                + "=" * 80
             )
 
         self.incremental = IncrementalRetriever(
@@ -209,12 +236,13 @@ class ContextMemoryManager:
 
         # Initialize LLM curator for Phase 2
         from .llm_curator import LLMContextCurator
+
         self.llm_curator = None
         if llm_manager:
             self.llm_curator = LLMContextCurator(
                 llm_manager=llm_manager,
                 phase2_budget=self.phase2_budget,
-                use_local_llm=True
+                use_local_llm=True,
             )
             logger.info("LLM Context Curator initialized for Phase 2 management")
 
@@ -236,25 +264,45 @@ class ContextMemoryManager:
 
         if current_package:
             pass1_usage = {
-                "baseline_tokens": current_package.token_usage.get("baseline_tokens", 0),
-                "reserved_for_pass2": current_package.token_usage.get("reserved_for_pass2", 0),
+                "baseline_tokens": current_package.token_usage.get(
+                    "baseline_tokens", 0
+                ),
+                "reserved_for_pass2": current_package.token_usage.get(
+                    "reserved_for_pass2", 0
+                ),
             }
             pass2_usage = {
-                "reserve_shortfall": current_package.token_usage.get("reserve_shortfall", 0),
+                "reserve_shortfall": current_package.token_usage.get(
+                    "reserve_shortfall", 0
+                ),
                 "remaining_budget": self.context_state.get_remaining_budget(),
             }
         return {
             "pass1": {
-                "baseline_chunks": len(current_package.baseline_chunks) if current_package else 0,
-                "baseline_themes": current_package.baseline_themes if current_package else [],
-                "authorial_directives": current_package.authorial_directives if current_package else [],
-                "structured_passages": current_package.structured_passages if current_package else [],
+                "baseline_chunks": (
+                    len(current_package.baseline_chunks) if current_package else 0
+                ),
+                "baseline_themes": (
+                    current_package.baseline_themes if current_package else []
+                ),
+                "authorial_directives": (
+                    current_package.authorial_directives if current_package else []
+                ),
+                "structured_passages": (
+                    current_package.structured_passages if current_package else []
+                ),
                 "token_usage": pass1_usage,
             },
             "pass2": {
-                "divergence_detected": current_package.divergence_detected if current_package else False,
-                "divergence_confidence": current_package.divergence_confidence if current_package else 0.0,
-                "additional_chunks": len(current_package.additional_chunks) if current_package else 0,
+                "divergence_detected": (
+                    current_package.divergence_detected if current_package else False
+                ),
+                "divergence_confidence": (
+                    current_package.divergence_confidence if current_package else 0.0
+                ),
+                "additional_chunks": (
+                    len(current_package.additional_chunks) if current_package else 0
+                ),
                 "token_reserve_percent": int(self.pass2_reserve * 100),
                 "usage": pass2_usage,
             },
@@ -264,8 +312,8 @@ class ContextMemoryManager:
             },
             "settings": {
                 "divergence_threshold": self.divergence_threshold,
-                "warm_slice_default": self.warm_slice_default
-            }
+                "warm_slice_default": self.warm_slice_default,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -279,6 +327,7 @@ class ContextMemoryManager:
         token_usage: Optional[Dict[str, int]] = None,
         assembled_context: Optional[Dict[str, Any]] = None,
         authorial_directives: Optional[Iterable[str]] = None,
+        execute_authorial_directives: bool = True,
     ) -> ContextPackage:
         """Run Pass 1 analysis and store baseline context for the next turn."""
 
@@ -301,7 +350,7 @@ class ContextMemoryManager:
         existing_ids: Set[int] = set()
         structured_passages: List[Dict[str, Any]] = []
 
-        for collection in (warm_slice or []):
+        for collection in warm_slice or []:
             normalized = dict(collection)
             chunk_id = self._coerce_chunk_id(normalized)
             if chunk_id is None:
@@ -313,7 +362,7 @@ class ContextMemoryManager:
             chunk_details.append({"chunk_id": chunk_id, **normalized})
 
         chunk_retrievals: List[Dict[str, Any]] = []
-        for passage in (retrieved_passages or []):
+        for passage in retrieved_passages or []:
             normalized = dict(passage)
             chunk_id = self._coerce_chunk_id(normalized)
             if chunk_id is None:
@@ -325,20 +374,30 @@ class ContextMemoryManager:
 
         directive_chunks: List[Dict[str, Any]] = []
         directive_structured: List[Dict[str, Any]] = []
-        if directives:
-            directive_chunks, directive_structured = self._execute_authorial_directives(directives, existing_ids)
+        if directives and execute_authorial_directives:
+            directive_chunks, directive_structured = self._execute_authorial_directives(
+                directives, existing_ids
+            )
             if directive_chunks:
                 chunk_retrievals.extend(directive_chunks)
             if directive_structured:
                 structured_passages.extend(directive_structured)
             if assembled_context is not None:
                 if directive_chunks:
-                    retrieval_section = assembled_context.setdefault("retrieved_passages", {})
+                    retrieval_section = assembled_context.setdefault(
+                        "retrieved_passages", {}
+                    )
                     retrieval_results = retrieval_section.setdefault("results", [])
-                    retrieval_results.extend(dict(result) for result in directive_chunks)
+                    retrieval_results.extend(
+                        dict(result) for result in directive_chunks
+                    )
                 if directive_structured:
-                    structured_section = assembled_context.setdefault("structured_passages", [])
-                    structured_section.extend(dict(result) for result in directive_structured)
+                    structured_section = assembled_context.setdefault(
+                        "structured_passages", []
+                    )
+                    structured_section.extend(
+                        dict(result) for result in directive_structured
+                    )
 
         if assembled_context is not None:
             structured_section = assembled_context.setdefault("structured_passages", [])
@@ -353,7 +412,8 @@ class ContextMemoryManager:
 
         token_usage = token_usage or {}
         baseline_tokens = sum(
-            token_usage.get(key, 0) for key in ("warm_slice", "structured", "augmentation")
+            token_usage.get(key, 0)
+            for key in ("warm_slice", "structured", "augmentation")
         )
         total_available = token_usage.get("total_available", 0)
         reserved_for_pass2 = max(0, int(total_available * self.pass2_reserve))
@@ -421,16 +481,21 @@ class ContextMemoryManager:
 
         # Strip whitespace and common punctuation
         import re
+
         # Remove leading/trailing whitespace and punctuation
-        cleaned = user_input.strip().strip('.,!?;:')
+        cleaned = user_input.strip().strip(".,!?;:")
 
         # Pattern: single digit, or single letter (upper/lower)
         # After stripping, should just be the choice character
-        pattern = r'^[1-9]$|^[A-Za-z]$'
+        pattern = r"^[1-9]$|^[A-Za-z]$"
 
         is_simple = bool(re.match(pattern, cleaned))
         if is_simple:
-            logger.info("Simple choice detected: '%s' -> '%s' - skipping Phase 2 retrieval", user_input, cleaned)
+            logger.info(
+                "Simple choice detected: '%s' -> '%s' - skipping Phase 2 retrieval",
+                user_input,
+                cleaned,
+            )
 
         return is_simple
 
@@ -464,7 +529,9 @@ class ContextMemoryManager:
 
         return DivergenceResult(False, 0.0, {}, set(), set())
 
-    def _compute_available_phase2_budget(self, token_counts: Optional[Dict[str, int]]) -> int:
+    def _compute_available_phase2_budget(
+        self, token_counts: Optional[Dict[str, int]]
+    ) -> int:
         """Determine the usable Phase 2 budget for this turn."""
 
         remaining_budget = self.context_state.get_remaining_budget()
@@ -473,7 +540,8 @@ class ContextMemoryManager:
             total_available = token_counts.get("total_available")
             if total_available is not None:
                 baseline_tokens = sum(
-                    token_counts.get(key, 0) for key in ("warm_slice", "structured", "augmentation")
+                    token_counts.get(key, 0)
+                    for key in ("warm_slice", "structured", "augmentation")
                 )
                 actual_remaining = max(0, int(total_available) - int(baseline_tokens))
                 if actual_remaining != remaining_budget:
@@ -524,7 +592,9 @@ class ContextMemoryManager:
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
             return Pass2Update(
-                divergence, [], 0,
+                divergence,
+                [],
+                0,
                 baseline_available=False,
                 llm_unavailable=not self.llm_curator,
                 degraded_mode_reason=degraded_reason,
@@ -536,19 +606,23 @@ class ContextMemoryManager:
         if self.skip_simple_choices and self._is_simple_choice(user_input):
             logger.info("📌 Phase 2 skipped: Simple choice detected")
             return Pass2Update(
-                divergence, [], 0,
+                divergence,
+                [],
+                0,
                 baseline_available=True,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason
+                degraded_mode_reason=degraded_reason,
             )
 
         if available_budget <= 0:
             logger.info("📉 Phase 2 skipped: No remaining token budget available")
             return Pass2Update(
-                divergence, [], 0,
+                divergence,
+                [],
+                0,
                 baseline_available=True,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason
+                degraded_mode_reason=degraded_reason,
             )
 
         # STEP 2: Always run raw vector search (unless simple choice)
@@ -556,23 +630,29 @@ class ContextMemoryManager:
         raw_search_results, raw_tokens = self.incremental.retrieve_from_raw_input(
             user_input,
             budget=available_budget,
-            k=self.raw_search_k  # Overretrieve (default 30)
+            k=self.raw_search_k,  # Overretrieve (default 30)
         )
 
         if not raw_search_results:
             logger.info("No results from raw vector search - Phase 2 complete")
             return Pass2Update(
-                divergence, [], 0,
+                divergence,
+                [],
+                0,
                 baseline_available=True,
                 llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason
+                degraded_mode_reason=degraded_reason,
             )
 
-        logger.info(f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)")
+        logger.info(
+            f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)"
+        )
 
         # STEP 3: Use LLM curator to decide what to keep (if available)
         if not self.llm_curator:
-            logger.warning("No LLM curator available - keeping first chunks that fit budget")
+            logger.warning(
+                "No LLM curator available - keeping first chunks that fit budget"
+            )
             # Simple fallback: keep chunks that fit in budget
             kept_chunks = []
             total_tokens = 0
@@ -591,10 +671,12 @@ class ContextMemoryManager:
                     total_tokens,
                 )
             return Pass2Update(
-                divergence, kept_chunks, total_tokens,
+                divergence,
+                kept_chunks,
+                total_tokens,
                 baseline_available=True,
                 llm_unavailable=True,
-                degraded_mode_reason=degraded_reason
+                degraded_mode_reason=degraded_reason,
             )
 
         logger.info("🤖 Phase 2 Step 2: LLM curation of results")
@@ -606,7 +688,7 @@ class ContextMemoryManager:
         curation = self.llm_curator.curate(
             user_input=user_input,
             raw_search_results=raw_search_results,
-            storyteller_context=storyteller_context
+            storyteller_context=storyteller_context,
         )
 
         # STEP 4: Process curation decision
@@ -626,7 +708,9 @@ class ContextMemoryManager:
         # STEP 5: Execute additional queries suggested by LLM
         remaining_budget = max(0, available_budget - final_tokens)
         if curation.additional_queries and remaining_budget > 0:
-            logger.info(f"🔍 Phase 2 Step 3: Executing {len(curation.additional_queries)} additional queries")
+            logger.info(
+                f"🔍 Phase 2 Step 3: Executing {len(curation.additional_queries)} additional queries"
+            )
 
             for query_spec in curation.additional_queries:
                 query_type = query_spec.get("type", "vector")
@@ -640,10 +724,12 @@ class ContextMemoryManager:
                     try:
                         add_chunks, add_tokens = self.incremental.retrieve_gap_context(
                             {query_text: "LLM-requested targeted retrieval"},
-                            remaining_budget
+                            remaining_budget,
                         )
                         if add_chunks:
-                            logger.info(f"Vector query '{query_text[:50]}...' retrieved {len(add_chunks)} chunks")
+                            logger.info(
+                                f"Vector query '{query_text[:50]}...' retrieved {len(add_chunks)} chunks"
+                            )
                             final_chunks.extend(add_chunks)
                             final_tokens += add_tokens
                             remaining_budget -= add_tokens
@@ -652,7 +738,9 @@ class ContextMemoryManager:
 
                 elif query_type == "sql":
                     # SQL queries could be implemented here if needed
-                    logger.info(f"SQL queries not yet implemented: {query_text[:50]}...")
+                    logger.info(
+                        f"SQL queries not yet implemented: {query_text[:50]}..."
+                    )
 
                 if remaining_budget <= 0:
                     logger.info("Phase 2 budget exhausted")
@@ -671,10 +759,12 @@ class ContextMemoryManager:
             logger.info("Phase 2 complete: No chunks retained after curation")
 
         return Pass2Update(
-            divergence, final_chunks, final_tokens,
+            divergence,
+            final_chunks,
+            final_tokens,
             baseline_available=True,
             llm_unavailable=not self.llm_curator,
-            degraded_mode_reason=degraded_reason
+            degraded_mode_reason=degraded_reason,
         )
 
     # ------------------------------------------------------------------
@@ -707,13 +797,19 @@ class ContextMemoryManager:
                 continue
 
             if self.query_memory.has_run(directive_text):
-                logger.debug("Skipping duplicate authorial directive: %s", directive_text)
+                logger.debug(
+                    "Skipping duplicate authorial directive: %s", directive_text
+                )
                 continue
 
             try:
-                payload = memnon.query_memory(query=directive_text, k=6, use_hybrid=True)
+                payload = memnon.query_memory(
+                    query=directive_text, k=6, use_hybrid=True
+                )
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error("Authorial directive query failed for '%s': %s", directive_text, exc)
+                logger.error(
+                    "Authorial directive query failed for '%s': %s", directive_text, exc
+                )
                 continue
 
             for result in payload.get("results", []):
@@ -747,7 +843,9 @@ class ContextMemoryManager:
         except (TypeError, ValueError):
             return None
 
-    def augment_warm_slice(self, warm_slice: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def augment_warm_slice(
+        self, warm_slice: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Merge existing warm slice chunks with any incremental additions."""
 
         if not warm_slice:
@@ -832,7 +930,9 @@ class ContextMemoryManager:
                         canonical = self.user_character_name.lower()
                         if canonical not in self.alias_lookup:
                             self.alias_lookup[canonical] = [self.user_character_name]
-                            self.canonical_name_map[canonical] = self.user_character_name
+                            self.canonical_name_map[canonical] = (
+                                self.user_character_name
+                            )
                         for alias in self.alias_lookup[canonical]:
                             self.alias_inverse[alias.lower()] = canonical
                         for pronoun in ("you", "your", "yours", "yourself"):
@@ -900,7 +1000,13 @@ class ContextMemoryManager:
         """Lightweight heuristic analysis of storyteller output."""
         text = narrative or ""
         if not text.strip():
-            return {"characters": [], "locations": [], "keywords": [], "themes": [], "expected": []}
+            return {
+                "characters": [],
+                "locations": [],
+                "keywords": [],
+                "themes": [],
+                "expected": [],
+            }
 
         character_candidates = re.findall(r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)", text)
         characters: List[str] = []
@@ -964,6 +1070,3 @@ class ContextMemoryManager:
             "themes": themes,
             "expected": expected,
         }
-
-
-    

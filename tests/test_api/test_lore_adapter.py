@@ -1,6 +1,9 @@
 """Tests for adapting LOGON responses into incubator payloads."""
 
-from nexus.agents.logon.apex_schema import ReferencedEntities, StorytellerResponseExtended
+from nexus.agents.logon.apex_schema import (
+    ReferencedEntities,
+    StorytellerResponseExtended,
+)
 from nexus.api.lore_adapter import response_to_incubator
 
 
@@ -10,6 +13,9 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     response = StorytellerResponseExtended(
         narrative="Jonas waits beneath the pharmacy sign.",
         choices=["Follow Jonas.", "Answer the phone."],
+        authorial_directives=[
+            "Retrieve Jonas Vale's prior interactions with Eleanor Voss."
+        ],
         chunk_metadata={
             "chronology": {
                 "episode_transition": "continue",
@@ -60,6 +66,9 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
     )
 
     assert incubator["metadata_updates"]["chronology"]["time_delta_minutes"] == 1
+    assert incubator["authorial_directives"] == [
+        "Retrieve Jonas Vale's prior interactions with Eleanor Voss."
+    ]
     reference_updates = incubator["reference_updates"]
     assert reference_updates["characters"][0]["character_name"] == "Eleanor Voss"
     assert reference_updates["characters"][1]["new_character"]["name"] == "Jonas Vale"
@@ -69,8 +78,7 @@ def test_response_to_incubator_serializes_current_reference_schema() -> None:
         == "transit stop"
     )
     assert (
-        reference_updates["factions"][0]["new_faction"]["name"]
-        == "Project Palimpsest"
+        reference_updates["factions"][0]["new_faction"]["name"] == "Project Palimpsest"
     )
 
     # The commit path reparses this JSONB payload into the current schema.
