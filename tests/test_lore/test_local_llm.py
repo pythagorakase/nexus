@@ -259,6 +259,27 @@ class TestQueryGeneration:
             "East Span Crown wardline pursuit",
         ]
 
+    def test_sanitize_retrieval_queries_rejects_live_keyword_stutter(self):
+        """Live local models can emit keyword stutter instead of useful queries."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "Character relationships and interactions among them.",
+                "Thus we can propose queries like:",
+                'Orrel "misdirect" inspectors inspector misdirection tactics',
+                "front front the drains laundry?",
+                "Orrel ledger ledgers ledgers",
+                "Orrel misdirect inspectors through laundry chaos",
+                "Lantern Court laundry crate inspector search",
+                "Ledger concealment near the service hatch",
+            ]
+        )
+
+        assert queries == [
+            "Orrel misdirect inspectors through laundry chaos",
+            "Lantern Court laundry crate inspector search",
+            "Ledger concealment near the service hatch",
+        ]
+
     def test_retrieval_query_set_requires_three_queries(self):
         """Structured output should fall back when too few valid queries survive."""
         assert not _has_complete_retrieval_query_set(["Sella sour bite"])
