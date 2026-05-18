@@ -237,6 +237,7 @@ class TestQueryGeneration:
                 "Make sure each line is a query phrase. No bullet points.",
                 'Ganrow?" "stated*" "delay',
                 'Sella" "clause splinter" history of location "Rema',
+                'history of "Lantern Court" alliance with "Remainder Chamber"',
                 "Sella sour bite Remainder Chamber poisoning",
                 "Lantern Court healer living remainder",
                 "East Span Crown wardline pursuit",
@@ -244,6 +245,7 @@ class TestQueryGeneration:
         )
 
         assert queries == [
+            'history of "Lantern Court" alliance with "Remainder Chamber"',
             "Sella sour bite Remainder Chamber poisoning",
             "Lantern Court healer living remainder",
             "East Span Crown wardline pursuit",

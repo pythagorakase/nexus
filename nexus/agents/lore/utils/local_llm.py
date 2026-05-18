@@ -43,7 +43,6 @@ _META_QUERY_PREFIXES = (
     "key entities",
     "let's ",
     "locations:",
-    "make sure",
     "no numbering",
     "output exactly",
     "the user wants",
@@ -56,6 +55,7 @@ _META_QUERY_FRAGMENTS = (
     "complete question or search phrase",
     "generate retrieval queries",
     "generate queries",
+    "make sure",
     "no bullet",
     "query phrase",
     "one per line",
@@ -152,6 +152,37 @@ def _parse_structured_json_text(response: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _has_well_formed_double_quotes(query: str) -> bool:
+    """Return whether double quotes look like balanced phrase delimiters."""
+    quote_positions = [match.start() for match in re.finditer('"', query)]
+    if not quote_positions:
+        return True
+    if len(quote_positions) % 2 == 1:
+        return False
+
+    for pair_index, quote_index in enumerate(quote_positions):
+        previous_char = query[quote_index - 1] if quote_index > 0 else ""
+        next_char = query[quote_index + 1] if quote_index + 1 < len(query) else ""
+        is_opening = pair_index % 2 == 0
+
+        if is_opening:
+            if (
+                previous_char
+                and not previous_char.isspace()
+                and previous_char not in "([{:"
+            ):
+                return False
+            if not next_char or next_char.isspace():
+                return False
+        else:
+            if not previous_char or previous_char.isspace():
+                return False
+            if next_char and not next_char.isspace() and next_char not in ".,;:)]}":
+                return False
+
+    return True
+
+
 def _clean_retrieval_query(query: Any) -> Optional[str]:
     """Normalize one candidate retrieval query and reject instruction/meta text."""
     if not isinstance(query, str):
@@ -161,7 +192,7 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
     cleaned = cleaned.replace("\xa0", " ").replace("…", "...")
     cleaned = _LM_CONTROL_TOKEN_RE.sub(" ", cleaned)
     cleaned = " ".join(cleaned.split()).strip()
-    cleaned = _QUERY_PREFIX_RE.sub("", cleaned).strip(" \"'`")
+    cleaned = _QUERY_PREFIX_RE.sub("", cleaned).strip().strip("`")
 
     if len(cleaned) <= 10:
         return None
@@ -184,9 +215,7 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
         return None
     if len(re.findall(r"[A-Za-z0-9]+", cleaned)) < 3:
         return None
-    if cleaned.count('"') % 2 == 1:
-        return None
-    if cleaned.count('"') >= 4:
+    if not _has_well_formed_double_quotes(cleaned):
         return None
 
     return cleaned
@@ -687,6 +716,8 @@ Each query should be a complete search phrase that captures what information you
 
                 valid_queries = _sanitize_retrieval_queries(queries)
 
+                # Sanitization can drop generic or malformed items even when the
+                # Pydantic response had the requested list length.
                 if _has_complete_retrieval_query_set(valid_queries):
                     logger.info(
                         f"Generated {len(valid_queries)} valid retrieval queries via structured output"
@@ -694,7 +725,7 @@ Each query should be a complete search phrase that captures what information you
                     return valid_queries
                 else:
                     logger.warning(
-                        "Structured output returned fewer than 3 valid queries, falling back to text parsing"
+                        f"Structured output returned fewer than {_MIN_RETRIEVAL_QUERIES} valid queries, falling back to text parsing"
                     )
                     raise ValueError("Invalid structured output")
 
@@ -737,10 +768,10 @@ Each query should be a complete question or search phrase."""
             queries = _sanitize_retrieval_queries(query_candidates)
 
             # Ensure we have between 3-5 queries
-            if len(queries) < 3:
+            if not _has_complete_retrieval_query_set(queries):
                 # Fallback: add generic queries based on user input
                 logger.warning(
-                    f"Only generated {len(queries)} queries, adding fallbacks"
+                    f"Only generated {len(queries)} queries; need {_MIN_RETRIEVAL_QUERIES}, adding fallbacks"
                 )
                 fallback_candidates = []
                 if user_input:
