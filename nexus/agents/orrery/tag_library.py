@@ -23,6 +23,7 @@ class TagLibraryEntry:
     category: str
     tag: str
     is_ephemeral: bool
+    description: str
     category_description: str
     prompt_order: int
 
@@ -54,7 +55,8 @@ def read_tag_library(
                     r.description AS category_description,
                     r.prompt_order,
                     t.tag,
-                    t.is_ephemeral
+                    t.is_ephemeral,
+                    t.description
                 FROM tag_category_registry r
                 JOIN tags t ON t.category = r.category
                 WHERE {' AND '.join(where)}
@@ -72,6 +74,7 @@ def read_tag_library(
                     category=str(row["category"]),
                     tag=str(row["tag"]),
                     is_ephemeral=bool(row["is_ephemeral"]),
+                    description=str(row["description"] or ""),
                     category_description=str(row["category_description"] or ""),
                     prompt_order=int(row["prompt_order"]),
                 )
@@ -125,10 +128,7 @@ def format_tag_library_for_prompt(
             ),
         ):
             first = category_entries[0]
-            tags = ", ".join(
-                _format_tag_name(entry.tag, entry.is_ephemeral)
-                for entry in category_entries
-            )
+            tags = ", ".join(_format_tag_entry(entry) for entry in category_entries)
             if first.category_description:
                 lines.append(
                     f"- `{category}` — {first.category_description} Tags: {tags}"
@@ -157,6 +157,20 @@ def _normalize_entity_kinds(
 def _format_tag_name(tag: str, is_ephemeral: bool) -> str:
     suffix = " (ephemeral)" if is_ephemeral else ""
     return f"`{tag}`{suffix}"
+
+
+def _format_tag_entry(entry: TagLibraryEntry) -> str:
+    name = _format_tag_name(entry.tag, entry.is_ephemeral)
+    if not entry.description:
+        return name
+    return f"{name}: {_clean_description(entry.description)}"
+
+
+def _clean_description(description: str, *, max_length: int = 140) -> str:
+    cleaned = " ".join(description.split())
+    if len(cleaned) <= max_length:
+        return cleaned
+    return f"{cleaned[: max_length - 3].rstrip()}..."
 
 
 def _connect(dbname: Optional[str]):

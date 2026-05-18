@@ -20,6 +20,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "prompt_order": 10,
             "tag": "wounded",
             "is_ephemeral": True,
+            "description": "Character has an acute wound.",
         },
         {
             "entity_kind": "place",
@@ -28,6 +29,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
             "prompt_order": 10,
             "tag": "safe_house",
             "is_ephemeral": False,
+            "description": "Place can shelter people from danger.",
         },
     ]
     monkeypatch.setattr(tag_library, "_connect", lambda _dbname: _Conn(rows))
@@ -38,9 +40,9 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
     assert "Prefer exact registered tags when they fit" in rendered
     assert "add new tags when the existing library does not cover" in rendered
     assert "### Character Tags" in rendered
-    assert "`wounded` (ephemeral)" in rendered
+    assert "`wounded` (ephemeral): Character has an acute wound." in rendered
     assert "### Place Tags" in rendered
-    assert "`safe_house`" in rendered
+    assert "`safe_house`: Place can shelter people from danger." in rendered
 
 
 def test_format_tag_library_rejects_unknown_entity_kind() -> None:

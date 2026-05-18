@@ -344,3 +344,32 @@ def test_tag_category_registry_migration_covers_current_vocab_categories() -> No
     assert ("place_affordance", "place") in registered
     assert ("power_posture", "faction") in registered
     assert "tag_category_registry" in migration_path.read_text()
+
+
+def test_tag_baseline_reconciliation_migration_closes_slot_drift() -> None:
+    """Migration 038 keeps template clones and existing slots on one vocab set."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "038_orrery_tag_baseline_reconciliation.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert {"intimate_services_contact", "kin_protector"} <= {
+        tag for tag, _category, _description in migration.DURABLE_TAGS
+    }
+    assert "ON CONFLICT (tag) DO UPDATE SET" in migration_path.read_text()
+
+
+def test_new_story_character_orrery_tags_migration_adds_cache_column() -> None:
+    """Migration 039 preserves protagonist tags until setup transition."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "039_new_story_character_orrery_tags.py"
+    ).read_text()
+
+    assert "character_orrery_tags jsonb" in migration_source
+    assert "OrreryTagBestowal JSON" in migration_source

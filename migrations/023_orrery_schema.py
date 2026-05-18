@@ -400,6 +400,10 @@ def _create_identity_views(conn) -> None:
     _execute(
         conn,
         """
+        DROP VIEW IF EXISTS entity_relationships_v;
+        DROP VIEW IF EXISTS chunk_entity_references_v;
+        DROP VIEW IF EXISTS entity_names_v;
+
         CREATE OR REPLACE VIEW entity_names_v AS
             SELECT e.id, e.kind, c.name
             FROM entities e

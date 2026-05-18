@@ -101,6 +101,7 @@ def _hydrate_character_context(request: ChatRequest) -> Optional[Dict[str, Any]]
         char_state["wildcard"] = {
             "wildcard_name": cache.character.wildcard_name,
             "wildcard_description": cache.character.wildcard_rationale,
+            "orrery_tags": cache.character.orrery_tags,
         }
 
     if char_state:
@@ -452,9 +453,13 @@ async def new_story_chat_endpoint(request: ChatRequest):
 
                     # TEST mode: Use pre-computed location data from mock database
                     if selected_model == "TEST":
-                        logger.info("TEST mode: Using mock location data for slot %s", request.slot)
+                        logger.info(
+                            "TEST mode: Using mock location data for slot %s",
+                            request.slot,
+                        )
                         try:
                             from nexus.api.mock_openai import query_wizard_cache
+
                             mock_cache = query_wizard_cache()
                             layer_data = {
                                 "name": mock_cache.get("layer_name"),
@@ -745,9 +750,13 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
 
                         # TEST mode: Use pre-computed location data from mock database
                         if selected_model == "TEST":
-                            logger.info("TEST mode (stream): Using mock location data for slot %s", request.slot)
+                            logger.info(
+                                "TEST mode (stream): Using mock location data for slot %s",
+                                request.slot,
+                            )
                             try:
                                 from nexus.api.mock_openai import query_wizard_cache
+
                                 mock_cache = query_wizard_cache()
                                 layer_data = {
                                     "name": mock_cache.get("layer_name"),
@@ -779,11 +788,16 @@ async def new_story_chat_stream_endpoint(request: ChatRequest):
                                     location_data.get("name"),
                                 )
                             except Exception as e:
-                                logger.error("TEST mode (stream) set design failed: %s", e)
+                                logger.error(
+                                    "TEST mode (stream) set design failed: %s", e
+                                )
                                 payload["set_design_error"] = str(e)
                         else:
                             # Production: Call set designer
-                            logger.info("Running set designer (stream) for slot %s", request.slot)
+                            logger.info(
+                                "Running set designer (stream) for slot %s",
+                                request.slot,
+                            )
                             try:
                                 layer, zone, place = await generate_set_design(
                                     location_sketch=location_sketch,
