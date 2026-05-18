@@ -11,27 +11,8 @@ import sharp from "sharp";
 
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
-  const corePort = process.env.CORE_API_PORT || "8001";
-  const coreTarget = process.env.CORE_API_URL || `http://localhost:${corePort}`;
   const narrativePort = process.env.NARRATIVE_API_PORT || "8002";
   const narrativeTarget = process.env.NARRATIVE_API_URL || `http://localhost:${narrativePort}`;
-
-  // Proxy for Core API (FastAPI backend on port 8001)
-  // Handles model management and system operations
-  const coreModelsProxy = createProxyMiddleware({
-    target: coreTarget,
-    changeOrigin: true,
-    pathRewrite: (path) => `/api/models${path}`,
-  });
-
-  const coreHealthProxy = createProxyMiddleware({
-    target: coreTarget,
-    changeOrigin: true,
-    pathRewrite: (path) => `/api/health${path === "/" ? "" : path}`,
-  });
-
-  app.use("/api/models", coreModelsProxy);
-  app.use("/api/health", coreHealthProxy);
 
   // Proxy for Narrative API (FastAPI backend on port 8002)
   // Handles generation + incubator management without intercepting local narrative read routes

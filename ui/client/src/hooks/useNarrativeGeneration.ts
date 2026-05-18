@@ -25,6 +25,11 @@ const ACTIVE_GENERATION_PHASES: NarrativePhase[] = [
   "processing_response",
 ];
 
+const isActiveGenerationPhase = (
+  phase: NarrativePhase | null,
+): phase is NarrativePhase =>
+  phase !== null && ACTIVE_GENERATION_PHASES.includes(phase);
+
 interface UseNarrativeGenerationOptions {
   onPhaseChange?: (phase: NarrativePhase | null) => void;
   onComplete?: () => void;
@@ -269,9 +274,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ACTIVE_GENERATION_PHASES.includes(
-          narrativePhase ?? "",
-        )
+        isActiveGenerationPhase(narrativePhase)
       ) {
         toast({
           title: "Generation in progress",
@@ -422,9 +425,7 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
       // Prevent concurrent generations
       if (
         activeNarrativeSessionRef.current &&
-        ACTIVE_GENERATION_PHASES.includes(
-          narrativePhase ?? "",
-        )
+        isActiveGenerationPhase(narrativePhase)
       ) {
         toast({
           title: "Generation in progress",
@@ -508,8 +509,6 @@ export function useNarrativeGeneration(options: UseNarrativeGenerationOptions = 
     fetchIncubatorData,
 
     // Computed
-    isMidGeneration: ACTIVE_GENERATION_PHASES.includes(
-      narrativePhase ?? "",
-    ),
+    isMidGeneration: isActiveGenerationPhase(narrativePhase),
   };
 }

@@ -8,15 +8,12 @@ from nexus.config import save_settings
 @pytest.fixture
 def sample_toml(tmp_path):
     """Create a sample TOML file with comments."""
-    content = '''# Header comment
+    content = """# Header comment
 [global.model]
 # Default model comment
 default_model = "old-model"
-possible_values = [
-    "model-a",
-    "model-b",
-]
-'''
+default_slot_model = "TEST"
+"""
     toml_path = tmp_path / "test.toml"
     toml_path.write_text(content)
     return toml_path
@@ -43,10 +40,11 @@ def test_partial_update_leaves_other_fields(sample_toml):
         validate=False,
     )
     import tomllib
+
     with open(sample_toml, "rb") as f:
         data = tomllib.load(f)
     assert data["global"]["model"]["default_model"] == "new-model"
-    assert data["global"]["model"]["possible_values"] == ["model-a", "model-b"]
+    assert data["global"]["model"]["default_slot_model"] == "TEST"
 
 
 def test_creates_backup(sample_toml):
@@ -74,26 +72,32 @@ def test_file_not_found_raises(tmp_path):
 
 def test_preserves_multiline_arrays(tmp_path):
     """Verify multiline array format is preserved."""
-    content = '''[global.model]
-possible_values = [
-    "model-a",
-    "model-b",
+    content = """[lore.context.entity_inclusion]
+active_event_statuses = [
+    "open",
+    "active",
 ]
-'''
+"""
     toml_path = tmp_path / "test.toml"
     toml_path.write_text(content)
 
     save_settings(
-        {"global.model.possible_values": ["model-a", "model-b", "model-c"]},
+        {
+            "lore.context.entity_inclusion.active_event_statuses": [
+                "open",
+                "active",
+                "latent",
+            ]
+        },
         path=toml_path,
         validate=False,
     )
 
     result = toml_path.read_text()
     # Check that array is still multiline (one element per line)
-    assert '"model-a",' in result
-    assert '"model-b",' in result
-    assert '"model-c"' in result
+    assert '"open",' in result
+    assert '"active",' in result
+    assert '"latent"' in result
     # Ensure it's not a single-line array
-    lines_with_model_a = [l for l in result.split("\n") if "model-a" in l]
-    assert len(lines_with_model_a) == 1, "Array should be multiline, not single-line"
+    lines_with_open = [l for l in result.split("\n") if "open" in l]
+    assert len(lines_with_open) == 1, "Array should be multiline, not single-line"

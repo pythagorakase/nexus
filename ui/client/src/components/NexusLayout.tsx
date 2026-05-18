@@ -32,7 +32,6 @@ const TIMEOUTS = {
   TRANSMITTING_FALLBACK: 600,       // Fallback to GENERATING from TRANSMITTING
   ELAPSED_DISPLAY_THRESHOLD: 5000,  // Show elapsed time after 5 seconds
   ELAPSED_UPDATE_INTERVAL: 500,     // Update elapsed time every 500ms
-  MODEL_STATUS_POLL: 5000,          // Poll model status every 5 seconds
   APEX_CONNECTIVITY_POLL: 10000,    // Poll APEX connectivity every 10 seconds
   SETTINGS_REFETCH: 60000,          // Refetch settings every 60 seconds (optimized - settings rarely change)
   LATEST_CHUNK_REFETCH: 30000,      // Refetch latest chunk every 30 seconds (optimized - use WebSocket for real-time updates)
@@ -47,9 +46,6 @@ interface SettingsPayload {
       model?: {
         default_model?: string;
       };
-      llm?: {
-        api_base?: string;
-      };
       narrative?: {
         test_mode?: boolean;
       };
@@ -59,17 +55,6 @@ interface SettingsPayload {
 
 export function NexusLayout() {
   const [currentModel, setCurrentModel] = useState("LOADING");
-  const [currentModelId, setCurrentModelId] = useState("");
-  type ModelStatus = "unloaded" | "loading" | "loaded" | "generating";
-  type StableModelStatus = Exclude<ModelStatus, "generating">;
-  const [modelStatus, internalSetModelStatus] = useState<ModelStatus>("unloaded");
-  const stableModelStatusRef = useRef<StableModelStatus>("unloaded");
-  const setModelStatus = useCallback((status: ModelStatus) => {
-    if (status !== "generating") {
-      stableModelStatusRef.current = status as StableModelStatus;
-    }
-    internalSetModelStatus(status);
-  }, []);
   const [isStoryMode, setIsStoryMode] = useState(true);
   const [isTestModeEnabled, setIsTestModeEnabled] = useState(false);
   const [apexStatus, setApexStatus] = useState<
@@ -388,50 +373,16 @@ export function NexusLayout() {
           ? defaultModel.split("/").pop()!.toUpperCase()
           : defaultModel.toUpperCase();
         setCurrentModel(modelName);
-        setCurrentModelId(defaultModel); // Store full ID for API calls
       } else {
         setCurrentModel("UNCONFIGURED");
-        setCurrentModelId("");
       }
       const testMode = Boolean(settings?.["Agent Settings"]?.global?.narrative?.test_mode);
       setIsTestModeEnabled(testMode);
     } else if (settingsError) {
       setCurrentModel("UNAVAILABLE");
-      setCurrentModelId("");
       setIsTestModeEnabled(false);
     }
   }, [settings, settingsError, settingsLoaded]);
-
-  const refreshModelStatus = useCallback(async () => {
-    try {
-      const response = await fetch("/api/models/status");
-      if (response.ok) {
-        const data = await response.json();
-        const loadedModels = Array.isArray(data.loaded_models) ? data.loaded_models : [];
-        setModelStatus(loadedModels.length > 0 ? "loaded" : "unloaded");
-      } else {
-        setModelStatus("unloaded");
-      }
-    } catch {
-      setModelStatus("unloaded");
-    }
-  }, [setModelStatus]);
-
-
-  // Check if LLM server is running and has model loaded
-  useEffect(() => {
-    refreshModelStatus();
-    const interval = setInterval(refreshModelStatus, TIMEOUTS.MODEL_STATUS_POLL);
-    return () => clearInterval(interval);
-  }, [refreshModelStatus]);
-
-  useEffect(() => {
-    if (apexStatus === "GENERATING" && stableModelStatusRef.current === "loaded") {
-      internalSetModelStatus("generating");
-    } else if (apexStatus !== "GENERATING" && modelStatus === "generating") {
-      internalSetModelStatus(stableModelStatusRef.current);
-    }
-  }, [apexStatus, modelStatus]);
 
   // Check APEX connectivity
   useEffect(() => {
@@ -520,22 +471,12 @@ export function NexusLayout() {
       <div className="h-screen w-full bg-background flex flex-col font-mono overflow-hidden dark animate-fade-in">
         <StatusBar
           model={currentModel}
-          modelId={currentModelId}
-          season={latestChunk?.metadata?.season ?? 1}
-          episode={latestChunk?.metadata?.episode ?? 1}
-          scene={latestChunk?.metadata?.scene ?? 1}
           apexStatus={apexStatus}
           isStoryMode={isStoryMode}
           isTestModeEnabled={isTestModeEnabled}
-          modelStatus={modelStatus}
           activeSlot={activeSlot ?? undefined}
           userCharacterName={userCharacter?.name}
-          onModelStatusChange={setModelStatus}
-          onRefreshModelStatus={refreshModelStatus}
           onNavigate={setActiveTab}
-          onHamburgerClick={() => {
-            // Can be used for mobile menu in the future
-          }}
         />
 
         <Tabs
