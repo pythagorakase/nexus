@@ -235,6 +235,14 @@ class TestQueryGeneration:
         queries = _sanitize_retrieval_queries(
             [
                 "Make sure each line is a query phrase. No bullet points.",
+                "We must output exactly 3-5 lines, no numbering or bullets. Let's produce 4 queries.",
+                "But need 3-5 queries. Provide maybe four lines.",
+                "We'll produce something like:",
+                "So there is a scene where someone maybe climbs a dry pump throat.",
+                "History of locations (maybe Mercy Flue, ledger, Archivum).",
+                "Background information on key entities (Mercy Flue, ledger, Archivist).",
+                "Past events at",
+                "Past events at Lantern Lantern...",
                 'Ganrow?" "stated*" "delay',
                 'Sella" "clause splinter" history of location "Rema',
                 'history of "Lantern Court" alliance with "Remainder Chamber"',
