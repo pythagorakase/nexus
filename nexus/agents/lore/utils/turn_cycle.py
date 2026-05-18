@@ -92,6 +92,13 @@ def _coerce_authorial_directives(raw_directives: Any) -> List[str]:
     return normalize_authorial_directives(raw_directives, allow_json_string=True)
 
 
+def _chunk_text(chunk: Dict[str, Any]) -> str:
+    """Return the best available narrative text from a warm-slice chunk."""
+
+    text = chunk.get("text") or chunk.get("full_text") or ""
+    return text.strip() if isinstance(text, str) else ""
+
+
 class TurnCycleManager:
     """Manages the execution of turn cycle phases"""
 
@@ -125,6 +132,27 @@ class TurnCycleManager:
             raise RuntimeError(
                 f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
             ) from exc
+
+    def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
+        """Resolve the current/parent chunk text to use as a baseline query."""
+
+        for chunk in turn_context.warm_slice:
+            if chunk.get("is_target"):
+                text = _chunk_text(chunk)
+                if text:
+                    return text
+        return None
+
+    def _classify_query_type(self, query_text: str) -> str:
+        """Classify a MEMNON query for phase-state accounting."""
+
+        if not self.query_analyzer:
+            return "general"
+
+        query_info = self.query_analyzer.analyze_query(query_text)
+        query_type = query_info.get("type", "general")
+        logger.debug(f"Query '{query_text[:50]}...' classified as '{query_type}'")
+        return query_type
 
     async def process_user_input(self, turn_context: TurnContext):
         """
@@ -215,6 +243,8 @@ class TurnCycleManager:
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
                 recent_list = recent_chunks.get("results", [])
+                if target_chunk_id is None and recent_list:
+                    recent_list[0]["is_target"] = True
                 if (
                     not turn_context.authorial_directives
                     and target_chunk_id is None
@@ -522,12 +552,31 @@ class TurnCycleManager:
         if getattr(self.lore, "memory_manager", None):
             self.lore.memory_manager.reset_pass1_queries()
 
-        # Storyteller-authored directives are first-line retrieval input. The
-        # local LLM fills any remaining query budget from the current analysis.
+        # Full chunk text is the first-line retrieval baseline. Storyteller
+        # directives add targeted continuity, and local LLM queries fill any
+        # remaining budget from the current analysis.
         max_deep_queries = self._max_deep_queries()
         incoming_directives = turn_context.authorial_directives
         queries = []
-        for directive in incoming_directives[:max_deep_queries]:
+        raw_chunk_query = self._raw_chunk_retrieval_query(turn_context)
+        if raw_chunk_query:
+            queries.append(
+                {
+                    "text": raw_chunk_query,
+                    "type": self._classify_query_type(raw_chunk_query),
+                    "source": "raw_chunk",
+                }
+            )
+
+        directive_budget = max(0, max_deep_queries - len(queries))
+        if incoming_directives and directive_budget <= 0:
+            logger.warning(
+                "raw_chunk query consumed full query budget (%d); "
+                "all authorial directives suppressed",
+                max_deep_queries,
+            )
+
+        for directive in incoming_directives[:directive_budget]:
             queries.append(
                 {
                     "text": directive,
@@ -551,14 +600,12 @@ class TurnCycleManager:
 
         # Step 2: Classify local generated queries with MEMNON's QueryAnalyzer
         for q_text in llm_queries[:remaining_query_slots]:
-            query_type = "general"
-            if self.query_analyzer:
-                query_info = self.query_analyzer.analyze_query(q_text)
-                query_type = query_info.get("type", "general")
-                logger.debug(f"Query '{q_text[:50]}...' classified as '{query_type}'")
-
             queries.append(
-                {"text": q_text, "type": query_type, "source": "llm_generated"}
+                {
+                    "text": q_text,
+                    "type": self._classify_query_type(q_text),
+                    "source": "llm_generated",
+                }
             )
 
         # Step 3: Execute queries with proper SearchManager configuration
@@ -613,6 +660,9 @@ class TurnCycleManager:
             "queries_executed": len(queries),
             "query_types": query_type_counts,
             "query_sources": {
+                "raw_chunk": sum(
+                    1 for query in queries if query.get("source") == "raw_chunk"
+                ),
                 "authorial_directive": sum(
                     1
                     for query in queries
