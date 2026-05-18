@@ -331,10 +331,25 @@ class OrreryBleedSettings(BaseModel):
 
 
 class OrreryPromoteSettings(BaseModel):
-    """Deprecated promotion discriminator settings for Orrery resolutions."""
+    """Deterministic promotion discriminator settings for Orrery resolutions."""
 
     model_config = ConfigDict(extra="forbid")
 
+    priority_threshold: float = Field(
+        default=50.0,
+        ge=0.0,
+        description="Promote resolutions whose priority is at or above this value.",
+    )
+    magnitude_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        description="Promote resolutions whose magnitude is at or above this value.",
+    )
+    perceptual_summary_max_chars: int = Field(
+        default=240,
+        ge=1,
+        description="Maximum characters copied from a resolution brief into the promotion summary.",
+    )
     provider: Optional[Literal["local"]] = Field(
         default=None,
         exclude=True,

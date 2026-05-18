@@ -13,6 +13,7 @@ from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, Field
 
 from nexus.config import load_settings_as_dict
+from nexus.config.settings_models import OrreryPromoteSettings
 
 logger = logging.getLogger("nexus.orrery.worker")
 
@@ -23,8 +24,6 @@ DEFAULT_SEMANTIC_CLEARANCE_LIMIT = 20
 DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS = 10
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS = 5
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS = 6
-DEFAULT_PROMOTION_PRIORITY_THRESHOLD = 50.0
-DEFAULT_PROMOTION_MAGNITUDE_THRESHOLD = 0.5
 
 NARRATION_SYSTEM_PROMPT = (
     "You write concise off-screen narrative records for NEXUS. The prose is "
@@ -86,7 +85,6 @@ def process_orrery_outbox_sync(
         DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS
     ),
     settings: Optional[Mapping[str, Any]] = None,
-    llm_manager: Optional[Any] = None,
     narration_provider: Optional[Any] = None,
 ) -> OrreryWorkerResult:
     """Drain pending Orrery background work."""
@@ -95,7 +93,6 @@ def process_orrery_outbox_sync(
         slot,
         limit=promotion_limit,
         settings=settings,
-        llm_manager=llm_manager,
     )
     narrated, failed = drain_narration_outbox_sync(
         slot,
@@ -110,7 +107,6 @@ def process_orrery_outbox_sync(
         evidence_chunk_limit=semantic_clearance_evidence_chunks,
         evidence_event_limit=semantic_clearance_evidence_events,
         settings=settings,
-        llm_manager=llm_manager,
     )
     return OrreryWorkerResult(
         promoted=promoted,
@@ -126,13 +122,9 @@ def promote_pending_resolutions_sync(
     *,
     limit: int = 20,
     settings: Optional[Mapping[str, Any]] = None,
-    llm_manager: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
-    """Mark pending resolutions promoted or skipped with deterministic criteria.
-
-    ``llm_manager`` is accepted for compatibility with older callers and ignored.
-    """
+    """Mark pending resolutions promoted or skipped with deterministic criteria."""
 
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
@@ -166,11 +158,12 @@ def promote_pending_resolutions_sync(
                 if not rows:
                     return (0, 0)
 
+                promotion_settings = _promotion_settings(settings_dict)
                 promoted = 0
                 skipped = 0
                 slot_label = _slot_label(slot)
                 for row in rows:
-                    verdict = _promotion_verdict(row)
+                    verdict = _promotion_verdict(row, promotion_settings)
                     if verdict.promote:
                         _mark_promoted(cur, row, verdict, slot_label, settings_dict)
                         promoted += 1
@@ -287,7 +280,6 @@ def clear_semantic_tags_sync(
     evidence_chunk_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
     evidence_event_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
     settings: Optional[Mapping[str, Any]] = None,
-    llm_manager: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> int:
     """Return no semantic clears until a non-local clearance signal exists.
@@ -491,35 +483,46 @@ def _mark_narration_failed(
     )
 
 
-def _promotion_verdict(row: Mapping[str, Any]) -> PromotionVerdict:
+def _promotion_verdict(
+    row: Mapping[str, Any], settings: OrreryPromoteSettings
+) -> PromotionVerdict:
     priority = _numeric_or_zero(row.get("priority"))
     magnitude = _numeric_or_zero(row.get("magnitude"))
     state_delta = row.get("state_delta") or {}
     event_ids = row.get("event_ids") or []
     brief = str(row.get("brief") or "").strip()
-    has_canonical_signal = bool(brief) and bool(state_delta or event_ids)
+    has_resolution_content = bool(brief or state_delta or event_ids)
     is_salient = (
-        priority >= DEFAULT_PROMOTION_PRIORITY_THRESHOLD
-        or magnitude >= DEFAULT_PROMOTION_MAGNITUDE_THRESHOLD
+        priority >= settings.priority_threshold
+        or magnitude >= settings.magnitude_threshold
     )
 
-    if has_canonical_signal and is_salient:
+    if has_resolution_content and is_salient:
         return PromotionVerdict(
             promote=True,
             reason=(
                 "Deterministic promotion: priority "
-                f"{priority:g}, magnitude {magnitude:g}, "
+                f"{priority:g}/{settings.priority_threshold:g}, magnitude "
+                f"{magnitude:g}/{settings.magnitude_threshold:g}, "
                 f"state_delta={bool(state_delta)}, event_ids={len(event_ids)}."
             ),
-            perceptual_summary=brief[:240],
+            perceptual_summary=brief[: settings.perceptual_summary_max_chars] or None,
         )
     return PromotionVerdict(
         promote=False,
         reason=(
-            "Deterministic skip: resolution lacks both a durable canonical "
-            "signal and salience threshold."
+            "Deterministic skip: resolution lacks content or salience threshold "
+            f"(priority {priority:g}/{settings.priority_threshold:g}, "
+            f"magnitude {magnitude:g}/{settings.magnitude_threshold:g})."
         ),
     )
+
+
+def _promotion_settings(settings: Mapping[str, Any]) -> OrreryPromoteSettings:
+    raw_settings = (settings.get("orrery") or {}).get("promote") or {}
+    if isinstance(raw_settings, OrreryPromoteSettings):
+        return raw_settings
+    return OrreryPromoteSettings.model_validate(raw_settings)
 
 
 def _mark_promoted(

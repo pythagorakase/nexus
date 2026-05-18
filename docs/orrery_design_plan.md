@@ -583,6 +583,11 @@ model_ref = "@anthropic.default"                        # resolved via [global.m
 
 [orrery.bleed]
 max_candidates = 3
+
+[orrery.promote]
+priority_threshold = 50.0
+magnitude_threshold = 0.5
+perceptual_summary_max_chars = 240
 ```
 
 Every model reference uses the `@provider.role` syntax that the existing config loader resolves against `[global.model.api_models]` — never a hardcoded ID in runtime code (per `CLAUDE.md` "Testing Defaults").
@@ -689,7 +694,7 @@ This section is now mostly historical. The active queue has moved past the found
 
 - **`CommitOrreryTick` writer**: Step 8.5 inside `commit_incubator_to_database_sync` (L233 — the production path; insert between `apply_state_updates_sync` at L415 and incubator clear at L418) and parity inside `commit_incubator_to_database` (L320 — async, test-only; insert between `apply_state_updates` at L420 and `clear_incubator` at L423). Both call into the unified event writer in `nexus/agents/orrery/events.py`.
 - **Stamp `tick_chunk_id`** on every proposal row at this step, after `insert_narrative_chunk` returns the new chunk id.
-- Promote discriminator: deterministic salience policy over `priority`, `magnitude`, `state_delta`, `event_ids`, and `brief`. No local inference required.
+- Promote discriminator: deterministic salience policy over `priority`, `magnitude`, `state_delta`, `event_ids`, and `brief`, tuned through `[orrery.promote]`. No local inference required.
 - Deterministic brief generator → `orrery_resolutions.brief`.
 - Frontier narration via durable outbox; trigger drain via `BackgroundTasks` from `_approve_narrative_impl` after commit returns; standalone CLI worker for catch-up.
 - Narrator persistence to `offscreen_narrations` (not `narrative_chunks`); embedding pipeline shared with MEMNON.
@@ -756,7 +761,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 - Mirror in `_approve_narrative_impl` post-commit to drain the narration outbox
 
 **Config + system prompt**
-- `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, and `[orrery.bleed]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
+- `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, `[orrery.bleed]`, and `[orrery.promote]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
 - `nexus/agents/lore/logon_utility.py::_format_context_prompt` — PR 4 Bleed prompt framing
 
 **New artifacts**

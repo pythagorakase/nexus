@@ -109,7 +109,12 @@ def _settings():
             "narration": {
                 "provider": "anthropic",
                 "model_ref": "claude-sonnet-4-6",
-            }
+            },
+            "promote": {
+                "priority_threshold": 50.0,
+                "magnitude_threshold": 0.5,
+                "perceptual_summary_max_chars": 240,
+            },
         }
     }
 
@@ -161,7 +166,6 @@ def test_promote_pending_resolutions_queues_narration_job() -> None:
     promoted, skipped = promote_pending_resolutions_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
 
@@ -189,7 +193,6 @@ def test_promote_pending_resolutions_skips_low_signal_rows() -> None:
     promoted, skipped = promote_pending_resolutions_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
 
@@ -201,6 +204,59 @@ def test_promote_pending_resolutions_skips_low_signal_rows() -> None:
     assert verdict["promote"] is False
     assert "Deterministic skip" in verdict["reason"]
     assert "INSERT INTO orrery_narration_jobs" not in statements
+
+
+def test_promote_pending_resolutions_uses_state_signal_without_brief() -> None:
+    """A salient state/event resolution should not require a generated brief."""
+
+    row = dict(
+        _promotion_row(),
+        priority=80,
+        magnitude=0.1,
+        brief="",
+        state_delta={"character.current_activity": "recovering"},
+        event_ids=[],
+    )
+    cursor = WorkerCursor(promotion_rows=[row])
+
+    promoted, skipped = promote_pending_resolutions_sync(
+        slot=5,
+        settings=_settings(),
+        conn=WorkerConn(cursor),
+    )
+
+    verdict = json.loads(cursor.executed[1][1][0])
+
+    assert promoted == 1
+    assert skipped == 0
+    assert verdict["promote"] is True
+    assert verdict["perceptual_summary"] is None
+
+
+def test_promote_pending_resolutions_uses_configured_thresholds() -> None:
+    """Promotion salience should be tuned through Orrery promote config."""
+
+    row = dict(_promotion_row(), priority=80, magnitude=0.7)
+    settings = _settings()
+    settings["orrery"]["promote"] = {
+        "priority_threshold": 90.0,
+        "magnitude_threshold": 0.9,
+        "perceptual_summary_max_chars": 16,
+    }
+    cursor = WorkerCursor(promotion_rows=[row])
+
+    promoted, skipped = promote_pending_resolutions_sync(
+        slot=5,
+        settings=settings,
+        conn=WorkerConn(cursor),
+    )
+
+    verdict = json.loads(cursor.executed[-1][1][0])
+
+    assert promoted == 0
+    assert skipped == 1
+    assert verdict["promote"] is False
+    assert "80/90" in verdict["reason"]
 
 
 def test_drain_narration_outbox_persists_offscreen_narration() -> None:
@@ -295,7 +351,6 @@ def test_clear_semantic_tags_is_conservative_noop_without_local_inference() -> N
     cleared = clear_semantic_tags_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
 

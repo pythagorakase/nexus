@@ -15,6 +15,9 @@ def test_orrery_settings_resolve_model_reference() -> None:
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
     assert settings.orrery.promote.provider is None
+    assert settings.orrery.promote.priority_threshold == 50.0
+    assert settings.orrery.promote.magnitude_threshold == 0.5
+    assert settings.orrery.promote.perceptual_summary_max_chars == 240
     assert settings.orrery.sunhelm.accrual_rates == {
         "sleep": 1.0,
         "hunger": 1.0,
@@ -55,4 +58,8 @@ def test_orrery_promote_accepts_deprecated_provider_key() -> None:
     settings = OrreryPromoteSettings(provider="local")
 
     assert settings.provider == "local"
-    assert "provider" not in settings.model_dump()
+    dumped = settings.model_dump()
+    assert dumped["priority_threshold"] == 50.0
+    assert dumped["magnitude_threshold"] == 0.5
+    assert dumped["perceptual_summary_max_chars"] == 240
+    assert "provider" not in dumped
