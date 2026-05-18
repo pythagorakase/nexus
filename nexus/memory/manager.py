@@ -12,8 +12,8 @@ from sqlalchemy import text
 
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
+from .entity_detector import HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
-from .llm_divergence import LLMDivergenceDetector
 from .query_memory import QueryMemory
 
 try:  # pragma: no cover - optional dependency during unit tests
@@ -99,8 +99,6 @@ class Pass2Update:
     retrieved_chunks: List[Dict[str, Any]]
     tokens_used: int
     baseline_available: bool = True
-    llm_unavailable: bool = False  # Flag indicating degraded mode without LLM
-    degraded_mode_reason: Optional[str] = None  # Reason for degraded mode
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -111,8 +109,6 @@ class Pass2Update:
             ],
             "tokens_used": self.tokens_used,
             "baseline_available": self.baseline_available,
-            "llm_unavailable": self.llm_unavailable,
-            "degraded_mode_reason": self.degraded_mode_reason,
         }
 
 
@@ -123,7 +119,6 @@ class ContextMemoryManager:
         self,
         settings: Dict[str, Any],
         memnon: Optional[object] = None,
-        llm_manager: Optional[object] = None,
         token_manager: Optional[object] = None,
     ) -> None:
         self.settings = settings
@@ -136,7 +131,7 @@ class ContextMemoryManager:
         )  # 10% of apex window
         self.raw_search_k = int(
             memory_settings.get("raw_search_k", 30)
-        )  # Overretrieve for curation
+        )  # Overretrieve before budget trimming
         self.skip_simple_choices = bool(
             memory_settings.get("skip_simple_choices", True)
         )
@@ -164,65 +159,18 @@ class ContextMemoryManager:
         self.context_state = ContextStateManager()
         self.query_memory = QueryMemory(max_iterations=self.max_sql_iterations)
 
-        # Initialize divergence detector and track degraded mode
-        divergence_config = memory_settings.get("divergence_detection", {})
-        use_llm_requested = bool(divergence_config.get("use_llm", True))
-        self.using_llm_detector = False
-        self.degraded_mode_reason = None
-        self.entity_detector = None
+        db_connection = None
+        if self.memnon and hasattr(self.memnon, "db"):
+            db_connection = self.memnon.db
 
-        if use_llm_requested and not llm_manager:
-            self.degraded_mode_reason = (
-                "LLM manager not available - using entity-based fallback detector"
-            )
-            logger.warning(
-                "\n"
-                + "=" * 80
-                + "\n⚠️  DEGRADED MODE WARNING: LLM-based divergence detection unavailable!\n"
-                + "    Falling back to entity-based detector with reduced capabilities.\n"
-                + "    Narrative callbacks and references may not be detected properly.\n"
-                + "=" * 80
-            )
-            use_llm_requested = False
-
-        if use_llm_requested and llm_manager:
-            use_local = divergence_config.get("use_local_llm", True)
-            self.divergence_detector = LLMDivergenceDetector(
-                llm_manager=llm_manager,
-                threshold=self.divergence_threshold,
-                use_local_llm=use_local,
-            )
-            self.using_llm_detector = True
-            logger.info(
-                "✅ Using LLM-based divergence detector (threshold=%.2f)",
-                self.divergence_threshold,
-            )
-        else:
-            # Import and use high-specificity entity detector as fallback
-            from .entity_detector import HighSpecificityEntityDetector
-
-            # Try to get database connection from memnon
-            db_connection = None
-            if self.memnon and hasattr(self.memnon, "db"):
-                db_connection = self.memnon.db
-
-            self.entity_detector = HighSpecificityEntityDetector(db_connection)
-            self.divergence_detector = DivergenceDetector(
-                threshold=self.divergence_threshold
-            )
-
-            if not self.degraded_mode_reason:
-                self.degraded_mode_reason = (
-                    "LLM divergence detection disabled - using entity-based fallback"
-                )
-
-            logger.warning(
-                "\n"
-                + "=" * 80
-                + "\n⚠️  DEGRADED MODE: Using entity-based detector as fallback\n"
-                + "    Limited to known entities from database, may miss narrative references\n"
-                + "=" * 80
-            )
+        self.entity_detector = HighSpecificityEntityDetector(db_connection)
+        self.divergence_detector = DivergenceDetector(
+            threshold=self.divergence_threshold
+        )
+        logger.info(
+            "Using entity-based divergence detector (threshold=%.2f)",
+            self.divergence_threshold,
+        )
 
         self.incremental = IncrementalRetriever(
             memnon=memnon,
@@ -231,20 +179,7 @@ class ContextMemoryManager:
             warm_slice_default=self.warm_slice_default,
         )
 
-        self.llm_manager = llm_manager
         self.token_manager = token_manager
-
-        # Initialize LLM curator for Phase 2
-        from .llm_curator import LLMContextCurator
-
-        self.llm_curator = None
-        if llm_manager:
-            self.llm_curator = LLMContextCurator(
-                llm_manager=llm_manager,
-                phase2_budget=self.phase2_budget,
-                use_local_llm=True,
-            )
-            logger.info("LLM Context Curator initialized for Phase 2 management")
 
         self.alias_lookup: Dict[str, List[str]] = {}
         self.canonical_name_map: Dict[str, str] = {}
@@ -505,13 +440,8 @@ class ContextMemoryManager:
         context: Optional[ContextPackage],
         transition: Optional[PassTransition],
     ) -> DivergenceResult:
-        """Detect divergence using the best available detector."""
+        """Detect divergence using high-specificity entity matching."""
 
-        # Prefer LLM detector when available
-        if self.using_llm_detector and getattr(self, "divergence_detector", None):
-            return self.divergence_detector.detect(user_input, context, transition)
-
-        # Fall back to high-specificity entity detector in degraded mode
         if getattr(self, "entity_detector", None):
             entity_match = self.entity_detector.detect_entities(user_input)
             summary = self.entity_detector.to_divergence_format(entity_match)
@@ -560,14 +490,11 @@ class ContextMemoryManager:
         user_input: str,
         token_counts: Optional[Dict[str, int]] = None,
     ) -> Pass2Update:
-        """Run Phase 2 retrieval with intelligent LLM curation.
+        """Run deterministic Phase 2 retrieval from raw user input.
 
-        New architecture:
         1. Check if simple choice -> skip if yes
-        2. Always run raw vector search
-        3. Use LLM curator to decide what to keep
-        4. Execute additional queries suggested by LLM
-        5. Return curated results
+        2. Run raw vector search
+        3. Keep chunks that fit the remaining Phase 2 budget
         """
 
         context = self.context_state.context
@@ -585,10 +512,6 @@ class ContextMemoryManager:
             divergence.gaps,
         )
 
-        degraded_reason = None
-        if not self.llm_curator:
-            degraded_reason = self.degraded_mode_reason or "No LLM curator available"
-
         if not context or not transition:
             logger.debug("No baseline context available; skipping Phase 2")
             return Pass2Update(
@@ -596,8 +519,6 @@ class ContextMemoryManager:
                 [],
                 0,
                 baseline_available=False,
-                llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason,
             )
 
         available_budget = self._compute_available_phase2_budget(token_counts)
@@ -610,8 +531,6 @@ class ContextMemoryManager:
                 [],
                 0,
                 baseline_available=True,
-                llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason,
             )
 
         if available_budget <= 0:
@@ -621,8 +540,6 @@ class ContextMemoryManager:
                 [],
                 0,
                 baseline_available=True,
-                llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason,
             )
 
         # STEP 2: Always run raw vector search (unless simple choice)
@@ -640,131 +557,38 @@ class ContextMemoryManager:
                 [],
                 0,
                 baseline_available=True,
-                llm_unavailable=not self.llm_curator,
-                degraded_mode_reason=degraded_reason,
             )
 
         logger.info(
             f"Raw search retrieved {len(raw_search_results)} chunks (~{raw_tokens} tokens)"
         )
 
-        # STEP 3: Use LLM curator to decide what to keep (if available)
-        if not self.llm_curator:
-            logger.warning(
-                "No LLM curator available - keeping first chunks that fit budget"
-            )
-            # Simple fallback: keep chunks that fit in budget
-            kept_chunks = []
-            total_tokens = 0
-            for chunk in raw_search_results:
-                chunk_tokens = self._estimate_tokens(chunk.get("text", ""))
-                if total_tokens + chunk_tokens > available_budget:
-                    break
-                kept_chunks.append(chunk)
-                total_tokens += chunk_tokens
-            if kept_chunks:
-                new_chunks = self.context_state.register_additional_chunks(kept_chunks)
-                self.context_state.consume_budget(total_tokens)
-                logger.info(
-                    "✅ Phase 2 fallback complete: %s new chunks, %s tokens",
-                    len(new_chunks),
-                    total_tokens,
-                )
-            return Pass2Update(
-                divergence,
-                kept_chunks,
-                total_tokens,
-                baseline_available=True,
-                llm_unavailable=True,
-                degraded_mode_reason=degraded_reason,
-            )
-
-        logger.info("🤖 Phase 2 Step 2: LLM curation of results")
-
-        # Get storyteller context for the curator
-        storyteller_context = transition.storyteller_output if transition else None
-
-        # Get curation decision from LLM
-        curation = self.llm_curator.curate(
-            user_input=user_input,
-            raw_search_results=raw_search_results,
-            storyteller_context=storyteller_context,
-        )
-
-        # STEP 4: Process curation decision
-        final_chunks = []
-        final_tokens = 0
-
-        # Keep selected chunks from raw search
-        kept_ids = set(curation.kept_chunk_ids)
+        # STEP 3: Keep chunks that fit in the remaining Phase 2 budget.
+        kept_chunks = []
+        total_tokens = 0
         for chunk in raw_search_results:
-            chunk_id = chunk.get("chunk_id") or chunk.get("id")
-            if chunk_id and int(chunk_id) in kept_ids:
-                final_chunks.append(chunk)
-                final_tokens += self._estimate_tokens(chunk.get("text", ""))
+            chunk_tokens = self._estimate_tokens(chunk.get("text", ""))
+            if total_tokens + chunk_tokens > available_budget:
+                break
+            kept_chunks.append(chunk)
+            total_tokens += chunk_tokens
 
-        logger.info(f"LLM kept {len(final_chunks)} chunks from raw search")
-
-        # STEP 5: Execute additional queries suggested by LLM
-        remaining_budget = max(0, available_budget - final_tokens)
-        if curation.additional_queries and remaining_budget > 0:
-            logger.info(
-                f"🔍 Phase 2 Step 3: Executing {len(curation.additional_queries)} additional queries"
-            )
-
-            for query_spec in curation.additional_queries:
-                query_type = query_spec.get("type", "vector")
-                query_text = query_spec.get("query", "")
-
-                if not query_text or remaining_budget <= 0:
-                    continue
-
-                if query_type == "vector":
-                    # Execute vector query
-                    try:
-                        add_chunks, add_tokens = self.incremental.retrieve_gap_context(
-                            {query_text: "LLM-requested targeted retrieval"},
-                            remaining_budget,
-                        )
-                        if add_chunks:
-                            logger.info(
-                                f"Vector query '{query_text[:50]}...' retrieved {len(add_chunks)} chunks"
-                            )
-                            final_chunks.extend(add_chunks)
-                            final_tokens += add_tokens
-                            remaining_budget -= add_tokens
-                    except Exception as e:
-                        logger.warning(f"Failed to execute vector query: {e}")
-
-                elif query_type == "sql":
-                    # SQL queries could be implemented here if needed
-                    logger.info(
-                        f"SQL queries not yet implemented: {query_text[:50]}..."
-                    )
-
-                if remaining_budget <= 0:
-                    logger.info("Phase 2 budget exhausted")
-                    break
-
-        # Register all chunks with context state
-        if final_chunks:
-            new_chunks = self.context_state.register_additional_chunks(final_chunks)
-            self.context_state.consume_budget(final_tokens)
+        if kept_chunks:
+            new_chunks = self.context_state.register_additional_chunks(kept_chunks)
+            self.context_state.consume_budget(total_tokens)
             logger.info(
                 f"✅ Phase 2 complete: {len(new_chunks)} new chunks, "
-                f"{final_tokens} tokens ("
-                f"{(final_tokens / available_budget * 100) if available_budget else 0:.1f}% of budget)"
+                f"{total_tokens} tokens ("
+                f"{(total_tokens / available_budget * 100) if available_budget else 0:.1f}% of budget)"
             )
         else:
-            logger.info("Phase 2 complete: No chunks retained after curation")
+            logger.info("Phase 2 complete: No chunks fit in remaining budget")
 
         return Pass2Update(
             divergence,
-            final_chunks,
-            final_tokens,
+            kept_chunks,
+            total_tokens,
             baseline_available=True,
-            llm_unavailable=not self.llm_curator,
-            degraded_mode_reason=degraded_reason,
         )
 
     # ------------------------------------------------------------------

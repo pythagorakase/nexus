@@ -242,7 +242,6 @@ class LORE:
         self.memory_manager = ContextMemoryManager(
             self.settings,
             memnon=self.memnon,
-            llm_manager=self.llm_manager,
             token_manager=self.token_manager,
         )
 

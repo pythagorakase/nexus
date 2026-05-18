@@ -156,7 +156,6 @@ def test_pass2_divergence_triggers_incremental_retrieval(
     update = manager.handle_user_input(user_input, token_counts)
 
     assert update.baseline_available is True
-    assert update.llm_unavailable is True
     assert update.divergence.detected is False
     assert dummy_memnon.queries  # Retrieval happened
     assert update.retrieved_chunks, "Expected incremental retrieval results"
@@ -305,14 +304,12 @@ def test_augment_warm_slice_merges_incremental_additions(
         token_usage=baseline_inputs["token_usage"],
     )
 
-    manager.divergence_detector.detect = (
-        lambda text, context, transition: DivergenceResult(
-            detected=True,
-            confidence=1.0,
-            gaps={"Data Shard": "Reference not present"},
-            unmatched_entities={"Data Shard"},
-            references_seen={"Data Shard"},
-        )
+    manager._detect_divergence = lambda *args, **kwargs: DivergenceResult(
+        detected=True,
+        confidence=1.0,
+        gaps={"Data Shard": "Reference not present"},
+        unmatched_entities={"Data Shard"},
+        references_seen={"Data Shard"},
     )
 
     manager.handle_user_input("Need the Data Shard briefing.")

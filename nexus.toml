@@ -524,14 +524,6 @@ divergence_threshold = 0.7       # Confidence threshold for divergence detection
 warm_slice_default = true        # Include warm slice by default
 max_sql_iterations = 5           # Max iterations for agentic SQL generation
 
-[memory.divergence_detection]
-# LLM-based divergence detection settings
-use_llm = true          # Use LLM for semantic divergence detection
-use_local_llm = true    # Use local LLM (vs API)
-llm_temperature = 0.3   # Low temperature for consistent detection
-llm_max_tokens = 500    # Max tokens for divergence analysis
-confidence_threshold = 0.7  # Minimum confidence to trigger retrieval
-
 # =============================================================================
 # APEX API Settings (Story Generation)
 # =============================================================================
