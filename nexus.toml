@@ -179,7 +179,9 @@ model_ref = "@anthropic.default"
 max_candidates = 3
 
 [orrery.promote]
-provider = "local"
+priority_threshold = 50.0
+magnitude_threshold = 0.5
+perceptual_summary_max_chars = 240
 
 [orrery.sunhelm]
 accrual_rates = { sleep = 1.0, hunger = 1.0, thirst = 1.0, socialize = 1.0, intimacy = 1.0 }

@@ -1,7 +1,7 @@
 """Tests for Orrery configuration loading."""
 
 from nexus.config import load_settings
-from nexus.config.settings_models import OrreryBleedSettings
+from nexus.config.settings_models import OrreryBleedSettings, OrreryPromoteSettings
 
 
 def test_orrery_settings_resolve_model_reference() -> None:
@@ -14,7 +14,10 @@ def test_orrery_settings_resolve_model_reference() -> None:
     assert settings.orrery.binding.window_chunks == 30
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
-    assert settings.orrery.promote.provider == "local"
+    assert settings.orrery.promote.provider is None
+    assert settings.orrery.promote.priority_threshold == 50.0
+    assert settings.orrery.promote.magnitude_threshold == 0.5
+    assert settings.orrery.promote.perceptual_summary_max_chars == 240
     assert settings.orrery.sunhelm.accrual_rates == {
         "sleep": 1.0,
         "hunger": 1.0,
@@ -47,3 +50,16 @@ def test_orrery_bleed_accepts_deprecated_selection_keys() -> None:
     dumped = settings.model_dump()
     assert "latency_budget_ms" not in dumped
     assert "candidate_pool_multiplier" not in dumped
+
+
+def test_orrery_promote_accepts_deprecated_provider_key() -> None:
+    """Old promotion config should validate but stay out of dumps."""
+
+    settings = OrreryPromoteSettings(provider="local")
+
+    assert settings.provider == "local"
+    dumped = settings.model_dump()
+    assert dumped["priority_threshold"] == 50.0
+    assert dumped["magnitude_threshold"] == 0.5
+    assert dumped["perceptual_summary_max_chars"] == 240
+    assert "provider" not in dumped
