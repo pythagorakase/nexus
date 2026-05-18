@@ -9,6 +9,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 EMBEDDING_TABLE_PATTERN = re.compile(r"^chunk_embeddings_(?P<dimensions>\d+)d$")
+
+# pgvector 0.8.x caps HNSW/IVFFlat indexes at 2000 dimensions in this local
+# deployment. Higher-dimensional tables still support exact vector search.
 PGVECTOR_ANN_INDEX_MAX_DIMENSIONS = 2000
 
 # Historical dimensions that may exist in older slots. New dimensions should not

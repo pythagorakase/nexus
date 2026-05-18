@@ -177,6 +177,11 @@ class LocalLLMManager:
         # user explicitly opts out. This avoids re-loading 70B+/120B models on
         # every turn, which can add 45-90 seconds of startup latency.
         self.unload_on_exit: bool = bool(self.llm_config.get("unload_on_exit", False))
+        self.fallback_retrieval_query: str = (
+            settings.get("lore", {})
+            .get("retrieval", {})
+            .get("fallback_query", "Recent narrative events")
+        )
 
         if LMS_SDK_AVAILABLE:
             self._initialize_sdk_client()
@@ -583,7 +588,8 @@ Each query should be a complete question or search phrase."""
             )
 
             response = _extract_final_channel_text(response)
-            queries = _sanitize_retrieval_queries(response.splitlines())
+            query_candidates = list(response.splitlines())
+            queries = _sanitize_retrieval_queries(query_candidates)
 
             # Ensure we have between 3-5 queries
             if len(queries) < 3:
@@ -596,15 +602,11 @@ Each query should be a complete question or search phrase."""
                     fallback_candidates.append(f"What happened with {characters[0]}?")
                 if locations:
                     fallback_candidates.append(f"Past events at {locations[0]}")
-                queries.extend(_sanitize_retrieval_queries(fallback_candidates))
-
-            queries = _sanitize_retrieval_queries(queries)
-
-            # Limit to 5 queries
-            queries = queries[:5]
+                query_candidates.extend(fallback_candidates)
+                queries = _sanitize_retrieval_queries(query_candidates)
 
             logger.info(f"Generated {len(queries)} retrieval queries via text parsing")
-            return queries or ["Recent narrative events"]
+            return queries or [self.fallback_retrieval_query]
 
         except Exception as e:
             logger.error(f"Failed to generate retrieval queries: {e}")
@@ -620,7 +622,7 @@ Each query should be a complete question or search phrase."""
 
             # Ensure at least one query
             if not fallback_queries:
-                fallback_queries = ["Recent narrative events"]
+                fallback_queries = [self.fallback_retrieval_query]
 
             return fallback_queries
     

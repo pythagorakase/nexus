@@ -56,3 +56,19 @@ def test_setup_database_indexes_skips_ann_indexes_for_high_dimensions(monkeypatc
     assert "using hnsw" not in statements
     assert "using ivfflat" not in statements
     assert connection.closed
+
+
+def test_setup_database_indexes_fails_on_unparseable_embedding_table(monkeypatch):
+    """Malformed embedding table names should not fall through to ANN creation."""
+    cursor = FakeCursor()
+    connection = FakeConnection(cursor)
+
+    monkeypatch.setattr(db_access.psycopg2, "connect", lambda **_kwargs: connection)
+    monkeypatch.setattr(
+        db_access,
+        "_list_existing_embedding_tables",
+        lambda _cursor: ["chunk_embeddings_bad"],
+    )
+
+    assert not db_access.setup_database_indexes("postgresql://user:pass@localhost/NEXUS")
+    assert connection.closed

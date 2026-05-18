@@ -803,9 +803,13 @@ def setup_database_indexes(db_url: str) -> bool:
 
                 # Create vector indexes for existing dimension-specific tables only.
                 for dim_table in _list_existing_embedding_tables(cursor):
+                    dimensions = parse_embedding_table_dimensions(dim_table)
+                    if dimensions is None:
+                        raise ValueError(
+                            f"Cannot parse dimensions from table name: {dim_table!r}"
+                        )
                     try:
-                        dimensions = parse_embedding_table_dimensions(dim_table)
-                        if dimensions and not supports_pgvector_ann_index(dimensions):
+                        if not supports_pgvector_ann_index(dimensions):
                             logger.info(
                                 "Skipping ANN vector index for %s: pgvector "
                                 "supports HNSW/IVFFlat indexes up to %sd "
