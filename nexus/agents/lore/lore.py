@@ -54,7 +54,6 @@ sys.path.insert(0, str(current_dir.parent.parent))
 from utils.turn_context import TurnContext, TurnPhase
 from utils.turn_cycle import TurnCycleManager
 from utils.token_budget import TokenBudgetManager
-from utils.local_llm import LocalLLMManager
 from nexus.llm import ModelManager
 from nexus.agents.lore.logon_utility import LogonUtility
 
@@ -199,9 +198,11 @@ class LORE:
         
         # Initialize managers - all required
         self.token_manager = TokenBudgetManager(self.settings)
-        settings_path = self.settings_path if hasattr(self, 'settings_path') else None
-        self.llm_manager = LocalLLMManager(self.settings, settings_path, self.system_prompt)  # Pass system prompt
         self.turn_manager = TurnCycleManager(self)
+        logger.info(
+            "LORE turn cycle uses deterministic retrieval planning; local LLM "
+            "manager will be initialized on demand for legacy retrieval tools."
+        )
         
         # MEMNON is REQUIRED
         if not MEMNON_AVAILABLE:
@@ -228,6 +229,15 @@ class LORE:
         )
 
         logger.info("Component initialization complete")
+
+    def _ensure_local_llm_manager(self):
+        """Initialize the legacy local LLM manager on demand."""
+        if self.llm_manager is None:
+            from utils.local_llm import LocalLLMManager
+
+            settings_path = self.settings_path if hasattr(self, 'settings_path') else None
+            self.llm_manager = LocalLLMManager(self.settings, settings_path, self.system_prompt)
+        return self.llm_manager
     
     def _initialize_memnon(self):
         """Initialize MEMNON utility for memory retrieval"""
@@ -313,10 +323,6 @@ class LORE:
         )
         
         try:
-            # Ensure the required model is loaded
-            if self.llm_manager:
-                self.llm_manager.ensure_model_loaded()
-            
             # Phase 1: User Input Processing
             self.current_phase = TurnPhase.USER_INPUT
             await self.turn_manager.process_user_input(self.turn_context)
@@ -368,7 +374,8 @@ class LORE:
             return f"Error processing turn: {str(e)}"
         
         finally:
-            # Clean up resources after turn - honor runtime keep-model override and settings
+            # Clean up legacy local-LLM resources if they were initialized by
+            # deprecated retrieval tools during this process.
             if (
                 self.llm_manager
                 and self.llm_manager.unload_on_exit  # allow --keep-model to disable
@@ -402,16 +409,18 @@ class LORE:
         qa_logger.info(f"Processing {len(retrieval_directives)} retrieval directive(s) for chunk {chunk_id}")
 
         # Ensure the default LM Studio model is loaded (auto load/unload as needed)
+        llm_manager = self._ensure_local_llm_manager()
+        if getattr(self, "_keep_legacy_local_llm_loaded", False):
+            llm_manager.unload_on_exit = False
         try:
             manager = ModelManager(
                 self.settings_path if hasattr(self, 'settings_path') else None,
-                unload_on_exit=self.llm_manager.unload_on_exit
+                unload_on_exit=llm_manager.unload_on_exit
             )
             ensured_model_id = manager.ensure_default_model()
             qa_logger.info(f"Ensured LM Studio model loaded: {ensured_model_id}")
             # Hint LocalLLMManager about the loaded model id
-            if self.llm_manager:
-                self.llm_manager.loaded_model_id = ensured_model_id
+            llm_manager.loaded_model_id = ensured_model_id
         except Exception as e:
             raise RuntimeError(f"FATAL: Cannot ensure default LM Studio model! {e}")
 
@@ -830,7 +839,13 @@ class LORE:
             "components": {
                 "memnon": "available" if self.memnon else "unavailable",
                 "logon": "available" if self.logon else "unavailable",
-                "llm": "available" if self.llm_manager.is_available() else "unavailable"
+                "llm": (
+                    "not initialized"
+                    if self.llm_manager is None
+                    else "available"
+                    if self.llm_manager.is_available()
+                    else "unavailable"
+                )
             }
         }
     
@@ -901,8 +916,8 @@ async def main():
             lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
         
         # Set keep-model flag BEFORE retrieval
-        if args.keep_model and lore.llm_manager:
-            lore.llm_manager.unload_on_exit = False
+        if args.keep_model:
+            lore._keep_legacy_local_llm_loaded = True
             logger.info("Model will be kept loaded after retrieval (--keep-model)")
         
         logger.info(f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}")

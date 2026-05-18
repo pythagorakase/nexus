@@ -27,7 +27,7 @@ class DummyLore:
 
 
 class DummyLLMManager:
-    """Local LLM stub with deterministic warm analysis and query generation."""
+    """Legacy local LLM stub for assertions that it is no longer consulted."""
 
     def __init__(self) -> None:
         self.generated_query_calls = 0
@@ -150,7 +150,7 @@ def test_warm_analysis_loads_parent_authorial_directives(
             return {"results": []}
 
     turn_manager.lore.memnon = DummyMemnon()
-    turn_manager.lore.llm_manager = DummyLLMManager()
+    turn_manager.lore.llm_manager = None
     ctx = TurnContext(
         turn_id="turn_parent_directives",
         user_input="Continue.",
@@ -163,10 +163,13 @@ def test_warm_analysis_loads_parent_authorial_directives(
     assert ctx.authorial_directives == [
         "Retrieve the missing ledger and ash-boiler escape route."
     ]
+    assert ctx.phase_states["warm_analysis"]["analysis"]["source"] == (
+        "programmatic_warm_slice"
+    )
     assert ctx.phase_states["warm_analysis"]["authorial_directive_count"] == 1
 
 
-def test_deep_queries_use_authorial_directives_before_local_llm(
+def test_deep_queries_use_authorial_directives_without_local_llm(
     turn_manager: TurnCycleManager,
 ):
     class DummyMemnon:
@@ -205,13 +208,12 @@ def test_deep_queries_use_authorial_directives_before_local_llm(
 
     asyncio.run(turn_manager.execute_deep_queries(ctx))
 
-    assert memnon.queries[:2] == ["Directive query A", "Directive query B"]
-    assert memnon.queries[2:] == ["Local query A", "Local query B", "Local query C"]
-    assert llm_manager.generated_query_calls == 1
+    assert memnon.queries == ["Directive query A", "Directive query B"]
+    assert llm_manager.generated_query_calls == 0
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 0,
         "authorial_directive": 2,
-        "llm_generated": 3,
+        "llm_generated": 0,
     }
 
 
@@ -267,13 +269,12 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
         "Full parent chunk text with all the messy narrative details.",
         "Directive query A",
         "Directive query B",
-        "Local query A",
-        "Local query B",
     ]
+    assert llm_manager.generated_query_calls == 0
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 1,
         "authorial_directive": 2,
-        "llm_generated": 2,
+        "llm_generated": 0,
     }
 
 
@@ -376,15 +377,47 @@ def test_deep_queries_obey_configured_query_budget(
 
     asyncio.run(turn_manager.execute_deep_queries(ctx))
 
-    assert memnon.queries == [
-        "Directive query A",
-        "Directive query B",
-        "Local query A",
-    ]
+    assert memnon.queries == ["Directive query A", "Directive query B"]
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 0,
         "authorial_directive": 2,
-        "llm_generated": 1,
+        "llm_generated": 0,
+    }
+
+
+def test_deep_queries_can_skip_without_local_llm_or_queries(
+    turn_manager: TurnCycleManager,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Missing raw text and directives should skip rather than summon a local LLM."""
+
+    class DummyMemnon:
+        def query_memory(
+            self, query: str, k: int, use_hybrid: bool
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            raise AssertionError("query_memory should not be called")
+
+    turn_manager.lore.memnon = DummyMemnon()
+    turn_manager.lore.llm_manager = None
+
+    ctx = TurnContext(
+        turn_id="turn_deep_no_queries",
+        user_input="Continue.",
+        start_time=time.time(),
+    )
+    ctx.phase_states["warm_analysis"] = {
+        "analysis": {"source": "programmatic_warm_slice"}
+    }
+
+    with caplog.at_level(logging.WARNING, logger="nexus.lore.turn_cycle"):
+        asyncio.run(turn_manager.execute_deep_queries(ctx))
+
+    assert ctx.retrieved_passages == []
+    assert "No raw chunk text or authorial directives" in caplog.text
+    assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "raw_chunk": 0,
+        "authorial_directive": 0,
+        "llm_generated": 0,
     }
 
 

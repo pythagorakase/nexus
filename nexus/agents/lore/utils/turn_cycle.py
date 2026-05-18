@@ -278,24 +278,25 @@ class TurnCycleManager:
                 turn_context.warm_slice
             )
 
-        # Analyze with local LLM - REQUIRED for LORE to function
-        if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
-            raise RuntimeError(
-                "FATAL: Local LLM is required for warm analysis. "
-                "LORE cannot function without semantic understanding. "
-                "Ensure LM Studio is running with a model loaded."
-            )
-
         if not turn_context.warm_slice:
             raise RuntimeError(
                 "FATAL: No warm slice chunks retrieved. "
-                "Cannot analyze narrative context without recent chunks. "
+                "Cannot assemble narrative context without recent chunks. "
                 "Check database connection and chunk retrieval."
             )
 
-        analysis = self.lore.llm_manager.analyze_narrative_context(
-            turn_context.warm_slice, turn_context.user_input
-        )
+        analysis = {
+            "source": "programmatic_warm_slice",
+            "chunk_count": len(turn_context.warm_slice),
+            "target_chunk_id": target_chunk_id,
+            "authorial_directive_count": len(turn_context.authorial_directives),
+            "warm_chunk_ids": [
+                chunk.get("id") or chunk.get("chunk_id")
+                for chunk in turn_context.warm_slice
+                if isinstance(chunk, dict)
+                and (chunk.get("id") is not None or chunk.get("chunk_id") is not None)
+            ],
+        }
 
         turn_context.phase_states["warm_analysis"] = {
             "analysis": analysis,
@@ -524,8 +525,9 @@ class TurnCycleManager:
         """
         Phase 4: Execute deep memory queries.
 
-        LLM generates retrieval queries based on narrative context,
-        then MEMNON's QueryAnalyzer classifies them for optimal search.
+        Retrieval uses the full current/parent chunk as the baseline query, then
+        applies Storyteller authorial directives up to the configured budget.
+        MEMNON's QueryAnalyzer classifies raw chunk text for optimal search.
         """
         logger.debug("Executing deep queries...")
 
@@ -533,28 +535,11 @@ class TurnCycleManager:
             logger.warning("MEMNON not available for deep queries")
             return
 
-        # Step 1: LLM generates retrieval queries based on narrative analysis
-        if not self.lore.llm_manager or not self.lore.llm_manager.is_available():
-            raise RuntimeError(
-                "FATAL: LLM is required for deep query generation. "
-                "Cannot generate meaningful retrieval queries without semantic understanding."
-            )
-
-        analysis = turn_context.phase_states.get("warm_analysis", {}).get(
-            "analysis", {}
-        )
-        if not isinstance(analysis, dict):
-            raise RuntimeError(
-                "FATAL: Warm analysis failed or returned invalid data. "
-                "Cannot proceed with deep queries without narrative context analysis."
-            )
-
         if getattr(self.lore, "memory_manager", None):
             self.lore.memory_manager.reset_pass1_queries()
 
         # Full chunk text is the first-line retrieval baseline. Storyteller
-        # directives add targeted continuity, and local LLM queries fill any
-        # remaining budget from the current analysis.
+        # directives add targeted continuity for the remaining query budget.
         max_deep_queries = self._max_deep_queries()
         incoming_directives = turn_context.authorial_directives
         queries = []
@@ -585,30 +570,24 @@ class TurnCycleManager:
                 }
             )
 
-        remaining_query_slots = max(0, max_deep_queries - len(queries))
-        llm_queries = []
-        if remaining_query_slots:
-            llm_queries = self.lore.llm_manager.generate_retrieval_queries(
-                analysis, turn_context.user_input
+        if not queries:
+            turn_context.retrieved_passages = []
+            turn_context.phase_states["deep_queries"] = {
+                "queries_executed": 0,
+                "query_types": {},
+                "query_sources": {
+                    "raw_chunk": 0,
+                    "authorial_directive": 0,
+                    "llm_generated": 0,
+                },
+                "results_retrieved": 0,
+            }
+            logger.warning(
+                "No raw chunk text or authorial directives available for deep queries"
             )
+            return
 
-        if not queries and not llm_queries:
-            raise RuntimeError(
-                "FATAL: LLM failed to generate any retrieval queries. "
-                "This should not happen - check LLM configuration."
-            )
-
-        # Step 2: Classify local generated queries with MEMNON's QueryAnalyzer
-        for q_text in llm_queries[:remaining_query_slots]:
-            queries.append(
-                {
-                    "text": q_text,
-                    "type": self._classify_query_type(q_text),
-                    "source": "llm_generated",
-                }
-            )
-
-        # Step 3: Execute queries with proper SearchManager configuration
+        # Execute queries with proper SearchManager configuration
         all_results = []
         query_type_counts = {}
 
@@ -856,7 +835,11 @@ class TurnCycleManager:
 
         if not self.lore.memnon:
             raise RuntimeError("Orrery bleed requires MEMNON database access")
-        if not self.lore.llm_manager:
+
+        llm_manager = self.lore.llm_manager
+        if llm_manager is None and hasattr(self.lore, "_ensure_local_llm_manager"):
+            llm_manager = self.lore._ensure_local_llm_manager()
+        if not llm_manager:
             raise RuntimeError("Orrery bleed requires local LLM access")
 
         latency_budget_ms = int(bleed_settings.get("latency_budget_ms", 2000))
@@ -875,7 +858,7 @@ class TurnCycleManager:
 
             result = await select_bleed_menu_async(
                 session,
-                llm_manager=self.lore.llm_manager,
+                llm_manager=llm_manager,
                 anchor_chunk_id=anchor_chunk_id,
                 user_input=turn_context.user_input,
                 warm_slice=turn_context.warm_slice,

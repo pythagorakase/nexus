@@ -87,18 +87,6 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
 
     init_calls = {"count": 0}
 
-    class _DummyLLMManager:
-        unload_on_exit = False
-
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            pass
-
-        def is_available(self) -> bool:
-            return True
-
-        def ensure_model_loaded(self) -> None:
-            return None
-
     def _fake_initialize(self: LogonUtility, is_bootstrap: bool | None = None) -> None:
         init_calls["count"] += 1
         self.provider = _DummyProvider()
@@ -111,12 +99,6 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
         "logon_utility.LogonUtility._initialize_provider",
     ):
         monkeypatch.setattr(target, _fake_initialize)
-
-    for target in (
-        "nexus.agents.lore.lore.LocalLLMManager",
-        "utils.local_llm.LocalLLMManager",
-    ):
-        monkeypatch.setattr(target, _DummyLLMManager)
 
     return init_calls
 
@@ -134,7 +116,6 @@ def _minimal_payload(*, is_bootstrap: bool = False) -> Dict[str, Any]:
     return payload
 
 
-@pytest.mark.requires_local_llm
 @pytest.mark.requires_postgres
 def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     """LORE should not initialize LOGON on construction when lazy mode is enabled."""
@@ -144,7 +125,6 @@ def test_lore_keeps_logon_lazy(patched_provider: Dict[str, int]) -> None:
     assert lore.logon is None
 
 
-@pytest.mark.requires_local_llm
 @pytest.mark.requires_postgres
 def test_logon_initializes_on_first_use(patched_provider: Dict[str, int]) -> None:
     """LOGON provider should initialize only when requested."""
