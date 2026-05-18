@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+import re
 from typing import Any, Mapping, Optional
 
 import psycopg2
@@ -589,12 +590,60 @@ def _structured_payload_from_raw(raw: Any) -> Any:
     return raw
 
 
+def _markdown_bool_payload_from_raw(
+    raw: Any, field_name: str
+) -> Optional[dict[str, Any]]:
+    """Recover simple markdown/text boolean verdicts from local LLM fallbacks."""
+    text: Optional[str] = None
+    reason: Optional[str] = None
+
+    if isinstance(raw, Mapping):
+        answer = raw.get("answer")
+        if isinstance(answer, str):
+            text = answer
+        for reason_key in ("reason", "reasoning"):
+            value = raw.get(reason_key)
+            if isinstance(value, str) and value.strip():
+                reason = value.strip()
+                break
+    elif isinstance(raw, str):
+        text = raw
+
+    if not text:
+        return None
+
+    verdict_match = re.search(
+        rf"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*{re.escape(field_name)}\s*"
+        r"(?:\*\*)?\s*[:=]\s*(?:\*\*)?\s*(true|false)\b",
+        text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    if not verdict_match:
+        return None
+
+    if reason is None:
+        reason_match = re.search(
+            r"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*reason\s*" r"(?:\*\*)?\s*[:=]\s*(.+)$",
+            text,
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if reason_match:
+            reason = reason_match.group(1).strip()
+
+    return {
+        field_name: verdict_match.group(1).lower() == "true",
+        "reason": reason or "Local model returned a text boolean verdict.",
+    }
+
+
 def _coerce_promotion_verdict(raw: Any) -> PromotionVerdict:
     """Return a conservative promotion verdict from noisy local-model output."""
     try:
         if isinstance(raw, PromotionVerdict):
             return raw
         payload = _structured_payload_from_raw(raw)
+        if not (isinstance(payload, Mapping) and "promote" in payload):
+            payload = _markdown_bool_payload_from_raw(payload, "promote") or payload
         if isinstance(payload, Mapping) and "promote" in payload:
             payload = dict(payload)
             payload.setdefault(
@@ -815,6 +864,8 @@ def _coerce_semantic_clearance_verdict(raw: Any) -> SemanticClearanceVerdict:
         if isinstance(raw, SemanticClearanceVerdict):
             return raw
         payload = _structured_payload_from_raw(raw)
+        if not (isinstance(payload, Mapping) and "clear" in payload):
+            payload = _markdown_bool_payload_from_raw(payload, "clear") or payload
         if isinstance(payload, Mapping) and "clear" in payload:
             payload = dict(payload)
             payload.setdefault(
