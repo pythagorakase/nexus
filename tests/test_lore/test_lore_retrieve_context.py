@@ -57,11 +57,10 @@ async def test_retrieve_context_uses_direct_memnon_queries_without_local_llm() -
     lore = LORE.__new__(LORE)
     lore.memnon = FakeMemnon()
     lore.settings = {}
-    lore.llm_manager = None
 
     result = await lore.retrieve_context(["Where did Victor go?"], chunk_id=42)
 
-    assert lore.llm_manager is None
+    assert not hasattr(lore, "llm_manager")
     assert lore.memnon.queries == [
         "Where did Victor go",
         "Victor vanished below the transit concourse.",
@@ -79,7 +78,6 @@ async def test_retrieve_context_caps_target_chunk_query_text() -> None:
     lore = LORE.__new__(LORE)
     lore.memnon = FakeMemnon(chunk_text="A" * 750)
     lore.settings = {}
-    lore.llm_manager = None
 
     await lore.retrieve_context(["Track the fallout"], chunk_id=42)
 
@@ -96,7 +94,6 @@ async def test_retrieve_context_without_chunk_uses_only_directive_query() -> Non
     lore = LORE.__new__(LORE)
     lore.memnon = FakeMemnon()
     lore.settings = {}
-    lore.llm_manager = None
 
     result = await lore.retrieve_context(["Who is Victor hiding from?"], chunk_id=None)
 

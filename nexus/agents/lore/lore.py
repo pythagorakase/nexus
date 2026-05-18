@@ -114,7 +114,6 @@ class LORE:
         self.logon: Optional[LogonUtility] = None
         self.enable_logon = enable_logon
         self._logon_initialized = False
-        self.llm_manager = None
         self.token_manager = None
         self.turn_manager = None
         self.memory_manager = None
@@ -667,12 +666,6 @@ async def main():
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
     parser.add_argument("--status", action="store_true", help="Show component status")
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
-    parser.add_argument(
-        "--keep-model",
-        action="store_true",
-        help="Ignored; contextual retrieval no longer loads LM Studio",
-    )
-
     args = parser.parse_args()
 
     # Configure logging
@@ -708,12 +701,6 @@ async def main():
                 "Usage: python lore.py 'directive1' 'directive2' ... --chunk <chunk_id>"
             )
             return
-
-        # Set keep-model flag BEFORE retrieval
-        if args.keep_model:
-            logger.info(
-                "--keep-model ignored; contextual retrieval no longer loads LM Studio"
-            )
 
         logger.info(
             f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}"

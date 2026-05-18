@@ -105,7 +105,6 @@ class FakeLore:
     def __init__(self, settings, session, logon=None):
         self.settings = settings
         self.memnon = FakeMemnon(session)
-        self.llm_manager = None
         self.logon = logon or FakeLogon()
 
     def ensure_logon(self):
@@ -259,7 +258,7 @@ async def test_assemble_context_payload_does_not_initialize_bleed_llm() -> None:
 
     await manager.assemble_context_payload(context)
 
-    assert lore.llm_manager is None
+    assert not hasattr(lore, "llm_manager")
     assert context.phase_states["orrery_bleed"]["selected_count"] == 1
 
 

@@ -8,10 +8,9 @@ when missing (NO FALLBACKS principle).
 import pytest
 import psycopg2
 import tiktoken
-import requests
 from pathlib import Path
 
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_llm]
+pytestmark = [pytest.mark.requires_postgres]
 
 
 class TestInfrastructure:
@@ -106,51 +105,6 @@ class TestInfrastructure:
 
         cursor.close()
 
-    def test_lm_studio_availability(self, settings):
-        """Test that LM Studio is running and accessible - MUST FAIL HARD if not."""
-        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
-        base_url = lm_settings.get("lmstudio_url", "http://localhost:1234/v1")
-
-        # Strip /v1 if present for health check
-        health_url = base_url.replace("/v1", "") + "/health"
-
-        # This MUST fail hard if LM Studio is not running
-        try:
-            response = requests.get(health_url, timeout=5)
-            assert (
-                response.status_code == 200
-            ), f"LM Studio health check failed: {response.status_code}"
-        except requests.exceptions.RequestException as e:
-            # Fail hard - no graceful fallback
-            raise RuntimeError(f"LM Studio is not available at {base_url}: {e}")
-
-    def test_lm_studio_models(self, settings):
-        """Test that required models are loaded in LM Studio."""
-        lm_settings = settings.get("Agent Settings", {}).get("LORE", {}).get("llm", {})
-        base_url = lm_settings.get("lmstudio_url", "http://localhost:1234/v1")
-
-        # Check models endpoint
-        models_url = f"{base_url}/models"
-
-        try:
-            response = requests.get(models_url, timeout=5)
-            assert (
-                response.status_code == 200
-            ), f"Failed to get models: {response.status_code}"
-
-            data = response.json()
-            models = data.get("data", [])
-
-            # Must have at least one model loaded
-            assert len(models) > 0, "No models loaded in LM Studio"
-
-            # Log available models for debugging
-            model_ids = [m.get("id") for m in models]
-            print(f"Available models: {model_ids}")
-
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Cannot query LM Studio models: {e}")
-
     def test_tiktoken_encoding(self, settings):
         """Test tiktoken with newer model encodings."""
         # Test o200k_base encoding for newer models
@@ -180,7 +134,6 @@ class TestInfrastructure:
         # Check required sections
         assert "token_budget" in lore_settings
         assert "payload_percent_budget" in lore_settings
-        assert "llm" in lore_settings
 
         # Verify token budget structure
         token_budget = lore_settings["token_budget"]
@@ -212,7 +165,6 @@ class TestInfrastructure:
             "utils/chunk_operations.py",
             "utils/context_validation.py",
             "utils/token_budget.py",
-            "utils/local_llm.py",
         ]
 
         for file_path in required_files:

@@ -32,14 +32,6 @@
                     "max": 70
                 }
             },
-            "llm": {
-                "lmstudio_url": "http://localhost:1234/v1",
-                "model_name": "nexveridian/gpt-oss-120b",
-                "required_model": "nexveridian/gpt-oss-120b",
-                "temperature": 0.3,
-                "max_tokens": 2000,
-                "timeout": 30
-            },
             "use_narrative_learner": true
         },
         "LOGON": {

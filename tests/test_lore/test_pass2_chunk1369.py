@@ -22,7 +22,7 @@ AUTHORIAL_DIRECTIVES = [
     "Pete and Alina collaboration highlights aboard The Ghost",
 ]
 
-pytestmark = [pytest.mark.requires_postgres, pytest.mark.requires_local_llm]
+pytestmark = [pytest.mark.requires_postgres]
 
 
 def _strip_user_section(full_text: str) -> str:
@@ -35,7 +35,9 @@ def lore_agent() -> LORE:
     return LORE(debug=True, enable_logon=False)
 
 
-def _build_warm_slice(lore: LORE, chunk_id: int, span: int = 4) -> List[Dict[str, object]]:
+def _build_warm_slice(
+    lore: LORE, chunk_id: int, span: int = 4
+) -> List[Dict[str, object]]:
     start_id = max(1, chunk_id - span)
     with lore.memnon.Session() as session:
         rows = session.execute(
@@ -72,7 +74,9 @@ def _run_pass1_phases(
         start_time=time.time(),
     )
 
-    monkeypatch.setattr(lore.memnon, "get_recent_chunks", lambda limit=5: {"results": warm_slice})
+    monkeypatch.setattr(
+        lore.memnon, "get_recent_chunks", lambda limit=5: {"results": warm_slice}
+    )
 
     async def _run() -> None:
         await turn_manager.process_user_input(ctx)
@@ -107,8 +111,12 @@ def test_pass2_handles_karaoke_divergence(
     authorial_passages.append(structured_stub)
 
     analysis = context.phase_states.get("warm_analysis", {}).get("analysis", {})
-    assert analysis.get("characters"), "Warm analysis should capture characters for notes"
-    assert context.entity_data.get("characters"), "Structured character lookups should be populated"
+    assert analysis.get(
+        "characters"
+    ), "Warm analysis should capture characters for notes"
+    assert context.entity_data.get(
+        "characters"
+    ), "Structured character lookups should be populated"
 
     baseline = lore_agent.memory_manager.handle_storyteller_response(
         narrative=storyteller_only,
@@ -160,10 +168,14 @@ def test_pass2_handles_karaoke_divergence(
     }
     additional_ids.discard(None)
     karaoke_hits = [cid for cid in additional_ids if cid in KARAOKE_DEEP_CUT_RANGE]
-    assert karaoke_hits, f"Expected karaoke chunks in {KARAOKE_DEEP_CUT_RANGE}, got {sorted(additional_ids)}"
+    assert (
+        karaoke_hits
+    ), f"Expected karaoke chunks in {KARAOKE_DEEP_CUT_RANGE}, got {sorted(additional_ids)}"
 
     summary = lore_agent.memory_manager.get_memory_summary()
     assert summary["pass2"]["divergence_detected"] is True
     assert summary["pass2"]["usage"]["remaining_budget"] >= 0
 
-    assert context.entity_data["characters"], "Structured character summaries should be present"
+    assert context.entity_data[
+        "characters"
+    ], "Structured character summaries should be present"
