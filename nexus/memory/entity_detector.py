@@ -10,6 +10,8 @@ import re
 from typing import Dict, List, Set, Optional, Any
 from dataclasses import dataclass
 
+from sqlalchemy import text as sql_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,89 +86,85 @@ class HighSpecificityEntityDetector:
                 "%d characters/aliases, %d places, %d factions",
                 len(self.character_lookup),
                 len(self.place_lookup),
-                len(self.faction_lookup)
+                len(self.faction_lookup),
             )
 
         except Exception as e:
-            logger.error("Failed to load entities from database: %s", e)
-            # Continue with empty lookups - detector will simply find nothing
+            raise RuntimeError(
+                "Failed to load entities for high-specificity divergence detection"
+            ) from e
 
     def _load_characters(self) -> None:
         """Load characters and their aliases from database."""
-        try:
-            # First load all characters
-            result = self.db.execute(
-                "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
-            )
-            characters = {}
-            for row in result:
-                char_record = {
-                    "id": row.id,
-                    "name": row.name,
-                    "summary": row.summary[:100] if row.summary else None
-                }
-                characters[row.id] = char_record
-                # Add primary name to lookup (case-insensitive)
-                self.character_lookup[row.name.lower()] = char_record
+        # First load all characters
+        result = self._execute(
+            "SELECT id, name, summary FROM characters WHERE name IS NOT NULL"
+        )
+        characters = {}
+        for row in result:
+            char_record = {
+                "id": row.id,
+                "name": row.name,
+                "summary": row.summary[:100] if row.summary else None,
+            }
+            characters[row.id] = char_record
+            # Add primary name to lookup (case-insensitive)
+            self.character_lookup[row.name.lower()] = char_record
 
-            # Now load all aliases
-            result = self.db.execute(
-                "SELECT character_id, alias FROM character_aliases"
-            )
-            for row in result:
-                if row.character_id in characters:
-                    # Add alias to lookup (case-insensitive)
-                    self.character_lookup[row.alias.lower()] = characters[row.character_id]
+        # Now load all aliases
+        result = self._execute("SELECT character_id, alias FROM character_aliases")
+        for row in result:
+            if row.character_id in characters:
+                # Add alias to lookup (case-insensitive)
+                self.character_lookup[row.alias.lower()] = characters[row.character_id]
 
-            logger.debug("Loaded %d characters with aliases", len(characters))
-
-        except Exception as e:
-            logger.error("Failed to load characters: %s", e)
+        logger.debug("Loaded %d characters with aliases", len(characters))
 
     def _load_places(self) -> None:
         """Load places from database."""
-        try:
-            result = self.db.execute(
-                "SELECT id, name, type, zone FROM places WHERE name IS NOT NULL"
-            )
-            for row in result:
-                place_record = {
-                    "id": row.id,
-                    "name": row.name,
-                    "type": row.type,
-                    "zone": row.zone
-                }
-                # Add to lookup (case-insensitive)
-                self.place_lookup[row.name.lower()] = place_record
+        result = self._execute(
+            "SELECT id, name, type, zone FROM places WHERE name IS NOT NULL"
+        )
+        for row in result:
+            place_record = {
+                "id": row.id,
+                "name": row.name,
+                "type": row.type,
+                "zone": row.zone,
+            }
+            # Add to lookup (case-insensitive)
+            self.place_lookup[row.name.lower()] = place_record
 
-                # Also add version with "the" prefix if not already present
-                if not row.name.lower().startswith("the "):
-                    self.place_lookup[f"the {row.name.lower()}"] = place_record
+            # Also add version with "the" prefix if not already present
+            if not row.name.lower().startswith("the "):
+                self.place_lookup[f"the {row.name.lower()}"] = place_record
 
-            logger.debug("Loaded %d places", len(self.place_lookup))
-
-        except Exception as e:
-            logger.error("Failed to load places: %s", e)
+        logger.debug("Loaded %d places", len(self.place_lookup))
 
     def _load_factions(self) -> None:
         """Load factions from database."""
-        try:
-            result = self.db.execute(
-                "SELECT id, name, ideology FROM factions WHERE name IS NOT NULL"
-            )
-            for row in result:
-                faction_record = {
-                    "id": row.id,
-                    "name": row.name,
-                    "ideology": row.ideology
-                }
-                # Add to lookup (case-insensitive)
-                self.faction_lookup[row.name.lower()] = faction_record
+        result = self._execute(
+            "SELECT id, name, ideology FROM factions WHERE name IS NOT NULL"
+        )
+        for row in result:
+            faction_record = {
+                "id": row.id,
+                "name": row.name,
+                "ideology": row.ideology,
+            }
+            # Add to lookup (case-insensitive)
+            self.faction_lookup[row.name.lower()] = faction_record
 
-            logger.debug("Loaded %d factions", len(self.faction_lookup))
+        logger.debug("Loaded %d factions", len(self.faction_lookup))
 
-        except Exception as e:
-            logger.error("Failed to load factions: %s", e)
+    def _execute(self, query: str):
+        """Execute a SQL query against either an engine, connection, or session."""
+
+        statement = sql_text(query)
+        if hasattr(self.db, "connect"):
+            with self.db.connect() as connection:
+                return list(connection.execute(statement))
+        return self.db.execute(statement)
 
     def detect_entities(self, text: str) -> EntityMatch:
         """Detect known entities in the given text with high specificity.
@@ -195,29 +193,41 @@ class HighSpecificityEntityDetector:
         for name_or_alias, char_record in self.character_lookup.items():
             # Use word boundaries for exact matching
             # This prevents matching "alex" in "alexander" or "complex"
-            pattern = r'\b' + re.escape(name_or_alias) + r'\b'
+            pattern = r"\b" + re.escape(name_or_alias) + r"\b"
             if re.search(pattern, text_lower):
                 found_characters[char_record["id"]] = char_record
-                logger.debug("Detected character: %s (id=%d)", char_record["name"], char_record["id"])
+                logger.debug(
+                    "Detected character: %s (id=%d)",
+                    char_record["name"],
+                    char_record["id"],
+                )
 
         # Check each place name
         for place_name, place_record in self.place_lookup.items():
-            pattern = r'\b' + re.escape(place_name) + r'\b'
+            pattern = r"\b" + re.escape(place_name) + r"\b"
             if re.search(pattern, text_lower):
                 found_places[place_record["id"]] = place_record
-                logger.debug("Detected place: %s (id=%d)", place_record["name"], place_record["id"])
+                logger.debug(
+                    "Detected place: %s (id=%d)",
+                    place_record["name"],
+                    place_record["id"],
+                )
 
         # Check each faction name
         for faction_name, faction_record in self.faction_lookup.items():
-            pattern = r'\b' + re.escape(faction_name) + r'\b'
+            pattern = r"\b" + re.escape(faction_name) + r"\b"
             if re.search(pattern, text_lower):
                 found_factions[faction_record["id"]] = faction_record
-                logger.debug("Detected faction: %s (id=%d)", faction_record["name"], faction_record["id"])
+                logger.debug(
+                    "Detected faction: %s (id=%d)",
+                    faction_record["name"],
+                    faction_record["id"],
+                )
 
         result = EntityMatch(
             characters=list(found_characters.values()),
             places=list(found_places.values()),
-            factions=list(found_factions.values())
+            factions=list(found_factions.values()),
         )
 
         if result.detected:
@@ -225,7 +235,7 @@ class HighSpecificityEntityDetector:
                 "High-specificity detection found: %d characters, %d places, %d factions",
                 len(result.characters),
                 len(result.places),
-                len(result.factions)
+                len(result.factions),
             )
 
         return result
@@ -259,8 +269,10 @@ class HighSpecificityEntityDetector:
 
         return {
             "detected": entity_match.detected,
-            "confidence": 1.0 if entity_match.detected else 0.0,  # High confidence in our matches
+            "confidence": (
+                1.0 if entity_match.detected else 0.0
+            ),  # High confidence in our matches
             "gaps": gaps,
             "unmatched_entities": unmatched_entities,
-            "references_seen": {"user_input"} if entity_match.detected else set()
+            "references_seen": {"user_input"} if entity_match.detected else set(),
         }

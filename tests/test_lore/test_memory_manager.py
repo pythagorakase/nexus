@@ -9,6 +9,7 @@ import pytest
 
 from nexus.memory import ContextMemoryManager
 from nexus.memory.divergence import DivergenceResult
+from nexus.memory.entity_detector import HighSpecificityEntityDetector
 
 
 @pytest.fixture
@@ -174,6 +175,57 @@ def test_pass2_divergence_triggers_incremental_retrieval(
     assert manager.context_state.context.token_usage["reserve_shortfall"] == max(
         0, reserve - post_budget
     )
+
+
+def test_pass2_ignores_entities_already_in_baseline(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
+    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager.entity_detector.character_lookup = {
+        "emilia": {"id": 2, "name": "Emilia", "summary": None}
+    }
+
+    manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=baseline_inputs["retrieved"],
+        token_usage=baseline_inputs["token_usage"],
+    )
+
+    update = manager.handle_user_input("Ask Emilia about the vault.")
+
+    assert update.divergence.detected is False
+    assert update.divergence.gaps == {}
+
+
+def test_pass2_marks_matched_entities_outside_baseline(
+    minimal_settings, dummy_memnon, baseline_inputs
+):
+    manager = ContextMemoryManager(minimal_settings, memnon=dummy_memnon)
+    manager.entity_detector.character_lookup = {
+        "victor": {"id": 99, "name": "Victor", "summary": None}
+    }
+
+    manager.handle_storyteller_response(
+        narrative=baseline_inputs["narrative"],
+        warm_slice=baseline_inputs["warm_slice"],
+        retrieved_passages=baseline_inputs["retrieved"],
+        token_usage=baseline_inputs["token_usage"],
+    )
+
+    update = manager.handle_user_input("Ask Victor about the vault.")
+
+    assert update.divergence.detected is True
+    assert update.divergence.gaps == {"character_99": "Character 'Victor' mentioned"}
+
+
+def test_entity_detector_raises_when_database_load_fails():
+    class BrokenDB:
+        def execute(self, _query):
+            raise RuntimeError("database unavailable")
+
+    with pytest.raises(RuntimeError, match="Failed to load entities"):
+        HighSpecificityEntityDetector(BrokenDB())
 
 
 def test_pass1_stores_authorial_directives(

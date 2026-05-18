@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from .context_state import ContextPackage, ContextStateManager, PassTransition
 from .divergence import DivergenceDetector, DivergenceResult
-from .entity_detector import HighSpecificityEntityDetector
+from .entity_detector import EntityMatch, HighSpecificityEntityDetector
 from .incremental import IncrementalRetriever
 from .query_memory import QueryMemory
 
@@ -162,6 +162,10 @@ class ContextMemoryManager:
         db_connection = None
         if self.memnon and hasattr(self.memnon, "db"):
             db_connection = self.memnon.db
+        if db_connection is None:
+            db_connection = getattr(
+                getattr(self.memnon, "db_manager", None), "engine", None
+            )
 
         self.entity_detector = HighSpecificityEntityDetector(db_connection)
         self.divergence_detector = DivergenceDetector(
@@ -414,9 +418,6 @@ class ContextMemoryManager:
         if not user_input:
             return False
 
-        # Strip whitespace and common punctuation
-        import re
-
         # Remove leading/trailing whitespace and punctuation
         cleaned = user_input.strip().strip(".,!?;:")
 
@@ -438,26 +439,130 @@ class ContextMemoryManager:
         self,
         user_input: str,
         context: Optional[ContextPackage],
-        transition: Optional[PassTransition],
     ) -> DivergenceResult:
         """Detect divergence using high-specificity entity matching."""
 
-        if getattr(self, "entity_detector", None):
-            entity_match = self.entity_detector.detect_entities(user_input)
-            summary = self.entity_detector.to_divergence_format(entity_match)
-            return DivergenceResult(
-                bool(summary.get("detected")),
-                float(summary.get("confidence", 0.0)),
-                summary.get("gaps", {}),
-                set(summary.get("unmatched_entities", set())),
-                set(summary.get("references_seen", set())),
-            )
+        entity_match = self.entity_detector.detect_entities(user_input)
+        entity_match = self._filter_baseline_entity_matches(entity_match, context)
+        summary = self.entity_detector.to_divergence_format(entity_match)
+        return DivergenceResult(
+            bool(summary.get("detected")),
+            float(summary.get("confidence", 0.0)),
+            summary.get("gaps", {}),
+            set(summary.get("unmatched_entities", set())),
+            set(summary.get("references_seen", set())),
+        )
 
-        # Retain placeholder behaviour if no detectors exist
-        if getattr(self, "divergence_detector", None):
-            return self.divergence_detector.detect(user_input, context, transition)
+    def _filter_baseline_entity_matches(
+        self,
+        entity_match: EntityMatch,
+        context: Optional[ContextPackage],
+    ) -> EntityMatch:
+        """Ignore matched entities that are already represented in Pass 1."""
 
-        return DivergenceResult(False, 0.0, {}, set(), set())
+        baseline_refs = self._baseline_entity_refs(context)
+
+        return EntityMatch(
+            characters=[
+                character
+                for character in entity_match.characters
+                if not self._entity_in_baseline("character", character, baseline_refs)
+            ],
+            places=[
+                place
+                for place in entity_match.places
+                if not self._entity_in_baseline("place", place, baseline_refs)
+            ],
+            factions=[
+                faction
+                for faction in entity_match.factions
+                if not self._entity_in_baseline("faction", faction, baseline_refs)
+            ],
+        )
+
+    def _baseline_entity_refs(
+        self,
+        context: Optional[ContextPackage],
+    ) -> Dict[str, Set[str]]:
+        """Collect normalized entity refs from the current Pass 1 baseline."""
+
+        refs: Dict[str, Set[str]] = {
+            "character": set(),
+            "place": set(),
+            "faction": set(),
+        }
+        if not context:
+            return refs
+
+        def add_ref(kind: str, value: Any) -> None:
+            if value is None:
+                return
+            if isinstance(value, str):
+                normalized = self._normalize_entity_ref(value)
+                if normalized:
+                    refs[kind].add(normalized)
+                return
+            if isinstance(value, dict):
+                raw_id = value.get("id") or value.get(f"{kind}_id")
+                if raw_id is not None:
+                    refs[kind].add(f"id:{raw_id}")
+                for key in ("name", "alias", "canonical_name"):
+                    normalized = self._normalize_entity_ref(value.get(key))
+                    if normalized:
+                        refs[kind].add(normalized)
+
+        def walk(kind: str, value: Any) -> None:
+            if isinstance(value, dict):
+                if any(key in value for key in ("id", f"{kind}_id", "name")):
+                    add_ref(kind, value)
+                    return
+                for nested in value.values():
+                    walk(kind, nested)
+                return
+            if isinstance(value, (list, tuple, set)):
+                for item in value:
+                    walk(kind, item)
+                return
+            add_ref(kind, value)
+
+        baseline_entities = context.baseline_entities or {}
+        for key in ("characters", "character"):
+            walk("character", baseline_entities.get(key))
+        for key in ("locations", "places", "place"):
+            walk("place", baseline_entities.get(key))
+        for key in ("factions", "faction"):
+            walk("faction", baseline_entities.get(key))
+
+        return refs
+
+    def _entity_in_baseline(
+        self,
+        kind: str,
+        entity: Dict[str, Any],
+        baseline_refs: Dict[str, Set[str]],
+    ) -> bool:
+        """Return true when a detected entity already appears in Pass 1."""
+
+        refs = baseline_refs.get(kind, set())
+        raw_id = entity.get("id") or entity.get(f"{kind}_id")
+        if raw_id is not None and f"id:{raw_id}" in refs:
+            return True
+
+        for key in ("name", "alias", "canonical_name"):
+            normalized = self._normalize_entity_ref(entity.get(key))
+            if normalized and normalized in refs:
+                return True
+
+        return False
+
+    @staticmethod
+    def _normalize_entity_ref(value: Any) -> Optional[str]:
+        """Normalize entity refs for baseline/detected comparisons."""
+
+        if not isinstance(value, str):
+            return None
+        normalized = re.sub(r"\s+", " ", value.strip().lower())
+        return normalized or None
 
     def _compute_available_phase2_budget(
         self, token_counts: Optional[Dict[str, int]]
@@ -500,7 +605,7 @@ class ContextMemoryManager:
         context = self.context_state.context
         transition = self.context_state.transition
 
-        divergence = self._detect_divergence(user_input, context, transition)
+        divergence = self._detect_divergence(user_input, context)
         logger.debug(
             "Divergence detection: %s (confidence=%.2f)",
             divergence.detected,
