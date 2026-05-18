@@ -92,6 +92,13 @@ def _coerce_authorial_directives(raw_directives: Any) -> List[str]:
     return normalize_authorial_directives(raw_directives, allow_json_string=True)
 
 
+def _chunk_text(chunk: Dict[str, Any]) -> str:
+    """Return the best available narrative text from a warm-slice chunk."""
+
+    text = chunk.get("text") or chunk.get("full_text") or chunk.get("raw_text") or ""
+    return text.strip() if isinstance(text, str) else ""
+
+
 class TurnCycleManager:
     """Manages the execution of turn cycle phases"""
 
@@ -125,6 +132,19 @@ class TurnCycleManager:
             raise RuntimeError(
                 f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
             ) from exc
+
+    def _raw_chunk_retrieval_query(self, turn_context: TurnContext) -> Optional[str]:
+        """Resolve the current/parent chunk text to use as a baseline query."""
+
+        for chunk in turn_context.warm_slice:
+            if chunk.get("is_target"):
+                text = _chunk_text(chunk)
+                if text:
+                    return text
+
+        if turn_context.warm_slice:
+            return _chunk_text(turn_context.warm_slice[0]) or None
+        return None
 
     async def process_user_input(self, turn_context: TurnContext):
         """
@@ -522,12 +542,23 @@ class TurnCycleManager:
         if getattr(self.lore, "memory_manager", None):
             self.lore.memory_manager.reset_pass1_queries()
 
-        # Storyteller-authored directives are first-line retrieval input. The
-        # local LLM fills any remaining query budget from the current analysis.
+        # Full chunk text is the first-line retrieval baseline. Storyteller
+        # directives add targeted continuity, and local LLM queries fill any
+        # remaining budget from the current analysis.
         max_deep_queries = self._max_deep_queries()
         incoming_directives = turn_context.authorial_directives
         queries = []
-        for directive in incoming_directives[:max_deep_queries]:
+        raw_chunk_query = self._raw_chunk_retrieval_query(turn_context)
+        if raw_chunk_query:
+            queries.append(
+                {
+                    "text": raw_chunk_query,
+                    "type": "general",
+                    "source": "raw_chunk",
+                }
+            )
+
+        for directive in incoming_directives[: max_deep_queries - len(queries)]:
             queries.append(
                 {
                     "text": directive,
@@ -613,6 +644,9 @@ class TurnCycleManager:
             "queries_executed": len(queries),
             "query_types": query_type_counts,
             "query_sources": {
+                "raw_chunk": sum(
+                    1 for query in queries if query.get("source") == "raw_chunk"
+                ),
                 "authorial_directive": sum(
                     1
                     for query in queries

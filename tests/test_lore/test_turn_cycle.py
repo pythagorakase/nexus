@@ -208,8 +208,71 @@ def test_deep_queries_use_authorial_directives_before_local_llm(
     assert memnon.queries[2:] == ["Local query A", "Local query B", "Local query C"]
     assert llm_manager.generated_query_calls == 1
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "raw_chunk": 0,
         "authorial_directive": 2,
         "llm_generated": 3,
+    }
+
+
+def test_deep_queries_use_raw_chunk_before_targeted_queries(
+    turn_manager: TurnCycleManager,
+):
+    """Full chunk text should seed retrieval before narrower query paths."""
+
+    class DummyMemnon:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        def query_memory(
+            self, query: str, k: int, use_hybrid: bool
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            self.queries.append(query)
+            return {
+                "results": [
+                    {
+                        "id": len(self.queries),
+                        "score": 1.0,
+                        "text": f"Result for {query[:20]}",
+                    }
+                ]
+            }
+
+    memnon = DummyMemnon()
+    llm_manager = DummyLLMManager()
+    turn_manager.lore.memnon = memnon
+    turn_manager.lore.llm_manager = llm_manager
+
+    ctx = TurnContext(
+        turn_id="turn_deep_raw_chunk",
+        user_input="Continue.",
+        start_time=time.time(),
+    )
+    ctx.warm_slice = [
+        {
+            "id": 10,
+            "is_target": True,
+            "text": "Full parent chunk text with all the messy narrative details.",
+        }
+    ]
+    ctx.authorial_directives = [
+        "Directive query A",
+        "Directive query B",
+    ]
+    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
+
+    asyncio.run(turn_manager.execute_deep_queries(ctx))
+
+    assert memnon.queries == [
+        "Full parent chunk text with all the messy narrative details.",
+        "Directive query A",
+        "Directive query B",
+        "Local query A",
+        "Local query B",
+    ]
+    assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "raw_chunk": 1,
+        "authorial_directive": 2,
+        "llm_generated": 2,
     }
 
 
@@ -261,6 +324,7 @@ def test_deep_queries_obey_configured_query_budget(
         "Local query A",
     ]
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "raw_chunk": 0,
         "authorial_directive": 2,
         "llm_generated": 1,
     }
