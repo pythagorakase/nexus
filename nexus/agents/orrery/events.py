@@ -811,13 +811,14 @@ def _apply_travel_start_sync(
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
-    estimate = _estimate_route_sync(
+    route = _select_route_sync(
         cur,
         origin_place_id=int(origin_place_id),
         destination_place_id=int(destination_place_id),
         mode=mode,
+        risk=risk,
     )
-    eta = _eta(world_time, estimate["duration_minutes"])
+    eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
     cur.execute(
         """
@@ -831,7 +832,8 @@ def _apply_travel_start_sync(
         ) VALUES (
             %s, 'in_transit', %s,
             %s, %s,
-            'estimated', %s::orrery_travel_mode, %s::orrery_travel_risk, %s,
+            %s::orrery_travel_route_method,
+            %s::orrery_travel_mode, %s::orrery_travel_risk, %s,
             %s, %s,
             %s, %s, %s,
             %s::jsonb
@@ -858,15 +860,16 @@ def _apply_travel_start_sync(
             origin_place_id,
             origin_place_id,
             destination_place_id,
-            mode,
-            risk,
+            route["route_method"],
+            route["travel_mode"],
+            route["risk"],
             progress,
-            estimate["distance_m"],
-            estimate["duration_minutes"],
+            route["distance_m"],
+            route["duration_minutes"],
             world_time,
             world_time,
             eta,
-            json.dumps(estimate["metadata"]),
+            json.dumps(route["metadata"]),
         ),
     )
 
@@ -893,13 +896,14 @@ async def _apply_travel_start_async(
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
-    estimate = await _estimate_route_async(
+    route = await _select_route_async(
         conn,
         origin_place_id=int(origin_place_id),
         destination_place_id=int(destination_place_id),
         mode=mode,
+        risk=risk,
     )
-    eta = _eta(world_time, estimate["duration_minutes"])
+    eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
     await conn.execute(
         """
@@ -913,10 +917,11 @@ async def _apply_travel_start_async(
         ) VALUES (
             $1, 'in_transit', $2,
             $3, $4,
-            'estimated', $5::orrery_travel_mode, $6::orrery_travel_risk, $7,
-            $8, $9,
-            $10, $11, $12,
-            $13::jsonb
+            $5::orrery_travel_route_method,
+            $6::orrery_travel_mode, $7::orrery_travel_risk, $8,
+            $9, $10,
+            $11, $12, $13,
+            $14::jsonb
         )
         ON CONFLICT (character_entity_id) DO UPDATE SET
             status = EXCLUDED.status,
@@ -939,15 +944,16 @@ async def _apply_travel_start_async(
         origin_place_id,
         origin_place_id,
         destination_place_id,
-        mode,
-        risk,
+        route["route_method"],
+        route["travel_mode"],
+        route["risk"],
         progress,
-        estimate["distance_m"],
-        estimate["duration_minutes"],
+        route["distance_m"],
+        route["duration_minutes"],
         world_time,
         world_time,
         eta,
-        json.dumps(estimate["metadata"]),
+        json.dumps(route["metadata"]),
     )
 
 
@@ -1820,12 +1826,208 @@ async def _current_travel_progress_async(conn: Any, actor_entity_id: int) -> flo
     return float(progress or 0.0)
 
 
+def _select_route_sync(
+    cur: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+    risk: str,
+) -> dict[str, Any]:
+    edge = _authored_route_edge_sync(
+        cur,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+    )
+    if edge is not None:
+        # Authored edges own their stored risk; caller risk only applies to
+        # coordinate-estimate fallback routes.
+        return _route_from_authored_edge(
+            edge,
+            origin_place_id=origin_place_id,
+            destination_place_id=destination_place_id,
+            requested_mode=mode,
+        )
+    return _estimate_route_sync(
+        cur,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+        risk=risk,
+    )
+
+
+async def _select_route_async(
+    conn: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+    risk: str,
+) -> dict[str, Any]:
+    edge = await _authored_route_edge_async(
+        conn,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+    )
+    if edge is not None:
+        # Authored edges own their stored risk; caller risk only applies to
+        # coordinate-estimate fallback routes.
+        return _route_from_authored_edge(
+            edge,
+            origin_place_id=origin_place_id,
+            destination_place_id=destination_place_id,
+            requested_mode=mode,
+        )
+    return await _estimate_route_async(
+        conn,
+        origin_place_id=origin_place_id,
+        destination_place_id=destination_place_id,
+        mode=mode,
+        risk=risk,
+    )
+
+
+def _authored_route_edge_sync(
+    cur: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+) -> Optional[Any]:
+    cur.execute(
+        """
+        SELECT id,
+               from_place_id,
+               to_place_id,
+               route_method::text AS route_method,
+               travel_mode::text AS travel_mode,
+               risk::text AS risk,
+               bidirectional,
+               distance_m,
+               duration_minutes,
+               ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
+               source,
+               metadata,
+               (from_place_id = %s AND to_place_id = %s) AS is_direct
+        FROM orrery_travel_edges
+        WHERE route_method = 'authored_edge'
+          AND travel_mode IN (%s::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+          AND (
+            (from_place_id = %s AND to_place_id = %s)
+            OR (from_place_id = %s AND to_place_id = %s AND bidirectional = true)
+          )
+        ORDER BY (travel_mode = %s::orrery_travel_mode) DESC, is_direct DESC, id
+        LIMIT 1
+        """,
+        (
+            origin_place_id,
+            destination_place_id,
+            mode,
+            origin_place_id,
+            destination_place_id,
+            destination_place_id,
+            origin_place_id,
+            mode,
+        ),
+    )
+    return cur.fetchone()
+
+
+async def _authored_route_edge_async(
+    conn: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    mode: str,
+) -> Optional[Any]:
+    row = await conn.fetchrow(
+        """
+        SELECT id,
+               from_place_id,
+               to_place_id,
+               route_method::text AS route_method,
+               travel_mode::text AS travel_mode,
+               risk::text AS risk,
+               bidirectional,
+               distance_m,
+               duration_minutes,
+               ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
+               source,
+               metadata,
+               (from_place_id = $1 AND to_place_id = $2) AS is_direct
+        FROM orrery_travel_edges
+        WHERE route_method = 'authored_edge'
+          AND travel_mode IN ($3::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+          AND (
+            (from_place_id = $1 AND to_place_id = $2)
+            OR (from_place_id = $2 AND to_place_id = $1 AND bidirectional = true)
+          )
+        ORDER BY (travel_mode = $3::orrery_travel_mode) DESC, is_direct DESC, id
+        LIMIT 1
+        """,
+        origin_place_id,
+        destination_place_id,
+        mode,
+    )
+    return row
+
+
+def _route_from_authored_edge(
+    row: Any,
+    *,
+    origin_place_id: int,
+    destination_place_id: int,
+    requested_mode: str,
+) -> dict[str, Any]:
+    edge_id = int(_row_get(row, "id", 0))
+    edge_from_place_id = int(_row_get(row, "from_place_id", 1))
+    edge_to_place_id = int(_row_get(row, "to_place_id", 2))
+    edge_travel_mode = str(_row_get(row, "travel_mode", 4))
+    travel_mode = requested_mode if edge_travel_mode == "mixed" else edge_travel_mode
+    risk = str(_row_get(row, "risk", 5))
+    route_geometry = _decode_json_value(
+        _row_get_optional(row, "route_geometry_geojson", 9)
+    )
+    reversed_edge = not bool(_row_get(row, "is_direct", 12))
+    metadata = {
+        "route_method": "authored_edge",
+        "origin_place_id": origin_place_id,
+        "destination_place_id": destination_place_id,
+        "requested_travel_mode": requested_mode,
+        "travel_mode": travel_mode,
+        "edge_travel_mode": edge_travel_mode,
+        "risk": risk,
+        "route_edge_id": edge_id,
+        "edge_from_place_id": edge_from_place_id,
+        "edge_to_place_id": edge_to_place_id,
+        "bidirectional": bool(_row_get(row, "bidirectional", 6)),
+        "reversed": reversed_edge,
+        "source": _row_get_optional(row, "source", 10),
+        "edge_metadata": _decode_json_value(_row_get_optional(row, "metadata", 11))
+        or {},
+    }
+    if route_geometry is not None:
+        metadata["route_geometry"] = route_geometry
+    return {
+        "route_method": "authored_edge",
+        "travel_mode": travel_mode,
+        "risk": risk,
+        "distance_m": _float_or_none(_row_get(row, "distance_m", 7)),
+        "duration_minutes": _float_or_none(_row_get(row, "duration_minutes", 8)),
+        "metadata": metadata,
+    }
+
+
 def _estimate_route_sync(
     cur: Any,
     *,
     origin_place_id: int,
     destination_place_id: int,
     mode: str,
+    risk: str,
 ) -> dict[str, Any]:
     cur.execute(
         """
@@ -1845,6 +2047,7 @@ def _estimate_route_sync(
         origin_place_id=origin_place_id,
         destination_place_id=destination_place_id,
         mode=mode,
+        risk=risk,
     )
 
 
@@ -1854,6 +2057,7 @@ async def _estimate_route_async(
     origin_place_id: int,
     destination_place_id: int,
     mode: str,
+    risk: str,
 ) -> dict[str, Any]:
     geodesic_distance_m = await conn.fetchval(
         """
@@ -1872,6 +2076,7 @@ async def _estimate_route_async(
         origin_place_id=origin_place_id,
         destination_place_id=destination_place_id,
         mode=mode,
+        risk=risk,
     )
 
 
@@ -1881,6 +2086,7 @@ def _route_estimate_from_distance(
     origin_place_id: int,
     destination_place_id: int,
     mode: str,
+    risk: str,
 ) -> dict[str, Any]:
     detour_factor = TRAVEL_MODE_DETOUR_FACTOR[mode]
     speed_kmh = TRAVEL_MODE_SPEED_KMH[mode]
@@ -1895,6 +2101,7 @@ def _route_estimate_from_distance(
         "origin_place_id": origin_place_id,
         "destination_place_id": destination_place_id,
         "travel_mode": mode,
+        "risk": risk,
         "geodesic_distance_m": (
             float(geodesic_distance_m) if geodesic_distance_m is not None else None
         ),
@@ -1902,6 +2109,9 @@ def _route_estimate_from_distance(
         "speed_kmh": speed_kmh,
     }
     return {
+        "route_method": "estimated",
+        "travel_mode": mode,
+        "risk": risk,
         "distance_m": distance_m,
         "duration_minutes": duration_minutes,
         "metadata": metadata,
@@ -2039,6 +2249,28 @@ def _row_get(row: Any, key: str, index: int) -> Any:
     if isinstance(row, Mapping):
         return row[key]
     return row[index]
+
+
+def _row_get_optional(row: Any, key: str, index: int, default: Any = None) -> Any:
+    try:
+        return _row_get(row, key, index)
+    except (KeyError, IndexError):
+        return default
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    return None if value is None else float(value)
+
+
+def _decode_json_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
 
 
 def _affected_count(status: str) -> int:
