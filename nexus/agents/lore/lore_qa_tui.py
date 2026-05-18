@@ -1,14 +1,11 @@
 """
-LORE Q&A Retrofuturistic TUI (Scaffold)
-
-Stage 1: App/screen/layout/theme only, no backend wiring yet.
+LORE Q&A Retrofuturistic TUI.
 
 Run:
   python nexus/agents/lore/lore_qa_tui.py
 
-Planned wiring in next stages:
-  - On submit, dispatch background `run_qa(question)`
-  - Populate telemetry and conversation from LORE.answer_question payload
+The legacy Q&A helper now returns direct MEMNON retrieval context rather than a
+local-model synthesized answer.
 """
 
 from __future__ import annotations
@@ -39,20 +36,91 @@ COLOR_ERROR = "#FF33FF"
 COLOR_ERROR_ALT = "#FF6633"
 
 
-class StatusBar(Static):
-    """Header status bar showing product, model, db, and hints."""
+def format_retrieval_context(result: Dict[str, Any]) -> str:
+    """Format direct MEMNON retrieval results for human-facing displays."""
 
-    model_name: reactive[str] = reactive("(model: unknown)")
+    answer = str(result.get("answer", "")).strip()
+    if answer:
+        return answer
+
+    directives = result.get("directives") or {}
+    if not isinstance(directives, dict):
+        return "No relevant information found in the available story data."
+
+    parts: list[str] = []
+    for directive, payload in directives.items():
+        if not isinstance(payload, dict):
+            continue
+        context = str(payload.get("retrieved_context", "")).strip()
+        if context:
+            parts.append(f"{directive}\n\n{context}")
+
+    return (
+        "\n\n---\n\n".join(parts)
+        or "No relevant information found in the available story data."
+    )
+
+
+def collect_directive_field(
+    result: Dict[str, Any],
+    field_name: str,
+    *,
+    include_scalars: bool = True,
+) -> List[Any]:
+    """Collect per-directive retrieval metadata into one flat list."""
+
+    collected: List[Any] = []
+    directives = result.get("directives") or {}
+    if not isinstance(directives, dict):
+        return collected
+
+    for payload in directives.values():
+        if not isinstance(payload, dict):
+            continue
+        value = payload.get(field_name)
+        if isinstance(value, list):
+            collected.extend(value)
+        elif include_scalars and value:
+            collected.append(value)
+    return collected
+
+
+def format_reasoning_metadata(result: Dict[str, Any]) -> str:
+    """Format top-level or per-directive reasoning metadata for export."""
+
+    reasoning_items = collect_directive_field(result, "reasoning")
+    if not reasoning_items:
+        return str(result.get("reasoning", "")).strip()
+
+    rendered = []
+    for item in reasoning_items:
+        if isinstance(item, (dict, list)):
+            rendered.append(json.dumps(item, indent=2, sort_keys=True))
+        else:
+            rendered.append(str(item))
+    return "\n\n".join(rendered)
+
+
+class StatusBar(Static):
+    """Header status bar showing product, retrieval mode, db, and hints."""
+
+    retrieval_mode: reactive[str] = reactive("(retrieval: direct)")
     db_health: reactive[str] = reactive("DB: ?")
     latency_ms: reactive[str] = reactive("— ms")
     token_info: reactive[str] = reactive("tokens: —")
-    hint_text: reactive[str] = reactive("Ctrl+Q: Quit  Ctrl+C: Clear  Ctrl+S: Save  ↑/↓: History")
+    hint_text: reactive[str] = reactive(
+        "Ctrl+Q: Quit  Ctrl+C: Clear  Ctrl+S: Save  ↑/↓: History"
+    )
 
     def render(self) -> str:
-        left = f"LORE Q&A  {self.model_name}  {self.db_health}  {self.token_info}"
+        left = f"LORE Q&A  {self.retrieval_mode}  {self.db_health}  {self.token_info}"
         right = f"⏱ {self.latency_ms}   {self.hint_text}"
         # Simple two-column feel by padding; Textual's Static render returns str
-        return f"[bold {COLOR_SYSTEM}]{left}[/]" + " " * 4 + f"[bold {COLOR_SYSTEM}]{right}[/]"
+        return (
+            f"[bold {COLOR_SYSTEM}]{left}[/]"
+            + " " * 4
+            + f"[bold {COLOR_SYSTEM}]{right}[/]"
+        )
 
 
 class ConversationView(Log):
@@ -75,14 +143,14 @@ class ConversationView(Log):
 
 
 class ReasoningLog(Log):
-    """Live reasoning stream (LLM trace)."""
+    """Direct retrieval trace."""
 
     def on_mount(self) -> None:  # type: ignore[override]
-        self.write(f"[bold {COLOR_SYSTEM}]Reasoning stream initialized…[/]")
+        self.write(f"[bold {COLOR_SYSTEM}]Retrieval trace initialized...[/]")
 
 
 class QueryList(DataTable):
-    """Generated queries table."""
+    """Retrieval queries table."""
 
     def on_mount(self) -> None:  # type: ignore[override]
         self.cursor_type = "row"
@@ -111,7 +179,7 @@ class TelemetryPanel(Vertical):
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Static(f"[bold {COLOR_SYSTEM}]Reasoning[/]")
         yield ReasoningLog(id="reasoning")
-        yield Static(f"[bold {COLOR_SYSTEM}]Generated Queries[/]")
+        yield Static(f"[bold {COLOR_SYSTEM}]Retrieval Queries[/]")
         yield QueryList(id="queries")
         yield Static(f"[bold {COLOR_SYSTEM}]Search Progress[/]")
         yield SearchProgress(id="progress")
@@ -212,7 +280,7 @@ class LoreQATerminal(App[None]):
     def on_mount(self) -> None:  # type: ignore[override]
         # Seed placeholder values in the header
         status = self.query_one(StatusBar)
-        status.model_name = "(model: pending)"
+        status.retrieval_mode = "(retrieval: direct)"
         status.db_health = "DB: pending"
         status.latency_ms = "—"
         status.token_info = "tokens: —"
@@ -239,7 +307,9 @@ class LoreQATerminal(App[None]):
 
     def action_save_transcript(self) -> None:
         # Placeholder: stage 4 will implement save/load
-        self.query_one(ConversationView).add_lore("[save placeholder] Transcript saving will be implemented in a later stage.")
+        self.query_one(ConversationView).add_lore(
+            "[save placeholder] Transcript saving will be implemented in a later stage."
+        )
 
     def action_history_up(self) -> None:
         if not self.input_history:
@@ -252,7 +322,6 @@ class LoreQATerminal(App[None]):
             return
         self.history_index = min(len(self.input_history) - 1, self.history_index + 1)
         self.query_one(Input).value = self.input_history[self.history_index]
-
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:  # type: ignore[override]
         question = (event.value or "").strip()
@@ -271,7 +340,9 @@ class LoreQATerminal(App[None]):
         self._set_status_busy()
 
         # Give immediate feedback
-        self.query_one(ReasoningLog).write(f"[dim]{time.strftime('%H:%M:%S')}[/] [bold {COLOR_SYSTEM}]queued[/] {question}")
+        self.query_one(ReasoningLog).write(
+            f"[dim]{time.strftime('%H:%M:%S')}[/] [bold {COLOR_SYSTEM}]queued[/] {question}"
+        )
 
         # Run in background to keep UI responsive
         asyncio.create_task(self._run_qa_flow(question))
@@ -292,7 +363,7 @@ class LoreQATerminal(App[None]):
             status = self.query_one(StatusBar)
             s = lore.get_status()  # type: ignore[attr-defined]
             comp = s.get("components", {}) if isinstance(s, dict) else {}
-            status.model_name = "(model: local)" if comp.get("local_llm") else "(model: unavailable)"
+            status.retrieval_mode = "(retrieval: direct)"
             status.db_health = "DB: ok" if comp.get("memnon") else "DB: unavailable"
         except Exception:
             pass
@@ -302,9 +373,12 @@ class LoreQATerminal(App[None]):
             return
         try:
             from nexus.agents.lore.lore import LORE  # Lazy import
+
             self.lore = LORE()
         except Exception as e:
-            self.query_one(ConversationView).add_error(f"Failed to initialize LORE: {e}")
+            self.query_one(ConversationView).add_error(
+                f"Failed to initialize LORE: {e}"
+            )
             raise
 
     async def _run_qa_flow(self, question: str) -> None:
@@ -326,12 +400,13 @@ class LoreQATerminal(App[None]):
             # Call backend
             result: Dict[str, Any] = await lore.answer_question(question)  # type: ignore[attr-defined]
 
-            # Populate conversation
-            answer = str(result.get("answer", "")).strip()
-            conversation.add_lore(answer or "I don't know based on the available story data.")
+            # Populate conversation with direct retrieval context.
+            conversation.add_lore(format_retrieval_context(result))
 
             # Citations
-            sources = result.get("sources") or []
+            sources = result.get("sources") or collect_directive_field(
+                result, "sources", include_scalars=False
+            )
             if sources:
                 conversation.write("[dim]citations:[/]")
                 for cid in sources[:10]:
@@ -339,8 +414,12 @@ class LoreQATerminal(App[None]):
 
             # Reasoning
             reasoning.clear()
-            if result.get("reasoning"):
-                reasoning.write(result["reasoning"])  # type: ignore[index]
+            reasoning_items = collect_directive_field(result, "reasoning")
+            if reasoning_items:
+                for item in reasoning_items:
+                    reasoning.write(str(item))
+            elif result.get("reasoning"):
+                reasoning.write(str(result["reasoning"]))  # type: ignore[index]
             else:
                 reasoning.write("[dim]No reasoning trace provided.[/]")
 
@@ -354,7 +433,9 @@ class LoreQATerminal(App[None]):
 
             # Search progress
             progress_table.clear(columns=False)
-            sp = result.get("search_progress") or []
+            sp = result.get("search_progress") or collect_directive_field(
+                result, "search_progress", include_scalars=False
+            )
             for idx, item in enumerate(sp, start=1):
                 if isinstance(item, dict):
                     q = str(item.get("query", ""))
@@ -364,7 +445,9 @@ class LoreQATerminal(App[None]):
 
             # SQL attempts
             sql_table.clear(columns=False)
-            attempts = result.get("sql_attempts") or []
+            attempts = result.get("sql_attempts") or collect_directive_field(
+                result, "sql_attempts", include_scalars=False
+            )
             for i, att in enumerate(attempts, start=1):
                 if isinstance(att, dict):
                     sql = str(att.get("sql", "")).replace("\n", " ")
@@ -384,22 +467,36 @@ class LoreQATerminal(App[None]):
             except Exception:
                 pass
 
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="LORE Q&A TUI or headless CLI")
-    parser.add_argument("--qa", help="Run headless Q&A with the given question (no TUI)")
-    parser.add_argument("--repl", action="store_true", help="Run interactive headless CLI (no TUI)")
-    parser.add_argument("--agentic-sql", action="store_true", help="Enable agentic SQL (default: ON via settings.json)")
-    parser.add_argument("--settings", default="settings.json", help="Path to settings.json for LORE (default: settings.json)")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging for headless mode")
-    parser.add_argument("--save-json", help="Path to save JSON transcript (headless mode)")
-    parser.add_argument("--save-md", help="Path to save Markdown summary (headless mode)")
-    parser.add_argument("--keep-model", action="store_true", help="Keep LM Studio model loaded (headless mode)")
+    parser.add_argument(
+        "--qa", help="Run headless Q&A with the given question (no TUI)"
+    )
+    parser.add_argument(
+        "--repl", action="store_true", help="Run interactive headless CLI (no TUI)"
+    )
+    parser.add_argument(
+        "--settings",
+        default="settings.json",
+        help="Path to settings.json for LORE (default: settings.json)",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debug logging for headless mode"
+    )
+    parser.add_argument(
+        "--save-json", help="Path to save JSON transcript (headless mode)"
+    )
+    parser.add_argument(
+        "--save-md", help="Path to save Markdown summary (headless mode)"
+    )
 
     args = parser.parse_args()
 
     if args.repl:
+
         async def _run_repl() -> int:
             """Run an interactive headless REPL for LORE Q&A.
 
@@ -410,23 +507,16 @@ if __name__ == "__main__":
                 from nexus.agents.lore.lore import LORE
 
                 lore = LORE(settings_path=args.settings, debug=args.debug)
-                # Agentic SQL is ON by default in settings.json; flag forces ON if provided
-                if args.agentic_sql:
-                    lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
-                if args.keep_model and getattr(lore, "llm_manager", None):
-                    try:
-                        lore.llm_manager.unload_on_exit = False  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
 
                 print("LORE Q&A CLI — type 'exit' or Ctrl+D to quit.\n")
                 # Best-effort status line
                 try:
                     status = lore.get_status()  # type: ignore[attr-defined]
-                    comps = status.get("components", {}) if isinstance(status, dict) else {}
-                    model = "local" if comps.get("local_llm") else "unavailable"
+                    comps = (
+                        status.get("components", {}) if isinstance(status, dict) else {}
+                    )
                     db = "ok" if comps.get("memnon") else "unavailable"
-                    print(f"Status: model={model}; db={db}\n")
+                    print(f"Status: retrieval=direct; db={db}\n")
                 except Exception:
                     pass
 
@@ -449,17 +539,18 @@ if __name__ == "__main__":
                         continue
 
                     elapsed_ms = int((time.time() - start) * 1000)
-                    answer = str(result.get("answer", "")).strip()
-                    print(f"\nAnswer:\n{answer}\n")
+                    print(f"\nRetrieved context:\n{format_retrieval_context(result)}\n")
 
-                    sources = result.get("sources") or []
+                    sources = result.get("sources") or collect_directive_field(
+                        result, "sources", include_scalars=False
+                    )
                     if sources:
                         print("Citations:")
                         for cid in sources[:10]:
                             print(f"- chunk_id:{cid}")
                         print()
 
-                    reasoning_text = str(result.get("reasoning", "")).strip()
+                    reasoning_text = format_reasoning_metadata(result)
                     if reasoning_text:
                         print("Reasoning:")
                         print(reasoning_text)
@@ -467,13 +558,15 @@ if __name__ == "__main__":
 
                     queries = result.get("queries") or []
                     if queries:
-                        print("Generated queries:")
+                        print("Retrieval queries:")
                         for i, q in enumerate(queries, start=1):
                             q_text = str(q)
                             print(f" {i}. {q_text}")
                         print()
 
-                    attempts = result.get("sql_attempts") or []
+                    attempts = result.get("sql_attempts") or collect_directive_field(
+                        result, "sql_attempts", include_scalars=False
+                    )
                     if attempts:
                         print("SQL attempts:")
                         for i, att in enumerate(attempts, start=1):
@@ -493,18 +586,12 @@ if __name__ == "__main__":
 
         raise SystemExit(asyncio.run(_run_repl()))
     elif args.qa:
+
         async def _run_headless() -> int:
             try:
                 from nexus.agents.lore.lore import LORE
+
                 lore = LORE(settings_path=args.settings, debug=args.debug)
-                # Apply runtime options immediately so they affect the run
-                if args.keep_model and getattr(lore, "llm_manager", None):
-                    try:
-                        lore.llm_manager.unload_on_exit = False  # type: ignore[attr-defined]
-                    except Exception:
-                        pass
-                if args.agentic_sql:
-                    lore.settings.setdefault("Agent Settings", {}).setdefault("LORE", {}).setdefault("agentic_sql", True)
                 start = time.time()
                 result: Dict[str, Any] = await lore.answer_question(args.qa)
                 elapsed = time.time() - start
@@ -525,12 +612,16 @@ if __name__ == "__main__":
                     try:
                         out_md = Path(args.save_md)
                         out_md.parent.mkdir(parents=True, exist_ok=True)
+                        sources = result.get("sources") or collect_directive_field(
+                            result, "sources", include_scalars=False
+                        )
                         lines = [
                             f"# LORE Q&A\n",
                             f"Question: {args.qa}\n\n",
-                            f"Answer:\n\n{result.get('answer','')}\n\n",
-                            "Citations:\n" + "\n".join([f"- chunk_id:{cid}" for cid in (result.get('sources') or [])]),
-                            "\n\nReasoning:\n\n" + str(result.get("reasoning", "")),
+                            f"Retrieved context:\n\n{format_retrieval_context(result)}\n\n",
+                            "Citations:\n"
+                            + "\n".join([f"- chunk_id:{cid}" for cid in sources]),
+                            "\n\nReasoning:\n\n" + format_reasoning_metadata(result),
                             f"\n\nElapsed: {int(elapsed*1000)} ms\n",
                         ]
                         out_md.write_text("".join(lines))
@@ -538,7 +629,6 @@ if __name__ == "__main__":
                         pass
                 # Print to stdout
                 print(json.dumps(result, indent=2))
-                # keep-model already applied before run
                 return 0
             except Exception as e:
                 print(json.dumps({"error": str(e)}))
@@ -547,5 +637,3 @@ if __name__ == "__main__":
         raise SystemExit(asyncio.run(_run_headless()))
     else:
         LoreQATerminal().run()
-
-
