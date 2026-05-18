@@ -2,14 +2,13 @@
 1. Simple chat-like interface within Terminal-based UI displays recent narrative in markdown format. (See `gui_mockup.rtf`)
 2. User inputs next passage.
 
-# 02 Warm Analysis
+# 02 Warm Context
 1. `LORE` retrieves recent narrative chunks (warm slice) from the database.
-2. Local LLM analyzes the warm slice to identify:
-	   - characters present or mentioned
-	   - locations mentioned
-	   - context type (dialogue/action/exploration/transition)
-	   - entities requiring deeper retrieval
-3. Salience is determined through LLM semantic analysis of what entities are contextually important.
+2. If a parent/target chunk is known, it is anchored first and marked as the
+   target for raw-text retrieval.
+3. Stored Skald `authorial_directives` are loaded from the target/latest chunk.
+4. Phase metadata records chunk ids and directive count; no local LLM analysis
+   runs here.
 
 # 03 World State Report - Programmatic Entity Queries
 1. `LORE` executes programmatic database queries to retrieve entity states based on `entity_inclusion` settings in settings.json.
@@ -27,14 +26,11 @@
 	   - `active_threat_statuses`: Threat status values to consider active (default: ["active", "imminent"])
 
 # 04 Deep Queries
-1. Local LLM generates 3-5 targeted retrieval queries based on narrative context analysis.
-2. Queries are designed to retrieve relevant past events, character history, and world information.
-3. Examples:
-	   - "What is Alex's history with The Bridge?"
-	   - "How has Emilia acted in similar high-stakes situations?"
-	   - "When did Alina and Lansky first interact?"
-4. Queries are classified by `MEMNON`'s QueryAnalyzer for optimal search strategy.
-5. Queries are sent to `MEMNON` for retrieval.
+1. The full target/latest chunk text is used as the first retrieval query when available.
+2. Stored Skald `authorial_directives` fill the remaining configured query budget.
+3. MEMNON's QueryAnalyzer classifies the raw chunk query for optimal search strategy.
+4. Queries are sent to `MEMNON` for retrieval. If no raw text or directives are
+   available, the phase skips instead of summoning a local LLM fallback.
 
 # 05 Cold Distillation
 1. For each query, `MEMNON` performs hybrid search combining vector similarity and text search.

@@ -250,7 +250,7 @@ class EntityInclusionConfig(BaseModel):
 
 
 class LORERetrievalSettings(BaseModel):
-    """LORE retrieval query generation settings."""
+    """LORE retrieval settings."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -258,11 +258,6 @@ class LORERetrievalSettings(BaseModel):
         default=5,
         ge=1,
         description="Maximum MEMNON queries to execute during LORE deep-query pass",
-    )
-    fallback_query: str = Field(
-        default="Recent narrative events",
-        min_length=1,
-        description="Fallback MEMNON query when local query generation yields none",
     )
 
 

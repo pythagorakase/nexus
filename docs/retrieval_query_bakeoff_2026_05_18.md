@@ -6,14 +6,15 @@ This diagnostic run compared three next-turn retrieval query sources:
 
 - `raw_chunk`: the full source chunk text as one MEMNON query.
 - `skald_directives`: Storyteller-style authorial retrieval directives.
-- `local_llm`: locally generated retrieval queries from warm analysis.
+- `local_llm`: locally generated retrieval queries from the now-removed warm
+  analysis path.
 
 The strongest result is that full raw chunk text should be the first-line
 retrieval baseline. It was faster and clearly stronger on future-oracle metrics
-than either smart-query path in this run. Skald/local queries still look useful
-as targeted augmenters, especially for entity continuity in newer stories, but
-the data does not support treating local LLM query generation as the primary
-retrieval pillar.
+than either smart-query path in this run. Skald directives still look useful as
+targeted augmenters, especially for entity continuity in newer stories, but the
+data did not support keeping local LLM query generation in the live retrieval
+path.
 
 ## Method
 
@@ -87,16 +88,16 @@ targeted directives can still add useful continuity coverage in newer stories.
 
 Use full raw parent/current chunk text as the default first retrieval query.
 Then spend the remaining query budget on targeted Storyteller directives.
-Treat local LLM generated queries as an optional fallback or gap-filler rather
-than a primary dependency.
+Do not treat local LLM generated queries as a live fallback; historical cached
+results remain useful only for reproducing this bake-off.
 
-The next production change should be narrow:
+The production change landed as a narrow path:
 
 - Insert a `raw_chunk` retrieval query at the start of LORE deep queries when a
   current/parent chunk text is available.
 - Keep `authorial_directives` after the raw query, up to the configured
   `lore.retrieval.max_deep_queries` budget.
-- Use local LLM queries only for unfilled query slots.
+- Skip deep queries if neither raw text nor directives are available.
 
 That preserves the useful targeted-query path while removing the system's
 dependence on a brittle local inference step that frequently fell back or
