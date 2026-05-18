@@ -35,7 +35,7 @@ COMMENT ON COLUMN incubator.reference_updates IS 'JSON: {character_present: [], 
 COMMENT ON COLUMN incubator.authorial_directives IS 'Storyteller-authored retrieval directives for the successor turn';
 COMMENT ON COLUMN incubator.orrery_proposal IS 'No-write OrreryTickProposal generated during preview; stamped into canonical Orrery tables only when the incubator chunk is accepted.';
 COMMENT ON COLUMN incubator.session_id IS 'UUID for tracking regeneration attempts';
-COMMENT ON COLUMN incubator.llm_response_id IS 'OpenAI or LM Studio response ID for debugging';
+COMMENT ON COLUMN incubator.llm_response_id IS 'Provider response ID for debugging';
 COMMENT ON COLUMN incubator.status IS 'Status: provisional (pending approval), approved (ready to commit), committed (written to main tables)';
 
 -- Create a view for easy inspection of incubator contents

@@ -86,80 +86,19 @@ class ProviderModels(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """LLM model configuration with provider grouping."""
+    """Model defaults and provider registry."""
 
     model_config = ConfigDict(extra="forbid")
 
     default_model: str = Field(
-        ..., description="Default model to load for local inference"
+        ..., description="Default model label shown by legacy settings consumers"
     )
-    possible_values: List[str] = Field(..., description="Available local model options")
     default_slot_model: str = Field(
         default="TEST", description="Default model for newly created/reset slots"
     )
     api_models: Dict[str, ProviderModels] = Field(
         default_factory=dict,
         description="API models grouped by provider (openai, anthropic, test)",
-    )
-
-
-class LLMConfig(BaseModel):
-    """Local LLM API settings (LM Studio)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    api_base: str = Field(..., description="LM Studio API endpoint")
-    context_window: int = Field(..., ge=1024, description="Maximum context length")
-    temperature: float = Field(..., ge=0.0, le=2.0, description="Sampling temperature")
-    max_tokens: int = Field(..., ge=1, description="Maximum output tokens")
-
-
-class LLMEndpointConfig(BaseModel):
-    """Endpoint configuration for LM Studio backends."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    base_url: str = Field(..., description="Base URL for the LM Studio server")
-    model: Optional[str] = Field(
-        default=None,
-        description="Model identifier for inference (overrides global default)",
-    )
-
-
-class LLMCloudConfig(BaseModel):
-    """Cloud provider configuration for LLM fallback.
-
-    Keys are no longer named here -- runtime lookups go through
-    ``nexus.util.secret_manager.get_secret(<provider>)`` which reads from
-    macOS Keychain.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    provider: str = Field(..., pattern="^(openai|anthropic)$")
-    model: str = Field(..., description="Cloud model identifier")
-
-
-class LLMRoutingConfig(BaseModel):
-    """Routing configuration for the pluggable LLM layer."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    mode: Literal["local", "remote", "cloud", "auto"] = Field(
-        default="auto",
-        description="Backend routing mode",
-    )
-    local: Optional[LLMEndpointConfig] = Field(
-        default=None,
-        description="Local LM Studio backend configuration",
-    )
-    remote: Optional[LLMEndpointConfig] = Field(
-        default=None,
-        description="Remote LM Studio backend configuration",
-    )
-    cloud: Optional[LLMCloudConfig] = Field(
-        default=None,
-        description="Cloud provider fallback configuration",
     )
 
 
@@ -188,7 +127,6 @@ class GlobalSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: ModelConfig
-    llm: LLMConfig
     narrative: NarrativeConfig
     api: Optional[GlobalAPIConfig] = Field(
         default=None, description="API configuration"
@@ -828,10 +766,6 @@ class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     global_: GlobalSettings = Field(..., alias="global")
-    llm: Optional[LLMRoutingConfig] = Field(
-        default=None,
-        description="Pluggable LLM routing configuration",
-    )
     secrets: Optional[SecretsConfig] = Field(
         default=None,
         description="Provider -> 1Password reference mappings (sync_secrets.py only)",
@@ -871,14 +805,6 @@ class Settings(BaseModel):
             targets.append((self.orrery.narration, "model_ref", False))
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))
-        # [llm.cloud] is the cloud-fallback routing target for the pluggable
-        # LLM layer; it does inference like any other consumer, so it goes
-        # through the same registry resolution + validation as APEX, wizard,
-        # and ir_eval.judgment. Two-level guard because both [llm] (the whole
-        # routing section) and [llm.cloud] (the fallback subsection) are
-        # independently optional in the schema.
-        if self.llm is not None and self.llm.cloud is not None:
-            targets.append((self.llm.cloud, "model", False))
 
         for container, attr, optional in targets:
             current = getattr(container, attr)

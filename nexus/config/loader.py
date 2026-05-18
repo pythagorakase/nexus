@@ -39,7 +39,7 @@ def save_settings(
 
     Args:
         updates: Dictionary of updates using dot-notation keys.
-                 Example: {"global.model.possible_values": ["model1", "model2"]}
+                 Example: {"global.model.default_model": "@openai.default"}
         path: Path to TOML file (default: nexus.toml)
         validate: If True, validate the merged config against Pydantic models
                   before writing. Raises ValidationError if invalid.
@@ -216,8 +216,7 @@ def load_settings(path: Union[str, Path] = "nexus.toml") -> Settings:
             return _load_from_json(legacy_path)
         else:
             raise FileNotFoundError(
-                f"Configuration file not found: {path}\n"
-                f"Also checked: {legacy_path}"
+                f"Configuration file not found: {path}\n" f"Also checked: {legacy_path}"
             )
 
     # Load based on file extension
@@ -262,31 +261,18 @@ def _load_from_json(path: Path) -> Settings:
     legacy_agent_settings = data.get("Agent Settings", {})
     legacy_global = legacy_agent_settings.get("global", {})
     legacy_model = dict(legacy_global.get("model", {}))
+    legacy_model.pop("possible_values", None)
+    legacy_model.pop("description", None)
     # If api_models is missing from legacy JSON, the Settings validator will
     # surface a clear error rather than silently filling in stale defaults.
 
     legacy_new_story = data.get("API Settings", {}).get("new_story", {})
 
-    legacy_llm_router = data.get("llm")
-    if legacy_llm_router is None:
-        legacy_llm = legacy_global.get("llm", {})
-        api_base = legacy_llm.get("api_base")
-        if api_base:
-            base = str(api_base).rstrip("/")
-            if not base.endswith("/v1"):
-                base = f"{base}/v1"
-            legacy_llm_router = {
-                "mode": "local",
-                "local": {"base_url": base},
-            }
-
     transformed_data = {
         "global": {
             "model": legacy_model,
-            "llm": legacy_global.get("llm", {}),
             "narrative": legacy_global.get("narrative", {}),
         },
-        "llm": legacy_llm_router,
         "lore": legacy_agent_settings.get("LORE", {}),
         "memnon": legacy_agent_settings.get("MEMNON", {}),
         "memory": data.get("memory", {}),
@@ -307,7 +293,10 @@ def _load_from_json(path: Path) -> Settings:
     except Exception as e:
         print(f"❌ Error validating legacy {path}:", file=sys.stderr)
         print(f"   {e}", file=sys.stderr)
-        print(f"   Note: Legacy settings.json may not be fully compatible.", file=sys.stderr)
+        print(
+            f"   Note: Legacy settings.json may not be fully compatible.",
+            file=sys.stderr,
+        )
         print(f"   Please migrate to nexus.toml.", file=sys.stderr)
         raise
 

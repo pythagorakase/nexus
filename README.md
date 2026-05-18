@@ -47,10 +47,9 @@ The `./iris` helper script now orchestrates every service required for UI work:
 1. `cd /Users/pythagor/nexus && poetry install` (first run only).
 2. `./iris`
    - Boots the Vite/Express dev server (default port 5001, respecting `PORT`).
-   - Starts the Audition FastAPI app on `API_PORT` (default `8000`) and proxies it through `/api/audition`.
-   - Starts the Core FastAPI model manager on `CORE_API_PORT` (default `8001`) and exposes it via `/api/models` + `/api/health`.
+   - Starts the Narrative FastAPI app on `NARRATIVE_API_PORT` (default `8002`) and proxies story, config, chunk, and wizard routes through the UI server.
 
-The Core API expects LM Studio plus the `lmstudio` Python SDK to be available locally so it can query `/api/models/status` and load/unload models. If you need to run components manually, start both FastAPI apps with `poetry run uvicorn nexus.api.apex_audition:app --reload --port 8000` and `poetry run uvicorn nexus.api.core:app --reload --port 8001`, then run `npm run dev` inside `ui/` with matching `API_PORT`/`CORE_API_PORT` environment variables so the proxies target the correct ports.
+If you need to run components manually, start the Narrative API with `poetry run uvicorn nexus.api.narrative:app --reload --port 8002`, then run `npm run dev` inside `ui/` with a matching `NARRATIVE_API_PORT` environment variable so the proxies target the correct port.
 
 For longer debugging sessions you can now supervise every service with the included `Procfile.dev`. Install either [Honcho](https://honcho.readthedocs.io/en/latest/) (`pip install honcho`) or Foreman (`brew install foreman`), then run:
 
@@ -58,7 +57,7 @@ For longer debugging sessions you can now supervise every service with the inclu
 honcho start -f Procfile.dev
 ```
 
-The Procfile respects the same `PORT`, `API_PORT`, and `CORE_API_PORT` variables as `./iris`, so you can override any of them before launching if a port is already in use.
+The Procfile respects the same `PORT` and `NARRATIVE_API_PORT` variables as `./iris`, so you can override either before launching if a port is already in use.
 If `DATABASE_URL` is unset, it automatically falls back to the local `postgresql://pythagor@localhost:5432/NEXUS`, mirroring the `iris` defaults.
 
 # 2. System Architecture
@@ -313,12 +312,11 @@ NEXUS features a modern React/TypeScript web interface built with Vite and shadc
   - **Seed Phase**: Story opening type, location hierarchy, timestamp, secrets channel
 - **Wizard Features**: "Accept Fate" button for autonomous Skald progression, structured choice system (2-4 options per response), interactive trait selector
 - **Save Slot System**: 5-slot save system for managing multiple narrative sessions (slot 1 protected)
-- **Status Bar**: Real-time display of model status, APEX connectivity, and generation state
+- **Status Bar**: Real-time display of configured model, APEX connectivity, and generation state
 - **Responsive Layout**: Adapts to different screen sizes with collapsible panels
 
 ## 5.2 Development Server
 
 The `./iris` script orchestrates all services:
 - Vite/Express dev server (default port 5001)
-- Audition FastAPI app (port 8000, proxied via `/api/audition`)
-- Core FastAPI model manager (port 8001, exposed via `/api/models` + `/api/health`)
+- Narrative FastAPI app (port 8002, proxied for story, config, chunk, and wizard routes)
