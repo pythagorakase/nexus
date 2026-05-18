@@ -666,6 +666,11 @@ async def main():
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
     parser.add_argument("--status", action="store_true", help="Show component status")
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")
+    parser.add_argument(
+        "--keep-model",
+        action="store_true",
+        help="Deprecated no-op; contextual retrieval no longer loads a local model",
+    )
     args = parser.parse_args()
 
     # Configure logging
@@ -701,6 +706,11 @@ async def main():
                 "Usage: python lore.py 'directive1' 'directive2' ... --chunk <chunk_id>"
             )
             return
+
+        if args.keep_model:
+            logger.info(
+                "--keep-model ignored; contextual retrieval no longer loads a local model"
+            )
 
         logger.info(
             f"Processing {len(directives)} retrieval directive(s) for chunk {args.chunk}"

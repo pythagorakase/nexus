@@ -146,7 +146,7 @@ def test_warm_analysis_loads_parent_authorial_directives(
     assert ctx.phase_states["warm_analysis"]["authorial_directive_count"] == 1
 
 
-def test_deep_queries_use_authorial_directives_without_local_llm(
+def test_deep_queries_use_authorial_directives_without_generated_queries(
     turn_manager: TurnCycleManager,
 ):
     class DummyMemnon:
@@ -352,11 +352,11 @@ def test_deep_queries_obey_configured_query_budget(
     }
 
 
-def test_deep_queries_can_skip_without_local_llm_or_queries(
+def test_deep_queries_can_skip_without_raw_text_or_directives(
     turn_manager: TurnCycleManager,
     caplog: pytest.LogCaptureFixture,
 ):
-    """Missing raw text and directives should skip rather than summon a local LLM."""
+    """Missing raw text and directives should skip retrieval."""
 
     class DummyMemnon:
         def query_memory(
