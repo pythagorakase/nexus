@@ -17,6 +17,7 @@ nexus_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(nexus_root))
 
 from nexus.agents.lore.utils.local_llm import (
+    _sanitize_retrieval_queries,
     LocalLLMManager,
     NarrativeAnalysis,
     LMS_SDK_AVAILABLE
@@ -166,6 +167,67 @@ class TestQueryGeneration:
             # Method should exist
             assert hasattr(manager, 'generate_retrieval_queries')
             assert callable(getattr(manager, 'generate_retrieval_queries'))
+
+    def test_sanitize_retrieval_queries_rejects_model_chatter(self):
+        """Meta reasoning and prompt echoes should not become MEMNON queries."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "<|channel|>analysis<|message|>The user wants retrieval queries",
+                "We need to output exactly 3-5 lines.",
+                "1. Mara Vey debt history with the Archivum",
+                "- Past events at the Verdigris Scriptorium",
+                "Query 3: Hollow Choir obligation conflict",
+                "Mara Vey debt history with the Archivum",
+            ]
+        )
+
+        assert queries == [
+            "Mara Vey debt history with the Archivum",
+            "Past events at the Verdigris Scriptorium",
+            "Hollow Choir obligation conflict",
+        ]
+
+    @patch('nexus.agents.lore.utils.local_llm.LMS_SDK_AVAILABLE', False)
+    def test_text_query_generation_prefers_final_channel(self, settings, system_prompt):
+        """Leaked analysis-channel text should be discarded when final text exists."""
+        with patch('nexus.agents.lore.utils.local_llm.requests.get') as mock_get:
+            with patch('nexus.agents.lore.utils.local_llm.requests.post') as mock_post:
+                mock_get.return_value.status_code = 200
+
+                mock_llm_response = MagicMock()
+                mock_llm_response.status_code = 200
+                mock_llm_response.json.return_value = {
+                    "choices": [{
+                        "message": {
+                            "content": (
+                                "<|channel|>analysis<|message|>"
+                                "We need to generate 3-5 retrieval queries.\n"
+                                "<|channel|>final<|message|>\n"
+                                "1. Mara Vey debt history with the Archivum\n"
+                                "2. Past events at the Verdigris Scriptorium\n"
+                                "3. Hollow Choir obligation conflict"
+                            )
+                        }
+                    }]
+                }
+                mock_post.return_value = mock_llm_response
+
+                manager = LocalLLMManager(settings, system_prompt=system_prompt)
+                queries = manager.generate_retrieval_queries(
+                    {
+                        "characters": ["Mara Vey"],
+                        "locations": ["Verdigris Scriptorium"],
+                        "entities_for_retrieval": ["Archivum"],
+                        "context_type": "exploration",
+                    },
+                    "Study the fruit ledger.",
+                )
+
+        assert queries == [
+            "Mara Vey debt history with the Archivum",
+            "Past events at the Verdigris Scriptorium",
+            "Hollow Choir obligation conflict",
+        ]
     
     @patch('nexus.agents.lore.utils.local_llm.LMS_SDK_AVAILABLE', False)
     def test_queries_are_natural_language(self, settings, system_prompt):

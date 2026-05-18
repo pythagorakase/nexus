@@ -7,6 +7,8 @@ Handles initialization and interaction with local language models via LM Studio 
 import logging
 import requests
 import json
+import re
+import unicodedata
 from typing import Optional, Dict, Any, List, Type, Union
 from typing import Literal
 from pathlib import Path
@@ -19,6 +21,42 @@ except ImportError:
     LMS_SDK_AVAILABLE = False
 
 logger = logging.getLogger("nexus.lore.local_llm")
+
+_LM_FINAL_CHANNEL_MARKERS = (
+    "<|channel|>final<|message|>",
+    "<|start_header_id|>assistant<|end_header_id|>",
+)
+_LM_CONTROL_TOKEN_RE = re.compile(r"<\|[^>]+?\|>")
+_QUERY_PREFIX_RE = re.compile(
+    r"^(?:query\s*)?(?:\d+[\.)]|[-*•])\s*|^query\s*\d*\s*:\s*",
+    re.IGNORECASE,
+)
+_META_QUERY_PREFIXES = (
+    "analysis ",
+    "based on the current narrative context",
+    "context analysis",
+    "each query should",
+    "format:",
+    "generate ",
+    "here are",
+    "key entities",
+    "let's ",
+    "locations:",
+    "no numbering",
+    "output exactly",
+    "the user wants",
+    "thus produce",
+    "user input",
+    "we need",
+    "we should",
+)
+_META_QUERY_FRAGMENTS = (
+    "complete question or search phrase",
+    "generate retrieval queries",
+    "generate queries",
+    "one per line",
+    "retrieval queries to search",
+)
 
 
 # Pydantic models for structured responses
@@ -51,6 +89,64 @@ class RetrievalQueries(BaseModel):
         max_length=5,
         description="Retrieval queries for finding relevant narrative context"
     )
+
+
+def _extract_final_channel_text(response: str) -> str:
+    """Prefer assistant final-channel text when a local model leaks chat markers."""
+    for marker in _LM_FINAL_CHANNEL_MARKERS:
+        if marker in response:
+            return response.rsplit(marker, 1)[-1]
+    return response
+
+
+def _clean_retrieval_query(query: Any) -> Optional[str]:
+    """Normalize one candidate retrieval query and reject instruction/meta text."""
+    if not isinstance(query, str):
+        return None
+
+    cleaned = unicodedata.normalize("NFKD", query)
+    cleaned = cleaned.replace("\xa0", " ").replace("…", "...")
+    cleaned = _LM_CONTROL_TOKEN_RE.sub(" ", cleaned)
+    cleaned = " ".join(cleaned.split()).strip()
+    cleaned = _QUERY_PREFIX_RE.sub("", cleaned).strip(" \"'`")
+
+    if len(cleaned) <= 10:
+        return None
+
+    lowered = cleaned.lower()
+    if lowered.startswith(_META_QUERY_PREFIXES):
+        return None
+    if any(fragment in lowered for fragment in _META_QUERY_FRAGMENTS):
+        return None
+    if not any(character.isalpha() for character in cleaned):
+        return None
+    if len(re.findall(r"[A-Za-z0-9]+", cleaned)) < 3:
+        return None
+
+    return cleaned
+
+
+def _sanitize_retrieval_queries(queries: List[Any], limit: int = 5) -> List[str]:
+    """Return deduplicated, MEMNON-safe retrieval queries."""
+    valid_queries: List[str] = []
+    seen: set[str] = set()
+
+    for query in queries:
+        cleaned = _clean_retrieval_query(query)
+        if not cleaned:
+            continue
+
+        key = cleaned.casefold()
+        if key in seen:
+            continue
+
+        valid_queries.append(cleaned)
+        seen.add(key)
+
+        if len(valid_queries) >= limit:
+            break
+
+    return valid_queries
 
 
 class LocalLLMManager:
@@ -445,20 +541,7 @@ Each query should be a complete search phrase that captures what information you
                 logger.debug(f"Structured output result type: {type(result)}")
                 logger.debug(f"Parsed queries: {queries}")
 
-                # Clean up and validate queries
-                import unicodedata
-                valid_queries = []
-                for q in queries:
-                    if q:
-                        # Clean up non-breaking spaces and other Unicode artifacts
-                        cleaned = unicodedata.normalize('NFKD', q)
-                        cleaned = cleaned.replace('\xa0', ' ')  # Replace non-breaking spaces
-                        cleaned = cleaned.replace('…', '...')  # Replace ellipsis character
-                        cleaned = ' '.join(cleaned.split())  # Normalize whitespace
-
-                        # Check if the cleaned query is valid
-                        if len(cleaned.strip()) > 10:  # Minimum meaningful query length
-                            valid_queries.append(cleaned)
+                valid_queries = _sanitize_retrieval_queries(queries)
 
                 if valid_queries:
                     logger.info(f"Generated {len(valid_queries)} valid retrieval queries via structured output")
@@ -499,38 +582,29 @@ Each query should be a complete question or search phrase."""
                 system_prompt=system_prompt
             )
 
-            # Parse the response into individual queries
-            queries = []
-            for line in response.split('\n'):
-                line = line.strip()
-                # Skip empty lines, numbering, and bullets
-                if not line:
-                    continue
-                # Remove common numbering/bullet formats
-                if line and line[0].isdigit() and (line[1] == '.' or line[1] == ')'):
-                    line = line[2:].strip()
-                elif line.startswith('-') or line.startswith('*'):
-                    line = line[1:].strip()
-
-                if line and len(line) > 10:  # Minimum meaningful query length
-                    queries.append(line)
+            response = _extract_final_channel_text(response)
+            queries = _sanitize_retrieval_queries(response.splitlines())
 
             # Ensure we have between 3-5 queries
             if len(queries) < 3:
                 # Fallback: add generic queries based on user input
                 logger.warning(f"Only generated {len(queries)} queries, adding fallbacks")
+                fallback_candidates = []
                 if user_input:
-                    queries.append(user_input)
+                    fallback_candidates.append(user_input)
                 if characters:
-                    queries.append(f"What happened with {characters[0]}?")
+                    fallback_candidates.append(f"What happened with {characters[0]}?")
                 if locations:
-                    queries.append(f"Past events at {locations[0]}")
+                    fallback_candidates.append(f"Past events at {locations[0]}")
+                queries.extend(_sanitize_retrieval_queries(fallback_candidates))
+
+            queries = _sanitize_retrieval_queries(queries)
 
             # Limit to 5 queries
             queries = queries[:5]
 
             logger.info(f"Generated {len(queries)} retrieval queries via text parsing")
-            return queries
+            return queries or ["Recent narrative events"]
 
         except Exception as e:
             logger.error(f"Failed to generate retrieval queries: {e}")
@@ -542,6 +616,7 @@ Each query should be a complete question or search phrase."""
                 fallback_queries.append(f"Past events involving {characters[0]}")
             if locations:
                 fallback_queries.append(f"History of {locations[0]}")
+            fallback_queries = _sanitize_retrieval_queries(fallback_queries)
 
             # Ensure at least one query
             if not fallback_queries:

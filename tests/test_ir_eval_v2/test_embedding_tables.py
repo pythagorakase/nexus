@@ -5,6 +5,7 @@ import pytest
 from nexus.agents.memnon.utils.embedding_tables import (
     parse_embedding_table_dimensions,
     resolve_dimension_table,
+    supports_pgvector_ann_index,
     table_name_for_dimensions,
 )
 
@@ -36,3 +37,10 @@ def test_parse_embedding_table_dimensions() -> None:
     """Dimension parser recognizes canonical embedding table names only."""
     assert parse_embedding_table_dimensions("chunk_embeddings_1536d") == 1536
     assert parse_embedding_table_dimensions("chunk_embeddings_small") is None
+
+
+def test_pgvector_ann_index_dimension_limit() -> None:
+    """Local pgvector ANN indexes are only supported through 2000 dimensions."""
+    assert supports_pgvector_ann_index(2000)
+    assert not supports_pgvector_ann_index(2001)
+    assert not supports_pgvector_ann_index(2560)
