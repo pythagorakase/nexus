@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any, Dict
 
@@ -251,7 +252,7 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
         {
             "id": 10,
             "is_target": True,
-            "text": "Full parent chunk text with all the messy narrative details.",
+            "full_text": "Full parent chunk text with all the messy narrative details.",
         }
     ]
     ctx.authorial_directives = [
@@ -273,6 +274,63 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
         "raw_chunk": 1,
         "authorial_directive": 2,
         "llm_generated": 2,
+    }
+
+
+def test_deep_queries_warn_when_raw_chunk_suppresses_directives(
+    turn_manager: TurnCycleManager,
+    caplog: pytest.LogCaptureFixture,
+):
+    """A one-query budget should trace that raw text displaced directives."""
+
+    class DummyMemnon:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        def query_memory(
+            self, query: str, k: int, use_hybrid: bool
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            self.queries.append(query)
+            return {
+                "results": [
+                    {
+                        "id": len(self.queries),
+                        "score": 1.0,
+                        "text": f"Result for {query[:20]}",
+                    }
+                ]
+            }
+
+    memnon = DummyMemnon()
+    llm_manager = DummyLLMManager()
+    turn_manager.lore.memnon = memnon
+    turn_manager.lore.llm_manager = llm_manager
+    turn_manager.lore.settings["lore"] = {"retrieval": {"max_deep_queries": 1}}
+
+    ctx = TurnContext(
+        turn_id="turn_deep_raw_chunk_budget",
+        user_input="Continue.",
+        start_time=time.time(),
+    )
+    ctx.warm_slice = [
+        {
+            "id": 10,
+            "is_target": True,
+            "text": "Full parent chunk text.",
+        }
+    ]
+    ctx.authorial_directives = ["Directive query A"]
+    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
+
+    with caplog.at_level(logging.WARNING, logger="nexus.lore.turn_cycle"):
+        asyncio.run(turn_manager.execute_deep_queries(ctx))
+
+    assert memnon.queries == ["Full parent chunk text."]
+    assert "all authorial directives suppressed" in caplog.text
+    assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "raw_chunk": 1,
+        "authorial_directive": 0,
+        "llm_generated": 0,
     }
 
 
