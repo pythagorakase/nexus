@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS incubator (
     entity_updates JSONB DEFAULT '{}',                      -- Character/place/faction state changes
     reference_updates JSONB DEFAULT '{}',                   -- Entity references (present/mentioned)
     authorial_directives JSONB DEFAULT '[]',                -- Retrieval directives for the next turn
+    orrery_proposal JSONB,                                  -- No-write Orrery proposal awaiting approval
     session_id UUID NOT NULL DEFAULT gen_random_uuid(),     -- Track generation attempts
     llm_response_id TEXT,                                   -- API response ID for debugging
     status TEXT DEFAULT 'provisional',                      -- provisional -> approved -> committed
@@ -32,6 +33,7 @@ COMMENT ON COLUMN incubator.metadata_updates IS 'JSON: {episode_transition, time
 COMMENT ON COLUMN incubator.entity_updates IS 'JSON object of entity state changes: {characters: [], locations: [], factions: []}';
 COMMENT ON COLUMN incubator.reference_updates IS 'JSON: {character_present: [], character_referenced: [], place_referenced: []}';
 COMMENT ON COLUMN incubator.authorial_directives IS 'Storyteller-authored retrieval directives for the successor turn';
+COMMENT ON COLUMN incubator.orrery_proposal IS 'No-write OrreryTickProposal generated during preview; stamped into canonical Orrery tables only when the incubator chunk is accepted.';
 COMMENT ON COLUMN incubator.session_id IS 'UUID for tracking regeneration attempts';
 COMMENT ON COLUMN incubator.llm_response_id IS 'OpenAI or LM Studio response ID for debugging';
 COMMENT ON COLUMN incubator.status IS 'Status: provisional (pending approval), approved (ready to commit), committed (written to main tables)';
@@ -47,6 +49,7 @@ SELECT
     i.choice_object,
     i.choice_text,
     i.authorial_directives,
+    i.orrery_proposal,
     i.metadata_updates -> 'chronology' ->> 'episode_transition' AS episode_transition,
     i.metadata_updates -> 'chronology' ->> 'time_delta_description' AS time_delta,
     i.metadata_updates ->> 'world_layer' AS world_layer,

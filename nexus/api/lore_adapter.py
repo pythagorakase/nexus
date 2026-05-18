@@ -14,6 +14,7 @@ from nexus.api.choice_handling import (
     normalize_choice_object,
     selected_text_from_choice_object,
 )
+from nexus.util.authorial_directives import normalize_authorial_directives
 
 logger = logging.getLogger("nexus.api.lore_adapter")
 
@@ -99,11 +100,7 @@ def extract_authorial_directives(response: StoryTurnResponse) -> List[str]:
     """Extract normalized next-turn retrieval directives from a response."""
 
     directives = getattr(response, "authorial_directives", None) or []
-    return [
-        directive.strip()
-        for directive in directives
-        if isinstance(directive, str) and directive.strip()
-    ]
+    return normalize_authorial_directives(directives)
 
 
 def response_to_incubator(

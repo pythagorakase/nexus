@@ -5,7 +5,6 @@ Handles the execution of individual turn cycle phases.
 """
 
 import logging
-import json
 import time
 from typing import Dict, List, Any, Optional, Union, Iterable
 from datetime import datetime
@@ -32,6 +31,8 @@ try:
         record_bleed_offers,
         select_bleed_menu_async,
     )
+    from nexus.config.settings_models import LORERetrievalSettings
+    from nexus.util.authorial_directives import normalize_authorial_directives
 except ImportError:
     # If relative import fails, try absolute
     from nexus.agents.lore.utils.turn_context import TurnContext, TurnPhase
@@ -53,6 +54,8 @@ except ImportError:
         record_bleed_offers,
         select_bleed_menu_async,
     )
+    from nexus.config.settings_models import LORERetrievalSettings
+    from nexus.util.authorial_directives import normalize_authorial_directives
 
 try:
     from nexus.agents.memnon.utils.query_analysis import QueryAnalyzer
@@ -86,20 +89,7 @@ def _sorted_chunk_ids(chunk_ids: Iterable[Any]) -> List[Any]:
 def _coerce_authorial_directives(raw_directives: Any) -> List[str]:
     """Normalize authorial directives loaded from JSONB or structured responses."""
 
-    if isinstance(raw_directives, str):
-        try:
-            raw_directives = json.loads(raw_directives)
-        except json.JSONDecodeError:
-            raw_directives = [raw_directives]
-
-    if not isinstance(raw_directives, list):
-        return []
-
-    return [
-        directive.strip()
-        for directive in raw_directives
-        if isinstance(directive, str) and directive.strip()
-    ]
+    return normalize_authorial_directives(raw_directives, allow_json_string=True)
 
 
 class TurnCycleManager:
@@ -120,6 +110,21 @@ class TurnCycleManager:
         if MEMNON_ANALYZER_AVAILABLE:
             memnon_settings = self.settings.get("Agent Settings", {}).get("MEMNON", {})
             self.query_analyzer = QueryAnalyzer(memnon_settings)
+
+    def _max_deep_queries(self) -> int:
+        """Resolve the configured deep-query budget for one turn."""
+
+        retrieval_settings = self.settings.get("lore", {}).get("retrieval") or (
+            self.settings.get("Agent Settings", {}).get("LORE", {}).get("retrieval", {})
+        )
+        default_budget = LORERetrievalSettings().max_deep_queries
+        budget = retrieval_settings.get("max_deep_queries", default_budget)
+        try:
+            return max(1, int(budget))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Invalid LORE retrieval max_deep_queries setting: {budget!r}"
+            ) from exc
 
     async def process_user_input(self, turn_context: TurnContext):
         """
@@ -514,17 +519,15 @@ class TurnCycleManager:
                 "Cannot proceed with deep queries without narrative context analysis."
             )
 
-        incoming_directives = _coerce_authorial_directives(
-            turn_context.authorial_directives
-        )
-
         if getattr(self.lore, "memory_manager", None):
             self.lore.memory_manager.reset_pass1_queries()
 
         # Storyteller-authored directives are first-line retrieval input. The
         # local LLM fills any remaining query budget from the current analysis.
+        max_deep_queries = self._max_deep_queries()
+        incoming_directives = turn_context.authorial_directives
         queries = []
-        for directive in incoming_directives[:5]:
+        for directive in incoming_directives[:max_deep_queries]:
             queries.append(
                 {
                     "text": directive,
@@ -533,7 +536,7 @@ class TurnCycleManager:
                 }
             )
 
-        remaining_query_slots = max(0, 5 - len(queries))
+        remaining_query_slots = max(0, max_deep_queries - len(queries))
         llm_queries = []
         if remaining_query_slots:
             llm_queries = self.lore.llm_manager.generate_retrieval_queries(
@@ -562,7 +565,7 @@ class TurnCycleManager:
         all_results = []
         query_type_counts = {}
 
-        for query_obj in queries[:5]:  # Limit to 5 queries
+        for query_obj in queries[:max_deep_queries]:
             if getattr(self.lore, "memory_manager", None):
                 self.lore.memory_manager.record_pass1_query(query_obj["text"])
             try:
@@ -611,10 +614,12 @@ class TurnCycleManager:
             "query_types": query_type_counts,
             "query_sources": {
                 "authorial_directive": sum(
-                    1 for query in queries if query["source"] == "authorial_directive"
+                    1
+                    for query in queries
+                    if query.get("source") == "authorial_directive"
                 ),
                 "llm_generated": sum(
-                    1 for query in queries if query["source"] == "llm_generated"
+                    1 for query in queries if query.get("source") == "llm_generated"
                 ),
             },
             "results_retrieved": len(unique_results),

@@ -20,6 +20,10 @@ from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import datetime
 
+from nexus.util.authorial_directives import (
+    normalize_authorial_directives as normalize_directive_list,
+)
+
 # Import all database ENUMs
 from nexus.agents.logon.apex_enums import (
     AgentType,
@@ -823,11 +827,7 @@ class AuthorialDirectivesMixin(BaseModel):
     def normalize_authorial_directives(cls, directives: List[str]) -> List[str]:
         """Trim empty directive strings before persistence and prompt echoing."""
 
-        normalized = [
-            directive.strip()
-            for directive in directives
-            if isinstance(directive, str) and directive.strip()
-        ]
+        normalized = normalize_directive_list(directives)
         if not normalized:
             raise ValueError("authorial_directives must include at least one directive")
         return normalized
