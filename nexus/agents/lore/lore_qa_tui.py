@@ -61,7 +61,12 @@ def format_retrieval_context(result: Dict[str, Any]) -> str:
     )
 
 
-def collect_directive_field(result: Dict[str, Any], field_name: str) -> List[Any]:
+def collect_directive_field(
+    result: Dict[str, Any],
+    field_name: str,
+    *,
+    include_scalars: bool = True,
+) -> List[Any]:
     """Collect per-directive retrieval metadata into one flat list."""
 
     collected: List[Any] = []
@@ -75,9 +80,25 @@ def collect_directive_field(result: Dict[str, Any], field_name: str) -> List[Any
         value = payload.get(field_name)
         if isinstance(value, list):
             collected.extend(value)
-        elif value:
+        elif include_scalars and value:
             collected.append(value)
     return collected
+
+
+def format_reasoning_metadata(result: Dict[str, Any]) -> str:
+    """Format top-level or per-directive reasoning metadata for export."""
+
+    reasoning_items = collect_directive_field(result, "reasoning")
+    if not reasoning_items:
+        return str(result.get("reasoning", "")).strip()
+
+    rendered = []
+    for item in reasoning_items:
+        if isinstance(item, (dict, list)):
+            rendered.append(json.dumps(item, indent=2, sort_keys=True))
+        else:
+            rendered.append(str(item))
+    return "\n\n".join(rendered)
 
 
 class StatusBar(Static):
@@ -383,7 +404,9 @@ class LoreQATerminal(App[None]):
             conversation.add_lore(format_retrieval_context(result))
 
             # Citations
-            sources = result.get("sources") or []
+            sources = result.get("sources") or collect_directive_field(
+                result, "sources", include_scalars=False
+            )
             if sources:
                 conversation.write("[dim]citations:[/]")
                 for cid in sources[:10]:
@@ -411,7 +434,7 @@ class LoreQATerminal(App[None]):
             # Search progress
             progress_table.clear(columns=False)
             sp = result.get("search_progress") or collect_directive_field(
-                result, "search_progress"
+                result, "search_progress", include_scalars=False
             )
             for idx, item in enumerate(sp, start=1):
                 if isinstance(item, dict):
@@ -423,7 +446,7 @@ class LoreQATerminal(App[None]):
             # SQL attempts
             sql_table.clear(columns=False)
             attempts = result.get("sql_attempts") or collect_directive_field(
-                result, "sql_attempts"
+                result, "sql_attempts", include_scalars=False
             )
             for i, att in enumerate(attempts, start=1):
                 if isinstance(att, dict):
@@ -518,22 +541,19 @@ if __name__ == "__main__":
                     elapsed_ms = int((time.time() - start) * 1000)
                     print(f"\nRetrieved context:\n{format_retrieval_context(result)}\n")
 
-                    sources = result.get("sources") or []
+                    sources = result.get("sources") or collect_directive_field(
+                        result, "sources", include_scalars=False
+                    )
                     if sources:
                         print("Citations:")
                         for cid in sources[:10]:
                             print(f"- chunk_id:{cid}")
                         print()
 
-                    reasoning_items = collect_directive_field(result, "reasoning")
-                    reasoning_text = str(result.get("reasoning", "")).strip()
-                    if reasoning_items or reasoning_text:
+                    reasoning_text = format_reasoning_metadata(result)
+                    if reasoning_text:
                         print("Reasoning:")
-                        if reasoning_items:
-                            for item in reasoning_items:
-                                print(item)
-                        else:
-                            print(reasoning_text)
+                        print(reasoning_text)
                         print()
 
                     queries = result.get("queries") or []
@@ -545,7 +565,7 @@ if __name__ == "__main__":
                         print()
 
                     attempts = result.get("sql_attempts") or collect_directive_field(
-                        result, "sql_attempts"
+                        result, "sql_attempts", include_scalars=False
                     )
                     if attempts:
                         print("SQL attempts:")
@@ -592,18 +612,16 @@ if __name__ == "__main__":
                     try:
                         out_md = Path(args.save_md)
                         out_md.parent.mkdir(parents=True, exist_ok=True)
+                        sources = result.get("sources") or collect_directive_field(
+                            result, "sources", include_scalars=False
+                        )
                         lines = [
                             f"# LORE Q&A\n",
                             f"Question: {args.qa}\n\n",
                             f"Retrieved context:\n\n{format_retrieval_context(result)}\n\n",
                             "Citations:\n"
-                            + "\n".join(
-                                [
-                                    f"- chunk_id:{cid}"
-                                    for cid in (result.get("sources") or [])
-                                ]
-                            ),
-                            "\n\nReasoning:\n\n" + str(result.get("reasoning", "")),
+                            + "\n".join([f"- chunk_id:{cid}" for cid in sources]),
+                            "\n\nReasoning:\n\n" + format_reasoning_metadata(result),
                             f"\n\nElapsed: {int(elapsed*1000)} ms\n",
                         ]
                         out_md.write_text("".join(lines))
