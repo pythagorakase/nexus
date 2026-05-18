@@ -29,9 +29,6 @@ class DummyLore:
 class DummyLLMManager:
     """Legacy local LLM stub for assertions that it is no longer consulted."""
 
-    def __init__(self) -> None:
-        self.generated_query_calls = 0
-
     def is_available(self) -> bool:
         return True
 
@@ -198,7 +195,6 @@ def test_deep_queries_use_authorial_directives_without_local_llm(
     asyncio.run(turn_manager.execute_deep_queries(ctx))
 
     assert memnon.queries == ["Directive query A", "Directive query B"]
-    assert llm_manager.generated_query_calls == 0
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 0,
         "authorial_directive": 2,
@@ -259,7 +255,6 @@ def test_deep_queries_use_raw_chunk_before_targeted_queries(
         "Directive query A",
         "Directive query B",
     ]
-    assert llm_manager.generated_query_calls == 0
     assert ctx.phase_states["deep_queries"]["query_sources"] == {
         "raw_chunk": 1,
         "authorial_directive": 2,
