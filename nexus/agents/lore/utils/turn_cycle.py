@@ -775,6 +775,12 @@ class TurnCycleManager:
         if turn_context.note:
             turn_context.context_payload["note"] = turn_context.note
 
+        proposal: Any = turn_context.orrery_proposal
+        if proposal and getattr(proposal, "resolution_count", 0):
+            turn_context.context_payload["orrery_imminent_activity"] = [
+                draft.to_dict() for draft in proposal.resolutions
+            ]
+
         if turn_context.orrery_proposal and turn_context.orrery_proposal.pressure_count:
             turn_context.context_payload["orrery_scene_pressures"] = [
                 pressure.to_dict()

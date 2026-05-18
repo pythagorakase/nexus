@@ -40,6 +40,7 @@ class RecordingCursor:
         route_graph_edges=None,
         authored_route_edges=None,
         travel_state_update_rowcount=1,
+        character_entity_ids=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -56,6 +57,9 @@ class RecordingCursor:
         self.route_graph_edges = list(route_graph_edges or [])
         self.authored_route_edges = list(authored_route_edges or [])
         self.travel_state_update_rowcount = travel_state_update_rowcount
+        self.character_entity_ids = (
+            {11: 1} if character_entity_ids is None else character_entity_ids
+        )
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -76,6 +80,16 @@ class RecordingCursor:
         if "FROM entities WHERE id = ANY" in normalized:
             entity_ids = params[0]
             self._fetchall = [{"id": entity_id} for entity_id in entity_ids]
+        elif "FROM characters WHERE id = ANY" in normalized:
+            character_ids = params[0]
+            self._fetchall = [
+                {
+                    "id": character_id,
+                    "entity_id": self.character_entity_ids[character_id],
+                }
+                for character_id in character_ids
+                if character_id in self.character_entity_ids
+            ]
         elif "FROM entity_names_v WHERE id = ANY" in normalized:
             names = {1: "Mara", 2: "Vale"}
             self._fetchall = [
@@ -415,8 +429,10 @@ def test_proposal_round_trips_through_json_shape() -> None:
     """Commit can hydrate the exact proposal shape stored in incubator JSONB."""
 
     proposal = _proposal()
+    payload = proposal.to_dict()
 
-    assert OrreryTickProposal.from_dict(proposal.to_dict()) == proposal
+    assert payload["resolutions"][0]["proposal_id"] == "evade_pursuers:abc123"
+    assert OrreryTickProposal.from_dict(payload) == proposal
 
 
 def test_proposal_round_trips_scene_pressures_without_state_delta() -> None:
@@ -446,6 +462,35 @@ def test_response_to_incubator_serializes_orrery_proposal() -> None:
         "evade_pursuers"
     )
     assert incubator_data["orrery_proposal"]["scene_pressures"] == []
+
+
+def test_response_to_incubator_serializes_orrery_adjudications() -> None:
+    """Skald's structured Orrery rulings ride the incubator handoff."""
+
+    class ResponseWithAdjudication(MinimalStoryResponse):
+        orrery_adjudications = [
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "defer",
+                "note": "Hold for the next beat.",
+            }
+        ]
+
+    incubator_data = response_to_incubator(
+        ResponseWithAdjudication(),
+        parent_chunk_id=99,
+        user_text="Continue.",
+        session_id="session-1",
+        orrery_proposal=_proposal(),
+    )
+
+    assert incubator_data["orrery_adjudications"] == [
+        {
+            "proposal_id": "evade_pursuers:abc123",
+            "action": "defer",
+            "note": "Hold for the next beat.",
+        }
+    ]
 
 
 def test_commit_orrery_tick_ignores_scene_pressures() -> None:
@@ -503,6 +548,168 @@ def test_commit_orrery_tick_materializes_resolution_event_and_tags() -> None:
     assert "INSERT INTO world_event_entities" in statements
     assert "INSERT INTO tag_clearance_log" in statements
     assert resolution_params[-1] == "Mara vanishes into a maintenance corridor."
+
+
+def test_commit_orrery_tick_defers_explicit_adjudication() -> None:
+    """Defer preserves pressure by skipping materialization this tick."""
+
+    cursor = RecordingCursor()
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        adjudications=[
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "defer",
+                "note": "Not during this exchange.",
+            }
+        ],
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert result.resolution_count == 0
+    assert result.event_count == 0
+    assert result.adjudication_count == 1
+    assert result.deferred_count == 1
+    assert "INSERT INTO orrery_adjudication_log" in statements
+    assert "INSERT INTO orrery_resolutions" not in statements
+    assert "UPDATE characters SET current_activity" not in statements
+
+
+def test_commit_orrery_tick_voids_explicit_adjudication() -> None:
+    """Void records a definitive Skald cancellation without side effects."""
+
+    cursor = RecordingCursor()
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        adjudications=[
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "void",
+                "note": "The pursuit no longer exists.",
+            }
+        ],
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+
+    assert result.resolution_count == 0
+    assert result.adjudication_count == 1
+    assert result.voided_count == 1
+    assert "INSERT INTO orrery_adjudication_log" in statements
+    assert "INSERT INTO world_events" not in statements
+
+
+def test_commit_orrery_tick_replaces_from_structured_state_update() -> None:
+    """Structured Skald writes to the same entity/field beat Orrery proposals."""
+
+    cursor = RecordingCursor()
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        storyteller_state_updates={
+            "characters": [
+                {"character_id": 11, "current_activity": "arguing in the room"}
+            ]
+        },
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    audit_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO orrery_adjudication_log" in sql
+    )
+
+    assert result.resolution_count == 0
+    assert result.adjudication_count == 1
+    assert result.replaced_count == 1
+    assert audit_params[5] == "structured_state_update"
+    assert "INSERT INTO orrery_resolutions" not in statements
+    assert "UPDATE characters SET current_activity" not in statements
+
+
+def test_commit_orrery_tick_replaces_with_explicit_delta() -> None:
+    """Replace can commit a Skald-authored Orrery-compatible delta."""
+
+    cursor = RecordingCursor()
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        adjudications=[
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "replace",
+                "note": "Mara stays engaged instead of vanishing.",
+                "replacement_state_delta": {
+                    "character_current_activity": "arguing in the room"
+                },
+            }
+        ],
+    )
+
+    activity_params = next(
+        params
+        for sql, params in cursor.executed
+        if "UPDATE characters SET current_activity" in sql
+    )
+    audit_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO orrery_adjudication_log" in sql
+    )
+
+    assert result.resolution_count == 1
+    assert result.event_count == 0
+    assert result.adjudication_count == 1
+    assert result.replaced_count == 1
+    assert activity_params == ("arguing in the room", 1)
+    assert audit_params[5] == "explicit"
+    assert not any("INSERT INTO world_events" in sql for sql, _ in cursor.executed)
+
+
+def test_commit_orrery_tick_replacement_event_type_is_explicit() -> None:
+    """Replacement deltas only emit canonical events when Skald names the event."""
+
+    cursor = RecordingCursor()
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        adjudications=[
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "character_current_activity": "ducking out of sight"
+                },
+                "replacement_event_type": "evade_pursuit",
+            }
+        ],
+    )
+
+    event_params = next(
+        params for sql, params in cursor.executed if "INSERT INTO world_events" in sql
+    )
+
+    assert result.event_count == 1
+    assert event_params[0] == "evade_pursuit"
 
 
 def test_commit_orrery_tick_skips_existing_resolution_without_double_writes() -> None:

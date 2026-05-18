@@ -70,6 +70,16 @@
 
 PR #219 implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping only after successful generation, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
 
+### Authority Model for Issue #275
+
+- Skald is sovereign. Current-tick Orrery resolutions enter the storyteller payload as `orrery_imminent_activity`, each with a stable `proposal_id`.
+- Absence of an `orrery_adjudications` entry means ratify: accepted commits materialize the proposal as before.
+- `defer` skips materialization this tick and logs the decision; persistent substrate pressure can reappear on later ticks if the underlying state still warrants it.
+- `void` skips materialization and logs that Skald considers the proposal definitively wrong or no longer true.
+- `replace` skips the original proposal. If Skald provides `replacement_state_delta`, commit materializes that limited Orrery-compatible delta instead; if not, commit assumes Skald handled the replacement through normal structured `state_updates` or prose. Replacement deltas only emit canonical world events when Skald also provides `replacement_event_type`.
+- Commit also infers `replace` without prose parsing when Skald's structured character `state_updates` touch the same actor/field that an Orrery proposal would change. This prevents Orrery from overwriting ordinary authoritative state writes such as `current_activity` or movement-related `current_location`.
+- All explicit and inferred decisions write `orrery_adjudication_log`. Bleed remains cross-turn ambient surfacing, not the path for current-tick proposals.
+
 ### Landed in PR #220
 
 PR #220 closes the retrieval-boundary audit: warm slices and normal MEMNON search remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
@@ -706,6 +716,7 @@ This section is now mostly historical. The active queue has moved past the found
 ### PR 4 — Bleed Selector + Storyteller Integration (implemented in PR #219)
 
 - Bleed selector wired into LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); reads `turn_context.bleed_menu` populated by a new selector method invoked at the start of that phase.
+- Current-tick proposals are no longer treated as Bleed. They enter Phase 5 as `orrery_imminent_activity` and are finalized by commit according to Skald's optional `orrery_adjudications`.
 - Typed candidate query over `orrery_resolutions` ⋈ `world_events` ⋈ `offscreen_narrations`.
 - Hard 2-second latency budget enforced via `asyncio.wait_for`; overrun = empty menu + loud log.
 - Surfacing bookkeeping increments.

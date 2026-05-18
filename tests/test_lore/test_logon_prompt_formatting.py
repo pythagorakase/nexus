@@ -220,6 +220,35 @@ def test_context_prompt_includes_orrery_scene_pressure_controls() -> None:
     assert "Travel toward the target's last known location: Mara is moving" in prompt
 
 
+def test_context_prompt_includes_orrery_imminent_activity_controls() -> None:
+    """Current-tick proposals are framed as ratifiable but Skald-sovereign."""
+
+    prompt = LogonUtility({})._format_context_prompt(
+        {
+            "user_input": "Continue.",
+            "orrery_imminent_activity": [
+                {
+                    "proposal_id": "sleep_pressure:sleepy-1",
+                    "template_id": "sleep_pressure",
+                    "branch_label": "Nod off",
+                    "state_delta": {
+                        "character.current_activity": "sleeping",
+                    },
+                }
+            ],
+        }
+    )
+
+    assert "=== ORRERY IMMINENT ACTIVITY ===" in prompt
+    assert "If you omit a proposal from orrery_adjudications" in prompt
+    assert "defer to leave pressure unresolved" in prompt
+    assert "void when a proposal is definitively false" in prompt
+    assert "replace when your structured state_updates" in prompt
+    assert "replacement_event_type" in prompt
+    assert "Refer only to proposal_id" in prompt
+    assert "sleep_pressure:sleepy-1 [Nod off]" in prompt
+
+
 def test_context_prompt_includes_orrery_bleed_menu_controls() -> None:
     """Selected Bleed peripherals are framed as optional ambient texture."""
 

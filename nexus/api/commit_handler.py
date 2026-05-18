@@ -54,6 +54,7 @@ async def fetch_incubator_data(
         """
         SELECT chunk_id, parent_chunk_id, user_text, storyteller_text,
                choice_object, choice_text, orrery_proposal,
+               COALESCE(orrery_adjudications, '[]'::jsonb) AS orrery_adjudications,
                COALESCE(authorial_directives, '[]'::jsonb) AS authorial_directives,
                metadata_updates, entity_updates, reference_updates,
                llm_response_id, status
@@ -448,17 +449,28 @@ async def commit_incubator_to_database(
                 tick_chunk_id=chunk_id,
                 slot=slot,
                 world_layer=world_layer,
+                adjudications=incubator.get("orrery_adjudications"),
+                storyteller_state_updates=incubator.get("entity_updates"),
             )
-            if orrery_result.resolution_count or orrery_result.skipped_existing_count:
+            if (
+                orrery_result.resolution_count
+                or orrery_result.skipped_existing_count
+                or orrery_result.adjudication_count
+            ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
-                    "%s tag mutations, %s cleared tags, %s existing skipped",
+                    "%s tag mutations, %s cleared tags, %s existing skipped, "
+                    "%s adjudications (%s deferred, %s voided, %s replaced)",
                     chunk_id,
                     orrery_result.resolution_count,
                     orrery_result.event_count,
                     orrery_result.tag_mutation_count,
                     orrery_result.cleared_tag_count,
                     orrery_result.skipped_existing_count,
+                    orrery_result.adjudication_count,
+                    orrery_result.deferred_count,
+                    orrery_result.voided_count,
+                    orrery_result.replaced_count,
                 )
 
             # Step 9: Clear incubator

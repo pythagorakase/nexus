@@ -31,6 +31,12 @@ from nexus.agents.orrery.needs import (
 )
 
 
+def _proposal_id(template_id: str, binding_hash_value: str) -> str:
+    """Return the stable public identifier for one tick proposal."""
+
+    return f"{template_id}:{binding_hash_value}"
+
+
 @dataclass(frozen=True, slots=True)
 class OrreryResolutionDraft:
     """Serializable dry-run result for one actor-bound package resolution."""
@@ -46,10 +52,17 @@ class OrreryResolutionDraft:
     changed_fields: Tuple[str, ...] = ()
     magnitude: float = 0.0
 
+    @property
+    def proposal_id(self) -> str:
+        """Stable identifier Skald can use to adjudicate this proposal."""
+
+        return _proposal_id(self.template_id, self.binding_hash)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation of this draft."""
 
         return {
+            "proposal_id": self.proposal_id,
             "template_id": self.template_id,
             "priority": self.priority,
             "binding_hash": self.binding_hash,
@@ -66,10 +79,23 @@ class OrreryResolutionDraft:
     def from_dict(cls, data: Mapping[str, Any]) -> "OrreryResolutionDraft":
         """Hydrate a draft from incubator JSONB data."""
 
+        template_id = str(data["template_id"])
+        binding_hash_value = str(data["binding_hash"])
+        expected_proposal_id = _proposal_id(template_id, binding_hash_value)
+        stored_proposal_id = data.get("proposal_id")
+        if (
+            stored_proposal_id is not None
+            and str(stored_proposal_id) != expected_proposal_id
+        ):
+            raise ValueError(
+                "Orrery proposal_id does not match template_id/binding_hash: "
+                f"{stored_proposal_id!r} != {expected_proposal_id!r}"
+            )
+
         return cls(
-            template_id=str(data["template_id"]),
+            template_id=template_id,
             priority=int(data["priority"]),
-            binding_hash=str(data["binding_hash"]),
+            binding_hash=binding_hash_value,
             bindings=dict(data.get("bindings") or {}),
             branch_label=str(data["branch_label"]),
             narrative_stub=str(data["narrative_stub"]),

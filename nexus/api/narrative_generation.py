@@ -272,10 +272,10 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
             id, chunk_id, parent_chunk_id, user_text, storyteller_text,
             choice_object, choice_text,
             metadata_updates, entity_updates, reference_updates,
-            authorial_directives, orrery_proposal,
+            authorial_directives, orrery_proposal, orrery_adjudications,
             session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         """
 
@@ -301,6 +301,7 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                     if data.get("orrery_proposal")
                     else None
                 ),
+                json.dumps(data.get("orrery_adjudications", [])),
                 data["session_id"],
                 data["llm_response_id"],
                 data["status"],
@@ -503,6 +504,7 @@ async def generate_bootstrap_narrative(
             "factions": [],
         },
         "authorial_directives": extract_authorial_directives(story_response),
+        "orrery_adjudications": [],
         "session_id": session_id,
         "llm_response_id": f"bootstrap_{uuid.uuid4().hex[:8]}",
         "status": "provisional",
