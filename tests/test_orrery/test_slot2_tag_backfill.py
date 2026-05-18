@@ -68,6 +68,11 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
     candidates, skipped = _build_candidates(
         manifest,
         tags=tags,
+        allowed_categories={
+            "character": {"orrery_need", "orrery_state", "role", "state"},
+            "faction": {"power_posture"},
+            "place": {"place_affordance"},
+        },
         entities=entities,
         current=set(),
         min_confidence="medium",
@@ -75,10 +80,10 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
 
     assert [(candidate.entity_id, candidate.tag) for candidate in candidates] == [
         (1, "extended_household"),
+        (1, "sleep_deprived_1_mild"),
         (2, "militarized"),
     ]
     assert skipped["below_confidence"] == 1
-    assert skipped["incompatible_category:orrery_need"] == 1
     assert skipped["incompatible_category:place_affordance"] == 1
     assert skipped["incompatible_category:state"] == 1
     assert skipped["unknown_tag"] == 1
@@ -119,6 +124,7 @@ def test_slot2_tag_backfill_skips_existing_and_missing_entities() -> None:
     candidates, skipped = _build_candidates(
         manifest,
         tags=tags,
+        allowed_categories={"character": {"orrery_state"}},
         entities=entities,
         current={(1, 1)},
         min_confidence="medium",
@@ -153,6 +159,7 @@ def test_slot2_tag_backfill_rejects_manifest_entity_kind_mismatch() -> None:
                     id=1, category="orrery_state", is_ephemeral=False
                 )
             },
+            allowed_categories={"character": {"orrery_state"}},
             entities={1: EntityDefinition(kind="faction", name="Dynacorp")},
             current=set(),
             min_confidence="medium",

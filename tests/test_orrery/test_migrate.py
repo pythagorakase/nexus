@@ -323,3 +323,53 @@ def test_osm_route_graph_migration_adds_local_graph_tables() -> None:
     assert "route_geometry geometry(LineString, 4326)" in migration_source
     assert "travel_mode orrery_travel_mode" in migration_source
     assert "COMMENT ON TABLE orrery_route_graph_nodes" in migration_source
+
+
+def test_tag_category_registry_migration_covers_current_vocab_categories() -> None:
+    """Migration 037 owns the entity-kind/category compatibility contract."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "037_orrery_tag_category_registry.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    registered = {
+        (category, entity_kind)
+        for category, entity_kind, _order, _description in migration.CATEGORY_REGISTRY
+    }
+
+    assert ("orrery_need", "character") in registered
+    assert ("orrery_concealment", "character") in registered
+    assert ("place_affordance", "place") in registered
+    assert ("power_posture", "faction") in registered
+    assert "tag_category_registry" in migration_path.read_text()
+
+
+def test_tag_baseline_reconciliation_migration_closes_slot_drift() -> None:
+    """Migration 038 keeps template clones and existing slots on one vocab set."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "038_orrery_tag_baseline_reconciliation.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    assert {"intimate_services_contact", "kin_protector"} <= {
+        tag for tag, _category, _description in migration.DURABLE_TAGS
+    }
+    assert "ON CONFLICT (tag) DO UPDATE SET" in migration_path.read_text()
+
+
+def test_new_story_character_orrery_tags_migration_adds_cache_column() -> None:
+    """Migration 039 preserves protagonist tags until setup transition."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "039_new_story_character_orrery_tags.py"
+    ).read_text()
+
+    assert "character_orrery_tags jsonb" in migration_source
+    assert "OrreryTagBestowal JSON" in migration_source

@@ -22,10 +22,20 @@ from nexus.api.db_pool import get_connection
 logger = logging.getLogger("nexus.api.new_story_cache")
 
 # Valid trait enum values (must match PostgreSQL trait enum)
-VALID_TRAITS = frozenset({
-    'allies', 'contacts', 'patron', 'dependents', 'status',
-    'reputation', 'resources', 'domain', 'enemies', 'obligations'
-})
+VALID_TRAITS = frozenset(
+    {
+        "allies",
+        "contacts",
+        "patron",
+        "dependents",
+        "status",
+        "reputation",
+        "resources",
+        "domain",
+        "enemies",
+        "obligations",
+    }
+)
 
 
 def _parse_pg_array(value: Any) -> List[str]:
@@ -42,11 +52,11 @@ def _parse_pg_array(value: Any) -> List[str]:
         return value  # Already a list
     if isinstance(value, str):
         # Parse PostgreSQL array format: {elem1,elem2,...}
-        if value.startswith('{') and value.endswith('}'):
+        if value.startswith("{") and value.endswith("}"):
             inner = value[1:-1]
             if not inner:
                 return []
-            return inner.split(',')
+            return inner.split(",")
     return []
 
 
@@ -68,6 +78,7 @@ def _merge_unique_lists(*values: List[str]) -> List[str]:
 @dataclass
 class SettingData:
     """Setting phase data (normalized columns)."""
+
     genre: Optional[str] = None
     secondary_genres: List[str] = field(default_factory=list)  # Always array for UI
     world_name: Optional[str] = None
@@ -88,6 +99,7 @@ class SettingData:
 @dataclass
 class SuggestedTrait:
     """A single LLM-suggested trait with rationale."""
+
     trait: str
     rationale: str
 
@@ -99,6 +111,7 @@ class CharacterData:
     Concept data is in new_story_creator columns.
     Trait data is now in assets.traits table.
     """
+
     # Concept subphase (from new_story_creator)
     name: Optional[str] = None
     archetype: Optional[str] = None
@@ -113,6 +126,7 @@ class CharacterData:
     # Wildcard status (derived from assets.traits id=11)
     wildcard_name: Optional[str] = None  # from traits.name where id=11
     wildcard_rationale: Optional[str] = None  # from traits.rationale where id=11
+    orrery_tags: Optional[Dict[str, Any]] = None  # from new_story_creator JSONB
 
     def has_concept(self) -> bool:
         """Check if concept subphase is complete."""
@@ -134,6 +148,7 @@ class CharacterData:
 @dataclass
 class SeedData:
     """Seed phase data (normalized columns)."""
+
     # StorySeed
     seed_type: Optional[str] = None
     title: Optional[str] = None
@@ -159,6 +174,7 @@ class SeedData:
 @dataclass
 class WizardCache:
     """Complete wizard cache state."""
+
     thread_id: Optional[str] = None
     target_slot: Optional[int] = None
     setting: SettingData = field(default_factory=SettingData)
@@ -248,6 +264,7 @@ class WizardCache:
             "wildcard": {
                 "wildcard_name": self.character.wildcard_name,
                 "wildcard_description": self.character.wildcard_rationale,
+                "orrery_tags": self.character.orrery_tags,
             },
         }
 
@@ -374,6 +391,21 @@ def read_cache_raw(dbname: Optional[str] = None) -> Optional[Dict[str, Any]]:
             return dict(row) if row else None
 
 
+def _parse_json_object(value: Any) -> Optional[Dict[str, Any]]:
+    """Return a JSONB object value as a dict."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        parsed = json.loads(value)
+        if parsed is None:
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError(f"Expected JSON object, got {type(value).__name__}")
+
+
 def _row_to_cache(
     row: Dict[str, Any],
     selected_traits: Optional[List[SuggestedTrait]] = None,
@@ -412,6 +444,7 @@ def _row_to_cache(
             traits_confirmed=traits_confirmed,
             wildcard_name=wildcard_row.get("name") if wildcard_row else None,
             wildcard_rationale=wildcard_row.get("rationale") if wildcard_row else None,
+            orrery_tags=_parse_json_object(row.get("character_orrery_tags")),
         ),
         seed=SeedData(
             seed_type=row.get("seed_type"),
@@ -531,13 +564,17 @@ def write_character_concept(
                 """,
                 (name, archetype, background, appearance),
             )
-    logger.info("Updated character concept in %s", dbname or os.environ.get("PGDATABASE"))
+    logger.info(
+        "Updated character concept in %s", dbname or os.environ.get("PGDATABASE")
+    )
 
 
 def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
     """Toggle a trait's is_selected state. Returns new state."""
     if trait_name not in VALID_TRAITS:
-        raise ValueError(f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}")
+        raise ValueError(
+            f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}"
+        )
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
@@ -591,6 +628,7 @@ def confirm_trait_selection(dbname: Optional[str]) -> List[str]:
 @dataclass
 class TraitMenuItem:
     """A trait for the selection menu."""
+
     id: int
     name: str
     description: List[str]  # Bullet points
@@ -638,25 +676,54 @@ def get_selected_trait_count(dbname: Optional[str]) -> int:
             return cur.fetchone()[0]
 
 
+def _write_character_wildcard(
+    cur,
+    *,
+    wildcard_name: str,
+    wildcard_description: str,
+    orrery_tags: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Write wildcard data using an existing cursor."""
+    serialized_tags = json.dumps(orrery_tags) if orrery_tags is not None else None
+    cur.execute(
+        """
+        UPDATE assets.traits SET
+            name = %s,
+            rationale = %s
+        WHERE id = 11
+        """,
+        (wildcard_name, wildcard_description),
+    )
+    cur.execute(
+        """
+        UPDATE assets.new_story_creator SET
+            character_orrery_tags = %s::jsonb,
+            updated_at = NOW()
+        WHERE id = TRUE
+        """,
+        (serialized_tags,),
+    )
+
+
 def write_character_wildcard(
     dbname: Optional[str],
     *,
     wildcard_name: str,
     wildcard_description: str,
+    orrery_tags: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Write character wildcard (subphase 3) to assets.traits row 11."""
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE assets.traits SET
-                    name = %s,
-                    rationale = %s
-                WHERE id = 11
-                """,
-                (wildcard_name, wildcard_description),
+            _write_character_wildcard(
+                cur,
+                wildcard_name=wildcard_name,
+                wildcard_description=wildcard_description,
+                orrery_tags=orrery_tags,
             )
-    logger.info("Updated character wildcard in %s", dbname or os.environ.get("PGDATABASE"))
+    logger.info(
+        "Updated character wildcard in %s", dbname or os.environ.get("PGDATABASE")
+    )
 
 
 def write_suggested_traits(
@@ -704,7 +771,9 @@ def clear_suggested_traits(dbname: Optional[str] = None) -> None:
             cur.execute(
                 "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
             )
-    logger.info("Cleared trait selections in %s", dbname or os.environ.get("PGDATABASE"))
+    logger.info(
+        "Cleared trait selections in %s", dbname or os.environ.get("PGDATABASE")
+    )
 
 
 def write_seed(
@@ -810,7 +879,11 @@ def init_cache(
                 """,
                 (thread_id, target_slot),
             )
-    logger.info("Initialized cache for slot %s in %s", target_slot, dbname or os.environ.get("PGDATABASE"))
+    logger.info(
+        "Initialized cache for slot %s in %s",
+        target_slot,
+        dbname or os.environ.get("PGDATABASE"),
+    )
 
 
 def clear_cache(dbname: Optional[str] = None) -> None:
@@ -822,6 +895,13 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.new_story_creator
+                SET character_orrery_tags = NULL
+                WHERE id = TRUE
+                """
+            )
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
             cur.execute(
@@ -830,7 +910,10 @@ def clear_cache(dbname: Optional[str] = None) -> None:
             cur.execute(
                 "UPDATE assets.traits SET name = 'wildcard', rationale = NULL WHERE id = 11"
             )
-    logger.info("Cleared new_story_creator cache in %s", dbname or os.environ.get("PGDATABASE", "NEXUS"))
+    logger.info(
+        "Cleared new_story_creator cache in %s",
+        dbname or os.environ.get("PGDATABASE", "NEXUS"),
+    )
 
 
 def clear_seed_phase(dbname: Optional[str] = None) -> None:
@@ -883,6 +966,7 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                     character_archetype = NULL,
                     character_background = NULL,
                     character_appearance = NULL,
+                    character_orrery_tags = NULL,
                     traits_confirmed = FALSE,
                     -- Seed columns (also clear downstream)
                     seed_type = NULL,
@@ -950,6 +1034,7 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                     character_archetype = NULL,
                     character_background = NULL,
                     character_appearance = NULL,
+                    character_orrery_tags = NULL,
                     -- Seed columns
                     seed_type = NULL,
                     seed_title = NULL,
@@ -1013,6 +1098,16 @@ def write_cache(
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
+            # First ensure the row exists; wildcard Orrery tags are written with
+            # an UPDATE below, so first-time legacy writes need the cache row now.
+            cur.execute(
+                """
+                INSERT INTO assets.new_story_creator (id)
+                VALUES (TRUE)
+                ON CONFLICT (id) DO NOTHING
+                """
+            )
+
             # Build the update dynamically based on what's provided
             updates = ["updated_at = NOW()"]
             params = []
@@ -1028,40 +1123,44 @@ def write_cache(
             if setting_draft is not None:
                 # Map old JSONB to new columns
                 # Enum columns need explicit casting
-                updates.extend([
-                    "setting_genre = %s::genre",
-                    "setting_secondary_genres = %s::genre[]",
-                    "setting_world_name = %s",
-                    "setting_time_period = %s",
-                    "setting_tech_level = %s::tech_level",
-                    "setting_magic_exists = %s",
-                    "setting_magic_description = %s",
-                    "setting_political_structure = %s",
-                    "setting_major_conflict = %s",
-                    "setting_tone = %s::tone",
-                    "setting_themes = %s",
-                    "setting_cultural_notes = %s",
-                    "setting_language_notes = %s",
-                    "setting_geographic_scope = %s::geographic_scope",
-                    "setting_diegetic_artifact = %s",
-                ])
-                params.extend([
-                    setting_draft.get("genre"),
-                    setting_draft.get("secondary_genres"),
-                    setting_draft.get("world_name"),
-                    setting_draft.get("time_period"),
-                    setting_draft.get("tech_level"),
-                    setting_draft.get("magic_exists"),
-                    setting_draft.get("magic_description"),
-                    setting_draft.get("political_structure"),
-                    setting_draft.get("major_conflict"),
-                    setting_draft.get("tone"),
-                    setting_draft.get("themes"),
-                    setting_draft.get("cultural_notes"),
-                    setting_draft.get("language_notes"),
-                    setting_draft.get("geographic_scope"),
-                    setting_draft.get("diegetic_artifact"),
-                ])
+                updates.extend(
+                    [
+                        "setting_genre = %s::genre",
+                        "setting_secondary_genres = %s::genre[]",
+                        "setting_world_name = %s",
+                        "setting_time_period = %s",
+                        "setting_tech_level = %s::tech_level",
+                        "setting_magic_exists = %s",
+                        "setting_magic_description = %s",
+                        "setting_political_structure = %s",
+                        "setting_major_conflict = %s",
+                        "setting_tone = %s::tone",
+                        "setting_themes = %s",
+                        "setting_cultural_notes = %s",
+                        "setting_language_notes = %s",
+                        "setting_geographic_scope = %s::geographic_scope",
+                        "setting_diegetic_artifact = %s",
+                    ]
+                )
+                params.extend(
+                    [
+                        setting_draft.get("genre"),
+                        setting_draft.get("secondary_genres"),
+                        setting_draft.get("world_name"),
+                        setting_draft.get("time_period"),
+                        setting_draft.get("tech_level"),
+                        setting_draft.get("magic_exists"),
+                        setting_draft.get("magic_description"),
+                        setting_draft.get("political_structure"),
+                        setting_draft.get("major_conflict"),
+                        setting_draft.get("tone"),
+                        setting_draft.get("themes"),
+                        setting_draft.get("cultural_notes"),
+                        setting_draft.get("language_notes"),
+                        setting_draft.get("geographic_scope"),
+                        setting_draft.get("diegetic_artifact"),
+                    ]
+                )
 
             if character_draft is not None:
                 # Character draft contains nested subphase data
@@ -1070,18 +1169,22 @@ def write_cache(
                 wildcard = character_draft.get("wildcard", {})
 
                 if concept:
-                    updates.extend([
-                        "character_name = %s",
-                        "character_archetype = %s",
-                        "character_background = %s",
-                        "character_appearance = %s",
-                    ])
-                    params.extend([
-                        concept.get("name"),
-                        concept.get("archetype"),
-                        concept.get("background"),
-                        concept.get("appearance"),
-                    ])
+                    updates.extend(
+                        [
+                            "character_name = %s",
+                            "character_archetype = %s",
+                            "character_background = %s",
+                            "character_appearance = %s",
+                        ]
+                    )
+                    params.extend(
+                        [
+                            concept.get("name"),
+                            concept.get("archetype"),
+                            concept.get("background"),
+                            concept.get("appearance"),
+                        ]
+                    )
 
                 # Traits are written to assets.traits table (using the existing cursor)
                 if traits:
@@ -1102,68 +1205,84 @@ def write_cache(
                                 """,
                                 (rationale, trait_name),
                             )
-                        logger.info("Wrote 3 selected traits to assets.traits in %s", dbname)
+                        logger.info(
+                            "Wrote 3 selected traits to assets.traits in %s", dbname
+                        )
+                        updates.append("traits_confirmed = TRUE")
 
                 if wildcard:
-                    write_character_wildcard(
-                        dbname,
+                    _write_character_wildcard(
+                        cur,
                         wildcard_name=wildcard.get("wildcard_name", "wildcard"),
                         wildcard_description=wildcard.get("wildcard_description", ""),
+                        orrery_tags=wildcard.get("orrery_tags"),
                     )
 
             if selected_seed is not None:
-                updates.extend([
-                    "seed_type = %s::seed_type",
-                    "seed_title = %s",
-                    "seed_situation = %s",
-                    "seed_hook = %s",
-                    "seed_immediate_goal = %s",
-                    "seed_stakes = %s",
-                    "seed_tension_source = %s",
-                    "seed_weather = %s",
-                    "seed_key_npcs = %s",
-                    "seed_starting_location = NULL",
-                    "seed_initial_mystery = NULL",
-                    "seed_potential_allies = NULL",
-                    "seed_potential_obstacles = NULL",
-                    "seed_secrets = %s",
-                ])
-                params.extend([
-                    selected_seed.get("seed_type"),
-                    selected_seed.get("title"),
-                    selected_seed.get("situation"),
-                    selected_seed.get("hook"),
-                    selected_seed.get("immediate_goal"),
-                    selected_seed.get("stakes"),
-                    selected_seed.get("tension_source"),
-                    selected_seed.get("weather"),
-                    selected_seed.get("key_npcs"),
-                    selected_seed.get("secrets"),
-                ])
+                updates.extend(
+                    [
+                        "seed_type = %s::seed_type",
+                        "seed_title = %s",
+                        "seed_situation = %s",
+                        "seed_hook = %s",
+                        "seed_immediate_goal = %s",
+                        "seed_stakes = %s",
+                        "seed_tension_source = %s",
+                        "seed_weather = %s",
+                        "seed_key_npcs = %s",
+                        "seed_starting_location = NULL",
+                        "seed_initial_mystery = NULL",
+                        "seed_potential_allies = NULL",
+                        "seed_potential_obstacles = NULL",
+                        "seed_secrets = %s",
+                    ]
+                )
+                params.extend(
+                    [
+                        selected_seed.get("seed_type"),
+                        selected_seed.get("title"),
+                        selected_seed.get("situation"),
+                        selected_seed.get("hook"),
+                        selected_seed.get("immediate_goal"),
+                        selected_seed.get("stakes"),
+                        selected_seed.get("tension_source"),
+                        selected_seed.get("weather"),
+                        selected_seed.get("key_npcs"),
+                        selected_seed.get("secrets"),
+                    ]
+                )
 
             if layer_draft is not None:
-                updates.extend([
-                    "layer_name = %s",
-                    "layer_type = %s::layer_type",
-                    "layer_description = %s",
-                ])
-                params.extend([
-                    layer_draft.get("name"),
-                    layer_draft.get("type"),
-                    layer_draft.get("description"),
-                ])
+                updates.extend(
+                    [
+                        "layer_name = %s",
+                        "layer_type = %s::layer_type",
+                        "layer_description = %s",
+                    ]
+                )
+                params.extend(
+                    [
+                        layer_draft.get("name"),
+                        layer_draft.get("type"),
+                        layer_draft.get("description"),
+                    ]
+                )
 
             if zone_draft is not None:
-                updates.extend([
-                    "zone_name = %s",
-                    "zone_summary = %s",
-                    "zone_boundary_description = NULL",
-                    "zone_approximate_area = NULL",
-                ])
-                params.extend([
-                    zone_draft.get("name"),
-                    zone_draft.get("summary"),
-                ])
+                updates.extend(
+                    [
+                        "zone_name = %s",
+                        "zone_summary = %s",
+                        "zone_boundary_description = NULL",
+                        "zone_approximate_area = NULL",
+                    ]
+                )
+                params.extend(
+                    [
+                        zone_draft.get("name"),
+                        zone_draft.get("summary"),
+                    ]
+                )
 
             if initial_location is not None:
                 updates.append("initial_location = %s")
@@ -1173,21 +1292,15 @@ def write_cache(
                 updates.append("base_timestamp = %s")
                 params.append(base_timestamp)
 
-            # First ensure the row exists
-            cur.execute(
-                """
-                INSERT INTO assets.new_story_creator (id)
-                VALUES (TRUE)
-                ON CONFLICT (id) DO NOTHING
-                """
-            )
-
             # Then update
             if updates:
                 sql = f"UPDATE assets.new_story_creator SET {', '.join(updates)} WHERE id = TRUE"
                 cur.execute(sql, params)
 
-    logger.info("Updated new_story_creator cache in %s", dbname or os.environ.get("PGDATABASE", "NEXUS"))
+    logger.info(
+        "Updated new_story_creator cache in %s",
+        dbname or os.environ.get("PGDATABASE", "NEXUS"),
+    )
 
 
 def write_wizard_choices(choices: List[str], dbname: str) -> None:

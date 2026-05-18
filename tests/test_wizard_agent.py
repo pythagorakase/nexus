@@ -176,6 +176,11 @@ def sample_seed_submission() -> StorySeedSubmission:
 def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
     monkeypatch.setattr(wizard_module, "_load_base_prompt", lambda: "BASE")
     monkeypatch.setattr(wizard_module, "_load_trait_menu", lambda: "TRAIT MENU")
+    monkeypatch.setattr(
+        wizard_module,
+        "format_tag_library_for_prompt",
+        lambda _dbname: "TAG LIBRARY",
+    )
 
     context = make_context(phase="character")
     context.accept_fate = True
@@ -183,6 +188,7 @@ def test_build_wizard_prompt_includes_trait_menu_and_accept_fate(monkeypatch):
     prompt = build_wizard_prompt(SimpleNamespace(deps=context))
 
     assert "BASE" in prompt
+    assert "TAG LIBRARY" in prompt
     assert "Trait Reference" in prompt
     assert "TRAIT MENU" in prompt
     assert ACCEPT_FATE_SIGNAL in prompt

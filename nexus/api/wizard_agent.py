@@ -34,6 +34,7 @@ from nexus.api.new_story_schemas import (
     WizardResponse,
 )
 from nexus.api.slot_utils import slot_dbname
+from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
 
 logger = logging.getLogger("nexus.api.wizard_agent")
 
@@ -174,7 +175,9 @@ def _phase_instruction(context: WizardContext) -> str:
 
             if suggested:
                 instruction += "\n[SUGGESTED TRAITS]\n"
-                instruction += "You previously suggested these traits for this character:\n"
+                instruction += (
+                    "You previously suggested these traits for this character:\n"
+                )
                 for trait in suggested:
                     rationale = rationales.get(trait, "")
                     if rationale:
@@ -189,9 +192,7 @@ def _phase_instruction(context: WizardContext) -> str:
                 )
 
     elif context.phase == "seed":
-        instruction += (
-            "World and Character are established. Focus on generating the starting scenario.\n"
-        )
+        instruction += "World and Character are established. Focus on generating the starting scenario.\n"
         if context.context_data:
             if "setting" in context.context_data:
                 instruction += (
@@ -205,7 +206,9 @@ def _phase_instruction(context: WizardContext) -> str:
                     f"{json.dumps(context.context_data['character'], indent=2, ensure_ascii=True)}\n"
                     "[/CHARACTER SHEET]\n"
                 )
-    instruction += "Use the available tool to submit the artifact when the user confirms."
+    instruction += (
+        "Use the available tool to submit the artifact when the user confirms."
+    )
     return instruction
 
 
@@ -251,6 +254,9 @@ def build_wizard_prompt(ctx: RunContext[WizardContext]) -> str:
     """Generate system prompt based on current wizard state."""
     context = ctx.deps
     parts = [_load_base_prompt(), _phase_instruction(context)]
+    parts.append(
+        "\n\n---\n\n" + format_tag_library_for_prompt(slot_dbname(context.slot))
+    )
 
     if context.phase == "character":
         trait_menu = _load_trait_menu()
@@ -280,7 +286,9 @@ def _log_retry(ctx: RunContext[WizardContext], tool_name: str) -> None:
         )
 
 
-def _ensure_phase(ctx: RunContext[WizardContext], expected: str, tool_name: str) -> None:
+def _ensure_phase(
+    ctx: RunContext[WizardContext], expected: str, tool_name: str
+) -> None:
     if ctx.deps.phase != expected:
         raise ModelRetry(f"{tool_name} is only valid during {expected} phase.")
 
@@ -330,7 +338,9 @@ async def _submit_concept_impl(
     """Shared implementation for submit_character_concept tool."""
     _log_retry(ctx, "submit_character_concept")
     _ensure_phase(ctx, "character", "submit_character_concept")
-    creation_state = _ensure_character_subphase(ctx, "concept", "submit_character_concept")
+    creation_state = _ensure_character_subphase(
+        ctx, "concept", "submit_character_concept"
+    )
 
     concept_data = concept.to_character_concept()
     updated_state = CharacterCreationState.model_validate(
@@ -338,7 +348,10 @@ async def _submit_concept_impl(
     )
 
     suggestions = [
-        {"trait": trait, "rationale": concept_data.trait_rationales.to_dict().get(trait, "")}
+        {
+            "trait": trait,
+            "rationale": concept_data.trait_rationales.to_dict().get(trait, ""),
+        }
         for trait in concept_data.suggested_traits
     ]
     if suggestions:
@@ -421,7 +434,9 @@ async def _submit_wildcard_impl(
     """Shared implementation for submit_wildcard_trait tool."""
     _log_retry(ctx, "submit_wildcard_trait")
     _ensure_phase(ctx, "character", "submit_wildcard_trait")
-    creation_state = _ensure_character_subphase(ctx, "wildcard", "submit_wildcard_trait")
+    creation_state = _ensure_character_subphase(
+        ctx, "wildcard", "submit_wildcard_trait"
+    )
 
     updated_state = CharacterCreationState.model_validate(
         {**creation_state.model_dump(), "wildcard": wildcard.model_dump()}
@@ -566,7 +581,9 @@ _setting_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _setting_accept_agent.tool(retries=_wizard_retries)(_submit_world_impl)
-_setting_accept_agent.output_validator(_make_accept_fate_validator("submit_world_document"))
+_setting_accept_agent.output_validator(
+    _make_accept_fate_validator("submit_world_document")
+)
 
 # -----------------------------------------------------------------------------
 # Character Phase - Concept Subphase Agents
@@ -591,7 +608,9 @@ _concept_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _concept_accept_agent.tool(retries=_wizard_retries)(_submit_concept_impl)
-_concept_accept_agent.output_validator(_make_accept_fate_validator("submit_character_concept"))
+_concept_accept_agent.output_validator(
+    _make_accept_fate_validator("submit_character_concept")
+)
 
 # -----------------------------------------------------------------------------
 # Character Phase - Traits Subphase Agent
@@ -631,7 +650,9 @@ _wildcard_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _wildcard_accept_agent.tool(retries=_wizard_retries)(_submit_wildcard_impl)
-_wildcard_accept_agent.output_validator(_make_accept_fate_validator("submit_wildcard_trait"))
+_wildcard_accept_agent.output_validator(
+    _make_accept_fate_validator("submit_wildcard_trait")
+)
 
 # -----------------------------------------------------------------------------
 # Seed Phase Agents
@@ -656,7 +677,9 @@ _seed_accept_agent = Agent(
     retries=_wizard_retries,
 )
 _seed_accept_agent.tool(retries=_wizard_retries)(_submit_scenario_impl)
-_seed_accept_agent.output_validator(_make_accept_fate_validator("submit_starting_scenario"))
+_seed_accept_agent.output_validator(
+    _make_accept_fate_validator("submit_starting_scenario")
+)
 
 # -----------------------------------------------------------------------------
 # Debug Agent (unchanged)

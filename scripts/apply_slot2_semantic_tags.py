@@ -20,6 +20,7 @@ from typing import Any, Iterable, Mapping, Optional
 import psycopg2
 from psycopg2.extras import DictCursor
 
+from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
 from nexus.api.slot_utils import get_slot_db_url
 
 
@@ -31,52 +32,6 @@ CONFIDENCE_RANK: Mapping[str, int] = {
     "low": 1,
     "medium": 2,
     "high": 3,
-}
-
-ALLOWED_CATEGORIES: Mapping[str, frozenset[str]] = {
-    "character": frozenset(
-        {
-            "bodyform",
-            "capacity",
-            "disposition",
-            "orrery_need_modifier",
-            "orrery_signal",
-            "orrery_state",
-            "profession_lite",
-            "role",
-            "state",
-        }
-    ),
-    "faction": frozenset(
-        {
-            "hidden_agenda_class",
-            "history_class",
-            "ideology_axis",
-            "legitimacy_status",
-            "operational_secrecy",
-            "power_posture",
-            "resource_class",
-        }
-    ),
-    "place": frozenset({"place_affordance"}),
-}
-
-# Small, explicit canonicalization list from the reviewed slot 2 report. This
-# keeps the live backfill useful without auto-collapsing every naming cluster.
-CANONICAL_TAGS: Mapping[str, str] = {
-    "bridge_linked": "bridge_aware",
-    "captive_subject": "captive",
-    "collapse_survivor": "trauma_survivor",
-    "corporate_defector": "corporate_exile",
-    "digital_consciousness": "digital_mind",
-    "disaster_survivor": "trauma_survivor",
-    "echo_survivor": "trauma_survivor",
-    "estranged_parent": "parent",
-    "ex_corporate": "corporate_exile",
-    "found_family_anchor": "extended_household",
-    "found_family_member": "extended_household",
-    "shadow_broker": "broker",
-    "trauma_history": "trauma_survivor",
 }
 
 
@@ -168,6 +123,7 @@ def main() -> None:
     try:
         with conn.cursor(cursor_factory=DictCursor) as cur:
             tags = _load_tags(cur)
+            allowed_categories = _load_allowed_categories(cur)
             entities = _load_entities(cur)
             current = _load_current_tags(cur)
             source_kinds = _load_source_kinds(cur)
@@ -182,6 +138,7 @@ def main() -> None:
             candidates, skipped = _build_candidates(
                 manifest,
                 tags=tags,
+                allowed_categories=allowed_categories,
                 entities=entities,
                 current=current,
                 min_confidence=args.min_confidence,
@@ -256,6 +213,19 @@ def _load_tags(cur: DictCursor) -> dict[str, TagDefinition]:
     }
 
 
+def _load_allowed_categories(cur: DictCursor) -> dict[str, set[str]]:
+    cur.execute(
+        """
+        SELECT entity_kind::text AS entity_kind, category
+        FROM tag_category_registry
+        """
+    )
+    allowed: dict[str, set[str]] = {}
+    for row in cur.fetchall():
+        allowed.setdefault(str(row["entity_kind"]), set()).add(str(row["category"]))
+    return allowed
+
+
 def _load_entities(cur: DictCursor) -> dict[int, EntityDefinition]:
     cur.execute(
         """
@@ -304,6 +274,7 @@ def _build_candidates(
     manifest: Mapping[str, Any],
     *,
     tags: Mapping[str, TagDefinition],
+    allowed_categories: Mapping[str, set[str]],
     entities: Mapping[int, EntityDefinition],
     current: set[tuple[int, int]],
     min_confidence: str,
@@ -339,7 +310,7 @@ def _build_candidates(
                 skipped["unknown_tag"] += 1
                 continue
 
-            allowed = ALLOWED_CATEGORIES.get(entity_kind, frozenset())
+            allowed = allowed_categories.get(entity_kind, set())
             if tag.category not in allowed:
                 skipped[f"incompatible_category:{tag.category}"] += 1
                 continue

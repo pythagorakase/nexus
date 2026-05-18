@@ -42,6 +42,7 @@ from nexus.agents.logon.apex_enums import (
     WorldLayerType,
     get_active_entity_types,
 )
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 logger = logging.getLogger("nexus.logon.apex_schema")
 
@@ -53,6 +54,7 @@ logger = logging.getLogger("nexus.logon.apex_schema")
 # OpenAI strict mode requires additionalProperties: false, but bare Dicts emit
 # additionalProperties: true, causing a mismatch when the field is in 'required'.
 
+
 class Coordinates(BaseModel):
     """
     Earth-based lat/lon coordinates.
@@ -62,6 +64,7 @@ class Coordinates(BaseModel):
     for the location's described characteristics (climate, terrain, proximity
     to water).
     """
+
     lat: float = Field(description="Latitude (-90 to 90)")
     lon: float = Field(description="Longitude (-180 to 180)")
 
@@ -76,6 +79,7 @@ class CharacterTraits(BaseModel):
     wildcard. Traits signal narrative focus - what aspects of the character
     should be foregrounded in the story.
     """
+
     # Social Network (choose if narratively significant)
     allies: Optional[str] = Field(
         default=None, description="Who will actively help and take risks for you"
@@ -108,7 +112,8 @@ class CharacterTraits(BaseModel):
 
     # Liabilities
     enemies: Optional[str] = Field(
-        default=None, description="Those actively opposed who will expend energy to thwart you"
+        default=None,
+        description="Those actively opposed who will expend energy to thwart you",
     )
     obligations: Optional[str] = Field(
         default=None, description="Debts, oaths, or duties you must honor"
@@ -116,12 +121,11 @@ class CharacterTraits(BaseModel):
 
     # Optional wildcard - unique trait that sets this character apart
     wildcard_name: Optional[str] = Field(
-        default=None,
-        description="Name of the unique custom trait"
+        default=None, description="Name of the unique custom trait"
     )
     wildcard_description: Optional[str] = Field(
         default=None,
-        description="What this trait means - capability, possession, relationship, or curse"
+        description="What this trait means - capability, possession, relationship, or curse",
     )
 
     model_config = ConfigDict(extra="allow")
@@ -133,11 +137,14 @@ class PlaceDetails(BaseModel):
 
     These provide rich world-building details beyond the core place fields.
     """
+
     category: Optional[str] = Field(
-        default=None, description="Narrative category: settlement, wilderness, dungeon, building, district, landmark, road, border"
+        default=None,
+        description="Narrative category: settlement, wilderness, dungeon, building, district, landmark, road, border",
     )
     size: Optional[str] = Field(
-        default=None, description="Relative size: tiny, small, medium, large, huge, massive"
+        default=None,
+        description="Relative size: tiny, small, medium, large, huge, massive",
     )
     population: Optional[int] = Field(
         default=None, ge=0, description="Population if applicable"
@@ -186,9 +193,8 @@ class FactionDetails(BaseModel):
     """
     Additional faction attributes stored in extra_data JSONB.
     """
-    leader: Optional[str] = Field(
-        default=None, description="Name of faction leader"
-    )
+
+    leader: Optional[str] = Field(default=None, description="Name of faction leader")
     notable_members: List[str] = Field(
         default_factory=list, description="Other notable members"
     )
@@ -212,43 +218,51 @@ class FactionDetails(BaseModel):
 # New Entity Creation
 # ============================================================================
 
+
 class NewCharacter(BaseModel):
     """
     Schema for introducing a new character - aligned with DB schema.
     """
+
     name: str = Field(description="Character's name")
     appearance: Optional[str] = Field(
-        default=None,
-        description="Physical description - how the character looks"
+        default=None, description="Physical description - how the character looks"
     )
     background: Optional[str] = Field(
-        default=None,
-        description="Character backstory and history"
+        default=None, description="Character backstory and history"
     )
     personality: Optional[str] = Field(
         default=None,
-        description="Personality traits and quirks (prose format, e.g., 'Methodical problem-solver. Paranoid about digital traces.')"
+        description="Personality traits and quirks (prose format, e.g., 'Methodical problem-solver. Paranoid about digital traces.')",
     )
     emotional_state: Optional[str] = Field(
-        default=None,
-        description="Current emotional state"
+        default=None, description="Current emotional state"
     )
     current_activity: Optional[str] = Field(
-        default=None,
-        description="What the character is currently doing"
+        default=None, description="What the character is currently doing"
     )
     current_location: Optional[int] = Field(
         default=None,
-        description="Place ID where character is located (FK to places.id)"
+        description="Place ID where character is located (FK to places.id)",
     )
     summary: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Brief character description (max 500 chars)"
+        description="Brief character description (max 500 chars)",
     )
     extra_data: Optional[CharacterTraits] = Field(
         default=None,
-        description="Character traits (3 of 10 optional traits + required wildcard)"
+        description="Character traits (3 of 10 optional traits + required wildcard)",
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Semantic Orrery tags for this character (bodyform, capacity, "
+            "disposition, role, state, etc.). Apply registered tags by name; "
+            "propose new ones when the genre needs vocabulary that doesn't yet "
+            "exist (e.g., bodyform:elf for a fantasy elf). See the Orrery "
+            "Awareness section of your system prompt for category guidance."
+        ),
     )
 
 
@@ -257,39 +271,48 @@ class NewPlace(BaseModel):
     Schema for introducing a new place - aligned with DB schema.
     Zone is calculated from coordinates post-creation (not an input field).
     """
+
     name: str = Field(description="Place name")
     type: PlaceType = Field(
         default=PlaceType.FIXED_LOCATION,
-        description="Type of place (fixed_location, vehicle, virtual, other)"
+        description="Type of place (fixed_location, vehicle, virtual, other)",
     )
     summary: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Brief place description (max 500 chars)"
+        description="Brief place description (max 500 chars)",
     )
     history: Optional[str] = Field(
-        default=None,
-        description="Place history and past events"
+        default=None, description="Place history and past events"
     )
     current_status: Optional[str] = Field(
         default=None,
-        description="Current state, conditions, and activity at this location"
+        description="Current state, conditions, and activity at this location",
     )
     secrets: Optional[str] = Field(
         default=None,
-        description="Hidden information, plot hooks, and narrative opportunities"
+        description="Hidden information, plot hooks, and narrative opportunities",
     )
     coordinates: Optional[Coordinates] = Field(
         default=None,
-        description="Geographic coordinates (lat/lon on Earth-shaped planet). Zone calculated from this."
+        description="Geographic coordinates (lat/lon on Earth-shaped planet). Zone calculated from this.",
     )
     inhabitants: Optional[List[int]] = Field(
         default_factory=list,
-        description="Character IDs of inhabitants (usually empty for newly introduced places)"
+        description="Character IDs of inhabitants (usually empty for newly introduced places)",
     )
     extra_data: Optional[PlaceDetails] = Field(
         default=None,
-        description="Additional place attributes (atmosphere, features, dangers, etc.)"
+        description="Additional place attributes (atmosphere, features, dangers, etc.)",
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Semantic place_affordance tags for this location (e.g., "
+            "sheltered, public, isolated, defensible, ritually_charged). "
+            "Propose new ones when the setting needs vocabulary that doesn't "
+            "yet exist."
+        ),
     )
 
     @model_validator(mode="before")
@@ -337,49 +360,55 @@ class NewFaction(BaseModel):
     Schema for introducing a new faction - aligned with DB schema.
     Leader info goes in extra_data or character relationships.
     """
+
     name: str = Field(description="Faction name")
     summary: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Brief faction description (max 500 chars)"
+        description="Brief faction description (max 500 chars)",
     )
     ideology: Optional[str] = Field(
-        default=None,
-        description="Faction's core ideology or purpose"
+        default=None, description="Faction's core ideology or purpose"
     )
     history: Optional[str] = Field(
-        default=None,
-        description="Faction origins, past events, and evolution"
+        default=None, description="Faction origins, past events, and evolution"
     )
     current_activity: Optional[str] = Field(
-        default=None,
-        description="What the faction is currently doing"
+        default=None, description="What the faction is currently doing"
     )
     hidden_agenda: Optional[str] = Field(
         default=None,
-        description="Secret goals, plots, and agendas (like place secrets - narrative gold!)"
+        description="Secret goals, plots, and agendas (like place secrets - narrative gold!)",
     )
     territory: Optional[str] = Field(
         default=None,
-        description="Controlled areas, zones of influence, or operational reach"
+        description="Controlled areas, zones of influence, or operational reach",
     )
     power_level: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Faction influence/power rating (0.0-1.0, default 0.5 for new factions)"
+        description="Faction influence/power rating (0.0-1.0, default 0.5 for new factions)",
     )
     resources: Optional[str] = Field(
-        default=None,
-        description="Assets, capabilities, personnel, and resources"
+        default=None, description="Assets, capabilities, personnel, and resources"
     )
     primary_location: Optional[int] = Field(
         default=None,
-        description="Place ID of faction headquarters/primary base (FK to places.id)"
+        description="Place ID of faction headquarters/primary base (FK to places.id)",
     )
     extra_data: Optional[FactionDetails] = Field(
         default=None,
-        description="Additional faction attributes (leader, members, allies, rivals, etc.)"
+        description="Additional faction attributes (leader, members, allies, rivals, etc.)",
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Semantic Orrery tags for this faction (ideology_axis, "
+            "power_posture, legitimacy_status, operational_secrecy, "
+            "resource_class, hidden_agenda_class, history_class). Propose new "
+            "ones when the setting needs vocabulary that doesn't yet exist."
+        ),
     )
 
 
@@ -387,51 +416,49 @@ class NewFaction(BaseModel):
 # Entity References (Supporting both existing and new)
 # ============================================================================
 
+
 class CharacterReference(BaseModel):
     """Reference to a character - either existing or new"""
+
     # For existing character
     character_id: Optional[int] = Field(
-        default=None,
-        description="Database ID for existing character"
+        default=None, description="Database ID for existing character"
     )
     character_name: Optional[str] = Field(
-        default=None,
-        description="Name for lookup if ID unknown"
+        default=None, description="Name for lookup if ID unknown"
     )
     # For new character
     new_character: Optional[NewCharacter] = Field(
-        default=None,
-        description="Details for creating new character"
+        default=None, description="Details for creating new character"
     )
     # How they appear in this chunk
     reference_type: ReferenceType = Field(
-        default=ReferenceType.MENTIONED,
-        description="How the character is referenced"
+        default=ReferenceType.MENTIONED, description="How the character is referenced"
     )
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_character_reference(self):
         """Ensure we have either existing ref or new character"""
         if not any([self.character_id, self.character_name, self.new_character]):
-            raise ValueError("Must provide either character_id, character_name, or new_character")
+            raise ValueError(
+                "Must provide either character_id, character_name, or new_character"
+            )
         return self
 
 
 class PlaceReference(BaseModel):
     """Reference to a place - either existing or new"""
+
     # For existing place
     place_id: Optional[int] = Field(
-        default=None,
-        description="Database ID for existing place"
+        default=None, description="Database ID for existing place"
     )
     place_name: Optional[str] = Field(
-        default=None,
-        description="Name for lookup if ID unknown"
+        default=None, description="Name for lookup if ID unknown"
     )
     # For new place
     new_place: Optional[NewPlace] = Field(
-        default=None,
-        description="Details for creating new place"
+        default=None, description="Details for creating new place"
     )
     # How it appears in this chunk (REQUIRED for junction table)
     reference_type: PlaceReferenceType = Field(
@@ -441,10 +468,10 @@ class PlaceReference(BaseModel):
     evidence: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Optional text evidence for this place reference (e.g., specific quote or context)"
+        description="Optional text evidence for this place reference (e.g., specific quote or context)",
     )
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_place_reference(self):
         """Ensure we have either existing ref or new place"""
         if not any([self.place_id, self.place_name, self.new_place]):
@@ -454,24 +481,21 @@ class PlaceReference(BaseModel):
 
 class FactionReference(BaseModel):
     """Reference to a faction - either existing or new"""
+
     # For existing faction
     faction_id: Optional[int] = Field(
-        default=None,
-        description="Database ID for existing faction"
+        default=None, description="Database ID for existing faction"
     )
     faction_name: Optional[str] = Field(
-        default=None,
-        description="Name for lookup if ID unknown"
+        default=None, description="Name for lookup if ID unknown"
     )
     # For new faction
     new_faction: Optional[NewFaction] = Field(
-        default=None,
-        description="Details for creating new faction"
+        default=None, description="Details for creating new faction"
     )
     # How it appears
     reference_type: ReferenceType = Field(
-        default=ReferenceType.MENTIONED,
-        description="How the faction is referenced"
+        default=ReferenceType.MENTIONED, description="How the faction is referenced"
     )
 
 
@@ -480,17 +504,18 @@ class ReferencedEntities(BaseModel):
     Collection of all entities referenced in the narrative chunk.
     Supports both existing entities and introduction of new ones.
     """
+
     characters: List[CharacterReference] = Field(
         default_factory=list,
-        description="Characters present or mentioned (existing or new)"
+        description="Characters present or mentioned (existing or new)",
     )
     places: List[PlaceReference] = Field(
         default_factory=list,
-        description="Places present or mentioned (existing or new)"
+        description="Places present or mentioned (existing or new)",
     )
     factions: List[FactionReference] = Field(
         default_factory=list,
-        description="Factions present or mentioned (existing or new)"
+        description="Factions present or mentioned (existing or new)",
     )
     # Note: items and threats tables exist but are empty
     # events table doesn't exist
@@ -501,6 +526,7 @@ class ReferencedEntities(BaseModel):
 # ============================================================================
 # Chunk Metadata (Minimal, removing deprecated fields)
 # ============================================================================
+
 
 class ChronologyUpdate(BaseModel):
     """
@@ -514,9 +540,10 @@ class ChronologyUpdate(BaseModel):
     Fixed: episode_transition replaces the problematic dual boolean flags
     to prevent invalid state (season increment without episode increment).
     """
+
     episode_transition: Literal["continue", "new_episode", "new_season"] = Field(
         default="continue",
-        description="Episode/season transition: continue current, new episode, or new season (which also starts new episode)"
+        description="Episode/season transition: continue current, new episode, or new season (which also starts new episode)",
     )
 
     # LLM-friendly time fields (more natural than seconds)
@@ -524,30 +551,34 @@ class ChronologyUpdate(BaseModel):
         default=None,
         ge=0,
         lt=60,
-        description="Minutes elapsed (0-59). Most chunks are in this range."
+        description="Minutes elapsed (0-59). Most chunks are in this range.",
     )
     time_delta_hours: Optional[int] = Field(
         default=None,
         ge=0,
         lt=24,
-        description="Hours elapsed (0-23). Use for longer time passages."
+        description="Hours elapsed (0-23). Use for longer time passages.",
     )
     time_delta_days: Optional[int] = Field(
         default=None,
         ge=0,
-        description="Days elapsed (0+). Rarely used - most narrative is continuous."
+        description="Days elapsed (0+). Rarely used - most narrative is continuous.",
     )
 
     time_delta_description: Optional[str] = Field(
         default=None,
         max_length=100,
-        description="Human-readable time passage (e.g., 'two hours later', 'the next morning')"
+        description="Human-readable time passage (e.g., 'two hours later', 'the next morning')",
     )
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_time_fields(self):
         """At least one time field should be set if any are set"""
-        time_fields = [self.time_delta_minutes, self.time_delta_hours, self.time_delta_days]
+        time_fields = [
+            self.time_delta_minutes,
+            self.time_delta_hours,
+            self.time_delta_days,
+        ]
         if any(f is not None for f in time_fields):
             # Valid - at least one field set
             return self
@@ -562,13 +593,13 @@ class ChunkMetadataUpdate(BaseModel):
     Minimal metadata for chunk (removed 15 deprecated JSONB fields).
     Focused on essential chronology and reference tracking.
     """
+
     chronology: Optional[ChronologyUpdate] = Field(
-        default=None,
-        description="Time progression updates"
+        default=None, description="Time progression updates"
     )
     world_layer: WorldLayerType = Field(
         default=WorldLayerType.PRIMARY,
-        description="Narrative layer (primary, flashback, dream, etc.)"
+        description="Narrative layer (primary, flashback, dream, etc.)",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -578,32 +609,34 @@ class ChunkMetadataUpdate(BaseModel):
 # Entity State Updates (Aligned with database)
 # ============================================================================
 
+
 class CharacterStateUpdate(BaseModel):
     """
     Update to a character's state (aligned with database schema).
     """
+
     character_id: Optional[int] = Field(
-        default=None,
-        description="Database ID of character"
+        default=None, description="Database ID of character"
     )
-    character_name: str = Field(
-        description="Character name (for lookup if ID unknown)"
-    )
-    current_location: Optional[int] = Field(
-        default=None,
-        description="FK to places.id"
-    )
+    character_name: str = Field(description="Character name (for lookup if ID unknown)")
+    current_location: Optional[int] = Field(default=None, description="FK to places.id")
     current_activity: Optional[str] = Field(
-        default=None,
-        description="What the character is currently doing"
+        default=None, description="What the character is currently doing"
     )
     emotional_state: Optional[str] = Field(
-        default=None,
-        description="Character's emotional state"
+        default=None, description="Character's emotional state"
     )
     extra_observations: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional observations stored in extra_data JSONB"
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
-        description="Additional observations stored in extra_data JSONB"
+        description=(
+            "Tag deltas for this character. Use applied_tags to add new tags "
+            "(e.g., they were just cursed → cursed), tags_to_clear to retire "
+            "ephemerals that no longer apply (e.g., the geas was lifted), and "
+            "new_tag_proposals when the vocabulary lacks what you need."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -613,38 +646,28 @@ class RelationshipUpdate(BaseModel):
     """
     Update to a relationship (aligned with character_relationships table).
     """
-    character1_id: Optional[int] = Field(
-        default=None,
-        description="First character ID"
-    )
+
+    character1_id: Optional[int] = Field(default=None, description="First character ID")
     character1_name: Optional[str] = Field(
-        default=None,
-        description="First character name (if ID unknown)"
+        default=None, description="First character name (if ID unknown)"
     )
     character2_id: Optional[int] = Field(
-        default=None,
-        description="Second character ID"
+        default=None, description="Second character ID"
     )
     character2_name: Optional[str] = Field(
-        default=None,
-        description="Second character name (if ID unknown)"
+        default=None, description="Second character name (if ID unknown)"
     )
     relationship_type: Optional[RelationshipType] = Field(
-        default=None,
-        description="Type of relationship"
+        default=None, description="Type of relationship"
     )
     emotional_valence: Optional[EmotionalValence] = Field(
-        default=None,
-        description="Emotional valence of relationship"
+        default=None, description="Emotional valence of relationship"
     )
     dynamic: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Current relationship dynamic"
+        default=None, max_length=500, description="Current relationship dynamic"
     )
     recent_events: Optional[str] = Field(
-        default=None,
-        description="Recent events affecting relationship"
+        default=None, description="Recent events affecting relationship"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -654,21 +677,24 @@ class LocationStateUpdate(BaseModel):
     """
     Update to a location's state (replaces vague world_state_notes).
     """
-    place_id: Optional[int] = Field(
-        default=None,
-        description="Database ID of place"
-    )
+
+    place_id: Optional[int] = Field(default=None, description="Database ID of place")
     place_name: Optional[str] = Field(
-        default=None,
-        description="Place name (if ID unknown)"
+        default=None, description="Place name (if ID unknown)"
     )
     current_conditions: Optional[str] = Field(
-        default=None,
-        description="Current conditions at location"
+        default=None, description="Current conditions at location"
     )
     notable_changes: Optional[List[str]] = Field(
-        default_factory=list,
-        description="Notable changes since last visit"
+        default_factory=list, description="Notable changes since last visit"
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
+        default=None,
+        description=(
+            "Tag deltas for this place. Use applied_tags to add new "
+            "place_affordance tags, tags_to_clear to retire ones that no longer "
+            "apply (e.g., a sheltered hideout is now compromised)."
+        ),
     )
 
 
@@ -676,25 +702,29 @@ class FactionStateUpdate(BaseModel):
     """
     Update to a faction's state.
     """
+
     faction_id: Optional[int] = Field(
-        default=None,
-        description="Database ID of faction"
+        default=None, description="Database ID of faction"
     )
     faction_name: Optional[str] = Field(
-        default=None,
-        description="Faction name (if ID unknown)"
+        default=None, description="Faction name (if ID unknown)"
     )
     current_activity: Optional[str] = Field(
-        default=None,
-        description="Current faction activity or operational focus"
+        default=None, description="Current faction activity or operational focus"
     )
     recent_actions: Optional[List[str]] = Field(
-        default_factory=list,
-        description="Recent faction actions"
+        default_factory=list, description="Recent faction actions"
     )
     stance_changes: Optional[Dict[str, str]] = Field(
+        default=None, description="Changes in stance toward other entities"
+    )
+    orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
-        description="Changes in stance toward other entities"
+        description=(
+            "Tag deltas for this faction. Use applied_tags to add tags (e.g., "
+            "they just lost state sanction → ousted_remnant), tags_to_clear to "
+            "retire ones that no longer apply."
+        ),
     )
 
 
@@ -702,21 +732,18 @@ class StateUpdates(BaseModel):
     """
     Collection of all state updates (structured, not vague).
     """
+
     characters: List[CharacterStateUpdate] = Field(
-        default_factory=list,
-        description="Character state updates"
+        default_factory=list, description="Character state updates"
     )
     relationships: List[RelationshipUpdate] = Field(
-        default_factory=list,
-        description="Relationship updates"
+        default_factory=list, description="Relationship updates"
     )
     locations: List[LocationStateUpdate] = Field(
-        default_factory=list,
-        description="Location state updates"
+        default_factory=list, description="Location state updates"
     )
     factions: List[FactionStateUpdate] = Field(
-        default_factory=list,
-        description="Faction state updates"
+        default_factory=list, description="Faction state updates"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -726,15 +753,15 @@ class StateUpdates(BaseModel):
 # Operations
 # ============================================================================
 
+
 class SummaryRequest(BaseModel):
     """Request for an episode or season summary."""
+
     summary_type: Literal["episode", "season"] = Field(
         description="Type of summary needed"
     )
     reason: Optional[str] = Field(
-        default=None,
-        max_length=200,
-        description="Reason for requesting summary"
+        default=None, max_length=200, description="Reason for requesting summary"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -742,34 +769,32 @@ class SummaryRequest(BaseModel):
 
 class RegenerationRequest(BaseModel):
     """Request to regenerate this narrative chunk."""
+
     reason: str = Field(
-        max_length=500,
-        description="Reason for requesting regeneration"
+        max_length=500, description="Reason for requesting regeneration"
     )
-    issues: List[Literal[
-        "continuity_error",
-        "out_of_character",
-        "pacing_issue",
-        "tone_mismatch",
-        "world_inconsistency",
-        "other"
-    ]] = Field(
-        default_factory=list,
-        description="Specific issues detected"
-    )
+    issues: List[
+        Literal[
+            "continuity_error",
+            "out_of_character",
+            "pacing_issue",
+            "tone_mismatch",
+            "world_inconsistency",
+            "other",
+        ]
+    ] = Field(default_factory=list, description="Specific issues detected")
 
     model_config = ConfigDict(extra="forbid")
 
 
 class Operations(BaseModel):
     """Special operations or requests from the Storyteller AI."""
+
     request_summary: Optional[SummaryRequest] = Field(
-        default=None,
-        description="Request for episode/season summary"
+        default=None, description="Request for episode/season summary"
     )
     request_regeneration: Optional[RegenerationRequest] = Field(
-        default=None,
-        description="Request to regenerate this chunk"
+        default=None, description="Request to regenerate this chunk"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -779,15 +804,15 @@ class Operations(BaseModel):
 # Main Response Schema with Hierarchical Options
 # ============================================================================
 
+
 class StorytellerResponseBootstrap(BaseModel):
     """Bootstrap response for first-chunk narrative generation."""
-    narrative: str = Field(
-        description="The opening narrative prose"
-    )
+
+    narrative: str = Field(description="The opening narrative prose")
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -795,17 +820,15 @@ class StorytellerResponseBootstrap(BaseModel):
 
 class StorytellerResponseMinimal(BaseModel):
     """Minimal response for quick narrative generation."""
-    narrative: str = Field(
-        description="The narrative prose (500-1500 words)"
-    )
+
+    narrative: str = Field(description="The narrative prose (500-1500 words)")
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
     )
     referenced_entities: Optional[ReferencedEntities] = Field(
-        default=None,
-        description="Entities referenced in narrative"
+        default=None, description="Entities referenced in narrative"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -813,23 +836,19 @@ class StorytellerResponseMinimal(BaseModel):
 
 class StorytellerResponseStandard(BaseModel):
     """Standard response with narrative and essential metadata."""
-    narrative: str = Field(
-        description="The narrative prose (500-1500 words)"
-    )
+
+    narrative: str = Field(description="The narrative prose (500-1500 words)")
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
     )
-    chunk_metadata: ChunkMetadataUpdate = Field(
-        description="Essential chunk metadata"
-    )
+    chunk_metadata: ChunkMetadataUpdate = Field(description="Essential chunk metadata")
     referenced_entities: ReferencedEntities = Field(
         description="All entities referenced"
     )
     state_updates: Optional[StateUpdates] = Field(
-        default=None,
-        description="State changes for entities"
+        default=None, description="State changes for entities"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -837,30 +856,23 @@ class StorytellerResponseStandard(BaseModel):
 
 class StorytellerResponseExtended(BaseModel):
     """Extended response with all features including operations."""
-    narrative: str = Field(
-        description="The narrative prose (500-1500 words)"
-    )
+
+    narrative: str = Field(description="The narrative prose (500-1500 words)")
     choices: List[str] = Field(
         min_length=2,
         max_length=4,
-        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective."
+        description="Player choices (2-4 options). Each should be a complete, actionable option written from player perspective.",
     )
-    chunk_metadata: ChunkMetadataUpdate = Field(
-        description="Essential chunk metadata"
-    )
+    chunk_metadata: ChunkMetadataUpdate = Field(description="Essential chunk metadata")
     referenced_entities: ReferencedEntities = Field(
         description="All entities referenced (existing or new)"
     )
-    state_updates: StateUpdates = Field(
-        description="Comprehensive state updates"
-    )
+    state_updates: StateUpdates = Field(description="Comprehensive state updates")
     operations: Optional[Operations] = Field(
-        default=None,
-        description="Special operations or requests"
+        default=None, description="Special operations or requests"
     )
     reasoning: Optional[str] = Field(
-        default=None,
-        description="Storyteller's reasoning (debug mode only)"
+        default=None, description="Storyteller's reasoning (debug mode only)"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -870,6 +882,7 @@ class StorytellerResponseExtended(BaseModel):
 # Utility Functions
 # ============================================================================
 
+
 def calculate_token_count(text: str) -> int:
     """
     Calculate precise token count using tiktoken.
@@ -877,6 +890,7 @@ def calculate_token_count(text: str) -> int:
     """
     # Import here to avoid circular dependencies
     from nexus.agents.lore.utils.chunk_operations import calculate_chunk_tokens
+
     return calculate_chunk_tokens(text)
 
 
@@ -888,16 +902,20 @@ def validate_entity_references(entities: ReferencedEntities) -> List[str]:
     warnings = []
 
     # Check for duplicate characters
-    char_names = [c.character_name or c.new_character.name
-                  for c in entities.characters
-                  if c.character_name or c.new_character]
+    char_names = [
+        c.character_name or c.new_character.name
+        for c in entities.characters
+        if c.character_name or c.new_character
+    ]
     if len(char_names) != len(set(char_names)):
         warnings.append("Duplicate character references detected")
 
     # Check for duplicate places
-    place_names = [p.place_name or p.new_place.name
-                   for p in entities.places
-                   if p.place_name or p.new_place]
+    place_names = [
+        p.place_name or p.new_place.name
+        for p in entities.places
+        if p.place_name or p.new_place
+    ]
     if len(place_names) != len(set(place_names)):
         warnings.append("Duplicate place references detected")
 
@@ -914,13 +932,14 @@ StoryTurnResponse = Union[
     StorytellerResponseExtended,
     StorytellerResponseStandard,
     StorytellerResponseMinimal,
-    StorytellerResponseBootstrap
+    StorytellerResponseBootstrap,
 ]
 
 
 # ============================================================================
 # Helper Functions for Compatibility
 # ============================================================================
+
 
 def validate_story_turn_response(data: Dict[str, Any]) -> StoryTurnResponse:
     """
