@@ -2,24 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from decimal import Decimal
 from typing import Any, Mapping, Optional
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 logger = logging.getLogger("nexus.orrery.bleed")
-
-
-BLEED_SYSTEM_PROMPT = (
-    "You are the Orrery Bleed selector. Choose only off-screen narrations that "
-    "could plausibly be perceived as ambient peripheral texture in the current "
-    "scene. Prefer sensory, social, or digital traces. Ignore candidates that "
-    "would spoil hidden information or force the Storyteller to use them."
-)
 
 
 class BleedCandidate(BaseModel):
@@ -52,19 +43,11 @@ class BleedCandidate(BaseModel):
         }
 
 
-class BleedSelection(BaseModel):
-    """Structured local-LLM verdict for Bleed candidates."""
-
-    selected_resolution_ids: list[int] = Field(default_factory=list)
-    reasoning: str = ""
-
-
 class BleedSelectorResult(BaseModel):
     """Result of a Bleed selector pass."""
 
     candidates_considered: int = 0
     selected: list[BleedCandidate] = Field(default_factory=list)
-    timed_out: bool = False
 
 
 def load_bleed_candidates(
@@ -126,18 +109,13 @@ def load_bleed_candidates(
     return [_candidate_from_row(row) for row in rows]
 
 
-async def select_bleed_menu_async(
+def select_bleed_menu(
     session: Any,
     *,
-    llm_manager: Any,
     anchor_chunk_id: int,
-    user_input: str,
-    warm_slice: list[dict[str, Any]],
     max_candidates: int,
-    candidate_pool_multiplier: int,
-    latency_budget_ms: int,
 ) -> BleedSelectorResult:
-    """Select a spoiler-safe ambient Bleed menu under a hard latency budget."""
+    """Select a deterministic ambient Bleed menu from eligible candidates."""
 
     if max_candidates <= 0:
         return BleedSelectorResult()
@@ -145,40 +123,14 @@ async def select_bleed_menu_async(
     candidate_pool = load_bleed_candidates(
         session,
         anchor_chunk_id=anchor_chunk_id,
-        limit=max_candidates * max(1, candidate_pool_multiplier),
+        limit=max_candidates,
     )
     if not candidate_pool:
         return BleedSelectorResult()
 
-    prompt = _build_bleed_prompt(
-        candidate_pool,
-        user_input=user_input,
-        warm_slice=warm_slice,
-        max_candidates=max_candidates,
-    )
-
-    try:
-        async with asyncio.timeout(latency_budget_ms / 1000):
-            selected = await _select_candidates_async(
-                llm_manager,
-                prompt,
-                candidate_pool,
-                max_candidates,
-                latency_budget_ms / 1000,
-            )
-    except (TimeoutError, asyncio.TimeoutError):
-        logger.error(
-            "Orrery Bleed selector exceeded %sms latency budget",
-            latency_budget_ms,
-        )
-        return BleedSelectorResult(
-            candidates_considered=len(candidate_pool),
-            timed_out=True,
-        )
-
     return BleedSelectorResult(
         candidates_considered=len(candidate_pool),
-        selected=selected,
+        selected=candidate_pool[:max_candidates],
     )
 
 
@@ -250,87 +202,3 @@ def _float_or_none(value: Any) -> Optional[float]:
     if isinstance(value, Decimal):
         return float(value)
     return float(value)
-
-
-def _build_bleed_prompt(
-    candidates: list[BleedCandidate],
-    *,
-    user_input: str,
-    warm_slice: list[dict[str, Any]],
-    max_candidates: int,
-) -> str:
-    recent_lines = []
-    for chunk in warm_slice[-3:]:
-        text_value = chunk.get("text") or chunk.get("full_text") or ""
-        if text_value:
-            recent_lines.append(" ".join(str(text_value).split())[:500])
-
-    candidate_payload = [
-        {
-            "resolution_id": candidate.resolution_id,
-            "template_id": candidate.template_id,
-            "event_type": candidate.event_type,
-            "actor_name": candidate.actor_name,
-            "target_name": candidate.target_name,
-            "channel": candidate.channel,
-            "summary": candidate.summary,
-            "brief": candidate.brief,
-            # Full narration text is only for selector-side spoiler judgment.
-            # Storyteller injection must use BleedCandidate.to_prompt_dict().
-            "text": candidate.text,
-            "magnitude": candidate.magnitude,
-        }
-        for candidate in candidates
-    ]
-
-    return (
-        "Select ambient Orrery Bleed candidates for the next Storyteller turn.\n\n"
-        f"User input: {user_input}\n\n"
-        "Recent scene excerpts:\n"
-        + "\n".join(f"- {line}" for line in recent_lines)
-        + "\n\nCandidates:\n"
-        + json.dumps(candidate_payload, sort_keys=True)
-        + "\n\nReturn at most "
-        + str(max_candidates)
-        + " selected_resolution_ids. Select none if no candidate is safely "
-        "perceptible from the current scene."
-    )
-
-
-async def _select_candidates_async(
-    llm_manager: Any,
-    prompt: str,
-    candidates: list[BleedCandidate],
-    max_candidates: int,
-    timeout_seconds: float,
-) -> list[BleedCandidate]:
-    raw = await llm_manager.structured_query_async(
-        prompt,
-        BleedSelection,
-        temperature=0.1,
-        max_tokens=512,
-        system_prompt=BLEED_SYSTEM_PROMPT,
-        timeout=timeout_seconds,
-    )
-    try:
-        selection = (
-            raw
-            if isinstance(raw, BleedSelection)
-            else BleedSelection.model_validate(raw)
-        )
-    except ValidationError as exc:
-        raise ValueError(f"Malformed Orrery Bleed selection: {raw}") from exc
-
-    candidates_by_id = {candidate.resolution_id: candidate for candidate in candidates}
-    selected: list[BleedCandidate] = []
-    unknown_ids = [
-        resolution_id
-        for resolution_id in selection.selected_resolution_ids
-        if resolution_id not in candidates_by_id
-    ]
-    if unknown_ids:
-        raise ValueError(f"Orrery Bleed selected unknown resolutions: {unknown_ids}")
-
-    for resolution_id in selection.selected_resolution_ids[:max_candidates]:
-        selected.append(candidates_by_id[resolution_id])
-    return selected

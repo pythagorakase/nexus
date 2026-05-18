@@ -29,7 +29,7 @@ try:
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
-        select_bleed_menu_async,
+        select_bleed_menu,
     )
     from nexus.config.settings_models import LORERetrievalSettings
     from nexus.util.authorial_directives import normalize_authorial_directives
@@ -52,7 +52,7 @@ except ImportError:
     from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
     from nexus.agents.orrery.bleed import (
         record_bleed_offers,
-        select_bleed_menu_async,
+        select_bleed_menu,
     )
     from nexus.config.settings_models import LORERetrievalSettings
     from nexus.util.authorial_directives import normalize_authorial_directives
@@ -822,9 +822,6 @@ class TurnCycleManager:
 
         bleed_settings = orrery_settings.get("bleed", {})
         max_candidates = int(bleed_settings.get("max_candidates", 3))
-        candidate_pool_multiplier = int(
-            bleed_settings.get("candidate_pool_multiplier", 4)
-        )
         if max_candidates <= 0:
             turn_context.phase_states["orrery_bleed"] = {
                 "enabled": True,
@@ -836,13 +833,6 @@ class TurnCycleManager:
         if not self.lore.memnon:
             raise RuntimeError("Orrery bleed requires MEMNON database access")
 
-        llm_manager = self.lore.llm_manager
-        if llm_manager is None and hasattr(self.lore, "_ensure_local_llm_manager"):
-            llm_manager = self.lore._ensure_local_llm_manager()
-        if not llm_manager:
-            raise RuntimeError("Orrery bleed requires local LLM access")
-
-        latency_budget_ms = int(bleed_settings.get("latency_budget_ms", 2000))
         with self.lore.memnon.Session() as session:
             if turn_context.orrery_proposal is not None:
                 anchor_chunk_id = turn_context.orrery_proposal.anchor_chunk_id
@@ -856,15 +846,10 @@ class TurnCycleManager:
                 }
                 return
 
-            result = await select_bleed_menu_async(
+            result = select_bleed_menu(
                 session,
-                llm_manager=llm_manager,
                 anchor_chunk_id=anchor_chunk_id,
-                user_input=turn_context.user_input,
-                warm_slice=turn_context.warm_slice,
                 max_candidates=max_candidates,
-                candidate_pool_multiplier=candidate_pool_multiplier,
-                latency_budget_ms=latency_budget_ms,
             )
 
         turn_context.bleed_menu = result.selected
@@ -873,7 +858,6 @@ class TurnCycleManager:
             "anchor_chunk_id": anchor_chunk_id,
             "candidate_count": result.candidates_considered,
             "selected_count": len(result.selected),
-            "timed_out": result.timed_out,
             "offers_recorded": 0,
         }
 

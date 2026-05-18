@@ -212,8 +212,8 @@ class LORE:
         self.token_manager = TokenBudgetManager(self.settings)
         self.turn_manager = TurnCycleManager(self)
         logger.info(
-            "LORE turn cycle uses deterministic retrieval planning; local LLM "
-            "manager will be initialized on demand for legacy retrieval tools."
+            "LORE turn cycle uses deterministic retrieval planning and direct "
+            "MEMNON search."
         )
 
         # MEMNON is REQUIRED
@@ -247,19 +247,6 @@ class LORE:
         )
 
         logger.info("Component initialization complete")
-
-    def _ensure_local_llm_manager(self):
-        """Initialize the legacy local LLM manager on demand."""
-        if self.llm_manager is None:
-            from utils.local_llm import LocalLLMManager
-
-            settings_path = (
-                self.settings_path if hasattr(self, "settings_path") else None
-            )
-            self.llm_manager = LocalLLMManager(
-                self.settings, settings_path, self.system_prompt
-            )
-        return self.llm_manager
 
     def _initialize_memnon(self):
         """Initialize MEMNON utility for memory retrieval"""
@@ -404,20 +391,6 @@ class LORE:
             if failed_phase == TurnPhase.APEX_GENERATION:
                 raise
             return f"Error processing turn: {str(e)}"
-
-        finally:
-            # Clean up legacy local-LLM resources if they were initialized by
-            # deprecated retrieval tools during this process.
-            if (
-                self.llm_manager
-                and self.llm_manager.unload_on_exit  # allow --keep-model to disable
-                and self.settings.get("Agent Settings", {})
-                .get("LORE", {})
-                .get("llm", {})
-                .get("unload_after_turn", True)
-            ):
-                logger.debug("Unloading model after turn cycle to free resources")
-                self.llm_manager.unload_model()
 
     async def retrieve_context(
         self,
@@ -649,15 +622,7 @@ class LORE:
             "components": {
                 "memnon": "available" if self.memnon else "unavailable",
                 "logon": "available" if self.logon else "unavailable",
-                "llm": (
-                    "not initialized"
-                    if self.llm_manager is None
-                    else (
-                        "available"
-                        if self.llm_manager.is_available()
-                        else "unavailable"
-                    )
-                ),
+                "retrieval": "direct_memnon",
             },
         }
 
@@ -668,9 +633,7 @@ class LORE:
             "components": {
                 "memnon": self.memnon is not None,
                 "logon": self.logon is not None,
-                "local_llm": (
-                    self.llm_manager.is_available() if self.llm_manager else False
-                ),
+                "retrieval": "direct_memnon",
                 "token_manager": self.token_manager is not None,
                 "turn_manager": self.turn_manager is not None,
                 "memory_manager": self.memory_manager is not None,

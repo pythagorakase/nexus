@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -11,9 +10,8 @@ import pytest
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.bleed import (
-    BleedSelection,
     load_bleed_candidates,
-    select_bleed_menu_async,
+    select_bleed_menu,
 )
 
 
@@ -54,7 +52,7 @@ class FakeSession:
         if "/* orrery:bleed_candidates */" in sql:
             assert "r.tick_chunk_id <= :anchor_chunk_id" in sql
             assert "r.offer_count < 3" in sql
-            return FakeResult(self.candidate_rows)
+            return FakeResult(self.candidate_rows[: params["limit"]])
         if "/* orrery:record_bleed_offers */" in sql:
             return FakeResult([])
         if "SELECT max(id) AS max_id" in sql:
@@ -63,34 +61,6 @@ class FakeSession:
 
     def commit(self):
         self.commits += 1
-
-
-class FakeLLM:
-    """Local LLM stand-in returning one Bleed selection."""
-
-    def __init__(self, selection):
-        self.selection = selection
-        self.prompts = []
-
-    async def structured_query_async(self, prompt, response_model, **_kwargs):
-        self.prompts.append((prompt, response_model))
-        return self.selection
-
-
-class SlowLLM(FakeLLM):
-    """Local LLM stand-in that exceeds the latency budget."""
-
-    def __init__(self, selection):
-        super().__init__(selection)
-        self.cancelled = False
-
-    async def structured_query_async(self, prompt, response_model, **kwargs):
-        try:
-            await asyncio.sleep(0.05)
-        except asyncio.CancelledError:
-            self.cancelled = True
-            raise
-        return await super().structured_query_async(prompt, response_model, **kwargs)
 
 
 class FakeMemnon:
@@ -132,21 +102,14 @@ class FakeLore:
     token_manager = None
     enable_logon = True
 
-    def __init__(self, settings, session, llm_manager, logon=None):
+    def __init__(self, settings, session, logon=None):
         self.settings = settings
         self.memnon = FakeMemnon(session)
-        self.llm_manager = llm_manager
-        self.lazy_llm_manager = llm_manager
-        self.ensure_llm_calls = 0
+        self.llm_manager = None
         self.logon = logon or FakeLogon()
 
     def ensure_logon(self):
         return None
-
-    def _ensure_local_llm_manager(self):
-        self.ensure_llm_calls += 1
-        self.llm_manager = self.lazy_llm_manager
-        return self.llm_manager
 
 
 def _candidate_row():
@@ -169,14 +132,19 @@ def _candidate_row():
     }
 
 
+def _candidate_row_with_id(resolution_id: int):
+    row = dict(_candidate_row())
+    row["resolution_id"] = resolution_id
+    row["narration_id"] = 500 + resolution_id
+    return row
+
+
 def _settings():
     return {
         "orrery": {
             "enabled": True,
             "bleed": {
-                "latency_budget_ms": 2000,
                 "max_candidates": 3,
-                "candidate_pool_multiplier": 4,
             },
         }
     }
@@ -198,22 +166,15 @@ def test_load_bleed_candidates_coerces_descriptor() -> None:
     assert candidates[0].magnitude == 0.72
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_returns_selected_without_recording_offers() -> None:
+def test_select_bleed_menu_returns_top_candidate_without_recording_offers() -> None:
     """Selection is pure; offer bookkeeping waits until generation succeeds."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
-    llm = FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt"))
 
-    result = await select_bleed_menu_async(
+    result = select_bleed_menu(
         session,
-        llm_manager=llm,
         anchor_chunk_id=100,
-        user_input="Continue.",
-        warm_slice=[{"text": "Rain ticks against the transit glass."}],
         max_candidates=3,
-        candidate_pool_multiplier=4,
-        latency_budget_ms=2000,
     )
 
     assert result.candidates_considered == 1
@@ -224,72 +185,40 @@ async def test_select_bleed_menu_returns_selected_without_recording_offers() -> 
     )
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_returns_empty_without_candidates() -> None:
-    """No candidates means no local LLM call and no bookkeeping writes."""
+def test_select_bleed_menu_returns_empty_without_candidates() -> None:
+    """No candidates means no bookkeeping writes."""
 
     session = FakeSession(candidate_rows=[])
-    llm = FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="unused"))
 
-    result = await select_bleed_menu_async(
+    result = select_bleed_menu(
         session,
-        llm_manager=llm,
         anchor_chunk_id=100,
-        user_input="Continue.",
-        warm_slice=[],
         max_candidates=3,
-        candidate_pool_multiplier=4,
-        latency_budget_ms=2000,
     )
 
     assert result.candidates_considered == 0
     assert result.selected == []
-    assert llm.prompts == []
     assert session.commits == 0
 
 
-@pytest.mark.asyncio
-async def test_select_bleed_menu_timeout_returns_empty() -> None:
-    """Latency overruns produce an empty menu and no offer bookkeeping."""
+def test_select_bleed_menu_caps_deterministic_selection() -> None:
+    """Deterministic Bleed preserves SQL ordering and max-candidate caps."""
 
-    session = FakeSession(candidate_rows=[_candidate_row()])
-    llm = SlowLLM(BleedSelection(selected_resolution_ids=[10]))
-
-    result = await select_bleed_menu_async(
-        session,
-        llm_manager=llm,
-        anchor_chunk_id=100,
-        user_input="Continue.",
-        warm_slice=[],
-        max_candidates=3,
-        candidate_pool_multiplier=4,
-        latency_budget_ms=1,
+    session = FakeSession(
+        candidate_rows=[
+            _candidate_row_with_id(10),
+            _candidate_row_with_id(11),
+        ]
     )
 
-    assert result.timed_out is True
-    assert result.selected == []
-    assert llm.cancelled is True
-    assert session.commits == 0
+    result = select_bleed_menu(
+        session,
+        anchor_chunk_id=100,
+        max_candidates=1,
+    )
 
-
-@pytest.mark.asyncio
-async def test_select_bleed_menu_rejects_unknown_resolution_ids() -> None:
-    """Hallucinated structured IDs fail loudly instead of silently disappearing."""
-
-    session = FakeSession(candidate_rows=[_candidate_row()])
-
-    with pytest.raises(ValueError, match="unknown resolutions"):
-        await select_bleed_menu_async(
-            session,
-            llm_manager=FakeLLM(BleedSelection(selected_resolution_ids=[9999])),
-            anchor_chunk_id=100,
-            user_input="Continue.",
-            warm_slice=[],
-            max_candidates=3,
-            candidate_pool_multiplier=4,
-            latency_budget_ms=2000,
-        )
-
+    assert result.candidates_considered == 1
+    assert [candidate.resolution_id for candidate in result.selected] == [10]
     assert session.commits == 0
 
 
@@ -298,13 +227,7 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
     """LORE payload assembly injects selected ambient Orrery peripherals."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
-    manager = TurnCycleManager(
-        FakeLore(
-            _settings(),
-            session,
-            FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt")),
-        )
-    )
+    manager = TurnCycleManager(FakeLore(_settings(), session))
     context = TurnContext(
         turn_id="t1",
         user_input="Continue.",
@@ -321,13 +244,11 @@ async def test_assemble_context_payload_includes_bleed_menu() -> None:
 
 
 @pytest.mark.asyncio
-async def test_assemble_context_payload_initializes_bleed_llm_lazily() -> None:
-    """Orrery Bleed may still opt into the legacy local manager on demand."""
+async def test_assemble_context_payload_does_not_initialize_bleed_llm() -> None:
+    """Orrery Bleed should not summon local inference during turn assembly."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
-    llm = FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt"))
-    lore = FakeLore(_settings(), session, llm)
-    lore.llm_manager = None
+    lore = FakeLore(_settings(), session)
     manager = TurnCycleManager(lore)
     context = TurnContext(
         turn_id="t1",
@@ -338,8 +259,7 @@ async def test_assemble_context_payload_initializes_bleed_llm_lazily() -> None:
 
     await manager.assemble_context_payload(context)
 
-    assert lore.ensure_llm_calls == 1
-    assert lore.llm_manager is llm
+    assert lore.llm_manager is None
     assert context.phase_states["orrery_bleed"]["selected_count"] == 1
 
 
@@ -348,13 +268,7 @@ async def test_assemble_context_payload_reuses_orrery_proposal_anchor() -> None:
     """Bleed uses the existing resolve anchor instead of recomputing max chunk."""
 
     session = FakeSession(candidate_rows=[_candidate_row()])
-    manager = TurnCycleManager(
-        FakeLore(
-            _settings(),
-            session,
-            FakeLLM(BleedSelection(selected_resolution_ids=[10], reasoning="apt")),
-        )
-    )
+    manager = TurnCycleManager(FakeLore(_settings(), session))
     context = TurnContext(
         turn_id="t1",
         user_input="Continue.",
@@ -379,9 +293,7 @@ async def test_call_apex_ai_records_bleed_offers_after_generation_success() -> N
     """Surfacing bookkeeping is written only after LOGON returns a response."""
 
     session = FakeSession()
-    manager = TurnCycleManager(
-        FakeLore(_settings(), session, FakeLLM(BleedSelection()), logon=FakeLogon())
-    )
+    manager = TurnCycleManager(FakeLore(_settings(), session, logon=FakeLogon()))
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
@@ -414,9 +326,7 @@ async def test_call_apex_ai_does_not_record_bleed_offers_on_generation_failure()
     """Failed LOGON generation does not consume a Bleed opportunity."""
 
     session = FakeSession()
-    manager = TurnCycleManager(
-        FakeLore(_settings(), session, FakeLLM(BleedSelection()), logon=FailingLogon())
-    )
+    manager = TurnCycleManager(FakeLore(_settings(), session, logon=FailingLogon()))
     context = TurnContext(turn_id="t1", user_input="Continue.", start_time=0)
     context.context_payload = {"user_input": "Continue."}
     context.bleed_menu = load_bleed_candidates(
