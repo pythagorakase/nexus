@@ -12,7 +12,9 @@ The shared insert path stamps rows with the supplied ``source_kind`` (typically
 ``llm_generated``). Operates within the caller's transaction — no commits here.
 
 Depends on migration 036 making ``ix_entity_tags_current`` UNIQUE so the
-``ON CONFLICT`` clause in ``_insert_entity_tag`` matches a unique index.
+``ON CONFLICT`` clause in ``_insert_entity_tag`` matches a unique index, and on
+migration 037 seeding ``tag_category_registry`` so runtime bestowals know which
+tag categories may be applied to each entity kind.
 """
 
 from __future__ import annotations
@@ -46,6 +48,9 @@ def apply_tag_bestowal(
     2. Apply registered + just-proposed tag names to the entity via
        ``entity_tags`` insert.
     3. Mark ``tags_to_clear`` entries cleared (UPDATE cleared_at = now()).
+
+    Requires migration 037's ``tag_category_registry`` rows for the target
+    ``entity_kind``; missing registry data is treated as a slot-migration error.
 
     Returns counter dict suitable for logging:
     ``{"applied", "proposed", "cleared", "skipped_category", "skipped_unknown"}``.

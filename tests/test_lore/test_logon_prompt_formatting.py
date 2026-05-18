@@ -76,6 +76,32 @@ def test_system_prompt_includes_runtime_tag_library(monkeypatch) -> None:
     assert "Setting body." in prompt
 
 
+def test_system_prompt_keeps_setting_when_tag_library_unavailable(monkeypatch) -> None:
+    """A missing Orrery registry should not block storyteller prompt loading."""
+
+    def raise_missing_registry(_dbname: str) -> str:
+        raise RuntimeError("tag_category_registry missing")
+
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.format_tag_library_for_prompt",
+        raise_missing_registry,
+    )
+    monkeypatch.setattr(
+        "nexus.api.slot_utils.require_slot_dbname",
+        lambda dbname=None: dbname or "save_05",
+    )
+    monkeypatch.setattr(
+        "nexus.agents.lore.logon_utility.psycopg2.connect",
+        lambda **_kwargs: _Conn(),
+    )
+
+    prompt = LogonUtility({}, dbname="save_05")._load_system_prompt()
+
+    assert "TAG LIBRARY" not in prompt
+    assert "## Test Setting" in prompt
+    assert "Setting body." in prompt
+
+
 class _Conn:
     def cursor(self) -> "_Cursor":
         return _Cursor()

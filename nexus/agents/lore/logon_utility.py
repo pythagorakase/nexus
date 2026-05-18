@@ -57,7 +57,7 @@ class LogonUtility:
         self._system_prompt: Optional[str] = None
 
     def _load_system_prompt(self) -> str:
-        """Load and combine the storyteller core prompt with setting context"""
+        """Load and combine the storyteller core prompt with setting context."""
         from nexus.api.slot_utils import require_slot_dbname
 
         # Load storyteller core prompt
@@ -77,12 +77,18 @@ class LogonUtility:
             )
             core_prompt = "You are a narrative intelligence system generating interactive fiction."
 
-        db = require_slot_dbname(dbname=self.dbname)
-        tag_library_prompt = format_tag_library_for_prompt(db)
-        core_prompt = f"{core_prompt}\n\n---\n\n{tag_library_prompt}"
-
         # Query setting from global_variables
         try:
+            db = require_slot_dbname(dbname=self.dbname)
+            try:
+                tag_library_prompt = format_tag_library_for_prompt(db)
+                core_prompt = f"{core_prompt}\n\n---\n\n{tag_library_prompt}"
+            except Exception as e:
+                logger.warning(
+                    "Failed to load Orrery tag library for storyteller prompt: %s",
+                    e,
+                )
+
             conn = psycopg2.connect(host="localhost", database=db, user="pythagor")
             with conn.cursor() as cur:
                 cur.execute("SELECT setting FROM global_variables WHERE id = true")

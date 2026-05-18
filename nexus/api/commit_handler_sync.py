@@ -22,7 +22,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
-from nexus.agents.orrery.tag_writer import apply_tag_bestowal
+from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
     SummaryTask,
@@ -587,7 +587,7 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
                     logger.info(f"Updated character {char_update.character_id}")
 
                 bestowal = getattr(char_update, "orrery_tags", None)
-                if bestowal is not None:
+                if char_update.character_id and bestowal is not None:
                     _apply_state_tags(
                         cur,
                         kind="character",
@@ -645,7 +645,7 @@ def _apply_state_tags(cur, *, kind, subtype_table, subtype_id, bestowal) -> None
     if row is None:
         logger.warning(f"Skipping tag bestowal: no {kind} row for id={subtype_id}")
         return
-    entity_id = row[0]
+    entity_id = _row_value(row, "entity_id", 0)
     counters = apply_tag_bestowal(
         cur,
         entity_id=entity_id,

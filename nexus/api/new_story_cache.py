@@ -895,6 +895,13 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE assets.new_story_creator
+                SET character_orrery_tags = NULL
+                WHERE id = TRUE
+                """
+            )
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
             cur.execute(
@@ -1091,6 +1098,16 @@ def write_cache(
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
+            # First ensure the row exists; wildcard Orrery tags are written with
+            # an UPDATE below, so first-time legacy writes need the cache row now.
+            cur.execute(
+                """
+                INSERT INTO assets.new_story_creator (id)
+                VALUES (TRUE)
+                ON CONFLICT (id) DO NOTHING
+                """
+            )
+
             # Build the update dynamically based on what's provided
             updates = ["updated_at = NOW()"]
             params = []
@@ -1274,15 +1291,6 @@ def write_cache(
             if base_timestamp is not None:
                 updates.append("base_timestamp = %s")
                 params.append(base_timestamp)
-
-            # First ensure the row exists
-            cur.execute(
-                """
-                INSERT INTO assets.new_story_creator (id)
-                VALUES (TRUE)
-                ON CONFLICT (id) DO NOTHING
-                """
-            )
 
             # Then update
             if updates:

@@ -133,3 +133,65 @@ def test_write_cache_marks_three_selected_traits_confirmed(monkeypatch) -> None:
     assert any(
         "traits_confirmed = TRUE" in sql for sql, _params in fake_conn.cursor_obj.calls
     )
+
+
+def test_write_cache_creates_row_before_wildcard_tags(monkeypatch) -> None:
+    """First legacy cache writes must not drop wildcard Orrery tag payloads."""
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.calls.append((sql, params))
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_obj = FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def cursor(self):
+            return self.cursor_obj
+
+    fake_conn = FakeConnection()
+    monkeypatch.setattr(cache_module, "get_connection", lambda _dbname: fake_conn)
+
+    cache_module.write_cache(
+        dbname="save_05",
+        character_draft={
+            "wildcard": {
+                "wildcard_name": "Debts That Know Her Name",
+                "wildcard_description": "Favors find her even underground.",
+                "orrery_tags": {
+                    "applied_tags": ["obligation_magnet"],
+                    "new_tag_proposals": [],
+                    "tags_to_clear": [],
+                },
+            }
+        },
+    )
+
+    calls = [sql for sql, _params in fake_conn.cursor_obj.calls]
+    row_insert_index = next(
+        index
+        for index, sql in enumerate(calls)
+        if "INSERT INTO assets.new_story_creator" in sql
+    )
+    tag_update_index = next(
+        index
+        for index, sql in enumerate(calls)
+        if "character_orrery_tags = %s::jsonb" in sql
+    )
+
+    assert row_insert_index < tag_update_index
