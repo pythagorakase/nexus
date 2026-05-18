@@ -18,6 +18,7 @@ sys.path.insert(0, str(nexus_root))
 
 from nexus.agents.lore.utils.local_llm import (
     _extract_final_channel_text,
+    _has_complete_retrieval_query_set,
     _parse_structured_json_text,
     _sanitize_retrieval_queries,
     LocalLLMManager,
@@ -228,6 +229,38 @@ class TestQueryGeneration:
         )
 
         assert queries == ["Lantern Court trapdoor history"]
+
+    def test_sanitize_retrieval_queries_rejects_instruction_and_quote_junk(self):
+        """Live local models can leak instructions or malformed quote fragments."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "Make sure each line is a query phrase. No bullet points.",
+                'Ganrow?" "stated*" "delay',
+                'Sella" "clause splinter" history of location "Rema',
+                'history of "Lantern Court" alliance with "Remainder Chamber"',
+                "Sella sour bite Remainder Chamber poisoning",
+                "Lantern Court healer living remainder",
+                "East Span Crown wardline pursuit",
+            ]
+        )
+
+        assert queries == [
+            'history of "Lantern Court" alliance with "Remainder Chamber"',
+            "Sella sour bite Remainder Chamber poisoning",
+            "Lantern Court healer living remainder",
+            "East Span Crown wardline pursuit",
+        ]
+
+    def test_retrieval_query_set_requires_three_queries(self):
+        """Structured output should fall back when too few valid queries survive."""
+        assert not _has_complete_retrieval_query_set(["Sella sour bite"])
+        assert _has_complete_retrieval_query_set(
+            [
+                "Sella sour bite Remainder Chamber poisoning",
+                "Lantern Court healer living remainder",
+                "East Span Crown wardline pursuit",
+            ]
+        )
 
     def test_parse_structured_json_text_uses_final_channel_json(self):
         """Structured fallback parsing should recover JSON from leaked transcripts."""
