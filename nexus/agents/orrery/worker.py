@@ -6,17 +6,12 @@ import argparse
 import json
 import logging
 import os
-import re
 from typing import Any, Mapping, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
-from nexus.agents.lore.utils.local_llm import (
-    LocalLLMManager,
-    _parse_structured_json_text,
-)
 from nexus.config import load_settings_as_dict
 
 logger = logging.getLogger("nexus.orrery.worker")
@@ -28,13 +23,8 @@ DEFAULT_SEMANTIC_CLEARANCE_LIMIT = 20
 DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS = 10
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS = 5
 DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS = 6
-
-PROMOTION_SYSTEM_PROMPT = (
-    "You are the Orrery promotion discriminator. Decide whether an off-screen "
-    "resolution deserves durable prose. Promote only events that create future "
-    "retrieval value, dramatic irony, concrete world change, or a perceivable "
-    "ambient consequence. Do not promote routine maintenance."
-)
+DEFAULT_PROMOTION_PRIORITY_THRESHOLD = 50.0
+DEFAULT_PROMOTION_MAGNITUDE_THRESHOLD = 0.5
 
 NARRATION_SYSTEM_PROMPT = (
     "You write concise off-screen narrative records for NEXUS. The prose is "
@@ -42,16 +32,9 @@ NARRATION_SYSTEM_PROMPT = (
     "where useful, and free of second-person address."
 )
 
-SEMANTIC_CLEARANCE_SYSTEM_PROMPT = (
-    "You are the Orrery semantic tag-clearance judge. Decide whether an "
-    "ephemeral off-screen state tag is no longer active based only on the "
-    "recent canonical narrative and Orrery events provided. Clear tags only "
-    "when the evidence is concrete; uncertainty means keep the tag."
-)
-
 
 class PromotionVerdict(BaseModel):
-    """Structured local-LLM promotion verdict for an Orrery resolution."""
+    """Deterministic promotion verdict for an Orrery resolution."""
 
     promote: bool
     reason: str = Field(min_length=1)
@@ -63,13 +46,6 @@ class PromotionVerdict(BaseModel):
         default=None,
         description="Short spoiler-safe cue a later Bleed selector could inspect.",
     )
-
-
-class SemanticClearanceVerdict(BaseModel):
-    """Structured local-LLM verdict for semantic ephemeral-tag clearance."""
-
-    clear: bool
-    reason: str = Field(min_length=1)
 
 
 class OrreryWorkerResult(BaseModel):
@@ -113,7 +89,7 @@ def process_orrery_outbox_sync(
     llm_manager: Optional[Any] = None,
     narration_provider: Optional[Any] = None,
 ) -> OrreryWorkerResult:
-    """Promote, narrate, and clear pending Orrery background work."""
+    """Drain pending Orrery background work."""
 
     promoted, skipped = promote_pending_resolutions_sync(
         slot,
@@ -153,7 +129,10 @@ def promote_pending_resolutions_sync(
     llm_manager: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> tuple[int, int]:
-    """Use the local LLM to mark pending resolutions promoted or skipped."""
+    """Mark pending resolutions promoted or skipped with deterministic criteria.
+
+    ``llm_manager`` is accepted for compatibility with older callers and ignored.
+    """
 
     owns_conn = conn is None
     conn = conn or _connect_for_slot(slot)
@@ -187,12 +166,11 @@ def promote_pending_resolutions_sync(
                 if not rows:
                     return (0, 0)
 
-                manager = llm_manager or LocalLLMManager(settings_dict)
                 promoted = 0
                 skipped = 0
                 slot_label = _slot_label(slot)
                 for row in rows:
-                    verdict = _promotion_verdict(manager, row)
+                    verdict = _promotion_verdict(row)
                     if verdict.promote:
                         _mark_promoted(cur, row, verdict, slot_label, settings_dict)
                         promoted += 1
@@ -312,53 +290,12 @@ def clear_semantic_tags_sync(
     llm_manager: Optional[Any] = None,
     conn: Optional[Any] = None,
 ) -> int:
-    """Use the local LLM to clear stale semantic ephemeral tags."""
+    """Return no semantic clears until a non-local clearance signal exists.
 
-    if (
-        limit <= 0
-        or recent_chunk_window <= 0
-        or evidence_chunk_limit <= 0
-        or evidence_event_limit <= 0
-    ):
-        return 0
+    Arguments are accepted for compatibility with older callers.
+    """
 
-    owns_conn = conn is None
-    conn = conn or _connect_for_slot(slot)
-    settings_dict = dict(settings or load_settings_as_dict())
-    try:
-        rows = _semantic_clearance_candidates_sync(
-            conn,
-            limit=limit,
-            recent_chunk_window=recent_chunk_window,
-        )
-        if not rows:
-            return 0
-
-        manager = llm_manager or LocalLLMManager(settings_dict)
-        cleared = 0
-        for row in rows:
-            with conn:
-                with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    evidence = _semantic_clearance_evidence_sync(
-                        cur,
-                        entity_id=int(row["entity_id"]),
-                        chunk_limit=evidence_chunk_limit,
-                        event_limit=evidence_event_limit,
-                    )
-            verdict = _semantic_clearance_verdict(manager, row, evidence)
-            if verdict.clear:
-                did_clear = _mark_semantic_tag_cleared_sync(
-                    conn,
-                    row=row,
-                    verdict=verdict,
-                    source_chunk_id=_latest_evidence_chunk_id(evidence),
-                )
-                if did_clear:
-                    cleared += 1
-        return cleared
-    finally:
-        if owns_conn:
-            conn.close()
+    return 0
 
 
 def load_orrery_status_sync(
@@ -554,112 +491,35 @@ def _mark_narration_failed(
     )
 
 
-def _promotion_verdict(manager: Any, row: Mapping[str, Any]) -> PromotionVerdict:
-    prompt = (
-        "Evaluate this off-screen resolution for durable narration.\n\n"
-        f"Template: {row['template_id']}\n"
-        f"Actor: {row.get('actor_name') or row.get('actor_entity_id')}\n"
-        f"Priority: {row['priority']}\n"
-        f"Magnitude: {row.get('magnitude')}\n"
-        f"Brief: {row.get('brief')}\n"
-        f"State delta: {json.dumps(row.get('state_delta') or {}, sort_keys=True)}\n\n"
-        "Return promote=true only if this deserves off-screen prose."
+def _promotion_verdict(row: Mapping[str, Any]) -> PromotionVerdict:
+    priority = _numeric_or_zero(row.get("priority"))
+    magnitude = _numeric_or_zero(row.get("magnitude"))
+    state_delta = row.get("state_delta") or {}
+    event_ids = row.get("event_ids") or []
+    brief = str(row.get("brief") or "").strip()
+    has_canonical_signal = bool(brief) and bool(state_delta or event_ids)
+    is_salient = (
+        priority >= DEFAULT_PROMOTION_PRIORITY_THRESHOLD
+        or magnitude >= DEFAULT_PROMOTION_MAGNITUDE_THRESHOLD
     )
-    raw = manager.structured_query(
-        prompt,
-        PromotionVerdict,
-        temperature=0.1,
-        max_tokens=512,
-        system_prompt=PROMOTION_SYSTEM_PROMPT,
-    )
-    return _coerce_promotion_verdict(raw)
 
-
-def _structured_payload_from_raw(raw: Any) -> Any:
-    """Recover structured JSON when a local model leaks chat text wrappers."""
-    if isinstance(raw, Mapping):
-        answer = raw.get("answer")
-        if isinstance(answer, str):
-            parsed = _parse_structured_json_text(answer)
-            if parsed is not None:
-                return parsed
-    elif isinstance(raw, str):
-        parsed = _parse_structured_json_text(raw)
-        if parsed is not None:
-            return parsed
-    return raw
-
-
-def _markdown_bool_payload_from_raw(
-    raw: Any, field_name: str
-) -> Optional[dict[str, Any]]:
-    """Recover simple markdown/text boolean verdicts from local LLM fallbacks."""
-    text: Optional[str] = None
-    reason: Optional[str] = None
-
-    if isinstance(raw, Mapping):
-        answer = raw.get("answer")
-        if isinstance(answer, str):
-            text = answer
-        for reason_key in ("reason", "reasoning"):
-            value = raw.get(reason_key)
-            if isinstance(value, str) and value.strip():
-                reason = value.strip()
-                break
-    elif isinstance(raw, str):
-        text = raw
-
-    if not text:
-        return None
-
-    verdict_match = re.search(
-        rf"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*{re.escape(field_name)}\s*"
-        r"(?:\*\*)?\s*[:=]\s*(?:\*\*)?\s*(true|false)\b",
-        text,
-        re.IGNORECASE | re.MULTILINE,
-    )
-    if not verdict_match:
-        return None
-
-    if reason is None:
-        reason_match = re.search(
-            r"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*reason\s*" r"(?:\*\*)?\s*[:=]\s*(.+)$",
-            text,
-            re.IGNORECASE | re.MULTILINE,
-        )
-        if reason_match:
-            reason = reason_match.group(1).strip()
-
-    return {
-        field_name: verdict_match.group(1).lower() == "true",
-        "reason": reason or "Local model returned a text boolean verdict.",
-    }
-
-
-def _coerce_promotion_verdict(raw: Any) -> PromotionVerdict:
-    """Return a conservative promotion verdict from noisy local-model output."""
-    try:
-        if isinstance(raw, PromotionVerdict):
-            return raw
-        payload = _structured_payload_from_raw(raw)
-        if not (isinstance(payload, Mapping) and "promote" in payload):
-            payload = _markdown_bool_payload_from_raw(payload, "promote") or payload
-        if isinstance(payload, Mapping) and "promote" in payload:
-            payload = dict(payload)
-            payload.setdefault(
-                "reason", "Local model returned a bare promotion decision."
-            )
-        return PromotionVerdict.model_validate(payload)
-    except ValidationError as exc:
-        logger.warning(
-            "Malformed Orrery promotion verdict; skipping conservatively: %s",
-            raw,
-            exc_info=True,
-        )
+    if has_canonical_signal and is_salient:
         return PromotionVerdict(
-            promote=False,
-            reason="Malformed local promotion verdict; skipped conservatively.",
+            promote=True,
+            reason=(
+                "Deterministic promotion: priority "
+                f"{priority:g}, magnitude {magnitude:g}, "
+                f"state_delta={bool(state_delta)}, event_ids={len(event_ids)}."
+            ),
+            perceptual_summary=brief[:240],
         )
+    return PromotionVerdict(
+        promote=False,
+        reason=(
+            "Deterministic skip: resolution lacks both a durable canonical "
+            "signal and salience threshold."
+        ),
+    )
 
 
 def _mark_promoted(
@@ -705,255 +565,17 @@ def _mark_skipped(cur: Any, row: Mapping[str, Any], verdict: PromotionVerdict) -
     )
 
 
-def _semantic_clearance_candidates_sync(
-    conn: Any,
-    *,
-    limit: int,
-    recent_chunk_window: int,
-) -> list[Mapping[str, Any]]:
-    """Load semantic tag candidates without holding row locks across inference."""
-
-    with conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                WITH recent_ticks AS (
-                    SELECT id
-                    FROM narrative_chunks
-                    ORDER BY id DESC
-                    LIMIT %s
-                )
-                SELECT
-                    et.id AS entity_tag_id,
-                    et.entity_id,
-                    et.applied_at,
-                    et.applied_at_world_time,
-                    et.template_id,
-                    t.tag,
-                    t.category,
-                    t.description,
-                    n.name AS entity_name
-                FROM entity_tags et
-                JOIN tags t ON t.id = et.tag_id
-                LEFT JOIN entity_names_v n ON n.id = et.entity_id
-                WHERE et.cleared_at IS NULL
-                  AND t.deprecated = false
-                  AND t.is_ephemeral = true
-                  AND t.clearance_kind = 'semantic'
-                  AND (
-                      EXISTS (
-                          SELECT 1
-                          FROM chunk_entity_references_v cer
-                          JOIN recent_ticks rt ON rt.id = cer.chunk_id
-                          WHERE cer.entity_id = et.entity_id
-                      )
-                      OR EXISTS (
-                          SELECT 1
-                          FROM world_events we
-                          JOIN recent_ticks rt ON rt.id = we.tick_chunk_id
-                          WHERE we.actor_entity_id = et.entity_id
-                             OR we.target_entity_id = et.entity_id
-                             OR EXISTS (
-                                  SELECT 1
-                                  FROM world_event_entities wee
-                                  WHERE wee.event_id = we.id
-                                    AND wee.entity_id = et.entity_id
-                             )
-                      )
-                  )
-                ORDER BY et.applied_at, et.id
-                LIMIT %s
-                """,
-                (recent_chunk_window, limit),
-            )
-            return list(cur.fetchall())
-
-
-def _semantic_clearance_evidence_sync(
-    cur: Any,
-    *,
-    entity_id: int,
-    chunk_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
-    event_limit: int = DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
-) -> dict[str, Any]:
-    """Load bounded canonical evidence, not only the candidate trigger window."""
-
-    cur.execute(
-        """
-        SELECT nc.id, left(nc.raw_text, 1200) AS text
-        FROM chunk_entity_references_v cer
-        JOIN narrative_chunks nc ON nc.id = cer.chunk_id
-        WHERE cer.entity_id = %s
-        ORDER BY nc.id DESC
-        LIMIT %s
-        """,
-        (entity_id, chunk_limit),
-    )
-    chunks = [
-        {"chunk_id": row["id"], "text": row.get("text")} for row in cur.fetchall()
-    ]
-
-    cur.execute(
-        """
-        SELECT
-            we.id,
-            we.tick_chunk_id,
-            we.event_type,
-            we.changed_fields,
-            we.magnitude,
-            we.payload
-        FROM world_events we
-        WHERE we.actor_entity_id = %s
-           OR we.target_entity_id = %s
-           OR EXISTS (
-                SELECT 1
-                FROM world_event_entities wee
-                WHERE wee.event_id = we.id
-                  AND wee.entity_id = %s
-           )
-        ORDER BY we.tick_chunk_id DESC, we.id DESC
-        LIMIT %s
-        """,
-        (entity_id, entity_id, entity_id, event_limit),
-    )
-    events = [
-        {
-            "event_id": row["id"],
-            "tick_chunk_id": row["tick_chunk_id"],
-            "event_type": row["event_type"],
-            "changed_fields": list(row.get("changed_fields") or ()),
-            "magnitude": _json_scalar(row.get("magnitude")),
-            "payload": row.get("payload") or {},
-        }
-        for row in cur.fetchall()
-    ]
-    return {"recent_chunks": chunks, "recent_events": events}
-
-
-def _semantic_clearance_verdict(
-    manager: Any, row: Mapping[str, Any], evidence: Mapping[str, Any]
-) -> SemanticClearanceVerdict:
-    prompt = (
-        "Evaluate whether this semantic ephemeral Orrery tag should be cleared.\n\n"
-        f"Entity: {row.get('entity_name') or row['entity_id']}\n"
-        f"Tag: {row['tag']}\n"
-        f"Category: {row.get('category')}\n"
-        f"Description: {row.get('description')}\n"
-        f"Applied at: {row.get('applied_at')}\n"
-        f"Applied world time: {row.get('applied_at_world_time')}\n"
-        f"Template source: {row.get('template_id')}\n\n"
-        "Evidence:\n"
-        f"{json.dumps(evidence, sort_keys=True, default=str)}\n\n"
-        "Return clear=true only if the tag is now stale, resolved, or no "
-        "longer active. Return clear=false when evidence is missing, weak, "
-        "ambiguous, or the state still plausibly applies."
-    )
-    raw = manager.structured_query(
-        prompt,
-        SemanticClearanceVerdict,
-        temperature=0.1,
-        max_tokens=512,
-        system_prompt=SEMANTIC_CLEARANCE_SYSTEM_PROMPT,
-    )
-    return _coerce_semantic_clearance_verdict(raw)
-
-
-def _coerce_semantic_clearance_verdict(raw: Any) -> SemanticClearanceVerdict:
-    """Keep semantic tags when local clearance output is malformed."""
-    try:
-        if isinstance(raw, SemanticClearanceVerdict):
-            return raw
-        payload = _structured_payload_from_raw(raw)
-        if not (isinstance(payload, Mapping) and "clear" in payload):
-            payload = _markdown_bool_payload_from_raw(payload, "clear") or payload
-        if isinstance(payload, Mapping) and "clear" in payload:
-            payload = dict(payload)
-            payload.setdefault(
-                "reason", "Local model returned a bare semantic-clearance decision."
-            )
-        return SemanticClearanceVerdict.model_validate(payload)
-    except ValidationError as exc:
-        logger.warning(
-            "Malformed Orrery semantic clearance verdict; keeping tag: %s",
-            raw,
-            exc_info=True,
-        )
-        return SemanticClearanceVerdict(
-            clear=False,
-            reason="Malformed local semantic-clearance verdict; kept conservatively.",
-        )
-
-
-def _mark_semantic_tag_cleared_sync(
-    conn: Any,
-    *,
-    row: Mapping[str, Any],
-    verdict: SemanticClearanceVerdict,
-    source_chunk_id: Optional[int],
-) -> bool:
-    with conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(
-                """
-                UPDATE entity_tags et
-                SET cleared_at = now()
-                FROM tags t
-                WHERE et.id = %s
-                  AND t.id = et.tag_id
-                  AND et.cleared_at IS NULL
-                  AND t.deprecated = false
-                  AND t.is_ephemeral = true
-                  AND t.clearance_kind = 'semantic'
-                RETURNING et.id
-                """,
-                (row["entity_tag_id"],),
-            )
-            updated = cur.fetchone()
-            if not updated:
-                return False
-            cur.execute(
-                """
-                INSERT INTO tag_clearance_log (
-                    entity_tag_id, mechanism, justification, source_chunk_id
-                ) VALUES (%s, 'semantic', %s::jsonb, %s)
-                """,
-                (
-                    row["entity_tag_id"],
-                    json.dumps(
-                        {
-                            "tag": row["tag"],
-                            "reason": verdict.reason,
-                        }
-                    ),
-                    source_chunk_id,
-                ),
-            )
-            return True
-
-
-def _latest_evidence_chunk_id(evidence: Mapping[str, Any]) -> Optional[int]:
-    chunk_ids: list[int] = []
-    for chunk in evidence.get("recent_chunks") or ():
-        chunk_id = chunk.get("chunk_id")
-        if chunk_id is not None:
-            chunk_ids.append(int(chunk_id))
-    for event in evidence.get("recent_events") or ():
-        chunk_id = event.get("tick_chunk_id")
-        if chunk_id is not None:
-            chunk_ids.append(int(chunk_id))
-    return max(chunk_ids) if chunk_ids else None
-
-
 def _count_sync(cur: Any, sql: str) -> int:
     cur.execute(sql)
     row = cur.fetchone()
     return int((row or {}).get("count") or 0)
 
 
-def _json_scalar(value: Any) -> Any:
-    if hasattr(value, "as_tuple"):
+def _numeric_or_zero(value: Any) -> float:
+    try:
         return float(value)
-    return value
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _generate_narration(provider: Any, row: Mapping[str, Any]) -> str:
@@ -1071,25 +693,25 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--semantic-clearance-limit",
         type=int,
         default=DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
-        help="Maximum semantic ephemeral tags to evaluate in this run.",
+        help="Deprecated; semantic clearance is currently disabled.",
     )
     parser.add_argument(
         "--semantic-clearance-recent-chunks",
         type=int,
         default=DEFAULT_SEMANTIC_CLEARANCE_RECENT_CHUNKS,
-        help="Recent chunk window used to find relevant semantic tag evidence.",
+        help="Deprecated; semantic clearance is currently disabled.",
     )
     parser.add_argument(
         "--semantic-clearance-evidence-chunks",
         type=int,
         default=DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_CHUNKS,
-        help="Maximum recent narrative chunks included per semantic tag verdict.",
+        help="Deprecated; semantic clearance is currently disabled.",
     )
     parser.add_argument(
         "--semantic-clearance-evidence-events",
         type=int,
         default=DEFAULT_SEMANTIC_CLEARANCE_EVIDENCE_EVENTS,
-        help="Maximum recent Orrery events included per semantic tag verdict.",
+        help="Deprecated; semantic clearance is currently disabled.",
     )
     args = parser.parse_args(argv)
 

@@ -1,6 +1,6 @@
 # Off-Screen Behavior Resolver — Orrery Design Plan
 
-**Status:** The Orrery build path is now past foundation and into route realism. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance worker/status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, interpersonal needs (`SOCIALIZE` and `INTIMACY`), Work + Travel, concealment/contact package tuning, and authored travel edges. The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **routing phase 3**: local OSM-derived graph routing before falling back to authored edges and coarse estimates.
+**Status:** The Orrery build path is now past foundation and into route realism. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, interpersonal needs (`SOCIALIZE` and `INTIMACY`), Work + Travel, concealment/contact package tuning, and authored travel edges. The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **routing phase 3**: local OSM-derived graph routing before falling back to authored edges and coarse estimates.
 
 **Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
 **Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
@@ -85,7 +85,7 @@ PR #222 adds deterministic review orchestration so newly opened PRs can schedule
 ### Landed After PR #222
 
 - PR #223 expands the package library with round-2 care, craft, and contact templates.
-- PR #224 adds batched post-commit semantic clearance for ephemeral tags and exposes `python -m nexus.agents.orrery.worker --slot N --status` as a compact operational snapshot for pending Orrery background work.
+- PR #224 added a semantic-clearance/status surface; the live semantic-clearance worker now stays conservative and performs no clears until a non-local clearance signal exists. `python -m nexus.agents.orrery.worker --slot N --status` remains the compact operational snapshot for pending Orrery background work.
 - The Sunhelm phase adds `character_need_states`, timestamp-plus-debt need tracking, and SLEEP/DRINK/EAT packages.
 - The location phase adds place-affordance semantics used by need and package gates.
 - PR #237 applies slot 2 semantic tag seeding so mature-state dry runs have real package vocabulary to work with.
@@ -117,7 +117,7 @@ Package authors can contribute now. The cleanest contribution format is a small 
 
 NEXUS today asks the storyteller LLM to confabulate off-stage character activity each turn, with heuristic instructions about narrative debt and ambient texture. There is no architectural guarantee that any specific character gets updated, no continuity beyond the context window, and no provenance — distant sirens in the prose are decoration, not the audible signature of a real package execution sitting in the database.
 
-The proposal is a Bethesda-inspired off-screen behavior subsystem: a pipeline (`Resolve → Commit → Promote → Narrate → Bleed`) that simulates what every tracked entity does between player turns. Most state changes resolve deterministically in pure Python; a small subset is promoted to local-LLM judgment, then to frontier-model prose, then offered to the storyteller as an optional menu of perceivable ambient peripherals.
+The proposal is a Bethesda-inspired off-screen behavior subsystem: a pipeline (`Resolve → Commit → Promote → Narrate → Bleed`) that simulates what every tracked entity does between player turns. Most state changes resolve deterministically in pure Python; a small salient subset is promoted by deterministic policy to frontier-model prose, then offered to the storyteller as an optional menu of perceivable ambient peripherals.
 
 **Motivating test case:** an NPC the player forcefully interrogated fifty chunks ago protested that their life was over. Behind the scenes, a package on that NPC ticks through fifty chunks of pure state resolution. Eventually a branch fires that's high-magnitude enough to promote: the retaliation. Prose generated, persisted, never surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city and the storyteller has the option of hearing sirens in the distance — or not. If they do, MEMNON has substrate for retrieval. If they don't, the dramatic irony lives in the database, available to inform any future scene where it matters.
 
@@ -129,8 +129,8 @@ The proposal is a Bethesda-inspired off-screen behavior subsystem: a pipeline (`
 |---|---|---|---|
 | **Resolve** (Stage 1) | Free (pure Python) | Evaluate templates against per-entity bindings; produce an `OrreryTickProposal` (no writes, no `tick_chunk_id` yet) | In-cycle, during a new LORE Phase 4.5 (between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`) |
 | **Commit** (Stage 2) | Free (SQL transaction) | Stamp `tick_chunk_id`, then atomically materialize the proposal into canonical tables (entity deltas, tag mutations, `world_events`, `orrery_resolutions`, enqueue narration jobs) | Inside the same transaction as accepted-chunk commit |
-| **Clear** (Stage 3) | Local-LLM (batched) + deterministic | Event-based clearance runs in the commit transaction; semantic clearance runs post-commit, async, results available for next tick | Commit (event) + post-commit (semantic) |
-| **Promote** (Stage 4) | Local-LLM (batched) | Decide which resolutions deserve frontier prose | Post-commit |
+| **Clear** (Stage 3) | Deterministic | Event-based clearance runs in the commit transaction; semantic clearance is intentionally disabled until a non-local clearance signal exists | Commit (event) |
+| **Promote** (Stage 4) | Deterministic | Decide which resolutions deserve frontier prose | Post-commit |
 | **Narrate** (Stage 5) | Frontier-LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` (separate from `narrative_chunks`) | Async after commit; durable across process restart |
 | **Bleed** (Stage 6) | Deterministic storyteller-time selection | Offer a bounded menu from already-filtered, succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
 | **Stage 7 (deferred)** | — | Middle-tier journalistic prose | Metric-gated; see "Deferred — Orrery Stage 7" |
@@ -509,7 +509,7 @@ Older configs may still include `[orrery.bleed] latency_budget_ms` or `candidate
 - **Resolve runs in-cycle** during a new **LORE Phase 4.5**, inserted between `DEEP_QUERIES` (Phase 4) and `PAYLOAD_ASSEMBLY` (Phase 5). Pure Python; produces `OrreryTickProposal` carried on `TurnContext.orrery_proposal`; no writes.
 - **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database` (L320) / `commit_incubator_to_database_sync` (L233), between the existing `apply_state_updates*` call and `clear_incubator`. All canonical writes happen here.
 - **Clear (event)** runs in the same commit transaction as the triggering event.
-- **Clear (semantic)** runs post-commit, async, batched, filtered to entities with recent relevant events.
+- **Clear (semantic)** is currently a conservative no-op; event/authored clearance remains canonical until a non-local semantic-clearance signal exists.
 - **Promote** runs post-commit, async, batched per tick.
 - **Narrate** is async via durable outbox. Bleed reads only `state='succeeded'` narrations + deterministic briefs.
 - **Bleed** runs synchronously at storyteller-time (LORE Phase 5) without inference.
@@ -583,9 +583,6 @@ model_ref = "@anthropic.default"                        # resolved via [global.m
 
 [orrery.bleed]
 max_candidates = 3
-
-[orrery.promote]
-provider = "local"
 ```
 
 Every model reference uses the `@provider.role` syntax that the existing config loader resolves against `[global.model.api_models]` — never a hardcoded ID in runtime code (per `CLAUDE.md` "Testing Defaults").
@@ -692,14 +689,14 @@ This section is now mostly historical. The active queue has moved past the found
 
 - **`CommitOrreryTick` writer**: Step 8.5 inside `commit_incubator_to_database_sync` (L233 — the production path; insert between `apply_state_updates_sync` at L415 and incubator clear at L418) and parity inside `commit_incubator_to_database` (L320 — async, test-only; insert between `apply_state_updates` at L420 and `clear_incubator` at L423). Both call into the unified event writer in `nexus/agents/orrery/events.py`.
 - **Stamp `tick_chunk_id`** on every proposal row at this step, after `insert_narrative_chunk` returns the new chunk id.
-- Promote discriminator: `LocalLLMManager.structured_query(prompt, PromotionVerdict)` (existing API at `local_llm.py:642`). Fail loudly on malformed local-model output.
+- Promote discriminator: deterministic salience policy over `priority`, `magnitude`, `state_delta`, `event_ids`, and `brief`. No local inference required.
 - Deterministic brief generator → `orrery_resolutions.brief`.
 - Frontier narration via durable outbox; trigger drain via `BackgroundTasks` from `_approve_narrative_impl` after commit returns; standalone CLI worker for catch-up.
 - Narrator persistence to `offscreen_narrations` (not `narrative_chunks`); embedding pipeline shared with MEMNON.
-- Clear (event) in commit transaction; Clear (semantic) post-commit async, batched, filtered, and logged through `tag_clearance_log`.
+- Clear (event) in commit transaction; Clear (semantic) remains disabled as a conservative no-op until a non-local clearance path exists.
 - `tag_clearance_log` rows with justification.
 - Instrumented counters for the Orrery Stage 7 trigger metrics.
-- Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, local-LLM failure, async-worker state transitions.
+- Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, deterministic promotion behavior, async-worker state transitions.
 
 ### PR 4 — Bleed Selector + Storyteller Integration (implemented in PR #219)
 
@@ -727,7 +724,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 - `nexus/agents/lore/lore.py:289` — `process_turn`; new LORE Phase 4.5 inserts here
 - `nexus/agents/lore/utils/turn_context.py:12-41` — `TurnPhase` enum (add `ORRERY_RESOLVE`) and `TurnContext` dataclass (add `orrery_proposal`, `bleed_menu`)
 - `nexus/agents/lore/utils/turn_cycle.py:489` — `assemble_context_payload` (LORE Phase 5); Bleed selector hooks at the start
-- `nexus/agents/lore/utils/local_llm.py:642` — `structured_query(prompt, response_model, *, temperature=None, max_tokens=None, system_prompt=None)` — used by Promote and Clear (semantic)
+- `nexus/agents/orrery/worker.py` — deterministic Promote policy, durable narration outbox drain, and conservative semantic-clearance no-op
 
 **Commit path (production = sync)**
 - `nexus/api/narrative.py:281` — existing `BackgroundTasks` pattern to mirror
@@ -759,7 +756,7 @@ Revisit when: fourth real entity kind appears, compatibility view becomes write 
 - Mirror in `_approve_narrative_impl` post-commit to drain the narration outbox
 
 **Config + system prompt**
-- `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, `[orrery.bleed]`, `[orrery.promote]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
+- `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, and `[orrery.bleed]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
 - `nexus/agents/lore/logon_utility.py::_format_context_prompt` — PR 4 Bleed prompt framing
 
 **New artifacts**
@@ -775,8 +772,8 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 - **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
 - **Retrieval-boundary hardening:** Regression tests assert warm-slice retrieval, text search, and vector-search collection routing remain disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from public Orrery tables and cannot select internal queue/raw tag tables.
 - **PR 2 (#211):** Dry-pass against slot 5 and slot 2; proposal contents inspected; zero writes observed; `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase. Optional full-turn acceptance before PR 3: enable Orrery for a live LORE pass and confirm the storyteller payload remains unaffected while the proposal is attached only to the turn context.
-- **PR 3 (#214):** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); local-LLM failure (Promote fails loud); async-worker state transitions (`queued → leased → succeeded|failed`).
-- **PR 4:** Apt-bleed (ambient peripheral surfaces in the Storyteller payload); null-bleed (no candidates produces empty menu and no local-LLM call); chronology/surfacing boundary (only accepted prior narrated resolutions are eligible); latency-budget overrun produces empty menu and logs loudly.
+- **PR 3 (#214):** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); deterministic promotion; async-worker state transitions (`queued → leased → succeeded|failed`).
+- **PR 4:** Apt-bleed (ambient peripheral surfaces in the Storyteller payload); null-bleed (no candidates produces empty menu and no inference call); chronology/surfacing boundary (only accepted prior narrated resolutions are eligible); latency-budget overrun produces empty menu and logs loudly.
 
 ---
 
@@ -793,7 +790,7 @@ Verification should use live NEXUS flows where the feature touches LORE, LOGON, 
 9. **`source_kind` enum gains `'auto_registered'`** to satisfy the Vocabulary Growth contract.
 10. **Backfill pattern spelled out.** `NOT VALID → batch backfill → VALIDATE → CONCURRENTLY UNIQUE INDEX → SET NOT NULL`. Migration becomes Python, not SQL, because `scripts/migrate.py` is single-transaction-per-file.
 11. **`world_events.source` and `world_event_entities.role` promoted to real enums** (`event_source_kind`, `event_role_kind`), consistent with the rest of the controlled vocabulary.
-12. **`LocalLLMManager.structured_query` signature noted.** Existing API at `local_llm.py:642`; no new structured-output plumbing needed for the remaining Promote/Clear paths.
+12. **Live Orrery worker path is inference-free except narration.** Promote is deterministic, Bleed is deterministic, and semantic Clear is a conservative no-op until a non-local clearance signal exists.
 13. **`BackgroundTasks` pattern cross-referenced** to existing call sites (`narrative.py:281`, `storyteller.py:561, 666`).
 14. **`tick_chunk_id` timing clarified.** Not known during Resolve (Stage 1); stamped during CommitOrreryTick (Stage 2) after `insert_narrative_chunk` returns the new chunk's id. The UNIQUE idempotency constraint fires at write time.
 15. **MEMNON safety claim sharpened.** `get_recent_chunks` is already safe; real audit target is `query_memory` / `SearchManager`.

@@ -331,11 +331,15 @@ class OrreryBleedSettings(BaseModel):
 
 
 class OrreryPromoteSettings(BaseModel):
-    """Promotion discriminator settings for Orrery resolutions."""
+    """Deprecated promotion discriminator settings for Orrery resolutions."""
 
     model_config = ConfigDict(extra="forbid")
 
-    provider: Literal["local"] = "local"
+    provider: Optional[Literal["local"]] = Field(
+        default=None,
+        exclude=True,
+        description="Deprecated and ignored; promotion is deterministic.",
+    )
 
 
 def _default_need_accrual_rates() -> Dict[str, float]:

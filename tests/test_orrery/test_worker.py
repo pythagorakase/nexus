@@ -7,10 +7,6 @@ import json
 import pytest
 
 from nexus.agents.orrery.worker import (
-    PromotionVerdict,
-    SemanticClearanceVerdict,
-    _coerce_promotion_verdict,
-    _coerce_semantic_clearance_verdict,
     clear_semantic_tags_sync,
     drain_narration_outbox_sync,
     load_orrery_status_sync,
@@ -27,16 +23,10 @@ class WorkerCursor:
         *,
         promotion_rows=None,
         job_rows=None,
-        semantic_rows=None,
-        semantic_chunk_rows=None,
-        semantic_event_rows=None,
         count_rows=None,
     ):
         self.promotion_rows = promotion_rows or []
         self.job_rows = job_rows or []
-        self.semantic_rows = semantic_rows or []
-        self.semantic_chunk_rows = semantic_chunk_rows or []
-        self.semantic_event_rows = semantic_event_rows or []
         self.count_rows = list(count_rows or [])
         self.executed = []
         self._fetchall = []
@@ -59,18 +49,8 @@ class WorkerCursor:
             self._fetchall = self.promotion_rows
         elif "FROM orrery_narration_jobs j" in normalized:
             self._fetchall = self.job_rows
-        elif (
-            "WITH recent_ticks AS" in normalized and "FROM entity_tags et" in normalized
-        ):
-            self._fetchall = self.semantic_rows
-        elif "FROM chunk_entity_references_v cer" in normalized:
-            self._fetchall = self.semantic_chunk_rows
-        elif "FROM world_events we" in normalized:
-            self._fetchall = self.semantic_event_rows
         elif "INSERT INTO offscreen_narrations" in normalized:
             self._fetchone = {"id": 501}
-        elif "UPDATE entity_tags et SET cleared_at = now()" in normalized:
-            self._fetchone = {"id": params[0]}
 
     def fetchall(self):
         return self._fetchall
@@ -97,18 +77,6 @@ class WorkerConn:
 
     def close(self):
         self.closed = True
-
-
-class FakeLLM:
-    """Local LLM stand-in returning one structured verdict."""
-
-    def __init__(self, verdict):
-        self.verdicts = list(verdict) if isinstance(verdict, list) else [verdict]
-        self.prompts = []
-
-    def structured_query(self, prompt, response_model, **_kwargs):
-        self.prompts.append((prompt, response_model))
-        return self.verdicts.pop(0)
 
 
 class FakeProviderResponse:
@@ -185,67 +153,15 @@ def _job_row():
     }
 
 
-def _semantic_tag_row():
-    return {
-        "entity_tag_id": 700,
-        "entity_id": 1,
-        "entity_name": "Mara",
-        "applied_at": "2073-10-31T18:00:00+00:00",
-        "applied_at_world_time": None,
-        "template_id": "evade_pursuers",
-        "tag": "wounded",
-        "category": "state",
-        "description": "Entity has a recent physical injury.",
-    }
-
-
-def _semantic_tag_row_2():
-    row = dict(_semantic_tag_row())
-    row.update(
-        {
-            "entity_tag_id": 701,
-            "entity_id": 2,
-            "entity_name": "Toma",
-            "tag": "recently_violent",
-            "description": "Actor has executed violence in the recent past.",
-        }
-    )
-    return row
-
-
-def _semantic_chunk_row():
-    return {
-        "id": 105,
-        "text": "Mara limps at first, then steadies herself and keeps moving.",
-    }
-
-
-def _semantic_event_row():
-    return {
-        "id": 20,
-        "tick_chunk_id": 104,
-        "event_type": "evade_pursuit",
-        "changed_fields": ["character.current_activity"],
-        "magnitude": 0.72,
-        "payload": {"branch_label": "Go to ground"},
-    }
-
-
 def test_promote_pending_resolutions_queues_narration_job() -> None:
     """Promoted resolutions are marked and placed into the durable outbox."""
 
     cursor = WorkerCursor(promotion_rows=[_promotion_row()])
-    verdict = PromotionVerdict(
-        promote=True,
-        reason="It creates future retrieval value.",
-        perceptual_channel="digital",
-        perceptual_summary="street cameras briefly lose Mara",
-    )
 
     promoted, skipped = promote_pending_resolutions_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=FakeLLM(verdict),
+        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
 
@@ -258,77 +174,33 @@ def test_promote_pending_resolutions_queues_narration_job() -> None:
     assert "INSERT INTO orrery_narration_jobs" in statements
 
 
-def test_promote_pending_resolutions_skips_malformed_llm_output() -> None:
-    """Malformed local-LLM promotion data is skipped conservatively."""
+def test_promote_pending_resolutions_skips_low_signal_rows() -> None:
+    """Low-salience rows stay skipped without asking a local model."""
 
-    cursor = WorkerCursor(promotion_rows=[_promotion_row()])
+    row = dict(
+        _promotion_row(),
+        priority=10,
+        magnitude=0.1,
+        state_delta={},
+        event_ids=[],
+    )
+    cursor = WorkerCursor(promotion_rows=[row])
 
     promoted, skipped = promote_pending_resolutions_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=FakeLLM({"answer": "sure"}),
+        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
 
     verdict = json.loads(cursor.executed[-1][1][0])
+    statements = "\n".join(sql for sql, _params in cursor.executed)
 
     assert promoted == 0
     assert skipped == 1
     assert verdict["promote"] is False
-    assert "Malformed local promotion verdict" in verdict["reason"]
-
-
-def test_promote_pending_resolutions_recovers_bare_final_channel_json() -> None:
-    """Leaked final-channel JSON with no reason gets a durable skip reason."""
-
-    cursor = WorkerCursor(promotion_rows=[_promotion_row()])
-    raw = {
-        "answer": (
-            "<|channel|>analysis<|message|>routine maintenance\n"
-            '<|channel|>final<|message|>{"promote": false}'
-        ),
-        "reasoning": "unstructured",
-    }
-
-    promoted, skipped = promote_pending_resolutions_sync(
-        slot=5,
-        settings=_settings(),
-        llm_manager=FakeLLM(raw),
-        conn=WorkerConn(cursor),
-    )
-
-    verdict = json.loads(cursor.executed[-1][1][0])
-
-    assert promoted == 0
-    assert skipped == 1
-    assert verdict["promote"] is False
-    assert verdict["reason"] == "Local model returned a bare promotion decision."
-
-
-def test_coerce_promotion_verdict_recovers_markdown_boolean() -> None:
-    """Markdown-ish local fallback text should not become malformed noise."""
-
-    verdict = _coerce_promotion_verdict(
-        {"answer": "**promote:** false", "reasoning": "Routine maintenance."}
-    )
-
-    assert verdict.promote is False
-    assert verdict.reason == "Routine maintenance."
-
-
-def test_coerce_promotion_verdict_prefers_structured_field_over_answer() -> None:
-    """Structured verdict fields should not be shadowed by markdown answer text."""
-
-    verdict = _coerce_promotion_verdict(
-        {
-            "promote": False,
-            "answer": "**promote:** true",
-            "reason": "Structured field wins.",
-        }
-    )
-
-    assert verdict.promote is False
-    assert verdict.reason == "Structured field wins."
+    assert "Deterministic skip" in verdict["reason"]
+    assert "INSERT INTO orrery_narration_jobs" not in statements
 
 
 def test_drain_narration_outbox_persists_offscreen_narration() -> None:
@@ -415,152 +287,24 @@ def test_drain_narration_outbox_marks_terminal_after_max_attempts() -> None:
     assert "narration_status = 'failed'" in statements
 
 
-def test_clear_semantic_tags_clears_when_verdict_true() -> None:
-    """Semantic ephemeral tags clear only after a structured positive verdict."""
+def test_clear_semantic_tags_is_conservative_noop_without_local_inference() -> None:
+    """Semantic clearance performs no writes without a non-local clearance signal."""
 
-    cursor = WorkerCursor(
-        semantic_rows=[_semantic_tag_row()],
-        semantic_chunk_rows=[_semantic_chunk_row()],
-        semantic_event_rows=[_semantic_event_row()],
-    )
-    verdict = SemanticClearanceVerdict(clear=True, reason="Mara recovered.")
-    llm = FakeLLM(verdict)
+    cursor = WorkerCursor()
 
     cleared = clear_semantic_tags_sync(
         slot=5,
         settings=_settings(),
-        llm_manager=llm,
+        llm_manager=object(),
         conn=WorkerConn(cursor),
     )
-
-    statements = "\n".join(sql for sql, _params in cursor.executed)
-
-    assert cleared == 1
-    assert "WITH recent_ticks AS" in statements
-    assert "FOR UPDATE OF et SKIP LOCKED" not in statements
-    assert "UPDATE entity_tags et" in statements
-    assert "SET cleared_at = now()" in statements
-    assert "INSERT INTO tag_clearance_log" in statements
-    assert "VALUES (%s, 'semantic', %s::jsonb, %s)" in statements
-    assert cursor.executed[-1][1][2] == 105
-    assert llm.prompts[0][1] is SemanticClearanceVerdict
-    assert "Tag: wounded" in llm.prompts[0][0]
-    assert "Mara limps at first" in llm.prompts[0][0]
-
-
-def test_clear_semantic_tags_keeps_when_verdict_false() -> None:
-    """A negative semantic verdict leaves the current tag untouched."""
-
-    cursor = WorkerCursor(
-        semantic_rows=[_semantic_tag_row()],
-        semantic_chunk_rows=[_semantic_chunk_row()],
-        semantic_event_rows=[_semantic_event_row()],
-    )
-    verdict = SemanticClearanceVerdict(clear=False, reason="Recovery is ambiguous.")
-
-    cleared = clear_semantic_tags_sync(
-        slot=5,
-        settings=_settings(),
-        llm_manager=FakeLLM(verdict),
-        conn=WorkerConn(cursor),
-    )
-
-    statements = "\n".join(sql for sql, _params in cursor.executed)
 
     assert cleared == 0
-    assert "UPDATE entity_tags SET cleared_at" not in statements
-    assert "INSERT INTO tag_clearance_log" not in statements
-
-
-def test_clear_semantic_tags_keeps_on_malformed_llm_output() -> None:
-    """Malformed semantic-clearance data keeps the tag without losing prior commits."""
-
-    cursor = WorkerCursor(
-        semantic_rows=[_semantic_tag_row(), _semantic_tag_row_2()],
-        semantic_chunk_rows=[_semantic_chunk_row()],
-        semantic_event_rows=[_semantic_event_row()],
-    )
-    llm = FakeLLM(
-        [
-            SemanticClearanceVerdict(clear=True, reason="Mara recovered."),
-            {"answer": "maybe"},
-        ]
-    )
-
-    cleared = clear_semantic_tags_sync(
-        slot=5,
-        settings=_settings(),
-        llm_manager=llm,
-        conn=WorkerConn(cursor),
-    )
-
-    statements = "\n".join(sql for sql, _params in cursor.executed)
-
-    assert cleared == 1
-    assert statements.count("UPDATE entity_tags et") == 1
-    assert statements.count("INSERT INTO tag_clearance_log") == 1
-
-
-def test_coerce_semantic_clearance_verdict_recovers_markdown_boolean() -> None:
-    """Markdown-ish local fallback text should produce a normal keep verdict."""
-
-    verdict = _coerce_semantic_clearance_verdict(
-        {"answer": "**clear:** false", "reasoning": "Evidence still supports tag."}
-    )
-
-    assert verdict.clear is False
-    assert verdict.reason == "Evidence still supports tag."
-
-
-def test_coerce_semantic_clearance_prefers_structured_field_over_answer() -> None:
-    """Structured clearance fields should not be shadowed by markdown answer text."""
-
-    verdict = _coerce_semantic_clearance_verdict(
-        {
-            "clear": False,
-            "answer": "**clear:** true",
-            "reason": "Structured field wins.",
-        }
-    )
-
-    assert verdict.clear is False
-    assert verdict.reason == "Structured field wins."
-
-
-def test_coerce_semantic_clearance_ignores_incidental_markdown_boolean() -> None:
-    """Incidental prose should not clear tags by pretending to be a verdict."""
-
-    verdict = _coerce_semantic_clearance_verdict(
-        "This is noisy prose. To be clear: true, the evidence is mixed."
-    )
-
-    assert verdict.clear is False
-    assert (
-        verdict.reason
-        == "Malformed local semantic-clearance verdict; kept conservatively."
-    )
-
-
-def test_coerce_promotion_verdict_recovers_bulleted_markdown_boolean() -> None:
-    """Explicit bullet key/value verdicts should still parse."""
-
-    verdict = _coerce_promotion_verdict("- **promote:** true\n- reason: Enough proof.")
-
-    assert verdict.promote is True
-    assert verdict.reason == "Enough proof."
-
-
-def test_coerce_semantic_clearance_uses_default_reason_for_bare_text() -> None:
-    """Bare string verdicts without a reason should get a durable default reason."""
-
-    verdict = _coerce_semantic_clearance_verdict("clear: false")
-
-    assert verdict.clear is False
-    assert verdict.reason == "Local model returned a text boolean verdict."
+    assert cursor.executed == []
 
 
 def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
-    """The background entry point drains semantic clearance with other work."""
+    """The background entry point keeps the semantic-clearance compatibility call."""
 
     calls = []
 
