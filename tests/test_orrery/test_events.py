@@ -137,19 +137,43 @@ class RecordingCursor:
         ):
             self._fetchone = {"progress_ratio": self.travel_progress}
         elif "FROM orrery_travel_edges" in normalized:
-            from_place_id, to_place_id, travel_mode = params
-            require_bidirectional = "AND bidirectional = true" in normalized
+            (
+                origin_place_id,
+                destination_place_id,
+                travel_mode,
+                _direct_from_place_id,
+                _direct_to_place_id,
+                reverse_from_place_id,
+                reverse_to_place_id,
+                _order_travel_mode,
+            ) = params
+            candidates = []
             for edge in self.authored_route_edges:
                 if edge.get("route_method", "authored_edge") != "authored_edge":
                     continue
-                if edge["from_place_id"] != from_place_id:
+                edge_travel_mode = edge.get("travel_mode", "mixed")
+                if edge_travel_mode not in {travel_mode, "mixed"}:
                     continue
-                if edge["to_place_id"] != to_place_id:
-                    continue
-                if edge.get("travel_mode", "mixed") != travel_mode:
-                    continue
-                if require_bidirectional and not edge.get("bidirectional", True):
-                    continue
+                is_direct = (
+                    edge["from_place_id"] == origin_place_id
+                    and edge["to_place_id"] == destination_place_id
+                )
+                is_reversible = (
+                    edge["from_place_id"] == reverse_from_place_id
+                    and edge["to_place_id"] == reverse_to_place_id
+                    and edge.get("bidirectional", False)
+                )
+                if is_direct or is_reversible:
+                    candidates.append(
+                        (
+                            edge_travel_mode != travel_mode,
+                            not is_direct,
+                            edge.get("id", 7),
+                            edge,
+                        )
+                    )
+            if candidates:
+                _is_mixed, _is_reverse, _edge_id, edge = sorted(candidates)[0]
                 self._fetchone = {
                     "id": edge.get("id", 7),
                     "from_place_id": edge["from_place_id"],
@@ -157,14 +181,17 @@ class RecordingCursor:
                     "route_method": edge.get("route_method", "authored_edge"),
                     "travel_mode": edge.get("travel_mode", "mixed"),
                     "risk": edge.get("risk", "low"),
-                    "bidirectional": edge.get("bidirectional", True),
+                    "bidirectional": edge.get("bidirectional", False),
                     "distance_m": edge.get("distance_m"),
                     "duration_minutes": edge.get("duration_minutes"),
                     "route_geometry_geojson": edge.get("route_geometry_geojson"),
                     "source": edge.get("source"),
                     "metadata": edge.get("metadata", {}),
+                    "is_direct": (
+                        edge["from_place_id"] == origin_place_id
+                        and edge["to_place_id"] == destination_place_id
+                    ),
                 }
-                break
         elif "SELECT ST_Distance(o.coordinates, d.coordinates)" in normalized:
             self._fetchone = {"geodesic_distance_m": self.geodesic_distance_m}
         elif "SELECT current_location FROM characters" in normalized:
@@ -638,9 +665,95 @@ def test_commit_orrery_tick_prefers_direct_authored_route_edge() -> None:
     assert route_metadata["route_method"] == "authored_edge"
     assert route_metadata["route_edge_id"] == 17
     assert route_metadata["reversed"] is False
+    assert route_metadata["bidirectional"] is False
+    assert route_metadata["travel_mode"] == "vehicle"
+    assert route_metadata["edge_travel_mode"] == "vehicle"
     assert route_metadata["source"] == "author:route-notes"
     assert route_metadata["edge_metadata"] == {"name": "checkpoint road"}
     assert route_metadata["route_geometry"]["type"] == "LineString"
+
+
+def test_commit_orrery_tick_uses_mixed_authored_edge_for_concrete_mode() -> None:
+    """Generic authored edges still serve concrete travel-mode requests."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        geodesic_distance_m=999999,
+        authored_route_edges=[
+            {
+                "id": 31,
+                "from_place_id": 99,
+                "to_place_id": 42,
+                "travel_mode": "mixed",
+                "risk": "moderate",
+                "distance_m": 15000,
+                "duration_minutes": 45,
+            }
+        ],
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO character_travel_states" in sql
+    )
+    route_metadata = json.loads(travel_params[-1])
+
+    assert not any(
+        "ST_Distance(o.coordinates, d.coordinates)" in sql for sql, _ in cursor.executed
+    )
+    assert travel_params[4] == "authored_edge"
+    assert travel_params[5] == "vehicle"
+    assert route_metadata["route_edge_id"] == 31
+    assert route_metadata["travel_mode"] == "vehicle"
+    assert route_metadata["edge_travel_mode"] == "mixed"
+
+
+def test_commit_orrery_tick_allows_authored_route_without_duration() -> None:
+    """Incomplete authored estimates still preserve route provenance."""
+
+    cursor = RecordingCursor(
+        current_location=99,
+        authored_route_edges=[
+            {
+                "id": 19,
+                "from_place_id": 99,
+                "to_place_id": 42,
+                "travel_mode": "vehicle",
+                "distance_m": 12345,
+                "duration_minutes": None,
+            }
+        ],
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _travel_start_proposal(mode="vehicle"),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_params = next(
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO character_travel_states" in sql
+    )
+    route_metadata = json.loads(travel_params[-1])
+
+    assert travel_params[4] == "authored_edge"
+    assert travel_params[8] == pytest.approx(12345)
+    assert travel_params[9] is None
+    assert travel_params[12] is None
+    assert route_metadata["route_edge_id"] == 19
 
 
 def test_commit_orrery_tick_uses_bidirectional_authored_edge_in_reverse() -> None:
@@ -720,6 +833,10 @@ def test_commit_orrery_tick_rejects_non_bidirectional_reverse_edge() -> None:
     )
     route_metadata = json.loads(travel_params[-1])
 
+    route_queries = [
+        sql for sql, _ in cursor.executed if "FROM orrery_travel_edges" in sql
+    ]
+    assert len(route_queries) == 1
     assert any(
         "ST_Distance(o.coordinates, d.coordinates)" in sql for sql, _ in cursor.executed
     )

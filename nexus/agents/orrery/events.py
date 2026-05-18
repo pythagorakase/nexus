@@ -1841,13 +1841,13 @@ def _select_route_sync(
         mode=mode,
     )
     if edge is not None:
-        row, reversed_edge = edge
+        # Authored edges own their stored risk; caller risk only applies to
+        # coordinate-estimate fallback routes.
         return _route_from_authored_edge(
-            row,
+            edge,
             origin_place_id=origin_place_id,
             destination_place_id=destination_place_id,
             requested_mode=mode,
-            reversed_edge=reversed_edge,
         )
     return _estimate_route_sync(
         cur,
@@ -1873,13 +1873,13 @@ async def _select_route_async(
         mode=mode,
     )
     if edge is not None:
-        row, reversed_edge = edge
+        # Authored edges own their stored risk; caller risk only applies to
+        # coordinate-estimate fallback routes.
         return _route_from_authored_edge(
-            row,
+            edge,
             origin_place_id=origin_place_id,
             destination_place_id=destination_place_id,
             requested_mode=mode,
-            reversed_edge=reversed_edge,
         )
     return await _estimate_route_async(
         conn,
@@ -1896,7 +1896,7 @@ def _authored_route_edge_sync(
     origin_place_id: int,
     destination_place_id: int,
     mode: str,
-) -> Optional[tuple[Any, bool]]:
+) -> Optional[Any]:
     cur.execute(
         """
         SELECT id,
@@ -1910,50 +1910,30 @@ def _authored_route_edge_sync(
                duration_minutes,
                ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
                source,
-               metadata
+               metadata,
+               (from_place_id = %s AND to_place_id = %s) AS is_direct
         FROM orrery_travel_edges
-        WHERE from_place_id = %s
-          AND to_place_id = %s
-          AND route_method = 'authored_edge'
-          AND travel_mode = %s::orrery_travel_mode
-        ORDER BY id
+        WHERE route_method = 'authored_edge'
+          AND travel_mode IN (%s::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+          AND (
+            (from_place_id = %s AND to_place_id = %s)
+            OR (from_place_id = %s AND to_place_id = %s AND bidirectional = true)
+          )
+        ORDER BY (travel_mode = %s::orrery_travel_mode) DESC, is_direct DESC, id
         LIMIT 1
         """,
-        (origin_place_id, destination_place_id, mode),
+        (
+            origin_place_id,
+            destination_place_id,
+            mode,
+            origin_place_id,
+            destination_place_id,
+            destination_place_id,
+            origin_place_id,
+            mode,
+        ),
     )
-    row = cur.fetchone()
-    if row is not None:
-        return row, False
-
-    cur.execute(
-        """
-        SELECT id,
-               from_place_id,
-               to_place_id,
-               route_method::text AS route_method,
-               travel_mode::text AS travel_mode,
-               risk::text AS risk,
-               bidirectional,
-               distance_m,
-               duration_minutes,
-               ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
-               source,
-               metadata
-        FROM orrery_travel_edges
-        WHERE from_place_id = %s
-          AND to_place_id = %s
-          AND route_method = 'authored_edge'
-          AND travel_mode = %s::orrery_travel_mode
-          AND bidirectional = true
-        ORDER BY id
-        LIMIT 1
-        """,
-        (destination_place_id, origin_place_id, mode),
-    )
-    row = cur.fetchone()
-    if row is not None:
-        return row, True
-    return None
+    return cur.fetchone()
 
 
 async def _authored_route_edge_async(
@@ -1962,7 +1942,7 @@ async def _authored_route_edge_async(
     origin_place_id: int,
     destination_place_id: int,
     mode: str,
-) -> Optional[tuple[Any, bool]]:
+) -> Optional[Any]:
     row = await conn.fetchrow(
         """
         SELECT id,
@@ -1976,52 +1956,23 @@ async def _authored_route_edge_async(
                duration_minutes,
                ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
                source,
-               metadata
+               metadata,
+               (from_place_id = $1 AND to_place_id = $2) AS is_direct
         FROM orrery_travel_edges
-        WHERE from_place_id = $1
-          AND to_place_id = $2
-          AND route_method = 'authored_edge'
-          AND travel_mode = $3::orrery_travel_mode
-        ORDER BY id
+        WHERE route_method = 'authored_edge'
+          AND travel_mode IN ($3::orrery_travel_mode, 'mixed'::orrery_travel_mode)
+          AND (
+            (from_place_id = $1 AND to_place_id = $2)
+            OR (from_place_id = $2 AND to_place_id = $1 AND bidirectional = true)
+          )
+        ORDER BY (travel_mode = $3::orrery_travel_mode) DESC, is_direct DESC, id
         LIMIT 1
         """,
         origin_place_id,
         destination_place_id,
         mode,
     )
-    if row is not None:
-        return row, False
-
-    row = await conn.fetchrow(
-        """
-        SELECT id,
-               from_place_id,
-               to_place_id,
-               route_method::text AS route_method,
-               travel_mode::text AS travel_mode,
-               risk::text AS risk,
-               bidirectional,
-               distance_m,
-               duration_minutes,
-               ST_AsGeoJSON(route_geometry) AS route_geometry_geojson,
-               source,
-               metadata
-        FROM orrery_travel_edges
-        WHERE from_place_id = $1
-          AND to_place_id = $2
-          AND route_method = 'authored_edge'
-          AND travel_mode = $3::orrery_travel_mode
-          AND bidirectional = true
-        ORDER BY id
-        LIMIT 1
-        """,
-        destination_place_id,
-        origin_place_id,
-        mode,
-    )
-    if row is not None:
-        return row, True
-    return None
+    return row
 
 
 def _route_from_authored_edge(
@@ -2030,22 +1981,24 @@ def _route_from_authored_edge(
     origin_place_id: int,
     destination_place_id: int,
     requested_mode: str,
-    reversed_edge: bool,
 ) -> dict[str, Any]:
     edge_id = int(_row_get(row, "id", 0))
     edge_from_place_id = int(_row_get(row, "from_place_id", 1))
     edge_to_place_id = int(_row_get(row, "to_place_id", 2))
-    travel_mode = str(_row_get(row, "travel_mode", 4))
+    edge_travel_mode = str(_row_get(row, "travel_mode", 4))
+    travel_mode = requested_mode if edge_travel_mode == "mixed" else edge_travel_mode
     risk = str(_row_get(row, "risk", 5))
     route_geometry = _decode_json_value(
         _row_get_optional(row, "route_geometry_geojson", 9)
     )
+    reversed_edge = not bool(_row_get(row, "is_direct", 12))
     metadata = {
         "route_method": "authored_edge",
         "origin_place_id": origin_place_id,
         "destination_place_id": destination_place_id,
         "requested_travel_mode": requested_mode,
         "travel_mode": travel_mode,
+        "edge_travel_mode": edge_travel_mode,
         "risk": risk,
         "route_edge_id": edge_id,
         "edge_from_place_id": edge_from_place_id,
