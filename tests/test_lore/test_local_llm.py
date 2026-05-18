@@ -270,6 +270,22 @@ class TestQueryGeneration:
             ]
         )
 
+    def test_sanitize_retrieval_queries_keeps_specific_generic_openers(self):
+        """Specific entity/location queries should survive generic-looking openers."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "Background information on key entities involved in the Lantern Court conspiracy",
+                "History of locations: Verdigris Scriptorium fire timeline",
+                "History of locations around Lantern Court and Door Six",
+            ]
+        )
+
+        assert queries == [
+            "Background information on key entities involved in the Lantern Court conspiracy",
+            "History of locations: Verdigris Scriptorium fire timeline",
+            "History of locations around Lantern Court and Door Six",
+        ]
+
     def test_parse_structured_json_text_uses_final_channel_json(self):
         """Structured fallback parsing should recover JSON from leaked transcripts."""
         raw = (
