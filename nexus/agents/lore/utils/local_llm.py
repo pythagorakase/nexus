@@ -46,6 +46,7 @@ _META_QUERY_PREFIXES = (
     "no numbering",
     "the user wants",
     "thus produce",
+    "thus we ",
     "user input",
     "we need",
     "we must",
@@ -70,6 +71,7 @@ _META_QUERY_FRAGMENTS = (
 _GENERIC_RETRIEVAL_QUERIES = {
     "background info on key entities",
     "character relationships and interactions",
+    "character relationships and interactions among them",
     "past events at",
     "relevant past events involving these characters",
 }
@@ -79,6 +81,20 @@ _TEMPLATE_PLACEHOLDER_QUERY_PREFIXES = (
     "so there is a scene where someone maybe",
 )
 _MIN_RETRIEVAL_QUERIES = 3
+_QUERY_STUTTER_STOPWORDS = {
+    "about",
+    "after",
+    "among",
+    "and",
+    "from",
+    "history",
+    "into",
+    "past",
+    "that",
+    "the",
+    "them",
+    "with",
+}
 
 
 # Pydantic models for structured responses
@@ -195,6 +211,36 @@ def _has_well_formed_double_quotes(query: str) -> bool:
     return True
 
 
+def _normalized_query_term(token: str) -> Optional[str]:
+    """Return a comparable content term, preserving ignored tokens as boundaries."""
+    token = token.casefold()
+    if len(token) < 4 or token in _QUERY_STUTTER_STOPWORDS:
+        return None
+    if len(token) > 4 and token.endswith("ies"):
+        return f"{token[:-3]}y"
+    if (
+        len(token) > 4
+        and token.endswith("s")
+        and not token.endswith(("ss", "is", "os", "us"))
+    ):
+        return token[:-1]
+    return token
+
+
+def _has_adjacent_duplicate_query_terms(query: str) -> bool:
+    """Return whether a candidate looks like local-model keyword stutter."""
+    previous: Optional[str] = None
+    for token in re.findall(r"[A-Za-z0-9]+", query):
+        term = _normalized_query_term(token)
+        if term is None:
+            previous = None
+            continue
+        if term == previous:
+            return True
+        previous = term
+    return False
+
+
 def _clean_retrieval_query(query: Any) -> Optional[str]:
     """Normalize one candidate retrieval query and reject instruction/meta text."""
     if not isinstance(query, str):
@@ -231,6 +277,8 @@ def _clean_retrieval_query(query: Any) -> Optional[str]:
     if not any(character.isalpha() for character in cleaned):
         return None
     if len(re.findall(r"[A-Za-z0-9]+", cleaned)) < 3:
+        return None
+    if _has_adjacent_duplicate_query_terms(cleaned):
         return None
     if not _has_well_formed_double_quotes(cleaned):
         return None

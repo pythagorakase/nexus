@@ -18,7 +18,9 @@ sys.path.insert(0, str(nexus_root))
 
 from nexus.agents.lore.utils.local_llm import (
     _extract_final_channel_text,
+    _has_adjacent_duplicate_query_terms,
     _has_complete_retrieval_query_set,
+    _normalized_query_term,
     _parse_structured_json_text,
     _sanitize_retrieval_queries,
     LocalLLMManager,
@@ -258,6 +260,73 @@ class TestQueryGeneration:
             "Lantern Court healer living remainder",
             "East Span Crown wardline pursuit",
         ]
+
+    def test_sanitize_retrieval_queries_rejects_live_keyword_stutter(self):
+        """Live local models can emit keyword stutter instead of useful queries."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "Character relationships and interactions among them.",
+                "Thus we can propose queries like:",
+                'Orrel "misdirect" inspectors inspector misdirection tactics',
+                "front front the drains laundry?",
+                "Orrel ledger ledgers ledgers",
+                "Orrel misdirect inspectors through laundry chaos",
+                "Lantern Court laundry crate inspector search",
+                "Ledger concealment near the service hatch",
+            ]
+        )
+
+        assert queries == [
+            "Orrel misdirect inspectors through laundry chaos",
+            "Lantern Court laundry crate inspector search",
+            "Ledger concealment near the service hatch",
+        ]
+
+    def test_sanitize_retrieval_queries_preserves_non_adjacent_repeats(self):
+        """Repeated terms separated by real boundaries can still be useful."""
+        queries = _sanitize_retrieval_queries(
+            [
+                "Orrel ledgers in ledger archive",
+                "Inspector warrants and inspector protocols",
+            ]
+        )
+
+        assert queries == [
+            "Orrel ledgers in ledger archive",
+            "Inspector warrants and inspector protocols",
+        ]
+
+    @pytest.mark.parametrize(
+        ("token", "expected"),
+        [
+            ("inspectors", "inspector"),
+            ("ledgers", "ledger"),
+            ("batteries", "battery"),
+            ("them", None),
+            ("front", "front"),
+            ("chaos", "chaos"),
+            ("focus", "focus"),
+        ],
+    )
+    def test_normalized_query_term_documents_stutter_comparison(self, token, expected):
+        """Query stutter normalization should stay small and predictable."""
+        assert _normalized_query_term(token) == expected
+
+    @pytest.mark.parametrize(
+        ("query", "has_stutter"),
+        [
+            ("front front the drains laundry", True),
+            ("Orrel ledger ledgers ledgers", True),
+            ("inspectors inspector misdirection tactics", True),
+            ("Orrel ledgers in ledger archive", False),
+            ("Inspector warrants and inspector protocols", False),
+        ],
+    )
+    def test_has_adjacent_duplicate_query_terms_preserves_boundaries(
+        self, query, has_stutter
+    ):
+        """Ignored words should break adjacency instead of collapsing repeats."""
+        assert _has_adjacent_duplicate_query_terms(query) is has_stutter
 
     def test_retrieval_query_set_requires_three_queries(self):
         """Structured output should fall back when too few valid queries survive."""
