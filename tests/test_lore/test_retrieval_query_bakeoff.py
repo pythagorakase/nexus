@@ -115,4 +115,7 @@ def test_bootstrap_ci_reports_degenerate_singletons() -> None:
 def test_resolve_api_model_reference_uses_registry() -> None:
     """Diagnostic defaults should avoid hardcoded concrete model IDs."""
 
-    assert resolve_api_model_reference("@openai.default")
+    resolved = resolve_api_model_reference("@openai.default")
+
+    assert resolved
+    assert not resolved.startswith("@")

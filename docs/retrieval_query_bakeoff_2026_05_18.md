@@ -31,9 +31,10 @@ future target and used two automatic judges:
   place, or faction references.
 
 The run also executed all 21 labeled golden queries from `ir_eval/ir_eval.db`
-against the `NEXUS` database as a separate MEMNON sanity check. Golden queries
-are not a fourth strategy; they validate that the underlying retrieval stack is
-not obviously broken during the bake-off.
+against the legacy `NEXUS` database as a separate MEMNON sanity check because
+the existing qrels target that corpus. Golden queries are not a fourth strategy;
+they validate that the underlying retrieval stack is not obviously broken during
+the bake-off.
 
 Most historical chunks did not have stored authorial directives, so
 `skald_directives` used structured OpenAI backfills cached under

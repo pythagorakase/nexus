@@ -31,7 +31,7 @@ import sqlite3
 import statistics
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -40,7 +40,7 @@ from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, Field, field_validator
 
 from nexus.agents.memnon.memnon import MEMNON
-from nexus.api.slot_utils import get_slot_db_url, slot_dbname
+from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings, load_settings_as_dict
 
 
@@ -251,19 +251,19 @@ def load_turn_samples(
     samples: list[TurnSample] = []
 
     for slot in slots:
-        dbname = slot_dbname(slot)
-        with psycopg2.connect(dbname=dbname) as conn:
+        db_url = get_slot_db_url(slot=slot)
+        with psycopg2.connect(db_url) as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                clauses = ["next_id IS NOT NULL"]
+                clauses = ["o.next_id IS NOT NULL"]
                 params: list[Any] = []
                 if min_chunk_id is not None:
-                    clauses.append("id >= %s")
+                    clauses.append("o.id >= %s")
                     params.append(min_chunk_id)
                 if max_chunk_id is not None:
-                    clauses.append("id <= %s")
+                    clauses.append("o.id <= %s")
                     params.append(max_chunk_id)
                 if require_directives:
-                    clauses.append("jsonb_array_length(authorial_directives) > 0")
+                    clauses.append("jsonb_array_length(o.authorial_directives) > 0")
 
                 cur.execute(
                     f"""
@@ -277,10 +277,11 @@ def load_turn_samples(
                             LEAD(id) OVER (ORDER BY id) AS next_id
                         FROM narrative_chunks
                     )
-                    SELECT *
-                    FROM ordered
+                    SELECT o.*, target.raw_text AS target_raw_text
+                    FROM ordered o
+                    JOIN narrative_chunks target ON target.id = o.next_id
                     WHERE {' AND '.join(clauses)}
-                    ORDER BY id
+                    ORDER BY o.id
                     """,
                     tuple(params),
                 )
@@ -292,20 +293,13 @@ def load_turn_samples(
                 for row in rows:
                     source_id = int(row["id"])
                     target_id = int(row["next_id"])
-                    cur.execute(
-                        "SELECT raw_text FROM narrative_chunks WHERE id = %s",
-                        (target_id,),
-                    )
-                    target = cur.fetchone()
-                    if not target:
-                        continue
                     samples.append(
                         TurnSample(
                             slot=slot,
                             source_chunk_id=source_id,
                             target_chunk_id=target_id,
                             source_text=row["raw_text"] or "",
-                            target_text=target["raw_text"] or "",
+                            target_text=row["target_raw_text"] or "",
                             choice_text=row["choice_text"] or "",
                             authorial_directives=_coerce_directives(
                                 row["authorial_directives"]
@@ -608,9 +602,8 @@ def _entity_grades(slot: int, sample: TurnSample) -> dict[int, float]:
     ):
         return {}
 
-    dbname = slot_dbname(slot)
     grades: dict[int, float] = defaultdict(float)
-    with psycopg2.connect(dbname=dbname) as conn:
+    with psycopg2.connect(get_slot_db_url(slot=slot)) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if sample.target_refs.characters:
                 cur.execute(
@@ -738,8 +731,8 @@ def evaluate_sample(
             "slot": sample.slot,
             "source_chunk_id": sample.source_chunk_id,
             "target_chunk_id": sample.target_chunk_id,
-            "source_refs": sample.source_refs.__dict__,
-            "target_refs": sample.target_refs.__dict__,
+            "source_refs": asdict(sample.source_refs),
+            "target_refs": asdict(sample.target_refs),
             "stored_authorial_directive_count": len(sample.authorial_directives),
         },
         "oracle_grade_count": len(oracle_grades),
@@ -1038,6 +1031,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--golden-limit", type=int, default=None)
     parser.add_argument(
+        "--skald-reasoning-effort",
+        default="medium",
+        choices=["minimal", "low", "medium", "high"],
+        help="Reasoning effort for Skald-style directive backfills",
+    )
+    parser.add_argument(
         "--verbose-logs",
         action="store_true",
         help="Keep MEMNON/LLM library logs visible during long bake-off runs",
@@ -1060,18 +1059,19 @@ def _init_local_llm_manager() -> Any:
     from nexus.agents.lore.utils.local_llm import LocalLLMManager
 
     settings = load_settings_as_dict()
-    system_prompt = Path("nexus/agents/lore/lore_system_prompt.md").read_text()
+    repo_root = Path(__file__).resolve().parent.parent
+    system_prompt = (repo_root / "nexus/agents/lore/lore_system_prompt.md").read_text()
     return LocalLLMManager(settings, system_prompt=system_prompt)
 
 
-def _init_skald_provider(model: str) -> Any:
+def _init_skald_provider(model: str, *, reasoning_effort: str) -> Any:
     from scripts.api_openai import OpenAIProvider
 
     resolved_model = resolve_api_model_reference(model)
     return OpenAIProvider(
         model=resolved_model,
         max_output_tokens=1200,
-        reasoning_effort="medium",
+        reasoning_effort=reasoning_effort,
         system_prompt=(
             "You write concise retrieval directives for a narrative memory system. "
             "Return only structured directives."
@@ -1107,12 +1107,14 @@ def main() -> None:
     configure_logging(verbose=args.verbose_logs)
     slots = args.slots or [5]
     cache = JsonCache(args.cache)
+    min_chunk_id = args.chunk_id if args.chunk_id is not None else args.min_chunk_id
+    max_chunk_id = args.chunk_id if args.chunk_id is not None else args.max_chunk_id
 
     samples = load_turn_samples(
         slots,
         per_slot=args.samples_per_slot,
-        min_chunk_id=args.chunk_id or args.min_chunk_id,
-        max_chunk_id=args.chunk_id or args.max_chunk_id,
+        min_chunk_id=min_chunk_id,
+        max_chunk_id=max_chunk_id,
         require_directives=args.require_stored_directives,
     )
     if not samples:
@@ -1120,7 +1122,12 @@ def main() -> None:
 
     local_llm = _init_local_llm_manager() if args.generate_local_queries else None
     skald_provider = (
-        _init_skald_provider(args.skald_model) if args.generate_skald_missing else None
+        _init_skald_provider(
+            args.skald_model,
+            reasoning_effort=args.skald_reasoning_effort,
+        )
+        if args.generate_skald_missing
+        else None
     )
 
     memnon_by_slot = {slot: _init_memnon(slot) for slot in sorted(set(slots))}
