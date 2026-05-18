@@ -169,13 +169,13 @@ For detailed, task-specific workflows and guides, see the Claude Code skills in 
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
 - **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
-- **analyze-divergence**: Debug divergence detection behavior, understand the LLM-based architecture, and tune thresholds
+- **analyze-divergence**: Debug entity-based divergence detection behavior and tune thresholds
 
 These skills contain detailed commands, workflows, troubleshooting guides, and best practices extracted from development experience.
 
-## LLM-Based Divergence Detection
+## Entity-Based Divergence Detection
 
-The LORE agent uses intelligent LLM-based divergence detection to identify when users reference entities, events, or context not present in the recent narrative (warm slice).
+The LORE agent uses deterministic entity-based divergence detection to identify when users reference known entities not present in the recent narrative (warm slice).
 
 For architecture details, testing procedures, and troubleshooting, see the `analyze-divergence` skill in `.claude/skills/`.
 

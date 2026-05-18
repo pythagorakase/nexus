@@ -27,7 +27,7 @@ class DummyLore:
 
 
 class DummyLLMManager:
-    """Legacy local LLM stub for assertions that it is no longer consulted."""
+    """Legacy local LLM stub that would fail if retrieval called removed methods."""
 
     def is_available(self) -> bool:
         return True

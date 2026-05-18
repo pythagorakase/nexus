@@ -32,18 +32,18 @@ class DivergenceResult:
 
 
 class DivergenceDetector:
-    """Placeholder divergence detector - actual detection is done by LLM or entity detector.
+    """Placeholder divergence detector for compatibility.
 
-    This class remains for backward compatibility but always returns no divergence.
-    The real divergence detection is handled by:
-    - LLMDivergenceDetector (primary, when LLM available)
-    - HighSpecificityEntityDetector (fallback, when LLM unavailable)
+    This class remains for older tests and extension points that patch a
+    detector directly. Normal Pass 2 divergence detection is handled by
+    HighSpecificityEntityDetector in ContextMemoryManager.
     """
 
     def __init__(self, threshold: float = 0.7) -> None:
         self.threshold = max(0.0, min(1.0, threshold))
         logger.info(
-            "DivergenceDetector initialized as placeholder - actual detection via LLM or entity detector"
+            "DivergenceDetector initialized as placeholder; "
+            "ContextMemoryManager uses entity matching by default"
         )
 
     def detect(

@@ -10,7 +10,7 @@ We are building an intelligent, dynamic memory storage and retrieval system to a
 	- changing states of other locations
 	- internal states of characters (secrets, hidden agendas, etc.)
 
-Our project aims to compensate for these weaknesses with a local-LLM-driven orchestration system that coordinates specialized utilities to:
+Our project aims to compensate for these weaknesses with a deterministic orchestration system that coordinates specialized utilities and frontier-model narrative generation to:
 1. Critically analyze new input from user & storyteller AI.
 2. Dynamically and intelligently build an API payload to the apex-LLM that combines recent raw narrative, structured summaries of relevant character history and events, and excerpts from the historical narrative corpus curated for maximum relevance.
 3. Incorporate the apex-LLMs response (newly-generated narrative + updates to hidden variables).
@@ -99,9 +99,9 @@ The system employs two tiers of AI:
 - Generates new narrative to continue from last user input
 - Updates world state variables
 - Updates hidden information
-**LORE** (Local LLM: Llama)
-- Agent reasoning and orchestration
-- Preparation for new narrative
+**LORE** (deterministic orchestration)
+- Turn-cycle coordination and context budgeting
+- Retrieval planning from raw narrative text and Skald directives
 - Post-generation processing and integration
 
 ### PostgreSQL
@@ -164,14 +164,12 @@ Implementation: `nexus/agents/memnon/`
 - **Sentence-Transformers + Transformers**: Powers the triple-embedding strategy using models like BGE and E5
 - **OpenAI / Anthropic APIs**: Interfaces for narrative generation with frontier LLMs
 - **FastAPI + Uvicorn**: Web framework and ASGI server for API endpoints
-- **LM Studio SDK**: Local LLM inference for LORE agent operations
-- **llama-cpp-python**: Direct local model inference support
 - **PyTorch + Accelerate**: ML framework for embedding models and cross-encoder reranking
 - **Tiktoken**: Token counting for managing context window constraints
 - **React + TypeScript**: Modern frontend UI framework
 
 ### Hardware
-Performance quality and latency will depend on the user's ability to run a capable local LLM.
+Performance quality and latency will depend on the configured frontier models, PostgreSQL, embeddings, and reranking stack.
 
 Development Hardware:
 	- **Model**: MacBook Pro M4 Max
@@ -269,16 +267,16 @@ LORE orchestrates context assembly through a two-pass memory system:
 
 **Pass 1: Baseline Assembly** (triggered by Skald's narrative generation)
 1. LORE calculates a context budget based on Skald token limits
-2. Local LLM generates targeted retrieval queries based on narrative context
+2. LORE seeds retrieval from raw narrative text and Skald-supplied authorial directives
 3. MEMNON executes multi-strategy search (vector + text + hybrid scoring)
 4. Cross-encoder reranking refines results for semantic relevance
 5. LORE assembles the baseline context package: warm slice, historical excerpts, entity state
 
 **Pass 2: Divergence Detection** (triggered by user input)
 1. When user completes a chunk with their input, LORE analyzes for divergence
-2. LLM-based detector checks if user references entities/events NOT in the baseline
-3. If divergence detected, additional targeted retrieval fills the gaps
-4. Updated context ensures Skald has full awareness of user-referenced elements
+2. Entity matching checks if user input references known entities outside the baseline
+3. Raw user-input retrieval fills the remaining Phase 2 budget when appropriate
+4. Updated context improves Skald's awareness of user-referenced elements
 
 This two-pass approach ensures continuity: Pass 1 provides context for generation, Pass 2 catches novel user references that need historical grounding.
 

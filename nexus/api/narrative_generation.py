@@ -138,7 +138,7 @@ async def generate_narrative_async(
 
         if is_bootstrap:
             # Bootstrap mode: Generate first chunk using story seed directly
-            # Skip LORE entirely (requires warm slice and local LLM)
+            # Skip LORE entirely; there is no parent warm slice yet.
             logger.info(
                 "Bootstrap mode: calling apex AI directly with story seed context"
             )

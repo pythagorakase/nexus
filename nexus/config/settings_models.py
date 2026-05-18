@@ -686,18 +686,6 @@ class MEMNONSettings(BaseModel):
 # =============================================================================
 
 
-class DivergenceDetectionConfig(BaseModel):
-    """Divergence detection configuration."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    use_llm: bool
-    use_local_llm: bool
-    llm_temperature: float = Field(..., ge=0.0, le=2.0)
-    llm_max_tokens: int = Field(..., ge=1)
-    confidence_threshold: float = Field(..., ge=0.0, le=1.0)
-
-
 class MemorySettings(BaseModel):
     """Memory manager configuration."""
 
@@ -710,7 +698,6 @@ class MemorySettings(BaseModel):
     divergence_threshold: float = Field(..., ge=0.0, le=1.0)
     warm_slice_default: bool
     max_sql_iterations: int = Field(..., ge=1)
-    divergence_detection: DivergenceDetectionConfig
 
 
 # =============================================================================

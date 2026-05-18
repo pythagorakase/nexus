@@ -6,7 +6,6 @@ This agent is responsible for all memory operations, including:
 - Storing and retrieving narrative chunks
 - Cross-referencing structured data with vector embeddings
 - Implementing specialized query patterns for different memory tiers
-- Synthesizing responses using local LLM capabilities
 
 The architecture has been refactored to use modular utility classes:
 - EmbeddingManager: Handles embedding model lifecycle and vector generation
