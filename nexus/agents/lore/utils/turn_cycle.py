@@ -196,12 +196,12 @@ class TurnCycleManager:
 
     async def perform_warm_analysis(self, turn_context: TurnContext):
         """
-        Phase 2: Analyze recent narrative context.
+        Phase 2: Prepare recent narrative context.
 
         Args:
             turn_context: Current turn context
         """
-        logger.debug("Performing warm analysis...")
+        logger.debug("Preparing warm context...")
 
         warm_slice_chunks: List[Dict[str, Any]] = []
         target_chunk_id = getattr(turn_context, "target_chunk_id", None)

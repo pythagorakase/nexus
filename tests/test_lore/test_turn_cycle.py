@@ -35,17 +35,6 @@ class DummyLLMManager:
     def is_available(self) -> bool:
         return True
 
-    def analyze_narrative_context(
-        self, warm_slice: list[Dict[str, Any]], user_input: str
-    ) -> Dict[str, Any]:
-        return {"themes": ["testing"], "user_input": user_input}
-
-    def generate_retrieval_queries(
-        self, analysis: Dict[str, Any], user_input: str
-    ) -> list[str]:
-        self.generated_query_calls += 1
-        return ["Local query A", "Local query B", "Local query C"]
-
 
 @pytest.fixture()
 def turn_manager() -> TurnCycleManager:
