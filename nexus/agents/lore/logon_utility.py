@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import psycopg2
 
@@ -28,6 +28,53 @@ from nexus.config.loader import get_provider_for_model
 logger = logging.getLogger("nexus.lore.logon")
 
 
+def _coerce_mapping(value: Any) -> Dict[str, Any]:
+    """Return a JSON-like mapping from DB or model payloads."""
+
+    if value is None:
+        return {}
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse mapping JSON for prompt context: %r", value)
+            return {}
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json", exclude_none=True)
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def _string_value(value: Any) -> str:
+    """Render a scalar prompt value, keeping empty values out of prompts."""
+
+    if value is None or value == "":
+        return ""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, set):
+        return ", ".join(
+            str(item) for item in sorted(value, key=str) if item not in (None, "")
+        )
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(item) for item in value if item not in (None, ""))
+    if isinstance(value, Mapping):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)
+
+
+def _labeled_lines(rows: list[tuple[str, Any]]) -> list[str]:
+    """Render label/value rows, omitting absent values."""
+
+    lines: list[str] = []
+    for label, value in rows:
+        rendered = _string_value(value)
+        if rendered:
+            lines.append(f"- {label}: {rendered}")
+    return lines
+
+
 class LogonUtility:
     """Wrapper for Apex AI API calls using existing providers"""
 
@@ -39,6 +86,7 @@ class LogonUtility:
         settings: Dict[str, Any],
         dbname: Optional[str] = None,
         model_override: Optional[str] = None,
+        bootstrap_mode: bool = False,
     ):
         """
         Initialize LOGON utility with configured provider.
@@ -49,27 +97,28 @@ class LogonUtility:
                     If not provided, uses NEXUS_SLOT env var.
             model_override: Optional model to use instead of settings/slot config.
                            If None, will check slot's configured model first.
+            bootstrap_mode: Whether this LOGON instance is generating chunk #1.
         """
         self.settings = settings
         self.dbname = dbname
         self.model_override = model_override
+        self.bootstrap_mode = bootstrap_mode
         self.provider: Optional[object] = None
         self._system_prompt: Optional[str] = None
+        self._provider_bootstrap_mode: Optional[bool] = None
 
-    def _load_system_prompt(self) -> str:
-        """Load and combine the storyteller core prompt with setting context."""
+    def _load_system_prompt(self, is_bootstrap: Optional[bool] = None) -> str:
+        """Load and combine storyteller instructions with live slot context."""
         from nexus.api.slot_utils import require_slot_dbname
 
+        is_bootstrap = self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+
         # Load storyteller core prompt
-        core_prompt_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "prompts"
-            / "storyteller_core.md"
-        )
+        prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
+        core_prompt_path = prompts_dir / "storyteller_core.md"
 
         try:
-            with open(core_prompt_path, "r") as f:
-                core_prompt = f.read()
+            core_prompt = core_prompt_path.read_text()
             logger.info(f"Loaded storyteller core prompt ({len(core_prompt)} chars)")
         except FileNotFoundError:
             logger.warning(
@@ -77,12 +126,29 @@ class LogonUtility:
             )
             core_prompt = "You are a narrative intelligence system generating interactive fiction."
 
+        system_prompt = core_prompt
+        if is_bootstrap:
+            bootstrap_path = prompts_dir / "storyteller_bootstrap.md"
+            try:
+                bootstrap_content = bootstrap_path.read_text()
+                system_prompt = f"{system_prompt}\n\n---\n\n{bootstrap_content}"
+                logger.info(
+                    "Appended storyteller bootstrap supplement (%s chars)",
+                    len(bootstrap_content),
+                )
+            except FileNotFoundError:
+                logger.warning(
+                    "Bootstrap supplement not found at %s, using core prompt only",
+                    bootstrap_path,
+                )
+
         # Query setting from global_variables
         try:
             db = require_slot_dbname(dbname=self.dbname)
             try:
                 tag_library_prompt = format_tag_library_for_prompt(db)
-                core_prompt = f"{core_prompt}\n\n---\n\n{tag_library_prompt}"
+                if tag_library_prompt:
+                    system_prompt = f"{system_prompt}\n\n---\n\n{tag_library_prompt}"
             except Exception as e:
                 logger.warning(
                     "Failed to load Orrery tag library for storyteller prompt: %s",
@@ -95,15 +161,15 @@ class LogonUtility:
                 result = cur.fetchone()
 
                 if result and result[0]:
-                    setting_data = result[0]
-                    # Extract the markdown content from the JSON
-                    setting_content = setting_data.get("content", "")
-                    setting_title = setting_data.get("title", "Setting Context")
+                    setting_content = self._format_setting_context(result[0])
+                    if not setting_content:
+                        logger.warning(
+                            "Setting data found in global_variables but no promptable fields were present"
+                        )
+                        return system_prompt
 
                     # Combine core prompt with setting
-                    combined_prompt = (
-                        f"{core_prompt}\n\n## {setting_title}\n\n{setting_content}"
-                    )
+                    combined_prompt = f"{system_prompt}\n\n{setting_content}"
                     logger.info(
                         f"Combined prompt with setting context ({len(setting_content)} chars)"
                     )
@@ -112,14 +178,55 @@ class LogonUtility:
                     logger.warning(
                         "No setting data found in global_variables, using core prompt only"
                     )
-                    return core_prompt
+                    return system_prompt
 
         except Exception as e:
             logger.error(f"Failed to load setting from database: {e}")
-            return core_prompt
+            return system_prompt
         finally:
             if "conn" in locals():
                 conn.close()
+
+    @staticmethod
+    def _format_setting_context(setting_data: Any) -> str:
+        """Render persisted SettingCard JSON into system-prompt context."""
+
+        setting = _coerce_mapping(setting_data)
+        if not setting:
+            return ""
+
+        legacy_content = _string_value(setting.get("content"))
+        if legacy_content:
+            legacy_title = _string_value(setting.get("title")) or "Setting Context"
+            return f"## {legacy_title}\n\n{legacy_content}"
+
+        world_name = _string_value(setting.get("world_name")) or "Setting Context"
+        lines = [f"## Setting Context: {world_name}"]
+
+        diegetic_artifact = _string_value(setting.get("diegetic_artifact"))
+        if diegetic_artifact:
+            lines.extend(["", "### Diegetic Artifact", diegetic_artifact])
+
+        field_rows = [
+            ("Genre", setting.get("genre")),
+            ("Secondary Genres", setting.get("secondary_genres")),
+            ("Tone", setting.get("tone")),
+            ("Time Period", setting.get("time_period")),
+            ("Technology Level", setting.get("tech_level")),
+            ("Geographic Scope", setting.get("geographic_scope")),
+            ("Themes", setting.get("themes")),
+            ("Magic Exists", setting.get("magic_exists")),
+            ("Magic Description", setting.get("magic_description")),
+            ("Political Structure", setting.get("political_structure")),
+            ("Major Conflict", setting.get("major_conflict")),
+            ("Cultural Notes", setting.get("cultural_notes")),
+            ("Language Notes", setting.get("language_notes")),
+        ]
+        structured_lines = _labeled_lines(field_rows)
+        if structured_lines:
+            lines.extend(["", "### Structured Setting Card", *structured_lines])
+
+        return "\n".join(lines)
 
     def _get_slot_model(self) -> Optional[str]:
         """Get the model configured for the current slot from global_variables."""
@@ -139,9 +246,12 @@ class LogonUtility:
             logger.warning(f"Failed to get slot model: {e}")
             return None
 
-    def _initialize_provider(self) -> None:
+    def _initialize_provider(self, is_bootstrap: Optional[bool] = None) -> None:
         """Initialize the appropriate API provider based on settings and slot config."""
         apex_settings = self.settings.get("API Settings", {}).get("apex", {})
+        provider_bootstrap_mode = (
+            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+        )
 
         # Model priority: override > slot config > settings
         model = self.model_override
@@ -163,7 +273,9 @@ class LogonUtility:
             logger.info(f"TEST model: routing to mock server at {base_url}")
 
         # Load system prompt
-        system_prompt = self._load_system_prompt()
+        system_prompt = self._load_system_prompt(provider_bootstrap_mode)
+        self._system_prompt = system_prompt
+        self._provider_bootstrap_mode = provider_bootstrap_mode
 
         if provider_type in {"openai", "test"}:
             self.provider = OpenAIProvider(
@@ -191,19 +303,33 @@ class LogonUtility:
         )
         logger.info(f"System prompt loaded: {len(system_prompt)} chars")
 
-    def _ensure_provider(self) -> None:
+    def _ensure_provider(
+        self, context_payload: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Ensure the provider is initialized before use."""
+        desired_bootstrap_mode = (
+            self._is_bootstrap_context(context_payload)
+            if context_payload is not None
+            else self.bootstrap_mode
+        )
+
         if self.provider is None:
-            self._initialize_provider()
+            self._initialize_provider(desired_bootstrap_mode)
             return
 
         resolved_model = self.model_override or self._get_slot_model()
-        if resolved_model and getattr(self.provider, "model", None) != resolved_model:
+        model_changed = bool(
+            resolved_model and getattr(self.provider, "model", None) != resolved_model
+        )
+        bootstrap_changed = self._provider_bootstrap_mode != desired_bootstrap_mode
+        if model_changed or bootstrap_changed:
             logger.info(
-                "Model override detected. Reinitializing provider for model %s",
-                resolved_model,
+                "LOGON provider context changed. Reinitializing provider for model %s "
+                "(bootstrap=%s)",
+                resolved_model or getattr(self.provider, "model", None),
+                desired_bootstrap_mode,
             )
-            self._initialize_provider()
+            self._initialize_provider(desired_bootstrap_mode)
 
     def ensure_provider(self) -> None:
         """Public wrapper for provider initialization."""
@@ -211,7 +337,7 @@ class LogonUtility:
 
     def generate_narrative(self, context_payload: Dict[str, Any]) -> StoryTurnResponse:
         """Generate narrative from context payload with structured output."""
-        self._ensure_provider()
+        self._ensure_provider(context_payload)
         # Format the context into a prompt
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
@@ -236,7 +362,7 @@ class LogonUtility:
         self, context_payload: Dict[str, Any]
     ) -> StoryTurnResponse:
         """Generate narrative from context payload without blocking the event loop."""
-        self._ensure_provider()
+        self._ensure_provider(context_payload)
         prompt = self._format_context_prompt(context_payload)
         schema_model = self._select_response_schema(context_payload)
 
@@ -260,15 +386,22 @@ class LogonUtility:
         self, context_payload: Dict[str, Any]
     ) -> type[StorytellerResponseBootstrap] | type[StorytellerResponseExtended]:
         """Select the structured output schema for the current narrative context."""
+        if self._is_bootstrap_context(context_payload):
+            return StorytellerResponseBootstrap
+
+        return StorytellerResponseExtended
+
+    @staticmethod
+    def _is_bootstrap_context(context_payload: Optional[Mapping[str, Any]]) -> bool:
+        """Return whether a context payload is for the opening bootstrap chunk."""
+
+        if not isinstance(context_payload, Mapping):
+            return False
         metadata = context_payload.get("metadata", {})
         metadata_bootstrap = (
             metadata.get("is_bootstrap", False) if isinstance(metadata, dict) else False
         )
-
-        if context_payload.get("is_bootstrap", False) or metadata_bootstrap:
-            return StorytellerResponseBootstrap
-
-        return StorytellerResponseExtended
+        return bool(context_payload.get("is_bootstrap", False) or metadata_bootstrap)
 
     def _format_context_prompt(self, context: Dict) -> str:
         """Format context payload into a prompt for the Apex AI"""
@@ -279,6 +412,12 @@ class LogonUtility:
             sections.append("=== RECENT NARRATIVE ===")
             for chunk in context["warm_slice"]["chunks"]:
                 sections.append(chunk.get("text", ""))
+
+        bootstrap_sections = self._format_bootstrap_context(
+            context.get("bootstrap_data")
+        )
+        if bootstrap_sections:
+            sections.extend(bootstrap_sections)
 
         # Add user input
         sections.append("\n=== USER INPUT ===")
@@ -476,3 +615,101 @@ class LogonUtility:
         )
 
         return "\n".join(sections)
+
+    @staticmethod
+    def _format_bootstrap_context(bootstrap_data: Any) -> list[str]:
+        """Render new-story wizard output into chunk #1 user prompt context."""
+
+        data = _coerce_mapping(bootstrap_data)
+        if not data:
+            return []
+
+        sections = [
+            "\n=== BOOTSTRAP CONTEXT ===",
+            "Use this new-story context to write chunk #1. It is authoritative "
+            "for the opening scene.",
+        ]
+
+        setting = _coerce_mapping(data.get("setting"))
+        setting_lines = _labeled_lines(
+            [
+                ("World", setting.get("world_name")),
+                ("Genre", setting.get("genre")),
+                ("Tone", setting.get("tone")),
+                ("Themes", setting.get("themes")),
+                ("Time Period", setting.get("time_period")),
+                ("Technology Level", setting.get("tech_level")),
+                ("Magic Exists", setting.get("magic_exists")),
+                ("Magic Description", setting.get("magic_description")),
+                ("Political Structure", setting.get("political_structure")),
+                ("Major Conflict", setting.get("major_conflict")),
+                ("Cultural Notes", setting.get("cultural_notes")),
+                ("Language Notes", setting.get("language_notes")),
+                ("Geographic Scope", setting.get("geographic_scope")),
+                ("Diegetic Artifact", setting.get("diegetic_artifact")),
+            ]
+        )
+        if setting_lines:
+            sections.extend(["\n## Setting Snapshot", *setting_lines])
+
+        protagonist = _coerce_mapping(data.get("protagonist"))
+        protagonist_lines = _labeled_lines(
+            [
+                ("Name", protagonist.get("name")),
+                ("Summary", protagonist.get("summary")),
+                ("Appearance", protagonist.get("appearance")),
+                ("Background", protagonist.get("background")),
+                ("Personality", protagonist.get("personality")),
+                ("Emotional State", protagonist.get("emotional_state")),
+                ("Current Activity", protagonist.get("current_activity")),
+                ("Traits", protagonist.get("traits") or protagonist.get("extra_data")),
+            ]
+        )
+        if protagonist_lines:
+            sections.extend(["\n## Protagonist", *protagonist_lines])
+
+        location = _coerce_mapping(data.get("location"))
+        location_lines = _labeled_lines(
+            [
+                ("Name", location.get("name")),
+                ("Summary", location.get("summary")),
+                ("Current Status", location.get("current_status")),
+                ("Atmosphere", location.get("atmosphere")),
+                ("History", location.get("history")),
+                ("Inhabitants", location.get("inhabitants")),
+                ("Resources", location.get("resources")),
+                ("Dangers", location.get("dangers")),
+                ("Secrets", location.get("secrets")),
+            ]
+        )
+        if location_lines:
+            sections.extend(["\n## Starting Location", *location_lines])
+
+        seed = _coerce_mapping(data.get("story_seed"))
+        seed_title = _string_value(seed.get("title")) or "Story Seed"
+        seed_lines = _labeled_lines(
+            [
+                ("Seed Type", seed.get("seed_type")),
+                ("Situation", seed.get("situation")),
+                ("Hook", seed.get("hook")),
+                ("Immediate Goal", seed.get("immediate_goal")),
+                ("Stakes", seed.get("stakes")),
+                ("Tension Source", seed.get("tension_source")),
+                ("Weather", seed.get("weather")),
+                ("Key NPCs", seed.get("key_npcs")),
+            ]
+        )
+        if seed_lines:
+            sections.extend([f"\n## Story Seed: {seed_title}", *seed_lines])
+        seed_secrets = _string_value(seed.get("secrets"))
+        if seed_secrets:
+            sections.extend(
+                [
+                    "\n### LLM-Internal Secrets",
+                    "Use these for dramatic irony and continuity. Do not reveal "
+                    "them directly to the player unless the story earns it.",
+                    seed_secrets,
+                ]
+            )
+
+        return sections

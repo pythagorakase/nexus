@@ -99,9 +99,12 @@ def patched_provider(monkeypatch: pytest.MonkeyPatch) -> Dict[str, int]:
         def ensure_model_loaded(self) -> None:
             return None
 
-    def _fake_initialize(self: LogonUtility) -> None:
+    def _fake_initialize(self: LogonUtility, is_bootstrap: bool | None = None) -> None:
         init_calls["count"] += 1
         self.provider = _DummyProvider()
+        self._provider_bootstrap_mode = (
+            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+        )
 
     for target in (
         "nexus.agents.lore.logon_utility.LogonUtility._initialize_provider",
@@ -166,6 +169,7 @@ async def test_logon_async_generation_uses_structured_provider() -> None:
     provider = _DummyProvider()
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = provider
+    logon._provider_bootstrap_mode = False
 
     response = await logon.generate_narrative_async(_minimal_payload())
 
@@ -183,6 +187,7 @@ async def test_logon_async_generation_uses_bootstrap_schema_for_bootstrap() -> N
     provider = _DummyProvider()
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = provider
+    logon._provider_bootstrap_mode = True
 
     response = await logon.generate_narrative_async(_minimal_payload(is_bootstrap=True))
 
@@ -200,9 +205,35 @@ async def test_logon_structured_failure_does_not_call_plain_text_fallback() -> N
     provider = _FailingProvider()
     logon = LogonUtility({}, model_override="dummy-model")
     logon.provider = provider
+    logon._provider_bootstrap_mode = False
 
     with pytest.raises(RuntimeError, match="structured boom"):
         await logon.generate_narrative_async(_minimal_payload())
 
     assert provider.structured_calls == 1
     assert provider.completion_calls == 0
+
+
+def test_context_bootstrap_mode_does_not_mutate_logon_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bootstrap payload can re-prompt the provider without flipping the utility."""
+
+    initialized_modes: list[bool | None] = []
+
+    def _fake_initialize(self: LogonUtility, is_bootstrap: bool | None = None) -> None:
+        initialized_modes.append(is_bootstrap)
+        self.provider = _DummyProvider()
+        self._provider_bootstrap_mode = (
+            self.bootstrap_mode if is_bootstrap is None else is_bootstrap
+        )
+
+    monkeypatch.setattr(LogonUtility, "_initialize_provider", _fake_initialize)
+
+    logon = LogonUtility({}, model_override="dummy-model", bootstrap_mode=False)
+
+    logon.generate_narrative(_minimal_payload(is_bootstrap=True))
+
+    assert initialized_modes == [True]
+    assert logon.bootstrap_mode is False
+    assert logon._provider_bootstrap_mode is True

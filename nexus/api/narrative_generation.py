@@ -349,20 +349,36 @@ async def generate_bootstrap_narrative(
 
         # Get character details
         cur.execute(
-            "SELECT name, appearance, background FROM characters WHERE id = %s",
+            """
+            SELECT name, summary, appearance, background, personality,
+                   emotional_state, current_activity, extra_data
+            FROM characters
+            WHERE id = %s
+            """,
             (character_id,),
         )
         char_row = cur.fetchone()
         character_name = char_row["name"] if char_row else "Unknown"
+        character_summary = char_row.get("summary", "") if char_row else ""
         character_appearance = char_row.get("appearance", "") if char_row else ""
         character_background = char_row.get("background", "") if char_row else ""
+        character_personality = char_row.get("personality", "") if char_row else ""
+        character_emotional_state = (
+            char_row.get("emotional_state", "") if char_row else ""
+        )
+        character_current_activity = (
+            char_row.get("current_activity", "") if char_row else ""
+        )
+        character_traits = (char_row.get("extra_data") or {}) if char_row else {}
 
         # Get starting location via FK chain:
         # global_variables.user_character → characters.current_location → places.id
         # Note: atmosphere is stored in extra_data JSONB
         cur.execute(
-            """SELECT p.name, p.summary,
-                      p.extra_data->>'atmosphere' as atmosphere
+            """SELECT p.name, p.summary, p.history, p.current_status, p.secrets,
+                      p.inhabitants,
+                      p.extra_data->>'atmosphere' as atmosphere,
+                      p.extra_data
                FROM global_variables g
                JOIN characters c ON c.id = g.user_character
                JOIN places p ON p.id = c.current_location
@@ -372,6 +388,13 @@ async def generate_bootstrap_narrative(
         location_name = place_row["name"] if place_row else "Unknown Location"
         location_summary = place_row.get("summary", "") if place_row else ""
         location_atmosphere = place_row.get("atmosphere", "") if place_row else ""
+        location_history = place_row.get("history", "") if place_row else ""
+        location_current_status = (
+            place_row.get("current_status", "") if place_row else ""
+        )
+        location_secrets = place_row.get("secrets", "") if place_row else ""
+        location_inhabitants = place_row.get("inhabitants", []) if place_row else []
+        location_extra_data = (place_row.get("extra_data") or {}) if place_row else {}
 
     # Extract story seed from setting
     story_seed = setting_data.get("story_seed", {})
@@ -386,9 +409,18 @@ async def generate_bootstrap_narrative(
                 "world_name": setting_data.get("world_name", "Unknown World"),
                 "tone": setting_data.get("tone", ""),
                 "genre": setting_data.get("genre", ""),
+                "secondary_genres": setting_data.get("secondary_genres", []),
                 "themes": setting_data.get("themes", []),
+                "time_period": setting_data.get("time_period", ""),
+                "tech_level": setting_data.get("tech_level", ""),
                 "magic_exists": setting_data.get("magic_exists", False),
                 "magic_description": setting_data.get("magic_description", ""),
+                "political_structure": setting_data.get("political_structure", ""),
+                "major_conflict": setting_data.get("major_conflict", ""),
+                "cultural_notes": setting_data.get("cultural_notes", ""),
+                "language_notes": setting_data.get("language_notes", ""),
+                "geographic_scope": setting_data.get("geographic_scope", ""),
+                "diegetic_artifact": setting_data.get("diegetic_artifact", ""),
             },
             "story_seed": {
                 "title": story_seed.get("title", ""),
@@ -400,16 +432,28 @@ async def generate_bootstrap_narrative(
                 "tension_source": story_seed.get("tension_source", ""),
                 "weather": story_seed.get("weather", ""),
                 "key_npcs": story_seed.get("key_npcs", []),
+                "secrets": story_seed.get("secrets", ""),
             },
             "protagonist": {
                 "name": character_name,
+                "summary": character_summary,
                 "appearance": character_appearance,
                 "background": character_background,
+                "personality": character_personality,
+                "emotional_state": character_emotional_state,
+                "current_activity": character_current_activity,
+                "traits": character_traits,
             },
             "location": {
                 "name": location_name,
                 "summary": location_summary,
                 "atmosphere": location_atmosphere,
+                "history": location_history,
+                "current_status": location_current_status,
+                "secrets": location_secrets,
+                "inhabitants": location_inhabitants,
+                "resources": location_extra_data.get("resources", []),
+                "dangers": location_extra_data.get("dangers", []),
             },
         },
         "entity_data": {},  # No entity data for bootstrap
@@ -424,7 +468,7 @@ async def generate_bootstrap_narrative(
     # Initialize LOGON and generate narrative
     settings = load_settings()
     dbname = require_slot_dbname(slot=slot)
-    logon = LogonUtility(settings, dbname=dbname)
+    logon = LogonUtility(settings, dbname=dbname, bootstrap_mode=True)
     story_response = await logon.generate_narrative_async(bootstrap_context)
 
     # Extract narrative text
