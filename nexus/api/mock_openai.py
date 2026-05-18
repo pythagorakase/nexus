@@ -39,10 +39,11 @@ def _parse_pg_array(value: Any) -> List[str]:
         return []
     if isinstance(value, list):
         return value
-    if isinstance(value, str) and value.startswith('{') and value.endswith('}'):
+    if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
         inner = value[1:-1]
-        return inner.split(',') if inner else []
+        return inner.split(",") if inner else []
     return []
+
 
 app = FastAPI(title="NEXUS Mock OpenAI")
 
@@ -70,7 +71,8 @@ def query_wizard_cache() -> Dict[str, Any]:
     """Query wizard cache from mock.assets.new_story_creator."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT
                     -- Setting
                     setting_genre, setting_secondary_genres, setting_world_name,
@@ -92,7 +94,8 @@ def query_wizard_cache() -> Dict[str, Any]:
                     initial_location
                 FROM assets.new_story_creator
                 WHERE id = TRUE
-            """)
+            """
+            )
             return cur.fetchone() or {}
 
 
@@ -100,11 +103,13 @@ def query_traits() -> List[Dict[str, Any]]:
     """Query all traits from mock.assets.traits."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, name, description, is_selected, rationale
                 FROM assets.traits
                 ORDER BY id
-            """)
+            """
+            )
             return list(cur.fetchall())
 
 
@@ -112,15 +117,20 @@ def query_bootstrap_narrative() -> Dict[str, Any]:
     """Query bootstrap narrative from mock.incubator."""
     with get_mock_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT storyteller_text, choice_object, metadata_updates, reference_updates
+            cur.execute(
+                """
+                SELECT storyteller_text, choice_object, metadata_updates,
+                       reference_updates, authorial_directives
                 FROM incubator
                 WHERE id = TRUE
-            """)
+            """
+            )
             return cur.fetchone() or {}
 
 
-def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dict[str, Any]:
+def get_cached_phase_response(
+    phase: str, subphase: Optional[str] = None
+) -> Dict[str, Any]:
     """
     Get cached response for a wizard phase from mock database.
 
@@ -145,7 +155,9 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                 "language_notes": cache.get("setting_language_notes"),
                 "major_conflict": cache.get("setting_major_conflict"),
                 "geographic_scope": cache.get("setting_geographic_scope"),
-                "secondary_genres": _parse_pg_array(cache.get("setting_secondary_genres")),
+                "secondary_genres": _parse_pg_array(
+                    cache.get("setting_secondary_genres")
+                ),
                 "political_structure": cache.get("setting_political_structure"),
                 "diegetic_artifact": cache.get("setting_diegetic_artifact"),
             },
@@ -155,12 +167,18 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
     elif phase == "character":
         # Query traits from assets.traits table
         traits = query_traits()
-        selected_traits = [t for t in traits if t.get("is_selected") and t.get("id") <= 10]
+        selected_traits = [
+            t for t in traits if t.get("is_selected") and t.get("id") <= 10
+        ]
         wildcard = next((t for t in traits if t.get("id") == 11), None)
 
         # Build trait names and rationales from selected traits
         selected_names = [t.get("name") for t in selected_traits]
-        trait_rationales = {t.get("name"): t.get("rationale") for t in selected_traits if t.get("rationale")}
+        trait_rationales = {
+            t.get("name"): t.get("rationale")
+            for t in selected_traits
+            if t.get("rationale")
+        }
 
         if subphase == "concept":
             # For concept submission, suggest 3 traits if none are selected yet
@@ -215,8 +233,12 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
                             "selected_traits": selected_names,
                         },
                         "wildcard": {
-                            "wildcard_name": wildcard.get("name") if wildcard else "wildcard",
-                            "wildcard_description": wildcard.get("rationale") if wildcard else None,
+                            "wildcard_name": (
+                                wildcard.get("name") if wildcard else "wildcard"
+                            ),
+                            "wildcard_description": (
+                                wildcard.get("rationale") if wildcard else None
+                            ),
                         },
                     },
                 },
@@ -278,25 +300,18 @@ def get_cached_phase_response(phase: str, subphase: Optional[str] = None) -> Dic
 
     return {"data": {}, "message": "[TEST MODE] Unknown phase"}
 
+
 # Archetype choices for character intro
-ARCHETYPE_CHOICES = [
-    "The Amnesiac Courier",
-    "The Double Agent",
-    "The Memory Architect"
-]
+ARCHETYPE_CHOICES = ["The Amnesiac Courier", "The Double Agent", "The Memory Architect"]
 
 # Wildcard choices
-WILDCARD_CHOICES = [
-    "Ghostprint Key",
-    "Neural Echo",
-    "Dead Man's Archive"
-]
+WILDCARD_CHOICES = ["Ghostprint Key", "Neural Echo", "Dead Man's Archive"]
 
 # Seed type choices
 SEED_CHOICES = [
     "The Job You Already Took",
     "The Message That Found You",
-    "The Face You Used to Wear"
+    "The Face You Used to Wear",
 ]
 
 
@@ -343,7 +358,9 @@ def get_forced_tool(tool_choice: Any) -> Optional[str]:
     return None
 
 
-def detect_phase_from_tools(tools: Optional[List[Dict[str, Any]]]) -> tuple[str, Optional[str]]:
+def detect_phase_from_tools(
+    tools: Optional[List[Dict[str, Any]]],
+) -> tuple[str, Optional[str]]:
     """
     Detect wizard phase and subphase from the tools array in the request.
     """
@@ -380,10 +397,12 @@ def build_respond_with_choices(message: str, choices: List[str]) -> Dict[str, An
                 "type": "function",
                 "function": {
                     "name": "respond_with_choices",
-                    "arguments": json.dumps({
-                        "message": message,
-                        "choices": choices,
-                    }),
+                    "arguments": json.dumps(
+                        {
+                            "message": message,
+                            "choices": choices,
+                        }
+                    ),
                 },
             }
         ],
@@ -476,7 +495,9 @@ async def chat_completions(request: ChatCompletionRequest):
     if phase == "setting":
         # Setting phase goes straight to artifact (no intro conversation)
         cached = get_cached_phase_response("setting", None)
-        message = build_artifact_response("submit_world_document", cached.get("data", {}))
+        message = build_artifact_response(
+            "submit_world_document", cached.get("data", {})
+        )
         logger.info("[MOCK] Returning setting artifact")
 
     # === CHARACTER PHASE ===
@@ -491,14 +512,18 @@ async def chat_completions(request: ChatCompletionRequest):
             else:
                 # Any input (choice selection, accept_fate, or freeform) → advance
                 cached = get_cached_phase_response("character", "concept")
-                message = build_artifact_response("submit_character_concept", cached.get("data", {}))
+                message = build_artifact_response(
+                    "submit_character_concept", cached.get("data", {})
+                )
                 logger.info("[MOCK] Returning character concept artifact")
 
         # Subphase: Traits
         elif subphase == "traits":
             # Trait selection is handled by the UI - just return the artifact
             cached = get_cached_phase_response("character", "traits")
-            message = build_artifact_response("submit_trait_selection", cached.get("data", {}))
+            message = build_artifact_response(
+                "submit_trait_selection", cached.get("data", {})
+            )
             logger.info("[MOCK] Returning trait selection artifact")
 
         # Subphase: Wildcard
@@ -510,15 +535,23 @@ async def chat_completions(request: ChatCompletionRequest):
             else:
                 # Any input (choice selection, accept_fate, or freeform) → advance
                 cached = get_cached_phase_response("character", "wildcard")
-                wildcard_data = cached.get("data", {}).get("character_state", {}).get("wildcard", {})
-                message = build_artifact_response("submit_wildcard_trait", wildcard_data)
+                wildcard_data = (
+                    cached.get("data", {})
+                    .get("character_state", {})
+                    .get("wildcard", {})
+                )
+                message = build_artifact_response(
+                    "submit_wildcard_trait", wildcard_data
+                )
                 logger.info("[MOCK] Returning wildcard trait artifact")
 
         # Subphase: Character Sheet (all subphases complete)
         elif subphase == "sheet":
             # Return the final character sheet
             cached = get_cached_phase_response("character", "wildcard")
-            message = build_artifact_response("submit_character_sheet", cached.get("data", {}))
+            message = build_artifact_response(
+                "submit_character_sheet", cached.get("data", {})
+            )
             logger.info("[MOCK] Returning final character sheet artifact")
 
     # === SEED PHASE ===
@@ -530,16 +563,20 @@ async def chat_completions(request: ChatCompletionRequest):
         else:
             # Any input (choice selection, accept_fate, or freeform) → advance
             cached = get_cached_phase_response("seed", None)
-            message = build_artifact_response("submit_starting_scenario", cached.get("data", {}))
+            message = build_artifact_response(
+                "submit_starting_scenario", cached.get("data", {})
+            )
             logger.info("[MOCK] Returning seed artifact")
 
     # Fallback
     if message is None:
         message = build_respond_with_choices(
             f"[TEST MODE] Unexpected state: phase={phase}, subphase={subphase}",
-            ["Continue", "Go back"]
+            ["Continue", "Go back"],
         )
-        logger.warning(f"[MOCK] Fallback response for phase={phase}, subphase={subphase}")
+        logger.warning(
+            f"[MOCK] Fallback response for phase={phase}, subphase={subphase}"
+        )
 
     return {
         "id": f"chatcmpl-mock-{uuid.uuid4().hex[:8]}",
@@ -568,6 +605,7 @@ async def chat_completions(request: ChatCompletionRequest):
 
 class ResponsesRequest(BaseModel):
     """Request format for /v1/responses endpoint."""
+
     model: str
     input: List[Dict[str, Any]]
     max_output_tokens: Optional[int] = None
@@ -587,7 +625,11 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
 
     if not row:
         logger.warning("[MOCK] No bootstrap narrative found in mock.incubator")
-        return {"narrative": "[TEST MODE] No mock data available", "choices": ["Continue", "Wait"]}
+        return {
+            "narrative": "[TEST MODE] No mock data available",
+            "choices": ["Continue", "Wait"],
+            "authorial_directives": ["Retrieve the immediate prior scene."],
+        }
 
     # Extract choices from choice_object
     choice_obj = row.get("choice_object") or {}
@@ -604,6 +646,8 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
     return {
         "narrative": row.get("storyteller_text", ""),
         "choices": choices,
+        "authorial_directives": row.get("authorial_directives")
+        or ["Retrieve the immediate prior scene."],
         # ChunkMetadataUpdate: has chronology (nested) and world_layer
         "chunk_metadata": {
             "chronology": {
@@ -641,7 +685,7 @@ def get_cached_bootstrap_narrative() -> Dict[str, Any]:
             "factions": [],
         },
         "operations": None,
-        "reasoning": "[TEST MODE] Returning cached bootstrap narrative"
+        "reasoning": "[TEST MODE] Returning cached bootstrap narrative",
     }
 
 
@@ -663,9 +707,10 @@ async def responses_create(request: ResponsesRequest):
         if isinstance(content, str):
             input_text += content
 
-    is_narrative = any(kw in input_text.lower() for kw in [
-        "narrative", "story", "protagonist", "bootstrap", "user input"
-    ])
+    is_narrative = any(
+        kw in input_text.lower()
+        for kw in ["narrative", "story", "protagonist", "bootstrap", "user input"]
+    )
 
     if is_narrative:
         logger.info("[MOCK] Detected narrative request, returning cached bootstrap")

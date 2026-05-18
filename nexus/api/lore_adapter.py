@@ -95,6 +95,17 @@ def compute_raw_text(
     return f"{storyteller_text.rstrip()}\n\n{resolved_choice_text}"
 
 
+def extract_authorial_directives(response: StoryTurnResponse) -> List[str]:
+    """Extract normalized next-turn retrieval directives from a response."""
+
+    directives = getattr(response, "authorial_directives", None) or []
+    return [
+        directive.strip()
+        for directive in directives
+        if isinstance(directive, str) and directive.strip()
+    ]
+
+
 def response_to_incubator(
     response: StoryTurnResponse,
     parent_chunk_id: int,
@@ -139,6 +150,7 @@ def response_to_incubator(
         "metadata_updates": extract_metadata_updates(response),
         "entity_updates": extract_entity_updates(response),
         "reference_updates": extract_reference_updates(response),
+        "authorial_directives": extract_authorial_directives(response),
         "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
@@ -319,6 +331,7 @@ def validate_incubator_data(incubator_data: Dict[str, Any]) -> bool:
         "metadata_updates",
         "entity_updates",
         "reference_updates",
+        "authorial_directives",
         "session_id",
         "status",
     ]

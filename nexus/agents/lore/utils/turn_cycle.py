@@ -5,6 +5,7 @@ Handles the execution of individual turn cycle phases.
 """
 
 import logging
+import json
 import time
 from typing import Dict, List, Any, Optional, Union, Iterable
 from datetime import datetime
@@ -80,6 +81,25 @@ def _sorted_chunk_ids(chunk_ids: Iterable[Any]) -> List[Any]:
             return (1, str(chunk_id))
 
     return sorted(chunk_ids, key=sort_key)
+
+
+def _coerce_authorial_directives(raw_directives: Any) -> List[str]:
+    """Normalize authorial directives loaded from JSONB or structured responses."""
+
+    if isinstance(raw_directives, str):
+        try:
+            raw_directives = json.loads(raw_directives)
+        except json.JSONDecodeError:
+            raw_directives = [raw_directives]
+
+    if not isinstance(raw_directives, list):
+        return []
+
+    return [
+        directive.strip()
+        for directive in raw_directives
+        if isinstance(directive, str) and directive.strip()
+    ]
 
 
 class TurnCycleManager:
@@ -162,6 +182,9 @@ class TurnCycleManager:
                     if not target_entry.get("text") and target_entry.get("full_text"):
                         target_entry["text"] = target_entry["full_text"]
                     target_entry["is_target"] = True
+                    turn_context.authorial_directives = _coerce_authorial_directives(
+                        target_entry.get("authorial_directives")
+                    )
                     warm_slice_chunks.append(target_entry)
                     logger.info(
                         f"Anchored warm slice to requested chunk {target_chunk_id}"
@@ -187,6 +210,14 @@ class TurnCycleManager:
                 # Get most recent chunks directly
                 recent_chunks = self.lore.memnon.get_recent_chunks(limit=initial_chunks)
                 recent_list = recent_chunks.get("results", [])
+                if (
+                    not turn_context.authorial_directives
+                    and target_chunk_id is None
+                    and recent_list
+                ):
+                    turn_context.authorial_directives = _coerce_authorial_directives(
+                        recent_list[0].get("authorial_directives")
+                    )
 
                 if target_chunk_id is not None:
                     recent_list = [
@@ -234,6 +265,7 @@ class TurnCycleManager:
         turn_context.phase_states["warm_analysis"] = {
             "analysis": analysis,
             "chunk_count": len(turn_context.warm_slice),
+            "authorial_directive_count": len(turn_context.authorial_directives),
         }
 
     async def query_entity_states(self, turn_context: TurnContext):
@@ -482,24 +514,40 @@ class TurnCycleManager:
                 "Cannot proceed with deep queries without narrative context analysis."
             )
 
-        # LLM generates queries from scratch based on what information
-        # would help continue the narrative
-        llm_queries = self.lore.llm_manager.generate_retrieval_queries(
-            analysis, turn_context.user_input
+        incoming_directives = _coerce_authorial_directives(
+            turn_context.authorial_directives
         )
 
-        if not llm_queries:
+        if getattr(self.lore, "memory_manager", None):
+            self.lore.memory_manager.reset_pass1_queries()
+
+        # Storyteller-authored directives are first-line retrieval input. The
+        # local LLM fills any remaining query budget from the current analysis.
+        queries = []
+        for directive in incoming_directives[:5]:
+            queries.append(
+                {
+                    "text": directive,
+                    "type": "general",
+                    "source": "authorial_directive",
+                }
+            )
+
+        remaining_query_slots = max(0, 5 - len(queries))
+        llm_queries = []
+        if remaining_query_slots:
+            llm_queries = self.lore.llm_manager.generate_retrieval_queries(
+                analysis, turn_context.user_input
+            )
+
+        if not queries and not llm_queries:
             raise RuntimeError(
                 "FATAL: LLM failed to generate any retrieval queries. "
                 "This should not happen - check LLM configuration."
             )
 
-        if getattr(self.lore, "memory_manager", None):
-            self.lore.memory_manager.reset_pass1_queries()
-
-        # Step 2: Classify each generated query with MEMNON's QueryAnalyzer
-        queries = []
-        for q_text in llm_queries:
+        # Step 2: Classify local generated queries with MEMNON's QueryAnalyzer
+        for q_text in llm_queries[:remaining_query_slots]:
             query_type = "general"
             if self.query_analyzer:
                 query_info = self.query_analyzer.analyze_query(q_text)
@@ -561,6 +609,14 @@ class TurnCycleManager:
         turn_context.phase_states["deep_queries"] = {
             "queries_executed": len(queries),
             "query_types": query_type_counts,
+            "query_sources": {
+                "authorial_directive": sum(
+                    1 for query in queries if query["source"] == "authorial_directive"
+                ),
+                "llm_generated": sum(
+                    1 for query in queries if query["source"] == "llm_generated"
+                ),
+            },
             "results_retrieved": len(unique_results),
         }
 
@@ -855,6 +911,9 @@ class TurnCycleManager:
 
             # Store the full structured response
             turn_context.apex_response = story_response
+            turn_context.generated_authorial_directives = _coerce_authorial_directives(
+                getattr(story_response, "authorial_directives", [])
+            )
 
             # Extract narrative text for backward compatibility
             narrative_text = story_response.narrative
@@ -868,6 +927,9 @@ class TurnCycleManager:
                 "has_metadata": chunk_metadata is not None,
                 "has_entities": referenced_entities is not None,
                 "has_state_updates": state_updates is not None,
+                "authorial_directive_count": len(
+                    turn_context.generated_authorial_directives
+                ),
                 "narrative_length": len(narrative_text),
             }
 
@@ -917,6 +979,13 @@ class TurnCycleManager:
         }
 
         if structured_response is not None:
+            turn_context.generated_authorial_directives = _coerce_authorial_directives(
+                getattr(
+                    structured_response,
+                    "authorial_directives",
+                    turn_context.generated_authorial_directives,
+                )
+            )
             turn_context.phase_states["integration"][
                 "structured_response"
             ] = structured_response.model_dump()
@@ -929,7 +998,8 @@ class TurnCycleManager:
                     retrieved_passages=turn_context.retrieved_passages,
                     token_usage=turn_context.token_counts,
                     assembled_context=turn_context.context_payload,
-                    authorial_directives=turn_context.authorial_directives,
+                    authorial_directives=turn_context.generated_authorial_directives,
+                    execute_authorial_directives=False,
                 )
                 transition = self.lore.memory_manager.context_state.transition
                 baseline_snapshot = {

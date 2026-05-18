@@ -25,6 +25,27 @@ class DummyLore:
         self.llm_manager = None
 
 
+class DummyLLMManager:
+    """Local LLM stub with deterministic warm analysis and query generation."""
+
+    def __init__(self) -> None:
+        self.generated_query_calls = 0
+
+    def is_available(self) -> bool:
+        return True
+
+    def analyze_narrative_context(
+        self, warm_slice: list[Dict[str, Any]], user_input: str
+    ) -> Dict[str, Any]:
+        return {"themes": ["testing"], "user_input": user_input}
+
+    def generate_retrieval_queries(
+        self, analysis: Dict[str, Any], user_input: str
+    ) -> list[str]:
+        self.generated_query_calls += 1
+        return ["Local query A", "Local query B", "Local query C"]
+
+
 @pytest.fixture()
 def turn_manager() -> TurnCycleManager:
     return TurnCycleManager(DummyLore())
@@ -57,7 +78,7 @@ def _stub_baseline(
     return package
 
 
-def test_integrate_response_passes_authorial_directives(
+def test_integrate_response_passes_generated_authorial_directives(
     turn_manager: TurnCycleManager, monkeypatch: pytest.MonkeyPatch
 ):
     ctx = TurnContext(
@@ -65,7 +86,11 @@ def test_integrate_response_passes_authorial_directives(
         user_input="Test input",
         start_time=time.time(),
     )
-    ctx.authorial_directives = ["Directive A", "Directive B"]
+    ctx.authorial_directives = ["Incoming directive"]
+    ctx.generated_authorial_directives = [
+        "Generated directive A",
+        "Generated directive B",
+    ]
     ctx.warm_slice = [{"chunk_id": 999, "text": "Recent narrative."}]
     ctx.retrieved_passages = []
     ctx.token_counts = {
@@ -79,6 +104,9 @@ def test_integrate_response_passes_authorial_directives(
 
     def fake_handle_storyteller_response(**kwargs):
         captured["authorial_directives"] = kwargs.get("authorial_directives")
+        captured["execute_authorial_directives"] = kwargs.get(
+            "execute_authorial_directives"
+        )
         return _stub_baseline(
             turn_manager.lore.memory_manager,
             kwargs.get("narrative", ""),
@@ -95,10 +123,94 @@ def test_integrate_response_passes_authorial_directives(
 
     asyncio.run(turn_manager.integrate_response(ctx, "Story chunk text"))
 
-    assert captured["authorial_directives"] == ctx.authorial_directives
+    assert captured["authorial_directives"] == ctx.generated_authorial_directives
+    assert captured["execute_authorial_directives"] is False
     baseline_snapshot = ctx.memory_state["pass1"]
-    assert baseline_snapshot["authorial_directives"] == ctx.authorial_directives
+    assert (
+        baseline_snapshot["authorial_directives"] == ctx.generated_authorial_directives
+    )
     assert baseline_snapshot["structured_passages"] == []
+
+
+def test_warm_analysis_loads_parent_authorial_directives(
+    turn_manager: TurnCycleManager,
+):
+    class DummyMemnon:
+        def get_chunk_by_id(self, chunk_id: int) -> Dict[str, Any]:
+            return {
+                "id": chunk_id,
+                "text": "Parent scene.",
+                "authorial_directives": [
+                    "Retrieve the missing ledger and ash-boiler escape route."
+                ],
+            }
+
+        def get_recent_chunks(self, limit: int) -> Dict[str, Any]:
+            return {"results": []}
+
+    turn_manager.lore.memnon = DummyMemnon()
+    turn_manager.lore.llm_manager = DummyLLMManager()
+    ctx = TurnContext(
+        turn_id="turn_parent_directives",
+        user_input="Continue.",
+        start_time=time.time(),
+        target_chunk_id=42,
+    )
+
+    asyncio.run(turn_manager.perform_warm_analysis(ctx))
+
+    assert ctx.authorial_directives == [
+        "Retrieve the missing ledger and ash-boiler escape route."
+    ]
+    assert ctx.phase_states["warm_analysis"]["authorial_directive_count"] == 1
+
+
+def test_deep_queries_use_authorial_directives_before_local_llm(
+    turn_manager: TurnCycleManager,
+):
+    class DummyMemnon:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        def query_memory(
+            self, query: str, k: int, use_hybrid: bool
+        ) -> Dict[str, list[Dict[str, Any]]]:
+            self.queries.append(query)
+            return {
+                "results": [
+                    {
+                        "id": len(self.queries),
+                        "score": 1.0,
+                        "text": f"Result for {query}",
+                    }
+                ]
+            }
+
+    memnon = DummyMemnon()
+    llm_manager = DummyLLMManager()
+    turn_manager.lore.memnon = memnon
+    turn_manager.lore.llm_manager = llm_manager
+
+    ctx = TurnContext(
+        turn_id="turn_deep_directives",
+        user_input="Continue.",
+        start_time=time.time(),
+    )
+    ctx.authorial_directives = [
+        "Directive query A",
+        "Directive query B",
+    ]
+    ctx.phase_states["warm_analysis"] = {"analysis": {"themes": ["testing"]}}
+
+    asyncio.run(turn_manager.execute_deep_queries(ctx))
+
+    assert memnon.queries[:2] == ["Directive query A", "Directive query B"]
+    assert memnon.queries[2:] == ["Local query A", "Local query B", "Local query C"]
+    assert llm_manager.generated_query_calls == 1
+    assert ctx.phase_states["deep_queries"]["query_sources"] == {
+        "authorial_directive": 2,
+        "llm_generated": 3,
+    }
 
 
 def test_integrate_response_sorts_mixed_chunk_id_payloads(
