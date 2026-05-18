@@ -613,18 +613,19 @@ def _markdown_bool_payload_from_raw(
         return None
 
     verdict_match = re.search(
-        rf"(?:\*\*)?\b{re.escape(field_name)}\b(?:\*\*)?\s*[:=]\s*(?:\*\*)?\s*(true|false)\b",
+        rf"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*{re.escape(field_name)}\s*"
+        r"(?:\*\*)?\s*[:=]\s*(?:\*\*)?\s*(true|false)\b",
         text,
-        re.IGNORECASE,
+        re.IGNORECASE | re.MULTILINE,
     )
     if not verdict_match:
         return None
 
     if reason is None:
         reason_match = re.search(
-            r"(?:\*\*)?\breason\b(?:\*\*)?\s*[:=]\s*(.+)",
+            r"^\s*(?:[-*+]\s*)?(?:\*\*)?\s*reason\s*" r"(?:\*\*)?\s*[:=]\s*(.+)$",
             text,
-            re.IGNORECASE | re.DOTALL,
+            re.IGNORECASE | re.MULTILINE,
         )
         if reason_match:
             reason = reason_match.group(1).strip()
@@ -641,7 +642,8 @@ def _coerce_promotion_verdict(raw: Any) -> PromotionVerdict:
         if isinstance(raw, PromotionVerdict):
             return raw
         payload = _structured_payload_from_raw(raw)
-        payload = _markdown_bool_payload_from_raw(payload, "promote") or payload
+        if not (isinstance(payload, Mapping) and "promote" in payload):
+            payload = _markdown_bool_payload_from_raw(payload, "promote") or payload
         if isinstance(payload, Mapping) and "promote" in payload:
             payload = dict(payload)
             payload.setdefault(
@@ -862,7 +864,8 @@ def _coerce_semantic_clearance_verdict(raw: Any) -> SemanticClearanceVerdict:
         if isinstance(raw, SemanticClearanceVerdict):
             return raw
         payload = _structured_payload_from_raw(raw)
-        payload = _markdown_bool_payload_from_raw(payload, "clear") or payload
+        if not (isinstance(payload, Mapping) and "clear" in payload):
+            payload = _markdown_bool_payload_from_raw(payload, "clear") or payload
         if isinstance(payload, Mapping) and "clear" in payload:
             payload = dict(payload)
             payload.setdefault(

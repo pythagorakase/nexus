@@ -316,6 +316,21 @@ def test_coerce_promotion_verdict_recovers_markdown_boolean() -> None:
     assert verdict.reason == "Routine maintenance."
 
 
+def test_coerce_promotion_verdict_prefers_structured_field_over_answer() -> None:
+    """Structured verdict fields should not be shadowed by markdown answer text."""
+
+    verdict = _coerce_promotion_verdict(
+        {
+            "promote": False,
+            "answer": "**promote:** true",
+            "reason": "Structured field wins.",
+        }
+    )
+
+    assert verdict.promote is False
+    assert verdict.reason == "Structured field wins."
+
+
 def test_drain_narration_outbox_persists_offscreen_narration() -> None:
     """Queued narration jobs persist into offscreen_narrations."""
 
@@ -495,6 +510,53 @@ def test_coerce_semantic_clearance_verdict_recovers_markdown_boolean() -> None:
 
     assert verdict.clear is False
     assert verdict.reason == "Evidence still supports tag."
+
+
+def test_coerce_semantic_clearance_prefers_structured_field_over_answer() -> None:
+    """Structured clearance fields should not be shadowed by markdown answer text."""
+
+    verdict = _coerce_semantic_clearance_verdict(
+        {
+            "clear": False,
+            "answer": "**clear:** true",
+            "reason": "Structured field wins.",
+        }
+    )
+
+    assert verdict.clear is False
+    assert verdict.reason == "Structured field wins."
+
+
+def test_coerce_semantic_clearance_ignores_incidental_markdown_boolean() -> None:
+    """Incidental prose should not clear tags by pretending to be a verdict."""
+
+    verdict = _coerce_semantic_clearance_verdict(
+        "This is noisy prose. To be clear: true, the evidence is mixed."
+    )
+
+    assert verdict.clear is False
+    assert (
+        verdict.reason
+        == "Malformed local semantic-clearance verdict; kept conservatively."
+    )
+
+
+def test_coerce_promotion_verdict_recovers_bulleted_markdown_boolean() -> None:
+    """Explicit bullet key/value verdicts should still parse."""
+
+    verdict = _coerce_promotion_verdict("- **promote:** true\n- reason: Enough proof.")
+
+    assert verdict.promote is True
+    assert verdict.reason == "Enough proof."
+
+
+def test_coerce_semantic_clearance_uses_default_reason_for_bare_text() -> None:
+    """Bare string verdicts without a reason should get a durable default reason."""
+
+    verdict = _coerce_semantic_clearance_verdict("clear: false")
+
+    assert verdict.clear is False
+    assert verdict.reason == "Local model returned a text boolean verdict."
 
 
 def test_process_orrery_outbox_includes_semantic_clearance(monkeypatch) -> None:
