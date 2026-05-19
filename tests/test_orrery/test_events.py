@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 import nexus.agents.orrery.events as orrery_events
-from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.events import coerce_adjudications, commit_orrery_tick_sync
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
     OrreryScenePressureDraft,
@@ -710,6 +710,92 @@ def test_commit_orrery_tick_replacement_event_type_is_explicit() -> None:
 
     assert result.event_count == 1
     assert event_params[0] == "evade_pursuit"
+
+
+def test_coerce_adjudications_rejects_bare_mapping() -> None:
+    """Adjudications must be a list or wrapper object, not guessed from a dict."""
+
+    with pytest.raises(TypeError, match="must be a list"):
+        coerce_adjudications(
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "defer",
+            }
+        )
+
+
+def test_commit_orrery_tick_does_not_cancel_travel_for_activity_only_update() -> None:
+    """A current_activity write alone does not supersede unrelated travel state."""
+
+    draft = OrreryResolutionDraft(
+        template_id="travel",
+        priority=21,
+        binding_hash="travel-state-only",
+        bindings={"actor": 1},
+        branch_label="Depart toward the planned destination",
+        narrative_stub="{actor} starts the journey.",
+        state_delta={
+            "travel.start": {
+                "destination_place_id": 42,
+                "mode": "vehicle",
+                "initial_progress": 0.1,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=("character_travel_states.status",),
+        magnitude=0.28,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor()
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        storyteller_state_updates={
+            "characters": [
+                {"character_id": 11, "current_activity": "reading in the room"}
+            ]
+        },
+    )
+
+    assert result.resolution_count == 1
+    assert result.replaced_count == 0
+    assert any(
+        "INSERT INTO character_travel_states" in sql for sql, _ in cursor.executed
+    )
+
+
+def test_commit_orrery_tick_does_not_count_duplicate_replacement() -> None:
+    """Replacement metrics describe applied or handled replacements, not duplicates."""
+
+    cursor = RecordingCursor(duplicate_resolution=True)
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        _proposal(),
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+        adjudications=[
+            {
+                "proposal_id": "evade_pursuers:abc123",
+                "action": "replace",
+                "replacement_state_delta": {
+                    "character_current_activity": "arguing in the room"
+                },
+            }
+        ],
+    )
+
+    assert result.skipped_existing_count == 1
+    assert result.replaced_count == 0
 
 
 def test_commit_orrery_tick_skips_existing_resolution_without_double_writes() -> None:
