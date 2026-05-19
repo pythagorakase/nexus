@@ -1,151 +1,50 @@
-# Off-Screen Behavior Resolver — Orrery Design Plan
+# Orrery — Off-Screen Behavior Resolver
 
-**Status:** The Orrery build path is now past foundation and into route realism. Main has landed the identity spine and schema, dry-run resolver, accepted-chunk commit path, narration outbox, Bleed selector, retrieval-boundary hardening, relationship-trust hydration, semantic-clearance status surface, Sunhelm needs, place affordance semantics, slot 2 semantic tag seeding, deterministic review orchestration, interpersonal needs (`SOCIALIZE` and `INTIMACY`), Work + Travel, concealment/contact package tuning, and authored travel edges. The runtime pipeline remains disabled by default (`orrery.enabled = false`). The active slice is **routing phase 3**: local OSM-derived graph routing before falling back to authored edges and coarse estimates.
+Orrery is NEXUS's deterministic off-screen behavior subsystem. While the player interacts with a focused on-screen scene, Orrery resolves what every tracked off-screen entity is doing each tick — their state, who they're in conflict with, what they might be in transit to, what they're working on. The world keeps going even where attention isn't pointed.
 
-**Originating artifacts:** `temp/orrery/off_screen_resolver_spec.md`, `temp/orrery/behavior_substrate.py`, `temp/orrery/package_simulator.jsx`
-**Review trace:** `temp/orrery/design_plan_edited.md` (round 1: GPT-5.5-Pro, Codex, separate-Claude, Gemini) + `temp/orrery/super_table_question.md` (round 2: GPT-5.5-Pro, Claude Opus 4.7 chat) + v4 grounding pass against current `main` (claude-opus-4-7).
+## Inspirations
 
-**Terminology in v4:**
-- **LORE Phase N** = a phase of `LORE.process_turn()` (`turn_context.py:12-21`: USER_INPUT, WARM_ANALYSIS, ENTITY_STATE, DEEP_QUERIES, PAYLOAD_ASSEMBLY, APEX_GENERATION, INTEGRATION).
-- **Orrery Stage N** = a stage of the off-screen pipeline (Resolve / Commit / Clear / Promote / Narrate / Bleed / [deferred Stage 7]). v3 used "Phase 7" for the deferred prose stage, which collided with LORE Phase 7 = INTEGRATION; v4 reserves "Phase" for LORE and uses "Stage" for Orrery.
+Orrery's shape borrows openly from two reference points:
 
----
+- **Bethesda's Radiant AI** (Skyrim, Fallout): NPCs have schedules, dispositions, and faction-affiliated routines that run independent of player presence. Off-screen state isn't fiction; it's the canonical answer to "what is this NPC doing right now?"
+- **Dwarf Fortress**: autonomous agents with needs, relationships, and emergent off-screen events that produce historical record. The world simulates regardless of where attention is currently pointed.
 
-## Current Implementation Status
+What distinguishes Orrery from either of those is LLM-native integration: deterministic resolution feeds prose generation, prose feeds a *curated bleed menu*, and the storyteller (Skald) retains full authorial latitude over what makes it into the actual narrative chunk. The deterministic substrate decides what's *true*; the storyteller decides what's *said*.
 
-### Landed in PR #210
+## Motivating Example
 
-- Rebranded the feature surface from Radiant to Orrery (`docs/orrery_design_plan.md`, `nexus/agents/orrery/`, `[orrery]` config).
-- Added managed Python migration discovery in `scripts/migrate.py`, while keeping `008_populate_mock_database.py` script-only.
-- Added `migrations/023_orrery_schema.py`:
-  - enum-backed controlled vocabularies for entity kinds, tag provenance, event roles/sources/severity, Orrery statuses, narration jobs, and off-screen embedding state
-  - `entities` identity spine plus staged `entity_id` backfill for `characters`, `factions`, and `places`
-  - kind-correctness triggers for subtype tables
-  - compatibility views over names, chunk references, and relationships
-  - tag, event, Orrery resolution, narration outbox, and off-screen narration tables
-  - `chunk_metadata.world_time` and a statement-level refresh trigger
-- Added pure-Python package substrate in `nexus/agents/orrery/substrate.py`, initial package catalog in `templates.py`, and an offline demo harness in `demo.py`.
-- Added focused tests for the substrate, migration discovery, config resolution, and MEMNON whitelist.
-- Expanded `MEMNON.execute_readonly_sql` to expose only the public Orrery read surfaces, excluding raw/internal queue tables.
+An NPC the player interrogated fifty chunks ago protested that their life was over. Behind the scenes, packages on that NPC tick through fifty chunks of deterministic state resolution. Eventually a high-magnitude branch fires — say, the NPC's retaliation against the player's faction. Prose is generated, persisted into `offscreen_narrations`, never directly surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city, and the storyteller has the option of having a character hear distant sirens. If they do, MEMNON has substrate for retrieval and the moment connects to the long-ago interrogation. If they don't, the dramatic irony lives quietly in the database, available for any future scene that wants it.
 
-### Local Verification Completed for PR #210
+This is the shape: the world ticks for everyone, the dramatic salience filter is deterministic, the authorial choice is LLM-authored.
 
-- `poetry run pytest tests/test_orrery`
-- `poetry run pytest tests/test_orrery tests/config tests/test_api`
-- `poetry run python scripts/check_model_drift.py`
-- `poetry run python -m nexus.agents.orrery.demo --preset hunted`
-- `poetry run python -m nexus.agents.orrery.demo --preset debt`
-- `poetry run python scripts/migrate.py --status`
-- Live migration and trigger probes against `NEXUS_template`, `save_02`, `save_03`, `save_04`, and `save_05`
-- `save_01` intentionally remains locked and unmodified
-- `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment
+## What Orrery Is Not
 
-### Landed in PR #211
+- A replacement for the storyteller. Bleed offers a menu, never a decision.
+- Real-time simulation. Orrery resolves once per accepted player turn.
+- Full Bethesda parity. No game-engine pathfinding, no per-step animations, no combat resolution. (Travel has its own dedicated sub-system within Orrery — see *Routing*.)
+- Procedural template authoring at runtime. Packages are authored in Python and committed via migrations.
+- Inventory-game state. Items aren't first-class entities.
+- Event-sourcing inversion. Canonical state lives in row-shaped tables; events annotate, they don't replace.
 
-- Added `OrreryTickProposal` and `OrreryResolutionDraft` as in-memory proposal carriers with no `tick_chunk_id` during resolve.
-- Hydrates read-side `WorldState` from current tags, ephemeral tags, character locations and activities, place classes, relationships, faction memberships, recent primary unsuperseded events, and coarse time/weather context.
-- Composes `ACTOR`-only bindings from recent chunk references, recent primary unsuperseded events, and current ephemeral tags.
-- Evaluates the package stack in a dry-run resolver and attaches the proposal to `TurnContext.orrery_proposal`.
-- Adds `TurnPhase.ORRERY_RESOLVE` between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`, plus the `bleed_menu` placeholder needed by the later Bleed slice.
-- Keeps all canonical database writes and storyteller payload effects out of scope.
+## Terminology
 
-### Local Verification Completed for PR #211
-
-- `poetry run pytest tests/test_orrery`
-- `poetry run pytest tests/test_orrery tests/test_lore/test_turn_cycle.py tests/test_lore/test_context_validation.py`
-- `poetry run python -m py_compile nexus/agents/orrery/resolver.py nexus/agents/lore/utils/turn_cycle.py tests/test_orrery/test_resolver.py`
-- `git diff --check`
-- Live direct dry-run against slot 5: hydrated evening/rain context, produced proposals, and performed zero writes.
-- Live direct dry-run against slot 2: hydrated mature-state morning/clear context, produced proposals, and performed zero writes.
-- `poetry run flake8 ...` remains unavailable because `flake8` is not installed in the Poetry environment.
-
-### Landed After PR #211
-
-- PR #214 wires accepted-chunk commit-time persistence, stamps `tick_chunk_id`, materializes Orrery resolutions, world events, and tag mutations, and enqueues durable narration jobs after canonical commit succeeds.
-- PR #212 expands the package library with multi-slot templates and additional scene-pressure-aware package metadata.
-- PR #216 adds present-target scene pressure proposals that are Storyteller-facing only and ignored by canonical Orrery commit writers.
-- PR #217 adds generated human-readable catalog support for package authors and reviewers.
-
-### Landed in PR #219
-
-PR #219 implements PR 4: Bleed selection at Storyteller time. It selects a bounded menu of previously narrated off-screen events, records surfacing bookkeeping only after successful generation, and injects optional ambient peripherals into the LOGON prompt without advancing chronology or promoting off-screen narrations into warm-slice memory.
-
-### Authority Model for Issue #275
-
-- Skald is sovereign. Current-tick Orrery resolutions enter the storyteller payload as `orrery_imminent_activity`, each with a stable `proposal_id`.
-- Absence of an `orrery_adjudications` entry means ratify: accepted commits materialize the proposal as before.
-- `defer` skips materialization this tick and logs the decision; persistent substrate pressure can reappear on later ticks if the underlying state still warrants it.
-- `void` skips materialization and logs that Skald considers the proposal definitively wrong or no longer true.
-- `replace` skips the original proposal. If Skald provides `replacement_state_delta`, commit materializes that limited Orrery-compatible delta instead; if not, commit assumes Skald handled the replacement through normal structured `state_updates` or prose. Replacement deltas only emit canonical world events when Skald also provides `replacement_event_type`.
-- Commit also infers `replace` without prose parsing when Skald's structured character `state_updates` touch the same actor/field that an Orrery proposal would change. This prevents Orrery from overwriting ordinary authoritative state writes such as `current_activity` or movement-related `current_location`.
-- All explicit and inferred decisions write `orrery_adjudication_log`. Bleed remains cross-turn ambient surfacing, not the path for current-tick proposals.
-
-### Landed in PR #220
-
-PR #220 closes the retrieval-boundary audit: warm slices and normal MEMNON search remain accepted-narrative surfaces only, while explicit read-only SQL may still inspect public Orrery tables such as `offscreen_narrations`.
-
-### Landed in PR #221
-
-PR #221 resolves issue #213's consensus Option B: `character_relationships.emotional_valence` remains the canonical hybrid enum/label, `entity_relationships_v.valence_magnitude` exposes the explicit integer mapping, and `WorldState.trust` hydrates from that read surface.
-
-### Landed in PR #222
-
-PR #222 adds deterministic review orchestration so newly opened PRs can schedule the delayed review-check workflow without relying on a model-specific local hook.
-
-### Landed After PR #222
-
-- PR #223 expands the package library with round-2 care, craft, and contact templates.
-- PR #224 added a semantic-clearance/status surface; the live semantic-clearance worker now stays conservative and performs no clears until a non-local clearance signal exists. `python -m nexus.agents.orrery.worker --slot N --status` remains the compact operational snapshot for pending Orrery background work.
-- The Sunhelm phase adds `character_need_states`, timestamp-plus-debt need tracking, and SLEEP/DRINK/EAT packages.
-- The location phase adds place-affordance semantics used by need and package gates.
-- PR #237 applies slot 2 semantic tag seeding so mature-state dry runs have real package vocabulary to work with.
-- PR #236/#238 tighten deterministic review orchestration so fix commits do not trigger duplicate review windows.
-- PR #243 extends `character_need_states` from physiological needs into interpersonal pressure by adding `socialize` and `intimacy` need types, controlled severity/suppressor vocabulary, conservative SOCIALIZE and INTIMACY templates, and catalog coverage.
-- PR #244 adds additive WORK and TRAVEL state: `characters.current_location` remains the readable place anchor, while `character_travel_states` records planned/in-transit movement and route estimates.
-- PR #247 tunes concealment, surveillance, and cautious contact packages around hidden or relationship-loaded actors so mature-slot resolutions are less narratively blunt.
-- PR #248 activates `orrery_travel_edges` for authored route selection, including bidirectional reverse traversal, `mixed` generic edges, and route provenance metadata.
-
-### Current Slice
-
-The current slice is **routing phase 3** for TRAVEL. Travel starts now attempt local `osm_graph` routing from imported route-graph tables before falling back to authored `orrery_travel_edges`, then to the coordinate-distance estimate introduced with PR #244. The graph path is intentionally offline: normal Orrery ticks read only local tables and never call map APIs or inference.
-
-The database posture remains additive. `characters.current_location` is still the `places(id)` anchor used by existing LORE/LOGON/MEMNON/Orrery callers. `character_travel_states` records whether a character is at a place, planning travel, or in transit; while in transit, location predicates treat the anchor as non-physical so the resolver does not pretend the character is still co-located there. `orrery_route_graph_nodes`, `orrery_route_graph_edges`, and `orrery_place_route_graph_nodes` provide bounded local graph data; `orrery_travel_edges` remains the authored override/exception surface.
-
-For routing purposes, NEXUS embraces an Earth/Earth-mirror geography constraint. Future non-Earth or alien settings still choose Earth analogue coordinates in `places.coordinates`; this keeps GIS tooling, OSM-derived graph imports, and travel-time estimates available without inventing alternate map projections per world.
-
-### Next Planned Slice
-
-After local OSM graph routing, the next useful work is operational: seed real graph data for mature test slots, profile route-graph size limits, and tune package behavior that creates or consumes travel intent. The route graph setup and importer contract live in `docs/orrery_route_graph.md`.
-
-### Package Author Checkpoint
-
-Package authors can contribute now. The cleanest contribution format is a small template sketch or markdown catalog note that names: package goal, slots, gate, branches, event types, state deltas, required tags, and any pressure-only behavior. The current source of truth for implemented packages is `nexus/agents/orrery/templates.py`; the human-readable generated reference is `docs/orrery_packages.md`. New durable vocabulary still belongs in explicit migrations, and backfill/application of tags remains controlled data work rather than package-author side effects.
+- **LORE Phase N**: a phase of `LORE.process_turn()` (`turn_context.py:12-21`). Phases: USER_INPUT, WARM_ANALYSIS, ENTITY_STATE, DEEP_QUERIES, ORRERY_RESOLVE (4.5), PAYLOAD_ASSEMBLY, APEX_GENERATION, INTEGRATION.
+- **Orrery Stage N**: a stage of the off-screen pipeline (Resolve / Commit / Clear / Promote / Narrate / Bleed). "Phase" is reserved for LORE; "Stage" is Orrery, avoiding the historical Phase 7 / Stage 7 ambiguity.
 
 ---
 
-## Context
-
-NEXUS today asks the storyteller LLM to confabulate off-stage character activity each turn, with heuristic instructions about narrative debt and ambient texture. There is no architectural guarantee that any specific character gets updated, no continuity beyond the context window, and no provenance — distant sirens in the prose are decoration, not the audible signature of a real package execution sitting in the database.
-
-The proposal is a Bethesda-inspired off-screen behavior subsystem: a pipeline (`Resolve → Commit → Promote → Narrate → Bleed`) that simulates what every tracked entity does between player turns. Most state changes resolve deterministically in pure Python; a small salient subset is promoted by deterministic policy to frontier-model prose, then offered to the storyteller as an optional menu of perceivable ambient peripherals.
-
-**Motivating test case:** an NPC the player forcefully interrogated fifty chunks ago protested that their life was over. Behind the scenes, a package on that NPC ticks through fifty chunks of pure state resolution. Eventually a branch fires that's high-magnitude enough to promote: the retaliation. Prose generated, persisted, never surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city and the storyteller has the option of hearing sirens in the distance — or not. If they do, MEMNON has substrate for retrieval. If they don't, the dramatic irony lives in the database, available to inform any future scene where it matters.
-
----
-
-## Pipeline Summary
+## Pipeline
 
 | Stage | Cost class | What runs | When |
 |---|---|---|---|
-| **Resolve** (Stage 1) | Free (pure Python) | Evaluate templates against per-entity bindings; produce an `OrreryTickProposal` (no writes, no `tick_chunk_id` yet) | In-cycle, during a new LORE Phase 4.5 (between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`) |
-| **Commit** (Stage 2) | Free (SQL transaction) | Stamp `tick_chunk_id`, then atomically materialize the proposal into canonical tables (entity deltas, tag mutations, `world_events`, `orrery_resolutions`, enqueue narration jobs) | Inside the same transaction as accepted-chunk commit |
-| **Clear** (Stage 3) | Deterministic | Event-based clearance runs in the commit transaction; semantic clearance is intentionally disabled until a non-local clearance signal exists | Commit (event) |
+| **Resolve** (Stage 1) | Free (pure Python) | Evaluate templates against per-entity bindings; produce an `OrreryTickProposal` (no writes) | In-cycle, during LORE Phase 4.5 |
+| **Commit** (Stage 2) | Free (SQL) | Stamp `tick_chunk_id`, materialize the proposal into canonical tables, enqueue narration jobs | Inside the accepted-chunk commit transaction |
+| **Clear** (Stage 3) | Deterministic | Event-based clearance runs in the commit transaction; semantic clearance currently no-op | Commit (event-driven) |
 | **Promote** (Stage 4) | Deterministic | Decide which resolutions deserve frontier prose | Post-commit |
-| **Narrate** (Stage 5) | Frontier-LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` (separate from `narrative_chunks`) | Async after commit; durable across process restart |
-| **Bleed** (Stage 6) | Deterministic storyteller-time selection | Offer a bounded menu from already-filtered, succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
-| **Stage 7 (deferred)** | — | Middle-tier journalistic prose | Metric-gated; see "Deferred — Orrery Stage 7" |
+| **Narrate** (Stage 5) | Frontier LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` | Async after commit; durable across process restart |
+| **Bleed** (Stage 6) | Deterministic, storyteller-time | Offer a bounded menu from already-filtered succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
 
-**Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survived two earlier gates.
+**Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survive two earlier gates — salience-based promotion, then optional bleed selection. The only LLM call in the Orrery path is the Narration step; Promote and Bleed are both deterministic.
 
 ---
 
@@ -164,26 +63,69 @@ Two phases:
 1. **In-cycle (LORE Phase 4.5)**: Resolve produces an `OrreryTickProposal` carried on `TurnContext.orrery_proposal`. No writes. The proposal carries `(template_id, binding_hash, bindings, state_delta, magnitude, ...)` *without* `tick_chunk_id` — that field is unknown at this point.
 2. **Commit-time**: `CommitOrreryTick` runs inside the accepted-chunk commit transaction. The new chunk's id is generated by `insert_narrative_chunk` (returned at `commit_handler.py:394` / `commit_handler_sync.py:354`); every proposal row is stamped with that id, and the `UNIQUE (tick_chunk_id, template_id, binding_hash)` idempotency guard is enforced at write time.
 
-**Exact hook locations (verified against current `main`):**
-- **Async wrapper** (used only by tests): `nexus/api/commit_handler.py::commit_incubator_to_database` (L320). Transaction opens at L348. Insert `CommitOrreryTick` as **Step 8.5**: after `apply_state_updates(conn, state_updates)` returns at L420, before `clear_incubator(conn, session_id)` at L423.
-- **Sync wrapper** (production path — see PR 3): `nexus/api/commit_handler_sync.py::commit_incubator_to_database_sync` (L233). Insert `CommitOrreryTick` after `apply_state_updates_sync(conn, state_updates)` at L415, before the incubator-clear `DELETE` at L418.
-- The acceptance seam that *invokes* the sync commit wrapper lives in `nexus/api/narrative.py::_approve_narrative_impl` (L387), which calls `commit_incubator_to_database_sync` at L407.
+**Hook locations:**
+- **Sync wrapper** (production path): `nexus/api/commit_handler_sync.py::commit_incubator_to_database_sync`. `CommitOrreryTick` runs as **Step 8.5**, after `apply_state_updates_sync(conn, state_updates)` returns, before the incubator-clear `DELETE`.
+- **Async wrapper** (test-only): `nexus/api/commit_handler.py::commit_incubator_to_database`. Same Step 8.5 position.
+- The acceptance seam that *invokes* the sync commit wrapper lives in `nexus/api/narrative.py::_approve_narrative_impl`.
 
 ---
 
-## Settled Architecture
+## Authority Model: Skald-Adjudicated Commit
 
-### Entity Identity Spine (Staged Super-Table)
+> **Orrery proposes; Skald has final authorial authority.**
 
-A new `entities` table acts as the identity spine for polymorphic references. Existing subtype tables keep their primary keys unchanged; each gains a unique `entity_id` column FK'd to the spine. All new Orrery tables FK directly to `entities(id)` without a discriminator column. The existing six triplicate relationship/reference tables are NOT touched in this PR — they remain a stable wart with a deferred collapse plan.
+Current-tick Orrery resolutions are surfaced to Skald as `orrery_imminent_activity` in the storyteller context payload — each proposal carries a stable `proposal_id`. Skald may optionally adjudicate any proposal via a structured `orrery_adjudications` field in the storyteller response; absence of an adjudication ratifies the proposal at commit time. This is the design call landed via PR #276 (issue #275).
 
-The spine uses a dedicated `entity_kind` ENUM (distinct from the existing Python `apex_enums.py:EntityType`, which includes `'item'` — out of scope here):
+**Three explicit actions:**
+
+- **`defer`** — skip materialization this tick. The persistent substrate pressure can reappear on later ticks if the underlying state still warrants it. Useful for "this is plausible but not now — push it later."
+- **`replace`** — skip the original proposal in favor of Skald's substitute. If Skald provides `replacement_state_delta`, commit materializes that limited Orrery-compatible delta instead. If `replacement_event_type` is also provided, commit emits a canonical `world_event`. If neither is provided, commit assumes Skald handled the replacement through normal structured `state_updates` or prose.
+- **`void`** — skip materialization. Logs that Skald considers the proposal definitively wrong or no longer true. Strictly stronger than `defer` — the proposal does not get re-queued.
+
+**Implicit `replace` detection:** commit also infers `replace` without prose parsing when Skald's structured character `state_updates` touch the same actor/field that an Orrery proposal would change. This prevents Orrery from overwriting ordinary authoritative state writes such as `current_activity` or movement-related `current_location`.
+
+**Replacement scope is bounded.** `OrreryReplacementStateDelta` accepts only a constrained vocabulary (e.g., `character_current_activity`, `entity_tags_add`, `entity_tags_remove`, `entity_tags_target_add`) — Skald cannot replace with arbitrary world-state mutations. This is the safety property that keeps replacement from being arbitrary world-rewriting.
+
+**Audit:** every adjudication writes a row to `orrery_adjudication_log` with `adjudication_source: 'explicit' | 'structured_state_update'`, `original_state_delta`, `replacement_state_delta`, and optional `skald_note`. The log enables retrospective questions: how often does Skald veto? Replace? What patterns of intervention exist?
+
+**No `narrative_debt` flag.** Skald is fully sovereign — even player-action consequences (the 50-chunks-later NPC retaliation example) can be vetoed. The structural counterweights are (a) careful prompting that encourages allowing meaningful consequences and (b) path-of-least-resistance defaults — off-screen events happen by default if Skald takes no action.
+
+**Schema:**
 
 ```sql
--- spine-supported entity kinds (deliberately excludes 'item'; cross-link to apex_enums.py:41)
+ALTER TABLE incubator
+ADD COLUMN IF NOT EXISTS orrery_adjudications JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE orrery_adjudication_log (
+    id                       bigserial PRIMARY KEY,
+    tick_chunk_id            bigint NOT NULL REFERENCES narrative_chunks(id),
+    proposal_id              text NOT NULL,
+    template_id              text NOT NULL,
+    binding_hash             text NOT NULL,
+    action                   text NOT NULL
+        CHECK (action IN ('defer', 'replace', 'void')),
+    adjudication_source      text NOT NULL DEFAULT 'explicit'
+        CHECK (adjudication_source IN ('explicit', 'structured_state_update')),
+    skald_note               text,
+    original_state_delta     jsonb NOT NULL DEFAULT '{}'::jsonb,
+    replacement_state_delta  jsonb,
+    replacement_event_type   text REFERENCES event_types(type),
+    applied_resolution_id    bigint REFERENCES orrery_resolutions(id),
+    created_at               timestamptz NOT NULL DEFAULT now()
+);
+```
+
+---
+
+## Architecture
+
+### Entity Identity Spine
+
+A dedicated `entities` table is the identity spine for polymorphic references. Existing subtype tables (`characters`, `factions`, `places`) each have a unique `entity_id` column FK'd to the spine. All Orrery tables FK directly to `entities(id)` without a discriminator column.
+
+```sql
 CREATE TYPE entity_kind AS ENUM ('character', 'faction', 'place');
 
--- the new identity spine: pure identity, no fields duplicated from subtype tables
 CREATE TABLE entities (
   id           bigserial PRIMARY KEY,
   kind         entity_kind NOT NULL,
@@ -191,111 +133,38 @@ CREATE TABLE entities (
   created_at   timestamptz NOT NULL DEFAULT now(),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX ix_entities_kind ON entities (kind);
 
--- name stays on subtype tables (where it already lives and where character renames are
--- already handled via character_aliases). Polymorphic name access goes through a view:
 CREATE VIEW entity_names_v AS
-    SELECT e.id, e.kind, c.name
-    FROM entities e
-    JOIN characters c ON c.entity_id = e.id
-    WHERE e.kind = 'character'
+    SELECT e.id, e.kind, c.name FROM entities e JOIN characters c ON c.entity_id = e.id WHERE e.kind = 'character'
   UNION ALL
-    SELECT e.id, e.kind, f.name
-    FROM entities e
-    JOIN factions f ON f.entity_id = e.id
-    WHERE e.kind = 'faction'
+    SELECT e.id, e.kind, f.name FROM entities e JOIN factions f ON f.entity_id = e.id WHERE e.kind = 'faction'
   UNION ALL
-    SELECT e.id, e.kind, p.name
-    FROM entities e
-    JOIN places p ON p.entity_id = e.id
-    WHERE e.kind = 'place';
+    SELECT e.id, e.kind, p.name FROM entities e JOIN places p ON p.entity_id = e.id WHERE e.kind = 'place';
 ```
 
-**Backfill pattern (lock-aware, staged):** A naive `ADD COLUMN ... UNIQUE REFERENCES entities(id) NOT NULL` plus backfill takes an AccessExclusive lock and validates the FK against every existing row in one shot. Save-slot databases are not multi-tenant prod, but slots with non-trivial row counts (`save_01` has the bulk of the canonical narrative) will stall noticeably. Use the staged pattern:
+The spine carries no name column. Polymorphic name access goes through `entity_names_v`. Kind-correctness is enforced by `BEFORE INSERT OR UPDATE` triggers on each subtype table.
 
-```sql
--- Stage A: nullable, FK created with NOT VALID (no full-table scan)
-ALTER TABLE characters
-  ADD COLUMN entity_id bigint REFERENCES entities(id) NOT VALID;
--- (and equivalents for factions, places)
-
--- Stage B: backfill in batches (Python migration; see below)
---   For each existing row in {characters, factions, places}:
---     INSERT INTO entities(kind) VALUES (...) RETURNING id;
---     UPDATE <subtype> SET entity_id = <new_id> WHERE id = <subtype_id>;
-
--- Stage C: validate the FK (scans existing rows once but doesn't block writes)
-ALTER TABLE characters VALIDATE CONSTRAINT characters_entity_id_fkey;
-
--- Stage D: build the unique index concurrently, then promote it to a constraint
-CREATE UNIQUE INDEX CONCURRENTLY ix_characters_entity_id_unique ON characters (entity_id);
-ALTER TABLE characters
-  ADD CONSTRAINT characters_entity_id_unique UNIQUE USING INDEX ix_characters_entity_id_unique;
-
--- Stage E: enforce NOT NULL (cheap once every row is populated)
-ALTER TABLE characters ALTER COLUMN entity_id SET NOT NULL;
-```
-
-Because the staged backfill needs inter-stage commits and `CREATE INDEX CONCURRENTLY`, the backfill must be a **Python migration** (`migrations/023_orrery_schema.py` on current `main`), not a `.sql` file. The migration runner now treats `008_populate_mock_database.py` as a manual seed script and discovers managed Python migrations from `023` onward.
-
-```sql
--- kind-correctness enforced by triggers (after Stage E)
-CREATE TRIGGER trg_characters_entity_kind BEFORE INSERT OR UPDATE ON characters
-  FOR EACH ROW EXECUTE FUNCTION ensure_entity_kind('character');
--- (and equivalents for factions and places)
-```
-
-**Cascade-semantics policy** (per-table, deliberate):
+Cascade semantics, deliberate per table:
 - `entity_tags.entity_id` → `ON DELETE CASCADE`. Tags die with the entity.
 - `world_events.actor_entity_id` and `target_entity_id` → `ON DELETE RESTRICT`. Events outlive their participants; deletion requires explicit reckoning.
 - `world_event_entities.entity_id` → `ON DELETE RESTRICT`. Same rationale.
 - `orrery_resolutions.actor_entity_id` → `ON DELETE RESTRICT`.
 
-Future polymorphic tables follow this pattern.
-
-**Compatibility views** over the existing triplicate tables, so new code reads through the unified identity surface without forcing legacy rewrite:
-
-```sql
--- read-only convenience view over the three chunk-reference tables
-CREATE VIEW chunk_entity_references_v AS
-  SELECT ccr.chunk_id, c.entity_id, ccr.reference::text AS reference_type
-  FROM chunk_character_references ccr
-  JOIN characters c ON c.id = ccr.character_id
-UNION ALL
-  SELECT cfr.chunk_id, f.entity_id, NULL::text AS reference_type
-  FROM chunk_faction_references cfr
-  JOIN factions f ON f.id = cfr.faction_id
-UNION ALL
-  SELECT pcr.chunk_id, p.entity_id, pcr.reference_type::text
-  FROM place_chunk_references pcr
-  JOIN places p ON p.id = pcr.place_id;
-
--- equivalent view over the three relationship tables → entity_relationships_v
-```
-
-**Deferred legacy collapse triggers** (revisit when one becomes true):
-1. A fourth real entity kind appears.
-2. `chunk_entity_references_v` or `entity_relationships_v` becomes a frequent write target rather than just a read convenience.
-3. Grep of the codebase shows repeated `UNION ALL` or kind-branching logic spreading into many modules.
-
-Until then, the six triplicate tables stay. They are awkward but stable; their wrongness does not compound.
+The existing six triplicate relationship/reference tables (`chunk_character_references` / `chunk_faction_references` / `place_chunk_references` and their relationship counterparts) remain in place behind compatibility views `chunk_entity_references_v` and `entity_relationships_v`. Collapse is deferred until one of these holds: a fourth real entity kind appears, the views become frequent write targets, or kind-branching logic spreads into many modules.
 
 ### Tag System
 
 ```sql
--- enum for application provenance (includes auto_registered for the Vocabulary Growth contract below)
 CREATE TYPE entity_tag_source_kind AS ENUM (
-  'authored', 'llm_generated', 'system', 'template', 'auto_registered'
+  'authored', 'llm_generated', 'system', 'template', 'auto_registered', 'skald_inline'
 );
 
--- registry (unchanged)
 CREATE TABLE tags (
   id                       bigserial PRIMARY KEY,
   tag                      text UNIQUE NOT NULL,
   category                 text NOT NULL,
   is_ephemeral             boolean NOT NULL DEFAULT false,
-  clearance_kind           entity_tag_clearance_kind,       -- NULL when not ephemeral
+  clearance_kind           entity_tag_clearance_kind,   -- NULL when not ephemeral
   reapplication_policy     entity_tag_reapplication_policy,
   clear_on                 jsonb,
   synonym_for              bigint REFERENCES tags(id),
@@ -305,7 +174,6 @@ CREATE TABLE tags (
   CHECK (is_ephemeral = (clearance_kind IS NOT NULL))
 );
 
--- application: single FK to entities, no entity_kind discriminator
 CREATE TABLE entity_tags (
   id                     bigserial PRIMARY KEY,
   entity_id              bigint NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
@@ -313,14 +181,12 @@ CREATE TABLE entity_tags (
   applied_at             timestamp NOT NULL DEFAULT now(),
   applied_at_world_time  timestamptz,
   clear_on_override      jsonb,
-  cleared_at             timestamp,                 -- NULL means current
-  template_id            text,                      -- if applied by a template
+  cleared_at             timestamp,                   -- NULL means current
+  template_id            text,                        -- if applied by a template
   source_kind            entity_tag_source_kind NOT NULL,
   UNIQUE (entity_id, tag_id, applied_at)
 );
 
--- view excludes cleared, deprecated, synonyms; joins entities for kind
--- (callers that need entity_name JOIN entity_names_v explicitly)
 CREATE VIEW entity_tags_current AS
   SELECT et.id AS entity_tag_id, et.entity_id, e.kind AS entity_kind,
          t.tag, t.category, t.is_ephemeral, t.clearance_kind,
@@ -332,7 +198,6 @@ CREATE VIEW entity_tags_current AS
     AND et.cleared_at IS NULL
     AND (t.synonym_for IS NULL);
 
--- audit log
 CREATE TABLE tag_clearance_log (
   id                      bigserial PRIMARY KEY,
   entity_tag_id           bigint NOT NULL REFERENCES entity_tags(id),
@@ -345,26 +210,20 @@ CREATE TABLE tag_clearance_log (
 );
 ```
 
-**Locked-in choices:**
-- 3NF registry + join + view
-- Single `tags` table with `is_ephemeral` boolean
-- Surrogate `entity_tags.id` (not composite key)
-- `entity_id REFERENCES entities(id)` — single FK, no discriminator column, real cascade
-- `cleared_at` column for cheap current-view reads
-- Three clearance kinds: `event` / `semantic` / `authored`
-- No clock-based expiry
-- `source_kind` as a real PG enum (`entity_tag_source_kind`) — values include `'auto_registered'` so apex-sourced unknowns satisfy the Vocabulary Growth contract without sneaking a string in past the schema
+Design constraints:
+- 3NF registry + join + view (not a single denormalized table).
+- Single `tags` registry with `is_ephemeral` boolean (no separate ephemeral table).
+- Surrogate `entity_tags.id` (not composite key); allows multiple historical applications.
+- Single FK to `entities(id)`, no discriminator column.
+- `cleared_at` column for cheap current-view reads.
+- Three clearance kinds: `event` / `semantic` / `authored`. No clock-based expiry.
+- `source_kind` as a real PG enum. `'auto_registered'` satisfies the Vocabulary Growth contract; `'skald_inline'` is the runtime path from Skald tagging during structured-output entity registration.
 
 ### Event Stream
 
 ```sql
--- enums for event provenance + participant roles (replacing the v3 'text' columns)
-CREATE TYPE event_source_kind AS ENUM (
-  'apex', 'resolver', 'narrator', 'bleed', 'authored'
-);
-CREATE TYPE event_role_kind AS ENUM (
-  'actor', 'target', 'observer', 'beneficiary', 'witness'
-);
+CREATE TYPE event_source_kind AS ENUM ('apex', 'resolver', 'narrator', 'bleed', 'authored');
+CREATE TYPE event_role_kind AS ENUM ('actor', 'target', 'observer', 'beneficiary', 'witness');
 
 CREATE TABLE event_types (
   type           text PRIMARY KEY,
@@ -380,18 +239,12 @@ CREATE TABLE world_events (
   event_type             text NOT NULL REFERENCES event_types(type),
   tick_chunk_id          bigint NOT NULL REFERENCES narrative_chunks(id),
   narration_chunk_id     bigint REFERENCES offscreen_narrations(id),
-
-  -- single FK actor/target; no entity_kind columns
   actor_entity_id        bigint REFERENCES entities(id) ON DELETE RESTRICT,
   target_entity_id       bigint REFERENCES entities(id) ON DELETE RESTRICT,
-
-  -- location stays place-specific (per GPT-5.5-Pro): spatial semantics, not "entity" semantics
   location_id            bigint REFERENCES places(id) ON DELETE RESTRICT,
-
-  -- world_time joined from chunk_metadata at read; see "World Time Denormalization"
   world_layer            world_layer_type,
   source                 event_source_kind NOT NULL,
-  changed_fields         text[] NOT NULL DEFAULT '{}',                   -- controlled vocab, auto-derived from Pydantic StateUpdate models
+  changed_fields         text[] NOT NULL DEFAULT '{}',
   magnitude              numeric(4,3),
   resolution_id          bigint REFERENCES orrery_resolutions(id),
   payload                jsonb NOT NULL DEFAULT '{}',
@@ -399,7 +252,6 @@ CREATE TABLE world_events (
   created_at             timestamptz DEFAULT now()
 );
 
--- participation join table (multi-entity events): also single FK
 CREATE TABLE world_event_entities (
   event_id      bigint NOT NULL REFERENCES world_events(id) ON DELETE CASCADE,
   role          event_role_kind NOT NULL,
@@ -408,21 +260,15 @@ CREATE TABLE world_event_entities (
 );
 ```
 
-**`world_layer_type` precondition:** the Python enum `WorldLayerType` exists at `apex_enums.py:196` (`primary`, `flashback`, `dream`, ...). PR #210's `023_orrery_schema.py` now creates the Postgres `world_layer_type` enum if it is not already present, before any Orrery column uses it.
-
-**Locked-in choices:**
-- Append-only; supersession only for in-world retcons
-- `tick_chunk_id` and `narration_chunk_id` split — no overloaded `chunk_id`
-- Single-FK polymorphism: `actor_entity_id`, `target_entity_id` FK to `entities`; no `_kind` columns
-- `location_id REFERENCES places(id)` stays as a deliberate exception — places have spatial semantics distinct from entity-ness; if a place participates as an actor or target, use `actor_entity_id`/`target_entity_id`
-- `world_event_entities` join table replaces flat actor/target columns for multi-participant events; `role` is an enum so typos surface at INSERT time
-- `source` is an enum (`event_source_kind`), not free text
-- `changed_fields text[]` with controlled vocab auto-derived from `StateUpdate` Pydantic models (see `apex_schema.py:631`)
-- `magnitude` for Promote scoring without unpacking payload
-- `resolution_id` FK back to `orrery_resolutions` when resolver-sourced
-- `world_layer` filtering keeps dream/flashback events out of resolver's recent-event window
-- Event-type registry mirrors tags
-- Writer must validate every `entity_id` exists in `entities` before insert (now a real FK, so violation surfaces as a SQL error rather than silent rot — consistent with the project's "errors surface visibly" preference in `CLAUDE.md`)
+Design constraints:
+- Append-only; supersession only for in-world retcons (the `superseded_by_event_id` chain).
+- Separate `tick_chunk_id` and `narration_chunk_id` columns; no overloaded `chunk_id`.
+- Single-FK polymorphism for actor/target. `location_id` keeps the `places(id)` FK because places have spatial semantics distinct from entity-ness; a place participating as actor/target uses `actor_entity_id`/`target_entity_id`.
+- `world_event_entities` join table for multi-participant events; `role` is an enum.
+- `source` is an enum (`event_source_kind`), not free text.
+- `changed_fields text[]` with controlled vocab derived from `StateUpdate` Pydantic models (`apex_schema.py:631`).
+- `magnitude` enables Promote scoring without unpacking payload.
+- `world_layer` filtering keeps dream/flashback events out of the resolver's recent-event window.
 
 ### Orrery Resolutions
 
@@ -431,29 +277,28 @@ CREATE TABLE orrery_resolutions (
   id                  bigserial PRIMARY KEY,
   tick_chunk_id       bigint NOT NULL REFERENCES narrative_chunks(id),
   template_id         text NOT NULL,
-  binding_hash        text NOT NULL,                  -- stable hash of bindings dict
+  binding_hash        text NOT NULL,
   actor_entity_id     bigint REFERENCES entities(id) ON DELETE RESTRICT,
   priority            integer NOT NULL,
   magnitude           numeric(4,3),
   state_delta         jsonb NOT NULL,
-  brief               text,                           -- deterministic non-literary one-liner (PR 3)
-  event_ids           bigint[],                       -- world_events rows produced by this resolution
+  brief               text,
+  event_ids           bigint[],
   promotion_status    orrery_promotion_status NOT NULL DEFAULT 'pending',
   promotion_verdict   jsonb,
   narration_status    orrery_narration_status NOT NULL DEFAULT 'none',
   narration_chunk_id  bigint REFERENCES offscreen_narrations(id),
 
-  -- bleed surfacing bookkeeping (Codex)
   last_offered_chunk_id   bigint REFERENCES narrative_chunks(id),
   offer_count             integer NOT NULL DEFAULT 0,
   first_surfaced_chunk_id bigint REFERENCES narrative_chunks(id),
 
   created_at          timestamptz DEFAULT now(),
-  UNIQUE (tick_chunk_id, template_id, binding_hash)  -- idempotency guard, enforced at Stage 2 (Commit)
+  UNIQUE (tick_chunk_id, template_id, binding_hash)
 );
 ```
 
-Note: `tick_chunk_id` is `NOT NULL`, but the in-cycle `OrreryTickProposal` carries no `tick_chunk_id` — the field is stamped during `CommitOrreryTick` after `insert_narrative_chunk` returns the new chunk's id at `commit_handler.py:394` / `commit_handler_sync.py:354`. The `UNIQUE` constraint therefore fires at write time, not at proposal time.
+`tick_chunk_id` is `NOT NULL`, but the in-cycle `OrreryTickProposal` carries no `tick_chunk_id` — it's stamped during `CommitOrreryTick` after `insert_narrative_chunk` returns the new chunk's id. The `UNIQUE` constraint fires at write time, not at proposal time.
 
 ### Narration Outbox
 
@@ -461,7 +306,7 @@ Note: `tick_chunk_id` is `NOT NULL`, but the in-cycle `OrreryTickProposal` carri
 CREATE TABLE orrery_narration_jobs (
   id              bigserial PRIMARY KEY,
   resolution_id   bigint NOT NULL REFERENCES orrery_resolutions(id),
-  slot            text NOT NULL,                       -- save slot identifier
+  slot            text NOT NULL,
   state           orrery_job_state NOT NULL DEFAULT 'queued',
   attempts        integer NOT NULL DEFAULT 0,
   available_at    timestamptz DEFAULT now(),
@@ -475,58 +320,55 @@ CREATE TABLE orrery_narration_jobs (
 );
 ```
 
-Durable outbox surviving process restart. Dispatched via `FastAPI BackgroundTasks` — mirror the established pattern at `nexus/api/narrative.py:281` and `nexus/api/storyteller.py:561, 666`. Concretely: after `commit_incubator_to_database_sync` returns successfully in `_approve_narrative_impl`, call `background_tasks.add_task(process_orrery_outbox_sync, slot)`. Also drainable via standalone CLI: `python -m nexus.agents.orrery.worker --slot 5`; status-only inspection is `python -m nexus.agents.orrery.worker --slot 5 --status`.
+Durable outbox surviving process restart. Dispatched via FastAPI `BackgroundTasks` from `_approve_narrative_impl` after commit returns. Standalone CLI worker for catch-up: `python -m nexus.agents.orrery.worker --slot N`; status-only inspection: `--status`.
 
-### Off-Screen Narration Storage (Structural Visibility Separation)
+### Off-Screen Narration Storage
 
 ```sql
 CREATE TABLE offscreen_narrations (
   id              bigserial PRIMARY KEY,
   resolution_id   bigint NOT NULL REFERENCES orrery_resolutions(id),
   tick_chunk_id   bigint NOT NULL REFERENCES narrative_chunks(id),
-  -- world_time joined from chunk_metadata at read
-  world_layer     world_layer_type,                   -- usually 'primary'; not chronologically counted
+  world_layer     world_layer_type,
   text            text NOT NULL,
-  perceptual_descriptor jsonb,                        -- thin descriptor consumed by Bleed (sensory channel + brief)
-  embedding_status offscreen_embedding_status DEFAULT 'pending', -- own embedding pipeline; MEMNON indexes both tables
+  perceptual_descriptor jsonb,
+  embedding_status offscreen_embedding_status DEFAULT 'pending',
   created_at      timestamptz DEFAULT now()
 );
 ```
 
-`narrative_chunks` is always player-visible; `offscreen_narrations` never is. MEMNON's retrieval logic queries both tables with explicit semantic intent (warm-slice → `narrative_chunks` only; off-screen retrieval → both, with `offscreen_narrations` clearly labeled). `narrative_view.world_time` does NOT count off-screen narrations toward chronological advancement.
+`narrative_chunks` is always player-visible; `offscreen_narrations` never is. MEMNON's retrieval logic queries both tables with explicit semantic intent: warm-slice → `narrative_chunks` only; off-screen retrieval → both, with `offscreen_narrations` clearly labeled. `narrative_view.world_time` does NOT count off-screen narrations toward chronological advancement.
 
-**MEMNON safety claim, sharpened:** `nexus/agents/memnon/memnon.py::get_recent_chunks` (L1486) already queries only `narrative_chunks` — no change needed there. The real risk surface is `query_memory` and the underlying `SearchManager`, which run hybrid (vector + text) retrieval. PR 0 task: confirm `query_memory` and `SearchManager` never union or join `offscreen_narrations` into warm-slice results, and add an integration test that asserts the warm slice returned from `query_memory` is disjoint from `offscreen_narrations`.
+### Bleed Selector — Cross-Turn Ambient Surfacing
 
-### Bleed Selector
+**Bleed handles cross-turn grace, not current-tick proposals.** Current-tick proposals flow through the authority model above — Skald sees them directly in `orrery_imminent_activity` and adjudicates. Bleed's role is narrower: surfacing *prior-turn* narrated events that weren't included in any chunk yet but remain eligible to bleed through within a temporal grace window.
 
-**Bleed offers a menu, never a decision.** Perceptibility filtering happens before narration promotion and in the candidate query; storyteller-time Bleed now chooses deterministically from eligible narrated events. Output is a bounded list of N candidates (typically N ≤ 3), each annotated with sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor — *not* the narrator's full prose.
+Storyteller-time Bleed chooses deterministically from these eligible narrated events. Output is a bounded list (typically N ≤ 3), each annotated with a sensory channel (auditory, news fragment, secondhand mention, faction graffiti) and a thin perceptual descriptor — not the narrator's full prose.
 
-**Hook point.** Bleed runs at the start of LORE Phase 5 (`assemble_context_payload`, `nexus/agents/lore/utils/turn_cycle.py:489`). Its output populates `turn_context.bleed_menu`, which `assemble_context_payload` then reads when building the payload. Concretely, the Bleed entry point is a new method on `TurnCycleManager` invoked from `assemble_context_payload` before payload assembly proper begins.
+**Hook point**: runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`). Its output populates `turn_context.bleed_menu`, which `assemble_context_payload` then reads when building the payload.
 
-**No inference budget.** Bleed no longer makes a storyteller-time model call; empty bleed remains a valid outcome when no eligible narration exists.
+**No inference budget.** Bleed makes no storyteller-time model call; empty bleed remains a valid outcome.
 
-Older configs may still include `[orrery.bleed] latency_budget_ms` or `candidate_pool_multiplier`; the settings model accepts those keys as deprecated/ignored so existing slots keep booting.
+**Candidate query**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, and surfacing history. Selection is deterministic from the SQL ordering, capped by `[orrery.bleed] max_candidates`.
 
-**Candidate query is typed**: reads from `orrery_resolutions` JOIN `world_events` JOIN `offscreen_narrations` with filters on age, location proximity, sensory plausibility, and surfacing history. Selection is deterministic from the SQL ordering, capped by `[orrery.bleed] max_candidates`; Storyteller remains free to adapt, delay, or ignore the offered peripherals.
+**Surfacing bookkeeping** prevents nag: `last_offered_chunk_id`, `offer_count` (≤ 3 by current policy), `first_surfaced_chunk_id`. Distinguishes "offered to storyteller" from "actually surfaced" — only the latter creates a visible-world surfacing record.
 
-**Surfacing bookkeeping** prevents nag (Codex): `last_offered_chunk_id`, `offer_count`, `first_surfaced_chunk_id` (on `orrery_resolutions`). Distinguish "offered to storyteller" from "actually surfaced" — only the latter creates a visible-world surfacing record.
-
-**Payload framing:** "ambient peripherals available — ignore any or all, render at any density from overt to invisible." Zero is a valid inclusion count.
+**Payload framing**: "ambient peripherals available — ignore any or all, render at any density from overt to invisible." Zero is a valid inclusion count.
 
 ### Tick, Resolver Firing, World Time
 
-- **Tick = the *accepted* player-visible chunk's id**, not the latest `narrative_chunks` row. The id is generated at `commit_handler.py:394` / `commit_handler_sync.py:354` and stamped onto every Orrery write in the same transaction.
-- **Resolve runs in-cycle** during a new **LORE Phase 4.5**, inserted between `DEEP_QUERIES` (Phase 4) and `PAYLOAD_ASSEMBLY` (Phase 5). Pure Python; produces `OrreryTickProposal` carried on `TurnContext.orrery_proposal`; no writes.
-- **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database` (L320) / `commit_incubator_to_database_sync` (L233), between the existing `apply_state_updates*` call and `clear_incubator`. All canonical writes happen here.
+- **Tick = the accepted player-visible chunk's id**, not the latest `narrative_chunks` row. The id is generated at `commit_handler_sync.py:354` and stamped onto every Orrery write in the same transaction.
+- **Resolve runs in-cycle** during LORE Phase 4.5 (`TurnPhase.ORRERY_RESOLVE`), between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`. Pure Python; no writes.
+- **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database{,_sync}`. All canonical writes happen here.
 - **Clear (event)** runs in the same commit transaction as the triggering event.
-- **Clear (semantic)** is currently a conservative no-op; event/authored clearance remains canonical until a non-local semantic-clearance signal exists.
-- **Promote** runs post-commit, async, batched per tick.
+- **Clear (semantic)** is currently a conservative no-op until a non-local clearance signal exists.
+- **Promote** runs post-commit, deterministically, batched per tick.
 - **Narrate** is async via durable outbox. Bleed reads only `state='succeeded'` narrations + deterministic briefs.
-- **Bleed** runs synchronously at storyteller-time (LORE Phase 5) without inference.
+- **Bleed** runs synchronously at storyteller-time without inference.
 
 ### World Time Denormalization
 
-`world_time` denormalized onto **`chunk_metadata`**, not `world_events`. The cumulative-SUM of `narrative_view.world_time` means a `time_delta` edit on chunk K invalidates every later event row — fan-out unbounded. Per-chunk denormalization keeps fan-out bounded to "every chunk from K to current" — still O(N) on edits but materialized once per chunk, not per event.
+`world_time` denormalized onto `chunk_metadata`, not `world_events`. The cumulative-SUM of `narrative_view.world_time` means a `time_delta` edit on chunk K invalidates every later event row — fan-out unbounded. Per-chunk denormalization keeps fan-out bounded to "every chunk from K to current."
 
 ```sql
 ALTER TABLE chunk_metadata ADD COLUMN world_time timestamptz;
@@ -534,50 +376,58 @@ ALTER TABLE chunk_metadata ADD COLUMN world_time timestamptz;
 CREATE FUNCTION refresh_world_time_from_chunk(changed_chunk_id bigint)
 RETURNS void AS $$
   -- recompute world_time for changed_chunk_id and every chunk_id > changed_chunk_id
-  -- (cumulative SUM of time_delta from the canonical baseline)
 $$ LANGUAGE sql;
-
--- trigger on chunk_metadata.time_delta change updates affected chunks only
 ```
 
 `world_events.world_time` becomes a JOIN: `SELECT we.*, cm.world_time FROM world_events we JOIN chunk_metadata cm ON we.tick_chunk_id = cm.chunk_id`. Stamped only at accepted commit. Off-screen narrations never advance chronology.
 
-### EntityRef Helper (Now Thin, Backed by Real FK)
+### Routing
+
+For travel-related packages, NEXUS uses an Earth/Earth-mirror geography constraint: every place anchors to real-world coordinates in `places.coordinates`, even when the fiction is non-Earth. This keeps GIS tooling, OSM-derived graph imports, and travel-time estimates available without inventing alternate map projections per world.
+
+Travel-state lifecycle is additive to existing location tracking. `characters.current_location` remains the canonical `places(id)` anchor used by LORE / LOGON / MEMNON / Orrery; `character_travel_states` records whether a character is at a place, planning travel, or in transit. While in transit, location predicates treat the anchor as non-physical so the resolver does not pretend the character is still co-located there.
+
+Travel route selection cascades: local OSM-derived `osm_graph` routing first, then authored `orrery_travel_edges`, then a coordinate-distance estimate. The graph path is intentionally offline — normal Orrery ticks read only local tables and never call map APIs or inference. Authored edges (`mixed` generic, plus authored overrides) are an exception surface. See `docs/orrery_route_graph.md` for the graph importer contract.
+
+### EntityRef Helper
 
 ```python
 class EntityRef(BaseModel):
     id: int                                     # FK to entities.id
     kind: Optional[EntityKind] = None           # populated on read from entities.kind
     name: Optional[str] = None                  # populated on read via entity_names_v
-                                                # (never duplicated on entities table)
 
     def canonical_key(self) -> str:
         return f"entity:{self.id}"
 ```
 
-With the identity spine in place, `EntityRef.validate_exists()` is no longer needed at write time — Postgres enforces it via the FK. `EntityRef` survives as a typed read-side convenience: it's what binding composers, condition primitives, and bleed candidates carry. The `name` field is populated at read time from `entity_names_v` (which UNION-joins through the subtype tables); the spine itself carries no name column, so there's no drift surface between subtype names and spine names.
+Postgres FKs enforce existence; `EntityRef` is a typed read-side convenience that binding composers, condition primitives, and bleed candidates carry. The `name` field is populated at read time from `entity_names_v`; the spine itself carries no name column.
+
+---
+
+## Invariants and Contracts
 
 ### Vocabulary Growth Contract
 
-When a tag or event_type is referenced that the registry hasn't seen:
+When a tag or `event_type` is referenced that the registry hasn't seen:
 - **Resolver-sourced**: fail loudly. Templates must register their vocabulary before use.
-- **Apex-sourced**: auto-register with `source_kind='auto_registered'` (a real enum value on `entity_tag_source_kind`) and `description='AUTO: pending review'`. Surfaces in periodic curation.
+- **Apex/Skald-sourced**: auto-register with `source_kind='auto_registered'` or `'skald_inline'` and `description='AUTO: pending review'`. Surfaces in periodic curation.
 
-### ALWAYS-Fallback Invariant for Templates
+### ALWAYS-Fallback Invariant
 
 Every template MUST end with an `ALWAYS`-conditioned branch. Validated at template-load time via pytest fixture.
 
-### Gate-Cooldown Coverage Invariant for Templates
+### Gate-Cooldown Coverage
 
 If a template package gate includes `since_last_event_at_least(...)` cooldowns, every `event_type` emitted by any branch MUST appear in that gate's cooldown chain. Otherwise one branch can bypass the template's pacing intent by emitting an event the outer gate never checks. Validated by `tests/test_orrery/test_substrate.py::test_gate_cooldown_chain_covers_branch_events`.
 
 ### Sliding-Window Binding Scope
 
-Binding composer filters to recently-relevant entities: (referenced in `chunk_character_references` in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded `world_events` in last N chunks). N config-tunable via `nexus.toml` `[orrery.binding] window_chunks`. Default suggested: 30.
+The binding composer filters to recently-relevant entities: `(referenced in chunk_character_references in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded world_events in last N chunks)`. N is config-tunable via `[orrery.binding] window_chunks`; default is 30.
 
-### `nexus.toml` Section Layout
+---
 
-Follow the established nesting style from `[lore]` / `[lore.token_budget]` and `[memnon.retrieval.hybrid_search.weights_by_query_type.character]`. The proposed Orrery sections:
+## Configuration
 
 ```toml
 [orrery]
@@ -587,9 +437,9 @@ enabled = true
 window_chunks = 30
 
 [orrery.narration]
-mode = "async"                                          # "async" | "sync"
+mode = "async"                                  # "async" | "sync"
 provider = "anthropic"
-model_ref = "@anthropic.default"                        # resolved via [global.model.api_models]
+model_ref = "@anthropic.default"                # resolved via [global.model.api_models]
 
 [orrery.bleed]
 max_candidates = 3
@@ -600,215 +450,65 @@ magnitude_threshold = 0.5
 perceptual_summary_max_chars = 240
 ```
 
-Every model reference uses the `@provider.role` syntax that the existing config loader resolves against `[global.model.api_models]` — never a hardcoded ID in runtime code (per `CLAUDE.md` "Testing Defaults").
-
-### Things Deliberately Out of Scope
-
-- Replacing the storyteller
-- Real-time simulation
-- Full Bethesda parity (no NPC pathing, no real-time combat)
-- Procedural template authoring at runtime
-- Items as first-class entities (NEXUS is not an inventory game)
-- Full collapse of legacy triplicate tables (deferred per trigger list above)
-- Event-sourcing inversion (Pattern C from round-1 review)
-
----
-
-## Resolved Open Items
-
-### [OPEN 1] Narrate sync/async — RESOLVED: Async with durable outbox
-
-Unanimous. `orrery_narration_jobs` table; enqueued inside accepted-commit transaction; `FastAPI BackgroundTasks` triggers a draining worker function (mirroring `narrative.py:281` and `storyteller.py:561, 666`); standalone CLI for catch-up; `[orrery.narration] mode = "async" | "sync"` config switch. Promoted resolutions durable immediately; narration eventually durable. Bleed reads only succeeded + deterministic briefs.
-
-### [OPEN 2] Producer wiring — RESOLVED: Pattern B (dedicated event writer)
-
-Unanimous. `nexus/agents/orrery/events.py` exports `emit_state_updates_events(state_updates, tick_chunk_id, conn)` and `emit_event(...)`. Both `commit_incubator_to_database` (L320, async) and `commit_incubator_to_database_sync` (L233, sync — the production path) call into it at Step 8.5. Direct INSERTs to `world_events` forbidden by convention. Field-mapping from Pydantic `StateUpdate` models lives as a data table, not branchy code.
-
-### [OPEN 3] Entity super-table — RESOLVED: Staged identity spine (round-2 consensus)
-
-Round 1's framing biased reviewers toward "defer" by stating it as user direction. Round 2's neutral re-framing converged on **Option C: adopt the `entities` super-table now as an identity spine, but do not renumber existing PKs or collapse the legacy triplicate tables**. Implementation locked into the "Entity Identity Spine" section above, with the staged lock-aware backfill pattern called out so an implementer doesn't trip the naive ADD-COLUMN-with-FK-and-NOT-NULL lock storm.
-
-The round-1 verdict ("defer + EntityRef") was load-bearing on the framing — when reviewers were free to propose a third option, both independently landed on the staged shape. EntityRef survives as a thin read-side convenience rather than the primary safety mechanism; Postgres FKs do the heavy lifting.
-
-### [OPEN 4] Bootstrap blocker — RESOLVED: Moot
-
-PR #191 merged to `main` as `44aedba`. All phases unblocked. PR 2's structural split (hydration / dry-pass vs. canonical write wiring) retained for cognitive surface reasons.
-
-### [OPEN 5] Orrery Stage 7 — RESOLVED: Defer Stage 7, promote deterministic briefs into PR 3
-
-Unanimous. Deterministic briefs (pure string formatting from known fields → `orrery_resolutions.brief`) land in PR 3. Orrery Stage 7's actual LLM prose stage fires only when ≥ 2 of 3 instrumented counters deteriorate over a 50-tick playtest: Promote pass rate < 2%, bleed candidate scarcity < 3/scene, MEMNON retrieval misses on player-described off-screen events.
-
-### [OPEN 6] Denormalized summary columns — RESOLVED: `changed_fields text[]` only
-
-Unanimous. No fixed boolean columns. Controlled vocabulary auto-generated from `StateUpdate` Pydantic models (`apex_schema.py:631`); build-step generator produces canonical constants. GIN-indexed. Resolver primitive takes a tuple: `recent_event(changed_fields_any_of=('character.current_location', 'character.activity'), actor=X)`.
-
-### [OPEN 7] `world_time` denormalization staleness — RESOLVED: Denormalize onto `chunk_metadata`
-
-Per-chunk, not per-event. Stamped only at accepted commit. `world_events.world_time` becomes a JOIN at read time. Off-screen narrations never advance chronology.
-
-### [OPEN 8] `TEND_CRAFT` role-tag vocabulary — RESOLVED: Keep expressive tags for now
-
-Keep the expressive role-tag vocabulary seeded by migration 027 rather than collapsing it to a smaller canonical set yet.
-
-This preserves the narrative signal PR #223 intentionally kept in storyteller-side tagging: `musician`, `dancer`, `performer`, `artist`, `writer`, and `artisan` carry different social and world-state affordances even though the current package resolver gates them through the same `TEND_CRAFT` practice branch. Collapsing now would lose information before there is evidence that the vocabulary is hurting package authoring, UI workflows, or resolver performance.
-
-The alias-oriented hybrid remains the right future escape hatch if that pain appears: use `tags.synonym_for` to group expressive tags under canonical families, then teach substrate hydration to resolve both canonical tags and aliases. That is a real implementation change, with query semantics and tests, so it should be driven by observed need rather than folded into the current cleanup thread.
-
----
-
-## Phased Delivery
-
-This section is now mostly historical. The active queue has moved past the foundation, Bleed, needs, place semantics, semantic tag seeding, interpersonal layers, Work + Travel, and package-quality tuning into **route realism**. The PR 0-4 headings below are preserved as landing notes for the foundation, resolver, commit pipeline, and Bleed integration rather than as the current forward plan.
-
-### PR 0 — Seam Audit & Invariants (Foundation Subset in PR #210)
-
-- Confirmed the production commit path is `nexus/api/narrative.py::_approve_narrative_impl` (L387) → `commit_incubator_to_database_sync` (L233). The async sibling `commit_incubator_to_database` (L320) is test-only today; document this in PR 3 commit hook prose.
-- Retrieval-boundary audit in PR #220: confirm `query_memory`, `SearchManager`, and warm-slice retrieval surfaces never join or union `offscreen_narrations` into standard narrative context. Explicit read-only SQL access to public Orrery tables remains allowed.
-- Updated `nexus/agents/memnon/memnon.py::execute_readonly_sql` allowed-tables list. Additions: `entities`, `entity_names_v`, `entity_tags_current`, `world_events`, `world_event_entities`, `orrery_resolutions`, `offscreen_narrations`, `event_types`, `tags`. Excluded (internal-only): `orrery_narration_jobs`, `tag_clearance_log`, raw `entity_tags`.
-- Confirmed or created `world_layer_type` via `migrations/023_orrery_schema.py`.
-- Note that `chunk_workflow.py` is *not* on the commit path — it manages downstream embedding state transitions only. Do not hook `CommitOrreryTick` there.
-
-### PR 1 — Substrate + Schema + Identity Spine (Foundation Subset in PR #210)
-
-- Moved substrate from `temp/orrery/behavior_substrate.py` to `nexus/agents/orrery/`
-- Ported `EVADE_PURSUERS`, `HONOR_DEBT`, `PURSUE_GHOST_LEAD`, `MAINTAIN_COVER` from the simulator seed set
-- Extended condition library: `has_relationship_of_type`, `count_co_located`, `since_last_event_at_least`, `faction_member`, `relative_orbit_distance`, `recent_event(changed_fields_any_of=..., actor_slot=..., target_slot=...)`
-- Added ALWAYS-fallback validator and unit coverage
-- **Migration `023_orrery_schema.py`** (Python, not SQL — the staged FK backfill needs multi-transaction control and concurrent indexes):
-  - **Type prerequisites**: `entity_kind`, `entity_tag_source_kind`, `event_source_kind`, `event_role_kind`. If `world_layer_type` doesn't already exist in template (per PR 0 audit), create it too.
-  - **Identity spine**: `entities` table (id, kind, is_active, timestamps — no name column) + `entity_id` columns on `characters`/`factions`/`places`, added via the staged `NOT VALID → backfill → VALIDATE → CONCURRENTLY UNIQUE INDEX → SET NOT NULL` pattern + kind-correctness triggers
-  - **Polymorphic name view**: `entity_names_v` (UNION over subtype tables; spine has no duplicated name field)
-  - **Compatibility views**: `chunk_entity_references_v`, `entity_relationships_v`
-  - **Tag system**: `tags`, `entity_tags` (single FK), `entity_tags_current` view, `tag_clearance_log`
-  - **Event stream**: `event_types`, `world_events` (single-FK actor/target, `source` + `world_event_entities.role` as real enums), `world_event_entities`
-  - **Orrery tables**: `orrery_resolutions` (with `UNIQUE` idempotency key + surfacing bookkeeping columns), `orrery_narration_jobs`, `offscreen_narrations`
-  - **Time denormalization**: `chunk_metadata.world_time` column + `refresh_world_time_from_chunk` trigger function
-- `EntityRef` Pydantic helper in `nexus/agents/orrery/entity_ref.py` (thin read-side type; uses `EntityKind` enum mirroring the new `entity_kind` Postgres type) remains deferred until a runtime reader needs it
-- Follow-up slices now seed `event_types` and tag vocabulary through explicit migrations, and PR #237 applies the first reviewed slot 2 semantic tag backfill. `changed_fields` remains a controlled branch/template surface, with the longer-term generator from `apex_schema.py::StateUpdates` still useful but no longer a blocker for package delivery.
-- Demo: `python -m nexus.agents.orrery.demo` runs four presets against synthetic `WorldState`
-
-### PR 2 — Hydration + Dry-Pass Resolver (implemented in PR #211; no canonical writes)
-
-- `hydrate_world_state(session, anchor_chunk_id, window_chunks) -> WorldState` gathers tags, locations, activities, place classes, relationships, faction memberships, recent primary unsuperseded events, and coarse time/weather context.
-- Sliding-window binding composer for `ACTOR`-only templates pulls candidates from recent chunk references, recent primary unsuperseded events, and current ephemeral tags.
-- Resolver loop produces `OrreryTickProposal` with no `tick_chunk_id` in the proposal — see Stage 1 note above.
-- **New LORE Phase 4.5**: `TurnPhase.ORRERY_RESOLVE = "orrery_resolve"` is inserted between `DEEP_QUERIES` (Phase 4) and `PAYLOAD_ASSEMBLY` (Phase 5). `TurnCycleManager.resolve_orrery()` skips cleanly while `[orrery].enabled = false`, and otherwise stores the dry-run proposal on the turn context.
-- **Extended `TurnContext`** with:
-  - `orrery_proposal: Optional["OrreryTickProposal"] = None`
-  - `bleed_menu: List["BleedCandidate"] = field(default_factory=list)`
-- `[orrery]` section in `nexus.toml` (see "`nexus.toml` Section Layout" above)
-- **No canonical writes yet.** Proposal is buffered and inspectable, but does not mutate any table or enter the storyteller payload.
-- Verification: unit coverage for disabled/enabled phase behavior, anchor fallback, fallback/non-fallback packages, and SQL filters; live direct dry-runs against slot 5 (baby narrative state) and slot 2 (mature narrative state) with zero writes.
-
-### PR 3 — CommitOrreryTick + Promote + Narrate + Clear (implemented in PR #214 plus semantic-clearance follow-up)
-
-- **`CommitOrreryTick` writer**: Step 8.5 inside `commit_incubator_to_database_sync` (L233 — the production path; insert between `apply_state_updates_sync` at L415 and incubator clear at L418) and parity inside `commit_incubator_to_database` (L320 — async, test-only; insert between `apply_state_updates` at L420 and `clear_incubator` at L423). Both call into the unified event writer in `nexus/agents/orrery/events.py`.
-- **Stamp `tick_chunk_id`** on every proposal row at this step, after `insert_narrative_chunk` returns the new chunk id.
-- Promote discriminator: deterministic salience policy over `priority`, `magnitude`, `state_delta`, `event_ids`, and `brief`, tuned through `[orrery.promote]`. No local inference required.
-- Deterministic brief generator → `orrery_resolutions.brief`.
-- Frontier narration via durable outbox; trigger drain via `BackgroundTasks` from `_approve_narrative_impl` after commit returns; standalone CLI worker for catch-up.
-- Narrator persistence to `offscreen_narrations` (not `narrative_chunks`); embedding pipeline shared with MEMNON.
-- Clear (event) in commit transaction; Clear (semantic) remains disabled as a conservative no-op until a non-local clearance path exists.
-- `tag_clearance_log` rows with justification.
-- Instrumented counters for the Orrery Stage 7 trigger metrics.
-- Verification: engineered fifty-chunk scenario (motivating test case), idempotency, incubator rejection, warm-slice contamination, deterministic promotion behavior, async-worker state transitions.
-
-### PR 4 — Bleed Selector + Storyteller Integration (implemented in PR #219)
-
-- Bleed selector wired into LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); reads `turn_context.bleed_menu` populated by a new selector method invoked at the start of that phase.
-- Current-tick proposals are no longer treated as Bleed. They enter Phase 5 as `orrery_imminent_activity` and are finalized by commit according to Skald's optional `orrery_adjudications`.
-- Typed candidate query over `orrery_resolutions` ⋈ `world_events` ⋈ `offscreen_narrations`.
-- Hard 2-second latency budget enforced via `asyncio.wait_for`; overrun = empty menu + loud log.
-- Surfacing bookkeeping increments.
-- Menu injected into payload with framing "ambient peripherals — optional, ignore freely, render at any density".
-- Prompt framing injected by `LogonUtility._format_context_prompt` as optional Orrery ambient peripherals.
-- Verification: apt-bleed + null-bleed + spoiler-boundary + chronology tests.
-
-### Orrery Stage 7 — Middle-Tier Journalistic Prose (Deferred, Metric-Gated)
-
-Fires only when ≥ 2 of 3 instrumented counters deteriorate over a 50-tick playtest. (Renamed from "Phase 7" in v3 to disambiguate from LORE turn-cycle Phase 7 = INTEGRATION.)
-
-### Deferred — Legacy Triplicate Table Collapse
-
-Revisit when: fourth real entity kind appears, compatibility view becomes write target, or repeated UNION/kind-branching spreads into many modules.
+Every model reference uses the `@provider.role` syntax that the config loader resolves against `[global.model.api_models]` — never a hardcoded model ID in runtime code (per `CLAUDE.md` "Testing Defaults").
 
 ---
 
 ## Critical Files / Integration Points
 
 **LORE turn cycle**
-- `nexus/agents/lore/lore.py:289` — `process_turn`; new LORE Phase 4.5 inserts here
-- `nexus/agents/lore/utils/turn_context.py:12-41` — `TurnPhase` enum (add `ORRERY_RESOLVE`) and `TurnContext` dataclass (add `orrery_proposal`, `bleed_menu`)
+- `nexus/agents/lore/lore.py:289` — `process_turn`; LORE Phase 4.5 hook
+- `nexus/agents/lore/utils/turn_context.py:12-41` — `TurnPhase` enum + `TurnContext` dataclass (`orrery_proposal`, `bleed_menu`)
 - `nexus/agents/lore/utils/turn_cycle.py:489` — `assemble_context_payload` (LORE Phase 5); Bleed selector hooks at the start
-- `nexus/agents/orrery/worker.py` — deterministic Promote policy, durable narration outbox drain, and conservative semantic-clearance no-op
+- `nexus/agents/orrery/worker.py` — deterministic Promote policy, durable narration outbox drain, conservative semantic-clearance no-op
 
 **Commit path (production = sync)**
-- `nexus/api/narrative.py:281` — existing `BackgroundTasks` pattern to mirror
-- `nexus/api/narrative.py:387` — `_approve_narrative_impl`; acceptance seam that invokes the commit
+- `nexus/api/narrative.py:387` — `_approve_narrative_impl`; acceptance seam
 - `nexus/api/narrative.py:407` — calls `commit_incubator_to_database_sync`
-- **`nexus/api/commit_handler_sync.py:233`** — `commit_incubator_to_database_sync`; `CommitOrreryTick` inserts at Step 8.5 (after `apply_state_updates_sync` at L415, before incubator clear at L418)
-- `nexus/api/commit_handler_sync.py:354` — where the new chunk id is created in the sync path
-- **`nexus/api/commit_handler.py:320`** — `commit_incubator_to_database`; async parity hook (Step 8.5 between L420 and L423)
-- `nexus/api/commit_handler.py:394` — async path's chunk-id creation point
-- `nexus/api/db_converters.py` — reference resolution only; NOT the StateUpdates apply path
+- `nexus/api/commit_handler_sync.py:233` — `commit_incubator_to_database_sync`; `CommitOrreryTick` at Step 8.5
+- `nexus/api/commit_handler_sync.py:354` — where the new chunk id is created
+- `nexus/api/commit_handler.py:320` — async parity (test-only)
 
 **Not on the commit path**
-- `nexus/api/chunk_workflow.py` — narrative-chunk state machine (`DRAFT/PENDING_REVIEW/FINALIZED/EMBEDDED`); downstream embedding only. Do not hook here.
+- `nexus/api/chunk_workflow.py` — narrative-chunk state machine (DRAFT / PENDING_REVIEW / FINALIZED / EMBEDDED); downstream embedding only. Do not hook Orrery here.
+
+**MEMNON**
+- `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (warm slice; `narrative_chunks`-only)
+- `nexus/agents/memnon/memnon.py::query_memory` and `SearchManager` — warm-slice retrieval must remain disjoint from `offscreen_narrations`
+- `nexus/agents/memnon/memnon.py::execute_readonly_sql` — whitelist exposes public Orrery tables; internal queue/raw tables excluded
 
 **Schema sources**
 - `nexus/agents/logon/apex_schema.py:631` — `StateUpdates` Pydantic models (source for `changed_fields` vocab)
 - `nexus/agents/logon/apex_enums.py:41` — existing `EntityType` enum (includes `'item'`); spine declares its own narrower `entity_kind`
-- `nexus/agents/logon/apex_enums.py:196` — `WorldLayerType` (Python); `world_layer_type` Postgres ENUM is created if missing by `023_orrery_schema.py`
 
-**MEMNON**
-- `nexus/agents/memnon/memnon.py:1486` — `get_recent_chunks` (already `narrative_chunks`-only; no change needed)
-- `nexus/agents/memnon/memnon.py::query_memory` and `SearchManager` — PR 0 audit target (must not union `offscreen_narrations`)
-- `nexus/agents/memnon/memnon.py:469-538` — `execute_readonly_sql`; whitelist at L492-495 needs additions per PR 0
-- `nexus/agents/memnon/utils/content_processor.py:214` — reference; new `store_offscreen_narration` wrapper writes to `offscreen_narrations`
+**Orrery module**
+- `nexus/agents/orrery/substrate.py` — package primitive (`Template`, `Branch`, predicates, `evaluate`, `evaluate_stack`)
+- `nexus/agents/orrery/templates.py` — package catalog
+- `nexus/agents/orrery/resolver.py` — `resolve_dry_run` + binding composers
+- `nexus/agents/orrery/events.py` — canonical event writer (`emit_state_updates_events`, `emit_event`)
+- `nexus/agents/orrery/bleed.py` — bleed candidate query + offer bookkeeping
+- `nexus/agents/orrery/worker.py` — Promote / narration outbox drain
 
-**Background dispatch (BackgroundTasks pattern)**
-- `nexus/api/narrative.py:281` — `background_tasks.add_task(generate_narrative_async, ...)`
-- `nexus/api/storyteller.py:561, 666` — `background_tasks.add_task(manager.finalize_turn, ...)`
-- Mirror in `_approve_narrative_impl` post-commit to drain the narration outbox
-
-**Config + system prompt**
-- `nexus.toml` — new `[orrery]`, `[orrery.binding]`, `[orrery.narration]`, `[orrery.bleed]`, and `[orrery.promote]` sections; use `@provider.role` syntax per `[global.model.api_models]` registry
-- `nexus/agents/lore/logon_utility.py::_format_context_prompt` — PR 4 Bleed prompt framing
-
-**New artifacts**
-- `migrations/023_orrery_schema.py` — Python migration (multi-transaction; SQL alone insufficient for staged FK backfill)
-- New module: `nexus/agents/orrery/` (substrate, `events.py` writer, `entity_ref.py`, `worker.py`, `demo.py`)
+**Catalogs**
+- `docs/orrery_packages.md` — generated human-readable package reference (kept in lockstep with `templates.py` via the `regenerate-orrery-catalog` pre-commit hook)
+- `docs/orrery_route_graph.md` — route graph importer contract
 
 ---
 
 ## Verification Approach
 
-Verification should use live NEXUS flows where the feature touches LORE, LOGON, MEMNON, or database state. Pure substrate/package tests remain deterministic unit tests because their purpose is to validate package logic without paying model or API costs.
+Verification uses live NEXUS flows where the feature touches LORE, LOGON, MEMNON, or database state. Pure substrate/package tests remain deterministic unit tests because their purpose is to validate package logic without paying model or API costs.
 
-- **PR 0/1 foundation (#210):** Substrate demo runs against four presets; migration applies cleanly via `scripts/migrate.py --template` and unlocked slots; entity spine backfill validated; kind-enforcement triggers tested; compatibility views return expected unions; MEMNON whitelist updated and tested; `world_layer_type` confirmed or created in template.
-- **Retrieval-boundary hardening:** Regression tests assert warm-slice retrieval, text search, and vector-search collection routing remain disjoint from `offscreen_narrations`; `execute_readonly_sql` can SELECT from public Orrery tables and cannot select internal queue/raw tag tables.
-- **PR 2 (#211):** Dry-pass against slot 5 and slot 2; proposal contents inspected; zero writes observed; `TurnContext.orrery_proposal` carries no `tick_chunk_id` at this phase. Optional full-turn acceptance before PR 3: enable Orrery for a live LORE pass and confirm the storyteller payload remains unaffected while the proposal is attached only to the turn context.
-- **PR 3 (#214):** Engineered fifty-chunk motivating scenario (interrogated NPC → fifty ticks → retaliation prose persisted to `offscreen_narrations`, never surfaced); idempotency (regeneration cannot double-write — UNIQUE key fires); rejection (incubator rejection rolls everything back, including the Step 8.5 writes); warm-slice contamination (none); deterministic promotion; async-worker state transitions (`queued → leased → succeeded|failed`).
-- **PR 4:** Apt-bleed (ambient peripheral surfaces in the Storyteller payload); null-bleed (no candidates produces empty menu and no inference call); chronology/surfacing boundary (only accepted prior narrated resolutions are eligible); latency-budget overrun produces empty menu and logs loudly.
+- **Substrate tests** (`tests/test_orrery/`): template loading, gate predicates, branch evaluation, ALWAYS-fallback invariant, gate-cooldown coverage.
+- **Resolver tests**: hydration shape, binding composition (actor-only and actor-target), `evaluate_stack` semantics, dry-run against fixture `WorldState`.
+- **Integration tests**: idempotency (UNIQUE key fires on regeneration), incubator-rejection rollback (Step 8.5 writes get reverted), warm-slice contamination (none), deterministic promotion behavior, async-worker state transitions (`queued → leased → succeeded|failed`).
+- **Bleed tests**: apt-bleed (ambient peripheral surfaces in payload), null-bleed (no candidates produces empty menu and no inference call), chronology/surfacing boundary (only accepted prior narrated resolutions are eligible).
+- **Live dry-runs** against mature-state slots (typically slot 2) to validate package behavior against canonical narrative content; see `scripts/orrery_sample.py` for the harness.
 
 ---
 
-## v3 → v4 Change Log
+## Package Author Notes
 
-1. **Hook seams corrected.** `CommitOrreryTick` hooks the *transaction-wrapping* functions (`commit_incubator_to_database` L320 async; `commit_incubator_to_database_sync` L233 sync) at Step 8.5, not the `apply_state_updates*` workers at L223/L451.
-2. **Sync path called out as production.** Only `narrative.py:407` calls a commit function in production code, and it calls the sync variant. Async kept in parity for tests.
-3. **`chunk_workflow.py` removed from PR 0 audit.** It is not on the commit path; replaced with an audit of `narrative.py::_approve_narrative_impl` (L387).
-4. **Bleed hook point named.** Runs at the start of LORE Phase 5 (`assemble_context_payload`, `turn_cycle.py:489`); current implementation is deterministic and inference-free.
-5. **Pipeline stages renamed.** "Phase N" reserved for LORE turn cycle; Orrery pipeline uses "Stage N". Deferred "Phase 7" → "Orrery Stage 7".
-6. **`TurnContext` extension spelled out.** Two new dataclass fields + one new `TurnPhase` enum value.
-7. **`world_layer_type` precondition.** Postgres ENUM not in tracked migrations; PR 0 confirms or PR 1 declares.
-8. **`entity_kind` ENUM is distinct from `EntityType`** (which includes `'item'`); spine deliberately narrower.
-9. **`source_kind` enum gains `'auto_registered'`** to satisfy the Vocabulary Growth contract.
-10. **Backfill pattern spelled out.** `NOT VALID → batch backfill → VALIDATE → CONCURRENTLY UNIQUE INDEX → SET NOT NULL`. Migration becomes Python, not SQL, because `scripts/migrate.py` is single-transaction-per-file.
-11. **`world_events.source` and `world_event_entities.role` promoted to real enums** (`event_source_kind`, `event_role_kind`), consistent with the rest of the controlled vocabulary.
-12. **Live Orrery worker path is inference-free except narration.** Promote is deterministic, Bleed is deterministic, and semantic Clear is a conservative no-op until a non-local clearance signal exists.
-13. **`BackgroundTasks` pattern cross-referenced** to existing call sites (`narrative.py:281`, `storyteller.py:561, 666`).
-14. **`tick_chunk_id` timing clarified.** Not known during Resolve (Stage 1); stamped during CommitOrreryTick (Stage 2) after `insert_narrative_chunk` returns the new chunk's id. The UNIQUE idempotency constraint fires at write time.
-15. **MEMNON safety claim sharpened.** `get_recent_chunks` is already safe; real audit target is `query_memory` / `SearchManager`.
-16. **`execute_readonly_sql` whitelist additions enumerated.**
-17. **`nexus.toml` section layout** explicitly modeled on existing `[lore]` / `[memnon]` nesting.
+The cleanest contribution format for a new package is a small template sketch in `nexus/agents/orrery/templates.py` plus a markdown catalog note that names: package goal, slots, gate, branches, event types, state deltas, required tags, and any pressure-only behavior. The current source of truth for implemented packages is `templates.py`; the human-readable generated reference is `docs/orrery_packages.md` (regenerated automatically on commit when `templates.py` / `substrate.py` / `catalog.py` change).
+
+New durable vocabulary belongs in explicit migrations. Backfill and application of tags is data work, not package-author side effects — keep schema and content changes separate.
