@@ -15,6 +15,7 @@ Usage:
 
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -607,11 +608,171 @@ class ResponsesRequest(BaseModel):
     """Request format for /v1/responses endpoint."""
 
     model: str
-    input: List[Dict[str, Any]]
+    input: Any
     max_output_tokens: Optional[int] = None
     temperature: Optional[float] = None
     reasoning: Optional[Dict[str, Any]] = None
     text_format: Optional[Any] = None  # Pydantic schema for structured output
+
+
+def _collect_text(value: Any) -> str:
+    """Flatten OpenAI Responses input variants into searchable prompt text."""
+
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "\n".join(part for item in value if (part := _collect_text(item)))
+    if isinstance(value, dict):
+        text_parts: List[str] = []
+        for key in ("content", "text", "input", "message"):
+            if key in value:
+                text = _collect_text(value[key])
+                if text:
+                    text_parts.append(text)
+        if text_parts:
+            return "\n".join(text_parts)
+        return "\n".join(
+            part for item in value.values() if (part := _collect_text(item))
+        )
+    return ""
+
+
+def _extract_orrery_proposal_ids(prompt: str) -> List[str]:
+    """Extract proposal IDs from LogonUtility's prompt-facing Orrery list."""
+
+    proposal_ids: List[str] = []
+    seen: set[str] = set()
+    patterns = (
+        re.compile(r"^-\s+(?P<id>[^\s\[]+)\s+\[", re.MULTILINE),
+        re.compile(r'"proposal_id"\s*:\s*"(?P<id>[^"]+)"'),
+    )
+    for pattern in patterns:
+        for match in pattern.finditer(prompt):
+            proposal_id = match.group("id").strip()
+            if ":" not in proposal_id or proposal_id in seen:
+                continue
+            seen.add(proposal_id)
+            proposal_ids.append(proposal_id)
+    return proposal_ids
+
+
+def _mock_orrery_adjudications(prompt: str) -> List[Dict[str, Any]]:
+    """Return deterministic defer/void/replace decisions for Orrery tests."""
+
+    proposal_ids = _extract_orrery_proposal_ids(prompt)
+    adjudications: List[Dict[str, Any]] = []
+    for index, proposal_id in enumerate(proposal_ids[:3]):
+        if index == 0:
+            adjudications.append(
+                {
+                    "proposal_id": proposal_id,
+                    "action": "defer",
+                    "note": "[TEST MODE] Deferred so pressure can remain live.",
+                }
+            )
+        elif index == 1:
+            adjudications.append(
+                {
+                    "proposal_id": proposal_id,
+                    "action": "void",
+                    "note": "[TEST MODE] Voided as definitively untrue this tick.",
+                }
+            )
+        else:
+            adjudications.append(
+                {
+                    "proposal_id": proposal_id,
+                    "action": "replace",
+                    "note": "[TEST MODE] Replaced with a story-truer activity.",
+                    "replacement_state_delta": {
+                        "character_current_activity": (
+                            "following the mock-server replacement beat"
+                        )
+                    },
+                }
+            )
+    return adjudications
+
+
+def _mock_storyteller_response(prompt: str) -> Dict[str, Any]:
+    """Build a schema-valid deterministic narrative response for TEST mode."""
+
+    adjudications = _mock_orrery_adjudications(prompt)
+    return {
+        "narrative": (
+            "[TEST MODE] The scene advances under deterministic mock control. "
+            "Orrery pressure is acknowledged structurally, while the prose remains "
+            "simple enough for integration tests to inspect."
+        ),
+        "choices": [
+            "Continue following the immediate lead.",
+            "Pause and reassess the pressure around the scene.",
+            "Shift attention to the quieter off-screen consequence.",
+        ],
+        "authorial_directives": [
+            "Retrieve the immediate prior scene and unresolved Orrery pressure."
+        ],
+        "chunk_metadata": {
+            "chronology": {
+                "episode_transition": "continue",
+                "time_delta_minutes": 5,
+                "time_delta_hours": None,
+                "time_delta_days": None,
+                "time_delta_description": "A few focused minutes pass.",
+            },
+            "world_layer": "primary",
+        },
+        "referenced_entities": {
+            "characters": [],
+            "places": [],
+            "factions": [],
+        },
+        "state_updates": {
+            "characters": [],
+            "relationships": [],
+            "locations": [],
+            "factions": [],
+        },
+        "operations": None,
+        "orrery_adjudications": adjudications,
+        "reasoning": "[TEST MODE] Deterministic mock storyteller response.",
+    }
+
+
+def _responses_payload(output_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Format structured JSON as an OpenAI Responses-compatible payload."""
+
+    output_json = json.dumps(output_data)
+    return {
+        "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
+        "object": "response",
+        "created_at": int(datetime.now().timestamp()),
+        "model": "TEST",
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "id": f"msg-mock-{uuid.uuid4().hex[:8]}",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": output_json,
+                        "annotations": [],
+                    }
+                ],
+            }
+        ],
+        "output_text": output_json,
+        "usage": {
+            "input_tokens": 1000,
+            "output_tokens": 800,
+            "total_tokens": 1800,
+        },
+    }
 
 
 def get_cached_bootstrap_narrative() -> Dict[str, Any]:
@@ -701,52 +862,24 @@ async def responses_create(request: ResponsesRequest):
 
     # Check if this is a bootstrap/narrative request (vs wizard)
     # by looking for storyteller-related content in the messages
-    input_text = ""
-    for msg in request.input:
-        content = msg.get("content", "")
-        if isinstance(content, str):
-            input_text += content
+    input_text = _collect_text(request.input)
+    proposal_ids = _extract_orrery_proposal_ids(input_text)
 
     is_narrative = any(
         kw in input_text.lower()
         for kw in ["narrative", "story", "protagonist", "bootstrap", "user input"]
     )
 
+    if proposal_ids:
+        logger.info(
+            "[MOCK] Detected %d Orrery proposals, returning adjudication fixture",
+            len(proposal_ids),
+        )
+        return _responses_payload(_mock_storyteller_response(input_text))
+
     if is_narrative:
         logger.info("[MOCK] Detected narrative request, returning cached bootstrap")
-        cached = get_cached_bootstrap_narrative()
-        output_json = json.dumps(cached)
-
-        # Format as OpenAI responses API structured output
-        # content must be an array of content blocks, not a raw string
-        return {
-            "id": f"resp-mock-{uuid.uuid4().hex[:8]}",
-            "object": "response",
-            "created_at": int(datetime.now().timestamp()),
-            "model": "TEST",
-            "status": "completed",
-            "output": [
-                {
-                    "type": "message",
-                    "id": f"msg-mock-{uuid.uuid4().hex[:8]}",
-                    "status": "completed",
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": output_json,
-                            "annotations": [],
-                        }
-                    ],
-                }
-            ],
-            "output_text": output_json,
-            "usage": {
-                "input_tokens": 1000,
-                "output_tokens": 800,
-                "total_tokens": 1800,
-            },
-        }
+        return _responses_payload(get_cached_bootstrap_narrative())
 
     # Default fallback for non-narrative requests
     logger.warning(f"[MOCK] Unknown responses request type")
