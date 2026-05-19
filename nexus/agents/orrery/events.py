@@ -7,7 +7,7 @@ only place that materializes those proposals into canonical Orrery tables.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 import json
 from typing import Any, Mapping, Optional
@@ -46,6 +46,15 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "travel.delay",
     }
 )
+ADJUDICATION_ACTIONS = frozenset({"defer", "replace", "void"})
+ADJUDICATION_SOURCES = frozenset({"explicit", "structured_state_update"})
+REPLACEMENT_STATE_DELTA_ALIASES = {
+    "character_current_activity": "character.current_activity",
+    "entity_tags_add": "entity_tags.add",
+    "entity_tags_remove": "entity_tags.remove",
+    "entity_tags_target_add": "entity_tags_target.add",
+    "entity_tags_target_remove": "entity_tags_target.remove",
+}
 
 TRAVEL_MODE_DETOUR_FACTOR = {
     "walking": 1.35,
@@ -77,6 +86,38 @@ class CommitOrreryTickResult:
     tag_mutation_count: int = 0
     cleared_tag_count: int = 0
     skipped_existing_count: int = 0
+    adjudication_count: int = 0
+    deferred_count: int = 0
+    voided_count: int = 0
+    replaced_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class OrreryAdjudicationDecision:
+    """Skald's structured ruling for one Orrery proposal."""
+
+    proposal_id: str
+    action: str
+    note: Optional[str] = None
+    replacement_state_delta: Optional[Mapping[str, Any]] = None
+    replacement_event_type: Optional[str] = None
+
+
+@dataclass(frozen=True, slots=True)
+class StateUpdateIndex:
+    """Structured Storyteller state writes indexed by Orrery entity id."""
+
+    character_fields_by_entity: Mapping[int, frozenset[str]]
+
+
+@dataclass(frozen=True, slots=True)
+class AdjudicatedDraft:
+    """Pure adjudication result before sync/async commit writes diverge."""
+
+    adjudication: Optional[OrreryAdjudicationDecision]
+    adjudication_source: str
+    draft_to_commit: Optional[OrreryResolutionDraft]
+    brief: str
 
 
 def coerce_proposal(proposal: Any) -> Optional[OrreryTickProposal]:
@@ -93,6 +134,95 @@ def coerce_proposal(proposal: Any) -> Optional[OrreryTickProposal]:
     raise TypeError(f"Unsupported Orrery proposal payload: {type(proposal).__name__}")
 
 
+def coerce_adjudications(adjudications: Any) -> dict[str, OrreryAdjudicationDecision]:
+    """Coerce Skald adjudications into a proposal-id keyed mapping."""
+
+    if adjudications is None:
+        return {}
+    if isinstance(adjudications, str):
+        adjudications = json.loads(adjudications)
+    if hasattr(adjudications, "model_dump"):
+        adjudications = adjudications.model_dump(mode="json", exclude_none=True)
+    if isinstance(adjudications, Mapping):
+        if "orrery_adjudications" in adjudications:
+            adjudications = adjudications["orrery_adjudications"]
+        elif "adjudications" in adjudications:
+            adjudications = adjudications["adjudications"]
+        else:
+            raise TypeError("Orrery adjudications must be a list")
+    if not isinstance(adjudications, Iterable) or isinstance(
+        adjudications, (str, bytes)
+    ):
+        raise TypeError(
+            "Orrery adjudications must be a list of structured adjudication objects"
+        )
+
+    coerced: dict[str, OrreryAdjudicationDecision] = {}
+    for item in adjudications:
+        adjudication = _coerce_adjudication(item)
+        if adjudication.proposal_id in coerced:
+            raise ValueError(
+                f"Duplicate Orrery adjudication for {adjudication.proposal_id!r}"
+            )
+        coerced[adjudication.proposal_id] = adjudication
+    return coerced
+
+
+def _coerce_adjudication(item: Any) -> OrreryAdjudicationDecision:
+    if hasattr(item, "model_dump"):
+        item = item.model_dump(mode="json", exclude_none=True)
+    if not isinstance(item, Mapping):
+        raise TypeError("Orrery adjudication entries must be objects")
+
+    proposal_id = str(item.get("proposal_id") or "").strip()
+    if not proposal_id:
+        raise ValueError("Orrery adjudication is missing proposal_id")
+    action = str(item.get("action") or "").strip()
+    if action not in ADJUDICATION_ACTIONS:
+        raise ValueError(
+            "Orrery adjudication action must be one of "
+            f"{', '.join(sorted(ADJUDICATION_ACTIONS))}"
+        )
+
+    note = item.get("note")
+    replacement_state_delta = _normalize_replacement_state_delta(
+        item.get("replacement_state_delta")
+    )
+    replacement_event_type = item.get("replacement_event_type")
+    return OrreryAdjudicationDecision(
+        proposal_id=proposal_id,
+        action=action,
+        note=str(note).strip() if note else None,
+        replacement_state_delta=replacement_state_delta or None,
+        replacement_event_type=(
+            str(replacement_event_type).strip() if replacement_event_type else None
+        ),
+    )
+
+
+def _normalize_replacement_state_delta(raw: Any) -> dict[str, Any]:
+    """Map Skald-facing replacement delta field names to canonical Orrery keys."""
+
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump(mode="json", exclude_none=True)
+    if not isinstance(raw, Mapping):
+        raise TypeError("replacement_state_delta must be an object")
+
+    normalized: dict[str, Any] = {}
+    for key, value in raw.items():
+        if value is None or value == [] or value == {}:
+            continue
+        canonical_key = REPLACEMENT_STATE_DELTA_ALIASES.get(str(key), str(key))
+        if canonical_key not in SUPPORTED_STATE_DELTA_KEYS:
+            raise ValueError(f"Unsupported Orrery replacement_state_delta key: {key!r}")
+        normalized[canonical_key] = value
+    return normalized
+
+
 def commit_orrery_tick_sync(
     conn: Any,
     proposal: Any,
@@ -101,6 +231,8 @@ def commit_orrery_tick_sync(
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
     sunhelm_settings: Optional[Any] = None,
+    adjudications: Any = None,
+    storyteller_state_updates: Any = None,
 ) -> CommitOrreryTickResult:
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
@@ -108,38 +240,102 @@ def commit_orrery_tick_sync(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    adjudication_map = coerce_adjudications(adjudications)
     need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
+    _validate_adjudications(coerced, adjudication_map)
     with conn.cursor() as cur:
         entity_ids = _entity_ids_from_proposal(coerced)
         _validate_entity_ids_sync(cur, entity_ids)
         entity_names = _entity_names_sync(cur, entity_ids)
+        state_update_index = _state_update_index_sync(cur, storyteller_state_updates)
 
         resolution_count = 0
         event_count = 0
         tag_mutation_count = 0
         cleared_tag_count = 0
         skipped_existing_count = 0
+        adjudication_count = 0
+        deferred_count = 0
+        voided_count = 0
+        replaced_count = 0
 
         for draft in coerced.resolutions:
+            adjudicated = _adjudicate_draft(
+                draft,
+                adjudication_map,
+                state_update_index,
+                entity_names,
+            )
             actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
             target_entity_id = _scalar_entity_binding(draft.bindings, "target")
-            brief = _render_brief(draft, entity_names)
+
+            if adjudicated.adjudication is not None:
+                adjudication_count += 1
+                if adjudicated.adjudication.action == "defer":
+                    deferred_count += 1
+                    _insert_adjudication_log_sync(
+                        cur,
+                        draft,
+                        adjudicated.adjudication,
+                        tick_chunk_id=tick_chunk_id,
+                        adjudication_source=adjudicated.adjudication_source,
+                    )
+                    continue
+                if adjudicated.adjudication.action == "void":
+                    voided_count += 1
+                    _insert_adjudication_log_sync(
+                        cur,
+                        draft,
+                        adjudicated.adjudication,
+                        tick_chunk_id=tick_chunk_id,
+                        adjudication_source=adjudicated.adjudication_source,
+                    )
+                    continue
+                if (
+                    adjudicated.adjudication.action == "replace"
+                    and adjudicated.draft_to_commit is None
+                ):
+                    replaced_count += 1
+                    _insert_adjudication_log_sync(
+                        cur,
+                        draft,
+                        adjudicated.adjudication,
+                        tick_chunk_id=tick_chunk_id,
+                        adjudication_source=adjudicated.adjudication_source,
+                    )
+                    continue
+
+            if adjudicated.draft_to_commit is None:
+                raise RuntimeError("Orrery adjudication produced no draft to commit")
+
             resolution_id = _insert_resolution_sync(
                 cur,
-                draft,
+                adjudicated.draft_to_commit,
                 tick_chunk_id=tick_chunk_id,
                 actor_entity_id=actor_entity_id,
-                brief=brief,
+                brief=adjudicated.brief,
             )
             if resolution_id is None:
                 skipped_existing_count += 1
                 continue
 
+            if adjudicated.adjudication is not None:
+                if adjudicated.adjudication.action == "replace":
+                    replaced_count += 1
+                _insert_adjudication_log_sync(
+                    cur,
+                    draft,
+                    adjudicated.adjudication,
+                    tick_chunk_id=tick_chunk_id,
+                    adjudication_source=adjudicated.adjudication_source,
+                    applied_resolution_id=resolution_id,
+                )
+
             resolution_count += 1
             tag_mutation_count += _apply_state_delta_sync(
                 cur,
-                draft,
+                adjudicated.draft_to_commit,
                 actor_entity_id=actor_entity_id,
                 target_entity_id=target_entity_id,
                 source_chunk_id=tick_chunk_id,
@@ -147,7 +343,7 @@ def commit_orrery_tick_sync(
             )
             event_id = _emit_world_event_sync(
                 cur,
-                draft,
+                adjudicated.draft_to_commit,
                 tick_chunk_id=tick_chunk_id,
                 resolution_id=resolution_id,
                 actor_entity_id=actor_entity_id,
@@ -161,7 +357,7 @@ def commit_orrery_tick_sync(
                     cleared_tag_count += _clear_event_tags_sync(
                         cur,
                         entity_id=actor_entity_id,
-                        event_type=str(draft.event_type),
+                        event_type=str(adjudicated.draft_to_commit.event_type),
                         triggering_event_id=event_id,
                         source_chunk_id=tick_chunk_id,
                     )
@@ -172,6 +368,10 @@ def commit_orrery_tick_sync(
         tag_mutation_count=tag_mutation_count,
         cleared_tag_count=cleared_tag_count,
         skipped_existing_count=skipped_existing_count,
+        adjudication_count=adjudication_count,
+        deferred_count=deferred_count,
+        voided_count=voided_count,
+        replaced_count=replaced_count,
     )
 
 
@@ -183,6 +383,8 @@ async def commit_orrery_tick_async(
     slot: Optional[int] = None,
     world_layer: Optional[str] = "primary",
     sunhelm_settings: Optional[Any] = None,
+    adjudications: Any = None,
+    storyteller_state_updates: Any = None,
 ) -> CommitOrreryTickResult:
     """Async parity wrapper for tests and non-production commit callers."""
 
@@ -190,37 +392,103 @@ async def commit_orrery_tick_async(
     if coerced is None or not coerced.resolutions:
         return CommitOrreryTickResult()
 
+    adjudication_map = coerce_adjudications(adjudications)
     need_tuning = coerce_need_tuning(sunhelm_settings)
     _validate_proposal(coerced)
+    _validate_adjudications(coerced, adjudication_map)
     entity_ids = _entity_ids_from_proposal(coerced)
     await _validate_entity_ids_async(conn, entity_ids)
     entity_names = await _entity_names_async(conn, entity_ids)
+    state_update_index = await _state_update_index_async(
+        conn, storyteller_state_updates
+    )
 
     resolution_count = 0
     event_count = 0
     tag_mutation_count = 0
     cleared_tag_count = 0
     skipped_existing_count = 0
+    adjudication_count = 0
+    deferred_count = 0
+    voided_count = 0
+    replaced_count = 0
 
     for draft in coerced.resolutions:
+        adjudicated = _adjudicate_draft(
+            draft,
+            adjudication_map,
+            state_update_index,
+            entity_names,
+        )
         actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
         target_entity_id = _scalar_entity_binding(draft.bindings, "target")
-        brief = _render_brief(draft, entity_names)
+
+        if adjudicated.adjudication is not None:
+            adjudication_count += 1
+            if adjudicated.adjudication.action == "defer":
+                deferred_count += 1
+                await _insert_adjudication_log_async(
+                    conn,
+                    draft,
+                    adjudicated.adjudication,
+                    tick_chunk_id=tick_chunk_id,
+                    adjudication_source=adjudicated.adjudication_source,
+                )
+                continue
+            if adjudicated.adjudication.action == "void":
+                voided_count += 1
+                await _insert_adjudication_log_async(
+                    conn,
+                    draft,
+                    adjudicated.adjudication,
+                    tick_chunk_id=tick_chunk_id,
+                    adjudication_source=adjudicated.adjudication_source,
+                )
+                continue
+            if (
+                adjudicated.adjudication.action == "replace"
+                and adjudicated.draft_to_commit is None
+            ):
+                replaced_count += 1
+                await _insert_adjudication_log_async(
+                    conn,
+                    draft,
+                    adjudicated.adjudication,
+                    tick_chunk_id=tick_chunk_id,
+                    adjudication_source=adjudicated.adjudication_source,
+                )
+                continue
+
+        if adjudicated.draft_to_commit is None:
+            raise RuntimeError("Orrery adjudication produced no draft to commit")
+
         resolution_id = await _insert_resolution_async(
             conn,
-            draft,
+            adjudicated.draft_to_commit,
             tick_chunk_id=tick_chunk_id,
             actor_entity_id=actor_entity_id,
-            brief=brief,
+            brief=adjudicated.brief,
         )
         if resolution_id is None:
             skipped_existing_count += 1
             continue
 
+        if adjudicated.adjudication is not None:
+            if adjudicated.adjudication.action == "replace":
+                replaced_count += 1
+            await _insert_adjudication_log_async(
+                conn,
+                draft,
+                adjudicated.adjudication,
+                tick_chunk_id=tick_chunk_id,
+                adjudication_source=adjudicated.adjudication_source,
+                applied_resolution_id=resolution_id,
+            )
+
         resolution_count += 1
         tag_mutation_count += await _apply_state_delta_async(
             conn,
-            draft,
+            adjudicated.draft_to_commit,
             actor_entity_id=actor_entity_id,
             target_entity_id=target_entity_id,
             source_chunk_id=tick_chunk_id,
@@ -228,7 +496,7 @@ async def commit_orrery_tick_async(
         )
         event_id = await _emit_world_event_async(
             conn,
-            draft,
+            adjudicated.draft_to_commit,
             tick_chunk_id=tick_chunk_id,
             resolution_id=resolution_id,
             actor_entity_id=actor_entity_id,
@@ -242,7 +510,7 @@ async def commit_orrery_tick_async(
                 cleared_tag_count += await _clear_event_tags_async(
                     conn,
                     entity_id=actor_entity_id,
-                    event_type=str(draft.event_type),
+                    event_type=str(adjudicated.draft_to_commit.event_type),
                     triggering_event_id=event_id,
                     source_chunk_id=tick_chunk_id,
                 )
@@ -253,6 +521,10 @@ async def commit_orrery_tick_async(
         tag_mutation_count=tag_mutation_count,
         cleared_tag_count=cleared_tag_count,
         skipped_existing_count=skipped_existing_count,
+        adjudication_count=adjudication_count,
+        deferred_count=deferred_count,
+        voided_count=voided_count,
+        replaced_count=replaced_count,
     )
 
 
@@ -264,6 +536,181 @@ def _validate_proposal(proposal: OrreryTickProposal) -> None:
                 "Unsupported Orrery state_delta keys for "
                 f"{draft.template_id}: {', '.join(sorted(unsupported))}"
             )
+
+
+def _validate_adjudications(
+    proposal: OrreryTickProposal,
+    adjudications: Mapping[str, OrreryAdjudicationDecision],
+) -> None:
+    proposal_ids = {draft.proposal_id for draft in proposal.resolutions}
+    unknown = set(adjudications) - proposal_ids
+    if unknown:
+        raise ValueError(
+            "Orrery adjudication references unknown proposal_id(s): "
+            + ", ".join(sorted(unknown))
+        )
+
+
+def _adjudicate_draft(
+    draft: OrreryResolutionDraft,
+    adjudication_map: Mapping[str, OrreryAdjudicationDecision],
+    state_update_index: StateUpdateIndex,
+    entity_names: Mapping[int, str],
+) -> AdjudicatedDraft:
+    """Resolve Skald's authority decision without performing database writes."""
+
+    adjudication = adjudication_map.get(draft.proposal_id)
+    adjudication_source = "explicit"
+    if adjudication is None and _replaced_by_storyteller_state(
+        draft, state_update_index
+    ):
+        adjudication = OrreryAdjudicationDecision(
+            proposal_id=draft.proposal_id,
+            action="replace",
+            note=(
+                "Storyteller state_updates touched the same "
+                "character field; skipped the original Orrery delta."
+            ),
+        )
+        adjudication_source = "structured_state_update"
+
+    brief = _render_brief(draft, entity_names)
+    if adjudication is None:
+        return AdjudicatedDraft(
+            adjudication=None,
+            adjudication_source=adjudication_source,
+            draft_to_commit=draft,
+            brief=brief,
+        )
+    if adjudication.action in {"defer", "void"}:
+        return AdjudicatedDraft(
+            adjudication=adjudication,
+            adjudication_source=adjudication_source,
+            draft_to_commit=None,
+            brief=brief,
+        )
+    if adjudication.action == "replace":
+        if not adjudication.replacement_state_delta:
+            return AdjudicatedDraft(
+                adjudication=adjudication,
+                adjudication_source=adjudication_source,
+                draft_to_commit=None,
+                brief=brief,
+            )
+        draft_to_commit = replace(
+            draft,
+            state_delta=dict(adjudication.replacement_state_delta),
+            changed_fields=tuple(adjudication.replacement_state_delta.keys()),
+            event_type=adjudication.replacement_event_type,
+        )
+        return AdjudicatedDraft(
+            adjudication=adjudication,
+            adjudication_source=adjudication_source,
+            draft_to_commit=draft_to_commit,
+            brief=adjudication.note or _render_brief(draft_to_commit, entity_names),
+        )
+    raise ValueError(f"Unsupported Orrery adjudication action {adjudication.action!r}")
+
+
+def _coerce_state_updates_payload(raw: Any) -> Mapping[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    if hasattr(raw, "model_dump"):
+        raw = raw.model_dump(mode="json", exclude_none=True)
+    if isinstance(raw, Mapping):
+        return raw
+    raise TypeError("Storyteller state_updates must be a structured object")
+
+
+def _character_state_touches(raw: Any) -> dict[int, set[str]]:
+    payload = _coerce_state_updates_payload(raw)
+    touches: dict[int, set[str]] = {}
+    for item in payload.get("characters") or ():
+        if hasattr(item, "model_dump"):
+            item = item.model_dump(mode="json", exclude_none=True)
+        if not isinstance(item, Mapping) or not item.get("character_id"):
+            continue
+        character_id = _coerce_int(item["character_id"], label="character_id")
+        fields = touches.setdefault(character_id, set())
+        if item.get("current_activity"):
+            fields.add("current_activity")
+        if item.get("current_location"):
+            fields.add("current_location")
+    return touches
+
+
+def _state_update_index_sync(cur: Any, raw_state_updates: Any) -> StateUpdateIndex:
+    touches_by_character_id = _character_state_touches(raw_state_updates)
+    if not touches_by_character_id:
+        return StateUpdateIndex(character_fields_by_entity={})
+
+    cur.execute(
+        "SELECT id, entity_id FROM characters WHERE id = ANY(%s)",
+        (sorted(touches_by_character_id),),
+    )
+    character_to_entity = {
+        _row_get(row, "id", 0): _row_get(row, "entity_id", 1) for row in cur.fetchall()
+    }
+    touches_by_entity: dict[int, frozenset[str]] = {}
+    for character_id, fields in touches_by_character_id.items():
+        entity_id = character_to_entity.get(character_id)
+        if entity_id is not None:
+            touches_by_entity[int(entity_id)] = frozenset(fields)
+    return StateUpdateIndex(character_fields_by_entity=touches_by_entity)
+
+
+async def _state_update_index_async(
+    conn: Any, raw_state_updates: Any
+) -> StateUpdateIndex:
+    touches_by_character_id = _character_state_touches(raw_state_updates)
+    if not touches_by_character_id:
+        return StateUpdateIndex(character_fields_by_entity={})
+
+    rows = await conn.fetch(
+        "SELECT id, entity_id FROM characters WHERE id = ANY($1::bigint[])",
+        sorted(touches_by_character_id),
+    )
+    character_to_entity = {
+        _row_get(row, "id", 0): _row_get(row, "entity_id", 1) for row in rows
+    }
+    touches_by_entity: dict[int, frozenset[str]] = {}
+    for character_id, fields in touches_by_character_id.items():
+        entity_id = character_to_entity.get(character_id)
+        if entity_id is not None:
+            touches_by_entity[int(entity_id)] = frozenset(fields)
+    return StateUpdateIndex(character_fields_by_entity=touches_by_entity)
+
+
+def _replaced_by_storyteller_state(
+    draft: OrreryResolutionDraft,
+    state_update_index: StateUpdateIndex,
+) -> bool:
+    actor_entity_id = _scalar_entity_binding(draft.bindings, "actor")
+    if actor_entity_id is None:
+        return False
+    touched_fields = state_update_index.character_fields_by_entity.get(
+        actor_entity_id, frozenset()
+    )
+    if not touched_fields:
+        return False
+
+    delta_keys = set(draft.state_delta)
+    changed_fields = set(draft.changed_fields)
+    touches_travel_state = any(key.startswith("travel.") for key in delta_keys) or any(
+        field.startswith("character_travel_states.") for field in changed_fields
+    )
+    if "current_activity" in touched_fields and (
+        "character.current_activity" in delta_keys
+        or "character.current_activity" in changed_fields
+    ):
+        return True
+    if "current_location" in touched_fields and (
+        "character.current_location" in changed_fields or touches_travel_state
+    ):
+        return True
+    return False
 
 
 def _entity_ids_from_proposal(proposal: OrreryTickProposal) -> set[int]:
@@ -364,6 +811,86 @@ def _entity_label(value: Any, entity_names: Mapping[int, str]) -> str:
     except (TypeError, ValueError):
         return str(value)
     return entity_names.get(entity_id, f"entity {entity_id}")
+
+
+def _insert_adjudication_log_sync(
+    cur: Any,
+    draft: OrreryResolutionDraft,
+    adjudication: OrreryAdjudicationDecision,
+    *,
+    tick_chunk_id: int,
+    adjudication_source: str,
+    applied_resolution_id: Optional[int] = None,
+) -> None:
+    if adjudication_source not in ADJUDICATION_SOURCES:
+        raise ValueError(
+            f"Unsupported Orrery adjudication source {adjudication_source!r}"
+        )
+    cur.execute(
+        """
+        INSERT INTO orrery_adjudication_log (
+            tick_chunk_id, proposal_id, template_id, binding_hash, action,
+            adjudication_source, skald_note, original_state_delta,
+            replacement_state_delta, replacement_event_type, applied_resolution_id
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+        """,
+        (
+            tick_chunk_id,
+            adjudication.proposal_id,
+            draft.template_id,
+            draft.binding_hash,
+            adjudication.action,
+            adjudication_source,
+            adjudication.note,
+            json.dumps(draft.state_delta),
+            (
+                json.dumps(adjudication.replacement_state_delta)
+                if adjudication.replacement_state_delta
+                else None
+            ),
+            adjudication.replacement_event_type,
+            applied_resolution_id,
+        ),
+    )
+
+
+async def _insert_adjudication_log_async(
+    conn: Any,
+    draft: OrreryResolutionDraft,
+    adjudication: OrreryAdjudicationDecision,
+    *,
+    tick_chunk_id: int,
+    adjudication_source: str,
+    applied_resolution_id: Optional[int] = None,
+) -> None:
+    if adjudication_source not in ADJUDICATION_SOURCES:
+        raise ValueError(
+            f"Unsupported Orrery adjudication source {adjudication_source!r}"
+        )
+    await conn.execute(
+        """
+        INSERT INTO orrery_adjudication_log (
+            tick_chunk_id, proposal_id, template_id, binding_hash, action,
+            adjudication_source, skald_note, original_state_delta,
+            replacement_state_delta, replacement_event_type, applied_resolution_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11)
+        """,
+        tick_chunk_id,
+        adjudication.proposal_id,
+        draft.template_id,
+        draft.binding_hash,
+        adjudication.action,
+        adjudication_source,
+        adjudication.note,
+        json.dumps(draft.state_delta),
+        (
+            json.dumps(adjudication.replacement_state_delta)
+            if adjudication.replacement_state_delta
+            else None
+        ),
+        adjudication.replacement_event_type,
+        applied_resolution_id,
+    )
 
 
 def _insert_resolution_sync(
@@ -474,24 +1001,23 @@ def _apply_state_delta_sync(
             delta_key="entity_tags.remove",
         )
 
-    if (
-        draft.state_delta.get("entity_tags_target.add")
-        or draft.state_delta.get("entity_tags_target.remove")
-    ) and target_entity_id is None:
-        raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
-
-    for tag in draft.state_delta.get("entity_tags_target.add", ()) or ():
-        if _add_entity_tag_sync(cur, target_entity_id, str(tag), draft.template_id):
-            tag_mutations += 1
-    for tag in draft.state_delta.get("entity_tags_target.remove", ()) or ():
-        tag_mutations += _remove_entity_tag_sync(
-            cur,
-            target_entity_id,
-            str(tag),
-            draft.template_id,
-            source_chunk_id=source_chunk_id,
-            delta_key="entity_tags_target.remove",
-        )
+    target_tag_adds = draft.state_delta.get("entity_tags_target.add", ()) or ()
+    target_tag_removes = draft.state_delta.get("entity_tags_target.remove", ()) or ()
+    if target_tag_adds or target_tag_removes:
+        if target_entity_id is None:
+            raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
+        for tag in target_tag_adds:
+            if _add_entity_tag_sync(cur, target_entity_id, str(tag), draft.template_id):
+                tag_mutations += 1
+        for tag in target_tag_removes:
+            tag_mutations += _remove_entity_tag_sync(
+                cur,
+                target_entity_id,
+                str(tag),
+                draft.template_id,
+                source_chunk_id=source_chunk_id,
+                delta_key="entity_tags_target.remove",
+            )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += _apply_need_fulfillment_sync(
             cur,
@@ -578,26 +1104,25 @@ async def _apply_state_delta_async(
             delta_key="entity_tags.remove",
         )
 
-    if (
-        draft.state_delta.get("entity_tags_target.add")
-        or draft.state_delta.get("entity_tags_target.remove")
-    ) and target_entity_id is None:
-        raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
-
-    for tag in draft.state_delta.get("entity_tags_target.add", ()) or ():
-        if await _add_entity_tag_async(
-            conn, target_entity_id, str(tag), draft.template_id
-        ):
-            tag_mutations += 1
-    for tag in draft.state_delta.get("entity_tags_target.remove", ()) or ():
-        tag_mutations += await _remove_entity_tag_async(
-            conn,
-            target_entity_id,
-            str(tag),
-            draft.template_id,
-            source_chunk_id=source_chunk_id,
-            delta_key="entity_tags_target.remove",
-        )
+    target_tag_adds = draft.state_delta.get("entity_tags_target.add", ()) or ()
+    target_tag_removes = draft.state_delta.get("entity_tags_target.remove", ()) or ()
+    if target_tag_adds or target_tag_removes:
+        if target_entity_id is None:
+            raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
+        for tag in target_tag_adds:
+            if await _add_entity_tag_async(
+                conn, target_entity_id, str(tag), draft.template_id
+            ):
+                tag_mutations += 1
+        for tag in target_tag_removes:
+            tag_mutations += await _remove_entity_tag_async(
+                conn,
+                target_entity_id,
+                str(tag),
+                draft.template_id,
+                source_chunk_id=source_chunk_id,
+                delta_key="entity_tags_target.remove",
+            )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += await _apply_need_fulfillment_async(
             conn,
@@ -1615,6 +2140,7 @@ def _emit_world_event_sync(
     _ensure_event_type_sync(cur, draft.event_type)
     location_id = _actor_location_sync(cur, actor_entity_id)
     payload = {
+        "proposal_id": draft.proposal_id,
         "template_id": draft.template_id,
         "binding_hash": draft.binding_hash,
         "bindings": dict(draft.bindings),
@@ -1681,6 +2207,7 @@ async def _emit_world_event_async(
     await _ensure_event_type_async(conn, draft.event_type)
     location_id = await _actor_location_async(conn, actor_entity_id)
     payload = {
+        "proposal_id": draft.proposal_id,
         "template_id": draft.template_id,
         "binding_hash": draft.binding_hash,
         "bindings": dict(draft.bindings),
