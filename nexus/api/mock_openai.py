@@ -616,7 +616,11 @@ class ResponsesRequest(BaseModel):
 
 
 def _collect_text(value: Any) -> str:
-    """Flatten OpenAI Responses input variants into searchable prompt text."""
+    """Flatten OpenAI Responses input variants into searchable prompt text.
+
+    When a dict has multiple prompt-like keys, use the first known Responses API
+    shape instead of concatenating siblings that may duplicate the same content.
+    """
 
     if value is None:
         return ""
@@ -625,14 +629,11 @@ def _collect_text(value: Any) -> str:
     if isinstance(value, list):
         return "\n".join(part for item in value if (part := _collect_text(item)))
     if isinstance(value, dict):
-        text_parts: List[str] = []
         for key in ("content", "text", "input", "message"):
             if key in value:
                 text = _collect_text(value[key])
                 if text:
-                    text_parts.append(text)
-        if text_parts:
-            return "\n".join(text_parts)
+                    return text
         return "\n".join(
             part for item in value.values() if (part := _collect_text(item))
         )
@@ -640,13 +641,18 @@ def _collect_text(value: Any) -> str:
 
 
 def _extract_orrery_proposal_ids(prompt: str) -> List[str]:
-    """Extract proposal IDs from LogonUtility's prompt-facing Orrery list."""
+    """Extract proposal IDs from LogonUtility's prompt-facing Orrery list.
+
+    Orrery proposal IDs are generated as ``template_id:binding_hash`` in
+    ``nexus.agents.orrery.resolver``. Requiring the colon keeps generic markdown
+    bullets from being mistaken for proposal IDs.
+    """
 
     proposal_ids: List[str] = []
     seen: set[str] = set()
     patterns = (
-        re.compile(r"^-\s+(?P<id>[^\s\[]+)\s+\[", re.MULTILINE),
-        re.compile(r'"proposal_id"\s*:\s*"(?P<id>[^"]+)"'),
+        re.compile(r"^-\s+(?P<id>[^:\s\[]+:[^\s\[]+)\s+\[", re.MULTILINE),
+        re.compile(r'"proposal_id"\s*:\s*"(?P<id>[^":]+:[^"]+)"'),
     )
     for pattern in patterns:
         for match in pattern.finditer(prompt):
@@ -686,6 +692,7 @@ def _mock_orrery_adjudications(prompt: str) -> List[Dict[str, Any]]:
                     "proposal_id": proposal_id,
                     "action": "replace",
                     "note": "[TEST MODE] Replaced with a story-truer activity.",
+                    "replacement_event_type": "mock_replacement",
                     "replacement_state_delta": {
                         "character_current_activity": (
                             "following the mock-server replacement beat"
