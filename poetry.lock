@@ -3429,4 +3429,4 @@ dev = ["black", "mypy", "pytest"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "847c0f41c35414c9e490ac79246ad42dcfa29a5a283aafc498064e2d225816c3"
+content-hash = "820e8edc63df961d03edd9dd4fdbf5a4fa78ac4bf6c69e1478f429704aaf6db6"
