@@ -25,7 +25,7 @@ from nexus.agents.orrery.resolver import (
     hydrate_world_state,
     _present_actor_ids_at_anchor,
 )
-from nexus.agents.orrery.substrate import Slot, evaluate
+from nexus.agents.orrery.substrate import PresentTargetPolicy, Slot, evaluate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 from nexus.api.slot_utils import get_slot_db_url
 
@@ -303,6 +303,9 @@ def render_markdown(
     surviving_at_count = sum(
         1 for b in binding_reports if b.slot_kind == "actor_target"
     )
+    scene_pressure_count = sum(
+        1 for b in binding_reports if b.slot_kind == "scene_pressure"
+    )
     lines.append(
         f"- **Candidate actors (raw → after existence filter)**: "
         f"{raw_candidate_count} → {surviving_actor_count} "
@@ -311,7 +314,8 @@ def render_markdown(
     lines.append(
         f"- **Bindings evaluated**: "
         f"{surviving_actor_count} actor-only + "
-        f"{surviving_at_count} actor-target"
+        f"{surviving_at_count} actor-target (off-screen) + "
+        f"{scene_pressure_count} scene-pressure (present-target)"
     )
     lines.append(f"- **Templates available**: {len(BUILTIN_TEMPLATES)}")
     lines.append("")
@@ -355,19 +359,28 @@ def render_markdown(
         lines.append(f"| {name_for(aid, names)} | {srcs} |")
     lines.append("")
 
-    # Fired
-    fired = [
+    # Fired — split into off-screen (actor_only + actor_target) and scene-pressure
+    # (present-target) since they answer different questions and the production
+    # resolver tracks them as separate output lists (drafts vs scene_pressure_results).
+    offscreen_fired = [
         (br, e)
         for br in binding_reports
         for e in br.ledger
-        if e.outcome == "fired"
+        if e.outcome == "fired" and br.slot_kind in ("actor_only", "actor_target")
     ]
-    lines.append(f"## Fired ({len(fired)})")
+    scene_pressure_fired = [
+        (br, e)
+        for br in binding_reports
+        for e in br.ledger
+        if e.outcome == "fired" and br.slot_kind == "scene_pressure"
+    ]
+
+    lines.append(f"## Fired — off-screen activity ({len(offscreen_fired)})")
     lines.append("")
-    if fired:
+    if offscreen_fired:
         lines.append("| Actor | Target | Template | Pri | Branch | Rendered stub | event_type | mag |")
         lines.append("|---|---|---|---|---|---|---|---|")
-        for br, e in sorted(fired, key=lambda x: -x[1].priority):
+        for br, e in sorted(offscreen_fired, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
             target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
             stub = render_stub(e.narrative_stub, br.bindings, names)
@@ -376,15 +389,38 @@ def render_markdown(
                 f"{e.branch_label or '—'} | {stub} | {e.event_type or '—'} | {e.magnitude:.2f} |"
             )
         lines.append("")
-        # State deltas
         lines.append("### State deltas for fired resolutions")
         lines.append("")
-        for br, e in sorted(fired, key=lambda x: -x[1].priority):
+        for br, e in sorted(offscreen_fired, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
             lines.append(f"- **{actor} / `{e.template_id}`**: `{e.state_delta or {}}`")
         lines.append("")
     else:
         lines.append("(none)")
+        lines.append("")
+
+    lines.append(f"## Fired — scene pressures (present-target) ({len(scene_pressure_fired)})")
+    lines.append("")
+    if scene_pressure_fired:
+        lines.append(
+            "Pressure-policy templates fired against on-screen targets. These don't "
+            "appear in `orrery_resolutions` like off-screen drafts; production routes "
+            "them as Storyteller-facing scene pressures."
+        )
+        lines.append("")
+        lines.append("| Actor | Present target | Template | Pri | Branch | Rendered stub | event_type | mag |")
+        lines.append("|---|---|---|---|---|---|---|---|")
+        for br, e in sorted(scene_pressure_fired, key=lambda x: -x[1].priority):
+            actor = name_for(br.bindings.get(Slot.ACTOR), names)
+            target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
+            stub = render_stub(e.narrative_stub, br.bindings, names)
+            lines.append(
+                f"| {actor} | {target} | `{e.template_id}` | {e.priority} | "
+                f"{e.branch_label or '—'} | {stub} | {e.event_type or '—'} | {e.magnitude:.2f} |"
+            )
+        lines.append("")
+    else:
+        lines.append("(none — either no pressure-policy templates eligible, or no on-screen targets at this anchor)")
         lines.append("")
 
     # Priority-loss
@@ -571,6 +607,58 @@ def sample_anchor(slot: int, anchor_chunk_id: int, window_chunks: int, output_di
                     ledger=categorize_results(actor_target_templates, state, b),
                 )
             )
+
+        # Scene-pressure path: templates with STORYTELLER_PRESSURE policy are
+        # evaluated against actor↔present-target bindings (target is an on-screen
+        # character at the anchor). Mirrors the production resolver path at
+        # nexus/agents/orrery/resolver.py — without this, the sampler is
+        # misleading for anchors with on-screen targets because pressure
+        # templates would never appear to fire.
+        pressure_templates = [
+            t
+            for t in actor_target_templates
+            if t.present_target_policy is PresentTargetPolicy.STORYTELLER_PRESSURE
+        ]
+        if pressure_templates:
+            raw_present_target_bindings = compose_actor_target_bindings(
+                session,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=window_chunks,
+                actor_ids=raw_actor_ids,
+                target_presence="present",
+            )
+            # Apply the existence filter to present-target bindings too. Present
+            # targets are on-screen at the anchor so they'll generally pass, but
+            # the actor side still needs the filter.
+            for b in raw_present_target_bindings:
+                all_binding_entity_ids.add(b[Slot.ACTOR])
+                all_binding_entity_ids.add(b[Slot.TARGET])
+            # Refresh first_chunks / existed_at_anchor with the new ids.
+            new_ids = (
+                {b[Slot.ACTOR] for b in raw_present_target_bindings}
+                | {b[Slot.TARGET] for b in raw_present_target_bindings}
+            ) - set(first_chunks.keys())
+            if new_ids:
+                first_chunks.update(fetch_first_reference_chunk(session, new_ids))
+                existed_at_anchor |= {
+                    eid
+                    for eid in new_ids
+                    if first_chunks.get(eid, 10**9) <= anchor_chunk_id
+                }
+            present_target_bindings = tuple(
+                b
+                for b in raw_present_target_bindings
+                if b[Slot.ACTOR] in existed_at_anchor
+                and b[Slot.TARGET] in existed_at_anchor
+            )
+            for b in present_target_bindings:
+                binding_reports.append(
+                    BindingReport(
+                        bindings=dict(b),
+                        slot_kind="scene_pressure",
+                        ledger=categorize_results(pressure_templates, state, b),
+                    )
+                )
 
         # Fetch names for every entity that touched a binding, surviving or
         # filtered, so the report can render filtered actors by name too.
