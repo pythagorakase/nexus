@@ -753,6 +753,79 @@ class StateUpdates(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class OrreryReplacementStateDelta(BaseModel):
+    """
+    Limited Orrery state delta Skald may substitute for a proposed resolution.
+
+    Field names are Skald-facing aliases. The commit layer maps them to the
+    canonical dotted Orrery keys after schema validation.
+    """
+
+    character_current_activity: Optional[str] = Field(
+        default=None,
+        description="Replacement for the actor's character.current_activity delta",
+    )
+    entity_tags_add: List[str] = Field(
+        default_factory=list,
+        description="Replacement actor tags to add",
+    )
+    entity_tags_remove: List[str] = Field(
+        default_factory=list,
+        description="Replacement actor tags to clear",
+    )
+    entity_tags_target_add: List[str] = Field(
+        default_factory=list,
+        description="Replacement target tags to add",
+    )
+    entity_tags_target_remove: List[str] = Field(
+        default_factory=list,
+        description="Replacement target tags to clear",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class OrreryAdjudication(BaseModel):
+    """
+    Skald's optional ruling for one current-tick Orrery proposal.
+
+    Omit an adjudication to ratify the proposal at commit time. Use defer to
+    leave the pressure unresolved for a later tick, void when the proposal is
+    definitively false, and replace when Skald has supplied a story-truer
+    state update or replacement delta.
+    """
+
+    proposal_id: str = Field(
+        min_length=1,
+        description="Exact proposal_id from orrery_imminent_activity",
+    )
+    action: Literal["defer", "replace", "void"] = Field(
+        description="Structured authority decision for this proposal"
+    )
+    note: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Brief reason or replacement summary for audit/debugging",
+    )
+    replacement_state_delta: Optional[OrreryReplacementStateDelta] = Field(
+        default=None,
+        description=(
+            "Optional limited Orrery delta to commit instead of the proposal. "
+            "If omitted for replace, commit assumes Skald handled the replacement "
+            "through normal state_updates or prose."
+        ),
+    )
+    replacement_event_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional registered event type for a replacement_state_delta. "
+            "Leave unset unless the replacement should emit a canonical world_event."
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 # ============================================================================
 # Operations
 # ============================================================================
@@ -858,6 +931,10 @@ class StorytellerResponseMinimal(AuthorialDirectivesMixin):
     referenced_entities: Optional[ReferencedEntities] = Field(
         default=None, description="Entities referenced in narrative"
     )
+    orrery_adjudications: List[OrreryAdjudication] = Field(
+        default_factory=list,
+        description="Optional defer/replace/void rulings for Orrery proposals",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -877,6 +954,10 @@ class StorytellerResponseStandard(AuthorialDirectivesMixin):
     )
     state_updates: Optional[StateUpdates] = Field(
         default=None, description="State changes for entities"
+    )
+    orrery_adjudications: List[OrreryAdjudication] = Field(
+        default_factory=list,
+        description="Optional defer/replace/void rulings for Orrery proposals",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -898,6 +979,10 @@ class StorytellerResponseExtended(AuthorialDirectivesMixin):
     state_updates: StateUpdates = Field(description="Comprehensive state updates")
     operations: Optional[Operations] = Field(
         default=None, description="Special operations or requests"
+    )
+    orrery_adjudications: List[OrreryAdjudication] = Field(
+        default_factory=list,
+        description="Optional defer/replace/void rulings for Orrery proposals",
     )
     reasoning: Optional[str] = Field(
         default=None, description="Storyteller's reasoning (debug mode only)"

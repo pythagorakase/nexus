@@ -27,7 +27,9 @@ dependencies = [
     "python-docx>=1.1.0,<2.0.0",
     "python-frontmatter (>=1.1.0,<2.0.0)",
     "tomlkit>=0.13.2,<1.0.0",
-    "keyring (>=25.7.0,<26.0.0)"
+    "keyring (>=25.7.0,<26.0.0)",
+    "protobuf (>=6.0.0,<7.0.0)",
+    "sentencepiece (>=0.2.0,<0.3.0)"
 ]
 
 [project.optional-dependencies]

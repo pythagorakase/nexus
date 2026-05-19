@@ -555,6 +555,26 @@ class LogonUtility:
                     f"[Score: {passage.get('score', 0):.2f}] {passage.get('text', '')}"
                 )
 
+        imminent_activity = context.get("orrery_imminent_activity") or []
+        if imminent_activity:
+            sections.append("\n=== ORRERY IMMINENT ACTIVITY ===")
+            sections.append(
+                "These are current-tick Orrery proposals. If you omit a proposal "
+                "from orrery_adjudications, commit will ratify it. You remain "
+                "sovereign: use defer to leave pressure unresolved, void when a "
+                "proposal is definitively false, and replace when your structured "
+                "state_updates or replacement_state_delta supersede it. A replacement "
+                "only emits a world_event if you provide replacement_event_type. "
+                "Refer only to proposal_id; do not rely on prose parsing."
+            )
+            for proposal in imminent_activity[:5]:
+                if not isinstance(proposal, dict):
+                    continue
+                proposal_id = proposal.get("proposal_id")
+                label = proposal.get("branch_label") or proposal.get("template_id")
+                state_delta = proposal.get("state_delta") or {}
+                sections.append(f"- {proposal_id} [{label}]: state_delta={state_delta}")
+
         scene_pressures = context.get("orrery_scene_pressures") or []
         if scene_pressures:
             sections.append("\n=== ORRERY SCENE PRESSURE ===")

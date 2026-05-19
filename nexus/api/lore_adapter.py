@@ -103,6 +103,18 @@ def extract_authorial_directives(response: StoryTurnResponse) -> List[str]:
     return normalize_authorial_directives(directives)
 
 
+def extract_orrery_adjudications(response: StoryTurnResponse) -> List[Dict[str, Any]]:
+    """Extract optional Skald rulings for current-tick Orrery proposals."""
+
+    adjudications = getattr(response, "orrery_adjudications", None) or []
+    serialized = []
+    for adjudication in adjudications:
+        data = _model_to_json_dict(adjudication)
+        if data:
+            serialized.append(data)
+    return serialized
+
+
 def response_to_incubator(
     response: StoryTurnResponse,
     parent_chunk_id: int,
@@ -149,6 +161,7 @@ def response_to_incubator(
         "reference_updates": extract_reference_updates(response),
         "authorial_directives": extract_authorial_directives(response),
         "orrery_proposal": _serialize_orrery_proposal(orrery_proposal),
+        "orrery_adjudications": extract_orrery_adjudications(response),
         "session_id": session_id,
         "llm_response_id": getattr(response, "response_id", None),
         "status": "provisional",

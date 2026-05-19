@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from nexus.agents.logon.apex_schema import (
     FactionStateUpdate,
     NewPlace,
+    OrreryAdjudication,
     PlaceType,
     StorytellerResponseBootstrap,
     StorytellerResponseExtended,
@@ -73,6 +74,27 @@ def test_faction_state_update_accepts_current_activity() -> None:
     )
 
     assert update.current_activity == "Watching the station exits."
+
+
+def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
+    """Storyteller responses can rule on Orrery proposals without prose parsing."""
+
+    adjudication = OrreryAdjudication(
+        proposal_id="sleep_pressure:abc123",
+        action="replace",
+        replacement_state_delta={
+            "character_current_activity": "nodding off mid-sentence",
+        },
+        replacement_event_type="sleep_need",
+    )
+
+    assert adjudication.proposal_id == "sleep_pressure:abc123"
+    assert adjudication.replacement_state_delta is not None
+    assert (
+        adjudication.replacement_state_delta.character_current_activity
+        == "nodding off mid-sentence"
+    )
+    assert adjudication.replacement_event_type == "sleep_need"
 
 
 def test_extended_response_accepts_partial_new_character_context() -> None:

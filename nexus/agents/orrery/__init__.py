@@ -24,7 +24,10 @@ from nexus.agents.orrery.resolver import (
     OrreryScenePressureDraft,
     OrreryTickProposal,
 )
-from nexus.agents.orrery.events import CommitOrreryTickResult
+from nexus.agents.orrery.events import (
+    CommitOrreryTickResult,
+    OrreryAdjudicationDecision,
+)
 from nexus.agents.orrery.bleed import BleedCandidate, BleedSelectorResult
 
 __all__ = [
@@ -43,6 +46,7 @@ __all__ = [
     "Template",
     "WorldState",
     "CommitOrreryTickResult",
+    "OrreryAdjudicationDecision",
     "BleedCandidate",
     "BleedSelectorResult",
     "OrreryResolutionDraft",
