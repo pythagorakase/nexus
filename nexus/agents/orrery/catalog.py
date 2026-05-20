@@ -86,6 +86,28 @@ _register(
     ),
 )
 _register(
+    r"has_pair_tag\((?P<tag>[^@()]+)@(?P<subj>\w+)->(?P<obj>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('subj'))} has `{m.group('tag')}` pair tag "
+        f"to {_slot(m.group('obj'))}"
+    ),
+)
+_register(
+    r"lacks_pair_tag\((?P<tag>[^@()]+)@(?P<subj>\w+)->(?P<obj>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('subj'))} lacks `{m.group('tag')}` pair tag "
+        f"to {_slot(m.group('obj'))}"
+    ),
+)
+_register(
+    r"has_any_pair_tag\((?P<tags>[^@()]+)@(?P<subj>\w+)->(?P<obj>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('subj'))} has any of ["
+        + ", ".join(f"`{t}`" for t in m.group("tags").split(","))
+        + f"] pair tags to {_slot(m.group('obj'))}"
+    ),
+)
+_register(
     r"has_ephemeral\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('tag')}` ephemeral",
 )
@@ -489,6 +511,9 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("durable_tag_list", re.compile(r"has_any_tag\(([^@()]+)@")),
     ("current_tag_list", re.compile(r"has_any_current_tag\(([^@()]+)@")),
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
+    ("pair_tag", re.compile(r"has_pair_tag\(([^@()]+)@")),
+    ("pair_tag", re.compile(r"lacks_pair_tag\(([^@()]+)@")),
+    ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
     ("place_affordance", re.compile(r"in_location_class\(([^@()]+)@")),
@@ -517,6 +542,7 @@ def _collect_vocabulary(
     ephemeral: set[str] = set()
     current: set[str] = set()
     applied: set[str] = set()
+    pair_tags: set[str] = set()
     events: set[str] = set()
     place_affordances: set[str] = set()
     relationships: set[str] = set()
@@ -542,6 +568,11 @@ def _collect_vocabulary(
                     current.add(tag.strip())
             elif kind == "ephemeral_tag":
                 ephemeral.add(captured)
+            elif kind == "pair_tag":
+                pair_tags.add(captured)
+            elif kind == "pair_tag_list":
+                for tag in captured.split(","):
+                    pair_tags.add(tag.strip())
             elif kind == "event_type":
                 events.add(captured)
             elif kind == "place_affordance":
@@ -577,6 +608,7 @@ def _collect_vocabulary(
         "ephemeral_tags": sorted(ephemeral),
         "current_tags": sorted(current),
         "applied_tags": sorted(applied),
+        "pair_tags": sorted(pair_tags),
         "event_types": sorted(events),
         "place_affordances": sorted(place_affordances),
         "relationship_types": sorted(relationships),
@@ -629,6 +661,7 @@ def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
             "classification per migration)",
             vocab["applied_tags"],
         ),
+        ("Pair tags queried by directed predicates", vocab["pair_tags"]),
         ("Event types", vocab["event_types"]),
         (
             "Place affordances queried by location predicates",
