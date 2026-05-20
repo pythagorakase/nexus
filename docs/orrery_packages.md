@@ -1755,6 +1755,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/038_orrery_tag_baseline_reconciliation.py`
 - `migrations/039_new_story_character_orrery_tags.py`
 - `migrations/041_orrery_authority_model.sql`
+- `migrations/042_orrery_entity_pair_tags.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
