@@ -257,3 +257,140 @@ def _row_value(row: Any, key: str, index: int) -> Any:
     if hasattr(row, "get"):
         return row[key]
     return row[index]
+
+
+# ---------------------------------------------------------------------------
+# Multi-entity (pair) tag writer
+# ---------------------------------------------------------------------------
+#
+# `entity_pair_tags` is the application table for directed binary relations
+# between entities; `pair_tags` is the corresponding vocabulary registry (see
+# migration 042). This section adds writer helpers analogous to the single-
+# entity tag writer above: `apply_pair_tag_bestowal` for inserts (idempotent
+# against the unique partial index on active rows) and `clear_pair_tag` for
+# retiring an ephemeral relation.
+#
+# Predicates (`has_pair_tag`, inbound/outbound subject lookups) and the
+# binding-composer extension live in a separate module to keep the writer
+# focused on writes.
+
+
+def apply_pair_tag_bestowal(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    subject_kind: str,
+    object_kind: str,
+    tag: str,
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+) -> bool:
+    """Apply a directed multi-entity tag (relation) from subject to object.
+
+    Looks up the pair_tag by name, validates that ``subject_kind`` /
+    ``object_kind`` are members of the relation's allowed-kinds arrays, and
+    inserts a row into ``entity_pair_tags``. Idempotent via ``ON CONFLICT``
+    against ``ix_entity_pair_tags_current`` (the unique partial index covering
+    active rows).
+
+    Caller owns the transaction; no commits here.
+
+    Returns ``True`` if a new active row was inserted, ``False`` if an active
+    row for ``(subject, object, pair_tag)`` already existed (silently
+    suppressed).
+
+    Raises ``ValueError`` for:
+    - subject_entity_id == object_entity_id (self-loop)
+    - unknown / deprecated ``tag``
+    - ``subject_kind`` not in the tag's allowed subject_kinds
+    - ``object_kind`` not in the tag's allowed object_kinds
+    """
+
+    if subject_entity_id == object_entity_id:
+        raise ValueError(
+            f"pair_tag {tag!r} requires distinct subject and object; "
+            f"got subject_entity_id == object_entity_id == {subject_entity_id}"
+        )
+
+    cur.execute(
+        """
+        SELECT id, subject_kinds, object_kinds
+        FROM pair_tags
+        WHERE tag = %s AND NOT deprecated
+        """,
+        (tag,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"Unknown or deprecated pair_tag {tag!r}")
+
+    pair_tag_id = _row_value(row, "id", 0)
+    subject_kinds = _row_value(row, "subject_kinds", 1)
+    object_kinds = _row_value(row, "object_kinds", 2)
+
+    if subject_kind not in subject_kinds:
+        raise ValueError(
+            f"pair_tag {tag!r} does not allow subject_kind={subject_kind!r}; "
+            f"allowed: {sorted(subject_kinds)}"
+        )
+    if object_kind not in object_kinds:
+        raise ValueError(
+            f"pair_tag {tag!r} does not allow object_kind={object_kind!r}; "
+            f"allowed: {sorted(object_kinds)}"
+        )
+
+    if world_time is None:
+        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
+        chunk_row = cur.fetchone()
+        if chunk_row is not None:
+            world_time = _row_value(chunk_row, "world_time", 0)
+
+    cur.execute(
+        """
+        INSERT INTO entity_pair_tags (
+            subject_entity_id, object_entity_id, pair_tag_id,
+            applied_at_world_time, source_kind
+        )
+        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+        ON CONFLICT (subject_entity_id, object_entity_id, pair_tag_id)
+          WHERE cleared_at IS NULL
+          DO NOTHING
+        """,
+        (subject_entity_id, object_entity_id, pair_tag_id, world_time, source_kind),
+    )
+    return bool(cur.rowcount)
+
+
+def clear_pair_tag(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tag: str,
+) -> bool:
+    """Mark an active multi-entity tag as cleared (UPDATE cleared_at = now()).
+
+    Used to retire ephemeral relations when their establishing context no
+    longer holds (e.g., a `pursuing` relation when the pursuers give up).
+    Durable relations can also be cleared if narrative or substrate updates
+    require it.
+
+    Returns ``True`` if a row was cleared, ``False`` if no active row existed
+    for ``(subject, object, pair_tag)``.
+    """
+
+    cur.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND pt.tag = %s
+          AND ept.subject_entity_id = %s
+          AND ept.object_entity_id = %s
+          AND ept.cleared_at IS NULL
+        """,
+        (tag, subject_entity_id, object_entity_id),
+    )
+    return bool(cur.rowcount)
