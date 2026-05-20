@@ -322,6 +322,28 @@ def hydrate_world_state(
             if _should_replace_trust_magnitude(trust.get(key), valence_magnitude):
                 trust[key] = valence_magnitude
 
+    pair_tags: dict[tuple[int, int], set[str]] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:pair_tags */
+            SELECT ept.subject_entity_id,
+                   ept.object_entity_id,
+                   pt.tag
+            FROM entity_pair_tags ept
+            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            JOIN entities subject_entity ON subject_entity.id = ept.subject_entity_id
+            JOIN entities object_entity ON object_entity.id = ept.object_entity_id
+            WHERE ept.cleared_at IS NULL
+              AND NOT pt.deprecated
+              AND subject_entity.is_active = true
+              AND object_entity.is_active = true
+            """
+        )
+    ).mappings():
+        key = (row["subject_entity_id"], row["object_entity_id"])
+        pair_tags.setdefault(key, set()).add(row["tag"])
+
     faction_memberships: dict[int, set[int]] = {}
     for row in session.execute(
         text(
@@ -369,6 +391,7 @@ def hydrate_world_state(
         relationship_types={
             key: frozenset(values) for key, values in relationship_types.items()
         },
+        pair_tags={key: frozenset(values) for key, values in pair_tags.items()},
         faction_memberships={
             entity_id: frozenset(values)
             for entity_id, values in faction_memberships.items()

@@ -52,6 +52,7 @@ class FakeSession:
         location_class_rows=None,
         activity_rows=None,
         relationship_rows=None,
+        pair_tag_rows=None,
         faction_rows=None,
         event_rows=None,
         chunk_ref_actor_rows=None,
@@ -75,6 +76,7 @@ class FakeSession:
             {"entity_id": 1, "current_activity": "idle"}
         ]
         self.relationship_rows = relationship_rows or []
+        self.pair_tag_rows = pair_tag_rows or []
         self.faction_rows = faction_rows or []
         self.event_rows = event_rows or []
         self.chunk_ref_actor_rows = chunk_ref_actor_rows or [{"entity_id": 1}]
@@ -115,6 +117,10 @@ class FakeSession:
         if "/* orrery:relationship_types */" in sql:
             assert "valence_magnitude" in sql
             return FakeResult(self.relationship_rows)
+        if "/* orrery:pair_tags */" in sql:
+            assert "ept.cleared_at IS NULL" in sql
+            assert "NOT pt.deprecated" in sql
+            return FakeResult(self.pair_tag_rows)
         if "/* orrery:faction_memberships */" in sql:
             return FakeResult(self.faction_rows)
         if "/* orrery:recent_events */" in sql:
@@ -747,6 +753,32 @@ def test_hydrate_world_state_uses_stable_trust_magnitude_for_duplicate_pairs() -
     assert state.trust[(2, 1)] == -3
     assert state.relationship_types[(1, 2)] == frozenset({"comrade", "enemy"})
     assert state.relationship_types[(2, 1)] == frozenset({"ally", "rival"})
+
+
+def test_hydrate_world_state_loads_pair_tags() -> None:
+    """Orrery snapshots hydrate active directed pair tags."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 2,
+                    "tag": "mentors",
+                },
+                {
+                    "subject_entity_id": 2,
+                    "object_entity_id": 1,
+                    "tag": "protects",
+                },
+            ]
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.pair_tags[(1, 2)] == frozenset({"mentors"})
+    assert state.pair_tags[(2, 1)] == frozenset({"protects"})
 
 
 def test_hydrate_world_state_loads_travel_states() -> None:

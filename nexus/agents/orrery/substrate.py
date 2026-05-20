@@ -166,6 +166,7 @@ class WorldState:
     relationship_types: Mapping[Tuple[int, int], frozenset[str]] = field(
         default_factory=dict
     )
+    pair_tags: Mapping[Tuple[int, int], frozenset[str]] = field(default_factory=dict)
     faction_memberships: Mapping[int, frozenset[int]] = field(default_factory=dict)
     location_class: Mapping[int, str] = field(default_factory=dict)
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
@@ -225,6 +226,70 @@ def has_any_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
         return bool(candidates & state.tags.get(entity_id, frozenset()))
 
     return _named(_condition, f"has_any_tag({','.join(tags)}@{slot.value})")
+
+
+def has_pair_tag(
+    tag: str,
+    subject_slot: Slot = Slot.ACTOR,
+    object_slot: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether a directed pair tag exists between two slot-bound entities."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        object_id = _slot_entity(bindings, object_slot)
+        if subject_id is None or object_id is None:
+            return False
+        return tag in state.pair_tags.get((subject_id, object_id), frozenset())
+
+    return _named(
+        _condition,
+        f"has_pair_tag({tag}@{subject_slot.value}->{object_slot.value})",
+    )
+
+
+def lacks_pair_tag(
+    tag: str,
+    subject_slot: Slot = Slot.ACTOR,
+    object_slot: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether a directed pair tag is absent between slot-bound entities."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        object_id = _slot_entity(bindings, object_slot)
+        if subject_id is None or object_id is None:
+            return True
+        return tag not in state.pair_tags.get((subject_id, object_id), frozenset())
+
+    return _named(
+        _condition,
+        f"lacks_pair_tag({tag}@{subject_slot.value}->{object_slot.value})",
+    )
+
+
+def has_any_pair_tag(
+    *tags: str,
+    subject_slot: Slot = Slot.ACTOR,
+    object_slot: Slot = Slot.TARGET,
+) -> Condition:
+    """Return whether any directed pair tag exists between slot-bound entities."""
+
+    candidates = frozenset(tags)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        subject_id = _slot_entity(bindings, subject_slot)
+        object_id = _slot_entity(bindings, object_slot)
+        if subject_id is None or object_id is None:
+            return False
+        return bool(
+            candidates & state.pair_tags.get((subject_id, object_id), frozenset())
+        )
+
+    return _named(
+        _condition,
+        f"has_any_pair_tag({','.join(tags)}@{subject_slot.value}->{object_slot.value})",
+    )
 
 
 def has_any_current_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
