@@ -8,7 +8,7 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 
 ## Architectural Foundations
 
-### Three structures, one registry
+### Three Structures, One Registry
 
 | Structure | Application table | Carries | Example |
 |---|---|---|---|
@@ -16,7 +16,7 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 | **Multi-entity tag** | `entity_pair_tags` (new, proposed) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
 | **Rich relationship** | `character_relationships` (existing) | Affective/social state with valence, history, sub-states | Alex/Emilia trust=high, valence=positive |
 
-### Locked vocabulary — no runtime growth
+### Locked Vocabulary — No Runtime Growth
 
 Skald applies from a closed registry. The `skald_inline` and `auto_registered` source_kind paths can be deprecated. The Vocabulary Growth Contract section in the design plan should be removed.
 
@@ -27,17 +27,17 @@ Skald applies from a closed registry. The `skald_inline` and `auto_registered` s
 - **Universal scope:** tags are not genre-gated. `genre:*` tags exist as *informational* tags on the story slot, never gate other tags.
 - Skald can introduce genre-bending plot beats freely (the secret-goblinization-of-the-population case).
 
-### Skald is sovereign
+### Skald Is Sovereign
 
 Already shipped via PR #276 (issue #275). Skald's structured output can `defer` / `replace` / `void` any Orrery proposal at adjudication time. No `narrative_debt` flag — the canon-truth property is delegated entirely to Skald's authorial judgment.
 
 **Counterweights:** careful prompting + path-of-least-resistance default (no adjudication = ratify-all). Skald's LLM positivity bias is the main risk; structural defaults mitigate it.
 
-### Naming discipline: "guess without peeking"
+### Naming Discipline: "Guess Without Peeking"
 
 A tag name that requires its description field to be understandable is wrong. Names must be self-documenting. Vague design-speak (`affordance`), hedge language (`profession_lite`), and operational jargon (`orrery_signal`) all fail this test and were renamed or dropped.
 
-### Per-category cardinality
+### Per-Category Cardinality
 
 | Mode | Within one category | Example |
 |---|---|---|
@@ -48,19 +48,21 @@ A tag name that requires its description field to be understandable is wrong. Na
 
 Cardinality is a property of the category-in-the-registry, not of individual tag definitions. Implementation: add a `cardinality` column to the `tags` registry (default `multi`), enforce at bestowal time.
 
-### Polymorphic subjects/objects
+**⏳ SCHEMA-PENDING:** the `cardinality` column does not yet exist on the `tags` registry (see Open Items #5). Until that migration lands, exclusive/multi distinctions throughout this doc are *design intent* only — not database-enforced. Bestowal-time exclusivity checks must be done in application code (e.g., the writer / trait compiler) as an interim measure.
+
+### Polymorphic Subjects/Objects
 
 Multi-entity tags admit polymorphic endpoints (character | faction | place) where the relation makes sense across kinds. The `entities` super-table already polymorphizes; pair-tags ride on that. Examples: `can_access(character | faction → place)`, `obligation(character | faction → character | faction)`. Refusing polymorphism would force redundant vocabulary (`character_obligation`, `faction_obligation`, `cross_kind_obligation`).
 
-### Compositional truth over baked-in truth
+### Compositional Truth over Baked-In Truth
 
 Binary distinctions that are really cardinality questions are dissolved into the relation; counting reveals state. `claims` with one row = uncontested ownership; with multiple rows = disputed territory. No separate `owns` vocabulary needed. The pattern: **prefer compositional truth over baked-in truth.**
 
-### Vocabulary design tests
+### Vocabulary Design Tests
 
 Three tests filter candidate tags. Each catches a different failure mode; together they gate against the most common vocabulary mistakes. Apply in order — differential/gating first (should this be a tag at all?), then reskinning (is the concept era-neutral?), then granularity (does it add distinct value over its siblings?).
 
-#### 1. Differential + gating (anti-decoration)
+#### 1. Differential + Gating (Anti-Decoration)
 
 A property earns a tag only if BOTH:
 
@@ -71,7 +73,7 @@ Examples: `bodyform:undead` fires on a small subset and gates package/affordance
 
 The pattern: **a tag must do work that prose and metadata can't already do.**
 
-#### 2. Reskinning (anti-genre-lock)
+#### 2. Reskinning (Anti-Genre-Lock)
 
 A candidate tag must survive translation across eras and genres without losing its meaning. This is the operational form of the universal-scope rule under Locked Vocabulary: tags are not genre-gated, so the vocabulary itself must be era-and-genre-neutral.
 
@@ -79,7 +81,7 @@ Examples: `warrior` reskins cleanly from Bronze Age to cyberpunk — passes. `ha
 
 Heuristic: imagine the candidate tag applied to characters in three eras you haven't designed for. If two of the three read awkwardly, the abstraction is too narrow.
 
-#### 3. Granularity (anti-redundancy)
+#### 3. Granularity (Anti-Redundancy)
 
 Does this anchor gate differently from its neighbors within the same category? If two candidate tags gate identically on character action, the distinction is decorative — keep one, fold the other to prose.
 
@@ -87,7 +89,7 @@ Examples: `goblin` and `kobold` gate identically on bodyform's functional axes (
 
 Within bodyform, the **functional axes** (locomotion, sustenance, vulnerability, networkability, longevity, social legibility) serve as the granularity standard for whether two candidate tags are meaningfully distinct. Disposition uses its twelve axes the same way. Each category should articulate its own granularity standard.
 
-#### Coverage map
+#### Coverage Map
 
 The three tests catch non-overlapping failure modes:
 
@@ -253,7 +255,7 @@ This is a refactor of an earlier `function + authority + station` shape. Two des
 
 **Registry-level note on cardinality.** Per the Per-Category Cardinality foundation, cardinality lives on the *category*, not the tag. Function is multi-valued, fame and resources are exclusive — three different cardinality values, so they cannot share one registry category. **At the registry level these are three distinct categories: `role.function`, `role.fame`, `role.resources`** (each carrying its own cardinality). The shared "role" prefix exists only for documentation grouping. The compiler writes literal `(category, tag)` pairs of the form `('role.function', 'warrior')`, `('role.fame', 'renowned')`, `('role.resources', 'wealthy')`. Bodyform's lineage/condition split is the same shape (separate registry categories `bodyform.lineage` and `bodyform.condition`) — benign there because they share cardinality, but the registry split is identical.
 
-#### Function (multi-valued, single-entity)
+#### Function (Multi-Valued, Single-Entity)
 
 - `advocate`
 - `artisan`
@@ -277,9 +279,9 @@ This is a refactor of an earlier `function + authority + station` shape. Two des
 - `thief`
 - `warrior`
 
-Multi-valued: characters wear multiple operational hats (Pete = `artisan` + `criminal`; Nyati = `scholar` + `healer`). Tactical sub-archetypes of a function (a `warrior` who is a soldier vs. hitman vs. bodyguard) are *not* separate tags — that distinction is carried by faction relationships per the compositional-truth principle.
+Multi-valued: characters wear multiple operational hats (Pete = `artisan` + `thief`; Nyati = `scholar` + `healer`). Tactical sub-archetypes of a function (a `warrior` who is a soldier vs. hitman vs. bodyguard) are *not* separate tags — that distinction is carried by faction relationships per the compositional-truth principle.
 
-#### Resources (exclusive, single-entity)
+#### Resources (Exclusive, Single-Entity)
 
 - `destitute`
 - `poor`
@@ -289,7 +291,7 @@ Multi-valued: characters wear multiple operational hats (Pete = `artisan` + `cri
 
 Economic capacity / wealth. Scope-independent — you are rich or poor in absolute terms. Maps to the trait_menu `Resources` trait. Exclusive: one current level per character. Default for typical characters is implicitly `comfortable` and may go untagged unless wealth is narratively load-bearing.
 
-#### Fame (exclusive, single-entity)
+#### Fame (Exclusive, Single-Entity)
 
 - `obscure` (default — absent unless narratively load-bearing)
 - `known`
@@ -300,7 +302,7 @@ Ambient detection radius — effectively inverse stealth. **Unvalenced**: anchor
 
 Maps to the trait_menu `Fame` trait (renamed from `Reputation` for naming consistency). Exclusive: one current radius per character.
 
-#### Status — scope-bound, multi-entity
+#### Status — Scope-Bound, Multi-Entity
 
 Status is captured via the multi-entity tag layer rather than as a single-entity role sub-category — see the Multi-Entity Tags section below for the `status:<level>(char|faction → faction)` family.
 
@@ -438,14 +440,14 @@ Derived 2026-05-19 from `characters`, `character_psychology`, and `backstory.md`
 
 | Character | Capacities |
 |---|---|
-| Alina | `educated`, `tinker`, `perceptive` |
+| Alina | `educated`, `mechanical`, `perceptive` |
 | Alex | `perceptive`, `persuasive`, `deceptive`, `stealthy`, `martial`, `resourceful`, `urban` |
 | Emilia | `perceptive`, `martial`, `strong`, `hardy` |
-| Pete | `tinker`, `educated`, `stealthy`, `urban`, `resourceful` |
+| Pete | `mechanical`, `educated`, `stealthy`, `urban`, `resourceful` |
 | Nyati | `educated`, `medical`, `tactician` |
 | Victor | `tactician`, `persuasive`, `deceptive`, `intimidating`, `resourceful`, `urban` |
 
-### Role (single-entity)
+### Role (Single-Entity)
 
 | Character | Function | Resources | Fame |
 |---|---|---|---|
@@ -456,7 +458,7 @@ Derived 2026-05-19 from `characters`, `character_psychology`, and `backstory.md`
 | Nyati | `scholar`, `healer` | `comfortable` | `known` |
 | Victor | `leader` | `magnate` | `renowned` *(publicly disgraced exec; widely known)* |
 
-### Role (scope-bound status, multi-entity)
+### Role (Scope-Bound Status, Multi-Entity)
 
 | Character | Status rows |
 |---|---|
@@ -488,7 +490,7 @@ Diagnostic batch covering non-mainline characters and entity types that stress-t
 | Black Kite (53) | `inorganic`, `awakened` | Hybrid AI from spliced Nexus-06 + Alex-2 fragments; awakening from object to actor is exactly `awakened` |
 | Cam (99) | `human` | Standard human NPC. ⚠️ `current_activity` field has anomalous data unrelated to Cam — flag for slot 2 data review, not a vocabulary issue |
 
-#### Disposition (— = axis N/A for this entity)
+#### Disposition (— = Axis N/A for This Entity)
 
 | Axis | Sullivan | Lansky | Sam | Bridge | Black Kite | Cam |
 |---|---|---|---|---|---|---|
@@ -505,18 +507,18 @@ Diagnostic batch covering non-mainline characters and entity types that stress-t
 | Outlook | — | `cynical`, `dispassionate` | `cynical`, `realistic`, `idealistic` | `idealistic` | `optimistic`, `idealistic` | `cynical`, `realistic` |
 | Sociability | `reserved` | `solitary`, `reserved` | `solitary`, `reserved` | — | `reserved` | `reserved` |
 
-#### Capacity (— = capacity N/A for this entity)
+#### Capacity (— = Capacity N/A for This Entity)
 
 | Character | Capacities |
 |---|---|
 | Sullivan | `agile`, `perceptive`, `stealthy` |
-| Lansky | `educated`, `deceptive`, `stealthy`, `tinker` |
+| Lansky | `educated`, `deceptive`, `stealthy`, `mechanical` |
 | Sam | `educated`, `arcane`, `perceptive` |
 | The Bridge | — |
 | Black Kite | `educated`, `perceptive` |
 | Cam | `perceptive`, `resourceful`, `empathic`, `urban` |
 
-#### Role (— = sub-category N/A for this entity)
+#### Role (— = Sub-Category N/A for This Entity)
 
 | Character | Function | Resources | Fame | Status (scope-bound) |
 |---|---|---|---|---|
@@ -546,31 +548,31 @@ Diagnostic batch covering non-mainline characters and entity types that stress-t
 
 ## Place Categories
 
-### `place_function` (multi-valued, durable)
+### `place_function` (Multi-Valued, Durable)
 
 `commerce`, `dwelling`, `medical`, `transit`, `archive`, `fortification`, `haven`, `sacred`, `meeting`, `tomb`, `confinement`, `learning`, `craft`, `military`, `production`, `entertainment`.
 
 Compositions are normal: a medieval tavern is `commerce` + `dwelling` + `meeting` + `entertainment`. A monastery is `sacred` + `dwelling` + `learning`. The Burrow safe-house is `dwelling` + `haven`.
 
-### `place_visibility` (exclusive, durable)
+### `place_visibility` (Exclusive, Durable)
 
 `known`, `hidden`.
 
 If `hidden`: requires complementary `knows_location` multi-entity-tags to specify who can find it.
 
-### `place_access` (exclusive, durable)
+### `place_access` (Exclusive, Durable)
 
 `open`, `restricted`.
 
 If `restricted`: requires complementary `can_access` multi-entity-tags to specify who can enter (direct individual or faction-mediated).
 
-### `place_environment` (multi-valued, durable)
+### `place_environment` (Multi-Valued, Durable)
 
 `urban_dense`, `urban_sparse`, `rural`, `wilderness`, `subterranean`, `underwater`, `aerial`, `mountainous`, `forest`, `desert`, `polar`, `marshland`, `coastal`.
 
 Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `mountainous` + `forest`.
 
-### `place_threat` (exclusive, ephemeral)
+### `place_threat` (Exclusive, Ephemeral)
 
 `safe`, `contested`, `dangerous`.
 
@@ -592,7 +594,7 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 | `legitimacy` | Exclusive | Durable | `state_recognized`, `underground`, `shadow_legal`, `outlaw` |
 | `operational_mode` | Exclusive | Durable | `overt`, `covert`, `hybrid` |
 
-### `factions` table cleanup (in scope for the migration)
+### `factions` Table Cleanup (in Scope for the Migration)
 
 **Drop columns (move to tags):**
 - `ideology` → tag category `ideology`
@@ -615,33 +617,38 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 ## Multi-Entity Tags
 
-### Place-bound (6)
+**Implementation-status legend** (applies to all multi-entity tag tables below + the trait alignment section):
+
+- *(no marker)* — Seeded in `migrations/042_orrery_entity_pair_tags.py`; runtime-ready.
+- **⏳ SCHEMA-PENDING** — Settled in this doc; not yet seeded by any migration. Code that reads these rows today will find zero matches. Treat as design-target until the corresponding migration lands (the trait-compiler chunk is the natural carrier for most of these).
+
+### Place-Bound (6)
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
 | `knows_location` | character | place | Knowledge of the place's existence and how to find it |
 | `can_access` | character \| faction | place | Permission to enter (direct individual or group-mediated) |
-| `claims` | character \| faction | place | Territorial claim; contestation emerges from row cardinality. Polymorphic subject (extended from original faction-only to accept character-side `Domain` trait bestowals) |
+| `claims` | character \| faction | place | Territorial claim; contestation emerges from row cardinality. **⏳ SCHEMA-PENDING (polymorphic-subject extension):** currently seeded with `subject_kinds = ['faction']` only; the character-side polymorphism (to accept `Domain` trait bestowals) is a small `pair_tags` data update in the trait-compiler migration. |
 | `resides_at` | character | place | Habitual residence (multi-residence supported) |
 | `operates_from` | faction | place | Operational base (distinct from `claims`) |
 | `originates_from` | character | place | Origin / hometown |
 
-### Character / faction relations (6)
+### Character / Faction Relations (6)
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
-| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). *Renamed from `pursuing` — "hunt" reskins better than "pursue" across genres, and the substrate concept isn't physical-chase-specific* |
+| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). **⏳ SCHEMA-PENDING (rename):** currently seeded as `pursuing` in `migrations/042`; the rename is carried by the trait-compiler chunk's migration. Code reading `pair_tags.tag = 'hunting'` finds zero rows today — use `'pursuing'` until the rename lands. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept isn't physical-chase-specific.* |
 | `handles` | character | character | Operative-handler relationship; covert/operational |
 | `obligation` | character \| faction | character \| faction | Debt / oath / loyalty; kind inferable from establishing event |
 | `authority_over` | character \| faction | character \| faction | Interpersonal/positional power over a specific other entity. Distinct from scope-bound status (a king has `authority_over` a vassal directly; a senior officer in an institution holds `status:senior(→ faction)` against that institution's membership) |
 | `protects` | character \| faction | character | Active protective relationship; durable |
 | `mentors` | character | character | Teaching/training |
 
-### Scope-bound status (1 family — `status:<level>`)
+### Scope-Bound Status (1 Family — `status:<level>`) **⏳ SCHEMA-PENDING (Entire Family)**
 
 | Tag family | Subject | Object | Purpose |
 |---|---|---|---|
-| `status:<level>` | character \| faction | faction | Scope-bound social/institutional position within the audience-faction. The level is encoded in the tag name via the existing colon convention (`status:senior`, `status:outcast`, etc.). Maps to trait_menu's `Status` trait. |
+| `status:<level>` | character \| faction | faction | Scope-bound social/institutional position within the audience-faction. The level is encoded in the tag name via the existing colon convention (`status:senior`, `status:outcast`, etc.). Maps to trait_menu's `Status` trait. **⏳ SCHEMA-PENDING:** No `status:*` rows are seeded in `migrations/042`; the trait-compiler chunk's migration adds them. Reference Taggings below show `status:<level>(→ faction)` entries as design-target taggings, not as live database rows. |
 
 **Level vocabulary** (each registers as a distinct `pair_tags` row):
 
@@ -655,9 +662,9 @@ Vocabulary may expand per genre via the `new_tag_proposals` path (e.g., `status:
 
 **Formal vs. informal** is read off the scope-faction's own tags (its `legitimacy`, `operational_mode`), NOT the status tag itself. `status:senior(char → US_Army)` reads as formal military rank; `status:senior(char → village_elders)` reads as informal community elevation. Same level anchor, different flavor by composition.
 
-### Compiler-planned additions
+### Compiler-Planned Additions **⏳ SCHEMA-PENDING (Entire Section)**
 
-The trait → tag compiler (Codex chunk) will introduce three additional character ↔ character multi-entity tags to support the Allies / Contacts / Enemies traits:
+The trait → tag compiler (Codex chunk) will introduce three additional character ↔ character multi-entity tags to support the Allies / Contacts / Enemies traits. None are seeded today.
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
@@ -669,21 +676,21 @@ All cardinalities multi-valued. Polymorphic subjects/objects collapse what would
 
 ---
 
-## trait_menu ↔ tag-vocabulary alignment
+## trait_menu ↔ Tag-Vocabulary Alignment
 
 The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry point during character creation. Each character chooses 3 traits from the 10 optional list, plus 1 required wildcard. The trait → tag compiler at `nexus/api/new_story_db_mapper.py::finalize_narrative_bootstrap()` (Codex implementation chunk) translates user-chosen traits into structured tag bestowals after character INSERT and before final commit. The mapping:
 
 | trait_menu trait | Compiles to | Wizard prompts collected |
 |---|---|---|
-| `Status` *(broadened)* | `status:<level>(char → faction)` multi-entity row | Scope-faction name (created if new); level anchor |
-| `Fame` *(renamed from `Reputation`)* | `role.fame:<level>` single-entity tag | Detection-radius level; no valence prompt (composition handles it) |
+| `Status` *(broadened)* **⏳** | `status:<level>(char → faction)` multi-entity row | Scope-faction name (created if new); level anchor |
+| `Fame` *(renamed from `Reputation`)* **⏳ rename** | `role.fame:<level>` single-entity tag | Detection-radius level; no valence prompt (composition handles it) |
 | `Resources` | `role.resources:<level>` single-entity tag | Wealth level |
-| `Domain` | place entity (create if new) + `claims(char → place)` multi-entity (polymorphic extension) | Place name; nature of claim |
-| `Allies` | new `ally(char → char)` multi-entity rows + `character_relationships` entries | Names of allies; one row per |
-| `Contacts` | new `contact(char → char)` multi-entity rows + `character_relationships` entries | Names + areas of contact |
+| `Domain` **⏳ polymorphism** | place entity (create if new) + `claims(char → place)` multi-entity (polymorphic extension) | Place name; nature of claim |
+| `Allies` **⏳ new tag** | new `ally(char → char)` multi-entity rows + `character_relationships` entries | Names of allies; one row per |
+| `Contacts` **⏳ new tag** | new `contact(char → char)` multi-entity rows + `character_relationships` entries | Names + areas of contact |
 | `Patron` | Composition: `mentors(patron → char)` + `protects(patron → char)` + `authority_over(patron → char)` | Name of patron |
 | `Dependents` | Composition (directional inverse of Patron): `protects(char → dep)` + `authority_over(char → dep)` + optionally `mentors(char → dep)` + `character_relationships` | Names of dependents; whether each dependent is mentored vs. merely supported |
-| `Enemies` | `hunting(other → char)` or new `hostile_to(other → char)` multi-entity (choose by intensity of pursuit) | Names; nature of opposition |
+| `Enemies` **⏳ rename / new tag** | `hunting(other → char)` or new `hostile_to(other → char)` multi-entity (choose by intensity of pursuit) | Names; nature of opposition |
 | `Obligations` | `obligation(char → target)` multi-entity (already in settled set) | Target; nature of obligation |
 | `Wildcard` | **Compiles to existing vocabulary via composition.** `pact` → `obligation(char → deity-faction)`; `familiar` / `herd` → `protects` + a created entity; `artifact` / `symbiote` → `bodyform` condition (e.g. `enchanted`, `cybernetic`) or a row in the `items` table once that's populated. Genuinely novel mechanics live in prose / `extra_data`, **not** as new registry tags — the closed-vocabulary discipline holds. *(Confirmation needed code-side: `orrery_tags` field on `WildcardTrait` / `CharacterSheet` must validate against the registry, not accept arbitrary strings.)* | Wildcard name + description; the compiler attempts to decompose into existing tag/relationship structures and falls back to prose-only storage if decomposition fails |
 
@@ -705,9 +712,9 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 | `bound_to` + `owes` | Merged into `obligation` |
 | `controls` | Too vague — Skald-confusion attractor |
 | `orrery_state` (category) | System-bookkeeping moves to dedicated tables |
-| `place_affordance` (category) | Decomposed into function / visibility / access |
-| `profession_lite` (category) | Merged into `role` |
-| `orrery_signal` (category) | Merged into `state` |
+| `place_affordance` (category) **⏳** | Decomposed into function / visibility / access. *Pending deprecation — still seeded in `migrations/037`; a follow-up deprecation migration is needed.* |
+| `profession_lite` (category) **⏳** | Merged into `role`. *Pending deprecation — still seeded in `migrations/037`.* |
+| `orrery_signal` (category) **⏳** | Merged into `state`. *Pending deprecation — still seeded in `migrations/037`.* |
 | `defensive_position` (place_function value) | Renamed to `fortification`; `haven` added |
 | Vocabulary Growth Contract | Replaced by locked-vocabulary discipline |
 
