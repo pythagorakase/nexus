@@ -21,16 +21,19 @@ from nexus.agents.orrery.substrate import (
     count_co_located,
     direct_contact_is_dramatic,
     evaluate_stack,
+    has_any_pair_tag,
     has_any_intimacy_suppressor,
     has_established_partner_co_located,
     has_minimal_context,
     has_need_debt_at_or_above,
+    has_pair_tag,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
     in_location,
     in_location_class,
     is_constrained,
     is_hidden,
+    lacks_pair_tag,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -229,6 +232,30 @@ def test_has_symmetric_relationship_of_type_matches_either_direction() -> None:
     assert predicate(forward_state, bindings)
     assert predicate(reverse_state, bindings)
     assert not predicate(empty_state, bindings)
+
+
+def test_pair_tag_predicates_are_direction_sensitive() -> None:
+    """Directed pair-tag helpers read WorldState pair tags without symmetrizing."""
+
+    state = WorldState(pair_tags={(1, 2): frozenset({"mentors", "protects"})})
+    bindings = {Slot.ACTOR: 1, Slot.TARGET: 2}
+    reversed_bindings = {Slot.ACTOR: 2, Slot.TARGET: 1}
+
+    assert has_pair_tag("mentors")(state, bindings)
+    assert has_any_pair_tag("claims", "protects")(state, bindings)
+    assert not has_pair_tag("mentors")(state, reversed_bindings)
+    assert not has_pair_tag("pursuing")(state, bindings)
+
+
+def test_lacks_pair_tag_is_inverse_for_bound_slots() -> None:
+    """lacks_pair_tag is true for wrong direction, wrong tag, or missing slots."""
+
+    state = WorldState(pair_tags={(1, 2): frozenset({"mentors"})})
+
+    assert not lacks_pair_tag("mentors")(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert lacks_pair_tag("mentors")(state, {Slot.ACTOR: 2, Slot.TARGET: 1})
+    assert lacks_pair_tag("protects")(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
+    assert lacks_pair_tag("mentors")(state, {Slot.ACTOR: 1})
 
 
 def test_context_and_constraint_predicates_read_current_tags() -> None:

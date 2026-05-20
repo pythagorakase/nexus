@@ -111,6 +111,18 @@ def test_render_predicate_name_handles_known_predicates() -> None:
             "actor and target share `family` relationship (either direction)",
         ),
         (
+            "has_pair_tag(mentors@actor->target)",
+            "actor has `mentors` pair tag to target",
+        ),
+        (
+            "lacks_pair_tag(pursuing@target->actor)",
+            "target lacks `pursuing` pair tag to actor",
+        ),
+        (
+            "has_any_pair_tag(claims,protects@actor->target)",
+            "actor has any of [`claims`, `protects`] pair tags to target",
+        ),
+        (
             "since_last_event_at_least(informant_contact,4@actor,target=target)",
             "≥ 4 ticks since last `informant_contact` event for "
             "(actor, target) pair",
@@ -149,6 +161,30 @@ def test_render_catalog_accepts_a_generator() -> None:
     assert "vendetta_holder" in content
     assert "grudge_active" in content
     assert "retaliation_executed" in content
+
+
+def test_pair_tag_predicates_populate_vocabulary_appendix() -> None:
+    """Pair-tag predicates render as prose and populate the appendix."""
+
+    from nexus.agents.orrery.substrate import Branch, Slot, Template, has_pair_tag
+
+    template = Template(
+        id="pair_tag_catalog_fixture",
+        priority=1,
+        blurb="Catalog fixture.",
+        required_slots=(Slot.ACTOR, Slot.TARGET),
+        package_gate=has_pair_tag("mentors"),
+        branches=(
+            Branch("fallback", lambda _state, _bindings: True, "{actor} waits."),
+        ),
+    )
+
+    content = render_catalog((template,))
+    vocab = _collect_vocabulary((template,))
+
+    assert "actor has `mentors` pair tag to target" in content
+    assert "Pair tags queried by directed predicates" in content
+    assert "mentors" in vocab["pair_tags"]
 
 
 def test_orrery_packages_md_is_up_to_date() -> None:
