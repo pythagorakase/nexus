@@ -18,7 +18,7 @@ first place.
 
 from __future__ import annotations
 
-from typing import Generator, Optional
+from typing import Generator
 
 import psycopg2
 import pytest
@@ -50,7 +50,7 @@ class _TestEntities:
         char_a: int,
         char_b: int,
         char_c: int,
-        faction: Optional[int],
+        faction: int | None,
         all_ids: list[int],
     ):
         self.char_a = char_a
@@ -79,6 +79,25 @@ def test_entities(
     valid entity_ids to satisfy FK constraints). Teardown DELETEs the
     entities; the ON DELETE CASCADE on ``entity_pair_tags`` removes any
     pair tags created between them."""
+
+    # Vocabulary guard: confirm the pair_tag names the test suite uses are
+    # actually registered in `save_05.pair_tags`. If the slot was initialized
+    # from a template lacking migration 042's seed, skip cleanly rather than
+    # exploding with `ValueError: Unknown or deprecated pair_tag` deep in
+    # `apply_pair_tag_bestowal`.
+    required_tags = ("mentors", "protects")
+    with slot_connection.cursor() as cur:
+        cur.execute(
+            "SELECT tag FROM pair_tags WHERE NOT deprecated AND tag = ANY(%s)",
+            (list(required_tags),),
+        )
+        registered = {row[0] for row in cur.fetchall()}
+    missing_tags = set(required_tags) - registered
+    if missing_tags:
+        pytest.skip(
+            f"{TEST_DBNAME}.pair_tags is missing {sorted(missing_tags)}; "
+            "predicate tests require migration 042's seed vocabulary."
+        )
 
     created_ids: list[int] = []
     with slot_connection:
@@ -401,3 +420,117 @@ def test_lookup_objects_filters_by_tag(
             assert lookup_pair_tag_objects(
                 cur, subject_entity_id=test_entities.char_a, tag="protects"
             ) == [test_entities.char_c]
+
+
+# ---------------------------------------------------------------------------
+# Deprecated-tag exclusion (covers the `NOT pt.deprecated` filter in all three
+# predicates). Creates a temporary deprecated `pair_tags` row, inserts an
+# `entity_pair_tags` edge using it (bypassing `apply_pair_tag_bestowal`'s
+# deprecation check by writing the row directly), verifies all three
+# predicates treat it as absent, and cleans up the registry row.
+# ---------------------------------------------------------------------------
+
+
+def test_deprecated_pair_tag_is_excluded_from_all_predicates(
+    slot_connection: psycopg2.extensions.connection,
+    test_entities: _TestEntities,
+) -> None:
+    """All three predicates filter out rows whose pair_tag is deprecated."""
+
+    deprecated_tag_id: int | None = None
+    deprecated_tag_name = "_test_deprecated_relation_predicate"
+
+    try:
+        # Phase 1: register a deprecated test-only pair_tag (committed).
+        # Defensive cleanup of stale residue from a prior failed run before
+        # inserting — `ON CONFLICT (tag) DO UPDATE` would also work but the
+        # explicit delete makes the test's invariant ("this row is freshly
+        # created by us") clear.
+        with slot_connection:
+            with slot_connection.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM entity_pair_tags
+                    WHERE pair_tag_id IN (
+                        SELECT id FROM pair_tags WHERE tag = %s
+                    )
+                    """,
+                    (deprecated_tag_name,),
+                )
+                cur.execute(
+                    "DELETE FROM pair_tags WHERE tag = %s",
+                    (deprecated_tag_name,),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO pair_tags (
+                        tag, subject_kinds, object_kinds,
+                        is_ephemeral, deprecated, description
+                    ) VALUES (
+                        %s, %s, %s, false, true, %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        deprecated_tag_name,
+                        ["character"],
+                        ["character"],
+                        "Test fixture only — exercises predicate deprecation filter.",
+                    ),
+                )
+                deprecated_tag_id = cur.fetchone()[0]
+
+        # Phase 2: write an active entity_pair_tags row bypassing the writer
+        # (which would reject the deprecated tag), then exercise predicates.
+        with slot_connection:
+            with slot_connection.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO entity_pair_tags (
+                        subject_entity_id, object_entity_id, pair_tag_id, source_kind
+                    ) VALUES (%s, %s, %s, 'skald_inline'::entity_tag_source_kind)
+                    """,
+                    (test_entities.char_a, test_entities.char_b, deprecated_tag_id),
+                )
+
+                assert (
+                    pair_tag_exists(
+                        cur,
+                        subject_entity_id=test_entities.char_a,
+                        object_entity_id=test_entities.char_b,
+                        tag=deprecated_tag_name,
+                    )
+                    is False
+                )
+                assert (
+                    lookup_pair_tag_subjects(
+                        cur,
+                        object_entity_id=test_entities.char_b,
+                        tag=deprecated_tag_name,
+                    )
+                    == []
+                )
+                assert (
+                    lookup_pair_tag_objects(
+                        cur,
+                        subject_entity_id=test_entities.char_a,
+                        tag=deprecated_tag_name,
+                    )
+                    == []
+                )
+    finally:
+        # The test's finally runs BEFORE the fixture's teardown, so the
+        # entity_pair_tags row using this pair_tag is still alive and would
+        # cause an FK violation on pair_tags DELETE. Clear the referring
+        # rows first, then drop the registry row.
+        if deprecated_tag_id is not None:
+            with slot_connection:
+                with slot_connection.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM entity_pair_tags WHERE pair_tag_id = %s",
+                        (deprecated_tag_id,),
+                    )
+                    cur.execute(
+                        "DELETE FROM pair_tags WHERE id = %s",
+                        (deprecated_tag_id,),
+                    )
