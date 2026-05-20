@@ -656,8 +656,6 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 - *Social positions*: `respected`, `elite`
 - *Negative positions*: `outcast`, `pariah`, `enslaved`
 
-Vocabulary may expand per genre via the `new_tag_proposals` path (e.g., `status:apprentice(char → guild)`, `status:exiled(char → court)`).
-
 **`commoner` is the untagged default.** Ordinary citizens of a faction — no elevated rank, no informal recognition above baseline, not negatively positioned — carry *no* `status:<level>` row scoped to that faction. The compiler should NOT synthesize a `status:commoner` row for ordinary NPCs; the absence-of-row IS the commoner reading. This matches the same default-absent pattern as `role.fame:obscure` and `role.resources:comfortable`.
 
 **Formal vs. informal** is read off the scope-faction's own tags (its `legitimacy`, `operational_mode`), NOT the status tag itself. `status:senior(char → US_Army)` reads as formal military rank; `status:senior(char → village_elders)` reads as informal community elevation. Same level anchor, different flavor by composition.
