@@ -4,9 +4,16 @@ Exercises ``pair_tag_exists`` / ``lookup_pair_tag_subjects`` /
 ``lookup_pair_tag_objects`` against a live slot database (``save_05``).
 Activated by ``NEXUS_RUN_POSTGRES=1``.
 
-Reuses the same surgical-cleanup pattern as ``test_pair_tag_writer.py``:
-snapshot pre-existing row IDs between chosen entities, restore-by-deletion
-of only test-created rows on teardown.
+**Test isolation:** the fixture creates *fresh* bare entities for each test
+(``INSERT INTO entities (kind, is_active)`` with no backing characters /
+factions subtype row) and DELETEs them on teardown — the ON DELETE CASCADE
+on ``entity_pair_tags.subject_entity_id`` / ``object_entity_id`` cleans up
+any pair tags created between them automatically. This guarantees tests
+are independent of whatever pre-existing data lives in save_05 (no risk
+that an existing `mentors(char_1 → char_3)` row makes a false-when-absent
+assertion fail). The trade-off: tests can't cross-check that
+pre-existing user data is unaffected, but they don't touch it in the
+first place.
 """
 
 from __future__ import annotations
@@ -35,7 +42,7 @@ TEST_DBNAME = "save_05"
 
 
 class _TestEntities:
-    """Container for resolved test entity IDs and row-ID snapshots."""
+    """Container for freshly-created test entity IDs."""
 
     def __init__(
         self,
@@ -44,13 +51,13 @@ class _TestEntities:
         char_b: int,
         char_c: int,
         faction: Optional[int],
-        preexisting_ids: set[int],
+        all_ids: list[int],
     ):
         self.char_a = char_a
         self.char_b = char_b
         self.char_c = char_c
         self.faction = faction
-        self.preexisting_ids = preexisting_ids
+        self.all_ids = all_ids
 
 
 @pytest.fixture
@@ -66,45 +73,37 @@ def slot_connection() -> Generator[psycopg2.extensions.connection, None, None]:
 def test_entities(
     slot_connection: psycopg2.extensions.connection,
 ) -> Generator[_TestEntities, None, None]:
-    """Resolve three character entity IDs (and optionally a faction) for tests
-    that need a non-trivial inbound/outbound fan-out, snapshot pre-existing
-    pair_tags rows between them, and remove only test-created rows on
-    teardown."""
+    """Create 3 fresh bare character entities + 1 fresh bare faction for
+    isolated testing. Bare = entity row with no backing characters/factions
+    subtype row, which is sufficient for pair-tag tests (they only need
+    valid entity_ids to satisfy FK constraints). Teardown DELETEs the
+    entities; the ON DELETE CASCADE on ``entity_pair_tags`` removes any
+    pair tags created between them."""
 
-    with slot_connection.cursor() as cur:
-        cur.execute(
-            "SELECT id FROM entities WHERE kind = 'character' ORDER BY id LIMIT 3"
-        )
-        char_rows = cur.fetchall()
-        if len(char_rows) < 3:
-            pytest.skip(
-                f"{TEST_DBNAME} has fewer than 3 character entities; "
-                "cannot exercise pair-tag predicates with fan-out."
+    created_ids: list[int] = []
+    with slot_connection:
+        with slot_connection.cursor() as cur:
+            character_ids = []
+            for _ in range(3):
+                cur.execute(
+                    "INSERT INTO entities (kind, is_active) VALUES ('character', true) RETURNING id"
+                )
+                character_ids.append(cur.fetchone()[0])
+            char_a, char_b, char_c = character_ids
+            created_ids.extend(character_ids)
+
+            cur.execute(
+                "INSERT INTO entities (kind, is_active) VALUES ('faction', true) RETURNING id"
             )
-        char_a, char_b, char_c = (row[0] for row in char_rows)
-
-        cur.execute("SELECT id FROM entities WHERE kind = 'faction' ORDER BY id LIMIT 1")
-        faction_row = cur.fetchone()
-        faction = faction_row[0] if faction_row else None
-
-        ids_in_scope = [char_a, char_b, char_c]
-        if faction is not None:
-            ids_in_scope.append(faction)
-        cur.execute(
-            """
-            SELECT id FROM entity_pair_tags
-            WHERE subject_entity_id = ANY(%s) AND object_entity_id = ANY(%s)
-            """,
-            (ids_in_scope, ids_in_scope),
-        )
-        preexisting_ids = {row[0] for row in cur.fetchall()}
+            faction = cur.fetchone()[0]
+            created_ids.append(faction)
 
     entities = _TestEntities(
         char_a=char_a,
         char_b=char_b,
         char_c=char_c,
         faction=faction,
-        preexisting_ids=preexisting_ids,
+        all_ids=created_ids,
     )
 
     try:
@@ -112,14 +111,11 @@ def test_entities(
     finally:
         with slot_connection:
             with slot_connection.cursor() as cur:
+                # ON DELETE CASCADE on entity_pair_tags handles any pair tags;
+                # no manual pair-tag cleanup needed.
                 cur.execute(
-                    """
-                    DELETE FROM entity_pair_tags
-                    WHERE subject_entity_id = ANY(%s)
-                      AND object_entity_id = ANY(%s)
-                      AND NOT (id = ANY(%s))
-                    """,
-                    (ids_in_scope, ids_in_scope, list(entities.preexisting_ids)),
+                    "DELETE FROM entities WHERE id = ANY(%s)",
+                    (created_ids,),
                 )
 
 

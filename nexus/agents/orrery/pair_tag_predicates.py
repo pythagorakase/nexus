@@ -21,6 +21,24 @@ from __future__ import annotations
 from typing import Any
 
 
+def _row_value(row: Any, key: str, index: int) -> Any:
+    """Read a column from a row that may be a Mapping (RealDictCursor) or sequence.
+
+    The Orrery codebase uses both RealDictCursor (worker paths) and tuple
+    cursors (some tests and ad-hoc scripts). Indexing by integer crashes on
+    mapping rows with a KeyError; indexing by string crashes on tuple rows
+    with a TypeError. This helper handles both transparently.
+
+    Mirrors ``nexus.agents.orrery.tag_writer._row_value``; duplicated here to
+    keep the module independently usable rather than coupled to the writer's
+    internal helpers.
+    """
+
+    if hasattr(row, "get"):
+        return row[key]
+    return row[index]
+
+
 def pair_tag_exists(
     cur: Any,
     *,
@@ -74,7 +92,7 @@ def lookup_pair_tag_subjects(
 
     cur.execute(
         """
-        SELECT ept.subject_entity_id
+        SELECT ept.subject_entity_id AS subject_entity_id
         FROM entity_pair_tags ept
         JOIN pair_tags pt ON pt.id = ept.pair_tag_id
         WHERE ept.object_entity_id = %s
@@ -85,7 +103,7 @@ def lookup_pair_tag_subjects(
         """,
         (object_entity_id, tag),
     )
-    return [row[0] for row in cur.fetchall()]
+    return [_row_value(row, "subject_entity_id", 0) for row in cur.fetchall()]
 
 
 def lookup_pair_tag_objects(
@@ -109,7 +127,7 @@ def lookup_pair_tag_objects(
 
     cur.execute(
         """
-        SELECT ept.object_entity_id
+        SELECT ept.object_entity_id AS object_entity_id
         FROM entity_pair_tags ept
         JOIN pair_tags pt ON pt.id = ept.pair_tag_id
         WHERE ept.subject_entity_id = %s
@@ -120,4 +138,4 @@ def lookup_pair_tag_objects(
         """,
         (subject_entity_id, tag),
     )
-    return [row[0] for row in cur.fetchall()]
+    return [_row_value(row, "object_entity_id", 0) for row in cur.fetchall()]
