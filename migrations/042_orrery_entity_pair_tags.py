@@ -126,7 +126,11 @@ def run(conn: connection) -> None:
     """Create the entity_pair_tags substrate and seed the 12 settled relations."""
 
     with conn.cursor() as cur:
-        # Registry of relation types (analog of `tags` but with kind validation columns)
+        # Registry of relation types (analog of `tags` but with kind validation columns).
+        # Empty-array CHECK uses `cardinality(...) >= 1` rather than `array_length(...) >= 1`:
+        # PostgreSQL's `array_length('{}', 1)` returns NULL, and CHECK treats NULL as
+        # passing — so array_length would silently admit empty arrays. `cardinality`
+        # returns 0 for empty arrays, making the check NULL-safe.
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS pair_tags (
@@ -142,8 +146,8 @@ def run(conn: connection) -> None:
                 description          text,
                 created_at           timestamptz NOT NULL DEFAULT now(),
                 CHECK (is_ephemeral = (clearance_kind IS NOT NULL)),
-                CHECK (array_length(subject_kinds, 1) >= 1),
-                CHECK (array_length(object_kinds, 1) >= 1),
+                CHECK (cardinality(subject_kinds) >= 1),
+                CHECK (cardinality(object_kinds) >= 1),
                 CHECK (btrim(tag) <> '')
             )
             """
@@ -171,8 +175,37 @@ def run(conn: connection) -> None:
             "COMMENT ON COLUMN pair_tags.is_ephemeral IS "
             "'TRUE for relations that get cleared by world events (e.g., `pursuing`); FALSE for durable relations.'"
         )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.clearance_kind IS "
+            "'For ephemeral relations: the mode of clearance (e.g. `semantic`). NULL for durable relations. Enforced equal to (is_ephemeral) by check constraint.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.reapplication_policy IS "
+            "'How the relation behaves if reapplied after clearance. NULL = no special policy.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.clear_on IS "
+            "'Optional JSONB describing world_event types or conditions that auto-clear instances of this relation. Shape mirrors tags.clear_on.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.deprecated IS "
+            "'TRUE marks the relation as no longer accepted for new bestowals; lookup intentionally filters deprecated rows.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.description IS "
+            "'Human-readable description of the relation semantics.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN pair_tags.created_at IS "
+            "'When the relation type was registered.'"
+        )
 
-        # Application table — actual edges between entities
+        # Application table — actual edges between entities.
+        # Uniqueness is enforced by the partial index `ix_entity_pair_tags_current`
+        # below (one active row per directed triple). No `UNIQUE (subject, object,
+        # pair_tag, applied_at)` constraint is needed: `applied_at = now()` advances
+        # per-statement so two writes from different transactions never share a value,
+        # making such a constraint dead weight.
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS entity_pair_tags (
@@ -186,9 +219,7 @@ def run(conn: connection) -> None:
                 cleared_at            timestamptz,
                 clear_on_override     jsonb,
                 template_id           text,
-                CHECK (subject_entity_id <> object_entity_id),
-                CONSTRAINT entity_pair_tags_unique_event UNIQUE
-                    (subject_entity_id, object_entity_id, pair_tag_id, applied_at)
+                CHECK (subject_entity_id <> object_entity_id)
             )
             """
         )
@@ -212,8 +243,28 @@ def run(conn: connection) -> None:
             "'FK to pair_tags — the relation type.'"
         )
         cur.execute(
+            "COMMENT ON COLUMN entity_pair_tags.applied_at IS "
+            "'Real-world wall-clock time the row was inserted (DEFAULT now()).'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN entity_pair_tags.applied_at_world_time IS "
+            "'In-story world time when the relation became active. NULL if no world_time was provided by the caller.'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN entity_pair_tags.source_kind IS "
+            "'Provenance: `skald_inline` for runtime bestowals, `llm_generated` for offline backfills (same enum as entity_tags.source_kind).'"
+        )
+        cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.cleared_at IS "
             "'When set, the relation is no longer active (analogous to entity_tags.cleared_at).'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN entity_pair_tags.clear_on_override IS "
+            "'Optional per-row override of the relation type''s clear_on policy (analogous to entity_tags.clear_on).'"
+        )
+        cur.execute(
+            "COMMENT ON COLUMN entity_pair_tags.template_id IS "
+            "'Optional bestowal-template identifier for downstream traceability (analogous to entity_tags.template_id).'"
         )
 
         # Indexes

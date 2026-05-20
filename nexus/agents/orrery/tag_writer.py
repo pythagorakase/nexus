@@ -305,6 +305,13 @@ def apply_pair_tag_bestowal(
     - unknown / deprecated ``tag``
     - ``subject_kind`` not in the tag's allowed subject_kinds
     - ``object_kind`` not in the tag's allowed object_kinds
+
+    Note: ``subject_kind`` / ``object_kind`` are validated against the
+    pair_tag's allowed-kinds arrays only — they are NOT cross-checked against
+    the actual ``entities.kind`` values of the supplied entity IDs. Callers
+    must ensure ``subject_kind`` and ``object_kind`` correctly describe the
+    underlying entities; passing mismatched kind labels is undefined behavior
+    that this function will silently accept.
     """
 
     if subject_entity_id == object_entity_id:
@@ -378,6 +385,13 @@ def clear_pair_tag(
 
     Returns ``True`` if a row was cleared, ``False`` if no active row existed
     for ``(subject, object, pair_tag)``.
+
+    Note: unknown or deprecated ``tag`` names silently return ``False``
+    rather than raising — this is the inverse of ``apply_pair_tag_bestowal``,
+    which raises ``ValueError`` for unknown tags. The asymmetry is deliberate:
+    clearing a relation that doesn't exist is a no-op, so an unknown tag is
+    indistinguishable from a missing row. Callers should not interpret
+    ``False`` as "previously cleared" versus "tag doesn't exist."
     """
 
     cur.execute(
