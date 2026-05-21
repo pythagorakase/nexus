@@ -30,6 +30,19 @@ from nexus.agents.orrery.needs import (
     severity_for_debt,
 )
 
+LOCATION_CLASS_TAG_CATEGORIES: tuple[str, ...] = (
+    "place_affordance",
+    "place_function",
+    "place_visibility",
+    "place_access",
+    "place_environment",
+    "place_threat",
+)
+# Safe: assembled only from hardcoded LOCATION_CLASS_TAG_CATEGORIES values.
+_LOCATION_CLASS_CATEGORY_SQL = ", ".join(
+    f"'{category}'" for category in LOCATION_CLASS_TAG_CATEGORIES
+)
+
 
 def _proposal_id(template_id: str, binding_hash_value: str) -> str:
     """Return the stable public identifier for one tick proposal."""
@@ -260,7 +273,7 @@ def hydrate_world_state(
     location_classes: dict[int, set[str]] = {}
     for row in session.execute(
         text(
-            """
+            f"""
             /* orrery:location_classes */
             SELECT p.id, p.type::text AS location_class, true AS is_primary
             FROM places p
@@ -270,7 +283,7 @@ def hydrate_world_state(
             FROM places p
             JOIN entity_tags_current etc ON etc.entity_id = p.entity_id
             WHERE etc.entity_kind = 'place'
-              AND etc.category = 'place_affordance'
+              AND etc.category IN ({_LOCATION_CLASS_CATEGORY_SQL})
             """
         )
     ).mappings():
@@ -950,7 +963,8 @@ def _classify_weather(raw_weather: str) -> str:
 def _draft_from_resolution(resolution: Resolution) -> OrreryResolutionDraft:
     if resolution.branch_label is None or resolution.narrative_stub is None:
         raise RuntimeError(
-            f"Orrery resolution {resolution.template_id!r} passed gate but lacks branch data"
+            f"Orrery resolution {resolution.template_id!r} passed gate but lacks "
+            "branch data"
         )
     return OrreryResolutionDraft(
         template_id=resolution.template_id,

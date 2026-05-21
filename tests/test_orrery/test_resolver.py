@@ -7,6 +7,7 @@ import pytest
 from nexus.agents.lore.utils.turn_context import TurnContext
 from nexus.agents.lore.utils.turn_cycle import TurnCycleManager
 from nexus.agents.orrery.resolver import (
+    LOCATION_CLASS_TAG_CATEGORIES,
     _need_pressure_stub,
     compose_actor_target_bindings,
     hydrate_world_state,
@@ -110,7 +111,8 @@ class FakeSession:
         if "/* orrery:character_locations */" in sql:
             return FakeResult(self.location_rows)
         if "/* orrery:location_classes */" in sql:
-            assert "place_affordance" in sql
+            for category in LOCATION_CLASS_TAG_CATEGORIES:
+                assert category in sql
             return FakeResult(self.location_class_rows)
         if "/* orrery:character_activities */" in sql:
             return FakeResult(self.activity_rows)
@@ -839,6 +841,37 @@ def test_hydrate_world_state_loads_semantic_place_affordances() -> None:
     )
 
 
+def test_hydrate_world_state_loads_new_place_category_classes() -> None:
+    """Cutover category rows also feed legacy in_location_class() gates."""
+
+    state = hydrate_world_state(
+        FakeSession(
+            location_class_rows=[
+                {"id": 10, "location_class": "dwelling", "is_primary": False},
+                {"id": 10, "location_class": "hidden", "is_primary": False},
+                {"id": 10, "location_class": "restricted", "is_primary": False},
+                {"id": 10, "location_class": "subterranean", "is_primary": False},
+                {"id": 10, "location_class": "contested", "is_primary": False},
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+            ],
+        ),
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert state.location_class[10] == "fixed_location"
+    assert state.location_classes[10] == frozenset(
+        {
+            "fixed_location",
+            "dwelling",
+            "hidden",
+            "restricted",
+            "subterranean",
+            "contested",
+        }
+    )
+
+
 def test_hydrate_world_state_computes_effective_need_debt() -> None:
     """Need debt accrues from last_evaluated_at without resolver writes."""
 
@@ -1406,9 +1439,7 @@ def test_resolve_dry_run_uses_configured_present_need_pressure_tuning() -> None:
     assert pressure.magnitude == pytest.approx(0.3)
 
 
-def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets() -> (
-    None
-):
+def test_default_templates_keep_present_targets_offscreen_only() -> None:
     """Default multi-slot templates cannot pressure an on-screen target."""
 
     default_template = Template(

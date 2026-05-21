@@ -346,6 +346,58 @@ def test_tag_category_registry_migration_covers_current_vocab_categories() -> No
     assert "tag_category_registry" in migration_path.read_text()
 
 
+def test_category_refactor_phase1_migration_marks_cutover_categories() -> None:
+    """Migration 043 records new category axes without rewriting live tags."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "043_orrery_category_refactor_phase1.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    registered = {
+        (category, entity_kind)
+        for category, entity_kind, _order, _description in (
+            migration.NEW_CATEGORY_REGISTRY
+        )
+    }
+    deprecated = {
+        (category, entity_kind): replacements
+        for category, entity_kind, replacements in (
+            migration.DEPRECATED_CATEGORY_REPLACEMENTS
+        )
+    }
+
+    assert {
+        ("place_function", "place"),
+        ("place_visibility", "place"),
+        ("place_access", "place"),
+        ("place_environment", "place"),
+        ("place_threat", "place"),
+        ("ideology", "faction"),
+        ("power_status", "faction"),
+        ("agenda", "faction"),
+        ("resource_base", "faction"),
+        ("legitimacy", "faction"),
+        ("operational_mode", "faction"),
+    } <= registered
+    assert deprecated[("place_affordance", "place")] == (
+        "place_function",
+        "place_visibility",
+        "place_access",
+        "place_environment",
+        "place_threat",
+    )
+    assert deprecated[("profession_lite", "character")] == ("role",)
+    assert deprecated[("orrery_signal", "character")] == ("state",)
+    assert deprecated[("history_class", "faction")] is None
+
+    migration_source = migration_path.read_text()
+    assert "ADD COLUMN IF NOT EXISTS deprecated" in migration_source
+    assert "ADD COLUMN IF NOT EXISTS replacement_categories" in migration_source
+    assert "AND entity_kind = %s::entity_kind" in migration_source
+
+
 def test_tag_baseline_reconciliation_migration_closes_slot_drift() -> None:
     """Migration 038 keeps template clones and existing slots on one vocab set."""
 
