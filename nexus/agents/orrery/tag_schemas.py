@@ -11,62 +11,15 @@ These models are embedded in:
 Skald fills these as part of normal entity emission. The per-chunk commit
 handler and the wizard persistence layer feed them into
 ``nexus.agents.orrery.tag_writer.apply_tag_bestowal`` to insert into
-``entity_tags`` (and ``tags`` when proposing new vocabulary).
+``entity_tags``. The vocabulary is closed: Skald may only apply registered tag
+names.
 """
 
 from __future__ import annotations
 
-from typing import List, Literal
+from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field
-
-
-class NewTagProposal(BaseModel):
-    """A tag Skald wants to add to the registered vocabulary.
-
-    Auto-inserted into ``tags`` on apply (decision: max-contrast genre tests
-    need the vocab to grow in real time so package gates can match in the same
-    session). The corresponding ``entity_tags`` row is stamped with the
-    ``skald_inline`` source kind for audit.
-    """
-
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
-
-    tag: str = Field(
-        ...,
-        min_length=2,
-        max_length=64,
-        description=(
-            "snake_case tag name (e.g., bodyform:elf, sworn_liege, "
-            "scrying_target). Lowercase, no spaces."
-        ),
-    )
-    category: str = Field(
-        ...,
-        min_length=2,
-        max_length=64,
-        description=(
-            "Tag category. Reuse an existing one when possible (bodyform, "
-            "capacity, disposition, role, state, place_affordance, ideology_axis, "
-            "etc.). New namespaces are permitted when the existing ones do not fit."
-        ),
-    )
-    scope: Literal["durable", "ephemeral"] = Field(
-        ...,
-        description=(
-            "durable = stable property of the entity (bodyform, role, ideology). "
-            "ephemeral = a state that can clear (cursed, in_transit, scrying_target)."
-        ),
-    )
-    evidence: str = Field(
-        ...,
-        min_length=10,
-        max_length=500,
-        description=(
-            "One-sentence rationale plus a short near-quote from the structured "
-            "prose you are filling in. Without evidence, the proposal is noise."
-        ),
-    )
 
 
 class OrreryTagBestowal(BaseModel):
@@ -74,7 +27,7 @@ class OrreryTagBestowal(BaseModel):
 
     Embedded as an optional ``orrery_tags`` field on entity schemas. The DB
     writer ``apply_tag_bestowal`` consumes this model and writes ``entity_tags``
-    rows (plus ``tags`` rows for proposals).
+    rows for registered tags.
 
     ``tags_to_clear`` is only meaningful in update contexts
     (``CharacterStateUpdate`` etc.) — it is silently ignored when an entity is
@@ -87,15 +40,8 @@ class OrreryTagBestowal(BaseModel):
         default_factory=list,
         description=(
             "Registered tag names to apply to this entity. Lookups happen "
-            "against the live `tags` table; unknown names are silently skipped, "
-            "category-incompatible names are silently skipped."
-        ),
-    )
-    new_tag_proposals: List[NewTagProposal] = Field(
-        default_factory=list,
-        description=(
-            "Tag proposals not yet in the registered vocabulary. Auto-inserted "
-            "into `tags` on apply, then applied to this entity."
+            "against the live `tags` table; unknown names and "
+            "category-incompatible names are hard errors."
         ),
     )
     tags_to_clear: List[str] = Field(

@@ -263,9 +263,8 @@ class NewCharacter(BaseModel):
         description=(
             "Semantic Orrery tags for this character (bodyform, capacity, "
             "disposition, role, state, etc.). Apply registered tags by name; "
-            "propose new ones when the genre needs vocabulary that doesn't yet "
-            "exist (e.g., bodyform:elf for a fantasy elf). See the Orrery "
-            "Awareness section of your system prompt for category guidance."
+            "omit tags when the closed registry has no exact fit. See the "
+            "Orrery Awareness section of your system prompt for category guidance."
         ),
     )
 
@@ -636,10 +635,10 @@ class CharacterStateUpdate(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Tag deltas for this character. Use applied_tags to add new tags "
+            "Tag deltas for this character. Use applied_tags to apply registered tags "
             "(e.g., they were just cursed → cursed), tags_to_clear to retire "
-            "ephemerals that no longer apply (e.g., the geas was lifted), and "
-            "new_tag_proposals when the vocabulary lacks what you need."
+            "ephemerals that no longer apply (e.g., the geas was lifted). "
+            "Use only registered tag names."
         ),
     )
 

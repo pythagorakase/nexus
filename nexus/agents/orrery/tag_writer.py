@@ -22,12 +22,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from nexus.agents.orrery.status_family import STATUS_TAGS, status_tag_for_level
 from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
 from nexus.agents.orrery.tag_library import VALID_ENTITY_KINDS
-from nexus.agents.orrery.tag_schemas import NewTagProposal, OrreryTagBestowal
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 
-_SKALD_EPHEMERAL_CLEARANCE = "semantic"
+_DISALLOWED_SOURCE_KINDS = frozenset({"auto_" "registered"})
 
 
 def apply_tag_bestowal(
@@ -39,34 +40,30 @@ def apply_tag_bestowal(
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
 ) -> dict[str, int]:
-    """Apply a Skald-issued tag bestowal to the database.
+    """Apply a closed-vocabulary tag bestowal to the database.
 
-    Performs three operations in order:
+    Performs two operations in order:
 
-    1. Insert each new tag proposal into ``tags`` (idempotent via
-       ``ON CONFLICT (tag) DO NOTHING``).
-    2. Apply registered + just-proposed tag names to the entity via
-       ``entity_tags`` insert.
-    3. Mark ``tags_to_clear`` entries cleared (UPDATE cleared_at = now()).
+    1. Apply registered tag names to the entity via ``entity_tags`` insert.
+    2. Mark ``tags_to_clear`` entries cleared (UPDATE cleared_at = now()).
 
     Requires migration 037's ``tag_category_registry`` rows for the target
     ``entity_kind``; missing registry data is treated as a slot-migration error.
+    Unknown, deprecated, or entity-kind-incompatible tags raise ``ValueError``.
 
     Returns counter dict suitable for logging:
-    ``{"applied", "proposed", "cleared", "skipped_category", "skipped_unknown"}``.
+    ``{"applied", "cleared"}``.
     """
 
     counters = {
         "applied": 0,
-        "proposed": 0,
         "cleared": 0,
-        "skipped_category": 0,
-        "skipped_unknown": 0,
     }
 
     if bestowal is None:
         return counters
 
+    _validate_source_kind(source_kind)
     if entity_kind not in VALID_ENTITY_KINDS:
         raise ValueError(
             f"Unknown entity_kind={entity_kind!r}; expected one of "
@@ -85,36 +82,32 @@ def apply_tag_bestowal(
         if row is not None:
             world_time = _row_value(row, "world_time", 0)
 
-    apply_names = list(bestowal.applied_tags)
-
-    # 1. insert new tag proposals into the vocabulary
-    for proposal in bestowal.new_tag_proposals:
-        if proposal.category not in allowed:
-            status = _category_registry_status(cur, proposal.category, entity_kind)
-            if status == "unknown":
-                _insert_category_registry_row(
-                    cur, category=proposal.category, entity_kind=entity_kind
-                )
-                allowed.add(proposal.category)
-            else:
-                counters["skipped_category"] += 1
-                continue
-        _insert_new_tag(cur, proposal)
-        counters["proposed"] += 1
-        apply_names.append(proposal.tag)
-
-    # 2. apply tags (registered + just-proposed) to the entity
-    for proposed_name in apply_names:
-        canonical_name = CANONICAL_TAGS.get(proposed_name, proposed_name)
-        tag_row = _lookup_tag(cur, canonical_name)
-        if tag_row is None:
-            counters["skipped_unknown"] += 1
-            continue
+    tags_to_apply: list[int] = []
+    for tag_name in bestowal.applied_tags:
+        canonical_name, tag_row = _lookup_canonical_tag(cur, tag_name)
         category = _row_value(tag_row, "category", 1)
-        if category not in allowed:
-            counters["skipped_category"] += 1
-            continue
-        tag_id = _row_value(tag_row, "id", 0)
+        _validate_allowed_category(
+            category=category,
+            allowed=allowed,
+            tag_name=canonical_name,
+            entity_kind=entity_kind,
+        )
+        tags_to_apply.append(_row_value(tag_row, "id", 0))
+
+    tags_to_clear: list[int] = []
+    for clear_name in bestowal.tags_to_clear:
+        canonical_clear, tag_row = _lookup_canonical_tag(cur, clear_name)
+        category = _row_value(tag_row, "category", 1)
+        _validate_allowed_category(
+            category=category,
+            allowed=allowed,
+            tag_name=canonical_clear,
+            entity_kind=entity_kind,
+        )
+        tags_to_clear.append(_row_value(tag_row, "id", 0))
+
+    # 1. apply registered tags to the entity
+    for tag_id in tags_to_apply:
         applied = _insert_entity_tag(
             cur,
             entity_id=entity_id,
@@ -125,18 +118,74 @@ def apply_tag_bestowal(
         if applied:
             counters["applied"] += 1
 
-    # 3. clear tags that no longer apply (update contexts only)
-    for clear_name in bestowal.tags_to_clear:
-        canonical_clear = CANONICAL_TAGS.get(clear_name, clear_name)
-        tag_row = _lookup_tag(cur, canonical_clear)
-        if tag_row is None:
-            counters["skipped_unknown"] += 1
-            continue
-        tag_id = _row_value(tag_row, "id", 0)
+    # 2. clear tags that no longer apply (update contexts only)
+    for tag_id in tags_to_clear:
         if _clear_entity_tag(cur, entity_id=entity_id, tag_id=tag_id):
             counters["cleared"] += 1
 
     return counters
+
+
+def apply_exclusive_tag_bestowal(
+    cur: Any,
+    *,
+    entity_id: int,
+    entity_kind: str,
+    tag: str,
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+) -> bool:
+    """Replace the active tag within a single-entity exclusive category.
+
+    This is the write primitive for documented XOR categories such as
+    ``role.fame`` and ``role.resources`` while the registry-level cardinality
+    column is still schema-pending. The function clears all active sibling rows
+    in the target tag's category for ``entity_id`` before inserting the new tag,
+    all inside the caller-owned transaction.
+
+    Returns ``True`` if the new tag row was inserted, ``False`` if it was
+    already active. Sibling rows are cleared either way.
+    """
+
+    _validate_source_kind(source_kind)
+    if entity_kind not in VALID_ENTITY_KINDS:
+        raise ValueError(
+            f"Unknown entity_kind={entity_kind!r}; expected one of "
+            f"{sorted(VALID_ENTITY_KINDS)}"
+        )
+
+    allowed = _lookup_allowed_categories(cur, entity_kind)
+    if not allowed:
+        raise ValueError(
+            f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
+        )
+
+    canonical_name, tag_row = _lookup_canonical_tag(cur, tag)
+    category = _row_value(tag_row, "category", 1)
+    _validate_allowed_category(
+        category=category,
+        allowed=allowed,
+        tag_name=canonical_name,
+        entity_kind=entity_kind,
+    )
+    tag_id = _row_value(tag_row, "id", 0)
+
+    if world_time is None:
+        world_time = _load_world_time(cur)
+
+    _clear_entity_tag_siblings(
+        cur,
+        entity_id=entity_id,
+        category=category,
+        keep_tag_id=tag_id,
+    )
+    return _insert_entity_tag(
+        cur,
+        entity_id=entity_id,
+        tag_id=tag_id,
+        source_kind=source_kind,
+        world_time=world_time,
+    )
 
 
 def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
@@ -151,62 +200,6 @@ def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
     return {_row_value(row, "category", 0) for row in cur.fetchall()}
 
 
-def _category_registry_status(cur: Any, category: str, entity_kind: str) -> str:
-    cur.execute(
-        """
-        SELECT entity_kind::text AS entity_kind
-        FROM tag_category_registry
-        WHERE category = %s
-        """,
-        (category,),
-    )
-    rows = cur.fetchall()
-    if not rows:
-        return "unknown"
-    if any(_row_value(row, "entity_kind", 0) == entity_kind for row in rows):
-        return "compatible"
-    return "incompatible"
-
-
-def _insert_category_registry_row(cur: Any, *, category: str, entity_kind: str) -> None:
-    cur.execute(
-        """
-        INSERT INTO tag_category_registry (
-            category, entity_kind, prompt_order, description
-        ) VALUES (
-            %s, %s::entity_kind, 1000, %s
-        )
-        ON CONFLICT (category, entity_kind) DO NOTHING
-        """,
-        (
-            category,
-            entity_kind,
-            f"Skald-proposed {entity_kind} tag category.",
-        ),
-    )
-
-
-def _insert_new_tag(cur: Any, proposal: NewTagProposal) -> None:
-    """Insert proposal into ``tags``. Idempotent via ``ON CONFLICT (tag)``.
-
-    Honors the ``is_ephemeral = (clearance_kind IS NOT NULL)`` check
-    constraint by setting ``clearance_kind='semantic'`` for ephemerals and
-    ``NULL`` for durables.
-    """
-
-    is_ephemeral = proposal.scope == "ephemeral"
-    clearance_kind = _SKALD_EPHEMERAL_CLEARANCE if is_ephemeral else None
-    description = f"[skald-proposed] {proposal.evidence}"
-    cur.execute(
-        """
-        INSERT INTO tags (tag, category, is_ephemeral, clearance_kind, description)
-        VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (tag) DO NOTHING
-        """,
-        (proposal.tag, proposal.category, is_ephemeral, clearance_kind, description),
-    )
-
-
 def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
     cur.execute(
         """
@@ -217,6 +210,49 @@ def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
         (tag_name,),
     )
     return cur.fetchone()
+
+
+def _lookup_canonical_tag(cur: Any, tag_name: str) -> tuple[str, Any]:
+    canonical_name = CANONICAL_TAGS.get(tag_name, tag_name)
+    tag_row = _lookup_tag(cur, canonical_name)
+    if tag_row is None:
+        if canonical_name == tag_name:
+            raise ValueError(f"Unknown or deprecated Orrery tag {tag_name!r}")
+        raise ValueError(
+            f"Unknown or deprecated Orrery tag {tag_name!r} "
+            f"(canonicalized to {canonical_name!r})"
+        )
+    return canonical_name, tag_row
+
+
+def _validate_allowed_category(
+    *,
+    category: str,
+    allowed: set[str],
+    tag_name: str,
+    entity_kind: str,
+) -> None:
+    if category not in allowed:
+        raise ValueError(
+            f"Orrery tag {tag_name!r} has category {category!r}, which is not "
+            f"registered for entity_kind={entity_kind!r}"
+        )
+
+
+def _validate_source_kind(source_kind: str) -> None:
+    if source_kind in _DISALLOWED_SOURCE_KINDS:
+        raise ValueError(
+            f"source_kind={source_kind!r} is not accepted by Orrery writers; "
+            "closed-vocabulary bestowals must not auto-register tags"
+        )
+
+
+def _load_world_time(cur: Any) -> Optional[datetime]:
+    cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return _row_value(row, "world_time", 0)
 
 
 def _insert_entity_tag(
@@ -238,6 +274,29 @@ def _insert_entity_tag(
         (entity_id, tag_id, world_time, source_kind),
     )
     return bool(cur.rowcount)
+
+
+def _clear_entity_tag_siblings(
+    cur: Any,
+    *,
+    entity_id: int,
+    category: str,
+    keep_tag_id: int,
+) -> int:
+    cur.execute(
+        """
+        UPDATE entity_tags et
+        SET cleared_at = now()
+        FROM tags t
+        WHERE et.tag_id = t.id
+          AND et.entity_id = %s
+          AND t.category = %s
+          AND t.id <> %s
+          AND et.cleared_at IS NULL
+        """,
+        (entity_id, category, keep_tag_id),
+    )
+    return int(cur.rowcount)
 
 
 def _clear_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
@@ -314,12 +373,39 @@ def apply_pair_tag_bestowal(
     that this function will silently accept.
     """
 
+    _validate_source_kind(source_kind)
     if subject_entity_id == object_entity_id:
         raise ValueError(
             f"pair_tag {tag!r} requires distinct subject and object; "
             f"got subject_entity_id == object_entity_id == {subject_entity_id}"
         )
 
+    row = _lookup_pair_tag_row(cur, tag)
+    pair_tag_id = _row_value(row, "id", 0)
+    subject_kinds = _row_value(row, "subject_kinds", 1)
+    object_kinds = _row_value(row, "object_kinds", 2)
+    _validate_pair_tag_kinds(
+        tag=tag,
+        subject_kind=subject_kind,
+        object_kind=object_kind,
+        subject_kinds=subject_kinds,
+        object_kinds=object_kinds,
+    )
+
+    if world_time is None:
+        world_time = _load_world_time(cur)
+
+    return _insert_pair_tag_row(
+        cur,
+        subject_entity_id=subject_entity_id,
+        object_entity_id=object_entity_id,
+        pair_tag_id=pair_tag_id,
+        source_kind=source_kind,
+        world_time=world_time,
+    )
+
+
+def _lookup_pair_tag_row(cur: Any, tag: str) -> Any:
     cur.execute(
         """
         SELECT id, subject_kinds, object_kinds
@@ -331,11 +417,17 @@ def apply_pair_tag_bestowal(
     row = cur.fetchone()
     if row is None:
         raise ValueError(f"Unknown or deprecated pair_tag {tag!r}")
+    return row
 
-    pair_tag_id = _row_value(row, "id", 0)
-    subject_kinds = _row_value(row, "subject_kinds", 1)
-    object_kinds = _row_value(row, "object_kinds", 2)
 
+def _validate_pair_tag_kinds(
+    *,
+    tag: str,
+    subject_kind: str,
+    object_kind: str,
+    subject_kinds: list[str],
+    object_kinds: list[str],
+) -> None:
     if subject_kind not in subject_kinds:
         raise ValueError(
             f"pair_tag {tag!r} does not allow subject_kind={subject_kind!r}; "
@@ -347,12 +439,16 @@ def apply_pair_tag_bestowal(
             f"allowed: {sorted(object_kinds)}"
         )
 
-    if world_time is None:
-        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
-        chunk_row = cur.fetchone()
-        if chunk_row is not None:
-            world_time = _row_value(chunk_row, "world_time", 0)
 
+def _insert_pair_tag_row(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    pair_tag_id: int,
+    source_kind: str,
+    world_time: Optional[datetime],
+) -> bool:
     cur.execute(
         """
         INSERT INTO entity_pair_tags (
@@ -367,6 +463,58 @@ def apply_pair_tag_bestowal(
         (subject_entity_id, object_entity_id, pair_tag_id, world_time, source_kind),
     )
     return bool(cur.rowcount)
+
+
+def apply_status_pair_tag_bestowal(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    scope_faction_entity_id: int,
+    subject_kind: str,
+    level: str,
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+) -> bool:
+    """Replace the active ``status:*`` level for one subject→faction edge.
+
+    Status is multi-valued across different scope factions, but exclusive within
+    a single ``(subject, scope_faction)`` edge. This helper clears active
+    sibling ``status:*`` rows for that edge before applying ``status:<level>``.
+    """
+
+    tag = status_tag_for_level(level)
+    _validate_source_kind(source_kind)
+    if subject_entity_id == scope_faction_entity_id:
+        raise ValueError(
+            f"pair_tag {tag!r} requires distinct subject and object; "
+            f"got subject_entity_id == object_entity_id == {subject_entity_id}"
+        )
+    row = _lookup_pair_tag_row(cur, tag)
+    pair_tag_id = _row_value(row, "id", 0)
+    _validate_pair_tag_kinds(
+        tag=tag,
+        subject_kind=subject_kind,
+        object_kind="faction",
+        subject_kinds=_row_value(row, "subject_kinds", 1),
+        object_kinds=_row_value(row, "object_kinds", 2),
+    )
+    if world_time is None:
+        world_time = _load_world_time(cur)
+
+    _clear_pair_tags_by_name(
+        cur,
+        subject_entity_id=subject_entity_id,
+        object_entity_id=scope_faction_entity_id,
+        tags=STATUS_TAGS - {tag},
+    )
+    return _insert_pair_tag_row(
+        cur,
+        subject_entity_id=subject_entity_id,
+        object_entity_id=scope_faction_entity_id,
+        pair_tag_id=pair_tag_id,
+        source_kind=source_kind,
+        world_time=world_time,
+    )
 
 
 def clear_pair_tag(
@@ -408,3 +556,28 @@ def clear_pair_tag(
         (tag, subject_entity_id, object_entity_id),
     )
     return bool(cur.rowcount)
+
+
+def _clear_pair_tags_by_name(
+    cur: Any,
+    *,
+    subject_entity_id: int,
+    object_entity_id: int,
+    tags: set[str],
+) -> int:
+    if not tags:
+        return 0
+    cur.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.subject_entity_id = %s
+          AND ept.object_entity_id = %s
+          AND pt.tag = ANY(%s)
+          AND ept.cleared_at IS NULL
+        """,
+        (subject_entity_id, object_entity_id, sorted(tags)),
+    )
+    return int(cur.rowcount)

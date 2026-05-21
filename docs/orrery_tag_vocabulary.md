@@ -18,7 +18,7 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 
 ### Locked Vocabulary — No Runtime Growth
 
-Skald applies from a closed registry. The `skald_inline` and `auto_registered` source_kind paths are deprecated; the `new_tag_proposals` runtime path is removed (tracked as issue #287). Bestowal of an unknown tag name is a hard error, not an opportunity to auto-register.
+Skald applies from a closed registry. `skald_inline` remains the provenance marker for runtime bestowals of registered tags; the `auto_registered` source kind and runtime vocabulary-growth path are removed. Bestowal of an unknown tag name is a hard error, not an opportunity to auto-register.
 
 **Rationale:** every successful tag system in adjacent design space (Bethesda Radiant AI, Dwarf Fortress) uses closed vocabularies. NEXUS's earlier "let Skald propose at runtime" gambit produced entropy without curation; the right discipline is pre-design.
 
@@ -48,7 +48,7 @@ A tag name that requires its description field to be understandable is wrong. Na
 
 Cardinality is a property of the category-in-the-registry, not of individual tag definitions. Implementation: add a `cardinality` column to the `tags` registry (default `multi`), enforce at bestowal time.
 
-**⏳ SCHEMA-PENDING:** the `cardinality` column does not yet exist on the `tags` registry (see Open Items #5). Until that migration lands, exclusive/multi distinctions throughout this doc are *design intent* only — not database-enforced. Bestowal-time exclusivity checks must be done in application code (e.g., the writer / trait compiler) as an interim measure.
+**⏳ SCHEMA-PENDING:** the `cardinality` column does not yet exist on the `tags` registry (see Open Items #5). Until that migration lands, exclusive/multi distinctions throughout this doc are *design intent* only — not database-enforced. Bestowal-time exclusivity checks must be done in application code (for example, `apply_exclusive_tag_bestowal`) as an interim measure.
 
 ### Polymorphic Subjects/Objects
 
@@ -662,6 +662,8 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 **Formal vs. informal** is read off the scope-faction's own tags (its `legitimacy`, `operational_mode`), NOT the status tag itself. `status:senior(char → US_Army)` reads as formal military rank; `status:senior(char → village_elders)` reads as informal community elevation. Same level anchor, different flavor by composition.
 
+Status-family reads and writes go through `nexus.agents.orrery.status_family` / `apply_status_pair_tag_bestowal` rather than ad-hoc string parsing in individual packages. Within a single `(subject, scope_faction)` edge, status is exclusive: bestowing a new `status:<level>` clears sibling `status:*` rows for that same edge.
+
 ### Compiler-Planned Additions **⏳ SCHEMA-PENDING (Entire Section)**
 
 The trait → tag compiler (Codex chunk) will introduce three additional character ↔ character multi-entity tags to support the Allies / Contacts / Enemies traits. None are seeded today.
@@ -736,12 +738,11 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
-6. **`entity_pair_tags` substrate** — partially landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). Remaining (Codex chunks): WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state); `compose_actor_target_bindings` extension to consume pair-tag-derived actor↔target pairs.
+6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Remaining: `compose_actor_target_bindings` extension to consume pair-tag-derived actor↔target pairs.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
-8. **Skald prompt update for locked-vocabulary mode.** Vestigial "you may propose new vocabulary" framing in `tag_library.py`, `tag_schemas.py`, `tag_writer.py`, and `prompts/storyteller_new.md` needs removal — tracked as issue #287.
-9. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until role refactor lands code-side (Codex chunk).
-11. **`docs/orrery_design_plan.md` update.** Reflect the post-refactor vocabulary model in the broader Orrery design doc.
+8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
+9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until role refactor lands code-side (Codex chunk).
+10. **`docs/orrery_design_plan.md` update.** Reflect the post-refactor vocabulary model in the broader Orrery design doc.
 
 ---
 
@@ -760,9 +761,6 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 
 These are the downstream mechanical pre-requisites surfaced during the design-doc review. Each is tracked as its own issue so substrate work can be sequenced independently of further doc edits.
 
-- Issue #287 — Lock vocabulary growth (remove `new_tag_proposals` runtime path).
-- Issue #288 — Exclusive-category atomic-replace writer primitive (enforces `role.fame`, `role.resources`, place `visibility`/`access`, and one-`status:*`-per-edge at bestowal time).
-- Issue #289 — Centralized status-family helper (prevents ad-hoc `tag.startswith('status:')` parsing).
 - Issue #290 — Trait compiler must return structured audit results (no silent prose fallback for failed wildcard decomposition).
 - Issue #291 — Codify pair-tag-vs-`character_relationships` source-of-truth rule + reconciliation tests.
 - Issue #292 — Place/faction tag subcategory refactor + resolver adapter for `in_location_class()` gates.

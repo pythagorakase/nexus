@@ -38,7 +38,7 @@ def test_format_tag_library_groups_live_tags_by_entity_kind(monkeypatch) -> None
 
     assert "Current Orrery Tag Library" in rendered
     assert "Prefer exact registered tags when they fit" in rendered
-    assert "add new tags when the existing library does not cover" in rendered
+    assert "Do not invent new tag names at runtime" in rendered
     assert "### Character Tags" in rendered
     assert "`wounded` (ephemeral): Character has an acute wound." in rendered
     assert "### Place Tags" in rendered

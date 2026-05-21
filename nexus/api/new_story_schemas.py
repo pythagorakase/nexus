@@ -486,9 +486,8 @@ class WildcardTrait(BaseModel):
         description=(
             "Semantic tags for this protagonist (bodyform, capacity, "
             "disposition, role, state, etc.). Apply registered tags by name; "
-            "propose new ones when the genre needs vocabulary that doesn't yet "
-            "exist (e.g., bodyform:elf for a fantasy elf). See the Orrery "
-            "Awareness section of your system prompt for category guidance."
+            "omit tags when the closed registry has no exact fit. See the "
+            "Orrery Awareness section of your system prompt for category guidance."
         ),
     )
 
@@ -846,8 +845,8 @@ class PlaceProfile(BaseModel):
         description=(
             "Semantic place_affordance tags for this location (e.g., "
             "sheltered, public, isolated, defensible, ritually_charged). "
-            "Propose new ones when the setting needs vocabulary that doesn't "
-            "yet exist. See the Orrery Awareness section of your system prompt."
+            "Apply only registered tag names. See the Orrery Awareness section "
+            "of your system prompt."
         ),
     )
 

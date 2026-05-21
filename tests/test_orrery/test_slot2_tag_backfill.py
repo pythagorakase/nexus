@@ -27,7 +27,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
                     {"tag": "sleep_deprived_1_mild", "confidence": "high"},
                     {"tag": "contacts_available", "confidence": "low"},
                 ],
-                "new_tag_proposals": [
+                "unregistered_tag_candidates": [
                     {"tag": "found_family_anchor", "confidence": "high"},
                     {"tag": "unknown_one_off", "confidence": "high"},
                 ],
@@ -37,7 +37,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
                 "entity_kind": "faction",
                 "entity_name": "Dynacorp",
                 "registered_tag_proposals": [],
-                "new_tag_proposals": [
+                "unregistered_tag_candidates": [
                     {"tag": "militarized", "confidence": "medium"},
                     {"tag": "corporate_exile", "confidence": "high"},
                 ],
