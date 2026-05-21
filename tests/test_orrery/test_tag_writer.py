@@ -27,7 +27,7 @@ _WORLD_TIME = datetime(2073, 10, 31, 9, 44, tzinfo=timezone.utc)
 
 
 class _FakeRow:
-    """Dict + tuple hybrid row, mimics both psycopg2.extras.DictCursor and a tuple cursor."""
+    """Dict + tuple hybrid row for cursor-style tests."""
 
     def __init__(self, mapping: dict[str, Any], order: list[str]):
         self._mapping = mapping
