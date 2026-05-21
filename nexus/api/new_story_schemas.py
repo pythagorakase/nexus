@@ -8,12 +8,27 @@ from LLM providers during the setup conversation phase.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from enum import Enum
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+
+LEGACY_ORRERY_PROPOSAL_KEY = "new_tag_proposals"
+
+
+def _strip_legacy_orrery_proposals(value: Any) -> Any:
+    """Remove deprecated Orrery proposal keys from persisted wizard state."""
+    if isinstance(value, dict):
+        return {
+            key: _strip_legacy_orrery_proposals(item)
+            for key, item in value.items()
+            if key != LEGACY_ORRERY_PROPOSAL_KEY
+        }
+    if isinstance(value, list):
+        return [_strip_legacy_orrery_proposals(item) for item in value]
+    return value
 
 
 class Genre(str, Enum):
@@ -486,9 +501,8 @@ class WildcardTrait(BaseModel):
         description=(
             "Semantic tags for this protagonist (bodyform, capacity, "
             "disposition, role, state, etc.). Apply registered tags by name; "
-            "propose new ones when the genre needs vocabulary that doesn't yet "
-            "exist (e.g., bodyform:elf for a fantasy elf). See the Orrery "
-            "Awareness section of your system prompt for category guidance."
+            "omit tags when the closed registry has no exact fit. See the "
+            "Orrery Awareness section of your system prompt for category guidance."
         ),
     )
 
@@ -516,6 +530,12 @@ class CharacterCreationState(BaseModel):
     # Additional fields gathered during conversation
     summary: Optional[str] = Field(None, description="Brief character summary")
     personality: Optional[str] = Field(None, description="Personality description")
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_orrery_proposals(cls, data: Any) -> Any:
+        """Keep old wizard caches loadable after locking the Orrery vocabulary."""
+        return _strip_legacy_orrery_proposals(data)
 
     def current_subphase(self) -> Literal["concept", "traits", "wildcard", "complete"]:
         """Determine which sub-phase we're currently in."""
@@ -846,8 +866,8 @@ class PlaceProfile(BaseModel):
         description=(
             "Semantic place_affordance tags for this location (e.g., "
             "sheltered, public, isolated, defensible, ritually_charged). "
-            "Propose new ones when the setting needs vocabulary that doesn't "
-            "yet exist. See the Orrery Awareness section of your system prompt."
+            "Apply only registered tag names. See the Orrery Awareness section "
+            "of your system prompt."
         ),
     )
 

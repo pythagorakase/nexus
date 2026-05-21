@@ -14,14 +14,6 @@ def test_character_dict_preserves_wildcard_orrery_tags() -> None:
 
     bestowal = {
         "applied_tags": ["elf", "oath_bound"],
-        "new_tag_proposals": [
-            {
-                "tag": "moon_touched",
-                "category": "state",
-                "scope": "durable",
-                "evidence": "The wildcard says moonlight altered her blood.",
-            }
-        ],
         "tags_to_clear": [],
     }
     cache = WizardCache(
@@ -54,7 +46,6 @@ def test_row_to_cache_reads_character_orrery_tags() -> None:
 
     bestowal = {
         "applied_tags": ["ritualist"],
-        "new_tag_proposals": [],
         "tags_to_clear": [],
     }
 
@@ -175,7 +166,6 @@ def test_write_cache_creates_row_before_wildcard_tags(monkeypatch) -> None:
                 "wildcard_description": "Favors find her even underground.",
                 "orrery_tags": {
                     "applied_tags": ["obligation_magnet"],
-                    "new_tag_proposals": [],
                     "tags_to_clear": [],
                 },
             }

@@ -27,6 +27,7 @@ from nexus.api.slot_utils import get_slot_db_url
 DEFAULT_SLOT = 2
 DEFAULT_MANIFEST = Path("temp/slot2_backfill/manifest.json")
 DEFAULT_SOURCE_KIND = "llm_generated"
+UNREGISTERED_PROPOSAL_KEYS = ("unregistered_tag_candidates", "new_tag_proposals")
 
 CONFIDENCE_RANK: Mapping[str, int] = {
     "low": 1,
@@ -348,13 +349,14 @@ def _iter_proposals(
 ) -> Iterable[tuple[str, Mapping[str, Any]]]:
     for proposal in entity.get("registered_tag_proposals", []):
         yield ("registered", proposal)
-    for proposal in entity.get("new_tag_proposals", []):
-        yield ("new", proposal)
+    for key in UNREGISTERED_PROPOSAL_KEYS:
+        for proposal in entity.get(key, []):
+            yield ("unregistered", proposal)
 
 
 def _proposal_count(entity: Mapping[str, Any]) -> int:
-    return len(entity.get("registered_tag_proposals", [])) + len(
-        entity.get("new_tag_proposals", [])
+    return len(entity.get("registered_tag_proposals", [])) + sum(
+        len(entity.get(key, [])) for key in UNREGISTERED_PROPOSAL_KEYS
     )
 
 

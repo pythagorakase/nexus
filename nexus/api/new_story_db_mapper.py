@@ -321,7 +321,7 @@ class NewStoryDatabaseMapper:
                     bestowal=character.orrery_tags,
                     source_kind="skald_inline",
                 )
-                if tag_counters["applied"] or tag_counters["proposed"]:
+                if any(tag_counters.values()):
                     logger.info(f"Tag bestowal for {character.name}: {tag_counters}")
 
                 logger.info(
@@ -367,7 +367,7 @@ class NewStoryDatabaseMapper:
                             bestowal=character.orrery_tags,
                             source_kind="skald_inline",
                         )
-                        if tag_counters["applied"] or tag_counters["proposed"]:
+                        if any(tag_counters.values()):
                             logger.info(
                                 f"Tag bestowal for {character.name}: {tag_counters}"
                             )
@@ -492,7 +492,7 @@ class NewStoryDatabaseMapper:
                 bestowal=place.orrery_tags,
                 source_kind="skald_inline",
             )
-            if tag_counters["applied"] or tag_counters["proposed"]:
+            if any(tag_counters.values()):
                 logger.info(f"Tag bestowal for place {place.name}: {tag_counters}")
 
             # Generate a default circular boundary for the zone

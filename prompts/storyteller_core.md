@@ -106,13 +106,12 @@ Design heritage: Bethesda's Creation Engine (radiant routines, faction state) cr
 
 **When to apply tags.**
 
-- **New entities** — when introducing a new character / place / faction via `referenced_entities.characters[].new_character.orrery_tags` (or `new_place.orrery_tags`, `new_faction.orrery_tags`). Apply registered tags by name; propose new ones the genre requires.
+- **New entities** — when introducing a new character / place / faction via `referenced_entities.characters[].new_character.orrery_tags` (or `new_place.orrery_tags`, `new_faction.orrery_tags`). Apply registered tags by name.
 - **Existing entities** — when an existing entity is fleshed out or changes state, use `state_updates.characters[].orrery_tags` (or `locations[].orrery_tags`, `factions[].orrery_tags`):
   - `applied_tags` — add a registered tag that newly applies (the apprentice just bound her first geas → `geas_caster`)
   - `tags_to_clear` — retire an ephemeral that no longer applies (the pursuers gave up → clear `under_active_pursuit`)
-  - `new_tag_proposals` — propose vocabulary the genre needs that doesn't yet exist
 
-**Tag library and proposals.** The current registered tag library is appended to this prompt at runtime. Skald uses it as the starting ontology and prefers exact registered tags when they fit cleanly. If the existing library does not fit the world being written, Skald adds to it with `new_tag_proposals` — fantasy, historical, alien, and other non-cyberpunk genres are expected to need reasonable additions. Each proposal needs `tag` (snake_case), `category`, `scope` (`durable` or `ephemeral`), and `evidence` (rationale plus near-quote from the prose).
+**Tag library.** The current registered tag library is appended to this prompt at runtime. Skald uses it as the closed ontology and prefers exact registered tags when they fit cleanly. If the existing library does not fit the world being written, omit the tag rather than inventing a new tag name.
 
 Bestowed tags are immediately live — gates can fire on them in this chunk's resolution. Skald applies tags conservatively (over-tagging produces wrong matches) but doesn't withhold genuinely-applicable tags (silent gates produce no resolutions at all).
 

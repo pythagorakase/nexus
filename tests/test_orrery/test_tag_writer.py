@@ -14,16 +14,20 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import pytest
+from pydantic import ValidationError
 
-from nexus.agents.orrery.tag_schemas import NewTagProposal, OrreryTagBestowal
-from nexus.agents.orrery.tag_writer import apply_tag_bestowal
+from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.agents.orrery.tag_writer import (
+    apply_exclusive_tag_bestowal,
+    apply_tag_bestowal,
+)
 
 
 _WORLD_TIME = datetime(2073, 10, 31, 9, 44, tzinfo=timezone.utc)
 
 
 class _FakeRow:
-    """Dict + tuple hybrid row, mimics both psycopg2.extras.DictCursor and a tuple cursor."""
+    """Dict + tuple hybrid row for cursor-style tests."""
 
     def __init__(self, mapping: dict[str, Any], order: list[str]):
         self._mapping = mapping
@@ -179,6 +183,24 @@ class FakeCursor:
             self.inserted_entity_tag_rows.append(new_row)
             self.rowcount = 1
             return
+        if sql_upper.startswith("UPDATE ENTITY_TAGS ET"):
+            entity_id, category, keep_tag_id = params
+            cleared = 0
+            tag_id_to_category = {
+                row["id"]: row["category"] for row in self.tags.values()
+            }
+            for row in self.entity_tags:
+                if (
+                    row["entity_id"] == entity_id
+                    and row["tag_id"] != keep_tag_id
+                    and row["cleared_at"] is None
+                    and tag_id_to_category.get(row["tag_id"]) == category
+                ):
+                    row["cleared_at"] = "now"
+                    cleared += 1
+                    self.cleared_keys.append((entity_id, row["tag_id"]))
+            self.rowcount = cleared
+            return
         if sql_upper.startswith("UPDATE ENTITY_TAGS"):
             entity_id, tag_id = params
             cleared = 0
@@ -232,6 +254,8 @@ def _default_category_registry() -> dict[str, set[str]]:
         "place_affordance": {"place"},
         "power_posture": {"faction"},
         "profession_lite": {"character"},
+        "role.fame": {"character"},
+        "role.resources": {"character"},
         "state": {"character"},
     }
 
@@ -251,8 +275,6 @@ def test_applies_registered_character_tag():
         bestowal=bestowal,
     )
     assert counters["applied"] == 2
-    assert counters["skipped_unknown"] == 0
-    assert counters["skipped_category"] == 0
     inserted = {
         (r["entity_id"], r["source_kind"]) for r in cur.inserted_entity_tag_rows
     }
@@ -284,100 +306,9 @@ def test_idempotent_when_open_row_exists():
     assert len(cur.inserted_entity_tag_rows) == 0
 
 
-def test_new_tag_proposal_inserts_both_tag_and_entity_tag():
-    cur = FakeCursor(tags={})
-    bestowal = OrreryTagBestowal(
-        new_tag_proposals=[
-            NewTagProposal(
-                tag="bodyform:elf",
-                category="bodyform",
-                scope="durable",
-                evidence="Half-elven scholar with pointed ears and centuries of memory.",
-            )
-        ]
-    )
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=99,
-        entity_kind="character",
-        bestowal=bestowal,
-    )
-    assert counters["proposed"] == 1
-    assert counters["applied"] == 1
-    assert cur.inserted_tag_rows[0]["tag"] == "bodyform:elf"
-    assert cur.inserted_tag_rows[0]["is_ephemeral"] is False
-    assert cur.inserted_tag_rows[0]["clearance_kind"] is None
-    assert cur.inserted_entity_tag_rows[0]["entity_id"] == 99
-
-
-def test_new_tag_proposal_registers_new_category_for_entity_kind():
-    cur = FakeCursor(tags={})
-    bestowal = OrreryTagBestowal(
-        new_tag_proposals=[
-            NewTagProposal(
-                tag="oath_bound",
-                category="fantasy_oath_state",
-                scope="durable",
-                evidence="The oath-sigil burns when the knight speaks a vow.",
-            )
-        ]
-    )
-
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=99,
-        entity_kind="character",
-        bestowal=bestowal,
-    )
-
-    assert counters["proposed"] == 1
-    assert counters["applied"] == 1
-    assert cur.inserted_category_rows == [
-        {"category": "fantasy_oath_state", "entity_kind": "character"}
-    ]
-
-
-def test_new_tag_proposal_rejects_existing_category_for_wrong_entity_kind():
-    cur = FakeCursor(tags={})
-    bestowal = OrreryTagBestowal(
-        new_tag_proposals=[
-            NewTagProposal(
-                tag="hidden_gallery",
-                category="place_affordance",
-                scope="durable",
-                evidence="The person is standing in a hall with hidden galleries.",
-            )
-        ]
-    )
-
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=99,
-        entity_kind="character",
-        bestowal=bestowal,
-    )
-
-    assert counters["proposed"] == 0
-    assert counters["applied"] == 0
-    assert counters["skipped_category"] == 1
-    assert cur.inserted_tag_rows == []
-
-
-def test_ephemeral_proposal_sets_clearance_kind_semantic():
-    cur = FakeCursor(tags={})
-    bestowal = OrreryTagBestowal(
-        new_tag_proposals=[
-            NewTagProposal(
-                tag="scrying_target",
-                category="orrery_state",
-                scope="ephemeral",
-                evidence="The hedge witch's mirror flickers when she walks past.",
-            )
-        ]
-    )
-    apply_tag_bestowal(cur, entity_id=7, entity_kind="character", bestowal=bestowal)
-    assert cur.inserted_tag_rows[0]["is_ephemeral"] is True
-    assert cur.inserted_tag_rows[0]["clearance_kind"] == "semantic"
+def test_closed_bestowal_schema_rejects_runtime_vocabulary_growth_field():
+    with pytest.raises(ValidationError):
+        OrreryTagBestowal.model_validate({"new_" + "tag_proposals": []})
 
 
 def test_clears_existing_tag():
@@ -404,29 +335,27 @@ def test_clears_existing_tag():
     assert cur.cleared_keys == [(11, tag_id)]
 
 
-def test_incompatible_category_silently_skipped():
+def test_incompatible_category_raises():
     cur = FakeCursor(tags=_registered(("safe_house", "place_affordance", False)))
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=42,
-        entity_kind="character",
-        bestowal=OrreryTagBestowal(applied_tags=["safe_house"]),
-    )
-    assert counters["applied"] == 0
-    assert counters["skipped_category"] == 1
+    with pytest.raises(ValueError, match="not registered for entity_kind"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=42,
+            entity_kind="character",
+            bestowal=OrreryTagBestowal(applied_tags=["safe_house"]),
+        )
     assert cur.inserted_entity_tag_rows == []
 
 
-def test_unknown_tag_silently_skipped():
+def test_unknown_tag_raises():
     cur = FakeCursor(tags={})
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=42,
-        entity_kind="character",
-        bestowal=OrreryTagBestowal(applied_tags=["nonexistent_tag"]),
-    )
-    assert counters["applied"] == 0
-    assert counters["skipped_unknown"] == 1
+    with pytest.raises(ValueError, match="Unknown or deprecated Orrery tag"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=42,
+            entity_kind="character",
+            bestowal=OrreryTagBestowal(applied_tags=["nonexistent_tag"]),
+        )
 
 
 def test_canonical_alias_applied_as_canonical():
@@ -449,10 +378,7 @@ def test_none_bestowal_is_noop():
     )
     assert counters == {
         "applied": 0,
-        "proposed": 0,
         "cleared": 0,
-        "skipped_category": 0,
-        "skipped_unknown": 0,
     }
 
 
@@ -467,18 +393,78 @@ def test_unknown_entity_kind_raises():
         )
 
 
-def test_faction_category_gating():
+def test_mixed_bestowal_validates_before_writing():
     cur = FakeCursor(
         tags=_registered(
             ("militarized", "power_posture", False),
             ("corporate_exile", "state", False),  # state is character-only
         )
     )
-    counters = apply_tag_bestowal(
-        cur,
-        entity_id=7,
-        entity_kind="faction",
-        bestowal=OrreryTagBestowal(applied_tags=["militarized", "corporate_exile"]),
+    with pytest.raises(ValueError, match="not registered for entity_kind"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=7,
+            entity_kind="faction",
+            bestowal=OrreryTagBestowal(applied_tags=["militarized", "corporate_exile"]),
+        )
+    assert cur.inserted_entity_tag_rows == []
+
+
+def test_disallowed_runtime_source_kind_rejected():
+    cur = FakeCursor(tags=_registered(("corporate_exile", "state", False)))
+    with pytest.raises(ValueError, match="auto-register"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=42,
+            entity_kind="character",
+            bestowal=OrreryTagBestowal(applied_tags=["corporate_exile"]),
+            source_kind="auto_" "registered",
+        )
+
+
+def test_exclusive_tag_bestowal_clears_siblings_and_applies_new_value():
+    obscure_id = hash("obscure") & 0xFFFFFF
+    known_id = hash("known") & 0xFFFFFF
+    strong_id = hash("strong") & 0xFFFFFF
+    cur = FakeCursor(
+        tags=_registered(
+            ("obscure", "role.fame", False),
+            ("known", "role.fame", False),
+            ("strong", "capacity", False),
+        ),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": obscure_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "llm_generated",
+                "cleared_at": None,
+            },
+            {
+                "entity_id": 42,
+                "tag_id": strong_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "llm_generated",
+                "cleared_at": None,
+            },
+        ],
     )
-    assert counters["applied"] == 1
-    assert counters["skipped_category"] == 1
+
+    inserted = apply_exclusive_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        tag="known",
+    )
+
+    assert inserted is True
+    assert cur.cleared_keys == [(42, obscure_id)]
+    assert {
+        (row["tag_id"], row["cleared_at"])
+        for row in cur.entity_tags
+        if row["entity_id"] == 42
+    } == {
+        (obscure_id, "now"),
+        (strong_id, None),
+        (known_id, None),
+    }

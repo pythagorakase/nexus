@@ -96,7 +96,8 @@ def format_tag_library_for_prompt(
         return (
             "## Current Orrery Tag Library\n\n"
             "No registered Orrery tags are currently available in this slot. "
-            "Use `new_tag_proposals` when the story needs vocabulary."
+            "Do not invent tag names; leave `orrery_tags` empty until the "
+            "slot has registered vocabulary."
         )
 
     by_kind: dict[str, dict[str, list[TagLibraryEntry]]] = defaultdict(
@@ -109,9 +110,8 @@ def format_tag_library_for_prompt(
         "## Current Orrery Tag Library",
         "",
         "These are the tags already registered in this slot. Prefer exact "
-        "registered tags when they fit; add new tags when the existing library "
-        "does not cover the entity cleanly. New tags should extend this "
-        "ontology, not imitate its examples mechanically.",
+        "registered tags when they fit. Do not invent new tag names at runtime; "
+        "omit marginal or unsupported tags instead.",
         "",
     ]
     for entity_kind in ("character", "place", "faction"):
