@@ -84,10 +84,13 @@ NEW_CATEGORY_REGISTRY: Sequence[tuple[str, str, int, str]] = (
     ),
 )
 
-# (legacy_category, replacement_categories)
-DEPRECATED_CATEGORY_REPLACEMENTS: Sequence[tuple[str, Optional[tuple[str, ...]]]] = (
+# (legacy_category, entity_kind, replacement_categories)
+DEPRECATED_CATEGORY_REPLACEMENTS: Sequence[
+    tuple[str, str, Optional[tuple[str, ...]]]
+] = (
     (
         "place_affordance",
+        "place",
         (
             "place_function",
             "place_visibility",
@@ -96,15 +99,15 @@ DEPRECATED_CATEGORY_REPLACEMENTS: Sequence[tuple[str, Optional[tuple[str, ...]]]
             "place_threat",
         ),
     ),
-    ("profession_lite", ("role",)),
-    ("orrery_signal", ("state",)),
-    ("ideology_axis", ("ideology",)),
-    ("power_posture", ("power_status",)),
-    ("legitimacy_status", ("legitimacy",)),
-    ("operational_secrecy", ("operational_mode",)),
-    ("resource_class", ("resource_base",)),
-    ("hidden_agenda_class", ("agenda",)),
-    ("history_class", None),
+    ("profession_lite", "character", ("role",)),
+    ("orrery_signal", "character", ("state",)),
+    ("ideology_axis", "faction", ("ideology",)),
+    ("power_posture", "faction", ("power_status",)),
+    ("legitimacy_status", "faction", ("legitimacy",)),
+    ("operational_secrecy", "faction", ("operational_mode",)),
+    ("resource_class", "faction", ("resource_base",)),
+    ("hidden_agenda_class", "faction", ("agenda",)),
+    ("history_class", "faction", None),
 )
 
 
@@ -158,17 +161,23 @@ def run(conn: connection) -> None:
                 (category, entity_kind, prompt_order, description),
             )
 
-        for legacy_category, replacement_categories in DEPRECATED_CATEGORY_REPLACEMENTS:
+        for (
+            legacy_category,
+            entity_kind,
+            replacement_categories,
+        ) in DEPRECATED_CATEGORY_REPLACEMENTS:
             cur.execute(
                 """
                 UPDATE tag_category_registry
                 SET deprecated = TRUE,
                     replacement_categories = %s
                 WHERE category = %s
+                  AND entity_kind = %s::entity_kind
                 """,
                 (
                     list(replacement_categories) if replacement_categories else None,
                     legacy_category,
+                    entity_kind,
                 ),
             )
     conn.commit()

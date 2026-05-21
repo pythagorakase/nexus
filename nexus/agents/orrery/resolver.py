@@ -38,6 +38,7 @@ LOCATION_CLASS_TAG_CATEGORIES: tuple[str, ...] = (
     "place_environment",
     "place_threat",
 )
+# Safe: assembled only from hardcoded LOCATION_CLASS_TAG_CATEGORIES values.
 _LOCATION_CLASS_CATEGORY_SQL = ", ".join(
     f"'{category}'" for category in LOCATION_CLASS_TAG_CATEGORIES
 )

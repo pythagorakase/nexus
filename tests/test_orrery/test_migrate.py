@@ -361,7 +361,12 @@ def test_category_refactor_phase1_migration_marks_cutover_categories() -> None:
             migration.NEW_CATEGORY_REGISTRY
         )
     }
-    deprecated = dict(migration.DEPRECATED_CATEGORY_REPLACEMENTS)
+    deprecated = {
+        (category, entity_kind): replacements
+        for category, entity_kind, replacements in (
+            migration.DEPRECATED_CATEGORY_REPLACEMENTS
+        )
+    }
 
     assert {
         ("place_function", "place"),
@@ -376,20 +381,21 @@ def test_category_refactor_phase1_migration_marks_cutover_categories() -> None:
         ("legitimacy", "faction"),
         ("operational_mode", "faction"),
     } <= registered
-    assert deprecated["place_affordance"] == (
+    assert deprecated[("place_affordance", "place")] == (
         "place_function",
         "place_visibility",
         "place_access",
         "place_environment",
         "place_threat",
     )
-    assert deprecated["profession_lite"] == ("role",)
-    assert deprecated["orrery_signal"] == ("state",)
-    assert deprecated["history_class"] is None
+    assert deprecated[("profession_lite", "character")] == ("role",)
+    assert deprecated[("orrery_signal", "character")] == ("state",)
+    assert deprecated[("history_class", "faction")] is None
 
     migration_source = migration_path.read_text()
     assert "ADD COLUMN IF NOT EXISTS deprecated" in migration_source
     assert "ADD COLUMN IF NOT EXISTS replacement_categories" in migration_source
+    assert "AND entity_kind = %s::entity_kind" in migration_source
 
 
 def test_tag_baseline_reconciliation_migration_closes_slot_drift() -> None:

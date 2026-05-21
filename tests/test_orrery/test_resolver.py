@@ -1439,7 +1439,7 @@ def test_resolve_dry_run_uses_configured_present_need_pressure_tuning() -> None:
     assert pressure.magnitude == pytest.approx(0.3)
 
 
-def test_resolve_dry_run_keeps_default_templates_offscreen_only_for_present_targets():
+def test_default_templates_keep_present_targets_offscreen_only() -> None:
     """Default multi-slot templates cannot pressure an on-screen target."""
 
     default_template = Template(
