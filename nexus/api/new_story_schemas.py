@@ -8,12 +8,27 @@ from LLM providers during the setup conversation phase.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Literal
+from typing import Any, Dict, List, Optional, Literal
 from enum import Enum
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+
+LEGACY_ORRERY_PROPOSAL_KEY = "new_tag_proposals"
+
+
+def _strip_legacy_orrery_proposals(value: Any) -> Any:
+    """Remove deprecated Orrery proposal keys from persisted wizard state."""
+    if isinstance(value, dict):
+        return {
+            key: _strip_legacy_orrery_proposals(item)
+            for key, item in value.items()
+            if key != LEGACY_ORRERY_PROPOSAL_KEY
+        }
+    if isinstance(value, list):
+        return [_strip_legacy_orrery_proposals(item) for item in value]
+    return value
 
 
 class Genre(str, Enum):
@@ -515,6 +530,12 @@ class CharacterCreationState(BaseModel):
     # Additional fields gathered during conversation
     summary: Optional[str] = Field(None, description="Brief character summary")
     personality: Optional[str] = Field(None, description="Personality description")
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_orrery_proposals(cls, data: Any) -> Any:
+        """Keep old wizard caches loadable after locking the Orrery vocabulary."""
+        return _strip_legacy_orrery_proposals(data)
 
     def current_subphase(self) -> Literal["concept", "traits", "wildcard", "complete"]:
         """Determine which sub-phase we're currently in."""

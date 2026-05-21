@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from nexus.api.new_story_schemas import (
     SettingCard,
+    CharacterCreationState,
     CharacterSheet,
     CharacterTrait,
     StorySeed,
@@ -30,6 +31,7 @@ from nexus.api.new_story_schemas import (
     TechLevel,
     StorySeedType,
     PlaceExtraData,
+    WildcardTrait,
 )
 from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
 from nexus.api.new_story_generator import StoryComponentGenerator
@@ -105,6 +107,69 @@ class TestNewStorySchemas:
             character.trait_2.name,
             character.trait_3.name,
         }
+
+    def test_character_state_strips_legacy_orrery_tag_proposals(self):
+        """Persisted wizard state may predate the locked Orrery vocabulary."""
+        state = CharacterCreationState.model_validate(
+            {
+                "concept": {
+                    "archetype": "Exiled oathkeeper",
+                    "background": "Raised among fugitives after a ruined succession.",
+                    "name": "Seren Vale",
+                    "appearance": "Weathered cloak, bright eyes, and a duelist's poise.",
+                    "suggested_traits": ["allies", "contacts", "obligations"],
+                    "trait_rationales": {
+                        "allies": "A hidden circle shelters her.",
+                        "contacts": "Smugglers pass her messages.",
+                        "obligations": "An oath still owns her future.",
+                    },
+                },
+                "trait_selection": {
+                    "selected_traits": ["allies", "contacts", "obligations"],
+                    "trait_rationales": {
+                        "allies": "A hidden circle shelters her.",
+                        "contacts": "Smugglers pass her messages.",
+                        "obligations": "An oath still owns her future.",
+                    },
+                },
+                "wildcard": {
+                    "wildcard_name": "Moon-Touched Blood",
+                    "wildcard_description": "Her blood answers old lunar rites.",
+                    "orrery_tags": {
+                        "applied_tags": ["oath_bound"],
+                        "tags_to_clear": [],
+                        "new_tag_proposals": [
+                            {
+                                "name": "moon_touched",
+                                "category": "state",
+                                "rationale": "Legacy cache payload.",
+                            }
+                        ],
+                    },
+                },
+            }
+        )
+
+        assert state.wildcard is not None
+        assert state.wildcard.orrery_tags is not None
+        assert state.wildcard.orrery_tags.applied_tags == ["oath_bound"]
+        dumped_tags = state.model_dump()["wildcard"]["orrery_tags"]
+        assert "new_tag_proposals" not in dumped_tags
+
+    def test_wildcard_trait_rejects_live_legacy_orrery_tag_proposals(self):
+        """Live Skald output still cannot use the removed proposal field."""
+        with pytest.raises(ValidationError):
+            WildcardTrait.model_validate(
+                {
+                    "wildcard_name": "Moon-Touched Blood",
+                    "wildcard_description": "Her blood answers old lunar rites.",
+                    "orrery_tags": {
+                        "applied_tags": ["oath_bound"],
+                        "tags_to_clear": [],
+                        "new_tag_proposals": [],
+                    },
+                }
+            )
 
     def test_story_seed_creation(self):
         """Test creating a valid StorySeed with atomized timestamp."""
