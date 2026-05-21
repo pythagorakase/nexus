@@ -275,3 +275,16 @@ def test_status_bestowal_replaces_status_family_within_one_scope_edge() -> None:
         and row["cleared_at"] is None
     ]
     assert len(active_rows_for_scope) == 1
+
+
+def test_status_bestowal_self_scope_error_uses_scope_parameter_name() -> None:
+    cur = _PairCursor()
+
+    with pytest.raises(ValueError, match="scope_faction_entity_id"):
+        apply_status_pair_tag_bestowal(
+            cur,
+            subject_entity_id=10,
+            scope_faction_entity_id=10,
+            subject_kind="character",
+            level="senior",
+        )

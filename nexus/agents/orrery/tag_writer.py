@@ -28,6 +28,7 @@ from nexus.agents.orrery.tag_library import VALID_ENTITY_KINDS
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 
+# Split the retired source-kind literal so grep checks catch live usage sites.
 _DISALLOWED_SOURCE_KINDS = frozenset({"auto_" "registered"})
 
 
@@ -77,10 +78,7 @@ def apply_tag_bestowal(
         )
 
     if world_time is None:
-        cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
-        row = cur.fetchone()
-        if row is not None:
-            world_time = _row_value(row, "world_time", 0)
+        world_time = _load_world_time(cur)
 
     tags_to_apply: list[int] = []
     for tag_name in bestowal.applied_tags:
@@ -487,7 +485,8 @@ def apply_status_pair_tag_bestowal(
     if subject_entity_id == scope_faction_entity_id:
         raise ValueError(
             f"pair_tag {tag!r} requires distinct subject and object; "
-            f"got subject_entity_id == object_entity_id == {subject_entity_id}"
+            "got subject_entity_id == scope_faction_entity_id == "
+            f"{subject_entity_id}"
         )
     row = _lookup_pair_tag_row(cur, tag)
     pair_tag_id = _row_value(row, "id", 0)

@@ -49,6 +49,8 @@ class OrreryTagBestowal(BaseModel):
         description=(
             "Registered tag names whose open `entity_tags` row should be "
             "cleared (cleared_at = now()) for this entity. Meaningful only in "
-            "update contexts."
+            "update contexts. Clear targets are validated against the live, "
+            "non-deprecated registry just like applied tags; unknown, "
+            "deprecated, or category-incompatible names are hard errors."
         ),
     )
