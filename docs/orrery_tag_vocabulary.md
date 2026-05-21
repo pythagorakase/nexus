@@ -13,14 +13,14 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 | Structure | Application table | Carries | Example |
 |---|---|---|---|
 | **Single-entity tag** | `entity_tags` (existing) | Property of one entity | `bodyform:cyborg` on Alex |
-| **Multi-entity tag** | `entity_pair_tags` (new, proposed) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
+| **Multi-entity tag** | `entity_pair_tags` (shipped — see PR #283) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
 | **Rich relationship** | `character_relationships` (existing) | Affective/social state with valence, history, sub-states | Alex/Emilia trust=high, valence=positive |
 
 ### Locked Vocabulary — No Runtime Growth
 
-Skald applies from a closed registry. The `skald_inline` and `auto_registered` source_kind paths can be deprecated. The Vocabulary Growth Contract section in the design plan should be removed.
+Skald applies from a closed registry. The `skald_inline` and `auto_registered` source_kind paths are deprecated; the `new_tag_proposals` runtime path is removed (tracked as issue #287). Bestowal of an unknown tag name is a hard error, not an opportunity to auto-register.
 
-**Rationale:** every successful tag system in adjacent design space (Bethesda Radiant AI, Dwarf Fortress) uses closed vocabularies. NEXUS's earlier "let Skald propose at runtime" gambit produces entropy without curation; the right discipline is pre-design.
+**Rationale:** every successful tag system in adjacent design space (Bethesda Radiant AI, Dwarf Fortress) uses closed vocabularies. NEXUS's earlier "let Skald propose at runtime" gambit produced entropy without curation; the right discipline is pre-design.
 
 **Implications:**
 - Vocabulary must be comprehensive enough for cross-genre stories.
@@ -300,6 +300,8 @@ Economic capacity / wealth. Scope-independent — you are rich or poor in absolu
 
 Ambient detection radius — effectively inverse stealth. **Unvalenced**: anchors describe how widely-known the character is, not whether the recognition is positive (beloved) or negative (notorious). Valence emerges from compositional intersection with other tags (`legendary` + `criminal` + `status:outcast(→ society)` = hunted celebrity; `legendary` + `healer` + `status:respected(→ community)` = venerated elder).
 
+**Global, not scope-bound.** Fame radius applies to *all* observers — a `renowned` character is recognizable to passersby in any subculture. Subculture-only recognition is **not** fame; it compiles to `status:respected(char → subculture-faction)` instead. A Grid info-broker known only inside netrunner circles is `obscure` + `status:respected(→ Grid_underground)`, NOT `renowned` with a scope qualifier. The two concepts compose cleanly: `legendary` + `status:respected(→ Archivum)` reads as "globally legendary AND additionally elevated within the Archivum"; the fame tag never carries an audience.
+
 Maps to the trait_menu `Fame` trait (renamed from `Reputation` for naming consistency). Exclusive: one current radius per character.
 
 #### Status — Scope-Bound, Multi-Entity
@@ -523,7 +525,7 @@ Diagnostic batch covering non-mainline characters and entity types that stress-t
 | Character | Function | Resources | Fame | Status (scope-bound) |
 |---|---|---|---|---|
 | Sullivan | — | — | — | — |
-| Lansky | `spy`, `merchant` *(info-broker)* | `comfortable` *(Grid economy)* | `renowned` *(within netrunner circles)* | `status:outcast(→ Dynacorp)`, `status:respected(→ Grid_underground)` |
+| Lansky | `spy`, `merchant` *(info-broker)* | `comfortable` *(Grid economy)* | `obscure` | `status:outcast(→ Dynacorp)`, `status:respected(→ Grid_underground)` |
 | Sam | `teacher`, `scholar` | — | `obscure` | `status:outcast(→ Archivum)` *(banished or self-exiled — narrative ambiguity preserved)* |
 | The Bridge | — | — | — | — |
 | Black Kite | — *(still emerging)* | — | `obscure` | — *(Archivum has registered it as `Node-07`; may emerge as `status:respected(→ Archivum)` once integration completes)* |
@@ -672,6 +674,15 @@ The trait → tag compiler (Codex chunk) will introduce three additional charact
 
 All cardinalities multi-valued. Polymorphic subjects/objects collapse what would otherwise be ~30 separate tags.
 
+### Pair Tags vs. `character_relationships` — Source-of-Truth Rule
+
+The `ally`, `contact`, and `hostile_to` tags (and their compiler-planned siblings) sit alongside the existing `character_relationships` table. Both layers can describe what looks like "the same" relationship — but they answer different questions and must not drift.
+
+- **`pair_tag`** = typed mechanical edge that packages gate on. Binary: exists or it doesn't, plus the tag name. Cheap to query; deterministic. Example: a HIDE package gating on "does the acting character have any `hunting(other → self)` edges?"
+- **`character_relationships`** = affective / historical / valence layer that Skald and social-logic read. Multi-state; evolves continuously over time; carries trust, valence, history, sub-states. Example: Skald composing prose that reflects "Alex and Emilia were close, then there was a falling-out, then a partial reconciliation."
+
+The compiler writes both within a single transaction. Reconciliation invariant: every `ally` / `contact` / `hostile_to` pair tag must have a corresponding `character_relationships` row, and the converse for any `character_relationships` row marked as one of those relation types. Drift is a bug — tracked as issue #291.
+
 ---
 
 ## trait_menu ↔ Tag-Vocabulary Alignment
@@ -727,7 +738,7 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
 6. **`entity_pair_tags` substrate** — partially landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). Remaining (Codex chunks): WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state); `compose_actor_target_bindings` extension to consume pair-tag-derived actor↔target pairs.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
-8. **Skald prompt update for locked-vocabulary mode.** Once vocabulary is fixed, prompts need updating to remove "you may propose new vocabulary" framing.
+8. **Skald prompt update for locked-vocabulary mode.** Vestigial "you may propose new vocabulary" framing in `tag_library.py`, `tag_schemas.py`, `tag_writer.py`, and `prompts/storyteller_new.md` needs removal — tracked as issue #287.
 9. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
 10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until role refactor lands code-side (Codex chunk).
 11. **`docs/orrery_design_plan.md` update.** Reflect the post-refactor vocabulary model in the broader Orrery design doc.
@@ -744,3 +755,14 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
 - PR #284 — DB-level multi-entity tag predicates (`pair_tag_exists`, inbound/outbound subject lookups). *Merged.*
 - Issue #274 (`pursuing` relationship) — *parked*, branch `issue-274-orrery-pursuers`; supplanted by the multi-entity-tag direction.
+
+### Implementation Contracts (Open)
+
+These are the downstream mechanical pre-requisites surfaced during the design-doc review. Each is tracked as its own issue so substrate work can be sequenced independently of further doc edits.
+
+- Issue #287 — Lock vocabulary growth (remove `new_tag_proposals` runtime path).
+- Issue #288 — Exclusive-category atomic-replace writer primitive (enforces `role.fame`, `role.resources`, place `visibility`/`access`, and one-`status:*`-per-edge at bestowal time).
+- Issue #289 — Centralized status-family helper (prevents ad-hoc `tag.startswith('status:')` parsing).
+- Issue #290 — Trait compiler must return structured audit results (no silent prose fallback for failed wildcard decomposition).
+- Issue #291 — Codify pair-tag-vs-`character_relationships` source-of-truth rule + reconciliation tests.
+- Issue #292 — Place/faction tag subcategory refactor + resolver adapter for `in_location_class()` gates.
