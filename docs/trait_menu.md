@@ -33,14 +33,15 @@ Not choosing a trait does not mean the character is bereft of it; rather, this s
 ## Power & Position
 
 ### Status
-- standing or position recognized within a specific group, institution, or community — formal or informal
-- the group can be a formal institution (corporate hierarchy, military, guild) or an informal community (subculture, neighborhood, friend group); the nature of the group determines whether the status reads as formal rank or informal social clout
-- examples: military commission, guild journeyman, corporate board seat, respected elder in a community, info-broker reputation within a subculture
+- standing within a specific institution, faction, community, or social scene
+- can be formal rank or informal local esteem/clout
+- use this when you are known within that group, even if obscure elsewhere
+- examples: military commission, guild journeyman, corporate board seat, respected neighborhood fixer
 
-### Reputation
-- how widely you're known
-- what for
-- for better or worse
+### Reputation (Fame)
+- how broadly you're recognized beyond any one specific group
+- what the wider world recognizes you for, for better or worse
+- use Status instead when the recognition is limited to one faction, institution, community, or subculture
 - may or may not confer influence
 
 ## Assets & Territory
