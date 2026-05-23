@@ -307,9 +307,13 @@ def clear_entity_tag(cur: Any, *, entity_id: int, tag: str) -> bool:
     than raising — this is the inverse of ``apply_tag_bestowal``, which raises
     ``ValueError`` for unknown tags. The asymmetry matches ``clear_pair_tag``:
     clearing a tag that doesn't exist is a no-op, so an unknown tag is
-    indistinguishable from a missing row.
+    indistinguishable from a missing row. Alias names in ``CANONICAL_TAGS``
+    resolve to their canonical tag before clearing. Deprecated registry rows
+    are intentionally treated as absent; clearing pre-deprecation active rows is
+    a data-cleanup concern for a migration or id-based maintenance helper.
     """
 
+    canonical_name = CANONICAL_TAGS.get(tag, tag)
     cur.execute(
         """
         UPDATE entity_tags et
@@ -322,7 +326,7 @@ def clear_entity_tag(cur: Any, *, entity_id: int, tag: str) -> bool:
           AND t.synonym_for IS NULL
           AND et.cleared_at IS NULL
         """,
-        (entity_id, tag),
+        (entity_id, canonical_name),
     )
     return bool(cur.rowcount)
 
