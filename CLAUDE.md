@@ -169,20 +169,12 @@ For CLI command reference, see the `nexus-cli` skill in `.claude/skills/`.
 For detailed, task-specific workflows and guides, see the Claude Code skills in `.claude/skills/`. These skills are automatically invoked when relevant:
 
 - **git-feature-workflow**: Complete feature development workflow including branch creation, PR submission, GPT-5-Codex review handling, merging, and cleanup
-- **test-lore-agent**: Run LORE agent tests with context saving, divergence detection testing, and jq query helpers
 - **audit-settings**: Validate `settings.json` for configuration errors, constraint violations, and cross-agent consistency
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
 - **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
-- **analyze-divergence**: Debug entity-based divergence detection behavior and tune thresholds
 
 These skills contain detailed commands, workflows, troubleshooting guides, and best practices extracted from development experience.
-
-## Entity-Based Divergence Detection
-
-The LORE agent uses deterministic entity-based divergence detection to identify when users reference known entities not present in the recent narrative (warm slice).
-
-For architecture details, testing procedures, and troubleshooting, see the `analyze-divergence` skill in `.claude/skills/`.
 
 ## OpenAI API Best Practices
 
