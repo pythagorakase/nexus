@@ -998,7 +998,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **Gate:**
 
 - **AND:**
-  - actor has `bereaved` ephemeral
+  - actor has `grieving` ephemeral
   - ≥ 3 ticks since last `mourning_act` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
 
@@ -1013,7 +1013,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Sit with others who carry the same loss  *(mag 0.38)*
 
-**When:** 1+ other entities with `bereaved` ephemeral co-located with actor
+**When:** 1+ other entities with `grieving` ephemeral co-located with actor
 
 **Does:** activity → "gathering with co-mourners"
 **Event:** `mourning_act`
@@ -1257,7 +1257,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor is in transit
     - actor has a planned travel destination
   - **NOT:** actor has `wounded` ephemeral
-  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
 
 ### Branch 1 — Arrive at the planned destination  *(mag 0.34)*
 
@@ -1338,7 +1338,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 4 ticks since last `socialized` event for actor
   - ≥ 4 ticks since last `socialized_alone` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
-  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
   - **NOT:** actor has `wounded` ephemeral
 
 ### Branch 1 — Seek company after extended isolation  *(mag 0.54)*
@@ -1413,7 +1413,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 8 ticks since last `intimacy_deferred` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `wounded` ephemeral
-  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
 
 ### Branch 1 — Spend private time with an established partner  *(mag 0.32)*
 
@@ -1496,7 +1496,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 4 ticks since last `craft_tended` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `wounded` ephemeral
-  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
 
 ### Branch 1 — Make the weapon ready for what comes next  *(mag 0.18)*
 
@@ -1601,7 +1601,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 4 ticks since last `household_work_performed` event for actor
   - **NOT:** actor has `under_active_pursuit` ephemeral
   - **NOT:** actor has `wounded` ephemeral
-  - **NOT:** actor has `bereaved` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
 
 ### Branch 1 — Work a public-facing shift  *(mag 0.18)*
 
@@ -1826,11 +1826,11 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 
 ### Tags queried as ephemeral (via `has_ephemeral`)
 
-- `bereaved`
 - `captive`
 - `cns_stimulated`
 - `debt_pulse_active`
 - `dying`
+- `grieving`
 - `grudge_active`
 - `unconscious`
 - `under_active_pursuit`

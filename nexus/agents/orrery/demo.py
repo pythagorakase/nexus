@@ -103,7 +103,7 @@ def build_presets() -> Dict[str, WorldState]:
         ),
         # Round-2 solo presets
         "mourning": WorldState(
-            ephemeral_tags={ACTOR_ID: frozenset({"bereaved"})},
+            ephemeral_tags={ACTOR_ID: frozenset({"grieving"})},
             locations={ACTOR_ID: REMEMBRANCE_PLACE_ID},
             location_class=location_classes,
             time_of_day="evening",

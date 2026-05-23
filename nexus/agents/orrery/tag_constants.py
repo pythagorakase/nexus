@@ -11,6 +11,7 @@ from typing import Mapping
 
 
 CANONICAL_TAGS: Mapping[str, str] = {
+    "bereaved": "grieving",
     "bridge_linked": "bridge_aware",
     "captive_subject": "captive",
     "collapse_survivor": "trauma_survivor",
@@ -22,6 +23,7 @@ CANONICAL_TAGS: Mapping[str, str] = {
     "ex_corporate": "corporate_exile",
     "found_family_anchor": "extended_household",
     "found_family_member": "extended_household",
+    "grieving_recent_partner": "grieving",
     "shadow_broker": "broker",
     "trauma_history": "trauma_survivor",
 }

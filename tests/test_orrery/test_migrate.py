@@ -2,9 +2,11 @@
 
 from pathlib import Path
 
+import psycopg2
 import pytest
 
 import scripts.migrate as migrate
+from nexus.api.slot_utils import get_slot_db_url
 
 
 def test_discover_migrations_includes_python_and_skips_seed_script(
@@ -485,3 +487,136 @@ def test_trait_compiler_substrate_migration_seeds_required_contracts() -> None:
     assert "trait_compile_result jsonb" in migration_source
     assert "SET subject_kinds = ARRAY['character', 'faction']" in migration_source
     assert "SET name = 'fame'" in migration_source
+
+
+def test_canonical_grieving_migration_aliases_legacy_grief_tags() -> None:
+    """Migration 046 collapses bereaved and partner grief into grieving."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "046_canonical_grieving_state.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert migration.LEGACY_TAGS == ("bereaved", "grieving_recent_partner")
+    assert "'grieving', 'state', TRUE" in migration_source
+    assert "'extend_expiry'::entity_tag_reapplication_policy" in migration_source
+    assert "ON CONFLICT (entity_id, tag_id)" in migration_source
+    assert "synonym_for = %s" in migration_source
+
+
+@pytest.mark.requires_postgres
+def test_canonical_grieving_migration_executes_against_slot_db() -> None:
+    """Migration 046 moves active legacy rows and preserves grief reapply policy."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "046_canonical_grieving_state.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    created_entity_ids: list[int] = []
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT tag, id
+                    FROM tags
+                    WHERE tag = ANY(%s)
+                    """,
+                    (list(migration.LEGACY_TAGS),),
+                )
+                legacy_ids = {tag: tag_id for tag, tag_id in cur.fetchall()}
+                missing = set(migration.LEGACY_TAGS) - set(legacy_ids)
+                if missing:
+                    pytest.skip(f"Missing legacy grief tags: {sorted(missing)}")
+
+                for tag in migration.LEGACY_TAGS:
+                    cur.execute(
+                        "INSERT INTO entities (kind, is_active) "
+                        "VALUES ('character', true) RETURNING id"
+                    )
+                    entity_id = cur.fetchone()[0]
+                    created_entity_ids.append(entity_id)
+                    cur.execute(
+                        """
+                        INSERT INTO entity_tags (entity_id, tag_id, source_kind)
+                        VALUES (%s, %s, 'skald_inline')
+                        """,
+                        (entity_id, legacy_ids[tag]),
+                    )
+
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, reapplication_policy, deprecated, synonym_for
+                FROM tags
+                WHERE tag = 'grieving'
+                """
+            )
+            grieving_id, reapply, deprecated, synonym_for = cur.fetchone()
+            assert reapply == "extend_expiry"
+            assert deprecated is False
+            assert synonym_for is None
+
+            cur.execute(
+                """
+                SELECT t.tag, t.deprecated, t.synonym_for
+                FROM tags t
+                WHERE t.tag = ANY(%s)
+                ORDER BY t.tag
+                """,
+                (list(migration.LEGACY_TAGS),),
+            )
+            assert {
+                tag: (is_deprecated, alias_target)
+                for tag, is_deprecated, alias_target in cur.fetchall()
+            } == {
+                tag: (True, grieving_id) for tag in migration.LEGACY_TAGS
+            }
+
+            cur.execute(
+                """
+                SELECT e.id, active.tag, legacy.tag
+                FROM entities e
+                JOIN entity_tags et
+                  ON et.entity_id = e.id
+                 AND et.cleared_at IS NULL
+                JOIN tags active ON active.id = et.tag_id
+                LEFT JOIN entity_tags old_et
+                  ON old_et.entity_id = e.id
+                 AND old_et.tag_id = ANY(%s)
+                 AND old_et.cleared_at IS NULL
+                LEFT JOIN tags legacy ON legacy.id = old_et.tag_id
+                WHERE e.id = ANY(%s)
+                ORDER BY e.id
+                """,
+                (
+                    [legacy_ids[tag] for tag in migration.LEGACY_TAGS],
+                    created_entity_ids,
+                ),
+            )
+            assert cur.fetchall() == [
+                (entity_id, "grieving", None) for entity_id in created_entity_ids
+            ]
+    finally:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    if created_entity_ids:
+                        cur.execute(
+                            "DELETE FROM entities WHERE id = ANY(%s)",
+                            (created_entity_ids,),
+                        )
+        finally:
+            conn.close()

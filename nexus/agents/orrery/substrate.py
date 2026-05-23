@@ -47,7 +47,7 @@ INTIMACY_SUPPRESSOR_TAGS: frozenset[str] = frozenset(
         "closeted",
         "vow_of_celibacy",
         "religiously_abstinent",
-        "grieving_recent_partner",
+        "grieving",
         "recently_traumatized_intimate",
         "focus_committed",
         "libido_absent",

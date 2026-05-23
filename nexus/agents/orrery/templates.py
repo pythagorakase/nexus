@@ -1033,7 +1033,7 @@ CULTIVATE_INFORMANT = Template(
 #     (which reads `wounded` but had no template emitting `wound_healed`
 #     until now).
 #
-#   * `bereaved` / `dying` / `unconscious` ephemerals are seeded with
+#   * `grieving` / `dying` / `unconscious` ephemerals are seeded with
 #     event-based clearance pointing at `mourning_completed` / `death_recorded`
 #     / `regained_consciousness`. These events are authored externally
 #     (CommitOrreryTick or future world-state systems); MOURN_LOSS and
@@ -1164,7 +1164,7 @@ MOURN_LOSS = Template(
     blurb="A loss settles into the body across many quiet days.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
-        has_ephemeral("bereaved"),
+        has_ephemeral("grieving"),
         since_last_event_at_least("mourning_act", minimum_ticks=3),
         NOT(has_ephemeral("under_active_pursuit")),
     ),
@@ -1187,7 +1187,7 @@ MOURN_LOSS = Template(
         ),
         Branch(
             label="Sit with others who carry the same loss",
-            conditions=count_co_located(1, with_ephemeral="bereaved"),
+            conditions=count_co_located(1, with_ephemeral="grieving"),
             narrative_stub=(
                 "{actor} finds the others who knew the dead and sits with "
                 "them — wordlessly, mostly. The presence of someone else "
@@ -1356,7 +1356,7 @@ TRAVEL = Template(
     package_gate=AND(
         OR(is_in_transit(), has_travel_destination()),
         NOT(has_ephemeral("wounded")),
-        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("grieving")),
     ),
     branches=(
         Branch(
@@ -1501,7 +1501,7 @@ WORK = Template(
         since_last_event_at_least("household_work_performed", minimum_ticks=4),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("wounded")),
-        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("grieving")),
     ),
     branches=(
         Branch(
@@ -1648,7 +1648,7 @@ TEND_CRAFT = Template(
         since_last_event_at_least("craft_tended", minimum_ticks=4),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("wounded")),
-        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("grieving")),
     ),
     branches=(
         Branch(
@@ -2663,7 +2663,7 @@ SOCIALIZE = Template(
         since_last_event_at_least("socialized", minimum_ticks=4),
         since_last_event_at_least("socialized_alone", minimum_ticks=4),
         NOT(has_ephemeral("under_active_pursuit")),
-        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("grieving")),
         NOT(has_ephemeral("wounded")),
     ),
     branches=(
@@ -2810,7 +2810,7 @@ INTIMACY = Template(
         since_last_event_at_least("intimacy_deferred", minimum_ticks=8),
         NOT(has_ephemeral("under_active_pursuit")),
         NOT(has_ephemeral("wounded")),
-        NOT(has_ephemeral("bereaved")),
+        NOT(has_ephemeral("grieving")),
     ),
     branches=(
         Branch(
