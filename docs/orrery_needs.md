@@ -150,7 +150,7 @@ Mechanical details (gates, branch conditions, magnitudes, scene-pressure stubs) 
 
 The architecturally most significant of the basic-needs templates. Sleep is the substrate's most reliable source of small narrative texture — most ticks where it fires produce no prose, but the cumulative record of *where* a character has been sleeping is one of the densest queryable signals about their life situation.
 
-- **Gate**: in local sleep window AND not `well_rested`, OR `has_severity_tag("sleep_deprived")` at any level. Plus `NOT(has_ephemeral("cns_stimulated"))` and `NOT(has_ephemeral("under_active_pursuit"))`.
+- **Gate**: in local sleep window AND not `well_rested`, OR `has_severity_tag("sleep_deprived")` at any level. Plus `NOT(has_ephemeral("cns_stimulated"))` and `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. *(The pursuit clause currently ships as `NOT(has_ephemeral("under_active_pursuit"))`; migration to the pair-tag predicate is tracked in the Resolved Decisions section below.)*
 - **Sleep schedules are tag-based**: `sleep_schedule:diurnal`, `sleep_schedule:nocturnal`, `sleep_schedule:nightshift`, `sleep_schedule:siesta`, `sleep_schedule:polyphasic`. Tag picks a profile; the profile (defined in `nexus.toml`) holds the actual windows. Tagless characters use the global default.
 - **Sleep location is a mood lever.** The `slept_rough` tag applied by rough-sleep and collapse branches is the DF-inspired mood signal — downstream templates and the narrator can read "this character has been sleeping poorly." Several consecutive `slept_rough` ticks give a character a different emotional register than waking from their own bed.
 - **Branches** discriminate by location and severity: collapse-into-sleep (severe-deprivation), at home with partner, at home alone, lodgings/safe-house, sleep rough.
@@ -176,7 +176,7 @@ Slightly higher priority than EAT because thirst ramps faster. Structurally simp
 
 Routine-trigger gate plus pressure gate. The routine clause (`count_co_located(1) AND NOT(recently_socialized)`) means SOCIALIZE can fire just because someone is around — capturing the organic case where company is present and the character engages. Without it, SOCIALIZE only fires when severity-pressure builds, which misses the "Pete is on the submarine and the party is right there" pattern.
 
-- **Gate**: `has_severity_tag("under_socialized")` OR (co-located AND not recently socialized). Plus `NOT(under_active_pursuit)` and `NOT(bereaved)` (MOURN_LOSS owns that space).
+- **Gate**: `has_severity_tag("under_socialized")` OR (co-located AND not recently socialized). Plus `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))` and `NOT(has_ephemeral("grieving"))` (MOURN_LOSS owns that space). *(Currently ships as `under_active_pursuit` + `bereaved`; both are tracked for migration — see Resolved Decisions.)*
 - **Threshold mapping is per-character** via `extroversion_*` tags — see Modulator Tags.
 - **Parasocial branch** (reading, listening to a recording, watching a serial) uses partial decrement (`socialize_debt_delta: -0.4`) rather than full reset — captures "takes the edge off" without fully discharging.
 - **Branches**: seek-after-critical-isolation, engage with present company, go where people are (tavern/square/market), reach out to a contact, parasocial.
@@ -185,7 +185,7 @@ Routine-trigger gate plus pressure gate. The routine clause (`count_co_located(1
 
 The most sensitive in the catalog. Single-slot template (ACTOR only); branches that involve a partner read partner identity from the actor's relationship data. **No binding-composer pairing** — see Core Principle above.
 
-- **Gate**: `has_severity_tag("intimacy_starved")` AND `NOT(has_any_intimacy_suppressor())` AND not in a state that blocks (recent satisfaction, active pursuit, wounded, bereaved).
+- **Gate**: `has_severity_tag("intimacy_starved")` AND `NOT(has_any_intimacy_suppressor())` AND not in a blocking state (recent satisfaction, inbound `hunting`, wounded, `grieving`). *(Currently ships with `under_active_pursuit` + `bereaved`; migration tracked in Resolved Decisions.)*
 - **Modulator**: `libido_*` tags shift thresholds; `libido_absent` means the counter is ignored at hydration and the gate never fires.
 - **Branches** include partner-present (full reset), preference-compatible-setting (partial decrement — going is partial fulfillment; what happens at the venue is storyteller territory), contracted intimacy (gated on absence of vows), solo (partial decrement), let-the-want-stay (counter unchanged; chronic-deferral becomes narratively visible over many ticks).
 - **`partnered_exclusively`** is a semi-suppressor — gate stays open, but routes exclusively to partnered branches. Modeled as an extra gate clause on non-partner branches rather than a suppressor proper.
@@ -228,12 +228,13 @@ Each suppressor closes the INTIMACY gate while present; counter continues to inc
 | `closeted` | Durable | Authored narrative consequence | Internal conflict between identity and circumstance; the body wants but the situation forbids; lifting is a significant character beat |
 | `vow_of_celibacy` | Durable | Authored narrative consequence | Principled abstention; lifting is a major identity shift |
 | `religiously_abstinent` | Durable or ephemeral | Cyclical or authored (Lent, Ramadan, vow-periods) | Cultural/spiritual practice; lifting may be routine and not load-bearing narratively |
-| `grieving_recent_partner` | Ephemeral | Time-based plus authored | Cleared by extended time or by authored moment of moving on; respect required in prose |
 | `recently_traumatized_intimate` | Ephemeral | Authored narrative consequence | Body's recoil; lifting requires deliberate narrative care |
 | `focus_committed` | Ephemeral | Authored when the project/mission resolves | Voluntary deferral; lifting is just "the work is done now" |
 | `partnered_exclusively` | Durable | Narrative consequence (relationship change) | Not a true suppressor — gate doesn't *close*, it routes exclusively to partnered branches |
 
 A `has_any_intimacy_suppressor()` predicate checks the actor for any tag in this controlled list. The list lives as a module constant; adding new suppressors is one place, not scattered across templates.
+
+**Note on grief.** The earlier `grieving_recent_partner` (partner-loss-specific INTIMACY suppressor) has been collapsed into the canonical `grieving` state (see Resolved Decisions below). General `grieving` blocks INTIMACY by reading through the same suppressor list once added. If the partner-loss-specific nuance turns out to be load-bearing in play, `grieving_recent_partner` can be re-distinguished as a child state of `grieving`.
 
 ---
 
@@ -275,6 +276,28 @@ The architecture is **DF-inspired but narrator-led**. The substrate ensures char
 
 ---
 
+## Resolved Decisions (Tracking Implementation)
+
+These were surfaced as inconsistencies in `orrery_needs.md` during a follow-up review; decisions made via interview on 2026-05-23. Each has a tracking issue for the code/migration work; the doc reflects the resolved policy, while the shipped templates still use the legacy forms until the migrations land.
+
+### R1. `under_active_pursuit` → Inbound `hunting` Pair-Tag
+
+**Category error.** `under_active_pursuit` is a single-entity ephemeral but the concept ("someone is hunting me") is inherently relational — it's an inbound pair-tag from a pursuer. Three templates (SLEEP, SOCIALIZE, INTIMACY) currently gate on the ephemeral; the target form is `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. Migration depends on the `pursuing → hunting` rename (carried by #295's trait-compiler chunk) and on `has_inbound_pair_tag` hydration completing per `docs/orrery_tag_vocabulary.md` Open Item #6.
+
+### R2. Grief Vocabulary — Collapsed to Canonical `grieving`
+
+Three names were live for the same concept: `bereaved` (gate-blocker in SOCIALIZE / INTIMACY), `grieving_recent_partner` (INTIMACY suppressor, partner-specific), and an implicit general `grieving` state that the templates assumed but never declared. **Resolved**: canonicalize on `grieving` as the single general-bereavement state. `bereaved` and `grieving_recent_partner` get aliased to `grieving` via the `CANONICAL_TAGS` mechanism. The INTIMACY suppressor fires on canonical `grieving`. Caveat: if play reveals that the partner-loss-specific intimacy recoil is meaningfully different from general grief in this context, `grieving_recent_partner` can be re-distinguished later as a child state.
+
+### R3. `contacts_available` → Derive from `contact` Pair-Tag with Kind Qualifier
+
+The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates filter the actor's outbound `contact(char → other_char)` pair-tag rows by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. Substrate work needed: the `contact` pair-tag must carry a relationship-kind qualifier (either as a tag suffix or as a kind column on `entity_pair_tags`), and new predicates need to land. The compiler that creates `contact` rows from the trait_menu Contacts trait (#295) is the natural carrier.
+
+### R4. Affective Severity — Hybrid (Graduated Where Packages Gate; Flat Otherwise)
+
+The needs work shipped with a uniform graduated `_N` convention (mild / moderate / severe / critical) because every basic need has a package that gates on severity. For the *affective* cluster (states like fear, anger, longing, curiosity, etc. — the ChatClaude-drafted `state` category), **most affective states stay flat / binary** (purely `STORYTELLER_PRESSURE`; Skald reads them as prompt context). A small subset uses the graduated `_N` convention because a specific package gates on the level — initial example: `grieving_1_mild` through `grieving_4_critical` for MOURN_LOSS branch selection. **Each graduation is a justified choice, not a default.** The principle preserves the graduated machinery's value where it earns its keep without imposing four-level granularity on every emotion.
+
+---
+
 ## Open Questions
 
 These were surfaced during design and remain unresolved as of the implementation landing. They should each be filed as issues for explicit tracking rather than buried here.
@@ -304,9 +327,9 @@ Decision depends on whether the current catalog feels redundant in practice or w
 
 The basic-needs templates fire for every character every game-day, producing potentially thousands of resolutions per session. The current implementation uses a hybrid policy (severe / unusual / promoted-to-narration always log; routine maintenance updates need state and tags without a `world_events` row) — but the branch-level `log_policy` field is not formalized in the doc and routine ticks may still be logging more than intended. Audit needed.
 
-### 5. `contacts_available` Ambiguity in INTIMACY Branches
+### 5. ~~`contacts_available` Ambiguity~~ — Resolved
 
-The INTIMACY "engage contracted intimate companion" branch uses `has_tag("contacts_available")` as a gate condition. The same tag is also used by SLEEP (safe lodgings) and SOCIALIZE (reach-out branch) with different semantic meaning. Either the tag needs to be split into kind-specific variants (`contacts_available:intimate`, `contacts_available:lodging`, etc.) or the gate logic needs disambiguation by branch context.
+See R3 above. Decision: derive from `contact` pair-tag with relationship-kind qualifier. Implementation tracked separately.
 
 ### 6. Setting-Tag Vocabulary for `in_preference_compatible_setting`
 
