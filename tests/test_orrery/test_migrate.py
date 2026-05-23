@@ -485,3 +485,20 @@ def test_trait_compiler_substrate_migration_seeds_required_contracts() -> None:
     assert "trait_compile_result jsonb" in migration_source
     assert "SET subject_kinds = ARRAY['character', 'faction']" in migration_source
     assert "SET name = 'fame'" in migration_source
+
+
+def test_canonical_grieving_migration_aliases_legacy_grief_tags() -> None:
+    """Migration 046 collapses bereaved and partner grief into grieving."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "046_canonical_grieving_state.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert migration.LEGACY_TAGS == ("bereaved", "grieving_recent_partner")
+    assert "'grieving', 'state', TRUE" in migration_source
+    assert "ON CONFLICT (entity_id, tag_id)" in migration_source
+    assert "synonym_for = %s" in migration_source

@@ -504,6 +504,10 @@ def test_intimacy_suppressor_reads_durable_and_ephemeral_tags() -> None:
         {Slot.ACTOR: 1},
     )
     assert predicate(
+        WorldState(ephemeral_tags={1: frozenset({"grieving"})}),
+        {Slot.ACTOR: 1},
+    )
+    assert predicate(
         WorldState(ephemeral_tags={1: frozenset({"focus_committed"})}),
         {Slot.ACTOR: 1},
     )
