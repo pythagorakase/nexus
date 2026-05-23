@@ -660,13 +660,17 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 **`commoner` is the untagged default.** Ordinary citizens of a faction — no elevated rank, no informal recognition above baseline, not negatively positioned — carry *no* `status:<level>` row scoped to that faction. The compiler should NOT synthesize a `status:commoner` row for ordinary NPCs; the absence-of-row IS the commoner reading. This matches the same default-absent pattern as `role.fame:obscure` and `role.resources:comfortable`.
 
+**Level vocabulary is closed.** Status follows the same closed-vocabulary discipline as every other category in this registry. Genre-specific status-level additions (`status:apprentice`, `status:guildmaster`, `status:exiled`, etc.) require deliberate registry additions via migration; they are NOT added at runtime via Skald proposals or other auto-registration paths. The runtime `new_tag_proposals` path that previously allowed such growth was removed in #293 (only the `LEGACY_ORRERY_PROPOSAL_KEY` constant remains as historical residue). When a new status level is warranted for a story or genre, the path is: register it in a migration, then it becomes available for bestowal.
+
 **Formal vs. informal** is read off the scope-faction's own tags (its `legitimacy`, `operational_mode`), NOT the status tag itself. `status:senior(char → US_Army)` reads as formal military rank; `status:senior(char → village_elders)` reads as informal community elevation. Same level anchor, different flavor by composition.
 
 Status-family reads and writes go through `nexus.agents.orrery.status_family` / `apply_status_pair_tag_bestowal` rather than ad-hoc string parsing in individual packages. Within a single `(subject, scope_faction)` edge, status is exclusive: bestowing a new `status:<level>` clears sibling `status:*` rows for that same edge.
 
 ### Compiler-Planned Additions **⏳ SCHEMA-PENDING (Entire Section)**
 
-The trait → tag compiler (Codex chunk) will introduce three additional character ↔ character multi-entity tags to support the Allies / Contacts / Enemies traits. None are seeded today.
+The trait → tag compiler (Codex chunk) registers three additional character ↔ character multi-entity tags in the substrate. None are seeded today.
+
+**Important per #303**: these tags' existence in the registry does NOT mean the compiler instantiates them automatically at trait selection. Per the functional-vs-affective principle (Pair Tags vs. `character_relationships` Source-of-Truth Rule below), affective traits (Allies, Contacts, Enemies) compile primarily to `character_relationships` rows. The pair-tags below exist for *future* package gates that may need a binary mechanical edge; the compiler adds them per-package, not by default at trait selection time.
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
@@ -683,7 +687,14 @@ The `ally`, `contact`, and `hostile_to` tags (and their compiler-planned sibling
 - **`pair_tag`** = typed mechanical edge that packages gate on. Binary: exists or it doesn't, plus the tag name. Cheap to query; deterministic. Example: a HIDE package gating on "does the acting character have any `hunting(other → self)` edges?"
 - **`character_relationships`** = affective / historical / valence layer that Skald and social-logic read. Multi-state; evolves continuously over time; carries trust, valence, history, sub-states. Example: Skald composing prose that reflects "Alex and Emilia were close, then there was a falling-out, then a partial reconciliation."
 
-The compiler writes both within a single transaction. Reconciliation invariant: every `ally` / `contact` / `hostile_to` pair tag must have a corresponding `character_relationships` row, and the converse for any `character_relationships` row marked as one of those relation types. Drift is a bug — tracked as issue #291.
+**Functional-vs-affective compiler principle (decided 2026-05-23 per issue #303; applies uniformly across all affective traits).** Affective traits — ally, contact, patron, dependents, enemies, and any future trait describing a graded interpersonal bond — compile primarily to a `character_relationships` row capturing the affective bond. Pair-tags are added **selectively**, only where a specific package needs to gate on the edge. The compiler does **not** pre-provision pair-tags "just because the trait was selected"; each pair-tag is justified by a specific package that gates on it. When in doubt, write only the relationship row and add pair-tags reactively when a package implementation requires them. See the trait→tag mapping table below for per-trait application.
+
+The compiler writes both layers within a single transaction *when both are warranted*. Reconciliation invariants:
+
+- Every `ally` / `contact` / `hostile_to` pair tag MUST have a corresponding `character_relationships` row (these tags carry intrinsic affective content)
+- The converse does NOT hold uniformly — a `character_relationships` row need not have a parallel pair-tag unless a package needs the gate
+
+Drift between paired rows is a bug — tracked as issue #291.
 
 ---
 
@@ -691,21 +702,21 @@ The compiler writes both within a single transaction. Reconciliation invariant: 
 
 The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry point during character creation. Each character chooses 3 traits from the 10 optional list, plus 1 required wildcard. The trait → tag compiler at `nexus/api/new_story_db_mapper.py::finalize_narrative_bootstrap()` (Codex implementation chunk) translates user-chosen traits into structured tag bestowals after character INSERT and before final commit. The mapping:
 
-| trait_menu trait | Compiles to | Wizard prompts collected |
-|---|---|---|
-| `Status` *(broadened)* **⏳** | `status:<level>(char → faction)` multi-entity row | Scope-faction name (created if new); level anchor |
-| `Fame` *(renamed from `Reputation`)* **⏳ rename** | `role.fame:<level>` single-entity tag | Detection-radius level; no valence prompt (composition handles it) |
-| `Resources` | `role.resources:<level>` single-entity tag | Wealth level |
-| `Domain` **⏳ polymorphism** | place entity (create if new) + `claims(char → place)` multi-entity (polymorphic extension) | Place name; nature of claim |
-| `Allies` **⏳ new tag** | new `ally(char → char)` multi-entity rows + `character_relationships` entries | Names of allies; one row per |
-| `Contacts` **⏳ new tag** | new `contact(char → char)` multi-entity rows + `character_relationships` entries | Names + areas of contact |
-| `Patron` | Composition: `mentors(patron → char)` + `protects(patron → char)` + `authority_over(patron → char)` | Name of patron |
-| `Dependents` | Composition (directional inverse of Patron): `protects(char → dep)` + `authority_over(char → dep)` + optionally `mentors(char → dep)` + `character_relationships` | Names of dependents; whether each dependent is mentored vs. merely supported |
-| `Enemies` **⏳ rename / new tag** | `hunting(other → char)` or new `hostile_to(other → char)` multi-entity (choose by intensity of pursuit) | Names; nature of opposition |
-| `Obligations` | `obligation(char → target)` multi-entity (already in settled set) | Target; nature of obligation |
-| `Wildcard` | **Compiles to existing vocabulary via composition.** `pact` → `obligation(char → deity-faction)`; `familiar` / `herd` → `protects` + a created entity; `artifact` / `symbiote` → `bodyform` condition (e.g. `enchanted`, `cybernetic`) or a row in the `items` table once that's populated. Genuinely novel mechanics live in prose / `extra_data`, **not** as new registry tags — the closed-vocabulary discipline holds. *(Confirmation needed code-side: `orrery_tags` field on `WildcardTrait` / `CharacterSheet` must validate against the registry, not accept arbitrary strings.)* | Wildcard name + description; the compiler attempts to decompose into existing tag/relationship structures and falls back to prose-only storage if decomposition fails |
+| trait_menu trait | Compiles to | Direction (when pair-tags applied) | Wizard prompts collected |
+|---|---|---|---|
+| `Status` *(broadened)* **⏳** | `status:<level>(char → faction)` multi-entity row | `char → faction` (PC is subject; scope-faction is object) | Scope-faction name (created if new); level anchor |
+| `Fame` *(renamed from `Reputation`)* **⏳ rename** | `role.fame:<level>` single-entity tag | N/A (single-entity) | Detection-radius level; no valence prompt (composition handles it) |
+| `Resources` | `role.resources:<level>` single-entity tag | N/A (single-entity) | Wealth level |
+| `Domain` **⏳ polymorphism** | place entity (create if new) + `claims(char → place)` multi-entity (polymorphic extension) | `char → place` (PC is subject) | Place name; nature of claim |
+| `Allies` **⏳ new tag** | `character_relationships` row per ally (affective bond). **No default pair-tag**; `ally(char → char)` added only where a specific package gates on it. *(Per #303 — see Source-of-Truth Rule above.)* | `char → char` (PC → ally) for any future pair-tag | Names of allies; brief affective description |
+| `Contacts` **⏳ new tag** | `character_relationships` row per contact (transactional/arms-length bond). **No default pair-tag**; `contact(char → char)` added only where a specific package gates on it. *(Per #303.)* | `char → char` (PC → contact) for any future pair-tag | Names + areas of contact; brief affective description |
+| `Patron` | `character_relationships` row (patron-client bond; mentor/sponsor/protector/guide dimensions live in the row's description and structured fields). **No default pair-tags**; `mentors` / `protects` / `authority_over` / `sponsors` added per-package as needed. *(Per #303; resolves the OR→AND mismatch flagged in #305.)* | `patron → char` for any future protective/mentoring pair-tag; `char → patron` for any obligation/loyalty pair-tag | Name of patron; nature of the relationship (mentor, sponsor, protector, guide, mixed) |
+| `Dependents` | `protects(char → dep)` pair-tag (clean functional gate — protector activates defending packages when threat fires) + `character_relationships` row for affective subordination (devotion, loyalty, willingness to obey). **No `authority_over` or `obligation` pair-tag by default**; add reactively if a package needs the gate. *(Per #303 + #306.)* | `char → dep` for `protects`; `char → dep` for any future `authority_over`; `dep → char` for any future `obligation` | Names of dependents; brief affective description |
+| `Enemies` **⏳ rename / new tag** | `character_relationships` row (durable antagonism). `hunting(other → char)` pair-tag **only if** the enemy is actively pursuing the PC. `hostile_to` pair-tag is provisionally NOT added by default — sustained antagonism without active pursuit lives in the relationship row alone. *(Per #303 + #308.)* | `other → char` for `hunting` (enemy is subject; PC is target) | Names; brief affective description; "is this enemy actively hunting you, or just opposed?" |
+| `Obligations` | `obligation(char → target)` multi-entity (already in settled set) | `char → target` (PC owes) | Target; nature of obligation |
+| `Wildcard` | **Compiles to existing vocabulary via composition.** `pact` → `obligation(char → deity-faction)`; `familiar` / `herd` → `protects` + a created entity; `artifact` / `symbiote` → `bodyform` condition (e.g. `enchanted`, `cybernetic`). Genuinely novel mechanics live in prose / `extra_data`, **not** as new registry tags — the closed-vocabulary discipline holds. *(Confirmed in code: `WildcardTrait.orrery_tags` field validates against the registry via `apply_tag_bestowal`; `nexus/api/new_story_schemas.py:230` explicitly says "Apply registered tags by name; omit tags when the closed registry has no exact fit." The wildcard cannot mint tags — concepts that don't decompose stay in prose + `extra_data`.)* | Direction varies by composition | Wildcard name + description; the compiler attempts to decompose into existing tag/relationship structures and falls back to prose-only storage if decomposition fails |
 
-**Compiler-introduced new multi-entity tags:** `ally`, `contact`, `hostile_to` — added with Codex's trait-compiler chunk; documented above in the Multi-Entity Tags section under "Compiler-planned additions."
+**Registry additions accompanying the trait-compiler chunk:** `ally`, `contact`, `hostile_to` — registered in the substrate with Codex's trait-compiler chunk for future per-package use. The compiler itself does NOT auto-instantiate them at trait selection (per #303; affective traits go to `character_relationships` primary). The registry entries enable per-package gates that may need a binary mechanical edge.
 
 **Migration: trait rename `Reputation → Fame`.** The wizard's `VALID_TRAITS` frozenset (`nexus/api/new_story_cache.py`) and the `assets.traits` table need a small SQL migration to rename `reputation` → `fame` across all unlocked slots. Plus prose updates in `prompts/storyteller_new.md` and any tests referencing the trait name by string. Handled in the same compiler chunk.
 
