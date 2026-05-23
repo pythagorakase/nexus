@@ -209,8 +209,14 @@ def reconcile_trait_relationship_pair_tags(cur: Any) -> list[TraitRelationshipDr
         LEFT JOIN characters c1 ON c1.entity_id = ept.subject_entity_id
         LEFT JOIN characters c2 ON c2.entity_id = ept.object_entity_id
         LEFT JOIN character_relationships cr
-               ON cr.character1_id = c1.id
-              AND cr.character2_id = c2.id
+               ON (
+                   cr.character1_id = c1.id
+                   AND cr.character2_id = c2.id
+               )
+               OR (
+                   cr.character1_id = c2.id
+                   AND cr.character2_id = c1.id
+               )
         WHERE ept.cleared_at IS NULL
           AND NOT pt.deprecated
           AND pt.tag = ANY(%s)
@@ -246,11 +252,25 @@ def reconcile_trait_relationship_pair_tags(cur: Any) -> list[TraitRelationshipDr
               SELECT 1
               FROM entity_pair_tags ept
               JOIN pair_tags pt ON pt.id = ept.pair_tag_id
-              WHERE ept.subject_entity_id = c1.entity_id
-                AND ept.object_entity_id = c2.entity_id
-                AND ept.cleared_at IS NULL
+              WHERE ept.cleared_at IS NULL
                 AND NOT pt.deprecated
                 AND pt.tag = cr.extra_data->>'trait_compiler_pair_tag'
+                AND (
+                    (
+                        COALESCE(
+                            cr.extra_data->>'trait_compiler_pair_tag_direction',
+                            'protagonist_to_target'
+                        ) = 'protagonist_to_target'
+                        AND ept.subject_entity_id = c1.entity_id
+                        AND ept.object_entity_id = c2.entity_id
+                    )
+                    OR (
+                        cr.extra_data->>'trait_compiler_pair_tag_direction'
+                            = 'target_to_protagonist'
+                        AND ept.subject_entity_id = c2.entity_id
+                        AND ept.object_entity_id = c1.entity_id
+                    )
+                )
           )
         ORDER BY c1.entity_id, c2.entity_id, pair_tag
         """,
@@ -531,6 +551,9 @@ def _compile_relationship_target(
             history=target.history,
             trait=trait,
             pair_tag=pair_tag if target.apply_pair_tag else None,
+            pair_tag_direction=(
+                target.pair_tag_direction if target.apply_pair_tag else None
+            ),
         )
     result.created_relationships.append(
         CreatedRelationship(
@@ -557,6 +580,7 @@ def _upsert_character_relationship(
     history: str,
     trait: str,
     pair_tag: Optional[str],
+    pair_tag_direction: Optional[str],
 ) -> None:
     extra_data: dict[str, Any] = {
         "source": "trait_compiler",
@@ -564,6 +588,8 @@ def _upsert_character_relationship(
     }
     if pair_tag is not None:
         extra_data["trait_compiler_pair_tag"] = pair_tag
+    if pair_tag_direction is not None:
+        extra_data["trait_compiler_pair_tag_direction"] = pair_tag_direction
     cur.execute(
         """
         INSERT INTO character_relationships (

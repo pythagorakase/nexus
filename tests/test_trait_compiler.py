@@ -271,6 +271,10 @@ class TraitCompilerCursor:
                 (row["character1_id"], row["character2_id"])
                 for row in self.character_relationships
             }
+            relationship_keys |= {
+                (character2_id, character1_id)
+                for character1_id, character2_id in relationship_keys
+            }
             for row in self.entity_pair_tags:
                 tag = tag_by_id[row["pair_tag_id"]]
                 character1_id = entity_to_character.get(row["subject_entity_id"])
@@ -490,6 +494,11 @@ def test_enemy_pair_tag_can_point_from_target_to_protagonist() -> None:
     assert cur.entity_pair_tags[0]["object_entity_id"] == 501
     assert cur.character_relationships[0]["character1_id"] == 1
     assert cur.character_relationships[0]["character2_id"] == 2
+    assert (
+        '"trait_compiler_pair_tag_direction": "target_to_protagonist"'
+        in cur.character_relationships[0]["extra_data"]
+    )
+    assert reconcile_trait_relationship_pair_tags(cur) == []
 
 
 def test_failed_relationship_write_rolls_back_pair_tag_savepoint() -> None:

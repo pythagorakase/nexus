@@ -40,6 +40,29 @@ VALID_TRAITS = frozenset(
 )
 
 
+def _canonical_trait_name(trait_name: str) -> str:
+    """Return the database storage name for accepted trait aliases."""
+
+    if trait_name == "reputation":
+        return "fame"
+    return trait_name
+
+
+def _ensure_trait_update_matched(
+    cur: Any,
+    *,
+    trait_name: str,
+    storage_name: str,
+) -> None:
+    """Fail fast if a selected trait alias did not match an assets row."""
+
+    if getattr(cur, "rowcount", None) == 0:
+        raise RuntimeError(
+            f"Trait {trait_name!r} resolved to {storage_name!r}, "
+            "but no assets.traits row was updated."
+        )
+
+
 def _parse_pg_array(value: Any) -> List[str]:
     """Parse PostgreSQL array literal to Python list.
 
@@ -579,6 +602,7 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
         raise ValueError(
             f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}"
         )
+    storage_name = _canonical_trait_name(trait_name)
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
@@ -589,10 +613,15 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
                 WHERE name = %s
                 RETURNING is_selected
                 """,
-                (trait_name,),
+                (storage_name,),
             )
             result = cur.fetchone()
-            new_state = result[0] if result else False
+            if result is None:
+                raise RuntimeError(
+                    f"Trait {trait_name!r} resolved to {storage_name!r}, "
+                    "but no assets.traits row was toggled."
+                )
+            new_state = result[0]
     logger.info("Toggled trait %s to %s in %s", trait_name, new_state, dbname)
     return new_state
 
@@ -753,13 +782,25 @@ def write_suggested_traits(
 
             # Select and set rationale for each suggested trait
             for suggestion in suggestions:
+                trait_name = suggestion["trait"]
+                if trait_name not in VALID_TRAITS:
+                    raise ValueError(
+                        f"Invalid trait: {trait_name}. "
+                        f"Must be one of {sorted(VALID_TRAITS)}"
+                    )
+                storage_name = _canonical_trait_name(trait_name)
                 cur.execute(
                     """
                     UPDATE assets.traits
                     SET is_selected = TRUE, rationale = %s
                     WHERE name = %s
                     """,
-                    (suggestion["rationale"], suggestion["trait"]),
+                    (suggestion["rationale"], storage_name),
+                )
+                _ensure_trait_update_matched(
+                    cur,
+                    trait_name=trait_name,
+                    storage_name=storage_name,
                 )
     logger.info(
         "Wrote %d suggested traits to %s",
@@ -1201,6 +1242,7 @@ def write_cache(
                             "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
                         )
                         for trait_name in selected:
+                            storage_name = _canonical_trait_name(trait_name)
                             rationale = rationales.get(trait_name, "")
                             cur.execute(
                                 """
@@ -1208,7 +1250,12 @@ def write_cache(
                                 SET is_selected = TRUE, rationale = %s
                                 WHERE name = %s
                                 """,
-                                (rationale, trait_name),
+                                (rationale, storage_name),
+                            )
+                            _ensure_trait_update_matched(
+                                cur,
+                                trait_name=trait_name,
+                                storage_name=storage_name,
                             )
                         logger.info(
                             "Wrote 3 selected traits to assets.traits in %s", dbname

@@ -132,6 +132,107 @@ def test_write_cache_marks_three_selected_traits_confirmed(monkeypatch) -> None:
     )
 
 
+def test_write_cache_canonicalizes_legacy_reputation_trait(monkeypatch) -> None:
+    """The Fame rename should not make legacy reputation selections vanish."""
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.calls = []
+            self.rowcount = 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.calls.append((sql, params))
+            self.rowcount = 1
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_obj = FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def cursor(self):
+            return self.cursor_obj
+
+    fake_conn = FakeConnection()
+    monkeypatch.setattr(cache_module, "get_connection", lambda _dbname: fake_conn)
+
+    cache_module.write_cache(
+        dbname="save_05",
+        character_draft={
+            "trait_selection": {
+                "selected_traits": ["contacts", "reputation", "resources"],
+                "trait_rationales": {
+                    "contacts": "Informants keep her aware.",
+                    "reputation": "Her name has started to travel.",
+                    "resources": "She has liquid reserves.",
+                },
+            }
+        },
+    )
+
+    assert any(
+        params == ("Her name has started to travel.", "fame")
+        for _sql, params in fake_conn.cursor_obj.calls
+    )
+
+
+def test_write_suggested_traits_canonicalizes_legacy_reputation(
+    monkeypatch,
+) -> None:
+    """Concept suggestions should also write the Fame storage row."""
+
+    class FakeCursor:
+        def __init__(self) -> None:
+            self.calls = []
+            self.rowcount = 1
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def execute(self, sql, params=None):
+            self.calls.append((sql, params))
+            self.rowcount = 1
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.cursor_obj = FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def cursor(self):
+            return self.cursor_obj
+
+    fake_conn = FakeConnection()
+    monkeypatch.setattr(cache_module, "get_connection", lambda _dbname: fake_conn)
+
+    cache_module.write_suggested_traits(
+        "save_05",
+        [{"trait": "reputation", "rationale": "People know the name."}],
+    )
+
+    assert any(
+        params == ("People know the name.", "fame")
+        for _sql, params in fake_conn.cursor_obj.calls
+    )
+
+
 def test_write_cache_creates_row_before_wildcard_tags(monkeypatch) -> None:
     """First legacy cache writes must not drop wildcard Orrery tag payloads."""
 
