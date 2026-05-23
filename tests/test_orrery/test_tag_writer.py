@@ -379,7 +379,7 @@ def test_clear_entity_tag_marks_known_active_tag_cleared():
     assert cur.cleared_keys == [(11, tag_id)]
 
 
-def test_clear_entity_tag_returns_false_when_no_active_row():
+def test_clear_entity_tag_is_idempotent():
     tag_id = hash("scrying_target") & 0xFFFFFF
     cur = FakeCursor(
         tags=_registered(("scrying_target", "orrery_state", True)),
@@ -396,6 +396,33 @@ def test_clear_entity_tag_returns_false_when_no_active_row():
 
     assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is True
     assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is False
+
+
+def test_clear_entity_tag_returns_false_when_no_active_row():
+    cur = FakeCursor(tags=_registered(("scrying_target", "orrery_state", True)))
+
+    assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is False
+
+
+def test_clear_entity_tag_resolves_canonical_alias():
+    tag_id = hash("corporate_exile") & 0xFFFFFF
+    cur = FakeCursor(
+        tags=_registered(("corporate_exile", "state", False)),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    cleared = clear_entity_tag(cur, entity_id=42, tag="corporate_defector")
+
+    assert cleared is True
+    assert cur.entity_tags[0]["cleared_at"] == "now"
 
 
 def test_clear_entity_tag_unknown_or_deprecated_tag_is_noop():
