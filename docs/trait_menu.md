@@ -38,7 +38,7 @@ Not choosing a trait does not mean the character is bereft of it; rather, this s
 - use this when you are known within that group, even if obscure elsewhere
 - examples: military commission, guild journeyman, corporate board seat, respected neighborhood fixer
 
-### Reputation (Fame)
+### Fame (formerly Reputation)
 - how broadly you're recognized beyond any one specific group
 - what the wider world recognizes you for, for better or worse
 - use Status instead when the recognition is limited to one faction, institution, community, or subculture

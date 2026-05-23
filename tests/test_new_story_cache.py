@@ -48,6 +48,10 @@ def test_row_to_cache_reads_character_orrery_tags() -> None:
         "applied_tags": ["ritualist"],
         "tags_to_clear": [],
     }
+    compile_result = {
+        "dry_run": False,
+        "counters": {"prose_only_remainders": 1},
+    }
 
     cache = _row_to_cache(
         {
@@ -56,6 +60,7 @@ def test_row_to_cache_reads_character_orrery_tags() -> None:
             "character_background": "Raised in a sealed archive.",
             "character_appearance": "Ink-stained hands and observant eyes.",
             "character_orrery_tags": bestowal,
+            "trait_compile_result": compile_result,
         },
         selected_traits=[
             SuggestedTrait("contacts", "Archivists trade favors."),
@@ -72,6 +77,7 @@ def test_row_to_cache_reads_character_orrery_tags() -> None:
     )
 
     assert cache.character.orrery_tags == bestowal
+    assert cache.character.trait_compile_result == compile_result
     assert cache.get_character_dict()["wildcard"]["orrery_tags"] == bestowal
 
 

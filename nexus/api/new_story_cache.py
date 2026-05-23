@@ -29,6 +29,8 @@ VALID_TRAITS = frozenset(
         "patron",
         "dependents",
         "status",
+        "fame",
+        # Backward-compatible during the Reputation -> Fame rename.
         "reputation",
         "resources",
         "domain",
@@ -127,6 +129,7 @@ class CharacterData:
     wildcard_name: Optional[str] = None  # from traits.name where id=11
     wildcard_rationale: Optional[str] = None  # from traits.rationale where id=11
     orrery_tags: Optional[Dict[str, Any]] = None  # from new_story_creator JSONB
+    trait_compile_result: Optional[Dict[str, Any]] = None
 
     def has_concept(self) -> bool:
         """Check if concept subphase is complete."""
@@ -445,6 +448,7 @@ def _row_to_cache(
             wildcard_name=wildcard_row.get("name") if wildcard_row else None,
             wildcard_rationale=wildcard_row.get("rationale") if wildcard_row else None,
             orrery_tags=_parse_json_object(row.get("character_orrery_tags")),
+            trait_compile_result=_parse_json_object(row.get("trait_compile_result")),
         ),
         seed=SeedData(
             seed_type=row.get("seed_type"),
@@ -898,7 +902,8 @@ def clear_cache(dbname: Optional[str] = None) -> None:
             cur.execute(
                 """
                 UPDATE assets.new_story_creator
-                SET character_orrery_tags = NULL
+                SET character_orrery_tags = NULL,
+                    trait_compile_result = NULL
                 WHERE id = TRUE
                 """
             )
