@@ -169,20 +169,18 @@ For CLI command reference, see the `nexus-cli` skill in `.claude/skills/`.
 For detailed, task-specific workflows and guides, see the Claude Code skills in `.claude/skills/`. These skills are automatically invoked when relevant:
 
 - **git-feature-workflow**: Complete feature development workflow including branch creation, PR submission, GPT-5-Codex review handling, merging, and cleanup
-- **test-lore-agent**: Run LORE agent tests with context saving, divergence detection testing, and jq query helpers
 - **audit-settings**: Validate `settings.json` for configuration errors, constraint violations, and cross-agent consistency
 - **inspect-chunk-context**: Query NEXUS database for chunk details, metadata, entity references, and temporal relationships
 - **manage-api-keys**: Manage NEXUS API keys via macOS Keychain (runtime) and 1Password (canonical source), bootstrap fresh checkouts, rotate keys, and troubleshoot silent retrieval
 - **openai-structured-output**: Implement OpenAI structured outputs with Pydantic models or JSON schemas
-- **analyze-divergence**: Debug entity-based divergence detection behavior and tune thresholds
 
 These skills contain detailed commands, workflows, troubleshooting guides, and best practices extracted from development experience.
 
 ## Entity-Based Divergence Detection
 
-The LORE agent uses deterministic entity-based divergence detection to identify when users reference known entities not present in the recent narrative (warm slice).
+The LORE turn loop (`nexus/memory/manager.py`) runs deterministic entity-based divergence detection (`nexus/memory/divergence.py`, `nexus/memory/entity_detector.py`) to identify when user input references known entities absent from the warm slice. Configuration: `memory.divergence_threshold` in `settings.json` (default `0.7`). Tests at `tests/test_lore/test_memory_manager.py` and `tests/test_lore/test_pass2_chunk1369.py`.
 
-For architecture details, testing procedures, and troubleshooting, see the `analyze-divergence` skill in `.claude/skills/`.
+This is the **deterministic** entity-based variant. An earlier *LLM-based* divergence detection path was retired per the bake-off in `docs/retrieval_query_bakeoff_2026_05_18.md`; the `analyze-divergence` skill that documented the LLM-based path was removed alongside.
 
 ## OpenAI API Best Practices
 
