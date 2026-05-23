@@ -20,6 +20,7 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
     apply_tag_bestowal,
+    clear_entity_tag,
 )
 
 
@@ -183,6 +184,27 @@ class FakeCursor:
             self.inserted_entity_tag_rows.append(new_row)
             self.rowcount = 1
             return
+        if sql_upper.startswith("UPDATE ENTITY_TAGS ET") and "T.TAG =" in sql_upper:
+            entity_id, tag = params
+            tag_row = self.tags.get(tag)
+            cleared = 0
+            if (
+                tag_row is not None
+                and not tag_row.get("deprecated")
+                and tag_row.get("synonym_for") is None
+            ):
+                tag_id = tag_row["id"]
+                for row in self.entity_tags:
+                    if (
+                        row["entity_id"] == entity_id
+                        and row["tag_id"] == tag_id
+                        and row["cleared_at"] is None
+                    ):
+                        row["cleared_at"] = "now"
+                        cleared += 1
+                        self.cleared_keys.append((entity_id, tag_id))
+            self.rowcount = cleared
+            return
         if sql_upper.startswith("UPDATE ENTITY_TAGS ET"):
             entity_id, category, keep_tag_id = params
             cleared = 0
@@ -333,6 +355,69 @@ def test_clears_existing_tag():
     )
     assert counters["cleared"] == 1
     assert cur.cleared_keys == [(11, tag_id)]
+
+
+def test_clear_entity_tag_marks_known_active_tag_cleared():
+    tag_id = hash("scrying_target") & 0xFFFFFF
+    cur = FakeCursor(
+        tags=_registered(("scrying_target", "orrery_state", True)),
+        entity_tags=[
+            {
+                "entity_id": 11,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    cleared = clear_entity_tag(cur, entity_id=11, tag="scrying_target")
+
+    assert cleared is True
+    assert cur.entity_tags[0]["cleared_at"] == "now"
+    assert cur.cleared_keys == [(11, tag_id)]
+
+
+def test_clear_entity_tag_returns_false_when_no_active_row():
+    tag_id = hash("scrying_target") & 0xFFFFFF
+    cur = FakeCursor(
+        tags=_registered(("scrying_target", "orrery_state", True)),
+        entity_tags=[
+            {
+                "entity_id": 11,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is True
+    assert clear_entity_tag(cur, entity_id=11, tag="scrying_target") is False
+
+
+def test_clear_entity_tag_unknown_or_deprecated_tag_is_noop():
+    tag_rows = _registered(("retired_signal", "orrery_state", True))
+    tag_rows["retired_signal"]["deprecated"] = True
+    tag_id = tag_rows["retired_signal"]["id"]
+    cur = FakeCursor(
+        tags=tag_rows,
+        entity_tags=[
+            {
+                "entity_id": 11,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    assert clear_entity_tag(cur, entity_id=11, tag="retired_signal") is False
+    assert clear_entity_tag(cur, entity_id=11, tag="not_registered") is False
+    assert cur.entity_tags[0]["cleared_at"] is None
 
 
 def test_incompatible_category_raises():
