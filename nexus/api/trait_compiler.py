@@ -28,6 +28,7 @@ from nexus.api.trait_compiler_schemas import (
     TraitCompileResult,
     TraitRelationshipDrift,
     UnresolvedTrait,
+    canonical_trait_name,
 )
 
 
@@ -80,7 +81,7 @@ def compile_character_traits(
 
     for trait in character.get_trait_entries():
         trait_name = str(trait.name)
-        canonical_trait = _canonical_trait_name(trait_name)
+        canonical_trait = canonical_trait_name(trait_name)
         if canonical_trait == "resources":
             _compile_single_entity_level(
                 cur,
@@ -182,6 +183,8 @@ def persist_trait_compile_result(
         """,
         (json.dumps({"trait_compile_result": payload}), character_id),
     )
+    if getattr(cur, "rowcount", None) == 0:
+        raise RuntimeError(f"Character {character_id} was not updated.")
     cur.execute(
         """
         UPDATE assets.new_story_creator
@@ -191,6 +194,8 @@ def persist_trait_compile_result(
         """,
         (json.dumps(payload),),
     )
+    if getattr(cur, "rowcount", None) == 0:
+        raise RuntimeError("assets.new_story_creator row was not updated.")
 
 
 def reconcile_trait_relationship_pair_tags(cur: Any) -> list[TraitRelationshipDrift]:
@@ -658,6 +663,7 @@ def _lookup_faction_entity_id(cur: Any, faction_name: str) -> Optional[int]:
         SELECT entity_id
         FROM factions
         WHERE name = %s
+        ORDER BY entity_id
         LIMIT 1
         """,
         (faction_name,),
@@ -676,12 +682,6 @@ def _coerce_inputs(
     if isinstance(value, TraitCompileInputs):
         return value
     return TraitCompileInputs.model_validate(value)
-
-
-def _canonical_trait_name(trait_name: str) -> str:
-    if trait_name == "reputation":
-        return "fame"
-    return trait_name
 
 
 def _add_remainder(

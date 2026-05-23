@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any, Optional
 
@@ -11,6 +12,7 @@ from nexus.api.new_story_schemas import CharacterSheet, CharacterTrait
 from nexus.api.trait_compiler import (
     apply_character_trait_compilation,
     compile_character_traits,
+    persist_trait_compile_result,
     reconcile_trait_relationship_pair_tags,
 )
 from nexus.api.trait_compiler_schemas import (
@@ -20,6 +22,7 @@ from nexus.api.trait_compiler_schemas import (
     StatusTraitInput,
     TraitCompileInputs,
     TraitCompileReasonCode,
+    TraitCompileResult,
 )
 
 
@@ -298,8 +301,57 @@ class TraitCompilerCursor:
             return
 
         if "CR.EXTRA_DATA->>'TRAIT_COMPILER_PAIR_TAG' = ANY" in normalized:
-            self._next_rows = []
-            self.rowcount = 0
+            tags = set(params[0])
+            rows = []
+            character_to_entity = {
+                character_id: row["entity_id"]
+                for character_id, row in self.characters.items()
+            }
+            tag_by_id = {row["id"]: tag for tag, row in self.pair_tags.items()}
+            active_pair_keys = {
+                (
+                    row["subject_entity_id"],
+                    row["object_entity_id"],
+                    tag_by_id[row["pair_tag_id"]],
+                )
+                for row in self.entity_pair_tags
+                if row["cleared_at"] is None
+            }
+            for row in self.character_relationships:
+                extra_data = row["extra_data"]
+                if isinstance(extra_data, str):
+                    extra_data = json.loads(extra_data)
+                pair_tag = extra_data.get("trait_compiler_pair_tag")
+                if pair_tag not in tags:
+                    continue
+                character1_entity_id = character_to_entity[row["character1_id"]]
+                character2_entity_id = character_to_entity[row["character2_id"]]
+                pair_key = (
+                    character1_entity_id,
+                    character2_entity_id,
+                    pair_tag,
+                )
+                if (
+                    extra_data.get("trait_compiler_pair_tag_direction")
+                    == "target_to_protagonist"
+                ):
+                    pair_key = (
+                        character2_entity_id,
+                        character1_entity_id,
+                        pair_tag,
+                    )
+                if pair_key not in active_pair_keys:
+                    rows.append(
+                        (
+                            character1_entity_id,
+                            character2_entity_id,
+                            pair_tag,
+                            row["character1_id"],
+                            row["character2_id"],
+                        )
+                    )
+            self._next_rows = rows
+            self.rowcount = len(rows)
             return
 
         raise AssertionError(f"Unhandled SQL: {sql.strip()[:120]}")
@@ -544,3 +596,54 @@ def test_reconciliation_reports_pair_tag_without_relationship() -> None:
     assert len(drift) == 1
     assert drift[0].drift_kind == "missing_relationship"
     assert drift[0].pair_tag == "ally"
+
+
+def test_reconciliation_reports_relationship_without_pair_tag() -> None:
+    cur = TraitCompilerCursor()
+    cur.character_relationships.append(
+        {
+            "character1_id": 1,
+            "character2_id": 2,
+            "relationship_type": "ally",
+            "emotional_valence": "+3|trusting",
+            "dynamic": "A compiler-authored ally relationship.",
+            "recent_events": "",
+            "history": "",
+            "extra_data": json.dumps(
+                {
+                    "source": "trait_compiler",
+                    "trait": "allies",
+                    "trait_compiler_pair_tag": "ally",
+                }
+            ),
+        }
+    )
+
+    drift = reconcile_trait_relationship_pair_tags(cur)
+
+    assert len(drift) == 1
+    assert drift[0].drift_kind == "missing_pair_tag"
+    assert drift[0].pair_tag == "ally"
+
+
+def test_persist_trait_compile_result_requires_wizard_cache_row() -> None:
+    class PersistCursor:
+        def __init__(self) -> None:
+            self.rowcounts = [1, 0]
+            self.rowcount = 0
+
+        def execute(self, _sql, _params=None):
+            self.rowcount = self.rowcounts.pop(0)
+
+    result = TraitCompileResult(
+        character_id=1,
+        character_entity_id=501,
+        dry_run=False,
+    )
+
+    with pytest.raises(RuntimeError, match="new_story_creator"):
+        persist_trait_compile_result(
+            PersistCursor(),
+            character_id=1,
+            result=result,
+        )

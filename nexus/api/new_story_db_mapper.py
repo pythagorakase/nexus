@@ -729,13 +729,6 @@ class NewStoryDatabaseMapper:
                 )
                 raise
 
-    def finalize_narrative_bootstrap(
-        self, transition_data: TransitionData
-    ) -> Dict[str, int]:
-        """Finalize setup into narrative mode, including trait compilation."""
-
-        return self.perform_transition(transition_data)
-
     def _build_character_extra_data(self, character: CharacterSheet) -> Dict[str, Any]:
         """
         Build extra_data JSONB from CharacterSheet traits.

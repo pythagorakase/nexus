@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from nexus.api.db_pool import get_connection
+from nexus.api.trait_compiler_schemas import canonical_trait_name
 
 logger = logging.getLogger("nexus.api.new_story_cache")
 
@@ -40,14 +41,6 @@ VALID_TRAITS = frozenset(
 )
 
 
-def _canonical_trait_name(trait_name: str) -> str:
-    """Return the database storage name for accepted trait aliases."""
-
-    if trait_name == "reputation":
-        return "fame"
-    return trait_name
-
-
 def _ensure_trait_update_matched(
     cur: Any,
     *,
@@ -61,6 +54,22 @@ def _ensure_trait_update_matched(
             f"Trait {trait_name!r} resolved to {storage_name!r}, "
             "but no assets.traits row was updated."
         )
+
+
+def _trait_rationale(
+    rationales: Dict[str, str],
+    *,
+    trait_name: str,
+    storage_name: str,
+) -> str:
+    """Resolve rationales across canonical trait names and legacy aliases."""
+
+    return (
+        rationales.get(trait_name)
+        or rationales.get(storage_name)
+        or (rationales.get("reputation") if storage_name == "fame" else None)
+        or ""
+    )
 
 
 def _parse_pg_array(value: Any) -> List[str]:
@@ -602,7 +611,7 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
         raise ValueError(
             f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}"
         )
-    storage_name = _canonical_trait_name(trait_name)
+    storage_name = canonical_trait_name(trait_name)
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
@@ -788,7 +797,7 @@ def write_suggested_traits(
                         f"Invalid trait: {trait_name}. "
                         f"Must be one of {sorted(VALID_TRAITS)}"
                     )
-                storage_name = _canonical_trait_name(trait_name)
+                storage_name = canonical_trait_name(trait_name)
                 cur.execute(
                     """
                     UPDATE assets.traits
@@ -940,14 +949,6 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE assets.new_story_creator
-                SET character_orrery_tags = NULL,
-                    trait_compile_result = NULL
-                WHERE id = TRUE
-                """
-            )
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
             cur.execute(
@@ -1013,6 +1014,7 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                     character_background = NULL,
                     character_appearance = NULL,
                     character_orrery_tags = NULL,
+                    trait_compile_result = NULL,
                     traits_confirmed = FALSE,
                     -- Seed columns (also clear downstream)
                     seed_type = NULL,
@@ -1081,6 +1083,7 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                     character_background = NULL,
                     character_appearance = NULL,
                     character_orrery_tags = NULL,
+                    trait_compile_result = NULL,
                     -- Seed columns
                     seed_type = NULL,
                     seed_title = NULL,
@@ -1242,8 +1245,12 @@ def write_cache(
                             "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
                         )
                         for trait_name in selected:
-                            storage_name = _canonical_trait_name(trait_name)
-                            rationale = rationales.get(trait_name, "")
+                            storage_name = canonical_trait_name(trait_name)
+                            rationale = _trait_rationale(
+                                rationales,
+                                trait_name=trait_name,
+                                storage_name=storage_name,
+                            )
                             cur.execute(
                                 """
                                 UPDATE assets.traits

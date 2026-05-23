@@ -13,6 +13,14 @@ FameLevel = Literal["obscure", "known", "renowned", "legendary"]
 PairTagDirection = Literal["protagonist_to_target", "target_to_protagonist"]
 
 
+def canonical_trait_name(trait_name: str) -> str:
+    """Return the canonical storage name for accepted trait aliases."""
+
+    if trait_name == "reputation":
+        return "fame"
+    return trait_name
+
+
 class TraitCompileReasonCode(str, Enum):
     """Reason a selected trait did not produce mechanical writes."""
 
