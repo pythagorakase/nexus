@@ -131,14 +131,14 @@ def run(conn: connection) -> None:
             """
             COMMENT ON COLUMN tag_category_registry.deprecated IS
                 'Category-level cutover marker; existing tag rows remain live '
-                || 'until a data migration rewrites them.';
+                'until a data migration rewrites them.';
             """
         )
         cur.execute(
             """
             COMMENT ON COLUMN tag_category_registry.replacement_categories IS
                 'Preferred successor categories for deprecated category rows, '
-                || 'when any exist.';
+                'when any exist.';
             """
         )
 

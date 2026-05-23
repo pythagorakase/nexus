@@ -297,6 +297,36 @@ def _clear_entity_tag_siblings(
     return int(cur.rowcount)
 
 
+def clear_entity_tag(cur: Any, *, entity_id: int, tag: str) -> bool:
+    """Mark an active single-entity tag as cleared (UPDATE cleared_at = now()).
+
+    Returns ``True`` if a row was cleared, ``False`` if no active row existed for
+    ``(entity_id, tag)``.
+
+    Note: unknown or deprecated ``tag`` names silently return ``False`` rather
+    than raising — this is the inverse of ``apply_tag_bestowal``, which raises
+    ``ValueError`` for unknown tags. The asymmetry matches ``clear_pair_tag``:
+    clearing a tag that doesn't exist is a no-op, so an unknown tag is
+    indistinguishable from a missing row.
+    """
+
+    cur.execute(
+        """
+        UPDATE entity_tags et
+        SET cleared_at = now()
+        FROM tags t
+        WHERE et.tag_id = t.id
+          AND et.entity_id = %s
+          AND t.tag = %s
+          AND NOT t.deprecated
+          AND t.synonym_for IS NULL
+          AND et.cleared_at IS NULL
+        """,
+        (entity_id, tag),
+    )
+    return bool(cur.rowcount)
+
+
 def _clear_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
     cur.execute(
         """

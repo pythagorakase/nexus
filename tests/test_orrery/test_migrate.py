@@ -396,6 +396,7 @@ def test_category_refactor_phase1_migration_marks_cutover_categories() -> None:
     assert "ADD COLUMN IF NOT EXISTS deprecated" in migration_source
     assert "ADD COLUMN IF NOT EXISTS replacement_categories" in migration_source
     assert "AND entity_kind = %s::entity_kind" in migration_source
+    assert "||" not in migration_source
 
 
 def test_status_reputation_disambiguation_migration_updates_wizard_copy() -> None:

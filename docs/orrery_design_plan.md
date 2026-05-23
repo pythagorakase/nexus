@@ -493,6 +493,11 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 - `docs/orrery_packages.md` — generated human-readable package reference (kept in lockstep with `templates.py` via the `regenerate-orrery-catalog` pre-commit hook)
 - `docs/orrery_route_graph.md` — route graph importer contract
 
+**Specialized Subsystem Docs**
+- `docs/orrery_needs.md` — design rationale for the physiological and interpersonal need packages (SLEEP, EAT, DRINK, SOCIALIZE, INTIMACY): the substrate-vs-storyteller principle, the graduated severity pattern, the stimulant gate-suppression pattern, modulator tags, intimacy suppressors, the Pete worked example, and open questions. Companion to the mechanical catalog at `docs/orrery_packages.md`.
+- `docs/orrery_retrograde_spec.md` — design spec for deep-history generation (Orrery run backward at wizard-time and per-entity stub maturation at runtime). Phase 3+ work.
+- `docs/orrery_tag_vocabulary.md` — registry-level closed-vocabulary specification for tag categories (single-entity tags, multi-entity pair tags, place / faction categories, trait_menu alignment).
+
 ---
 
 ## Verification Approach
