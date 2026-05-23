@@ -1,5 +1,7 @@
 """Tests for Orrery configuration loading."""
 
+from copy import deepcopy
+
 import pytest
 from pydantic import ValidationError
 
@@ -93,17 +95,32 @@ def test_orrery_retrograde_weird_rejects_overlapping_bands() -> None:
         )
 
 
+def test_orrery_retrograde_weird_rejects_non_contiguous_bands() -> None:
+    """Genre remaps should cover a continuous raw-float band per genre."""
+
+    with pytest.raises(ValidationError, match="must be contiguous"):
+        OrreryRetrogradeWeirdGenreBands(
+            low={"min": 0.0, "max": 0.3},
+            medium={"min": 0.4, "max": 0.7},
+            high={"min": 0.7, "max": 1.0},
+        )
+
+
+def test_orrery_retrograde_weird_rejects_unknown_genre_keys() -> None:
+    """Typos in per-genre weird bands should fail at config load time."""
+
+    payload = deepcopy(load_settings("nexus.toml").orrery.retrograde.weird.model_dump())
+    payload["bands_by_genre"]["sci_fi"] = payload["bands_by_genre"].pop("scifi")
+
+    with pytest.raises(ValidationError, match="must define exactly"):
+        OrreryRetrogradeWeirdSettings(**payload)
+
+
 def test_orrery_retrograde_weird_rejects_bands_outside_dev_range() -> None:
     """Per-genre raw bands must stay within the configured dev float surface."""
 
+    payload = deepcopy(load_settings("nexus.toml").orrery.retrograde.weird.model_dump())
+    payload["dev"]["min"] = 0.2
+
     with pytest.raises(ValidationError, match="within the dev raw range"):
-        OrreryRetrogradeWeirdSettings(
-            dev={"cli_flag": "--weird", "min": 0.2, "max": 0.8, "default": 0.5},
-            bands_by_genre={
-                "fantasy": {
-                    "low": {"min": 0.1, "max": 0.2},
-                    "medium": {"min": 0.2, "max": 0.5},
-                    "high": {"min": 0.5, "max": 0.8},
-                }
-            },
-        )
+        OrreryRetrogradeWeirdSettings(**payload)

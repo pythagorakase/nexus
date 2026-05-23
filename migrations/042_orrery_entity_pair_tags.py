@@ -26,99 +26,10 @@ self-awareness (issue #282) all depend on this substrate.
 
 from __future__ import annotations
 
-from typing import Sequence
-
 from psycopg2.extensions import connection
 
-
-# (tag, subject_kinds, object_kinds, is_ephemeral, description)
-PAIR_TAG_SEED: Sequence[tuple[str, list[str], list[str], bool, str]] = (
-    # Place-bound (durable)
-    (
-        "knows_location",
-        ["character"],
-        ["place"],
-        False,
-        "Subject knows of the place's existence and how to find it.",
-    ),
-    (
-        "can_access",
-        ["character", "faction"],
-        ["place"],
-        False,
-        "Subject has permission to enter the place (direct individual or group-mediated).",
-    ),
-    (
-        "claims",
-        ["faction"],
-        ["place"],
-        False,
-        "Subject (faction) asserts a territorial claim on the place; contestation emerges from row cardinality.",
-    ),
-    (
-        "resides_at",
-        ["character"],
-        ["place"],
-        False,
-        "Subject's habitual residence. Multi-residence is supported via multiple rows.",
-    ),
-    (
-        "operates_from",
-        ["faction"],
-        ["place"],
-        False,
-        "Faction's operational base. Distinct from `claims` — claim is territorial, operates_from is functional.",
-    ),
-    (
-        "originates_from",
-        ["character"],
-        ["place"],
-        False,
-        "Character's origin or hometown.",
-    ),
-    # Character / faction relations
-    (
-        "pursuing",
-        ["character", "faction"],
-        ["character"],
-        True,
-        "Subject is actively hunting the target. Ephemeral; also confers narrow targeted detection sensitivity for that target (see issue #282).",
-    ),
-    (
-        "handles",
-        ["character"],
-        ["character"],
-        False,
-        "Subject is the operational handler of the target (covert / espionage / criminal flavor).",
-    ),
-    (
-        "obligation",
-        ["character", "faction"],
-        ["character", "faction"],
-        False,
-        "Subject owes a debt / oath / loyalty to the target. Kind inferable from establishing event.",
-    ),
-    (
-        "authority_over",
-        ["character", "faction"],
-        ["character", "faction"],
-        False,
-        "Subject holds institutional or positional power over the target.",
-    ),
-    (
-        "protects",
-        ["character", "faction"],
-        ["character"],
-        False,
-        "Subject is in an active protective relationship with the target. Durable.",
-    ),
-    (
-        "mentors",
-        ["character"],
-        ["character"],
-        False,
-        "Subject teaches or trains the target.",
-    ),
+from nexus.agents.orrery.pair_tag_registry import (
+    PAIR_TAG_SEED,
 )
 
 
@@ -126,11 +37,11 @@ def run(conn: connection) -> None:
     """Create the entity_pair_tags substrate and seed the 12 settled relations."""
 
     with conn.cursor() as cur:
-        # Registry of relation types (analog of `tags` but with kind validation columns).
-        # Empty-array CHECK uses `cardinality(...) >= 1` rather than `array_length(...) >= 1`:
-        # PostgreSQL's `array_length('{}', 1)` returns NULL, and CHECK treats NULL as
-        # passing — so array_length would silently admit empty arrays. `cardinality`
-        # returns 0 for empty arrays, making the check NULL-safe.
+        # Registry of relation types (analog of `tags` but with kind validation
+        # columns). Empty-array CHECK uses `cardinality(...) >= 1` rather than
+        # `array_length(...) >= 1`: PostgreSQL's `array_length('{}', 1)` returns
+        # NULL, and CHECK treats NULL as passing. `cardinality` returns 0 for
+        # empty arrays, making the check NULL-safe.
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS pair_tags (
@@ -156,16 +67,20 @@ def run(conn: connection) -> None:
         cur.execute(
             """
             COMMENT ON TABLE pair_tags IS
-                'Registry of multi-entity (directed binary) relation types. The vocabulary for entity_pair_tags. Analog of `tags` for edges between entities.';
+                'Registry of multi-entity (directed binary) relation types.
+                The vocabulary for entity_pair_tags. Analog of `tags` for
+                edges between entities.';
             """
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.tag IS "
-            "'Relation name (snake_case). May embed a level via the colon convention, e.g. `status:senior`.'"
+            "'Relation name (snake_case). May embed a level via the colon "
+            "convention, e.g. `status:senior`.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.subject_kinds IS "
-            "'Allowed entity_kind values for the subject (source) of this relation. Polymorphism (e.g. character|faction) is expressed via array membership.'"
+            "'Allowed entity_kind values for the subject (source) of this "
+            "relation. Polymorphism is expressed via array membership.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.object_kinds IS "
@@ -173,23 +88,28 @@ def run(conn: connection) -> None:
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.is_ephemeral IS "
-            "'TRUE for relations that get cleared by world events (e.g., `pursuing`); FALSE for durable relations.'"
+            "'TRUE for relations that get cleared by world events; FALSE "
+            "for durable relations.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.clearance_kind IS "
-            "'For ephemeral relations: the mode of clearance (e.g. `semantic`). NULL for durable relations. Enforced equal to (is_ephemeral) by check constraint.'"
+            "'For ephemeral relations: the mode of clearance. NULL for "
+            "durable relations. Enforced equal to is_ephemeral by check.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.reapplication_policy IS "
-            "'How the relation behaves if reapplied after clearance. NULL = no special policy.'"
+            "'How the relation behaves if reapplied after clearance. "
+            "NULL = no special policy.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.clear_on IS "
-            "'Optional JSONB describing world_event types or conditions that auto-clear instances of this relation. Shape mirrors tags.clear_on.'"
+            "'Optional JSONB describing world_event types or conditions "
+            "that auto-clear relation instances. Shape mirrors tags.clear_on.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.deprecated IS "
-            "'TRUE marks the relation as no longer accepted for new bestowals; lookup intentionally filters deprecated rows.'"
+            "'TRUE marks the relation as no longer accepted for new "
+            "bestowals; lookup intentionally filters deprecated rows.'"
         )
         cur.execute(
             "COMMENT ON COLUMN pair_tags.description IS "
@@ -210,8 +130,10 @@ def run(conn: connection) -> None:
             """
             CREATE TABLE IF NOT EXISTS entity_pair_tags (
                 id                    bigserial PRIMARY KEY,
-                subject_entity_id     bigint NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-                object_entity_id      bigint NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+                subject_entity_id     bigint NOT NULL
+                                      REFERENCES entities(id) ON DELETE CASCADE,
+                object_entity_id      bigint NOT NULL
+                                      REFERENCES entities(id) ON DELETE CASCADE,
                 pair_tag_id           bigint NOT NULL REFERENCES pair_tags(id),
                 applied_at            timestamptz NOT NULL DEFAULT now(),
                 applied_at_world_time timestamptz,
@@ -227,7 +149,9 @@ def run(conn: connection) -> None:
         cur.execute(
             """
             COMMENT ON TABLE entity_pair_tags IS
-                'Directed binary tag (relation) edge from subject to object. The application table for multi-entity tags; analog of entity_tags.';
+                'Directed binary tag (relation) edge from subject to object.
+                The application table for multi-entity tags; analog of
+                entity_tags.';
             """
         )
         cur.execute(
@@ -236,7 +160,8 @@ def run(conn: connection) -> None:
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.object_entity_id IS "
-            "'The target endpoint of the directed relation (FK entities). Must differ from subject_entity_id.'"
+            "'The target endpoint of the directed relation (FK entities). "
+            "Must differ from subject_entity_id.'"
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.pair_tag_id IS "
@@ -248,23 +173,28 @@ def run(conn: connection) -> None:
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.applied_at_world_time IS "
-            "'In-story world time when the relation became active. NULL if no world_time was provided by the caller.'"
+            "'In-story world time when the relation became active. NULL if "
+            "no world_time was provided by the caller.'"
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.source_kind IS "
-            "'Provenance: `skald_inline` for runtime bestowals, `llm_generated` for offline backfills (same enum as entity_tags.source_kind).'"
+            "'Provenance: `skald_inline` for runtime bestowals, "
+            "`llm_generated` for offline backfills.'"
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.cleared_at IS "
-            "'When set, the relation is no longer active (analogous to entity_tags.cleared_at).'"
+            "'When set, the relation is no longer active, analogous to "
+            "entity_tags.cleared_at.'"
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.clear_on_override IS "
-            "'Optional per-row override of the relation type''s clear_on policy (analogous to entity_tags.clear_on).'"
+            "'Optional per-row override of the relation type''s clear_on "
+            "policy, analogous to entity_tags.clear_on.'"
         )
         cur.execute(
             "COMMENT ON COLUMN entity_pair_tags.template_id IS "
-            "'Optional bestowal-template identifier for downstream traceability (analogous to entity_tags.template_id).'"
+            "'Optional bestowal-template identifier for downstream "
+            "traceability, analogous to entity_tags.template_id.'"
         )
 
         # Indexes
@@ -291,7 +221,13 @@ def run(conn: connection) -> None:
         )
 
         # Seed the 12 settled multi-entity relations
-        for tag, subject_kinds, object_kinds, is_ephemeral, description in PAIR_TAG_SEED:
+        for (
+            tag,
+            subject_kinds,
+            object_kinds,
+            is_ephemeral,
+            description,
+        ) in PAIR_TAG_SEED:
             clearance_kind = "semantic" if is_ephemeral else None
             cur.execute(
                 """

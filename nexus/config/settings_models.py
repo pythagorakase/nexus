@@ -425,6 +425,25 @@ class OrrerySunhelmSettings(BaseModel):
         return self
 
 
+RETROGRADE_SUPPORTED_GENRES = frozenset(
+    {
+        "fantasy",
+        "scifi",
+        "horror",
+        "mystery",
+        "historical",
+        "contemporary",
+        "postapocalyptic",
+        "cyberpunk",
+        "steampunk",
+        "urban_fantasy",
+        "space_opera",
+        "noir",
+        "thriller",
+    }
+)
+
+
 class OrreryRetrogradeWeirdBandSettings(BaseModel):
     """Inclusive raw-float interval for one player-facing weirdness level."""
 
@@ -462,6 +481,14 @@ class OrreryRetrogradeWeirdGenreBands(BaseModel):
             raise ValueError(
                 "Weird genre bands must be monotonic: "
                 "low <= medium <= high without overlap"
+            )
+        if not (
+            _same_float_boundary(self.low.max, self.medium.min)
+            and _same_float_boundary(self.medium.max, self.high.min)
+        ):
+            raise ValueError(
+                "Weird genre bands must be contiguous: "
+                "low.max == medium.min and medium.max == high.min"
             )
         return self
 
@@ -503,6 +530,15 @@ class OrreryRetrogradeWeirdSettings(BaseModel):
 
     @model_validator(mode="after")
     def _validate_bands_within_dev_range(self) -> "OrreryRetrogradeWeirdSettings":
+        configured = set(self.bands_by_genre)
+        if configured != RETROGRADE_SUPPORTED_GENRES:
+            missing = sorted(RETROGRADE_SUPPORTED_GENRES - configured)
+            unknown = sorted(configured - RETROGRADE_SUPPORTED_GENRES)
+            raise ValueError(
+                "orrery.retrograde.weird.bands_by_genre must define exactly "
+                f"{sorted(RETROGRADE_SUPPORTED_GENRES)}; "
+                f"missing={missing}, unknown={unknown}"
+            )
         for genre, bands in self.bands_by_genre.items():
             for level in ("low", "medium", "high"):
                 band = getattr(bands, level)
@@ -514,6 +550,10 @@ class OrreryRetrogradeWeirdSettings(BaseModel):
         return self
 
 
+def _same_float_boundary(left: float, right: float) -> bool:
+    return abs(left - right) <= 1e-9
+
+
 class OrreryRetrogradeSettings(BaseModel):
     """Retrograde deep-history generation settings."""
 
@@ -523,7 +563,11 @@ class OrreryRetrogradeSettings(BaseModel):
 
 
 class OrrerySettings(BaseModel):
-    """Orrery off-screen behavior subsystem settings."""
+    """Orrery off-screen behavior settings.
+
+    Retrograde config is intentionally required so every slot has explicit
+    weird-dial genre remapping before generation code starts reading it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

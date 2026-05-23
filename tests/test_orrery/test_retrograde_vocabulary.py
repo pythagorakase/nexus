@@ -45,7 +45,19 @@ def test_seed_eligible_pair_tags_are_sorted() -> None:
     """Stable ordering keeps snapshots and future prompt generation deterministic."""
 
     vocabulary = enumerate_seed_eligible_vocabulary()
-
-    assert vocabulary["multi_entity_tag_families"] == sorted(
-        vocabulary["multi_entity_tag_families"]
+    list_keys = (
+        "entity_kinds",
+        "slots",
+        "single_entity_tag_anchors",
+        "durable_tags",
+        "ephemeral_tags",
+        "current_tags",
+        "applied_tags",
+        "multi_entity_tag_families",
+        "event_types",
+        "place_affordances",
+        "relationship_types",
     )
+
+    for key in list_keys:
+        assert vocabulary[key] == sorted(vocabulary[key])
