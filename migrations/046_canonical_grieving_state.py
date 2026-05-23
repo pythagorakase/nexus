@@ -18,7 +18,9 @@ def run(conn) -> None:
                 deprecated, description
             ) VALUES (
                 'grieving', 'state', TRUE,
-                'event', NULL, '{"event_types": ["mourning_completed"]}'::jsonb,
+                'event',
+                'extend_expiry'::entity_tag_reapplication_policy,
+                '{"event_types": ["mourning_completed"]}'::jsonb,
                 FALSE,
                 'Actor is grieving a consequential loss. Long-lived; gates '
                 'MOURN_LOSS and suppresses incompatible routine/social/intimacy '
