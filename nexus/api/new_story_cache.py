@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from nexus.api.db_pool import get_connection
+from nexus.api.trait_compiler_schemas import canonical_trait_name
 
 logger = logging.getLogger("nexus.api.new_story_cache")
 
@@ -29,6 +30,8 @@ VALID_TRAITS = frozenset(
         "patron",
         "dependents",
         "status",
+        "fame",
+        # Backward-compatible during the Reputation -> Fame rename.
         "reputation",
         "resources",
         "domain",
@@ -36,6 +39,37 @@ VALID_TRAITS = frozenset(
         "obligations",
     }
 )
+
+
+def _ensure_trait_update_matched(
+    cur: Any,
+    *,
+    trait_name: str,
+    storage_name: str,
+) -> None:
+    """Fail fast if a selected trait alias did not match an assets row."""
+
+    if getattr(cur, "rowcount", None) == 0:
+        raise RuntimeError(
+            f"Trait {trait_name!r} resolved to {storage_name!r}, "
+            "but no assets.traits row was updated."
+        )
+
+
+def _trait_rationale(
+    rationales: Dict[str, str],
+    *,
+    trait_name: str,
+    storage_name: str,
+) -> str:
+    """Resolve rationales across canonical trait names and legacy aliases."""
+
+    return (
+        rationales.get(trait_name)
+        or rationales.get(storage_name)
+        or (rationales.get("reputation") if storage_name == "fame" else None)
+        or ""
+    )
 
 
 def _parse_pg_array(value: Any) -> List[str]:
@@ -127,6 +161,7 @@ class CharacterData:
     wildcard_name: Optional[str] = None  # from traits.name where id=11
     wildcard_rationale: Optional[str] = None  # from traits.rationale where id=11
     orrery_tags: Optional[Dict[str, Any]] = None  # from new_story_creator JSONB
+    trait_compile_result: Optional[Dict[str, Any]] = None
 
     def has_concept(self) -> bool:
         """Check if concept subphase is complete."""
@@ -445,6 +480,7 @@ def _row_to_cache(
             wildcard_name=wildcard_row.get("name") if wildcard_row else None,
             wildcard_rationale=wildcard_row.get("rationale") if wildcard_row else None,
             orrery_tags=_parse_json_object(row.get("character_orrery_tags")),
+            trait_compile_result=_parse_json_object(row.get("trait_compile_result")),
         ),
         seed=SeedData(
             seed_type=row.get("seed_type"),
@@ -575,6 +611,7 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
         raise ValueError(
             f"Invalid trait: {trait_name}. Must be one of {sorted(VALID_TRAITS)}"
         )
+    storage_name = canonical_trait_name(trait_name)
 
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
@@ -585,10 +622,15 @@ def toggle_trait(dbname: Optional[str], trait_name: str) -> bool:
                 WHERE name = %s
                 RETURNING is_selected
                 """,
-                (trait_name,),
+                (storage_name,),
             )
             result = cur.fetchone()
-            new_state = result[0] if result else False
+            if result is None:
+                raise RuntimeError(
+                    f"Trait {trait_name!r} resolved to {storage_name!r}, "
+                    "but no assets.traits row was toggled."
+                )
+            new_state = result[0]
     logger.info("Toggled trait %s to %s in %s", trait_name, new_state, dbname)
     return new_state
 
@@ -749,13 +791,25 @@ def write_suggested_traits(
 
             # Select and set rationale for each suggested trait
             for suggestion in suggestions:
+                trait_name = suggestion["trait"]
+                if trait_name not in VALID_TRAITS:
+                    raise ValueError(
+                        f"Invalid trait: {trait_name}. "
+                        f"Must be one of {sorted(VALID_TRAITS)}"
+                    )
+                storage_name = canonical_trait_name(trait_name)
                 cur.execute(
                     """
                     UPDATE assets.traits
                     SET is_selected = TRUE, rationale = %s
                     WHERE name = %s
                     """,
-                    (suggestion["rationale"], suggestion["trait"]),
+                    (suggestion["rationale"], storage_name),
+                )
+                _ensure_trait_update_matched(
+                    cur,
+                    trait_name=trait_name,
+                    storage_name=storage_name,
                 )
     logger.info(
         "Wrote %d suggested traits to %s",
@@ -895,13 +949,6 @@ def clear_cache(dbname: Optional[str] = None) -> None:
     """
     with get_connection(dbname) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE assets.new_story_creator
-                SET character_orrery_tags = NULL
-                WHERE id = TRUE
-                """
-            )
             cur.execute("DELETE FROM assets.new_story_creator WHERE id = TRUE")
             # Reset traits: deselect optional traits, clear rationales, reset wildcard name
             cur.execute(
@@ -967,6 +1014,7 @@ def clear_character_phase(dbname: Optional[str] = None) -> None:
                     character_background = NULL,
                     character_appearance = NULL,
                     character_orrery_tags = NULL,
+                    trait_compile_result = NULL,
                     traits_confirmed = FALSE,
                     -- Seed columns (also clear downstream)
                     seed_type = NULL,
@@ -1035,6 +1083,7 @@ def clear_setting_phase(dbname: Optional[str] = None) -> None:
                     character_background = NULL,
                     character_appearance = NULL,
                     character_orrery_tags = NULL,
+                    trait_compile_result = NULL,
                     -- Seed columns
                     seed_type = NULL,
                     seed_title = NULL,
@@ -1196,14 +1245,24 @@ def write_cache(
                             "UPDATE assets.traits SET is_selected = FALSE, rationale = NULL WHERE id <= 10"
                         )
                         for trait_name in selected:
-                            rationale = rationales.get(trait_name, "")
+                            storage_name = canonical_trait_name(trait_name)
+                            rationale = _trait_rationale(
+                                rationales,
+                                trait_name=trait_name,
+                                storage_name=storage_name,
+                            )
                             cur.execute(
                                 """
                                 UPDATE assets.traits
                                 SET is_selected = TRUE, rationale = %s
                                 WHERE name = %s
                                 """,
-                                (rationale, trait_name),
+                                (rationale, storage_name),
+                            )
+                            _ensure_trait_update_matched(
+                                cur,
+                                trait_name=trait_name,
+                                storage_name=storage_name,
                             )
                         logger.info(
                             "Wrote 3 selected traits to assets.traits in %s", dbname

@@ -442,3 +442,46 @@ def test_new_story_character_orrery_tags_migration_adds_cache_column() -> None:
 
     assert "character_orrery_tags jsonb" in migration_source
     assert "OrreryTagBestowal JSON" in migration_source
+
+
+def test_trait_compiler_substrate_migration_seeds_required_contracts() -> None:
+    """Migration 045 owns the closed vocab and audit storage for issue #295."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "045_trait_compiler_substrate.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert {"role.resources", "role.fame"} == {
+        category for category, _order, _description in migration.ROLE_CATEGORIES
+    }
+    assert {
+        "destitute",
+        "poor",
+        "comfortable",
+        "wealthy",
+        "magnate",
+    } <= {tag for tag, _category, _description in migration.ROLE_TAGS}
+    assert {"obscure", "known", "renowned", "legendary"} <= {
+        tag for tag, _category, _description in migration.ROLE_TAGS
+    }
+    assert {"ally", "contact", "hostile_to"} <= {
+        tag for tag, *_rest in migration.PAIR_TAGS
+    }
+    assert {
+        "status:junior",
+        "status:senior",
+        "status:executive",
+        "status:sovereign",
+        "status:respected",
+        "status:elite",
+        "status:outcast",
+        "status:pariah",
+        "status:enslaved",
+    } == {tag for tag, *_rest in migration.STATUS_PAIR_TAGS}
+    assert "trait_compile_result jsonb" in migration_source
+    assert "SET subject_kinds = ARRAY['character', 'faction']" in migration_source
+    assert "SET name = 'fame'" in migration_source

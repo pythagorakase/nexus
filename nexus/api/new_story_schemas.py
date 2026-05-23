@@ -14,6 +14,7 @@ from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
+from nexus.api.trait_compiler_schemas import TraitCompileInputs
 
 LEGACY_ORRERY_PROPOSAL_KEY = "new_tag_proposals"
 
@@ -141,6 +142,7 @@ TraitName = Literal[
     "patron",
     "dependents",
     "status",
+    "fame",
     "reputation",
     "resources",
     "domain",
@@ -229,6 +231,13 @@ class CharacterSheet(BaseModel):
         default=None,
         description="Semantic Orrery tags bestowed by Skald during the wizard wildcard step.",
     )
+    trait_compile_inputs: Optional[TraitCompileInputs] = Field(
+        default=None,
+        description=(
+            "Optional typed inputs for deterministic trait-to-Orrery compilation. "
+            "Traits without structured inputs remain prose-only remainders."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_unique_traits(self) -> "CharacterSheet":
@@ -284,8 +293,11 @@ class TraitRationales(BaseModel):
     status: Optional[str] = Field(
         None, description="Why status trait fits this character"
     )
+    fame: Optional[str] = Field(
+        None, description="Why fame trait fits this character"
+    )
     reputation: Optional[str] = Field(
-        None, description="Why reputation trait fits this character"
+        None, description="Why reputation/fame trait fits this character"
     )
     resources: Optional[str] = Field(
         None, description="Why resources trait fits this character"
@@ -452,7 +464,10 @@ class TraitSelection(BaseModel):
         ...,
         min_length=3,
         max_length=3,
-        description="Exactly 3 trait names from: allies, contacts, patron, dependents, status, reputation, resources, domain, enemies, obligations",
+        description=(
+            "Exactly 3 trait names from: allies, contacts, patron, dependents, "
+            "status, fame, reputation, resources, domain, enemies, obligations"
+        ),
     )
     trait_rationales: TraitRationales = Field(
         ...,
@@ -520,6 +535,12 @@ class CharacterCreationState(BaseModel):
     concept: Optional[CharacterConcept] = None
     trait_selection: Optional[TraitSelection] = None
     wildcard: Optional[WildcardTrait] = None
+    trait_compile_inputs: Optional[TraitCompileInputs] = Field(
+        default=None,
+        description=(
+            "Optional typed inputs gathered for deterministic trait compilation."
+        ),
+    )
 
     # Fleshed-out trait descriptions (filled in during trait development dialog)
     trait_details: Dict[str, str] = Field(
@@ -595,6 +616,7 @@ class CharacterCreationState(BaseModel):
             trait_2=trait_entries[1],
             trait_3=trait_entries[2],
             orrery_tags=self.wildcard.orrery_tags,
+            trait_compile_inputs=self.trait_compile_inputs,
         )
 
 

@@ -24,6 +24,10 @@ from nexus.api.new_story_schemas import (
 )
 from nexus.api.db_pool import get_connection
 from nexus.api.new_story_cache import clear_cache
+from nexus.api.trait_compiler import (
+    apply_character_trait_compilation,
+    persist_trait_compile_result,
+)
 from nexus.agents.orrery.tag_writer import apply_tag_bestowal
 
 logger = logging.getLogger("nexus.api.new_story_db_mapper")
@@ -541,8 +545,9 @@ class NewStoryDatabaseMapper:
         3. Saves story seed to global_variables
         4. Creates protagonist character
         5. Creates complete location hierarchy (layer -> zone -> place)
-        6. Sets base timestamp
-        7. Clears the wizard cache (mode is derived from data presence)
+        6. Applies typed trait compilation and persists the audit result
+        7. Sets base timestamp
+        8. Clears the wizard cache (mode is derived from data presence)
 
         Args:
             transition_data: Complete transition data package
@@ -657,6 +662,16 @@ class NewStoryDatabaseMapper:
                         current_activity=initial_activity,
                     )
                     logger.debug(f"Created protagonist with ID {character_id}")
+                    cur.execute(
+                        "SELECT entity_id FROM characters WHERE id = %s",
+                        (character_id,),
+                    )
+                    character_entity_row = cur.fetchone()
+                    if character_entity_row is None:
+                        raise ValueError(
+                            f"Character ID {character_id} was not found after insert"
+                        )
+                    character_entity_id = character_entity_row[0]
 
                     # Create complete location hierarchy (using shared cursor)
                     location_ids = self.create_location_hierarchy(
@@ -667,6 +682,23 @@ class NewStoryDatabaseMapper:
                         cursor=cur,
                     )
                     logger.debug(f"Created location hierarchy: {location_ids}")
+
+                    trait_compile_result = apply_character_trait_compilation(
+                        cur,
+                        character=transition_data.character,
+                        character_id=character_id,
+                        character_entity_id=character_entity_id,
+                    )
+                    persist_trait_compile_result(
+                        cur,
+                        character_id=character_id,
+                        result=trait_compile_result,
+                    )
+                    logger.info(
+                        "Trait compilation for %s: %s",
+                        transition_data.character.name,
+                        trait_compile_result.counters.model_dump(),
+                    )
 
                     # Set base timestamp (already a datetime from TransitionData)
                     cur.execute(

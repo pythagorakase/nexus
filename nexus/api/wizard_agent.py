@@ -34,6 +34,7 @@ from nexus.api.new_story_schemas import (
     WizardResponse,
 )
 from nexus.api.slot_utils import slot_dbname
+from nexus.api.trait_compiler_schemas import canonical_trait_name
 from nexus.agents.orrery.tag_library import format_tag_library_for_prompt
 
 logger = logging.getLogger("nexus.api.wizard_agent")
@@ -347,13 +348,17 @@ async def _submit_concept_impl(
         {**creation_state.model_dump(), "concept": concept_data.model_dump()}
     )
 
-    suggestions = [
-        {
-            "trait": trait,
-            "rationale": concept_data.trait_rationales.to_dict().get(trait, ""),
-        }
-        for trait in concept_data.suggested_traits
-    ]
+    rationales = concept_data.trait_rationales.to_dict()
+    suggestions = []
+    for trait in concept_data.suggested_traits:
+        storage_name = canonical_trait_name(trait)
+        rationale = (
+            rationales.get(trait)
+            or rationales.get(storage_name)
+            or (rationales.get("reputation") if storage_name == "fame" else None)
+            or ""
+        )
+        suggestions.append({"trait": trait, "rationale": rationale})
     if suggestions:
         write_suggested_traits(slot_dbname(ctx.deps.slot), suggestions)
 
