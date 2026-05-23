@@ -398,6 +398,22 @@ def test_category_refactor_phase1_migration_marks_cutover_categories() -> None:
     assert "AND entity_kind = %s::entity_kind" in migration_source
 
 
+def test_status_reputation_disambiguation_migration_updates_wizard_copy() -> None:
+    """Migration 044 clarifies scoped Status vs broad Reputation/Fame."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "044_disambiguate_status_reputation_traits.sql"
+    ).read_text()
+
+    assert "known within that group" in migration_source
+    assert "broadly you''re recognized beyond any one specific group" in (
+        migration_source
+    )
+    assert "use Status instead when recognition is limited" in migration_source
+
+
 def test_tag_baseline_reconciliation_migration_closes_slot_drift() -> None:
     """Migration 038 keeps template clones and existing slots on one vocab set."""
 

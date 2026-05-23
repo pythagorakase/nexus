@@ -188,6 +188,85 @@ magnitude_base = 0.35
 magnitude_per_level = 0.10
 magnitude_cap = 0.85
 
+[orrery.retrograde.weird]
+# Player-facing Retrograde strangeness is low/medium/high. Each genre remaps
+# those labels onto the raw calibration float below, so "medium" means
+# medium-for-that-genre rather than a universal numeric value.
+default_level = "medium"
+
+[orrery.retrograde.weird.dev]
+# Future calibration CLI surface, MidJourney-style: --weird <float>.
+# Runtime/player UI should keep using the coarse level labels above.
+cli_flag = "--weird"
+min = 0.0
+max = 1.0
+default = 0.5
+
+[orrery.retrograde.weird.bands_by_genre.fantasy]
+low = { min = 0.12, max = 0.28 }
+medium = { min = 0.28, max = 0.55 }
+high = { min = 0.55, max = 0.82 }
+
+[orrery.retrograde.weird.bands_by_genre.scifi]
+low = { min = 0.18, max = 0.34 }
+medium = { min = 0.34, max = 0.62 }
+high = { min = 0.62, max = 0.90 }
+
+[orrery.retrograde.weird.bands_by_genre.horror]
+low = { min = 0.10, max = 0.26 }
+medium = { min = 0.26, max = 0.54 }
+high = { min = 0.54, max = 0.88 }
+
+[orrery.retrograde.weird.bands_by_genre.mystery]
+low = { min = 0.04, max = 0.16 }
+medium = { min = 0.16, max = 0.34 }
+high = { min = 0.34, max = 0.58 }
+
+[orrery.retrograde.weird.bands_by_genre.historical]
+low = { min = 0.02, max = 0.12 }
+medium = { min = 0.12, max = 0.28 }
+high = { min = 0.28, max = 0.48 }
+
+[orrery.retrograde.weird.bands_by_genre.contemporary]
+low = { min = 0.03, max = 0.14 }
+medium = { min = 0.14, max = 0.32 }
+high = { min = 0.32, max = 0.52 }
+
+[orrery.retrograde.weird.bands_by_genre.postapocalyptic]
+low = { min = 0.14, max = 0.30 }
+medium = { min = 0.30, max = 0.58 }
+high = { min = 0.58, max = 0.84 }
+
+[orrery.retrograde.weird.bands_by_genre.cyberpunk]
+low = { min = 0.18, max = 0.36 }
+medium = { min = 0.36, max = 0.66 }
+high = { min = 0.66, max = 0.92 }
+
+[orrery.retrograde.weird.bands_by_genre.steampunk]
+low = { min = 0.14, max = 0.30 }
+medium = { min = 0.30, max = 0.56 }
+high = { min = 0.56, max = 0.82 }
+
+[orrery.retrograde.weird.bands_by_genre.urban_fantasy]
+low = { min = 0.12, max = 0.28 }
+medium = { min = 0.28, max = 0.54 }
+high = { min = 0.54, max = 0.80 }
+
+[orrery.retrograde.weird.bands_by_genre.space_opera]
+low = { min = 0.22, max = 0.40 }
+medium = { min = 0.40, max = 0.70 }
+high = { min = 0.70, max = 0.96 }
+
+[orrery.retrograde.weird.bands_by_genre.noir]
+low = { min = 0.08, max = 0.22 }
+medium = { min = 0.22, max = 0.45 }
+high = { min = 0.45, max = 0.70 }
+
+[orrery.retrograde.weird.bands_by_genre.thriller]
+low = { min = 0.06, max = 0.20 }
+medium = { min = 0.20, max = 0.44 }
+high = { min = 0.44, max = 0.68 }
+
 # =============================================================================
 # MEMNON Agent Settings (Memory & Retrieval)
 # =============================================================================

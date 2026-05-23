@@ -58,14 +58,16 @@ INSERT INTO assets.traits (id, name, description, is_selected, rationale) VALUES
 
 -- Power & Position
 (5, 'status', ARRAY[
-    'formal standing recognized by a specific institution or social structure',
-    'examples: military commission, guild journeyman, corporate board seat'
+    'standing within a specific institution, faction, community, or social scene',
+    'can be formal rank or informal local esteem/clout',
+    'use this when you are known within that group, even if obscure elsewhere',
+    'examples: military commission, guild journeyman, corporate board seat, respected neighborhood fixer'
 ], FALSE, NULL),
 
 (6, 'reputation', ARRAY[
-    'how widely you''re known',
-    'what for',
-    'for better or worse',
+    'Fame: how broadly you''re recognized beyond any one specific group',
+    'what the wider world recognizes you for, for better or worse',
+    'use Status instead when recognition is limited to one faction, institution, community, or subculture',
     'may or may not confer influence'
 ], FALSE, NULL),
 
