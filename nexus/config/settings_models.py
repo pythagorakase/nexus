@@ -302,7 +302,10 @@ class OrreryPromoteSettings(BaseModel):
     perceptual_summary_max_chars: int = Field(
         default=240,
         ge=1,
-        description="Maximum characters copied from a resolution brief into the promotion summary.",
+        description=(
+            "Maximum characters copied from a resolution brief into the "
+            "promotion summary."
+        ),
     )
     provider: Optional[Literal["local"]] = Field(
         default=None,
@@ -422,8 +425,149 @@ class OrrerySunhelmSettings(BaseModel):
         return self
 
 
+RETROGRADE_SUPPORTED_GENRES = frozenset(
+    {
+        "fantasy",
+        "scifi",
+        "horror",
+        "mystery",
+        "historical",
+        "contemporary",
+        "postapocalyptic",
+        "cyberpunk",
+        "steampunk",
+        "urban_fantasy",
+        "space_opera",
+        "noir",
+        "thriller",
+    }
+)
+
+
+class OrreryRetrogradeWeirdBandSettings(BaseModel):
+    """Inclusive raw-float interval for one player-facing weirdness level."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min: float = Field(..., ge=0.0)
+    max: float = Field(..., ge=0.0)
+
+    @model_validator(mode="after")
+    def _validate_order(self) -> "OrreryRetrogradeWeirdBandSettings":
+        if self.min > self.max:
+            raise ValueError("Weird band min must be less than or equal to max")
+        return self
+
+
+class OrreryRetrogradeWeirdGenreBands(BaseModel):
+    """Per-genre remapping from coarse player level to raw weirdness band."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    low: OrreryRetrogradeWeirdBandSettings
+    medium: OrreryRetrogradeWeirdBandSettings
+    high: OrreryRetrogradeWeirdBandSettings
+
+    @model_validator(mode="after")
+    def _validate_monotonic(self) -> "OrreryRetrogradeWeirdGenreBands":
+        if not (
+            self.low.min
+            <= self.low.max
+            <= self.medium.min
+            <= self.medium.max
+            <= self.high.min
+            <= self.high.max
+        ):
+            raise ValueError(
+                "Weird genre bands must be monotonic: "
+                "low <= medium <= high without overlap"
+            )
+        if not (
+            _same_float_boundary(self.low.max, self.medium.min)
+            and _same_float_boundary(self.medium.max, self.high.min)
+        ):
+            raise ValueError(
+                "Weird genre bands must be contiguous: "
+                "low.max == medium.min and medium.max == high.min"
+            )
+        return self
+
+
+class OrreryRetrogradeWeirdDevSettings(BaseModel):
+    """Developer-facing raw weirdness float surface for calibration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    cli_flag: str = Field(
+        default="--weird",
+        description="Future calibration CLI flag for raw weirdness overrides.",
+    )
+    min: float = Field(default=0.0, ge=0.0)
+    max: float = Field(default=1.0, ge=0.0)
+    default: float = Field(default=0.5, ge=0.0)
+
+    @model_validator(mode="after")
+    def _validate_range(self) -> "OrreryRetrogradeWeirdDevSettings":
+        if self.min > self.max:
+            raise ValueError("Retrograde weird dev min must be <= max")
+        if not self.min <= self.default <= self.max:
+            raise ValueError("Retrograde weird dev default must be within range")
+        return self
+
+
+class OrreryRetrogradeWeirdSettings(BaseModel):
+    """Entropy/coherence control for Retrograde seed generation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_level: Literal["low", "medium", "high"] = "medium"
+    dev: OrreryRetrogradeWeirdDevSettings = Field(
+        default_factory=OrreryRetrogradeWeirdDevSettings
+    )
+    bands_by_genre: Dict[str, OrreryRetrogradeWeirdGenreBands] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def _validate_bands_within_dev_range(self) -> "OrreryRetrogradeWeirdSettings":
+        configured = set(self.bands_by_genre)
+        if configured != RETROGRADE_SUPPORTED_GENRES:
+            missing = sorted(RETROGRADE_SUPPORTED_GENRES - configured)
+            unknown = sorted(configured - RETROGRADE_SUPPORTED_GENRES)
+            raise ValueError(
+                "orrery.retrograde.weird.bands_by_genre must define exactly "
+                f"{sorted(RETROGRADE_SUPPORTED_GENRES)}; "
+                f"missing={missing}, unknown={unknown}"
+            )
+        for genre, bands in self.bands_by_genre.items():
+            for level in ("low", "medium", "high"):
+                band = getattr(bands, level)
+                if band.min < self.dev.min or band.max > self.dev.max:
+                    raise ValueError(
+                        f"orrery.retrograde.weird band {genre}.{level} "
+                        "must stay within the dev raw range"
+                    )
+        return self
+
+
+def _same_float_boundary(left: float, right: float) -> bool:
+    return abs(left - right) <= 1e-9
+
+
+class OrreryRetrogradeSettings(BaseModel):
+    """Retrograde deep-history generation settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    weird: OrreryRetrogradeWeirdSettings
+
+
 class OrrerySettings(BaseModel):
-    """Orrery off-screen behavior subsystem settings."""
+    """Orrery off-screen behavior settings.
+
+    Retrograde config is intentionally required so every slot has explicit
+    weird-dial genre remapping before generation code starts reading it.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -436,6 +580,7 @@ class OrrerySettings(BaseModel):
     bleed: OrreryBleedSettings = Field(default_factory=OrreryBleedSettings)
     promote: OrreryPromoteSettings = Field(default_factory=OrreryPromoteSettings)
     sunhelm: OrrerySunhelmSettings = Field(default_factory=OrrerySunhelmSettings)
+    retrograde: OrreryRetrogradeSettings
 
 
 # =============================================================================
@@ -558,7 +703,8 @@ class RerankerCandidate(BaseModel):
     """One reranker model entry in the bakeoff candidate registry.
 
     `api_type` selects the inference path in ``cross_encoder.rerank_results``:
-      - "cross_encoder": standard SequenceClassification (DeBERTa-v3, mxbai, BGE-v2, etc.)
+      - "cross_encoder": standard SequenceClassification (DeBERTa-v3,
+        mxbai, BGE-v2, etc.)
       - "qwen3_lm": Qwen3-Reranker causal-LM with yes/no logit head
 
     Note: the production reranker is selected by the top-level
@@ -739,10 +885,15 @@ class IREvalJudgmentConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = Field(..., description="LLM model identifier for relevance judgments")
+    model: str = Field(
+        ...,
+        description="LLM model identifier for relevance judgments",
+    )
     reasoning_effort: str = Field(
         default="high",
-        description="Reasoning effort for the judgment model (e.g. minimal/medium/high)",
+        description=(
+            "Reasoning effort for the judgment model " "(e.g. minimal/medium/high)"
+        ),
     )
 
 
@@ -872,9 +1023,9 @@ class Settings(BaseModel):
 
     def model_dump(self, **kwargs) -> dict:
         """
-        Convert settings to dict, preserving dict-style access for backward compatibility.
+        Convert settings to dict, preserving dict-style access.
 
-        This ensures that existing code using settings.get("key", default) continues to work.
+        This keeps existing settings.get("key", default) callers working.
         """
         return super().model_dump(by_alias=True, **kwargs)
 

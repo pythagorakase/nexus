@@ -615,6 +615,12 @@ def _collect_vocabulary(
     }
 
 
+def collect_template_vocabulary(templates: Iterable[Template]) -> dict:
+    """Return package-facing vocabulary referenced by Orrery templates."""
+
+    return _collect_vocabulary(templates)
+
+
 def _discover_orrery_migrations() -> List[str]:
     """Find every migration file in migrations/ whose name mentions orrery.
 
