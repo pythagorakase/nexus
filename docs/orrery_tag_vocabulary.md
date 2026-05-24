@@ -716,10 +716,10 @@ Compiler surfaces:
 | `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `contact(char → char)`. | Kind-qualified contact gates for needs are still open (#317); do not use the base `contact` pair-tag as a lodging/social/intimate catch-all. |
 | `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Active pursuit remains the `pursuing`/future-`hunting` pair-tag track, not default `hostile_to` (#318). |
 | `Domain` | Current MVP returns a prose-only remainder. | Target design: create/identify a place entity and write `claims(char → place)`; registry polymorphism is ready, compiler input/schema is not. |
-| `Patron` | Current MVP returns a prose-only remainder. | Target design: `character_relationships` row for patron-client bond; package-specific pair-tags later as needed. |
+| `Patron` | Current MVP returns a prose-only remainder. | Target design: one `character_relationships` row for the patron-client bond; package-specific pair-tags later as needed. This preserves the #305 resolution: patron is not decomposed into a default OR/AND bundle of mentor, sponsor, protector, and authority edges. |
 | `Dependents` | Current MVP returns a prose-only remainder. | Target design: `protects(char → dependent)` plus affective relationship row; no default `authority_over`/`obligation` edge. |
 | `Obligations` | Current MVP returns a prose-only remainder. | Target design: `obligation(char → target)` when a structured target exists. |
-| `Wildcard` | Outside the current selected-trait compiler loop. The wizard persists prose in `characters.extra_data.wildcard`, and any Skald-bestowed `orrery_tags` apply through the ordinary tag bestowal surface. | Future wildcard decomposition may only use registered vocabulary. It cannot mint tags; novel mechanics remain prose/`extra_data` until a compiler surface exists. |
+| `Wildcard` | Outside the current selected-trait compiler loop. The wizard persists prose in `characters.extra_data.wildcard`, and any Skald-bestowed `orrery_tags` apply through the ordinary tag bestowal surface. | Future wildcard decomposition may only use registered vocabulary. It cannot mint tags; novel mechanics remain prose/`extra_data` until a compiler surface exists. There is no planned `items` table; inanimate artifacts stay prose/`extra_data` unless/until project scope changes. |
 
 **Migration 045 landed the substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. The compiler code owns only the current MVP rows above; the table is deliberately split so future docs do not confuse registry readiness with compiler readiness.
 
@@ -751,7 +751,7 @@ Compiler surfaces:
 6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Follow-up work is now specific: `under_active_pursuit` → inbound `hunting` (#318), kind-qualified contact gates (#317), and any future pair-tag-derived binding composers demanded by package implementations.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
 8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan are ready.
+9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan tracked by issue #326 are ready.
 
 ---
 
