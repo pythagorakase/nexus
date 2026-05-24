@@ -668,21 +668,25 @@ Status-family reads and writes go through `nexus.agents.orrery.status_family` / 
 
 ### Trait-Compiler Relationship Pair Tags
 
-Migration 045 registers three additional character ↔ character multi-entity tags for trait-compiler and future package-gate use.
+Migration 045 registered the first trait-compiler relationship tags. Migration 047 deprecates the bare `contact` pair-tag for new gates and registers the kind-qualified contact family.
 
 **Important per #303**: these tags' existence in the registry does NOT mean the compiler instantiates them automatically at trait selection. Per the functional-vs-affective principle (Pair Tags vs. `character_relationships` Source-of-Truth Rule below), affective traits (Allies, Contacts, Enemies) compile primarily to `character_relationships` rows. The pair-tags below exist for *future* package gates that may need a binary mechanical edge; the compiler adds them per-package, not by default at trait selection time.
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
 | `ally` | character | character | Will actively help when it matters; takes risks for the other |
-| `contact` | character | character | Lower-intensity transactional relationship; information / favor pipeline |
+| `contact:lodging` | character | character | Contact can provide lodging, shelter, or safe-house access |
+| `contact:social` | character | character | Contact can provide ordinary social connection, favors, messages, or indirect channels |
+| `contact:intimate` | character | character | Contact can provide contracted-intimacy access where the setting supports it |
 | `hostile_to` | character \| faction | character \| faction | Active opposition; willing to expend energy thwarting the other. **Durable** — captures simmering enmity (the Enemies trait is a durable character feature, not an acute episode). Distinct from `hunting` (which is *ephemeral, purposeful, acute* targeted pursuit). A character can be `hostile_to` someone without currently `hunting` them; conversely a hunt may fire without antecedent hostility. |
 
 All cardinalities multi-valued. Polymorphic subjects/objects collapse what would otherwise be ~30 separate tags.
 
+The bare `contact` pair-tag was registered by migration 045 but is deprecated by migration 047. Use `contact:<kind>` for package gates; generic contact flavor belongs in `character_relationships`.
+
 ### Pair Tags vs. `character_relationships` — Source-of-Truth Rule
 
-The `ally`, `contact`, and `hostile_to` tags (and their compiler-planned siblings) sit alongside the existing `character_relationships` table. Both layers can describe what looks like "the same" relationship — but they answer different questions and must not drift.
+The `ally`, `contact:<kind>`, and `hostile_to` tags (and their future siblings) sit alongside the existing `character_relationships` table. Both layers can describe what looks like "the same" relationship — but they answer different questions and must not drift.
 
 - **`pair_tag`** = typed mechanical edge that packages gate on. Binary: exists or it doesn't, plus the tag name. Cheap to query; deterministic. Example: a HIDE package gating on "does the acting character have any `hunting(other → self)` edges?"
 - **`character_relationships`** = affective / historical / valence layer that Skald and social-logic read. Multi-state; evolves continuously over time; carries trust, valence, history, sub-states. Example: Skald composing prose that reflects "Alex and Emilia were close, then there was a falling-out, then a partial reconciliation."
@@ -691,7 +695,7 @@ The `ally`, `contact`, and `hostile_to` tags (and their compiler-planned sibling
 
 The compiler writes both layers within a single transaction *when both are warranted*. Reconciliation invariants:
 
-- Every `ally` / `contact` / `hostile_to` pair tag MUST have a corresponding `character_relationships` row (these tags carry intrinsic affective content)
+- Every `ally` / `contact:<kind>` / `hostile_to` pair tag MUST have a corresponding `character_relationships` row (these tags carry intrinsic affective content)
 - The converse does NOT hold uniformly — a `character_relationships` row need not have a parallel pair-tag unless a package needs the gate
 
 Drift between paired rows is a bug. Issue #291 codified the rule and added the reconciliation surface in `nexus/api/trait_compiler.py::reconcile_trait_relationship_pair_tags`.
@@ -713,7 +717,7 @@ Compiler surfaces:
 | `Fame` / legacy `Reputation` | Writes `role.fame:<level>` when typed input supplies `obscure`, `known`, `renowned`, or `legendary`. Legacy `reputation` input aliases to `fame`. | Rename landed in migration 045; `reputation` remains accepted as a compatibility alias. |
 | `Resources` | Writes `role.resources:<level>` when typed input supplies `destitute`, `poor`, `comfortable`, `wealthy`, or `magnate`. | `comfortable` is the default/ordinary tier; absence of typed input is reported, not guessed. |
 | `Allies` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `ally(char → char)` in the same transaction. | Per #303, affective relationship row first; pair-tag only when a package gate needs the binary edge. |
-| `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `contact(char → char)`. | Kind-qualified contact gates for needs are still open (#317); do not use the base `contact` pair-tag as a lodging/social/intimate catch-all. |
+| `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` requires `contact_kind` (`lodging`, `social`, or `intimate`) or an explicit `contact:<kind>` pair-tag. | The bare `contact` pair-tag is deprecated as a package gate. Needs templates consume `has_contact_of_kind(...)` predicates. |
 | `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Active pursuit remains the `pursuing`/future-`hunting` pair-tag track, not default `hostile_to` (#318). |
 | `Domain` | Current MVP returns a prose-only remainder. | Target design: create/identify a place entity and write `claims(char → place)`; registry polymorphism is ready, compiler input/schema is not. |
 | `Patron` | Current MVP returns a prose-only remainder. | Target design: one `character_relationships` row for the patron-client bond; package-specific pair-tags later as needed. This preserves the #305 resolution: patron is not decomposed into a default OR/AND bundle of mentor, sponsor, protector, and authority edges. |
@@ -721,7 +725,7 @@ Compiler surfaces:
 | `Obligations` | Current MVP returns a prose-only remainder. | Target design: `obligation(char → target)` when a structured target exists. |
 | `Wildcard` | Outside the current selected-trait compiler loop. The wizard persists prose in `characters.extra_data.wildcard`, and any Skald-bestowed `orrery_tags` apply through the ordinary tag bestowal surface. | Future wildcard decomposition may only use registered vocabulary. It cannot mint tags; novel mechanics remain prose/`extra_data` until a compiler surface exists. There is no planned `items` table; inanimate artifacts stay prose/`extra_data` unless/until project scope changes. |
 
-**Migration 045 landed the substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. The compiler code owns only the current MVP rows above; the table is deliberately split so future docs do not confuse registry readiness with compiler readiness.
+**Migration 045 landed the trait-compiler substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. **Migration 047 refines contacts** by deprecating bare `contact`, adding `contact:lodging` / `contact:social` / `contact:intimate`, and deprecating the old single-entity contact flags. The compiler code owns only the current MVP rows above; the table is deliberately split so future docs do not confuse registry readiness with compiler readiness.
 
 ---
 
@@ -748,7 +752,7 @@ Compiler surfaces:
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
-6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Follow-up work is now specific: `under_active_pursuit` → inbound `hunting` (#318), kind-qualified contact gates (#317), and any future pair-tag-derived binding composers demanded by package implementations.
+6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Follow-up work is now specific: `under_active_pursuit` → inbound `hunting` (#318), and any future pair-tag-derived binding composers demanded by package implementations.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
 8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
 9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan tracked by issue #326 are ready.
@@ -761,17 +765,18 @@ Compiler surfaces:
 - `docs/orrery_design_plan.md` — broader Orrery system design.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
+- `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `pursuing` / future-`hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
 - PR #284 — DB-level multi-entity tag predicates (`pair_tag_exists`, inbound/outbound subject lookups). *Merged.*
 - Issue #290 / PR #323 — structured trait-compiler audit and opt-in `nexus trait-audit` CLI. *Merged.*
 - Issue #291 — pair-tag-vs-`character_relationships` reconciliation. *Closed.*
+- Issue #317 — Replace `contacts_available` overload with kind-qualified contact pair-tag predicates.
 
 ### Implementation Contracts (Open)
 
 These are the downstream mechanical pre-requisites surfaced during the design-doc review. Each is tracked as its own issue so substrate work can be sequenced independently of further doc edits.
 
 - Issue #292 — Place/faction tag subcategory refactor + resolver adapter for `in_location_class()` gates.
-- Issue #317 — Replace `contacts_available` overload with kind-qualified contact pair-tag predicates.
 - Issue #318 — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate.

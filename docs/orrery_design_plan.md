@@ -126,7 +126,7 @@ Current mechanical surface:
 - `Resources` → exclusive `role.resources:<level>` single-entity tag.
 - `Fame` / legacy `Reputation` → exclusive `role.fame:<level>` single-entity tag.
 - `Status` → `status:<level>(character → faction)` pair-tag.
-- `Allies`, `Contacts`, `Enemies` → `character_relationships` rows from structured targets, with optional pair-tags (`ally`, `contact`, `hostile_to`) only when a package gate explicitly needs the binary edge.
+- `Allies`, `Contacts`, `Enemies` → `character_relationships` rows from structured targets, with optional pair-tags (`ally`, `contact:<kind>`, `hostile_to`) only when a package gate explicitly needs the binary edge.
 
 Current prose-only surface: `Domain`, `Patron`, `Dependents`, and `Obligations` return `UnresolvedTrait` entries in `TraitCompileResult.prose_only_remainders` when they are selected and their typed compilers have not landed. The required wildcard is persisted separately in `characters.extra_data.wildcard` and can carry Skald-bestowed `orrery_tags`; it is not part of the selected-trait compiler loop yet.
 

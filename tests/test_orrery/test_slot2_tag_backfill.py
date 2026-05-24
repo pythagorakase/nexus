@@ -25,7 +25,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
                 "registered_tag_proposals": [
                     {"tag": "safe_house", "confidence": "high"},
                     {"tag": "sleep_deprived_1_mild", "confidence": "high"},
-                    {"tag": "contacts_available", "confidence": "low"},
+                    {"tag": "low_confidence_anchor", "confidence": "low"},
                 ],
                 "unregistered_tag_candidates": [
                     {"tag": "found_family_anchor", "confidence": "high"},
@@ -45,7 +45,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
         ]
     }
     tags = {
-        "contacts_available": TagDefinition(
+        "low_confidence_anchor": TagDefinition(
             id=1, category="orrery_state", is_ephemeral=False
         ),
         "corporate_exile": TagDefinition(id=2, category="state", is_ephemeral=False),
@@ -99,7 +99,7 @@ def test_slot2_tag_backfill_skips_existing_and_missing_entities() -> None:
                 "entity_kind": "character",
                 "entity_name": "Alex",
                 "registered_tag_proposals": [
-                    {"tag": "contacts_available", "confidence": "high"},
+                    {"tag": "quiet_retreat", "confidence": "high"},
                 ],
             },
             {
@@ -107,14 +107,14 @@ def test_slot2_tag_backfill_skips_existing_and_missing_entities() -> None:
                 "entity_kind": "character",
                 "entity_name": "Ghost",
                 "registered_tag_proposals": [
-                    {"tag": "contacts_available", "confidence": "high"},
+                    {"tag": "quiet_retreat", "confidence": "high"},
                     {"tag": "off_grid", "confidence": "medium"},
                 ],
             },
         ]
     }
     tags = {
-        "contacts_available": TagDefinition(
+        "quiet_retreat": TagDefinition(
             id=1, category="orrery_state", is_ephemeral=False
         ),
         "off_grid": TagDefinition(id=2, category="orrery_state", is_ephemeral=False),
@@ -145,7 +145,7 @@ def test_slot2_tag_backfill_rejects_manifest_entity_kind_mismatch() -> None:
                 "entity_kind": "character",
                 "entity_name": "Dynacorp",
                 "registered_tag_proposals": [
-                    {"tag": "contacts_available", "confidence": "high"},
+                    {"tag": "quiet_retreat", "confidence": "high"},
                 ],
             }
         ]
@@ -155,7 +155,7 @@ def test_slot2_tag_backfill_rejects_manifest_entity_kind_mismatch() -> None:
         _build_candidates(
             manifest,
             tags={
-                "contacts_available": TagDefinition(
+                "quiet_retreat": TagDefinition(
                     id=1, category="orrery_state", is_ephemeral=False
                 )
             },
@@ -166,9 +166,7 @@ def test_slot2_tag_backfill_rejects_manifest_entity_kind_mismatch() -> None:
         )
 
 
-def test_slot2_tag_backfill_insert_candidates_counts_rows_without_mutating_current() -> (
-    None
-):
+def test_slot2_tag_backfill_insert_counts_rows_without_mutating_current() -> None:
     """The insert helper counts DB rowcount and keeps caller state unchanged."""
 
     cursor = FakeInsertCursor(conflicting={(2, 20)})

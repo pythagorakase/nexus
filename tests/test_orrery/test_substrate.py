@@ -19,10 +19,12 @@ from nexus.agents.orrery.substrate import (
     can_move_publicly,
     co_located,
     count_co_located,
+    contact_pair_tag_for_kind,
     direct_contact_is_dramatic,
     evaluate_stack,
     has_any_pair_tag,
     has_any_intimacy_suppressor,
+    has_contact_of_kind,
     has_established_partner_co_located,
     has_minimal_context,
     has_need_debt_at_or_above,
@@ -247,6 +249,31 @@ def test_pair_tag_predicates_are_direction_sensitive() -> None:
     assert not has_pair_tag("pursuing")(state, bindings)
 
 
+def test_contact_kind_predicate_reads_outbound_kind_specific_edges() -> None:
+    """Contact-kind gates match outbound contact:<kind> pair-tags only."""
+
+    state = WorldState(
+        pair_tags={
+            (1, 2): frozenset({"contact:social"}),
+            (2, 1): frozenset({"contact:lodging"}),
+            (1, 3): frozenset({"ally"}),
+        }
+    )
+
+    assert has_contact_of_kind("social")(state, {Slot.ACTOR: 1})
+    assert not has_contact_of_kind("lodging")(state, {Slot.ACTOR: 1})
+    assert has_contact_of_kind("lodging")(state, {Slot.ACTOR: 2})
+    assert not has_contact_of_kind("intimate")(state, {Slot.ACTOR: 1})
+    assert not has_contact_of_kind("social")(state, {Slot.TARGET: 1})
+
+
+def test_contact_pair_tag_for_kind_rejects_unknown_kind() -> None:
+    """Contact-kind helpers fail loudly instead of inventing vocabulary."""
+
+    with pytest.raises(ValueError, match="Unsupported contact kind"):
+        contact_pair_tag_for_kind("medical")  # type: ignore[arg-type]
+
+
 def test_lacks_pair_tag_is_inverse_for_bound_slots() -> None:
     """lacks_pair_tag is true for wrong direction, wrong tag, or missing slots."""
 
@@ -299,6 +326,15 @@ def test_public_mobility_requires_public_context_and_freedom() -> None:
     assert can_move_publicly()(public_state, {Slot.ACTOR: 1})
     assert not can_move_publicly()(private_state, {Slot.ACTOR: 1})
     assert not can_move_publicly()(captive_state, {Slot.ACTOR: 1})
+
+
+def test_public_mobility_can_use_social_contact_channel() -> None:
+    """A social contact preserves the old contacts_available mobility affordance."""
+
+    state = WorldState(pair_tags={(1, 2): frozenset({"contact:social"})})
+
+    assert can_move_publicly()(state, {Slot.ACTOR: 1})
+    assert not can_move_publicly()(state, {Slot.ACTOR: 2})
 
 
 def test_relationship_contact_predicates_capture_asymmetry() -> None:

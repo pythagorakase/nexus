@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.orrery.substrate import ContactKind
+
 
 ResourceLevel = Literal["destitute", "poor", "comfortable", "wealthy", "magnate"]
 FameLevel = Literal["obscure", "known", "renowned", "legendary"]
@@ -96,6 +98,12 @@ class RelationshipTargetInput(BaseModel):
         "protagonist_to_target",
         description="Direction for the pair-tag edge when apply_pair_tag is true.",
     )
+    contact_kind: Optional[ContactKind] = Field(
+        None,
+        description=(
+            "Kind qualifier for Contacts pair-tags: lodging, social, or intimate."
+        ),
+    )
 
 
 class RelationshipTraitInput(BaseModel):
@@ -165,6 +173,7 @@ class CreatedRelationship(BaseModel):
     relationship_type: str
     emotional_valence: str
     pair_tag: Optional[str] = None
+    contact_kind: Optional[ContactKind] = None
     dry_run: bool = False
 
 

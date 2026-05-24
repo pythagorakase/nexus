@@ -290,7 +290,7 @@ Three names were live for the same concept: `bereaved` (gate-blocker in SOCIALIZ
 
 ### R3. `contacts_available` → Derive from `contact` Pair-Tag with Kind Qualifier
 
-The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates should filter the actor's outbound `contact(char → other_char)` data by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. Implementation is tracked by issue #317. Important boundary: the trait compiler's Contacts MVP writes `character_relationships` rows by default and only writes the bare `contact` pair-tag when explicitly requested for a package gate; #317 must define where the kind qualifier lives before the needs templates consume it.
+The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates filter the actor's outbound `contact:<kind>(char → other_char)` data by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. The trait compiler's Contacts MVP writes `character_relationships` rows by default; optional pair-tag writes now require a kind-qualified `contact:<kind>` edge, not the deprecated bare `contact` pair-tag. The old public-mobility affordance is preserved narrowly through `contact:social`; lodging and intimate contacts do not imply general public-flow movement.
 
 ### R4. Affective Severity — Hybrid (Graduated Where Packages Gate; Flat Otherwise)
 
@@ -329,7 +329,7 @@ The basic-needs templates fire for every character every game-day, producing pot
 
 ### 5. ~~`contacts_available` Ambiguity~~ — Resolved
 
-See R3 above. Decision: derive from `contact` data with a relationship-kind qualifier. Implementation is tracked by issue #317.
+See R3 above. Decision: derive from `contact:<kind>` data with a relationship-kind qualifier.
 
 ### 6. Setting-Tag Vocabulary for `in_preference_compatible_setting`
 
@@ -356,6 +356,5 @@ The architecture intentionally does not include a CONNECT template. Deep emotion
   - **#233** — Sunhelm basic-needs implementation
   - **#243** — Interpersonal needs implementation
 - **Open implementation issues**:
-  - **#317** — Replace `contacts_available` overload with kind-qualified contact predicates
   - **#318** — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate
 - **Drafting record (gitignored)**: `temp/orrery/sunhelm_update_draft.md`, `temp/orrery/orrery_interpersonal_update_draft.md` — full design conversation including multi-model input per open question. Useful for understanding *why* a particular decision was made; not authoritative for *what* shipped (this doc is).
