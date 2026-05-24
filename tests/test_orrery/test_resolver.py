@@ -259,11 +259,11 @@ def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
         ),
         (
             FakeSession(
-                tag_rows=[
+                pair_tag_rows=[
                     {
-                        "entity_id": 1,
-                        "tag": "contacts_available",
-                        "is_ephemeral": False,
+                        "subject_entity_id": 1,
+                        "object_entity_id": 2,
+                        "tag": "contact:social",
                     }
                 ],
                 event_rows=[
@@ -408,12 +408,18 @@ def test_active_pursuit_beats_hide() -> None:
         FakeSession(
             tag_rows=[
                 {"entity_id": 1, "tag": "off_grid", "is_ephemeral": False},
-                {"entity_id": 1, "tag": "contacts_available", "is_ephemeral": False},
                 {
                     "entity_id": 1,
                     "tag": "under_active_pursuit",
                     "is_ephemeral": True,
                 },
+            ],
+            pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 2,
+                    "tag": "contact:lodging",
+                }
             ],
             location_class_rows=[
                 {"id": 10, "location_class": "safe_house", "is_primary": True}

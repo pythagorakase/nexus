@@ -18,6 +18,7 @@ from nexus.agents.orrery.substrate import (
     has_any_intimacy_suppressor,
     has_any_current_tag,
     has_any_tag,
+    has_contact_of_kind,
     has_ephemeral,
     has_established_partner_co_located,
     has_minimal_context,
@@ -57,7 +58,7 @@ EVADE_PURSUERS = Template(
         NOT(is_constrained()),
         OR(
             in_location_class("the_roots"),
-            has_tag("contacts_available"),
+            has_contact_of_kind("lodging"),
             can_move_publicly(),
         ),
     ),
@@ -79,7 +80,7 @@ EVADE_PURSUERS = Template(
         ),
         Branch(
             label="Reach a safe house through contacts",
-            conditions=has_tag("contacts_available"),
+            conditions=has_contact_of_kind("lodging"),
             narrative_stub=(
                 "{actor} pings a broker through a low-bandwidth dead-drop and "
                 "takes a four-hop route to a safe house."
@@ -139,12 +140,14 @@ HIDE = Template(
             label="Harden or sanitize a safehouse",
             conditions=AND(
                 in_location_class("safe_house"),
-                has_any_current_tag(
-                    "contacts_available",
-                    "fixer",
-                    "route_familiar",
-                    "safehouse_operator",
-                    "survivalist",
+                OR(
+                    has_contact_of_kind("lodging"),
+                    has_any_current_tag(
+                        "fixer",
+                        "route_familiar",
+                        "safehouse_operator",
+                        "survivalist",
+                    ),
                 ),
             ),
             narrative_stub=(
@@ -161,13 +164,15 @@ HIDE = Template(
         ),
         Branch(
             label="Go dark and reduce signal exposure",
-            conditions=has_any_current_tag(
-                "contacts_available",
-                "ghostprint_active",
-                "hacker",
-                "off_grid",
-                "paranoid",
-                "signal_operator",
+            conditions=OR(
+                has_contact_of_kind("social"),
+                has_any_current_tag(
+                    "ghostprint_active",
+                    "hacker",
+                    "off_grid",
+                    "paranoid",
+                    "signal_operator",
+                ),
             ),
             narrative_stub=(
                 "{actor} trims their signal down to almost nothing — no "
@@ -279,7 +284,7 @@ HONOR_DEBT = Template(
         ),
         Branch(
             label="Fulfill obligation through a dead-drop",
-            conditions=has_tag("contacts_available"),
+            conditions=has_contact_of_kind("social"),
             narrative_stub=(
                 "{actor} tucks an encoded microdrive behind a loose ceramic "
                 "tile and leaves a mark for the recipient."
@@ -543,7 +548,7 @@ EXTRACT_VENGEANCE = Template(
         Branch(
             label="Surface a reputation attack in the right channels",
             conditions=AND(
-                has_tag("contacts_available"),
+                has_contact_of_kind("social"),
                 in_location_class("the_glow"),
             ),
             narrative_stub=(
@@ -646,7 +651,7 @@ PROTECT_KIN = Template(
         Branch(
             label="Travel toward the target's last known location",
             conditions=AND(
-                has_tag("contacts_available"),
+                has_contact_of_kind("social"),
                 NOT(co_located(Slot.ACTOR, Slot.TARGET)),
             ),
             narrative_stub=(
@@ -724,9 +729,9 @@ SURVEIL = Template(
         NOT(has_ephemeral("grudge_active")),
         OR(
             is_hidden(),
+            has_contact_of_kind("social"),
             has_any_current_tag(
                 "broker",
-                "contacts_available",
                 "hacker",
                 "informant_handler",
                 "intelligence_asset_active",
@@ -798,11 +803,13 @@ SURVEIL = Template(
         ),
         Branch(
             label="Collect a proxy watcher report",
-            conditions=has_any_current_tag(
-                "broker",
-                "contacts_available",
-                "fixer",
-                "informant_handler",
+            conditions=OR(
+                has_contact_of_kind("social"),
+                has_any_current_tag(
+                    "broker",
+                    "fixer",
+                    "informant_handler",
+                ),
             ),
             narrative_stub=(
                 "{actor} does not go near {target}. They let someone else "
@@ -1351,7 +1358,10 @@ KEEP_VIGIL = Template(
 TRAVEL = Template(
     id="travel",
     priority=21,
-    blurb="A character moves between meaningful places without pretending the road is a room.",
+    blurb=(
+        "A character moves between meaningful places without pretending the "
+        "road is a room."
+    ),
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         OR(is_in_transit(), has_travel_destination()),
@@ -1475,7 +1485,10 @@ TRAVEL = Template(
 WORK = Template(
     id="work",
     priority=14,
-    blurb="The recurring work that keeps a life, household, or organization functioning.",
+    blurb=(
+        "The recurring work that keeps a life, household, or organization "
+        "functioning."
+    ),
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         OR(
@@ -2216,7 +2229,7 @@ CONSULT_RIVAL = Template(
         ),
         Branch(
             label="Send a carefully-worded message through indirect channels",
-            conditions=has_tag("contacts_available"),
+            conditions=has_contact_of_kind("social"),
             narrative_stub=(
                 "{actor} sends {target} a message routed through an "
                 "intermediary they both trust slightly more than they "
@@ -2226,7 +2239,9 @@ CONSULT_RIVAL = Template(
                 "ignore it."
             ),
             state_delta={
-                "character.current_activity": "reaching out to a rival via intermediary",
+                "character.current_activity": (
+                    "reaching out to a rival via intermediary"
+                ),
             },
             event_type="rival_consulted",
             changed_fields=("character.current_activity",),
@@ -2239,7 +2254,7 @@ CONSULT_RIVAL = Template(
             ),
         ),
         Branch(
-            label="Leave a sign the rival will recognize and a door they can open",
+            label=("Leave a sign the rival will recognize and a door they can open"),
             conditions=ALWAYS,
             narrative_stub=(
                 "{actor} doesn't quite reach out — but they place a sign "
@@ -2249,7 +2264,9 @@ CONSULT_RIVAL = Template(
                 "begun. If they don't, it hasn't."
             ),
             state_delta={
-                "character.current_activity": "leaving a tentative overture for a rival",
+                "character.current_activity": (
+                    "leaving a tentative overture for a rival"
+                ),
             },
             event_type="contact_made",
             changed_fields=("character.current_activity",),
@@ -2334,6 +2351,7 @@ SLEEP = Template(
             conditions=OR(
                 in_location_class("lodgings"),
                 in_location_class("safe_house"),
+                has_contact_of_kind("lodging"),
             ),
             narrative_stub=(
                 "{actor} finds a place secure enough to become temporary "
@@ -2495,7 +2513,10 @@ DRINK = Template(
 EAT = Template(
     id="eat",
     priority=22,
-    blurb="The body asks for fuel; what it gets matters more than the cookbook suggests.",
+    blurb=(
+        "The body asks for fuel; what it gets matters more than the cookbook "
+        "suggests."
+    ),
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         has_need_debt_at_or_above("hunger", 4),
@@ -2656,7 +2677,10 @@ EAT = Template(
 SOCIALIZE = Template(
     id="socialize",
     priority=18,
-    blurb="The need for the company of others, on whatever terms a character can have it.",
+    blurb=(
+        "The need for the company of others, on whatever terms a character "
+        "can have it."
+    ),
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         has_need_debt_at_or_above("socialize", 24),
@@ -2747,7 +2771,7 @@ SOCIALIZE = Template(
         ),
         Branch(
             label="Reach out to a contact for no urgent reason",
-            conditions=has_tag("contacts_available"),
+            conditions=has_contact_of_kind("social"),
             narrative_stub=(
                 "{actor} thinks of someone they have not spoken with in too "
                 "long and reaches out for no urgent reason, which is its "
@@ -2870,7 +2894,7 @@ INTIMACY = Template(
             label="Engage contracted intimate company",
             conditions=AND(
                 in_location_class("intimate_services_establishment"),
-                has_tag("intimate_services_contact"),
+                has_contact_of_kind("intimate"),
                 NOT(has_tag("partnered_exclusively")),
                 NOT(
                     has_any_tag(

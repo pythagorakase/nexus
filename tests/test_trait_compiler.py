@@ -54,6 +54,21 @@ class TraitCompilerCursor:
                 "subject_kinds": ["character"],
                 "object_kinds": ["character"],
             },
+            "contact:lodging": {
+                "id": 104,
+                "subject_kinds": ["character"],
+                "object_kinds": ["character"],
+            },
+            "contact:social": {
+                "id": 105,
+                "subject_kinds": ["character"],
+                "object_kinds": ["character"],
+            },
+            "contact:intimate": {
+                "id": 106,
+                "subject_kinds": ["character"],
+                "object_kinds": ["character"],
+            },
             "hostile_to": {
                 "id": 103,
                 "subject_kinds": ["character", "faction"],
@@ -406,9 +421,9 @@ def test_no_typed_inputs_returns_structured_remainders() -> None:
         "status",
         "allies",
     }
-    assert {
-        item.reason_code for item in result.prose_only_remainders
-    } == {TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT}
+    assert {item.reason_code for item in result.prose_only_remainders} == {
+        TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
+    }
 
 
 def test_resources_and_reputation_compile_to_single_entity_tags() -> None:
@@ -513,6 +528,133 @@ def test_explicit_ally_pair_tag_writes_both_layers() -> None:
     assert result.created_relationships[0].pair_tag == "ally"
     assert len(cur.entity_pair_tags) == 1
     assert len(cur.character_relationships) == 1
+
+
+def test_contacts_pair_tag_requires_kind() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        contacts=RelationshipTraitInput(
+            targets=[
+                RelationshipTargetInput(
+                    character_id=2,
+                    character_entity_id=502,
+                    dynamic="A contact without a known gate kind.",
+                    apply_pair_tag=True,
+                )
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("contacts", "resources", "domain", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.applied_pair_tags == []
+    assert cur.entity_pair_tags == []
+    assert result.prose_only_remainders[0].reason_code == (
+        TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
+    )
+    assert "contact_kind" in result.prose_only_remainders[0].message
+
+
+def test_contact_kind_pair_tag_writes_kind_specific_edge() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        contacts=RelationshipTraitInput(
+            targets=[
+                RelationshipTargetInput(
+                    character_id=2,
+                    character_entity_id=502,
+                    dynamic="A lodging contact for safe-house access.",
+                    apply_pair_tag=True,
+                    contact_kind="lodging",
+                )
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("contacts", "resources", "domain", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.applied_pair_tags[0].tag == "contact:lodging"
+    assert result.created_relationships[0].pair_tag == "contact:lodging"
+    assert result.created_relationships[0].contact_kind == "lodging"
+    assert cur.entity_pair_tags[0]["pair_tag_id"] == 104
+    assert (
+        '"trait_compiler_contact_kind": "lodging"'
+        in cur.character_relationships[0]["extra_data"]
+    )
+
+
+def test_explicit_contact_pair_tag_infers_contact_kind_metadata() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        contacts=RelationshipTraitInput(
+            targets=[
+                RelationshipTargetInput(
+                    character_id=2,
+                    character_entity_id=502,
+                    dynamic="A social contact for messages and favors.",
+                    apply_pair_tag=True,
+                    pair_tag="contact:social",
+                )
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("contacts", "resources", "domain", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.applied_pair_tags[0].tag == "contact:social"
+    assert result.created_relationships[0].pair_tag == "contact:social"
+    assert result.created_relationships[0].contact_kind == "social"
+    assert cur.entity_pair_tags[0]["pair_tag_id"] == 105
+    assert (
+        '"trait_compiler_contact_kind": "social"'
+        in cur.character_relationships[0]["extra_data"]
+    )
+
+
+def test_unknown_contact_pair_tag_is_structured_remainder() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        contacts=RelationshipTraitInput(
+            targets=[
+                RelationshipTargetInput(
+                    character_id=2,
+                    character_entity_id=502,
+                    dynamic="A contact with an unsupported gate kind.",
+                    apply_pair_tag=True,
+                    pair_tag="contact:trade",
+                )
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("contacts", "resources", "domain", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.applied_pair_tags == []
+    assert cur.entity_pair_tags == []
+    assert result.prose_only_remainders[0].reason_code == (
+        TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
+    )
+    assert result.prose_only_remainders[0].details["pair_tag"] == "contact:trade"
 
 
 def test_enemy_pair_tag_can_point_from_target_to_protagonist() -> None:
@@ -624,6 +766,30 @@ def test_reconciliation_reports_relationship_without_pair_tag() -> None:
     assert len(drift) == 1
     assert drift[0].drift_kind == "missing_pair_tag"
     assert drift[0].pair_tag == "ally"
+
+
+def test_reconciliation_ignores_deprecated_bare_contact_pair_tag() -> None:
+    cur = TraitCompilerCursor()
+    cur.character_relationships.append(
+        {
+            "character1_id": 1,
+            "character2_id": 2,
+            "relationship_type": "contact",
+            "emotional_valence": "+1|favorable",
+            "dynamic": "Legacy compiler-authored contact relationship.",
+            "recent_events": "",
+            "history": "",
+            "extra_data": json.dumps(
+                {
+                    "source": "trait_compiler",
+                    "trait": "contacts",
+                    "trait_compiler_pair_tag": "contact",
+                }
+            ),
+        }
+    )
+
+    assert reconcile_trait_relationship_pair_tags(cur) == []
 
 
 def test_persist_trait_compile_result_requires_wizard_cache_row() -> None:

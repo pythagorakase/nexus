@@ -507,6 +507,34 @@ def test_canonical_grieving_migration_aliases_legacy_grief_tags() -> None:
     assert "synonym_for = %s" in migration_source
 
 
+def test_kind_qualified_contact_migration_deprecates_contact_flags() -> None:
+    """Migration 047 replaces overloaded contact flags with pair-tag kinds."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "047_kind_qualified_contact_pair_tags.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert {"contact:lodging", "contact:social", "contact:intimate"} == {
+        tag for tag, _description in migration.CONTACT_PAIR_TAGS
+    }
+    assert {"contacts_available", "intimate_services_contact"} == {
+        tag for tag, _replacement_note in migration.LEGACY_CONTACT_TAGS
+    }
+    assert migration.LEGACY_CONTACT_PAIR_TAGS == (
+        (
+            "contact",
+            "Replaced by kind-qualified contact pair-tags: contact:lodging, "
+            "contact:social, and contact:intimate.",
+        ),
+    )
+    assert "INSERT INTO pair_tags" in migration_source
+    assert "SET deprecated = TRUE" in migration_source
+
+
 @pytest.mark.requires_postgres
 def test_canonical_grieving_migration_executes_against_slot_db() -> None:
     """Migration 046 moves active legacy rows and preserves grief reapply policy."""
@@ -581,9 +609,7 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
             assert {
                 tag: (is_deprecated, alias_target)
                 for tag, is_deprecated, alias_target in cur.fetchall()
-            } == {
-                tag: (True, grieving_id) for tag in migration.LEGACY_TAGS
-            }
+            } == {tag: (True, grieving_id) for tag in migration.LEGACY_TAGS}
 
             cur.execute(
                 """

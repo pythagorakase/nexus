@@ -42,8 +42,9 @@ def build_presets() -> Dict[str, WorldState]:
     }
     return {
         "hunted": WorldState(
-            tags={ACTOR_ID: frozenset({"seeking_identity", "contacts_available"})},
+            tags={ACTOR_ID: frozenset({"seeking_identity"})},
             ephemeral_tags={ACTOR_ID: frozenset({"under_active_pursuit"})},
+            pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:lodging"})},
             locations=common_locations,
             location_class=location_classes,
             recent_events=(
@@ -58,11 +59,8 @@ def build_presets() -> Dict[str, WorldState]:
             current_tick=100,
         ),
         "fragment": WorldState(
-            tags={
-                ACTOR_ID: frozenset(
-                    {"seeking_identity", "contacts_available", "ghostprint_active"}
-                )
-            },
+            tags={ACTOR_ID: frozenset({"seeking_identity", "ghostprint_active"})},
+            pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:social"})},
             locations=common_locations,
             location_class=location_classes,
             time_of_day="evening",
@@ -70,8 +68,9 @@ def build_presets() -> Dict[str, WorldState]:
             current_tick=100,
         ),
         "debt": WorldState(
-            tags={ACTOR_ID: frozenset({"seeking_identity", "contacts_available"})},
+            tags={ACTOR_ID: frozenset({"seeking_identity"})},
             ephemeral_tags={ACTOR_ID: frozenset({"debt_pulse_active"})},
+            pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:social"})},
             locations={ACTOR_ID: STACKS_PLACE_ID},
             location_class=location_classes,
             recent_events=(

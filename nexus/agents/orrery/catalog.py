@@ -108,6 +108,13 @@ _register(
     ),
 )
 _register(
+    r"has_contact_of_kind\((?P<kind>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has outbound "
+        f"`contact:{m.group('kind')}` pair tag"
+    ),
+)
+_register(
     r"has_ephemeral\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} has `{m.group('tag')}` ephemeral",
 )
@@ -514,6 +521,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("pair_tag", re.compile(r"has_pair_tag\(([^@()]+)@")),
     ("pair_tag", re.compile(r"lacks_pair_tag\(([^@()]+)@")),
     ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
+    ("contact_kind", re.compile(r"has_contact_of_kind\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
     ("place_affordance", re.compile(r"in_location_class\(([^@()]+)@")),
@@ -573,6 +581,8 @@ def _collect_vocabulary(
             elif kind == "pair_tag_list":
                 for tag in captured.split(","):
                     pair_tags.add(tag.strip())
+            elif kind == "contact_kind":
+                pair_tags.add(f"contact:{captured}")
             elif kind == "event_type":
                 events.add(captured)
             elif kind == "place_affordance":

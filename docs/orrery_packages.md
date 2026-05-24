@@ -26,7 +26,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is constrained or immobilized
   - **OR:**
     - actor is in `the_roots` place affordance
-    - actor has `contacts_available` tag
+    - actor has outbound `contact:lodging` pair tag
     - actor can plausibly move through public flow
 
 ### Branch 1 — Go to ground in flooded tunnels  *(mag 0.72)*
@@ -44,7 +44,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Reach a safe house through contacts  *(mag 0.58)*
 
-**When:** actor has `contacts_available` tag
+**When:** actor has outbound `contact:lodging` pair tag
 
 **Does:** activity → "relocating through safe contacts"
 **Event:** `evade_pursuit`
@@ -114,7 +114,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor has `contacts_available` tag
+  - actor has outbound `contact:social` pair tag
   - **NOT:** actor and target are co-located
 
 **Does:** activity → "moving to reach kin in danger"
@@ -196,7 +196,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor has `contacts_available` tag
+  - actor has outbound `contact:social` pair tag
   - actor is in `the_glow` place affordance
 
 **Does:** activity → "running a reputation attack"; adds `reputation_compromised` to target
@@ -317,7 +317,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor is in `safe_house` place affordance
-  - actor has any current tag of [`contacts_available`, `fixer`, `route_familiar`, `safehouse_operator`, `survivalist`]
+  - **OR:**
+    - actor has outbound `contact:lodging` pair tag
+    - actor has any current tag of [`fixer`, `route_familiar`, `safehouse_operator`, `survivalist`]
 
 **Does:** activity → "hardening a safehouse"
 **Event:** `hideout_maintained`
@@ -326,7 +328,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Go dark and reduce signal exposure  *(mag 0.36)*
 
-**When:** actor has any current tag of [`contacts_available`, `ghostprint_active`, `hacker`, `off_grid`, `paranoid`, `signal_operator`]
+**When:**
+
+- **OR:**
+  - actor has outbound `contact:social` pair tag
+  - actor has any current tag of [`ghostprint_active`, `hacker`, `off_grid`, `paranoid`, `signal_operator`]
 
 **Does:** activity → "reducing signal exposure"
 **Event:** `signal_exposure_reduced`
@@ -399,7 +405,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Fulfill obligation through a dead-drop  *(mag 0.5)*
 
-**When:** actor has `contacts_available` tag
+**When:** actor has outbound `contact:social` pair tag
 
 **Does:** activity → "servicing an old debt"
 **Event:** `honor_debt`
@@ -736,7 +742,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor has `grudge_active` ephemeral
   - **OR:**
     - actor is hidden or off-grid
-    - actor has any current tag of [`broker`, `contacts_available`, `hacker`, `informant_handler`, `intelligence_asset_active`, `paranoid`, `researcher`, `signal_operator`, `surveillance_capable`]
+    - actor has outbound `contact:social` pair tag
+    - actor has any current tag of [`broker`, `hacker`, `informant_handler`, `intelligence_asset_active`, `paranoid`, `researcher`, `signal_operator`, `surveillance_capable`]
     - actor has `captor` relationship to target
     - actor has `guardian` relationship to target
     - actor has `handler` relationship to target
@@ -777,7 +784,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 3 — Collect a proxy watcher report  *(mag 0.38)*
 
-**When:** actor has any current tag of [`broker`, `contacts_available`, `fixer`, `informant_handler`]
+**When:**
+
+- **OR:**
+  - actor has outbound `contact:social` pair tag
+  - actor has any current tag of [`broker`, `fixer`, `informant_handler`]
 
 **Does:** activity → "collecting a proxy watcher report"
 **Event:** `surveillance_performed`
@@ -963,7 +974,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Send a carefully-worded message through indirect channels  *(mag 0.48)*
 
-**When:** actor has `contacts_available` tag
+**When:** actor has outbound `contact:social` pair tag
 
 **Does:** activity → "reaching out to a rival via intermediary"
 **Event:** `rival_consulted`
@@ -1082,6 +1093,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **OR:**
   - actor is in `lodgings` place affordance
   - actor is in `safe_house` place affordance
+  - actor has outbound `contact:lodging` pair tag
 
 **Does:** activity → "sleeping in safe lodgings"; fulfills `sleep` need, quality `adequate`, discharge 7
 **Event:** `slept`
@@ -1378,7 +1390,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 4 — Reach out to a contact for no urgent reason  *(mag 0.24)*
 
-**When:** actor has `contacts_available` tag
+**When:** actor has outbound `contact:social` pair tag
 
 **Does:** activity → "reconnecting with a contact"; fulfills `socialize` need, quality `remote_contact`, discharge 72
 **Event:** `socialized`
@@ -1448,7 +1460,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor is in `intimate_services_establishment` place affordance
-  - actor has `intimate_services_contact` tag
+  - actor has outbound `contact:intimate` pair tag
   - **NOT:** actor has `partnered_exclusively` tag
   - **NOT:** actor has any of [`vow_of_celibacy`, `religiously_abstinent`, `ethically_opposed_to_contracted_intimacy`]
 
@@ -1768,7 +1780,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `athlete`
 - `cares_for_household`
 - `combat_trained`
-- `contacts_available`
 - `contemplative`
 - `dancer`
 - `devout`
@@ -1785,7 +1796,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `hunter`
 - `informant_handler`
 - `innkeeper`
-- `intimate_services_contact`
 - `keeps_shop`
 - `loremaster`
 - `magical_healing`
@@ -1841,7 +1851,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `academic`
 - `broker`
 - `combat_trained`
-- `contacts_available`
 - `cover_identity`
 - `fixer`
 - `fugitive`
@@ -1876,6 +1885,12 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `recently_violent`
 - `reputation_compromised`
 - `under_truce`
+
+### Pair tags queried by directed predicates
+
+- `contact:intimate`
+- `contact:lodging`
+- `contact:social`
 
 ### Event types
 

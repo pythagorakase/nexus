@@ -41,6 +41,7 @@ class PresentTargetPolicy(str, Enum):
 
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
+ContactKind = Literal["lodging", "social", "intimate"]
 
 INTIMACY_SUPPRESSOR_TAGS: frozenset[str] = frozenset(
     {
@@ -88,7 +89,6 @@ HIDDEN_TAGS: frozenset[str] = frozenset(
 PUBLIC_MOBILITY_TAGS: frozenset[str] = frozenset(
     {
         "broker",
-        "contacts_available",
         "courier",
         "field_worker",
         "fixer",
@@ -114,6 +114,11 @@ DRAMATIC_CONTACT_TAGS: frozenset[str] = HIDDEN_TAGS | frozenset(
         "long_estranged",
     }
 )
+CONTACT_PAIR_TAGS: Mapping[ContactKind, str] = {
+    "lodging": "contact:lodging",
+    "social": "contact:social",
+    "intimate": "contact:intimate",
+}
 LOADED_TRUST_FORWARD_MIN = 2
 LOADED_TRUST_REVERSE_MAX = -1
 
@@ -290,6 +295,32 @@ def has_any_pair_tag(
         _condition,
         f"has_any_pair_tag({','.join(tags)}@{subject_slot.value}->{object_slot.value})",
     )
+
+
+def contact_pair_tag_for_kind(kind: ContactKind) -> str:
+    """Return the pair-tag name for a kind-qualified contact edge."""
+
+    try:
+        return CONTACT_PAIR_TAGS[kind]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported contact kind: {kind!r}") from exc
+
+
+def has_contact_of_kind(kind: ContactKind, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity has any outbound contact of ``kind``."""
+
+    pair_tag = contact_pair_tag_for_kind(kind)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return any(
+            subject_id == entity_id and pair_tag in tags
+            for (subject_id, _object_id), tags in state.pair_tags.items()
+        )
+
+    return _named(_condition, f"has_contact_of_kind({kind}@{slot.value})")
 
 
 def has_any_current_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
@@ -832,7 +863,8 @@ def has_relationship_of_type(
 
     return _named(
         _condition,
-        f"has_relationship_of_type({relationship_type},{slot_from.value}->{slot_to.value})",
+        "has_relationship_of_type("
+        f"{relationship_type},{slot_from.value}->{slot_to.value})",
     )
 
 
@@ -857,7 +889,8 @@ def has_symmetric_relationship_of_type(
 
     return _named(
         _condition,
-        f"has_symmetric_relationship_of_type({relationship_type},{slot_a.value}<->{slot_b.value})",
+        "has_symmetric_relationship_of_type("
+        f"{relationship_type},{slot_a.value}<->{slot_b.value})",
     )
 
 

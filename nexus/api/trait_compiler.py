@@ -9,6 +9,7 @@ from nexus.agents.orrery.status_family import (
     normalize_status_level,
     status_tag_for_level,
 )
+from nexus.agents.orrery.substrate import CONTACT_PAIR_TAGS, contact_pair_tag_for_kind
 from nexus.agents.orrery.tag_writer import (
     apply_exclusive_tag_bestowal,
     apply_pair_tag_bestowal,
@@ -53,7 +54,10 @@ RELATIONSHIP_DEFAULTS = {
     },
 }
 
-PAIR_TAG_RELATIONSHIP_TYPES = frozenset({"ally", "contact", "hostile_to"})
+PAIR_TAG_RELATIONSHIP_TYPES = frozenset({"ally", "hostile_to"}) | frozenset(
+    CONTACT_PAIR_TAGS.values()
+)
+CONTACT_KIND_BY_PAIR_TAG = {tag: kind for kind, tag in CONTACT_PAIR_TAGS.items()}
 
 
 def compile_character_traits(
@@ -493,6 +497,17 @@ def _compile_relationship_target(
     emotional_valence = target.emotional_valence or defaults["emotional_valence"]
     pair_tag = target.pair_tag or defaults["pair_tag"]
 
+    contact_kind = target.contact_kind if canonical_trait == "contacts" else None
+    if target.apply_pair_tag and canonical_trait == "contacts":
+        resolved_contact = _resolve_contact_pair_tag(
+            result,
+            trait=trait,
+            target=target,
+        )
+        if resolved_contact is None:
+            return
+        pair_tag, contact_kind = resolved_contact
+
     if target.apply_pair_tag and target.character_entity_id is None:
         _add_remainder(
             result,
@@ -559,6 +574,7 @@ def _compile_relationship_target(
             pair_tag_direction=(
                 target.pair_tag_direction if target.apply_pair_tag else None
             ),
+            contact_kind=contact_kind,
         )
     result.created_relationships.append(
         CreatedRelationship(
@@ -568,9 +584,65 @@ def _compile_relationship_target(
             relationship_type=relationship_type,
             emotional_valence=emotional_valence,
             pair_tag=pair_tag if target.apply_pair_tag else None,
+            contact_kind=contact_kind,
             dry_run=dry_run,
         )
     )
+
+
+def _resolve_contact_pair_tag(
+    result: TraitCompileResult,
+    *,
+    trait: str,
+    target: RelationshipTargetInput,
+) -> Optional[tuple[str, str]]:
+    if target.contact_kind is not None:
+        kind_pair_tag = contact_pair_tag_for_kind(target.contact_kind)
+        if target.pair_tag is not None and target.pair_tag != kind_pair_tag:
+            _add_remainder(
+                result,
+                trait=trait,
+                reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+                message=(
+                    "Contacts pair-tag input must not disagree with contact_kind."
+                ),
+                details={
+                    "name": target.name,
+                    "contact_kind": target.contact_kind,
+                    "pair_tag": target.pair_tag,
+                    "expected_pair_tag": kind_pair_tag,
+                },
+            )
+            return None
+        return kind_pair_tag, target.contact_kind
+
+    if target.pair_tag is not None and target.pair_tag in CONTACT_KIND_BY_PAIR_TAG:
+        return target.pair_tag, CONTACT_KIND_BY_PAIR_TAG[target.pair_tag]
+
+    if target.pair_tag is not None and target.pair_tag.startswith("contact:"):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message=(
+                "Contacts pair-tag input must use a registered contact kind "
+                "(lodging, social, intimate)."
+            ),
+            details={"name": target.name, "pair_tag": target.pair_tag},
+        )
+        return None
+
+    _add_remainder(
+        result,
+        trait=trait,
+        reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+        message=(
+            "Contacts pair-tag input requires contact_kind "
+            "(lodging, social, intimate) or an explicit contact:<kind> pair_tag."
+        ),
+        details={"name": target.name, "pair_tag": target.pair_tag or "contact"},
+    )
+    return None
 
 
 def _upsert_character_relationship(
@@ -586,6 +658,7 @@ def _upsert_character_relationship(
     trait: str,
     pair_tag: Optional[str],
     pair_tag_direction: Optional[str],
+    contact_kind: Optional[str],
 ) -> None:
     extra_data: dict[str, Any] = {
         "source": "trait_compiler",
@@ -595,6 +668,8 @@ def _upsert_character_relationship(
         extra_data["trait_compiler_pair_tag"] = pair_tag
     if pair_tag_direction is not None:
         extra_data["trait_compiler_pair_tag_direction"] = pair_tag_direction
+    if contact_kind is not None:
+        extra_data["trait_compiler_contact_kind"] = contact_kind
     cur.execute(
         """
         INSERT INTO character_relationships (
