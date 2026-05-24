@@ -282,7 +282,7 @@ These were surfaced as inconsistencies in `orrery_needs.md` during a follow-up r
 
 ### R1. `under_active_pursuit` → Inbound `hunting` Pair-Tag
 
-**Category error.** `under_active_pursuit` is a single-entity ephemeral but the concept ("someone is hunting me") is inherently relational — it's an inbound pair-tag from a pursuer. Three templates (SLEEP, SOCIALIZE, INTIMACY) currently gate on the ephemeral; the target form is `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. Migration depends on the `pursuing → hunting` rename (carried by #295's trait-compiler chunk) and on `has_inbound_pair_tag` hydration completing per `docs/orrery_tag_vocabulary.md` Open Item #6.
+**Category error.** `under_active_pursuit` is a single-entity ephemeral but the concept ("someone is hunting me") is inherently relational — it's an inbound pair-tag from a pursuer. Three templates (SLEEP, SOCIALIZE, INTIMACY) currently gate on the ephemeral; the target form is `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. This remains implementation work, tracked by issue #318. Live pair-tag data still uses `pursuing`; #318 owns both the `pursuing` → `hunting` rename and the needs-template gate migration.
 
 ### R2. Grief Vocabulary — Collapsed to Canonical `grieving`
 
@@ -290,7 +290,7 @@ Three names were live for the same concept: `bereaved` (gate-blocker in SOCIALIZ
 
 ### R3. `contacts_available` → Derive from `contact` Pair-Tag with Kind Qualifier
 
-The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates filter the actor's outbound `contact(char → other_char)` pair-tag rows by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. Substrate work needed: the `contact` pair-tag must carry a relationship-kind qualifier (either as a tag suffix or as a kind column on `entity_pair_tags`), and new predicates need to land. The compiler that creates `contact` rows from the trait_menu Contacts trait (#295) is the natural carrier.
+The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates should filter the actor's outbound `contact(char → other_char)` data by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. Implementation is tracked by issue #317. Important boundary: the trait compiler's Contacts MVP writes `character_relationships` rows by default and only writes the bare `contact` pair-tag when explicitly requested for a package gate; #317 must define where the kind qualifier lives before the needs templates consume it.
 
 ### R4. Affective Severity — Hybrid (Graduated Where Packages Gate; Flat Otherwise)
 
@@ -329,7 +329,7 @@ The basic-needs templates fire for every character every game-day, producing pot
 
 ### 5. ~~`contacts_available` Ambiguity~~ — Resolved
 
-See R3 above. Decision: derive from `contact` pair-tag with relationship-kind qualifier. Implementation tracked separately.
+See R3 above. Decision: derive from `contact` data with a relationship-kind qualifier. Implementation is tracked by issue #317.
 
 ### 6. Setting-Tag Vocabulary for `in_preference_compatible_setting`
 
@@ -355,4 +355,7 @@ The architecture intentionally does not include a CONNECT template. Deep emotion
 - **PRs**:
   - **#233** — Sunhelm basic-needs implementation
   - **#243** — Interpersonal needs implementation
+- **Open implementation issues**:
+  - **#317** — Replace `contacts_available` overload with kind-qualified contact predicates
+  - **#318** — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate
 - **Drafting record (gitignored)**: `temp/orrery/sunhelm_update_draft.md`, `temp/orrery/orrery_interpersonal_update_draft.md` — full design conversation including multi-model input per open question. Useful for understanding *why* a particular decision was made; not authoritative for *what* shipped (this doc is).
