@@ -328,6 +328,15 @@ def test_public_mobility_requires_public_context_and_freedom() -> None:
     assert not can_move_publicly()(captive_state, {Slot.ACTOR: 1})
 
 
+def test_public_mobility_can_use_social_contact_channel() -> None:
+    """A social contact preserves the old contacts_available mobility affordance."""
+
+    state = WorldState(pair_tags={(1, 2): frozenset({"contact:social"})})
+
+    assert can_move_publicly()(state, {Slot.ACTOR: 1})
+    assert not can_move_publicly()(state, {Slot.ACTOR: 2})
+
+
 def test_relationship_contact_predicates_capture_asymmetry() -> None:
     """Kin/contact templates can distinguish warmth from loaded contact."""
 

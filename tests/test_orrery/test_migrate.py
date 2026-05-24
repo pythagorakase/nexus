@@ -1,6 +1,7 @@
 """Tests for migration discovery around Orrery's Python migration."""
 
 from pathlib import Path
+from typing import Any, Iterable
 
 import psycopg2
 import pytest
@@ -536,6 +537,127 @@ def test_kind_qualified_contact_migration_deprecates_contact_flags() -> None:
 
 
 @pytest.mark.requires_postgres
+def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
+    """Migration 047 seeds kinded contacts and deprecates legacy rows."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "047_kind_qualified_contact_pair_tags.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    contact_pair_tags = [tag for tag, _description in migration.CONTACT_PAIR_TAGS]
+    legacy_pair_tags = [tag for tag, _note in migration.LEGACY_CONTACT_PAIR_TAGS]
+    legacy_tags = [tag for tag, _note in migration.LEGACY_CONTACT_TAGS]
+
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    pair_tag_names = [*contact_pair_tags, *legacy_pair_tags]
+    pair_tag_snapshot = _snapshot_pair_tags(conn, pair_tag_names)
+    tag_snapshot = _snapshot_tags(conn, legacy_tags)
+
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                for tag in legacy_pair_tags:
+                    cur.execute(
+                        """
+                        INSERT INTO pair_tags (
+                            tag, subject_kinds, object_kinds,
+                            is_ephemeral, clearance_kind, description, deprecated
+                        ) VALUES (
+                            %s,
+                            ARRAY['character'],
+                            ARRAY['character'],
+                            FALSE,
+                            NULL,
+                            'legacy contact pair-tag test seed.',
+                            FALSE
+                        )
+                        ON CONFLICT (tag) DO UPDATE SET
+                            subject_kinds = EXCLUDED.subject_kinds,
+                            object_kinds = EXCLUDED.object_kinds,
+                            is_ephemeral = FALSE,
+                            clearance_kind = NULL,
+                            description = EXCLUDED.description,
+                            deprecated = FALSE
+                        """,
+                        (tag,),
+                    )
+                for tag in legacy_tags:
+                    cur.execute(
+                        """
+                        INSERT INTO tags (
+                            tag, category, is_ephemeral, clearance_kind,
+                            synonym_for, deprecated, description
+                        ) VALUES (
+                            %s,
+                            'orrery_state',
+                            FALSE,
+                            NULL,
+                            NULL,
+                            FALSE,
+                            'legacy contact tag test seed.'
+                        )
+                        ON CONFLICT (tag) DO UPDATE SET
+                            category = EXCLUDED.category,
+                            is_ephemeral = FALSE,
+                            clearance_kind = NULL,
+                            synonym_for = NULL,
+                            deprecated = FALSE,
+                            description = EXCLUDED.description
+                        """,
+                        (tag,),
+                    )
+
+        migration.run(conn)
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag, subject_kinds, object_kinds, is_ephemeral,
+                       deprecated, description
+                FROM pair_tags
+                WHERE tag = ANY(%s)
+                """,
+                (pair_tag_names,),
+            )
+            pair_rows = {row[0]: row[1:] for row in cur.fetchall()}
+            for tag in contact_pair_tags:
+                assert pair_rows[tag][0] == ["character"]
+                assert pair_rows[tag][1] == ["character"]
+                assert pair_rows[tag][2] is False
+                assert pair_rows[tag][3] is False
+
+            for tag in legacy_pair_tags:
+                description = pair_rows[tag][4]
+                assert pair_rows[tag][3] is True
+                assert description.count("Replaced by") == 1
+
+            cur.execute(
+                """
+                SELECT tag, deprecated, description
+                FROM tags
+                WHERE tag = ANY(%s)
+                """,
+                (legacy_tags,),
+            )
+            tag_rows = {row[0]: row[1:] for row in cur.fetchall()}
+            for tag in legacy_tags:
+                assert tag_rows[tag][0] is True
+                assert tag_rows[tag][1].count("Replaced by") == 1
+    finally:
+        conn.rollback()
+        _restore_pair_tags(conn, pair_tag_snapshot, pair_tag_names)
+        _restore_tags(conn, tag_snapshot, legacy_tags)
+        conn.close()
+
+
+@pytest.mark.requires_postgres
 def test_canonical_grieving_migration_executes_against_slot_db() -> None:
     """Migration 046 moves active legacy rows and preserves grief reapply policy."""
 
@@ -646,3 +768,99 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
                         )
         finally:
             conn.close()
+
+
+def _snapshot_pair_tags(
+    conn: Any,
+    tag_names: Iterable[str],
+) -> dict[str, tuple[Any, ...]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT tag, subject_kinds, object_kinds, is_ephemeral,
+                   clearance_kind::text, reapplication_policy::text,
+                   clear_on::text, deprecated, description
+            FROM pair_tags
+            WHERE tag = ANY(%s)
+            """,
+            (list(tag_names),),
+        )
+        return {row[0]: row[1:] for row in cur.fetchall()}
+
+
+def _restore_pair_tags(
+    conn: Any,
+    snapshot: dict[str, tuple[Any, ...]],
+    tag_names: Iterable[str],
+) -> None:
+    with conn:
+        with conn.cursor() as cur:
+            for tag in tag_names:
+                row = snapshot.get(tag)
+                if row is None:
+                    cur.execute("DELETE FROM pair_tags WHERE tag = %s", (tag,))
+                    continue
+                cur.execute(
+                    """
+                    UPDATE pair_tags
+                    SET subject_kinds = %s,
+                        object_kinds = %s,
+                        is_ephemeral = %s,
+                        clearance_kind = %s::entity_tag_clearance_kind,
+                        reapplication_policy =
+                            %s::entity_tag_reapplication_policy,
+                        clear_on = %s::jsonb,
+                        deprecated = %s,
+                        description = %s
+                    WHERE tag = %s
+                    """,
+                    (*row, tag),
+                )
+
+
+def _snapshot_tags(
+    conn: Any,
+    tag_names: Iterable[str],
+) -> dict[str, tuple[Any, ...]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT tag, category, is_ephemeral, clearance_kind::text,
+                   reapplication_policy::text, clear_on::text, synonym_for,
+                   deprecated, description
+            FROM tags
+            WHERE tag = ANY(%s)
+            """,
+            (list(tag_names),),
+        )
+        return {row[0]: row[1:] for row in cur.fetchall()}
+
+
+def _restore_tags(
+    conn: Any,
+    snapshot: dict[str, tuple[Any, ...]],
+    tag_names: Iterable[str],
+) -> None:
+    with conn:
+        with conn.cursor() as cur:
+            for tag in tag_names:
+                row = snapshot.get(tag)
+                if row is None:
+                    cur.execute("DELETE FROM tags WHERE tag = %s", (tag,))
+                    continue
+                cur.execute(
+                    """
+                    UPDATE tags
+                    SET category = %s,
+                        is_ephemeral = %s,
+                        clearance_kind = %s::entity_tag_clearance_kind,
+                        reapplication_policy =
+                            %s::entity_tag_reapplication_policy,
+                        clear_on = %s::jsonb,
+                        synonym_for = %s,
+                        deprecated = %s,
+                        description = %s
+                    WHERE tag = %s
+                    """,
+                    (*row, tag),
+                )

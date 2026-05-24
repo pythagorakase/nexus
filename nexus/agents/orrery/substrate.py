@@ -199,6 +199,13 @@ def _is_in_transit(state: WorldState, entity_id: int) -> bool:
     return bool(travel_state and travel_state.is_in_transit)
 
 
+def _has_outbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> bool:
+    return any(
+        subject_id == entity_id and pair_tag in tags
+        for (subject_id, _object_id), tags in state.pair_tags.items()
+    )
+
+
 def has_tag(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound entity has a durable tag."""
 
@@ -315,10 +322,7 @@ def has_contact_of_kind(kind: ContactKind, slot: Slot = Slot.ACTOR) -> Condition
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
-        return any(
-            subject_id == entity_id and pair_tag in tags
-            for (subject_id, _object_id), tags in state.pair_tags.items()
-        )
+        return _has_outbound_pair_tag(state, entity_id, pair_tag)
 
     return _named(_condition, f"has_contact_of_kind({kind}@{slot.value})")
 
@@ -416,6 +420,8 @@ def can_move_publicly(slot: Slot = Slot.ACTOR) -> Condition:
         if CONSTRAINED_TAGS & current_tags:
             return False
         if PUBLIC_MOBILITY_TAGS & current_tags:
+            return True
+        if _has_outbound_pair_tag(state, entity_id, CONTACT_PAIR_TAGS["social"]):
             return True
         location_id = state.locations.get(entity_id)
         if location_id is None:

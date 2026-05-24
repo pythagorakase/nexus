@@ -7,11 +7,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nexus.agents.orrery.substrate import ContactKind
+
 
 ResourceLevel = Literal["destitute", "poor", "comfortable", "wealthy", "magnate"]
 FameLevel = Literal["obscure", "known", "renowned", "legendary"]
 PairTagDirection = Literal["protagonist_to_target", "target_to_protagonist"]
-ContactKind = Literal["lodging", "social", "intimate"]
 
 
 def canonical_trait_name(trait_name: str) -> str:

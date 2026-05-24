@@ -290,7 +290,7 @@ Three names were live for the same concept: `bereaved` (gate-blocker in SOCIALIZ
 
 ### R3. `contacts_available` → Derive from `contact` Pair-Tag with Kind Qualifier
 
-The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates filter the actor's outbound `contact:<kind>(char → other_char)` data by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. The trait compiler's Contacts MVP writes `character_relationships` rows by default; optional pair-tag writes now require a kind-qualified `contact:<kind>` edge, not the deprecated bare `contact` pair-tag.
+The single-entity `contacts_available` tag was overloaded across three templates with three meanings (SLEEP: lodging-providing; SOCIALIZE: reach-out target; INTIMACY: contracted-intimacy access). **Resolved**: drop the overloaded tag. Per-gate predicates filter the actor's outbound `contact:<kind>(char → other_char)` data by relationship kind — `has_contact_of_kind('lodging')` / `'social'` / `'intimate'`. The trait compiler's Contacts MVP writes `character_relationships` rows by default; optional pair-tag writes now require a kind-qualified `contact:<kind>` edge, not the deprecated bare `contact` pair-tag. The old public-mobility affordance is preserved narrowly through `contact:social`; lodging and intimate contacts do not imply general public-flow movement.
 
 ### R4. Affective Severity — Hybrid (Graduated Where Packages Gate; Flat Otherwise)
 
