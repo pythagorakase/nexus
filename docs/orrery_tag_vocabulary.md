@@ -621,8 +621,8 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 **Implementation-status legend** (applies to all multi-entity tag tables below + the trait alignment section):
 
-- *(no marker)* — Seeded in `migrations/042_orrery_entity_pair_tags.py`; runtime-ready.
-- **⏳ SCHEMA-PENDING** — Settled in this doc; not yet seeded by any migration. Code that reads these rows today will find zero matches. Treat as design-target until the corresponding migration lands (the trait-compiler chunk is the natural carrier for most of these).
+- *(no marker)* — Seeded by the migration named in context (`042` for the original pair-tag set, `045` for trait-compiler additions/status/`claims` extension); runtime-ready.
+- **⏳ DESIGN-TARGET** — Settled in this doc, but not yet fully represented by shipped schema/data/compiler behavior. Treat as design-target until the referenced issue or migration lands.
 
 ### Place-Bound (6)
 
@@ -630,7 +630,7 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 |---|---|---|---|
 | `knows_location` | character | place | Knowledge of the place's existence and how to find it |
 | `can_access` | character \| faction | place | Permission to enter (direct individual or group-mediated) |
-| `claims` | character \| faction | place | Territorial claim; contestation emerges from row cardinality. **⏳ SCHEMA-PENDING (polymorphic-subject extension):** currently seeded with `subject_kinds = ['faction']` only; the character-side polymorphism (to accept `Domain` trait bestowals) is a small `pair_tags` data update in the trait-compiler migration. |
+| `claims` | character \| faction | place | Territorial claim; contestation emerges from row cardinality. The character-side polymorphism was added by migration 045 so the registry can accept future `Domain` trait bestowals. |
 | `resides_at` | character | place | Habitual residence (multi-residence supported) |
 | `operates_from` | faction | place | Operational base (distinct from `claims`) |
 | `originates_from` | character | place | Origin / hometown |
@@ -639,18 +639,18 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
-| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). **⏳ SCHEMA-PENDING (rename):** currently seeded as `pursuing` in `migrations/042`; the rename is carried by the trait-compiler chunk's migration. Code reading `pair_tags.tag = 'hunting'` finds zero rows today — use `'pursuing'` until the rename lands. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept isn't physical-chase-specific.* |
+| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). **⏳ DESIGN-TARGET rename:** live seeded data still uses `pursuing` from migration 042. The `hunting` rename and needs-template migration are tracked by issue #318. Use `pursuing` in shipped code until that lands. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept isn't physical-chase-specific.* |
 | `handles` | character | character | Operative-handler relationship; covert/operational |
 | `obligation` | character \| faction | character \| faction | Debt / oath / loyalty; kind inferable from establishing event |
 | `authority_over` | character \| faction | character \| faction | Interpersonal/positional power over a specific other entity. Distinct from scope-bound status (a king has `authority_over` a vassal directly; a senior officer in an institution holds `status:senior(→ faction)` against that institution's membership) |
 | `protects` | character \| faction | character | Active protective relationship; durable |
 | `mentors` | character | character | Teaching/training |
 
-### Scope-Bound Status (1 Family — `status:<level>`) **⏳ SCHEMA-PENDING (Entire Family)**
+### Scope-Bound Status (1 Family — `status:<level>`)
 
 | Tag family | Subject | Object | Purpose |
 |---|---|---|---|
-| `status:<level>` | character \| faction | faction | Scope-bound social/institutional position within the audience-faction. The level is encoded in the tag name via the existing colon convention (`status:senior`, `status:outcast`, etc.). Maps to trait_menu's `Status` trait. **⏳ SCHEMA-PENDING:** No `status:*` rows are seeded in `migrations/042`; the trait-compiler chunk's migration adds them. Reference Taggings below show `status:<level>(→ faction)` entries as design-target taggings, not as live database rows. |
+| `status:<level>` | character \| faction | faction | Scope-bound social/institutional position within the audience-faction. The level is encoded in the tag name via the existing colon convention (`status:senior`, `status:outcast`, etc.). Maps to trait_menu's `Status` trait. Seeded by migration 045. |
 
 **Level vocabulary** (each registers as a distinct `pair_tags` row):
 
@@ -666,9 +666,9 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 Status-family reads and writes go through `nexus.agents.orrery.status_family` / `apply_status_pair_tag_bestowal` rather than ad-hoc string parsing in individual packages. Within a single `(subject, scope_faction)` edge, status is exclusive: bestowing a new `status:<level>` clears sibling `status:*` rows for that same edge.
 
-### Compiler-Planned Additions **⏳ SCHEMA-PENDING (Entire Section)**
+### Trait-Compiler Relationship Pair Tags
 
-The trait → tag compiler (Codex chunk) registers three additional character ↔ character multi-entity tags in the substrate. None are seeded today.
+Migration 045 registers three additional character ↔ character multi-entity tags for trait-compiler and future package-gate use.
 
 **Important per #303**: these tags' existence in the registry does NOT mean the compiler instantiates them automatically at trait selection. Per the functional-vs-affective principle (Pair Tags vs. `character_relationships` Source-of-Truth Rule below), affective traits (Allies, Contacts, Enemies) compile primarily to `character_relationships` rows. The pair-tags below exist for *future* package gates that may need a binary mechanical edge; the compiler adds them per-package, not by default at trait selection time.
 
@@ -694,35 +694,34 @@ The compiler writes both layers within a single transaction *when both are warra
 - Every `ally` / `contact` / `hostile_to` pair tag MUST have a corresponding `character_relationships` row (these tags carry intrinsic affective content)
 - The converse does NOT hold uniformly — a `character_relationships` row need not have a parallel pair-tag unless a package needs the gate
 
-Drift between paired rows is a bug — tracked as issue #291.
+Drift between paired rows is a bug. Issue #291 codified the rule and added the reconciliation surface in `nexus/api/trait_compiler.py::reconcile_trait_relationship_pair_tags`.
 
 ---
 
 ## trait_menu ↔ Tag-Vocabulary Alignment
 
-The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry point during character creation. Each character chooses 3 traits from the 10 optional list, plus 1 required wildcard. The trait → tag compiler at `nexus/api/new_story_db_mapper.py::finalize_narrative_bootstrap()` (Codex implementation chunk) translates user-chosen traits into structured tag bestowals after character INSERT and before final commit. The mapping:
+The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry point during character creation. Each character chooses 3 traits from the optional list, plus 1 required wildcard. The compiler implemented for new-story bootstrap is intentionally narrower than the full design target: every selected trait returns a structured `TraitCompileResult`, and unsupported or under-specified traits become explicit `prose_only_remainders` rather than silent mechanical loss.
 
-| trait_menu trait | Compiles to | Direction (when pair-tags applied) | Wizard prompts collected |
-|---|---|---|---|
-| `Status` *(broadened)* **⏳** | `status:<level>(char → faction)` multi-entity row | `char → faction` (PC is subject; scope-faction is object) | Scope-faction name (created if new); level anchor |
-| `Fame` *(renamed from `Reputation`)* **⏳ rename** | `role.fame:<level>` single-entity tag | N/A (single-entity) | Detection-radius level; no valence prompt (composition handles it) |
-| `Resources` | `role.resources:<level>` single-entity tag | N/A (single-entity) | Wealth level |
-| `Domain` **⏳ polymorphism** | place entity (create if new) + `claims(char → place)` multi-entity (polymorphic extension) | `char → place` (PC is subject) | Place name; nature of claim |
-| `Allies` **⏳ new tag** | `character_relationships` row per ally (affective bond). **No default pair-tag**; `ally(char → char)` added only where a specific package gates on it. *(Per #303 — see Source-of-Truth Rule above.)* | `char → char` (PC → ally) for any future pair-tag | Names of allies; brief affective description |
-| `Contacts` **⏳ new tag** | `character_relationships` row per contact (transactional/arms-length bond). **No default pair-tag**; `contact(char → char)` added only where a specific package gates on it. *(Per #303.)* | `char → char` (PC → contact) for any future pair-tag | Names + areas of contact; brief affective description |
-| `Patron` | `character_relationships` row (patron-client bond; mentor/sponsor/protector/guide dimensions live in the row's description and structured fields). **No default pair-tags**; `mentors` / `protects` / `authority_over` / `sponsors` added per-package as needed. *(Per #303; resolves the OR→AND mismatch flagged in #305.)* | `patron → char` for any future protective/mentoring pair-tag; `char → patron` for any obligation/loyalty pair-tag | Name of patron; nature of the relationship (mentor, sponsor, protector, guide, mixed) |
-| `Dependents` | `protects(char → dep)` pair-tag + `character_relationships` row for affective subordination (devotion, loyalty, willingness to obey). **The `protects` pair-tag is NOT an exception to the functional-vs-affective principle** — it is the structured form of the trait's declared meaning ("I shield this person from threats"). The trait's mechanical purpose IS this gate; the relationship row carries the affective layer (devotion, etc.). **No `authority_over` or `obligation` pair-tag by default**; add reactively if a package needs the gate. *(Per #303 + #306.)* | `char → dep` for `protects`; `char → dep` for any future `authority_over`; `dep → char` for any future `obligation` | Names of dependents; brief affective description |
-| `Enemies` **⏳ rename / new tag** | `character_relationships` row (durable antagonism). `hunting(other → char)` pair-tag **only if** the enemy is actively pursuing the PC. `hostile_to` pair-tag is NOT added by default — sustained antagonism without active pursuit lives in the relationship row alone. *(Firm per #308; revisit only if a specific package needs to gate on "X is hostile to Y but not actively hunting".)* *(Per #303 + #308.)* | `other → char` for `hunting` (enemy is subject; PC is target) | Names; brief affective description; "is this enemy actively hunting you, or just opposed?" |
-| `Obligations` | `obligation(char → target)` multi-entity (already in settled set) | `char → target` (PC owes) | Target; nature of obligation |
-| `Wildcard` | **Compiles to existing vocabulary via composition.** `pact` → `obligation(char → deity-faction)`; `familiar` / `herd` → `protects` + a created entity; `artifact` / `symbiote` → `bodyform` condition (e.g. `enchanted`, `cybernetic`). **There is no `items` table planned** — per project scope, inanimate things are handled in prose / `extra_data`, not as tracked entities. Genuinely novel mechanics live in prose / `extra_data`, **not** as new registry tags — the closed-vocabulary discipline holds. *(Confirmed in code: the `WildcardTrait.orrery_tags` field — in `nexus/api/new_story_schemas.py` — validates against the registry via `apply_tag_bestowal`. The field description explicitly says "Apply registered tags by name; omit tags when the closed registry has no exact fit." The wildcard cannot mint tags — concepts that don't decompose stay in prose + `extra_data`.)* | Direction varies by composition | Wildcard name + description; the compiler attempts to decompose into existing tag/relationship structures and falls back to prose-only storage if decomposition fails |
+Compiler surfaces:
 
-**Registry additions accompanying the trait-compiler chunk:** `ally`, `contact`, `hostile_to` — registered in the substrate with Codex's trait-compiler chunk for future per-package use. The compiler itself does NOT auto-instantiate them at trait selection (per #303; affective traits go to `character_relationships` primary). The registry entries enable per-package gates that may need a binary mechanical edge.
+- **Final bootstrap apply:** `nexus/api/new_story_db_mapper.py` calls `apply_character_trait_compilation()` after protagonist insertion and persists the result to `characters.extra_data.trait_compile_result` plus `assets.new_story_creator.trait_compile_result`.
+- **Dry-run audit:** `nexus trait-audit --slot N` reads the wizard cache, runs `compile_character_traits(..., dry_run=True)`, and reports applied writes vs. prose-only remainders. `--fail-on-remainders` is available for testing loops; normal wizard/UI flow does not add a confirmation screen.
 
-**Migration: trait rename `Reputation → Fame`.** The wizard's `VALID_TRAITS` frozenset (`nexus/api/new_story_cache.py`) and the `assets.traits` table need a small SQL migration to rename `reputation` → `fame` across all unlocked slots. Plus prose updates in `prompts/storyteller_new.md` and any tests referencing the trait name by string. Handled in the same compiler chunk.
+| trait_menu trait | Current compiler behavior | Design target / notes |
+|---|---|---|
+| `Status` | Writes `status:<level>(char → faction)` when `TraitCompileInputs.status` provides a scope faction and closed level. Missing/unknown scope or level becomes a structured remainder. | Scope-faction can be formal or informal; flavor is read from the faction's own tags. |
+| `Fame` / legacy `Reputation` | Writes `role.fame:<level>` when typed input supplies `obscure`, `known`, `renowned`, or `legendary`. Legacy `reputation` input aliases to `fame`. | Rename landed in migration 045; `reputation` remains accepted as a compatibility alias. |
+| `Resources` | Writes `role.resources:<level>` when typed input supplies `destitute`, `poor`, `comfortable`, `wealthy`, or `magnate`. | `comfortable` is the default/ordinary tier; absence of typed input is reported, not guessed. |
+| `Allies` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `ally(char → char)` in the same transaction. | Per #303, affective relationship row first; pair-tag only when a package gate needs the binary edge. |
+| `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `contact(char → char)`. | Kind-qualified contact gates for needs are still open (#317); do not use the base `contact` pair-tag as a lodging/social/intimate catch-all. |
+| `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Active pursuit remains the `pursuing`/future-`hunting` pair-tag track, not default `hostile_to` (#318). |
+| `Domain` | Current MVP returns a prose-only remainder. | Target design: create/identify a place entity and write `claims(char → place)`; registry polymorphism is ready, compiler input/schema is not. |
+| `Patron` | Current MVP returns a prose-only remainder. | Target design: `character_relationships` row for patron-client bond; package-specific pair-tags later as needed. |
+| `Dependents` | Current MVP returns a prose-only remainder. | Target design: `protects(char → dependent)` plus affective relationship row; no default `authority_over`/`obligation` edge. |
+| `Obligations` | Current MVP returns a prose-only remainder. | Target design: `obligation(char → target)` when a structured target exists. |
+| `Wildcard` | Outside the current selected-trait compiler loop. The wizard persists prose in `characters.extra_data.wildcard`, and any Skald-bestowed `orrery_tags` apply through the ordinary tag bestowal surface. | Future wildcard decomposition may only use registered vocabulary. It cannot mint tags; novel mechanics remain prose/`extra_data` until a compiler surface exists. |
 
-**`claims` polymorphism extension.** The seeded `pair_tags` row for `claims` currently has `subject_kinds = ['faction']`; extending to `subject_kinds = ['character', 'faction']` lets the Domain trait bestow a character-side claim on a place. Small data update in the trait-compiler chunk's migration.
-
-**Status trait broadening (trait_menu.md edit).** The `Status` trait's description currently reads "formal standing recognized by a specific institution or social structure" — narrow to formal contexts. Broaden to cover both formal (institutional rank) AND informal (social clout in a community); the wizard prompts for the scope-faction during compilation, and that faction's own tags determine whether the resulting `status:<level>` reads as formal or informal. One-paragraph doc edit, paired with the compiler chunk.
+**Migration 045 landed the substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. The compiler code owns only the current MVP rows above; the table is deliberately split so future docs do not confuse registry readiness with compiler readiness.
 
 ---
 
@@ -734,9 +733,9 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 | `bound_to` + `owes` | Merged into `obligation` |
 | `controls` | Too vague — Skald-confusion attractor |
 | `orrery_state` (category) | System-bookkeeping moves to dedicated tables |
-| `place_affordance` (category) **⏳** | Decomposed into function / visibility / access. *Pending deprecation — still seeded in `migrations/037`; a follow-up deprecation migration is needed.* |
-| `profession_lite` (category) **⏳** | Merged into `role`. *Pending deprecation — still seeded in `migrations/037`.* |
-| `orrery_signal` (category) **⏳** | Merged into `state`. *Pending deprecation — still seeded in `migrations/037`.* |
+| `place_affordance` (category) | Decomposed into function / visibility / access / environment / threat. Migration 043 marks the category deprecated and registers replacement categories; legacy tag rows remain readable through the resolver shim until data rewrite. |
+| `profession_lite` (category) | Merged into `role`. Migration 043 marks the category deprecated; legacy tag rows remain live until rewritten. |
+| `orrery_signal` (category) | Merged into `state`. Migration 043 marks the category deprecated; legacy tag rows remain live until rewritten. |
 | `defensive_position` (place_function value) | Renamed to `fortification`; `haven` added |
 | Vocabulary Growth Contract | Replaced by locked-vocabulary discipline |
 
@@ -744,16 +743,15 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 
 ## Open Items
 
-1. **Character category values.** `bodyform`, `disposition`, `capacity`, and `role` (refactored shape: function + resources + fame single-entity + scope-bound `status` multi-entity) all settled in this doc. `state` remains to enumerate — couples with clearance-event vocabulary (item 3). Code-side implementation of the role refactor + trait → tag compiler is the Codex chunk.
+1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. `state` remains to enumerate — couples with clearance-event vocabulary (item 3).
 2. **Faction category values.** Settle the sample tags above into a complete set. Smaller scope.
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
-6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Remaining: `compose_actor_target_bindings` extension to consume pair-tag-derived actor↔target pairs.
+6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Follow-up work is now specific: `under_active_pursuit` → inbound `hunting` (#318), kind-qualified contact gates (#317), and any future pair-tag-derived binding composers demanded by package implementations.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
 8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until role refactor lands code-side (Codex chunk).
-10. **`docs/orrery_design_plan.md` update.** Reflect the post-refactor vocabulary model in the broader Orrery design doc.
+9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan are ready.
 
 ---
 
@@ -762,16 +760,18 @@ The player-facing trait system (`docs/trait_menu.md`) is the wizard's entry poin
 - `docs/trait_menu.md` — player-facing trait selection system; alignment documented above.
 - `docs/orrery_design_plan.md` — broader Orrery system design.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
+- `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
-- Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; pursuing tags confer targeted detection sensitivity). *Open.*
+- Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `pursuing` / future-`hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
 - PR #284 — DB-level multi-entity tag predicates (`pair_tag_exists`, inbound/outbound subject lookups). *Merged.*
-- Issue #274 (`pursuing` relationship) — *parked*, branch `issue-274-orrery-pursuers`; supplanted by the multi-entity-tag direction.
+- Issue #290 / PR #323 — structured trait-compiler audit and opt-in `nexus trait-audit` CLI. *Merged.*
+- Issue #291 — pair-tag-vs-`character_relationships` reconciliation. *Closed.*
 
 ### Implementation Contracts (Open)
 
 These are the downstream mechanical pre-requisites surfaced during the design-doc review. Each is tracked as its own issue so substrate work can be sequenced independently of further doc edits.
 
-- Issue #290 — Trait compiler must return structured audit results (no silent prose fallback for failed wildcard decomposition).
-- Issue #291 — Codify pair-tag-vs-`character_relationships` source-of-truth rule + reconciliation tests.
 - Issue #292 — Place/faction tag subcategory refactor + resolver adapter for `in_location_class()` gates.
+- Issue #317 — Replace `contacts_available` overload with kind-qualified contact pair-tag predicates.
+- Issue #318 — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate.

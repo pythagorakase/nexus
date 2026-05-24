@@ -117,6 +117,28 @@ CREATE TABLE orrery_adjudication_log (
 
 ---
 
+## New-Story Trait Compiler
+
+The new-story wizard's trait choices are a front door into Orrery state, but the compiler is deliberately auditable rather than magical. `nexus/api/trait_compiler.py` compiles the three selected protagonist traits into deterministic substrate writes where the current MVP has enough typed input; every selected trait produces either mechanical output or a structured prose-only remainder.
+
+Current mechanical surface:
+
+- `Resources` → exclusive `role.resources:<level>` single-entity tag.
+- `Fame` / legacy `Reputation` → exclusive `role.fame:<level>` single-entity tag.
+- `Status` → `status:<level>(character → faction)` pair-tag.
+- `Allies`, `Contacts`, `Enemies` → `character_relationships` rows from structured targets, with optional pair-tags (`ally`, `contact`, `hostile_to`) only when a package gate explicitly needs the binary edge.
+
+Current prose-only surface: `Domain`, `Patron`, `Dependents`, and `Obligations` return `UnresolvedTrait` entries in `TraitCompileResult.prose_only_remainders` when they are selected and their typed compilers have not landed. The required wildcard is persisted separately in `characters.extra_data.wildcard` and can carry Skald-bestowed `orrery_tags`; it is not part of the selected-trait compiler loop yet.
+
+Two execution modes exist:
+
+- **Final bootstrap apply:** `nexus/api/new_story_db_mapper.py` applies compilation after protagonist insertion and persists the audit result to both `characters.extra_data.trait_compile_result` and `assets.new_story_creator.trait_compile_result`.
+- **CLI dry-run audit:** `nexus trait-audit --slot N` runs the same compiler with `dry_run=True` against wizard cache. `--trait-inputs` can provide typed inputs for testing, and `--fail-on-remainders` gives automation loops a nonzero exit when fallback remains. This is intentionally opt-in; the default wizard and React UI do not add another confirmation screen.
+
+This is the resolution of the "no silent prose fallback" design requirement: fallback is allowed, but it must be visible as structured audit data.
+
+---
+
 ## Architecture
 
 ### Entity Identity Spine
@@ -480,6 +502,7 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 **Schema sources**
 - `nexus/agents/logon/apex_schema.py:631` — `StateUpdates` Pydantic models (source for `changed_fields` vocab)
 - `nexus/agents/logon/apex_enums.py:41` — existing `EntityType` enum (includes `'item'`); spine declares its own narrower `entity_kind`
+- `nexus/api/trait_compiler_schemas.py` — trait compiler audit/result schemas (`TraitCompileResult`, `UnresolvedTrait`, applied tag/relationship rows)
 
 **Orrery module**
 - `nexus/agents/orrery/substrate.py` — package primitive (`Template`, `Branch`, predicates, `evaluate`, `evaluate_stack`)
@@ -488,6 +511,7 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 - `nexus/agents/orrery/events.py` — canonical event writer (`emit_state_updates_events`, `emit_event`)
 - `nexus/agents/orrery/bleed.py` — bleed candidate query + offer bookkeeping
 - `nexus/agents/orrery/worker.py` — Promote / narration outbox drain
+- `nexus/api/trait_compiler.py` — new-story trait → Orrery compiler, final apply, dry-run compile, and pair-tag/relationship drift reconciliation
 
 **Catalogs**
 - `docs/orrery_packages.md` — generated human-readable package reference (kept in lockstep with `templates.py` via the `regenerate-orrery-catalog` pre-commit hook)
@@ -509,6 +533,7 @@ Verification uses live NEXUS flows where the feature touches LORE, LOGON, MEMNON
 - **Integration tests**: idempotency (UNIQUE key fires on regeneration), incubator-rejection rollback (Step 8.5 writes get reverted), warm-slice contamination (none), deterministic promotion behavior, async-worker state transitions (`queued → leased → succeeded|failed`).
 - **Bleed tests**: apt-bleed (ambient peripheral surfaces in payload), null-bleed (no candidates produces empty menu and no inference call), chronology/surfacing boundary (only accepted prior narrated resolutions are eligible).
 - **Live dry-runs** against mature-state slots (typically slot 2) to validate package behavior against canonical narrative content; see `scripts/orrery_sample.py` for the harness.
+- **Trait compiler audits**: `poetry run nexus trait-audit --slot N` for opt-in wizard-cache inspection, plus `--fail-on-remainders` when a test loop should fail on any prose-only fallback.
 
 ---
 
