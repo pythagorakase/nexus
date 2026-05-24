@@ -890,68 +890,69 @@ def run_trait_audit(args: argparse.Namespace) -> Dict[str, Any]:
     """
 
     try:
-        from nexus.api.db_pool import get_connection
-        from nexus.api.new_story_cache import read_cache
-        from nexus.api.new_story_schemas import CharacterCreationState
-        from nexus.api.slot_utils import slot_dbname
-        from nexus.api.trait_compiler import compile_character_traits
-        from nexus.api.trait_compiler_schemas import TraitCompileInputs
-
-        dbname = slot_dbname(args.slot)
-        cache = read_cache(dbname)
-        if cache is None:
-            return {
-                "success": False,
-                "error": f"Slot {args.slot} has no new-story wizard cache.",
-            }
-
-        character_draft = cache.get_character_dict()
-        if character_draft is None:
-            return {
-                "success": False,
-                "error": (
-                    f"Slot {args.slot} does not have a complete character draft "
-                    "to audit."
-                ),
-            }
-
         trait_inputs_payload = _load_trait_inputs(args.trait_inputs)
-        trait_inputs = (
-            TraitCompileInputs.model_validate(trait_inputs_payload)
-            if trait_inputs_payload is not None
-            else None
-        )
-        character_state = CharacterCreationState.model_validate(character_draft)
-        character = character_state.to_character_sheet()
-
-        with get_connection(dbname) as conn:
-            with conn.cursor() as cur:
-                result = compile_character_traits(
-                    cur,
-                    character=character,
-                    character_id=args.character_id,
-                    character_entity_id=args.character_entity_id,
-                    trait_compile_inputs=trait_inputs,
-                    dry_run=True,
-                )
-
-        audit = result.model_dump(mode="json")
-        remainder_count = audit["counters"]["prose_only_remainders"]
-        failed_policy = bool(args.fail_on_remainders and remainder_count)
-        return {
-            "success": True,
-            "message": f"Trait compiler audit for slot {args.slot} (dry run).",
-            "slot": args.slot,
-            "dbname": dbname,
-            "character_name": character.name,
-            "traits": [trait.name for trait in character.get_trait_entries()],
-            "trait_audit": audit,
-            "failed_policy": failed_policy,
-        }
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Invalid --trait-inputs JSON: {e}"}
-    except Exception as e:
+    except ValueError as e:
         return {"success": False, "error": str(e)}
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.new_story_cache import read_cache
+    from nexus.api.new_story_schemas import CharacterCreationState
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.api.trait_compiler import compile_character_traits
+    from nexus.api.trait_compiler_schemas import TraitCompileInputs
+
+    dbname = slot_dbname(args.slot)
+    cache = read_cache(dbname)
+    if cache is None:
+        return {
+            "success": False,
+            "error": f"Slot {args.slot} has no new-story wizard cache.",
+        }
+
+    character_draft = cache.get_character_dict()
+    if character_draft is None:
+        return {
+            "success": False,
+            "error": (
+                f"Slot {args.slot} does not have a complete character draft "
+                "to audit."
+            ),
+        }
+
+    trait_inputs = (
+        TraitCompileInputs.model_validate(trait_inputs_payload)
+        if trait_inputs_payload is not None
+        else None
+    )
+    character_state = CharacterCreationState.model_validate(character_draft)
+    character = character_state.to_character_sheet()
+
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            result = compile_character_traits(
+                cur,
+                character=character,
+                character_id=args.character_id,
+                character_entity_id=args.character_entity_id,
+                trait_compile_inputs=trait_inputs,
+                dry_run=True,
+            )
+
+    audit = result.model_dump(mode="json")
+    remainder_count = audit["counters"]["prose_only_remainders"]
+    failed_policy = bool(args.fail_on_remainders and remainder_count)
+    return {
+        "success": True,
+        "message": f"Trait compiler audit for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "character_name": character.name,
+        "traits": [trait.name for trait in character.get_trait_entries()],
+        "trait_audit": audit,
+        "failed_policy": failed_policy,
+    }
 
 
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
@@ -1144,7 +1145,10 @@ Examples:
     trait_audit_parser.add_argument(
         "--fail-on-remainders",
         action="store_true",
-        help="Exit with status 1 if any trait falls back to prose-only storage",
+        help=(
+            "Exit with status 1 if any trait falls back to prose-only storage; "
+            "JSON callers should check the exit code or failed_policy"
+        ),
     )
 
     # lock command

@@ -166,7 +166,10 @@ class FakeConnection:
 
 
 class FakeCursor:
-    """Cursor double; missing compiler inputs do not require SQL."""
+    """Cursor double for remainder-only compiler paths."""
+
+    # All traits in FakeWizardCache hit remainder paths before SQL. If that
+    # changes, this double needs an execute() stub or a real trait cursor fake.
 
     def __enter__(self) -> "FakeCursor":
         """Enter cursor context."""
@@ -203,6 +206,23 @@ def test_trait_audit_reports_prose_only_remainders(monkeypatch) -> None:
     assert result["trait_audit"]["dry_run"] is True
     assert result["trait_audit"]["counters"]["prose_only_remainders"] == 3
     assert result["failed_policy"] is False
+
+
+def test_trait_audit_rejects_non_object_trait_inputs() -> None:
+    """Trait input overrides must be a JSON object."""
+
+    result = cli.run_trait_audit(
+        Namespace(
+            slot=5,
+            trait_inputs="[1, 2, 3]",
+            character_id=0,
+            character_entity_id=0,
+            fail_on_remainders=False,
+        )
+    )
+
+    assert result["success"] is False
+    assert "--trait-inputs must be a JSON object" in result["error"]
 
 
 def test_trait_audit_fail_on_remainders_sets_policy_failure(monkeypatch) -> None:
