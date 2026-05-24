@@ -1,5 +1,6 @@
 """Tests for the NEXUS CLI helpers."""
 
+import sys
 from argparse import Namespace
 from typing import Any
 
@@ -99,3 +100,169 @@ def test_continue_posts_choice_to_backend_without_preapproving(
     assert payload["choice"] == 1
     assert payload["accept_fate"] is False
     assert payload["user_text"] == ""
+
+
+class FakeWizardCache:
+    """Wizard cache double with a complete character draft."""
+
+    def get_character_dict(self) -> dict[str, Any]:
+        """Return enough character data to assemble a CharacterSheet."""
+
+        return {
+            "concept": {
+                "name": "Mara",
+                "archetype": "wary operator with complicated loyalties",
+                "background": (
+                    "Mara has survived by cultivating favors and avoiding "
+                    "easy debts in a city that records every promise."
+                ),
+                "appearance": (
+                    "Lean, watchful, and dressed for quick departures from "
+                    "dangerous rooms."
+                ),
+                "suggested_traits": ["resources", "status", "allies"],
+                "trait_rationales": {
+                    "resources": "Her money opens doors but paints a target.",
+                    "status": "Her badge matters in one narrow hierarchy.",
+                    "allies": "Her old crew still answers when she calls.",
+                },
+            },
+            "trait_selection": {
+                "selected_traits": ["resources", "status", "allies"],
+                "trait_rationales": {
+                    "resources": "Her money opens doors but paints a target.",
+                    "status": "Her badge matters in one narrow hierarchy.",
+                    "allies": "Her old crew still answers when she calls.",
+                },
+                "suggested_by_llm": ["resources", "status", "allies"],
+            },
+            "wildcard": {
+                "wildcard_name": "Storm Marked",
+                "wildcard_description": (
+                    "Lightning follows her in ways nobody can explain, "
+                    "turning quiet rooms into omens."
+                ),
+            },
+        }
+
+
+class FakeConnection:
+    """Context-manager connection double for dry-run compiler tests."""
+
+    def __enter__(self) -> "FakeConnection":
+        """Enter connection context."""
+
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        """Exit connection context."""
+
+        return None
+
+    def cursor(self) -> "FakeCursor":
+        """Return a context-manager cursor double."""
+
+        return FakeCursor()
+
+
+class FakeCursor:
+    """Cursor double; missing compiler inputs do not require SQL."""
+
+    def __enter__(self) -> "FakeCursor":
+        """Enter cursor context."""
+
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        """Exit cursor context."""
+
+        return None
+
+
+def test_trait_audit_reports_prose_only_remainders(monkeypatch) -> None:
+    """The CLI audit should expose dry-run compiler remainders from cache."""
+
+    from nexus.api import db_pool, new_story_cache
+
+    monkeypatch.setattr(new_story_cache, "read_cache", lambda dbname: FakeWizardCache())
+    monkeypatch.setattr(db_pool, "get_connection", lambda dbname: FakeConnection())
+
+    result = cli.run_trait_audit(
+        Namespace(
+            slot=5,
+            trait_inputs=None,
+            character_id=0,
+            character_entity_id=0,
+            fail_on_remainders=False,
+        )
+    )
+
+    assert result["success"] is True
+    assert result["character_name"] == "Mara"
+    assert result["traits"] == ["resources", "status", "allies"]
+    assert result["trait_audit"]["dry_run"] is True
+    assert result["trait_audit"]["counters"]["prose_only_remainders"] == 3
+    assert result["failed_policy"] is False
+
+
+def test_trait_audit_fail_on_remainders_sets_policy_failure(monkeypatch) -> None:
+    """Automation loops can request a nonzero status on prose-only fallback."""
+
+    from nexus.api import db_pool, new_story_cache
+
+    monkeypatch.setattr(new_story_cache, "read_cache", lambda dbname: FakeWizardCache())
+    monkeypatch.setattr(db_pool, "get_connection", lambda dbname: FakeConnection())
+
+    result = cli.run_trait_audit(
+        Namespace(
+            slot=5,
+            trait_inputs=None,
+            character_id=0,
+            character_entity_id=0,
+            fail_on_remainders=True,
+        )
+    )
+
+    assert result["success"] is True
+    assert result["failed_policy"] is True
+
+
+def test_main_trait_audit_policy_failure_keeps_output(monkeypatch, capsys) -> None:
+    """Policy failures should still print the audit payload for callers."""
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["nexus", "trait-audit", "--slot", "5", "--fail-on-remainders"],
+    )
+    monkeypatch.setattr(
+        cli,
+        "run_trait_audit",
+        lambda args: {
+            "success": True,
+            "message": "Trait compiler audit for slot 5 (dry run).",
+            "traits": ["resources"],
+            "trait_audit": {
+                "counters": {
+                    "applied_single_entity_tags": 0,
+                    "applied_pair_tags": 0,
+                    "created_entities": 0,
+                    "created_relationships": 0,
+                    "prose_only_remainders": 1,
+                },
+                "prose_only_remainders": [
+                    {
+                        "trait": "resources",
+                        "reason_code": "missing_structured_trait_input",
+                        "message": "Missing input.",
+                    }
+                ],
+            },
+            "failed_policy": True,
+        },
+    )
+
+    assert cli.main() == 1
+    captured = capsys.readouterr()
+    assert "Trait compiler audit for slot 5" in captured.out
+    assert "resources: missing_structured_trait_input" in captured.out
