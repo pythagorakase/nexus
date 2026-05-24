@@ -7,6 +7,7 @@ Commands:
     nexus undo --slot N         Revert the last action
     nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
+    nexus trait-audit --slot N  Dry-run new-story trait compiler audit
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -127,6 +128,89 @@ def _print_artifact(
             _print_value(key, value, indent=2, truncate=truncate)
 
 
+def _print_trait_audit(payload: Dict[str, Any]) -> None:
+    """Print a dry-run trait compiler audit in a compact CLI format."""
+
+    audit = payload.get("trait_audit") or {}
+    counters = audit.get("counters") or {}
+    traits = payload.get("traits") or []
+
+    character_name = payload.get("character_name")
+    if character_name:
+        print(f"Character: {character_name}")
+    if traits:
+        print(f"Traits: {', '.join(traits)}")
+
+    print()
+    print("Counters:")
+    for key in (
+        "applied_single_entity_tags",
+        "applied_pair_tags",
+        "created_entities",
+        "created_relationships",
+        "prose_only_remainders",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+
+    single_tags = audit.get("applied_single_entity_tags") or []
+    if single_tags:
+        print()
+        print("Applied single-entity tags:")
+        for item in single_tags:
+            print(
+                "  - "
+                f"{item['trait']}: {item['category']}:{item['tag']} "
+                f"on entity {item['entity_id']}"
+            )
+
+    pair_tags = audit.get("applied_pair_tags") or []
+    if pair_tags:
+        print()
+        print("Applied pair tags:")
+        for item in pair_tags:
+            print(
+                "  - "
+                f"{item['trait']}: {item['tag']} "
+                f"{item['subject_entity_id']} -> {item['object_entity_id']}"
+            )
+
+    created_entities = audit.get("created_entities") or []
+    if created_entities:
+        print()
+        print("Created entities:")
+        for item in created_entities:
+            name = f" ({item['name']})" if item.get("name") else ""
+            print(
+                "  - "
+                f"{item['trait']}: {item['entity_kind']} "
+                f"entity {item['entity_id']}{name}"
+            )
+
+    created_relationships = audit.get("created_relationships") or []
+    if created_relationships:
+        print()
+        print("Created relationships:")
+        for item in created_relationships:
+            print(
+                "  - "
+                f"{item['trait']}: character {item['character1_id']} -> "
+                f"{item['character2_id']} "
+                f"({item['relationship_type']}, {item['emotional_valence']})"
+            )
+
+    remainders = audit.get("prose_only_remainders") or []
+    if remainders:
+        print()
+        print("Prose-only remainders:")
+        for item in remainders:
+            print(f"  - {item['trait']}: {item['reason_code']}")
+            print(f"    {item['message']}")
+
+    if payload.get("failed_policy"):
+        print()
+        print("Policy: failed because --fail-on-remainders was set.")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -142,6 +226,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
     message = payload.get("message") or payload.get("storyteller_text")
     if message:
         print(message)
+        print()
+
+    if payload.get("trait_audit"):
+        _print_trait_audit(payload)
         print()
 
     # Get display elements
@@ -234,7 +322,10 @@ def run_load(args: argparse.Namespace) -> Dict[str, Any]:
         if data.get("is_empty"):
             return {
                 "success": True,
-                "message": f"Slot {args.slot} is empty. Use 'nexus continue --slot {args.slot}' to initialize.",
+                "message": (
+                    f"Slot {args.slot} is empty. "
+                    f"Use 'nexus continue --slot {args.slot}' to initialize."
+                ),
                 "is_empty": True,
             }
 
@@ -289,7 +380,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
 
         if state.get("is_empty"):
             # Initialize via setup/start endpoint
-            # Use CLI-provided model, slot's configured model, or let backend use default
+            # Use CLI-provided model, slot's configured model, or backend default.
             setup_url = f"{get_api_url()}/api/story/new/setup/start"
             setup_payload = {"slot": args.slot}
             model_to_use = getattr(args, "model", None) or state.get("model")
@@ -346,7 +437,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                 # Check if we're in trait selection mode
                 trait_menu = state.get("trait_menu")
 
-                # Map --accept-fate to --choice 0 in trait mode when confirmation is available
+                # Map --accept-fate to --choice 0 when confirmation is available.
                 if trait_menu and args.accept_fate and state.get("can_confirm"):
                     args.choice = 0  # Treat as confirm
 
@@ -354,7 +445,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     if args.dev:
                         return {
                             "success": False,
-                            "error": "Dev mode is not supported for trait selection toggles.",
+                            "error": (
+                                "Dev mode is not supported for trait selection "
+                                "toggles."
+                            ),
                         }
                     # Trait toggle/confirm mode: choice 0 = confirm, 1-10 = toggle
                     if args.choice == 0:
@@ -366,14 +460,18 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     elif not (1 <= args.choice <= 10):
                         return {
                             "success": False,
-                            "error": f"Choice {args.choice} out of range (0-10 for trait selection)",
+                            "error": (
+                                f"Choice {args.choice} out of range "
+                                "(0-10 for trait selection)"
+                            ),
                         }
 
                     payload = {
                         "slot": args.slot,
                         "message": "",
                         "trait_choice": args.choice,
-                        "current_phase": "character",  # Required for trait toggle handler
+                        # Required for trait toggle handler.
+                        "current_phase": "character",
                     }
                     if model_to_use:
                         payload["model"] = model_to_use
@@ -382,14 +480,18 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     response.raise_for_status()
                     data = response.json()
 
-                    # Check if subphase completed (traits confirmed → need wildcard intro)
+                    # Check if confirmed traits need a wildcard intro.
                     if data.get("subphase_complete"):
                         next_subphase = data.get("subphase")  # Should be "wildcard"
                         if next_subphase:
                             # Request Skald intro for next subphase
                             intro_payload = {
                                 "slot": args.slot,
-                                "message": f"[SYSTEM] Phase character subphase traits complete. Proceeding to {next_subphase}. Please introduce the next subphase.",
+                                "message": (
+                                    "[SYSTEM] Phase character subphase traits "
+                                    f"complete. Proceeding to {next_subphase}. "
+                                    "Please introduce the next subphase."
+                                ),
                                 "current_phase": "character",
                             }
                             if model_to_use:
@@ -409,7 +511,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                                     "subphase": next_subphase,
                                 }
 
-                    # Return for non-completing operations (toggles) or if intro request failed
+                    # Return for toggles or if the intro request failed.
                     return {
                         "success": True,
                         "message": data.get("message", ""),
@@ -429,7 +531,10 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                     else:
                         return {
                             "success": False,
-                            "error": f"Choice {args.choice} out of range (1-{len(choices)})",
+                            "error": (
+                                f"Choice {args.choice} out of range "
+                                f"(1-{len(choices)})"
+                            ),
                         }
 
                 payload = {
@@ -475,7 +580,11 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         # Send transition message to get next phase intro
                         transition_payload = {
                             "slot": args.slot,
-                            "message": f"[SYSTEM] Phase {current_phase} complete. Proceeding to {next_phase}. Please introduce the next phase.",
+                            "message": (
+                                f"[SYSTEM] Phase {current_phase} complete. "
+                                f"Proceeding to {next_phase}. "
+                                "Please introduce the next phase."
+                            ),
                             "current_phase": next_phase,
                         }
                         if model_to_use:
@@ -486,7 +595,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
                         )
                         if intro_response.ok:
                             intro_data = intro_response.json()
-                            # Append intro to result (artifact stays, intro message added)
+                            # Append intro to result, preserving the artifact.
                             result["next_phase_intro"] = intro_data.get("message")
                             result["choices"] = intro_data.get("choices", [])
                             result["phase"] = intro_data.get("phase") or next_phase
@@ -543,7 +652,7 @@ def run_continue(args: argparse.Namespace) -> Dict[str, Any]:
             # Wait for generation to complete and fetch result
             session_id = data.get("session_id")
             if session_id:
-                # Poll for completion (simplified - real implementation would use websocket)
+                # Poll for completion; websocket is intentionally not used here.
                 for _ in range(GENERATION_POLL_SECONDS):
                     status_url = f"{get_api_url()}/api/narrative/status/{session_id}"
                     status_response = requests.get(
@@ -760,6 +869,92 @@ def run_clear(args: argparse.Namespace) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
+def _load_trait_inputs(raw_value: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Parse optional trait compiler input overrides from a JSON string."""
+
+    if not raw_value:
+        return None
+    value = json.loads(raw_value)
+    if not isinstance(value, dict):
+        raise ValueError("--trait-inputs must be a JSON object")
+    return value
+
+
+def run_trait_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    """
+    Dry-run the trait compiler against the current new-story wizard cache.
+
+    This command is intentionally opt-in: normal wizard and React UI flows keep
+    minimizing confirmation screens, while test loops can inspect the mechanical
+    fallout before bootstrap.
+    """
+
+    try:
+        trait_inputs_payload = _load_trait_inputs(args.trait_inputs)
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Invalid --trait-inputs JSON: {e}"}
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.new_story_cache import read_cache
+    from nexus.api.new_story_schemas import CharacterCreationState
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.api.trait_compiler import compile_character_traits
+    from nexus.api.trait_compiler_schemas import TraitCompileInputs
+
+    dbname = slot_dbname(args.slot)
+    cache = read_cache(dbname)
+    if cache is None:
+        return {
+            "success": False,
+            "error": f"Slot {args.slot} has no new-story wizard cache.",
+        }
+
+    character_draft = cache.get_character_dict()
+    if character_draft is None:
+        return {
+            "success": False,
+            "error": (
+                f"Slot {args.slot} does not have a complete character draft "
+                "to audit."
+            ),
+        }
+
+    trait_inputs = (
+        TraitCompileInputs.model_validate(trait_inputs_payload)
+        if trait_inputs_payload is not None
+        else None
+    )
+    character_state = CharacterCreationState.model_validate(character_draft)
+    character = character_state.to_character_sheet()
+
+    with get_connection(dbname) as conn:
+        with conn.cursor() as cur:
+            result = compile_character_traits(
+                cur,
+                character=character,
+                character_id=args.character_id,
+                character_entity_id=args.character_entity_id,
+                trait_compile_inputs=trait_inputs,
+                dry_run=True,
+            )
+
+    audit = result.model_dump(mode="json")
+    remainder_count = audit["counters"]["prose_only_remainders"]
+    failed_policy = bool(args.fail_on_remainders and remainder_count)
+    return {
+        "success": True,
+        "message": f"Trait compiler audit for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "character_name": character.name,
+        "traits": [trait.name for trait in character.get_trait_entries()],
+        "trait_audit": audit,
+        "failed_policy": failed_policy,
+    }
+
+
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Lock a slot to prevent modifications.
@@ -829,6 +1024,7 @@ Examples:
   nexus clear --slot 5          Clear slot (reset wizard state)
   nexus lock --slot 1           Lock slot to prevent modifications
   nexus unlock --slot 2         Unlock slot to allow modifications
+  nexus trait-audit --slot 5    Dry-run trait compiler audit
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -872,7 +1068,10 @@ Examples:
     )
     continue_parser.add_argument(
         "--model",
-        help="Override model for this request (use a registry ID; see /api/config/models)",
+        help=(
+            "Override model for this request "
+            "(use a registry ID; see /api/config/models)"
+        ),
     )
 
     # undo command
@@ -916,6 +1115,42 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
+    # trait-audit command
+    trait_audit_parser = subparsers.add_parser(
+        "trait-audit",
+        help="Dry-run the new-story trait compiler against wizard cache",
+    )
+    trait_audit_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    trait_audit_parser.add_argument(
+        "--trait-inputs",
+        help=(
+            "Optional TraitCompileInputs JSON object for this dry run "
+            "(does not mutate wizard cache)"
+        ),
+    )
+    trait_audit_parser.add_argument(
+        "--character-id",
+        type=int,
+        default=0,
+        help="Placeholder character id to use in dry-run relationship output",
+    )
+    trait_audit_parser.add_argument(
+        "--character-entity-id",
+        type=int,
+        default=0,
+        help="Placeholder entity id to use in dry-run tag output",
+    )
+    trait_audit_parser.add_argument(
+        "--fail-on-remainders",
+        action="store_true",
+        help=(
+            "Exit with status 1 if any trait falls back to prose-only storage; "
+            "JSON callers should check the exit code or failed_policy"
+        ),
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -941,7 +1176,16 @@ def main() -> int:
     args = parser.parse_args()
 
     # Validate slot for commands that require it
-    if args.command in ("load", "continue", "undo", "regenerate", "clear", "lock", "unlock"):
+    if args.command in (
+        "load",
+        "continue",
+        "undo",
+        "regenerate",
+        "clear",
+        "trait-audit",
+        "lock",
+        "unlock",
+    ):
         if args.slot < 1 or args.slot > 5:
             emit_error("Slot must be between 1 and 5", args.json)
             return 1
@@ -967,6 +1211,8 @@ def main() -> int:
         result = run_model(args)
     elif args.command == "clear":
         result = run_clear(args)
+    elif args.command == "trait-audit":
+        result = run_trait_audit(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":
@@ -981,6 +1227,8 @@ def main() -> int:
         return 1
 
     emit_output(result, args.json, truncate=args.truncate)
+    if result.get("failed_policy"):
+        return 1
     return 0
 
 
