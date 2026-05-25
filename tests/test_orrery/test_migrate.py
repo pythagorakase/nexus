@@ -556,6 +556,53 @@ def test_hunting_pair_tag_migration_retires_pursuit_vocabulary() -> None:
     assert "WHERE tag = 'under_active_pursuit'" in migration_source
 
 
+def test_entity_tag_expiry_substrate_migration_adds_expiry_column() -> None:
+    """Migration 049 adds the scheduled-expiry column and sweeper index."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "049_orrery_entity_tag_expiry_substrate.py"
+    ).read_text()
+
+    assert "ADD COLUMN IF NOT EXISTS expires_at_world_time timestamptz" in (
+        migration_source
+    )
+    assert "ix_entity_tags_expiring" in migration_source
+    assert "WHERE cleared_at IS NULL" in migration_source
+    assert "expires_at_world_time IS NOT NULL" in migration_source
+
+
+def test_state_clearance_event_type_migration_registers_new_events() -> None:
+    """Migration 050 registers event types named by state clear_on contracts."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "050_orrery_state_clearance_event_types.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert {
+        "recovered_from_illness",
+        "cured",
+        "escaped",
+        "revealed",
+        "discovered",
+        "unmasked",
+        "exposed",
+        "threat_removed",
+        "confrontation_resolved",
+        "circumstance_reversed",
+    } == {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }
+    assert "ON CONFLICT (type) DO UPDATE SET" in migration_source
+    assert "synonym_for = NULL" in migration_source
+
+
 @pytest.mark.requires_postgres
 def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
     """Migration 047 seeds kinded contacts and deprecates legacy rows."""

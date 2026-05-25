@@ -12,14 +12,16 @@ The shared insert path stamps rows with the supplied ``source_kind`` (typically
 ``llm_generated``). Operates within the caller's transaction — no commits here.
 
 Depends on migration 036 making ``ix_entity_tags_current`` UNIQUE so the
-``ON CONFLICT`` clause in ``_insert_entity_tag`` matches a unique index, and on
+``ON CONFLICT`` clause in ``_insert_entity_tag`` matches a unique index,
 migration 037 seeding ``tag_category_registry`` so runtime bestowals know which
-tag categories may be applied to each entity kind.
+tag categories may be applied to each entity kind, and migration 049 adding the
+scheduled-expiry column used by duration-bearing tags.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from nexus.agents.orrery.status_family import STATUS_TAGS, status_tag_for_level
@@ -30,6 +32,13 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 
 # Split the retired source-kind literal so grep checks catch live usage sites.
 _DISALLOWED_SOURCE_KINDS = frozenset({"auto_" "registered"})
+_REAPPLICATION_POLICIES = frozenset({"new_row", "extend_expiry", "replace"})
+
+
+@dataclass(frozen=True)
+class _TagApplication:
+    tag_id: int
+    reapplication_policy: Optional[str]
 
 
 def apply_tag_bestowal(
@@ -40,6 +49,7 @@ def apply_tag_bestowal(
     bestowal: Optional[OrreryTagBestowal],
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    duration_override: Optional[timedelta] = None,
 ) -> dict[str, int]:
     """Apply a closed-vocabulary tag bestowal to the database.
 
@@ -51,6 +61,8 @@ def apply_tag_bestowal(
     Requires migration 037's ``tag_category_registry`` rows for the target
     ``entity_kind``; missing registry data is treated as a slot-migration error.
     Unknown, deprecated, or entity-kind-incompatible tags raise ``ValueError``.
+    ``duration_override`` sets ``entity_tags.expires_at_world_time`` for
+    duration-bearing applications and drives ``extend_expiry`` reapplications.
 
     Returns counter dict suitable for logging:
     ``{"applied", "cleared"}``.
@@ -80,7 +92,7 @@ def apply_tag_bestowal(
     if world_time is None:
         world_time = _load_world_time(cur)
 
-    tags_to_apply: list[int] = []
+    tags_to_apply: list[_TagApplication] = []
     for tag_name in bestowal.applied_tags:
         canonical_name, tag_row = _lookup_canonical_tag(cur, tag_name)
         category = _row_value(tag_row, "category", 1)
@@ -90,7 +102,12 @@ def apply_tag_bestowal(
             tag_name=canonical_name,
             entity_kind=entity_kind,
         )
-        tags_to_apply.append(_row_value(tag_row, "id", 0))
+        tags_to_apply.append(
+            _TagApplication(
+                tag_id=_row_value(tag_row, "id", 0),
+                reapplication_policy=_row_value(tag_row, "reapplication_policy", 3),
+            )
+        )
 
     tags_to_clear: list[int] = []
     for clear_name in bestowal.tags_to_clear:
@@ -105,13 +122,15 @@ def apply_tag_bestowal(
         tags_to_clear.append(_row_value(tag_row, "id", 0))
 
     # 1. apply registered tags to the entity
-    for tag_id in tags_to_apply:
+    for tag_application in tags_to_apply:
         applied = _insert_entity_tag(
             cur,
             entity_id=entity_id,
-            tag_id=tag_id,
+            tag_id=tag_application.tag_id,
             source_kind=source_kind,
             world_time=world_time,
+            duration_override=duration_override,
+            reapplication_policy=tag_application.reapplication_policy,
         )
         if applied:
             counters["applied"] += 1
@@ -132,6 +151,7 @@ def apply_exclusive_tag_bestowal(
     tag: str,
     source_kind: str = "skald_inline",
     world_time: Optional[datetime] = None,
+    duration_override: Optional[timedelta] = None,
 ) -> bool:
     """Replace the active tag within a single-entity exclusive category.
 
@@ -143,6 +163,7 @@ def apply_exclusive_tag_bestowal(
 
     Returns ``True`` if the new tag row was inserted, ``False`` if it was
     already active. Sibling rows are cleared either way.
+    ``duration_override`` has the same meaning as in ``apply_tag_bestowal``.
     """
 
     _validate_source_kind(source_kind)
@@ -167,6 +188,7 @@ def apply_exclusive_tag_bestowal(
         entity_kind=entity_kind,
     )
     tag_id = _row_value(tag_row, "id", 0)
+    reapplication_policy = _row_value(tag_row, "reapplication_policy", 3)
 
     if world_time is None:
         world_time = _load_world_time(cur)
@@ -183,6 +205,8 @@ def apply_exclusive_tag_bestowal(
         tag_id=tag_id,
         source_kind=source_kind,
         world_time=world_time,
+        duration_override=duration_override,
+        reapplication_policy=reapplication_policy,
     )
 
 
@@ -201,7 +225,7 @@ def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
 def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
     cur.execute(
         """
-        SELECT id, category, is_ephemeral
+        SELECT id, category, is_ephemeral, reapplication_policy
         FROM tags
         WHERE tag = %s AND NOT deprecated AND synonym_for IS NULL
         """,
@@ -260,18 +284,99 @@ def _insert_entity_tag(
     tag_id: int,
     source_kind: str,
     world_time: Optional[datetime],
+    duration_override: Optional[timedelta],
+    reapplication_policy: Optional[str],
 ) -> bool:
+    reapplication_policy = reapplication_policy or "new_row"
+    if reapplication_policy not in _REAPPLICATION_POLICIES:
+        raise ValueError(
+            f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
+        )
+
+    expires_at_world_time = _compute_expires_at_world_time(
+        world_time=world_time,
+        duration_override=duration_override,
+    )
+
+    if reapplication_policy == "replace":
+        cur.execute(
+            """
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind
+            )
+            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = EXCLUDED.expires_at_world_time,
+                source_kind = EXCLUDED.source_kind
+            """,
+            (entity_id, tag_id, world_time, expires_at_world_time, source_kind),
+        )
+        return bool(cur.rowcount)
+
+    if reapplication_policy == "extend_expiry" and duration_override is not None:
+        cur.execute(
+            """
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind
+            )
+            VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = GREATEST(
+                    COALESCE(
+                        entity_tags.expires_at_world_time,
+                        EXCLUDED.applied_at_world_time
+                    ),
+                    EXCLUDED.applied_at_world_time
+                ) + %s,
+                source_kind = EXCLUDED.source_kind
+            """,
+            (
+                entity_id,
+                tag_id,
+                world_time,
+                expires_at_world_time,
+                source_kind,
+                duration_override,
+            ),
+        )
+        return bool(cur.rowcount)
+
     cur.execute(
         """
-        INSERT INTO entity_tags (entity_id, tag_id, applied_at_world_time, source_kind)
-        VALUES (%s, %s, %s, %s::entity_tag_source_kind)
+        INSERT INTO entity_tags (
+            entity_id, tag_id, applied_at_world_time,
+            expires_at_world_time, source_kind
+        )
+        VALUES (%s, %s, %s, %s, %s::entity_tag_source_kind)
         ON CONFLICT (entity_id, tag_id)
           WHERE cleared_at IS NULL
           DO NOTHING
         """,
-        (entity_id, tag_id, world_time, source_kind),
+        (entity_id, tag_id, world_time, expires_at_world_time, source_kind),
     )
     return bool(cur.rowcount)
+
+
+def _compute_expires_at_world_time(
+    *,
+    world_time: Optional[datetime],
+    duration_override: Optional[timedelta],
+) -> Optional[datetime]:
+    if duration_override is None:
+        return None
+    if world_time is None:
+        raise ValueError("duration_override requires a known Orrery world_time")
+    return world_time + duration_override
 
 
 def _clear_entity_tag_siblings(

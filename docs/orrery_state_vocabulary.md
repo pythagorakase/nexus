@@ -36,7 +36,7 @@ Most affective states are pressure material → binary. `wounded`/`sick` are the
 One hard substrate fact constrains this: `ix_entity_tags_current` is `UNIQUE (entity_id, tag_id) WHERE cleared_at IS NULL`, so **any single `tag_id` is singular** — only one open row per tag per entity. Implications:
 
 - Distinct tags coexist freely (different `tag_id`s): `intoxicated:stimulant` + `intoxicated:depressant` is fine.
-- A re-apply of the **same** tag raises a unique violation — it does not silently stack or extend. The pharmacologic cluster's additive-timer behavior therefore requires an **extend-on-conflict** branch in the application writer (see open issue / migration debts).
+- A re-apply of the **same** tag is policy-dispatched by the application writer: most tags keep idempotent `new_row` behavior, duration-bearing tags can `extend_expiry`, and refresh-style tags can `replace` the active row.
 - Graduated-severity tracks are mutually exclusive within track by construction (one tier tag at a time), which the needs maintenance pass already enforces by clearing sibling tiers on re-tier.
 
 ---
@@ -89,7 +89,7 @@ Replaces the vague `intoxicated` with one tag per **pharmacological class**, usi
 
 **Kinetics model — duration at application, sweeper-cleared.** Every dose carries a duration set **at application** (default per class, overridable by the establishing event / Skald when the substance warrants it — espresso vs combat-drug). Clearance is by elapsed world-time, via the **expiry sweeper** (#328), *not* by any event — so these are the one cluster that names a **duration**, not a clearing event type. The clearance-event enumeration below intentionally does not include any `metabolized` type; it doesn't exist.
 
-**Polypharmacy.** Multi-valued: different classes are distinct `tag_id`s and coexist (`intoxicated:stimulant` + `intoxicated:depressant` is a specific, recognizable state, and the suppression/impairment effects compose). Same-class re-dose is *not* a second row — the unique index forbids it — so the writer must **extend the open row's expiry** on conflict. **Substrate prerequisite:** the `tags.reapplication_policy` column already exists (migration 023, enum `new_row` / `extend_expiry` / `replace`) and several existing tags already declare `extend_expiry`. What's missing is (1) the `entity_tags.expires_at_world_time` column for the sweeper to read, and (2) writer-side dispatch on `reapplication_policy` (currently `ON CONFLICT DO NOTHING` at `tag_writer.py:268`, ignoring the template field). Tracked in #329, sibling to #328.
+**Polypharmacy.** Multi-valued: different classes are distinct `tag_id`s and coexist (`intoxicated:stimulant` + `intoxicated:depressant` is a specific, recognizable state, and the suppression/impairment effects compose). Same-class re-dose is *not* a second row — the unique index forbids it — so the writer must **extend the open row's expiry** on conflict. Migration 049 provides the `entity_tags.expires_at_world_time` column plus writer dispatch on the existing `tags.reapplication_policy` enum (`new_row` / `extend_expiry` / `replace`). The remaining runtime prerequisite is the expiry sweeper (#328).
 
 **On the kinetics framing.** Additive-timer is a *narrative-modeling convenience*, not pharmacological accuracy — only ethanol is genuinely zero-order at narrative-relevant doses; stimulants, opioids, hallucinogens, and dissociatives are first-order in reality. We favor legibility (more dose = lasts longer, in a way the writer can reason about) over verisimilitude. A per-class `expires_at` cap is a one-line knob if runaway re-dosing ever matters; probably unnecessary for narrative purposes.
 
@@ -119,20 +119,20 @@ These passed the membership test in earlier passes but belong to none of the fir
 
 **Where clearance config lives.** Per-tag-template fields declare *which* event types clear *this* state — clearance is a property of the state, not of the event. The runtime mechanism is `_clear_event_tags_sync` / `_clear_event_tags_async` (`nexus/agents/orrery/events.py:3030+`), which queries `t.clear_on -> 'event_types' ? <event_type>` against the `tags` table's `clear_on` JSONB column. Adding a new event type doesn't require enumerating every state it could clear; each tag template declares its own clearance contract. The event registry below lists *names referenced from the state side*; whether each currently exists in the `event_types` table is independent of whether any state has actually wired it up. A state whose clearance config names a nonexistent event type does not no-op — it applies and **never clears, silently** — so the event vocabulary cannot lag the state vocabulary.
 
-The table marks each row's registry status against the live `event_types` table. Registration of the new rows is tracked by #330.
+The table marks each row's registry status against the live `event_types` table. Migration 050 registers the new rows required by this draft.
 
 | Clearing event type(s) | Registry status | Clears |
 |---|---|---|
 | `tended_wound`, `wound_healed` | **existing** | `wounded` |
-| `recovered_from_illness`, `cured` | **register** | `sick` |
+| `recovered_from_illness`, `cured` | **existing** | `sick` |
 | `captivity_ended` | **existing** | `restrained` (release variant), `imprisoned` |
-| `escaped` | **register** | `restrained`, `imprisoned` (escape variant — distinct from `captivity_ended` because the actor's agency matters narratively) |
-| `revealed`, `discovered` | **register** | `concealed` |
-| `unmasked`, `exposed` | **register** | `disguised` |
-| `threat_removed` | **register** | `afraid` |
+| `escaped` | **existing** | `restrained`, `imprisoned` (escape variant — distinct from `captivity_ended` because the actor's agency matters narratively) |
+| `revealed`, `discovered` | **existing** | `concealed` |
+| `unmasked`, `exposed` | **existing** | `disguised` |
+| `threat_removed` | **existing** | `afraid` |
 | `retaliation_executed` | **existing** | `enraged` (vengeance variant — uses the existing retaliation event-type from the contact/hostility cluster) |
-| `confrontation_resolved` | **register** | `enraged` (alternate path — confronted-and-de-escalated without retaliation) |
-| `circumstance_reversed` | **register** | `despairing` |
+| `confrontation_resolved` | **existing** | `enraged` (alternate path — confronted-and-de-escalated without retaliation) |
+| `circumstance_reversed` | **existing** | `despairing` |
 | `mourning_completed` | **existing** | `grieving` (authored fallback — the sweeper handles the primary time-decay path) |
 | *(none — time-cleared via sweeper)* | sweeper #328 | `grieving` (primary), all `intoxicated:*` |
 
@@ -146,13 +146,11 @@ Several alignments with existing vocab dropped synonymous proposals: `tended`/`h
 
 1. **`under_active_pursuit` → inbound `hunting` pair-tag — resolved.** Migration 048 renames live `pursuing` pair-tag rows to `hunting`, deprecates the legacy single-entity signal, and templates now gate on `has_inbound_pair_tag("hunting", ...)`. This closes the category-error state debt; remaining `hunting` behavior belongs to package self-awareness (#282), not the `state` vocabulary.
 2. **Grief vocabulary — resolved.** PR #320 collapsed three competing names (`bereaved`, `grieving_recent_partner`, the earlier-proposed `grieving`) to the canonical `grieving`. The INTIMACY suppressor row for `grieving_recent_partner` was removed; general `grieving` covers it. This doc adopts that resolution; no further work required.
-3. **`cns_stimulated` → `intoxicated:stimulant` alias.** Alias via `CANONICAL_TAGS` + SLEEP-gate rewrite, as in Cluster 3. Implementation surface: `nexus/agents/orrery/tag_constants.py` (add alias) and `nexus/agents/orrery/templates.py:2298` (rewrite the gate predicate). Small enough to land alongside the substrate enrichment in #329, or as its own micro-PR.
+3. **`cns_stimulated` → `intoxicated:stimulant` alias.** Alias via `CANONICAL_TAGS` + SLEEP-gate rewrite, as in Cluster 3. Implementation surface: `nexus/agents/orrery/tag_constants.py` (add alias) and `nexus/agents/orrery/templates.py:2298` (rewrite the gate predicate). This remains a small follow-up once the pharmacologic tags themselves are ready to ship.
 4. **`contacts_available` overload — resolved.** PR #327 (migration 047) shipped the kind-qualified `contact:<lodging|social|intimate>` pair-tag family, replacing the overloaded `contacts_available` ephemeral and closing #317. Not a `state` issue — noted only for cross-reference; the substrate fix applies cleanly to needs templates per `orrery_needs.md` R3.
-5. **`entity_tags` substrate enrichment for additive-timer pharmacologics.** The pharmacologic cluster's same-class re-dose behavior requires two substrate additions:
-   - `entity_tags.expires_at_world_time` column (currently absent — the table has `cleared_at` for actual clearance, but no scheduled-expiry field for the sweeper to read).
-   - `_insert_entity_tag`'s `ON CONFLICT ... DO NOTHING` becomes policy-dispatched: `new_row` / `extend_expiry` / `replace`, declared on the tag template via the existing `reapplication_policy` field.
+5. **`entity_tags` substrate enrichment for additive-timer pharmacologics — resolved.** Migration 049 adds `entity_tags.expires_at_world_time` and the expiring-row index, and `_insert_entity_tag` now dispatches `new_row` / `extend_expiry` / `replace` from each tag's existing `reapplication_policy` field.
    
-   Tracked in **#329**; sibling to **#328** (sweeper). The pharmacologic cluster blocks on both — neither shipping in isolation gives you a working `intoxicated:*` tag.
+   The remaining sibling is **#328** (sweeper). The pharmacologic cluster still needs the sweeper before `intoxicated:*` becomes a fully working time-cleared state family.
 
 ---
 
