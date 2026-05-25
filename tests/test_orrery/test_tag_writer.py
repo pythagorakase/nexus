@@ -449,6 +449,25 @@ def test_extend_expiry_policy_extends_from_later_of_expiry_or_world_time():
     assert cur.entity_tags[0]["source_kind"] == "system"
 
 
+def test_extend_expiry_policy_requires_duration_override():
+    cur = FakeCursor(
+        tags=_registered(
+            ("intoxicated:stimulant", "state", True, "extend_expiry"),
+        )
+    )
+
+    with pytest.raises(ValueError, match="extend_expiry.*duration_override"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=42,
+            entity_kind="character",
+            bestowal=OrreryTagBestowal(applied_tags=["intoxicated:stimulant"]),
+            world_time=_WORLD_TIME,
+        )
+
+    assert cur.entity_tags == []
+
+
 def test_replace_policy_restamps_existing_open_row():
     tag_id = hash("disguised") & 0xFFFFFF
     cur = FakeCursor(

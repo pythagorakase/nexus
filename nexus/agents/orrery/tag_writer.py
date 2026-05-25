@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Literal, Optional, TypeAlias
 
 from nexus.agents.orrery.status_family import STATUS_TAGS, status_tag_for_level
 from nexus.agents.orrery.tag_constants import CANONICAL_TAGS
@@ -33,12 +33,13 @@ from nexus.agents.orrery.tag_schemas import OrreryTagBestowal
 # Split the retired source-kind literal so grep checks catch live usage sites.
 _DISALLOWED_SOURCE_KINDS = frozenset({"auto_" "registered"})
 _REAPPLICATION_POLICIES = frozenset({"new_row", "extend_expiry", "replace"})
+ReapplicationPolicy: TypeAlias = Literal["new_row", "extend_expiry", "replace"]
 
 
 @dataclass(frozen=True)
 class _TagApplication:
     tag_id: int
-    reapplication_policy: Optional[str]
+    reapplication_policy: Optional[ReapplicationPolicy]
 
 
 def apply_tag_bestowal(
@@ -285,12 +286,16 @@ def _insert_entity_tag(
     source_kind: str,
     world_time: Optional[datetime],
     duration_override: Optional[timedelta],
-    reapplication_policy: Optional[str],
+    reapplication_policy: Optional[ReapplicationPolicy],
 ) -> bool:
     reapplication_policy = reapplication_policy or "new_row"
     if reapplication_policy not in _REAPPLICATION_POLICIES:
         raise ValueError(
             f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
+        )
+    if reapplication_policy == "extend_expiry" and duration_override is None:
+        raise ValueError(
+            "reapplication_policy='extend_expiry' requires duration_override"
         )
 
     expires_at_world_time = _compute_expires_at_world_time(
@@ -318,7 +323,7 @@ def _insert_entity_tag(
         )
         return bool(cur.rowcount)
 
-    if reapplication_policy == "extend_expiry" and duration_override is not None:
+    if reapplication_policy == "extend_expiry":
         cur.execute(
             """
             INSERT INTO entity_tags (
@@ -349,6 +354,8 @@ def _insert_entity_tag(
                 duration_override,
             ),
         )
+        # A truthy result means the active row changed: either inserted fresh or
+        # conflict-updated. For replace/extend, "applied" is broader than insert.
         return bool(cur.rowcount)
 
     cur.execute(

@@ -604,6 +604,86 @@ def test_state_clearance_event_type_migration_registers_new_events() -> None:
 
 
 @pytest.mark.requires_postgres
+def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
+    """Migration 049 DDL is idempotent against a real slot schema."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "049_orrery_entity_tag_expiry_substrate.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    column_existed = _column_exists(conn, "entity_tags", "expires_at_world_time")
+    index_definition_before = _index_definition(conn, "ix_entity_tags_expiring")
+    try:
+        migration.run(conn)
+        migration.run(conn)
+
+        assert _column_exists(conn, "entity_tags", "expires_at_world_time")
+        index_definition = _index_definition(conn, "ix_entity_tags_expiring")
+        assert index_definition is not None
+        assert "expires_at_world_time" in index_definition
+        assert "cleared_at IS NULL" in index_definition
+        assert "expires_at_world_time IS NOT NULL" in index_definition
+    finally:
+        with conn:
+            with conn.cursor() as cur:
+                if index_definition_before is None:
+                    cur.execute("DROP INDEX IF EXISTS ix_entity_tags_expiring")
+                if not column_existed:
+                    cur.execute(
+                        "ALTER TABLE entity_tags "
+                        "DROP COLUMN IF EXISTS expires_at_world_time"
+                    )
+        conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_state_clearance_event_type_migration_executes_against_slot_db() -> None:
+    """Migration 050 event-type seeding is idempotent against a real slot."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "050_orrery_state_clearance_event_types.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    event_types = [event_type for event_type, *_rest in migration.EVENT_TYPES]
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    snapshot = _snapshot_event_types(conn, event_types)
+    try:
+        migration.run(conn)
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT type, category, severity::text, deprecated, synonym_for
+                FROM event_types
+                WHERE type = ANY(%s)
+                """,
+                (event_types,),
+            )
+            rows = {row[0]: row[1:] for row in cur.fetchall()}
+
+        assert set(rows) == set(event_types)
+        assert all(row[2] is False for row in rows.values())
+        assert all(row[3] is None for row in rows.values())
+    finally:
+        _restore_event_types(conn, snapshot, event_types)
+        conn.close()
+
+
+@pytest.mark.requires_postgres
 def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
     """Migration 047 seeds kinded contacts and deprecates legacy rows."""
 
@@ -835,6 +915,81 @@ def test_canonical_grieving_migration_executes_against_slot_db() -> None:
                         )
         finally:
             conn.close()
+
+
+def _column_exists(conn: Any, table_name: str, column_name: str) -> bool:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = %s
+              AND column_name = %s
+            """,
+            (table_name, column_name),
+        )
+        return cur.fetchone() is not None
+
+
+def _index_definition(conn: Any, index_name: str) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT indexdef
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+              AND indexname = %s
+            """,
+            (index_name,),
+        )
+        row = cur.fetchone()
+        return row[0] if row is not None else None
+
+
+def _snapshot_event_types(
+    conn: Any,
+    event_types: Iterable[str],
+) -> dict[str, tuple[Any, ...]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT type, category, severity::text, description,
+                   deprecated, synonym_for
+            FROM event_types
+            WHERE type = ANY(%s)
+            """,
+            (list(event_types),),
+        )
+        return {row[0]: row[1:] for row in cur.fetchall()}
+
+
+def _restore_event_types(
+    conn: Any,
+    snapshot: dict[str, tuple[Any, ...]],
+    event_types: Iterable[str],
+) -> None:
+    with conn:
+        with conn.cursor() as cur:
+            for event_type in event_types:
+                row = snapshot.get(event_type)
+                if row is None:
+                    cur.execute(
+                        "DELETE FROM event_types WHERE type = %s", (event_type,)
+                    )
+                    continue
+                cur.execute(
+                    """
+                    UPDATE event_types
+                    SET category = %s,
+                        severity = %s::event_severity_kind,
+                        description = %s,
+                        deprecated = %s,
+                        synonym_for = %s
+                    WHERE type = %s
+                    """,
+                    (*row, event_type),
+                )
 
 
 def _snapshot_pair_tags(
