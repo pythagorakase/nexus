@@ -73,6 +73,9 @@ def run(conn) -> None:
                 """,
                 (pursuing_id, hunting_id),
             )
+            # This is a vocabulary rename, not a clearance event: historical
+            # cleared rows should resolve through the canonical tag name too.
+            # Active duplicates are cleared above before this FK retarget.
             cur.execute(
                 """
                 UPDATE entity_pair_tags

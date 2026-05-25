@@ -555,10 +555,13 @@ def compose_actor_bindings(
             SELECT DISTINCT ept.object_entity_id AS entity_id
             FROM entity_pair_tags ept
             JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            JOIN entities subject_entity ON subject_entity.id = ept.subject_entity_id
             JOIN entities e ON e.id = ept.object_entity_id
             WHERE ept.cleared_at IS NULL
               AND pt.is_ephemeral = true
+              AND pt.tag = 'hunting'
               AND NOT pt.deprecated
+              AND subject_entity.is_active = true
               AND e.kind = 'character'
               AND e.is_active = true
             """

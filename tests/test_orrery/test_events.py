@@ -16,6 +16,7 @@ from nexus.agents.orrery.resolver import (
     OrreryScenePressureDraft,
     OrreryTickProposal,
 )
+from nexus.agents.logon.apex_schema import OrreryAdjudication
 from nexus.api.lore_adapter import response_to_incubator
 
 
@@ -684,6 +685,27 @@ def test_commit_orrery_tick_replaces_with_explicit_delta() -> None:
     assert activity_params == ("arguing in the room", 1)
     assert audit_params[5] == "explicit"
     assert not any("INSERT INTO world_events" in sql for sql, _ in cursor.executed)
+
+
+def test_coerce_adjudication_model_accepts_pair_tag_target_clear() -> None:
+    """Typed Skald replacements can request inbound target pair-tag clearing."""
+
+    adjudications = coerce_adjudications(
+        [
+            OrreryAdjudication(
+                proposal_id="protect_kin:abc123",
+                action="replace",
+                replacement_state_delta={
+                    "entity_pair_tags_target_clear_inbound": ["hunting"],
+                },
+            )
+        ]
+    )
+
+    assert list(adjudications) == ["protect_kin:abc123"]
+    assert adjudications["protect_kin:abc123"].replacement_state_delta == {
+        "entity_pair_tags_target.clear_inbound": ["hunting"]
+    }
 
 
 def test_commit_orrery_tick_replacement_event_type_is_explicit() -> None:

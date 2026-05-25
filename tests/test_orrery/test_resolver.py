@@ -141,7 +141,9 @@ class FakeSession:
             return FakeResult(self.ephemeral_actor_rows)
         if "/* orrery:actor_bindings_inbound_ephemeral_pair_tags */" in sql:
             assert "pt.is_ephemeral = true" in sql
+            assert "pt.tag = 'hunting'" in sql
             assert "NOT pt.deprecated" in sql
+            assert "subject_entity.is_active = true" in sql
             return FakeResult(self.inbound_ephemeral_pair_actor_rows)
         if "/* orrery:present_actor_ids_at_anchor */" in sql:
             return FakeResult(self.present_actor_rows)
