@@ -118,23 +118,71 @@ class CrossEncoderReranker:
         try:
             # Use sentence-transformers CrossEncoder predict method
             scores = self.model.predict([(query, passage)])
-            
-            # CrossEncoder might return a single score as a numpy array or list
-            if isinstance(scores, np.ndarray):
-                score = scores[0]
-            elif isinstance(scores, list):
-                score = scores[0]
-            else:
-                score = scores
-                
-            # Normalize to 0-1 range with sigmoid if needed
-            if score < 0 or score > 1:
-                score = 1 / (1 + np.exp(-score))  # Sigmoid
-                
-            return float(score)
+            return self._normalize_score(scores)
         except Exception as e:
             logger.error(f"Error scoring pair: {e}")
             return 0.0
+
+    def _normalize_score(self, raw_score: Any) -> float:
+        """Normalize a CrossEncoder score to the 0-1 relevance range."""
+        if isinstance(raw_score, np.ndarray):
+            flattened = raw_score.reshape(-1)
+            if flattened.size == 0:
+                return 0.0
+            score = flattened[0]
+        elif isinstance(raw_score, (list, tuple)):
+            if not raw_score:
+                return 0.0
+            score = raw_score[0]
+        else:
+            score = raw_score
+
+        score = float(score)
+        if score < 0 or score > 1:
+            score = 1 / (1 + np.exp(-score))  # Sigmoid
+        return float(score)
+
+    def score_batch(
+        self,
+        query: str,
+        passages: List[str],
+        batch_size: int = 8,
+    ) -> List[float]:
+        """
+        Score query-passage pairs with true CrossEncoder batched inference.
+
+        Args:
+            query: The search query
+            passages: Passages to score
+            batch_size: Batch size for model inference
+
+        Returns:
+            Relevance scores between 0 and 1, one per passage
+        """
+        if not passages:
+            return []
+
+        try:
+            pairs = [(query, passage) for passage in passages]
+            raw_scores = self.model.predict(pairs, batch_size=batch_size)
+
+            if isinstance(raw_scores, np.ndarray):
+                score_values = raw_scores.reshape(-1).tolist()
+            elif isinstance(raw_scores, list):
+                score_values = raw_scores
+            else:
+                score_values = [raw_scores]
+
+            if len(score_values) != len(passages):
+                raise ValueError(
+                    "CrossEncoder returned "
+                    f"{len(score_values)} scores for {len(passages)} passages"
+                )
+
+            return [self._normalize_score(score) for score in score_values]
+        except Exception as e:
+            logger.error(f"Error scoring batch: {e}")
+            return [0.0 for _ in passages]
 
     def score_pair_with_sliding_window(self, query: str, passage: str) -> float:
         """
@@ -235,19 +283,41 @@ class CrossEncoderReranker:
         Returns:
             List of relevance scores for each passage
         """
+        if not passages:
+            return []
+
         scores = []
 
         # Process in batches
         for i in range(0, len(passages), batch_size):
             batch_passages = passages[i:i+batch_size]
-            batch_scores = []
 
-            for passage in batch_passages:
-                if use_sliding_window:
-                    score = self.score_pair_with_sliding_window(query, passage)
+            if not use_sliding_window:
+                scores.extend(
+                    self.score_batch(query, batch_passages, batch_size=batch_size)
+                )
+                continue
+
+            batch_scores = [0.0 for _ in batch_passages]
+            short_passage_indexes = []
+            short_passages = []
+
+            for batch_index, passage in enumerate(batch_passages):
+                if len(passage) < self.max_length * 4:
+                    short_passage_indexes.append(batch_index)
+                    short_passages.append(passage)
                 else:
-                    score = self.score_pair(query, passage)
-                batch_scores.append(score)
+                    batch_scores[batch_index] = self.score_pair_with_sliding_window(
+                        query, passage
+                    )
+
+            short_scores = self.score_batch(
+                query,
+                short_passages,
+                batch_size=batch_size,
+            )
+            for batch_index, score in zip(short_passage_indexes, short_scores):
+                batch_scores[batch_index] = score
 
             scores.extend(batch_scores)
 
