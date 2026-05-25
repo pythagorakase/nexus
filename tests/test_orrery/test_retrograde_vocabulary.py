@@ -36,9 +36,9 @@ def test_seed_eligible_vocabulary_includes_pair_tag_kind_constraints() -> None:
     assert "claims" in vocabulary["multi_entity_tag_families"]
     assert definitions["claims"]["subject_kinds"] == ["faction"]
     assert definitions["claims"]["object_kinds"] == ["place"]
-    assert definitions["pursuing"]["subject_kinds"] == ["character", "faction"]
-    assert definitions["pursuing"]["object_kinds"] == ["character"]
-    assert definitions["pursuing"]["is_ephemeral"] is True
+    assert definitions["hunting"]["subject_kinds"] == ["character", "faction"]
+    assert definitions["hunting"]["object_kinds"] == ["character"]
+    assert definitions["hunting"]["is_ephemeral"] is True
 
 
 def test_seed_eligible_pair_tags_are_sorted() -> None:

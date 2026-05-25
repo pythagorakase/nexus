@@ -84,6 +84,7 @@ def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
         action="replace",
         replacement_state_delta={
             "character_current_activity": "nodding off mid-sentence",
+            "entity_pair_tags_target_clear_inbound": ["hunting"],
         },
         replacement_event_type="sleep_need",
     )
@@ -93,6 +94,10 @@ def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
     assert (
         adjudication.replacement_state_delta.character_current_activity
         == "nodding off mid-sentence"
+    )
+    assert (
+        adjudication.replacement_state_delta.entity_pair_tags_target_clear_inbound
+        == ["hunting"]
     )
     assert adjudication.replacement_event_type == "sleep_need"
 

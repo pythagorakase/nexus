@@ -21,7 +21,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - **OR:**
-    - actor has `under_active_pursuit` ephemeral
+    - actor has inbound `hunting` pair tag
     - recent `compliance_alert` event targeting actor in last 5 ticks
   - **NOT:** actor is constrained or immobilized
   - **OR:**
@@ -87,10 +87,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor and target share `chosen_kin` relationship (either direction)
     - actor and target share `comrade` relationship (either direction)
   - **OR:**
-    - target has `under_active_pursuit` ephemeral
+    - target has inbound `hunting` pair tag
     - target has `wounded` ephemeral
     - recent `threat_issued` event targeting target in last 4 ticks
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Physically intervene at the target's location  *(mag 0.78)*
 
@@ -98,9 +98,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor and target are co-located
-  - target has `under_active_pursuit` ephemeral
+  - target has inbound `hunting` pair tag
 
-**Does:** activity → "shielding kin from active threat"; adds `recently_protective` to actor; removes `under_active_pursuit` from target
+**Does:** activity → "shielding kin from active threat"; adds `recently_protective` to actor; clears inbound `hunting` pair tags from target
 **Event:** `protective_intervention`
 
 > {actor} reaches {target} as the noose tightens — pulling them off the line of sight, into a service corridor whose layout {actor} has memorized for exactly this kind of moment.
@@ -171,7 +171,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - trust actor→target < -2
   - ≥ 8 ticks since last `retaliation_attempted` event for actor
   - ≥ 8 ticks since last `retaliation_executed` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Strike directly when opportunity opens  *(mag 0.85)*
 
@@ -235,8 +235,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - target has `wounded` ephemeral
   - actor and target are co-located
-  - **NOT:** actor has `under_active_pursuit` ephemeral
-  - **NOT:** target has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** target has inbound `hunting` pair tag
   - ≥ 2 ticks since last `tended_wound` event for (actor, target) pair
   - ≥ 2 ticks since last `wound_healed` event for (actor, target) pair
 
@@ -305,7 +305,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - actor has enough hydrated context
   - actor is hidden or off-grid
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor is constrained or immobilized
   - ≥ 6 ticks since last `hideout_maintained` event for actor
   - ≥ 6 ticks since last `signal_exposure_reduced` event for actor
@@ -442,8 +442,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **OR:**
     - recent `threat_issued` event targeting target in last 3 ticks
     - recent `compliance_alert` event targeting target in last 3 ticks
-    - target has `under_active_pursuit` ephemeral
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+    - target has inbound `hunting` pair tag
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Reach the ally face-to-face before the word gets out  *(mag 0.66)*
 
@@ -503,8 +503,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - actor has `seeking_identity` tag
   - time of day is one of [evening, night]
-  - actor lacks `under_active_pursuit` tag
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Recon a hideout their body remembers  *(mag 0.64)*
 
@@ -553,7 +552,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor has `guardian` relationship to target
   - ≥ 12 ticks since last `contact_made` event for (actor, target) pair
   - ≥ 12 ticks since last `welfare_check` event for (actor, target) pair
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
 
 ### Branch 1 — Drop by in person when the moment allows  *(mag 0.44)*
@@ -605,7 +604,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 4 ticks since last `informant_contact` event for (actor, target) pair
   - ≥ 4 ticks since last `intel_acquired` event for (actor, target) pair
   - time of day is one of [evening, night]
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
 
 ### Branch 1 — Press for material intel when trust is sufficient  *(mag 0.62)*
@@ -683,7 +682,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor has `guardian` relationship to target
     - actor has `captor` relationship to target
   - ≥ 2 ticks since last `vigil_held` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Maintain prayerful or meditative presence  *(mag 0.46)*
 
@@ -738,7 +737,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - actor has enough hydrated context
   - **NOT:** actor is constrained or immobilized
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
   - **OR:**
     - actor is hidden or off-grid
@@ -862,7 +861,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 8 ticks since last `contact_made` event for (actor, target) pair
   - ≥ 8 ticks since last `kin_visit` event for (actor, target) pair
   - ≥ 8 ticks since last `contact_deferred` event for (actor, target) pair
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grudge_active` ephemeral
 
 ### Branch 1 — Find the moment for a real face-to-face conversation  *(mag 0.36)*
@@ -953,7 +952,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 20 ticks since last `contact_made` event for (actor, target) pair
   - ≥ 20 ticks since last `rival_consulted` event for (actor, target) pair
   - **NOT:** actor has `grudge_active` ephemeral
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Meet face-to-face on neutral ground  *(mag 0.62)*
 
@@ -1011,7 +1010,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - actor has `grieving` ephemeral
   - ≥ 3 ticks since last `mourning_act` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Visit the place of remembrance  *(mag 0.42)*
 
@@ -1066,7 +1065,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
       - actor has `sleep` debt ≥ 8
     - actor has `sleep` debt ≥ 16
   - **NOT:** actor has `cns_stimulated` ephemeral
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Collapse into deferred sleep  *(mag 0.74)*
 
@@ -1121,7 +1120,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `thirst` debt ≥ 2
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Drink desperately, whatever is available  *(mag 0.56)*
 
@@ -1184,7 +1183,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **OR:**
     - time of day is one of [morning, afternoon, evening]
     - actor has `hunger` debt ≥ 8
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Eat ravenously, whatever is available  *(mag 0.62)*
 
@@ -1349,7 +1348,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - actor has `socialize` debt ≥ 24
   - ≥ 4 ticks since last `socialized` event for actor
   - ≥ 4 ticks since last `socialized_alone` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grieving` ephemeral
   - **NOT:** actor has `wounded` ephemeral
 
@@ -1423,7 +1422,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - ≥ 8 ticks since last `intimacy_pursued` event for actor
   - ≥ 8 ticks since last `intimacy_partial` event for actor
   - ≥ 8 ticks since last `intimacy_deferred` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
@@ -1506,7 +1505,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 - **AND:**
   - actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`, `arcane_caster`, `engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`, `musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`, `athlete`, `martial_artist`, `ranger`, `scout`, `monk`, `keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `matriarch`, `patriarch`, `scholar`, `researcher`, `academic`, `loremaster`]
   - ≥ 4 ticks since last `craft_tended` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
@@ -1611,7 +1610,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is in transit
   - ≥ 4 ticks since last `work_performed` event for actor
   - ≥ 4 ticks since last `household_work_performed` event for actor
-  - **NOT:** actor has `under_active_pursuit` ephemeral
+  - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
@@ -1769,6 +1768,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/041_orrery_authority_model.sql`
 - `migrations/042_orrery_entity_pair_tags.py`
 - `migrations/043_orrery_category_refactor_phase1.py`
+- `migrations/048_orrery_hunting_pair_tag.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -1826,7 +1826,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `trader`
 - `travel_provisioned`
 - `travel_ready`
-- `under_active_pursuit`
 - `vendetta_holder`
 - `violent_history`
 - `vow_of_celibacy`
@@ -1843,7 +1842,6 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `grieving`
 - `grudge_active`
 - `unconscious`
-- `under_active_pursuit`
 - `wounded`
 
 ### Tags queried as current durable-or-ephemeral state (via `has_any_current_tag`)
@@ -1891,6 +1889,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `contact:intimate`
 - `contact:lodging`
 - `contact:social`
+- `hunting`
 
 ### Event types
 

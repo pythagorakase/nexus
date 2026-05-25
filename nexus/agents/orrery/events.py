@@ -39,6 +39,7 @@ SUPPORTED_STATE_DELTA_KEYS = frozenset(
         "entity_tags.remove",
         "entity_tags_target.add",
         "entity_tags_target.remove",
+        "entity_pair_tags_target.clear_inbound",
         "need.fulfill",
         "travel.start",
         "travel.advance",
@@ -54,6 +55,7 @@ REPLACEMENT_STATE_DELTA_ALIASES = {
     "entity_tags_remove": "entity_tags.remove",
     "entity_tags_target_add": "entity_tags_target.add",
     "entity_tags_target_remove": "entity_tags_target.remove",
+    "entity_pair_tags_target_clear_inbound": ("entity_pair_tags_target.clear_inbound"),
 }
 
 TRAVEL_MODE_DETOUR_FACTOR = {
@@ -1003,7 +1005,10 @@ def _apply_state_delta_sync(
 
     target_tag_adds = draft.state_delta.get("entity_tags_target.add", ()) or ()
     target_tag_removes = draft.state_delta.get("entity_tags_target.remove", ()) or ()
-    if target_tag_adds or target_tag_removes:
+    target_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags_target.clear_inbound", ()) or ()
+    )
+    if target_tag_adds or target_tag_removes or target_pair_tag_clears:
         if target_entity_id is None:
             raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
         for tag in target_tag_adds:
@@ -1017,6 +1022,12 @@ def _apply_state_delta_sync(
                 draft.template_id,
                 source_chunk_id=source_chunk_id,
                 delta_key="entity_tags_target.remove",
+            )
+        for tag in target_pair_tag_clears:
+            tag_mutations += _clear_inbound_pair_tags_sync(
+                cur,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
             )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += _apply_need_fulfillment_sync(
@@ -1106,7 +1117,10 @@ async def _apply_state_delta_async(
 
     target_tag_adds = draft.state_delta.get("entity_tags_target.add", ()) or ()
     target_tag_removes = draft.state_delta.get("entity_tags_target.remove", ()) or ()
-    if target_tag_adds or target_tag_removes:
+    target_pair_tag_clears = (
+        draft.state_delta.get("entity_pair_tags_target.clear_inbound", ()) or ()
+    )
+    if target_tag_adds or target_tag_removes or target_pair_tag_clears:
         if target_entity_id is None:
             raise ValueError(f"Orrery draft {draft.template_id} has no target binding")
         for tag in target_tag_adds:
@@ -1122,6 +1136,12 @@ async def _apply_state_delta_async(
                 draft.template_id,
                 source_chunk_id=source_chunk_id,
                 delta_key="entity_tags_target.remove",
+            )
+        for tag in target_pair_tag_clears:
+            tag_mutations += await _clear_inbound_pair_tags_async(
+                conn,
+                object_entity_id=target_entity_id,
+                tag=str(tag),
             )
     if "need.fulfill" in draft.state_delta:
         tag_mutations += await _apply_need_fulfillment_async(
@@ -2084,6 +2104,30 @@ def _remove_entity_tag_sync(
     return len(entity_tag_ids)
 
 
+def _clear_inbound_pair_tags_sync(
+    cur: Any,
+    *,
+    object_entity_id: int,
+    tag: str,
+) -> int:
+    cur.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.object_entity_id = %s
+          AND pt.tag = %s
+          AND ept.cleared_at IS NULL
+        """,
+        (object_entity_id, tag),
+    )
+    rowcount = getattr(cur, "rowcount", 0)
+    if rowcount is None or rowcount < 0:
+        return 0
+    return int(rowcount)
+
+
 async def _remove_entity_tag_async(
     conn: Any,
     entity_id: int,
@@ -2122,6 +2166,28 @@ async def _remove_entity_tag_async(
             source_chunk_id,
         )
     return len(entity_tag_ids)
+
+
+async def _clear_inbound_pair_tags_async(
+    conn: Any,
+    *,
+    object_entity_id: int,
+    tag: str,
+) -> int:
+    status = await conn.execute(
+        """
+        UPDATE entity_pair_tags ept
+        SET cleared_at = now()
+        FROM pair_tags pt
+        WHERE ept.pair_tag_id = pt.id
+          AND ept.object_entity_id = $1
+          AND pt.tag = $2
+          AND ept.cleared_at IS NULL
+        """,
+        object_entity_id,
+        tag,
+    )
+    return _affected_count(status)
 
 
 def _emit_world_event_sync(

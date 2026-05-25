@@ -83,7 +83,7 @@ def lookup_pair_tag_subjects(
     ``object_entity_id``.
 
     Inbound lookup: "who has this relation pointing AT me?" — used by gates
-    like the targeted-detection-radius logic for ``pursuing`` (issue #282)
+    like the targeted-detection-radius logic for ``hunting`` (issue #282)
     where the target entity needs to know who is hunting them.
 
     Results are returned in ascending subject_entity_id order for

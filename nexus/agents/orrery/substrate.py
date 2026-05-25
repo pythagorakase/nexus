@@ -206,6 +206,13 @@ def _has_outbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> 
     )
 
 
+def _has_inbound_pair_tag(state: WorldState, entity_id: int, pair_tag: str) -> bool:
+    return any(
+        object_id == entity_id and pair_tag in tags
+        for (_subject_id, object_id), tags in state.pair_tags.items()
+    )
+
+
 def has_tag(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether a slot-bound entity has a durable tag."""
 
@@ -302,6 +309,16 @@ def has_any_pair_tag(
         _condition,
         f"has_any_pair_tag({','.join(tags)}@{subject_slot.value}->{object_slot.value})",
     )
+
+
+def has_inbound_pair_tag(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether any subject points ``tag`` at the slot-bound entity."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        return entity_id is not None and _has_inbound_pair_tag(state, entity_id, tag)
+
+    return _named(_condition, f"has_inbound_pair_tag({tag}@{slot.value})")
 
 
 def contact_pair_tag_for_kind(kind: ContactKind) -> str:

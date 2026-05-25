@@ -59,6 +59,7 @@ class FakeSession:
         chunk_ref_actor_rows=None,
         event_actor_rows=None,
         ephemeral_actor_rows=None,
+        inbound_ephemeral_pair_actor_rows=None,
         present_actor_rows=None,
         actor_target_relationship_rows=None,
         entity_name_rows=None,
@@ -83,6 +84,7 @@ class FakeSession:
         self.chunk_ref_actor_rows = chunk_ref_actor_rows or [{"entity_id": 1}]
         self.event_actor_rows = event_actor_rows or []
         self.ephemeral_actor_rows = ephemeral_actor_rows or []
+        self.inbound_ephemeral_pair_actor_rows = inbound_ephemeral_pair_actor_rows or []
         self.present_actor_rows = present_actor_rows or []
         self.actor_target_relationship_rows = actor_target_relationship_rows or []
         self.entity_name_rows = entity_name_rows or [
@@ -137,6 +139,12 @@ class FakeSession:
             return FakeResult(self.event_actor_rows)
         if "/* orrery:actor_bindings_ephemeral */" in sql:
             return FakeResult(self.ephemeral_actor_rows)
+        if "/* orrery:actor_bindings_inbound_ephemeral_pair_tags */" in sql:
+            assert "pt.is_ephemeral = true" in sql
+            assert "pt.tag = 'hunting'" in sql
+            assert "NOT pt.deprecated" in sql
+            assert "subject_entity.is_active = true" in sql
+            return FakeResult(self.inbound_ephemeral_pair_actor_rows)
         if "/* orrery:present_actor_ids_at_anchor */" in sql:
             return FakeResult(self.present_actor_rows)
         if "/* orrery:actor_target_bindings_character_relationships */" in sql:
@@ -357,17 +365,15 @@ def test_maintain_cover_skips_constrained_actor() -> None:
 
 
 def test_evade_pursuers_skips_captive_public_flow() -> None:
-    """Active-pursuit fallback cannot make a captive actor blend into crowds."""
+    """Inbound hunting cannot make a captive actor blend into crowds."""
 
     proposal = resolve_dry_run(
         FakeSession(
             tag_rows=[
-                {
-                    "entity_id": 1,
-                    "tag": "under_active_pursuit",
-                    "is_ephemeral": True,
-                },
                 {"entity_id": 1, "tag": "captive", "is_ephemeral": True},
+            ],
+            pair_tag_rows=[
+                {"subject_entity_id": 2, "object_entity_id": 1, "tag": "hunting"},
             ],
             location_class_rows=[
                 {"id": 10, "location_class": "blacksite", "is_primary": True}
@@ -402,25 +408,22 @@ def test_hide_handles_steady_state_concealment() -> None:
 
 
 def test_active_pursuit_beats_hide() -> None:
-    """EVADE owns hot pursuit while HIDE owns chronic concealment."""
+    """EVADE owns active hunting while HIDE owns chronic concealment."""
 
     proposal = resolve_dry_run(
         FakeSession(
             tag_rows=[
                 {"entity_id": 1, "tag": "off_grid", "is_ephemeral": False},
-                {
-                    "entity_id": 1,
-                    "tag": "under_active_pursuit",
-                    "is_ephemeral": True,
-                },
             ],
             pair_tag_rows=[
                 {
                     "subject_entity_id": 1,
                     "object_entity_id": 2,
                     "tag": "contact:lodging",
-                }
+                },
+                {"subject_entity_id": 2, "object_entity_id": 1, "tag": "hunting"},
             ],
+            inbound_ephemeral_pair_actor_rows=[{"entity_id": 1}],
             location_class_rows=[
                 {"id": 10, "location_class": "safe_house", "is_primary": True}
             ],
@@ -433,6 +436,34 @@ def test_active_pursuit_beats_hide() -> None:
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "evade_pursuers"
     assert proposal.resolutions[0].branch_label == "Reach a safe house through contacts"
+
+
+def test_inbound_hunting_pair_tag_binds_actor_for_evade() -> None:
+    """A hunted object is actor-eligible even without a legacy ephemeral flag."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[],
+            pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 2,
+                    "tag": "contact:lodging",
+                },
+                {"subject_entity_id": 2, "object_entity_id": 1, "tag": "hunting"},
+            ],
+            inbound_ephemeral_pair_actor_rows=[{"entity_id": 1}],
+            location_class_rows=[
+                {"id": 10, "location_class": "safe_house", "is_primary": True}
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "evade_pursuers"
 
 
 def test_surveillance_offscreen_target_commits_resolution() -> None:
@@ -1546,7 +1577,7 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
     """A multi-slot template fires when its hydrated state + bindings line up.
 
     Builds a FakeSession that produces a single character→character
-    relationship plus the ephemeral tag and event needed to satisfy
+    relationship plus the inbound hunting edge needed to satisfy
     PROTECT_KIN's gate. The reverse binding fires the intervene branch.
     """
 
@@ -1560,8 +1591,8 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
             {"id": 10, "location_class": "the_glow", "is_primary": True}
         ],
         activity_rows=[],
-        tag_rows=[
-            {"entity_id": 2, "tag": "under_active_pursuit", "is_ephemeral": True},
+        pair_tag_rows=[
+            {"subject_entity_id": 3, "object_entity_id": 2, "tag": "hunting"},
         ],
         relationship_rows=[
             {
@@ -1573,7 +1604,7 @@ def test_resolve_dry_run_produces_multi_slot_resolution() -> None:
         actor_target_relationship_rows=[
             {"source_entity_id": 1, "target_entity_id": 2},
         ],
-        ephemeral_actor_rows=[{"entity_id": 2}],
+        inbound_ephemeral_pair_actor_rows=[{"entity_id": 2}],
     )
 
     proposal = resolve_dry_run(

@@ -150,7 +150,7 @@ Mechanical details (gates, branch conditions, magnitudes, scene-pressure stubs) 
 
 The architecturally most significant of the basic-needs templates. Sleep is the substrate's most reliable source of small narrative texture — most ticks where it fires produce no prose, but the cumulative record of *where* a character has been sleeping is one of the densest queryable signals about their life situation.
 
-- **Gate**: in local sleep window AND not `well_rested`, OR `has_severity_tag("sleep_deprived")` at any level. Plus `NOT(has_ephemeral("cns_stimulated"))` and `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. *(The pursuit clause currently ships as `NOT(has_ephemeral("under_active_pursuit"))`; migration to the pair-tag predicate is tracked in the Resolved Decisions section below.)*
+- **Gate**: in local sleep window AND not `well_rested`, OR `has_severity_tag("sleep_deprived")` at any level. Plus `NOT(has_ephemeral("cns_stimulated"))` and `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`.
 - **Sleep schedules are tag-based**: `sleep_schedule:diurnal`, `sleep_schedule:nocturnal`, `sleep_schedule:nightshift`, `sleep_schedule:siesta`, `sleep_schedule:polyphasic`. Tag picks a profile; the profile (defined in `nexus.toml`) holds the actual windows. Tagless characters use the global default.
 - **Sleep location is a mood lever.** The `slept_rough` tag applied by rough-sleep and collapse branches is the DF-inspired mood signal — downstream templates and the narrator can read "this character has been sleeping poorly." Several consecutive `slept_rough` ticks give a character a different emotional register than waking from their own bed.
 - **Branches** discriminate by location and severity: collapse-into-sleep (severe-deprivation), at home with partner, at home alone, lodgings/safe-house, sleep rough.
@@ -176,7 +176,7 @@ Slightly higher priority than EAT because thirst ramps faster. Structurally simp
 
 Routine-trigger gate plus pressure gate. The routine clause (`count_co_located(1) AND NOT(recently_socialized)`) means SOCIALIZE can fire just because someone is around — capturing the organic case where company is present and the character engages. Without it, SOCIALIZE only fires when severity-pressure builds, which misses the "Pete is on the submarine and the party is right there" pattern.
 
-- **Gate**: `has_severity_tag("under_socialized")` OR (co-located AND not recently socialized). Plus `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))` and `NOT(has_ephemeral("grieving"))` (MOURN_LOSS owns that space). *(Currently ships as `under_active_pursuit` + `bereaved`; both are tracked for migration — see Resolved Decisions.)*
+- **Gate**: `has_severity_tag("under_socialized")` OR (co-located AND not recently socialized). Plus `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))` and `NOT(has_ephemeral("grieving"))` (MOURN_LOSS owns that space).
 - **Threshold mapping is per-character** via `extroversion_*` tags — see Modulator Tags.
 - **Parasocial branch** (reading, listening to a recording, watching a serial) uses partial decrement (`socialize_debt_delta: -0.4`) rather than full reset — captures "takes the edge off" without fully discharging.
 - **Branches**: seek-after-critical-isolation, engage with present company, go where people are (tavern/square/market), reach out to a contact, parasocial.
@@ -185,7 +185,7 @@ Routine-trigger gate plus pressure gate. The routine clause (`count_co_located(1
 
 The most sensitive in the catalog. Single-slot template (ACTOR only); branches that involve a partner read partner identity from the actor's relationship data. **No binding-composer pairing** — see Core Principle above.
 
-- **Gate**: `has_severity_tag("intimacy_starved")` AND `NOT(has_any_intimacy_suppressor())` AND not in a blocking state (recent satisfaction, inbound `hunting`, wounded, `grieving`). *(Currently ships with `under_active_pursuit` + `bereaved`; migration tracked in Resolved Decisions.)*
+- **Gate**: `has_severity_tag("intimacy_starved")` AND `NOT(has_any_intimacy_suppressor())` AND not in a blocking state (recent satisfaction, inbound `hunting`, wounded, `grieving`).
 - **Modulator**: `libido_*` tags shift thresholds; `libido_absent` means the counter is ignored at hydration and the gate never fires.
 - **Branches** include partner-present (full reset), preference-compatible-setting (partial decrement — going is partial fulfillment; what happens at the venue is storyteller territory), contracted intimacy (gated on absence of vows), solo (partial decrement), let-the-want-stay (counter unchanged; chronic-deferral becomes narratively visible over many ticks).
 - **`partnered_exclusively`** is a semi-suppressor — gate stays open, but routes exclusively to partnered branches. Modeled as an extra gate clause on non-partner branches rather than a suppressor proper.
@@ -278,11 +278,11 @@ The architecture is **DF-inspired but narrator-led**. The substrate ensures char
 
 ## Resolved Decisions (Tracking Implementation)
 
-These were surfaced as inconsistencies in `orrery_needs.md` during a follow-up review; decisions made via interview on 2026-05-23. Each has a tracking issue for the code/migration work; the doc reflects the resolved policy, while the shipped templates still use the legacy forms until the migrations land.
+These were surfaced as inconsistencies in `orrery_needs.md` during a follow-up review; decisions made via interview on 2026-05-23. This section records the settled policy and the implementation status.
 
 ### R1. `under_active_pursuit` → Inbound `hunting` Pair-Tag
 
-**Category error.** `under_active_pursuit` is a single-entity ephemeral but the concept ("someone is hunting me") is inherently relational — it's an inbound pair-tag from a pursuer. Three templates (SLEEP, SOCIALIZE, INTIMACY) currently gate on the ephemeral; the target form is `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`. This remains implementation work, tracked by issue #318. Live pair-tag data still uses `pursuing`; #318 owns both the `pursuing` → `hunting` rename and the needs-template gate migration.
+**Category error.** `under_active_pursuit` was a single-entity ephemeral but the concept ("someone is hunting me") is inherently relational — it is an inbound pair-tag from a hunter. Migration 048 renames live `pursuing` pair-tag rows to `hunting`, deprecates the legacy single-entity signal, and the templates gate on `NOT(has_inbound_pair_tag("hunting", Slot.ACTOR))`.
 
 ### R2. Grief Vocabulary — Collapsed to Canonical `grieving`
 
@@ -352,9 +352,8 @@ The architecture intentionally does not include a CONNECT template. Deep emotion
   - **028** — Sunhelm basic-needs (SLEEP, EAT, DRINK) schema + vocabulary seeding
   - **029** — Sunhelm need-state initialization trigger
   - **032** — Interpersonal needs (SOCIALIZE, INTIMACY) schema + vocabulary seeding
-- **PRs**:
+- **Issues / PRs**:
   - **#233** — Sunhelm basic-needs implementation
   - **#243** — Interpersonal needs implementation
-- **Open implementation issues**:
-  - **#318** — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate
+  - **#318** — inbound `hunting` pair-tag migration for pursuit-like blockers
 - **Drafting record (gitignored)**: `temp/orrery/sunhelm_update_draft.md`, `temp/orrery/orrery_interpersonal_update_draft.md` — full design conversation including multi-model input per open question. Useful for understanding *why* a particular decision was made; not authoritative for *what* shipped (this doc is).

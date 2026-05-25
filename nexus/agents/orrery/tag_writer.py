@@ -560,7 +560,7 @@ def clear_pair_tag(
     """Mark an active multi-entity tag as cleared (UPDATE cleared_at = now()).
 
     Used to retire ephemeral relations when their establishing context no
-    longer holds (e.g., a `pursuing` relation when the pursuers give up).
+    longer holds (e.g., a `hunting` relation when the hunters give up).
     Durable relations can also be cleared if narrative or substrate updates
     require it.
 

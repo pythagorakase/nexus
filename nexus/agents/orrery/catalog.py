@@ -108,6 +108,10 @@ _register(
     ),
 )
 _register(
+    r"has_inbound_pair_tag\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (f"{_slot(m.group('slot'))} has inbound " f"`{m.group('tag')}` pair tag"),
+)
+_register(
     r"has_contact_of_kind\((?P<kind>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (
         f"{_slot(m.group('slot'))} has outbound "
@@ -393,6 +397,10 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             tags = ", ".join(f"`{t}`" for t in value)
             parts.append(f"removes {tags} from {target}")
             continue
+        if key == "entity_pair_tags_target.clear_inbound":
+            tags = ", ".join(f"`{t}`" for t in value)
+            parts.append(f"clears inbound {tags} pair tags from target")
+            continue
         if key == "need.fulfill":
             if isinstance(value, Mapping):
                 need = value.get("type") or value.get("need")
@@ -520,6 +528,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("pair_tag", re.compile(r"has_pair_tag\(([^@()]+)@")),
     ("pair_tag", re.compile(r"lacks_pair_tag\(([^@()]+)@")),
+    ("pair_tag", re.compile(r"has_inbound_pair_tag\(([^@()]+)@")),
     ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
     ("contact_kind", re.compile(r"has_contact_of_kind\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
@@ -600,6 +609,11 @@ def _collect_vocabulary(
             if branch.event_type:
                 events.add(branch.event_type)
             for key, value in branch.state_delta.items():
+                if key == "entity_pair_tags_target.clear_inbound":
+                    if isinstance(value, list):
+                        for tag in value:
+                            pair_tags.add(str(tag))
+                    continue
                 if not key.startswith("entity_tags"):
                     continue
                 if not isinstance(value, list):

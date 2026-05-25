@@ -780,6 +780,10 @@ class OrreryReplacementStateDelta(BaseModel):
         default_factory=list,
         description="Replacement target tags to clear",
     )
+    entity_pair_tags_target_clear_inbound: List[str] = Field(
+        default_factory=list,
+        description="Replacement inbound target pair-tags to clear",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

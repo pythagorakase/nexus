@@ -115,8 +115,12 @@ def test_render_predicate_name_handles_known_predicates() -> None:
             "actor has `mentors` pair tag to target",
         ),
         (
-            "lacks_pair_tag(pursuing@target->actor)",
-            "target lacks `pursuing` pair tag to actor",
+            "lacks_pair_tag(hunting@target->actor)",
+            "target lacks `hunting` pair tag to actor",
+        ),
+        (
+            "has_inbound_pair_tag(hunting@actor)",
+            "actor has inbound `hunting` pair tag",
         ),
         (
             "has_any_pair_tag(claims,protects@actor->target)",
