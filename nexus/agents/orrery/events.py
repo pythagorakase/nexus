@@ -239,14 +239,25 @@ def commit_orrery_tick_sync(
     """Materialize a preview proposal inside the accepted-chunk transaction."""
 
     coerced = coerce_proposal(proposal)
-    if coerced is None or not coerced.resolutions:
-        return CommitOrreryTickResult()
+    has_resolutions = coerced is not None and bool(coerced.resolutions)
+    if has_resolutions:
+        adjudication_map = coerce_adjudications(adjudications)
+        need_tuning = coerce_need_tuning(sunhelm_settings)
+        _validate_proposal(coerced)
+        _validate_adjudications(coerced, adjudication_map)
+    else:
+        adjudication_map = {}
+        need_tuning = coerce_need_tuning(sunhelm_settings)
 
-    adjudication_map = coerce_adjudications(adjudications)
-    need_tuning = coerce_need_tuning(sunhelm_settings)
-    _validate_proposal(coerced)
-    _validate_adjudications(coerced, adjudication_map)
     with conn.cursor() as cur:
+        expired_tag_count = _sweep_expired_entity_tags_sync(
+            cur,
+            source_chunk_id=tick_chunk_id,
+        )
+        if not has_resolutions:
+            return CommitOrreryTickResult(cleared_tag_count=expired_tag_count)
+
+        assert coerced is not None
         entity_ids = _entity_ids_from_proposal(coerced)
         _validate_entity_ids_sync(cur, entity_ids)
         entity_names = _entity_names_sync(cur, entity_ids)
@@ -255,7 +266,7 @@ def commit_orrery_tick_sync(
         resolution_count = 0
         event_count = 0
         tag_mutation_count = 0
-        cleared_tag_count = 0
+        cleared_tag_count = expired_tag_count
         skipped_existing_count = 0
         adjudication_count = 0
         deferred_count = 0
@@ -391,13 +402,24 @@ async def commit_orrery_tick_async(
     """Async parity wrapper for tests and non-production commit callers."""
 
     coerced = coerce_proposal(proposal)
-    if coerced is None or not coerced.resolutions:
-        return CommitOrreryTickResult()
+    has_resolutions = coerced is not None and bool(coerced.resolutions)
+    if has_resolutions:
+        adjudication_map = coerce_adjudications(adjudications)
+        need_tuning = coerce_need_tuning(sunhelm_settings)
+        _validate_proposal(coerced)
+        _validate_adjudications(coerced, adjudication_map)
+    else:
+        adjudication_map = {}
+        need_tuning = coerce_need_tuning(sunhelm_settings)
 
-    adjudication_map = coerce_adjudications(adjudications)
-    need_tuning = coerce_need_tuning(sunhelm_settings)
-    _validate_proposal(coerced)
-    _validate_adjudications(coerced, adjudication_map)
+    expired_tag_count = await _sweep_expired_entity_tags_async(
+        conn,
+        source_chunk_id=tick_chunk_id,
+    )
+    if not has_resolutions:
+        return CommitOrreryTickResult(cleared_tag_count=expired_tag_count)
+
+    assert coerced is not None
     entity_ids = _entity_ids_from_proposal(coerced)
     await _validate_entity_ids_async(conn, entity_ids)
     entity_names = await _entity_names_async(conn, entity_ids)
@@ -408,7 +430,7 @@ async def commit_orrery_tick_async(
     resolution_count = 0
     event_count = 0
     tag_mutation_count = 0
-    cleared_tag_count = 0
+    cleared_tag_count = expired_tag_count
     skipped_existing_count = 0
     adjudication_count = 0
     deferred_count = 0
@@ -3136,6 +3158,55 @@ def _clear_event_tags_sync(
     return len(tag_ids)
 
 
+def _sweep_expired_entity_tags_sync(
+    cur: Any,
+    *,
+    source_chunk_id: int,
+) -> int:
+    world_time = _tick_world_time_sync(cur, source_chunk_id)
+    cur.execute(
+        """
+        SELECT et.id, et.expires_at_world_time
+        FROM entity_tags et
+        WHERE et.cleared_at IS NULL
+          AND et.expires_at_world_time IS NOT NULL
+          AND et.expires_at_world_time <= %s
+        """,
+        (world_time,),
+    )
+    rows = cur.fetchall()
+    for row in rows:
+        entity_tag_id = _row_get(row, "id", 0)
+        expires_at_world_time = _row_get(row, "expires_at_world_time", 1)
+        cur.execute(
+            "UPDATE entity_tags SET cleared_at = now() WHERE id = %s",
+            (entity_tag_id,),
+        )
+        cur.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_tag_id, cleared_at_world_time, mechanism,
+                triggering_event_id, justification, source_chunk_id
+            ) VALUES (%s, %s, 'time', NULL, %s::jsonb, %s)
+            """,
+            (
+                entity_tag_id,
+                world_time,
+                json.dumps(
+                    {
+                        "expires_at_world_time": (
+                            str(expires_at_world_time)
+                            if expires_at_world_time is not None
+                            else None
+                        )
+                    }
+                ),
+                source_chunk_id,
+            ),
+        )
+    return len(rows)
+
+
 async def _clear_event_tags_async(
     conn: Any,
     *,
@@ -3177,6 +3248,52 @@ async def _clear_event_tags_async(
             source_chunk_id,
         )
     return len(tag_ids)
+
+
+async def _sweep_expired_entity_tags_async(
+    conn: Any,
+    *,
+    source_chunk_id: int,
+) -> int:
+    world_time = await _tick_world_time_async(conn, source_chunk_id)
+    rows = await conn.fetch(
+        """
+        SELECT et.id, et.expires_at_world_time
+        FROM entity_tags et
+        WHERE et.cleared_at IS NULL
+          AND et.expires_at_world_time IS NOT NULL
+          AND et.expires_at_world_time <= $1
+        """,
+        world_time,
+    )
+    for row in rows:
+        entity_tag_id = _row_get(row, "id", 0)
+        expires_at_world_time = _row_get(row, "expires_at_world_time", 1)
+        await conn.execute(
+            "UPDATE entity_tags SET cleared_at = now() WHERE id = $1",
+            entity_tag_id,
+        )
+        await conn.execute(
+            """
+            INSERT INTO tag_clearance_log (
+                entity_tag_id, cleared_at_world_time, mechanism,
+                triggering_event_id, justification, source_chunk_id
+            ) VALUES ($1, $2, 'time', NULL, $3::jsonb, $4)
+            """,
+            entity_tag_id,
+            world_time,
+            json.dumps(
+                {
+                    "expires_at_world_time": (
+                        str(expires_at_world_time)
+                        if expires_at_world_time is not None
+                        else None
+                    )
+                }
+            ),
+            source_chunk_id,
+        )
+    return len(rows)
 
 
 def _scalar_entity_binding(bindings: Mapping[str, Any], slot: str) -> Optional[int]:
