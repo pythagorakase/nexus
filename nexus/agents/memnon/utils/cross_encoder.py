@@ -130,7 +130,7 @@ class CrossEncoderReranker:
             if flattened.size == 0:
                 return 0.0
             score = flattened[0]
-        elif isinstance(raw_score, (list, tuple)):
+        elif isinstance(raw_score, list):
             if not raw_score:
                 return 0.0
             score = raw_score[0]
@@ -162,29 +162,29 @@ class CrossEncoderReranker:
         if not passages:
             return []
 
+        pairs = [(query, passage) for passage in passages]
         try:
-            pairs = [(query, passage) for passage in passages]
             raw_scores = self.model.predict(pairs, batch_size=batch_size)
-
-            if isinstance(raw_scores, np.ndarray):
-                score_values = raw_scores.reshape(-1).tolist()
-            elif isinstance(raw_scores, list):
-                score_values = raw_scores
-            else:
-                score_values = [raw_scores]
-
-            if len(score_values) != len(passages):
-                raise ValueError(
-                    "CrossEncoder returned "
-                    f"{len(score_values)} scores for {len(passages)} passages"
-                )
-
-            return [self._normalize_score(score) for score in score_values]
         except Exception as e:
             logger.error(
                 f"Error scoring batch: {e}; falling back to per-passage scoring"
             )
             return [self.score_pair(query, passage) for passage in passages]
+
+        if isinstance(raw_scores, np.ndarray):
+            score_values = raw_scores.reshape(-1).tolist()
+        elif isinstance(raw_scores, list):
+            score_values = raw_scores
+        else:
+            score_values = [raw_scores]
+
+        if len(score_values) != len(passages):
+            raise ValueError(
+                "CrossEncoder returned "
+                f"{len(score_values)} scores for {len(passages)} passages"
+            )
+
+        return [self._normalize_score(score) for score in score_values]
 
     def score_pair_with_sliding_window(self, query: str, passage: str) -> float:
         """

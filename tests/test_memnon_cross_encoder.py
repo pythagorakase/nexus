@@ -35,6 +35,15 @@ class BatchFailingCrossEncoderModel(FakeCrossEncoderModel):
         return np.array([len(passage) / 10])
 
 
+class WrongScoreCountCrossEncoderModel(FakeCrossEncoderModel):
+    """Fake that violates the CrossEncoder score-count contract."""
+
+    def predict(self, pairs, batch_size=None):
+        pairs = list(pairs)
+        self.calls.append({"pairs": pairs, "batch_size": batch_size})
+        return np.array([0.1])
+
+
 def make_reranker(model, max_length=512):
     """Build a reranker around a fake model without running __init__."""
     reranker = CrossEncoderReranker.__new__(CrossEncoderReranker)
@@ -68,6 +77,7 @@ def test_rerank_batch_batches_short_passages_in_sliding_window_mode():
         "query",
         ["a", "bb", "ccc"],
         batch_size=3,
+        use_sliding_window=True,
     )
 
     assert scores == pytest.approx([0.1, 0.2, 0.3])
@@ -103,6 +113,32 @@ def test_rerank_batch_preserves_order_when_long_passages_use_sliding_window():
     assert model.calls[0]["pairs"] == [("query", "aa"), ("query", "bbb")]
 
 
+def test_rerank_batch_handles_all_long_passages_in_sliding_window_mode():
+    model = FakeCrossEncoderModel()
+    reranker = make_reranker(model, max_length=2)
+    long_passage_calls = []
+
+    def fake_sliding_window_score(query, passage):
+        long_passage_calls.append((query, passage))
+        return len(long_passage_calls) / 10
+
+    reranker.score_pair_with_sliding_window = fake_sliding_window_score
+
+    scores = reranker.rerank_batch(
+        "query",
+        ["first long passage", "second long passage"],
+        batch_size=2,
+        use_sliding_window=True,
+    )
+
+    assert scores == pytest.approx([0.1, 0.2])
+    assert long_passage_calls == [
+        ("query", "first long passage"),
+        ("query", "second long passage"),
+    ]
+    assert model.calls == []
+
+
 def test_rerank_batch_normalizes_raw_logits_like_score_pair():
     model = FakeCrossEncoderModel(scores=[-2.0, 0.25])
     reranker = make_reranker(model)
@@ -136,3 +172,16 @@ def test_rerank_batch_falls_back_to_per_passage_on_batch_error():
         [("query", "bad")],
         [("query", "cccc")],
     ]
+
+
+def test_rerank_batch_raises_when_cross_encoder_returns_wrong_score_count():
+    model = WrongScoreCountCrossEncoderModel()
+    reranker = make_reranker(model)
+
+    with pytest.raises(ValueError, match="returned 1 scores for 2 passages"):
+        reranker.rerank_batch(
+            "query",
+            ["first", "second"],
+            batch_size=2,
+            use_sliding_window=False,
+        )
