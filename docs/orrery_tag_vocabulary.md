@@ -584,17 +584,28 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 ## Faction Categories
 
-*Values shown are samples; full enumeration is a remaining task (see Open Items).*
+Draft companion: `docs/orrery_faction_vocabulary.md`.
 
-| Category | Cardinality | Ephemerality | Sample tags |
+Faction categories describe group-level actors: institutions, movements,
+corporations, gangs, churches, polities, guilds, scenes, families, and other
+organizations. The draft deliberately stays within the six categories registered
+by migration 043 and does not add a generic faction `state` category; passive
+faction conditions decompose into `power_status`, `agenda`, pair-tags, event
+history, or prose.
+
+| Category | Cardinality | Ephemerality | Draft tags |
 |---|---|---|---|
-| `ideology` | Multi-valued | Durable | `authoritarian`, `populist`, `theocratic`, `nationalist`, `mercantilist`, `revolutionary` |
-| `power_status` | Exclusive | Ephemeral | `dominant`, `ascending`, `stable`, `declining`, `fragile` |
-| `agenda` | Multi-valued | Ephemeral | `revanchist`, `infiltration`, `coup`, `succession`, `expansion`, `consolidation` |
-| `resource_base` | Multi-valued | Durable | `capital`, `force`, `information`, `faith`, `industry`, `network` |
-| `state` | Multi-valued | Ephemeral | `recently_dispossessed`, `leadership_disputed`, `under_investigation`, `negotiating`, `mobilized` |
-| `legitimacy` | Exclusive | Durable | `state_recognized`, `underground`, `shadow_legal`, `outlaw` |
+| `ideology` | Multi-valued | Durable | `authoritarian`, `egalitarian`, `traditionalist`, `progressive`, `theocratic`, `secularist`, `nationalist`, `cosmopolitan`, `imperial`, `communalist`, `mercantilist`, `technocratic`, `revolutionary`, `restorationist`, `isolationist` |
+| `resource_base` | Multi-valued | Durable | `capital`, `force`, `information`, `faith`, `industry`, `labor`, `territory`, `patronage`, `bureaucracy`, `technology`, `specialized_knowledge`, `criminal_network`, `supply_lines`, `mobility` |
+| `legitimacy` | Exclusive | Durable | `state_recognized`, `customary`, `tolerated`, `shadow_legal`, `underground`, `outlaw`, `contested` |
 | `operational_mode` | Exclusive | Durable | `overt`, `covert`, `hybrid` |
+| `power_status` | Exclusive | Ephemeral | `dominant`, `ascending`, `stable`, `pressured`, `declining`, `fragile`, `collapsed` |
+| `agenda` | Multi-valued | Ephemeral | `expand_control`, `consolidate_control`, `infiltrate`, `seize_leadership`, `settle_succession`, `recover_losses`, `negotiate`, `mobilize`, `investigate`, `recruit`, `extract_resources`, `sabotage`, `suppress_dissent`, `conceal_exposure`, `reform_internal`, `secure_alliance`, `enforce_claim`, `protect_asset`, `retaliate` |
+
+Legacy sample values rename for clarity: `revanchist` -> `recover_losses`,
+`coup` -> `seize_leadership`, `succession` -> `settle_succession`,
+`infiltration` -> `infiltrate`, `expansion` -> `expand_control`, and
+`consolidation` -> `consolidate_control`.
 
 ### `factions` Table Cleanup (in Scope for the Migration)
 
@@ -606,7 +617,7 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 **Drop columns entirely:**
 - `history` — narrative belongs in `world_events`
-- `current_activity` — should be a `state:*` tag if anything
+- `current_activity` — usually should become `agenda`; otherwise prose
 - `territory` — should be multi-entity tag `claims(faction → place)`
 
 **Keep columns:**
@@ -748,7 +759,7 @@ Compiler surfaces:
 ## Open Items
 
 1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. The `state` category vocabulary is now specified in `docs/orrery_state_vocabulary.md`; implementation remains coupled to clearance-event vocabulary (item 3) and the substrate debts named there.
-2. **Faction category values.** Settle the sample tags above into a complete set. Smaller scope.
+2. **Faction category values.** Drafted in `docs/orrery_faction_vocabulary.md`; still needs review, seeding migration, Slot 2 mapping, and clearance-event collapse.
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
@@ -764,6 +775,7 @@ Compiler surfaces:
 - `docs/trait_menu.md` — player-facing trait selection system; alignment documented above.
 - `docs/orrery_design_plan.md` — broader Orrery system design.
 - `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific open decisions.
+- `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, and faction table cleanup implications.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
