@@ -10,7 +10,7 @@ in Phase 2/3 of the Skald-tag-bestowal plan.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import pytest
@@ -64,7 +64,7 @@ class FakeCursor:
     ):
         self.tags = dict(
             tags or {}
-        )  # name → {id, category, is_ephemeral, deprecated, synonym_for}
+        )  # name -> {id, category, is_ephemeral, reapplication_policy, ...}
         self.entity_tags = list(entity_tags or [])
         self.category_registry = category_registry or _default_category_registry()
         self.world_time = world_time
@@ -127,6 +127,7 @@ class FakeCursor:
                 "id": tag_id,
                 "category": category,
                 "is_ephemeral": is_ephemeral,
+                "reapplication_policy": None,
                 "clearance_kind": clearance_kind,
                 "deprecated": False,
                 "synonym_for": None,
@@ -158,25 +159,51 @@ class FakeCursor:
                     "id": row["id"],
                     "category": row["category"],
                     "is_ephemeral": row["is_ephemeral"],
+                    "reapplication_policy": row.get("reapplication_policy"),
                 },
-                ["id", "category", "is_ephemeral"],
+                ["id", "category", "is_ephemeral", "reapplication_policy"],
             )
             self.rowcount = 1
             return
         if sql_upper.startswith("INSERT INTO ENTITY_TAGS"):
-            entity_id, tag_id, world_time, source_kind = params
+            if len(params) == 4:
+                entity_id, tag_id, world_time, source_kind = params
+                expires_at_world_time = None
+                duration_override = None
+            else:
+                entity_id, tag_id, world_time, expires_at_world_time, source_kind = (
+                    params[:5]
+                )
+                duration_override = params[5] if len(params) > 5 else None
             for row in self.entity_tags:
                 if (
                     row["entity_id"] == entity_id
                     and row["tag_id"] == tag_id
                     and row["cleared_at"] is None
                 ):
+                    if "GREATEST" in sql_upper:
+                        base = max(
+                            row.get("expires_at_world_time") or world_time,
+                            world_time,
+                        )
+                        row["applied_at_world_time"] = world_time
+                        row["expires_at_world_time"] = base + duration_override
+                        row["source_kind"] = source_kind
+                        self.rowcount = 1
+                        return
+                    if "DO UPDATE SET" in sql_upper:
+                        row["applied_at_world_time"] = world_time
+                        row["expires_at_world_time"] = expires_at_world_time
+                        row["source_kind"] = source_kind
+                        self.rowcount = 1
+                        return
                     self.rowcount = 0
                     return
             new_row = {
                 "entity_id": entity_id,
                 "tag_id": tag_id,
                 "applied_at_world_time": world_time,
+                "expires_at_world_time": expires_at_world_time,
                 "source_kind": source_kind,
                 "cleared_at": None,
             }
@@ -254,11 +281,16 @@ def _registered(*entries):
     """Quick helper to build the vocabulary dict for the fake cursor."""
     table = {}
     for entry in entries:
-        name, category, ephemeral = entry
+        if len(entry) == 3:
+            name, category, ephemeral = entry
+            reapplication_policy = None
+        else:
+            name, category, ephemeral, reapplication_policy = entry
         table[name] = {
             "id": hash(name) & 0xFFFFFF,
             "category": category,
             "is_ephemeral": ephemeral,
+            "reapplication_policy": reapplication_policy,
             "clearance_kind": "semantic" if ephemeral else None,
             "deprecated": False,
             "synonym_for": None,
@@ -326,6 +358,149 @@ def test_idempotent_when_open_row_exists():
     )
     assert counters["applied"] == 0
     assert len(cur.inserted_entity_tag_rows) == 0
+
+
+def test_duration_override_sets_expiry_on_insert():
+    cur = FakeCursor(tags=_registered(("intoxicated:stimulant", "state", True)))
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["intoxicated:stimulant"]),
+        duration_override=timedelta(hours=2),
+        world_time=_WORLD_TIME,
+    )
+
+    assert counters["applied"] == 1
+    assert cur.inserted_entity_tag_rows[0]["expires_at_world_time"] == (
+        _WORLD_TIME + timedelta(hours=2)
+    )
+
+
+def test_new_row_policy_preserves_existing_open_row_on_reapply():
+    tag_id = hash("intoxicated:stimulant") & 0xFFFFFF
+    original_expiry = _WORLD_TIME + timedelta(minutes=30)
+    cur = FakeCursor(
+        tags=_registered(
+            ("intoxicated:stimulant", "state", True, "new_row"),
+        ),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "expires_at_world_time": original_expiry,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["intoxicated:stimulant"]),
+        duration_override=timedelta(hours=2),
+        world_time=_WORLD_TIME + timedelta(minutes=10),
+    )
+
+    assert counters["applied"] == 0
+    assert cur.entity_tags[0]["expires_at_world_time"] == original_expiry
+
+
+def test_extend_expiry_policy_extends_from_later_of_expiry_or_world_time():
+    tag_id = hash("intoxicated:stimulant") & 0xFFFFFF
+    original_expiry = _WORLD_TIME + timedelta(minutes=30)
+    cur = FakeCursor(
+        tags=_registered(
+            ("intoxicated:stimulant", "state", True, "extend_expiry"),
+        ),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "expires_at_world_time": original_expiry,
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["intoxicated:stimulant"]),
+        duration_override=timedelta(hours=1),
+        world_time=_WORLD_TIME + timedelta(minutes=10),
+        source_kind="system",
+    )
+
+    assert counters["applied"] == 1
+    assert cur.entity_tags[0]["expires_at_world_time"] == (
+        original_expiry + timedelta(hours=1)
+    )
+    assert cur.entity_tags[0]["applied_at_world_time"] == (
+        _WORLD_TIME + timedelta(minutes=10)
+    )
+    assert cur.entity_tags[0]["source_kind"] == "system"
+
+
+def test_extend_expiry_policy_requires_duration_override():
+    cur = FakeCursor(
+        tags=_registered(
+            ("intoxicated:stimulant", "state", True, "extend_expiry"),
+        )
+    )
+
+    with pytest.raises(ValueError, match="extend_expiry.*duration_override"):
+        apply_tag_bestowal(
+            cur,
+            entity_id=42,
+            entity_kind="character",
+            bestowal=OrreryTagBestowal(applied_tags=["intoxicated:stimulant"]),
+            world_time=_WORLD_TIME,
+        )
+
+    assert cur.entity_tags == []
+
+
+def test_replace_policy_restamps_existing_open_row():
+    tag_id = hash("disguised") & 0xFFFFFF
+    cur = FakeCursor(
+        tags=_registered(("disguised", "state", True, "replace")),
+        entity_tags=[
+            {
+                "entity_id": 42,
+                "tag_id": tag_id,
+                "applied_at_world_time": _WORLD_TIME,
+                "expires_at_world_time": _WORLD_TIME + timedelta(hours=1),
+                "source_kind": "skald_inline",
+                "cleared_at": None,
+            }
+        ],
+    )
+    new_world_time = _WORLD_TIME + timedelta(days=1)
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["disguised"]),
+        duration_override=timedelta(hours=3),
+        world_time=new_world_time,
+        source_kind="system",
+    )
+
+    assert counters["applied"] == 1
+    assert cur.entity_tags[0]["applied_at_world_time"] == new_world_time
+    assert cur.entity_tags[0]["expires_at_world_time"] == (
+        new_world_time + timedelta(hours=3)
+    )
+    assert cur.entity_tags[0]["source_kind"] == "system"
 
 
 def test_closed_bestowal_schema_rejects_runtime_vocabulary_growth_field():

@@ -131,7 +131,7 @@ class TraitCompilerCursor:
             (tag,) = params
             row = self.tags.get(tag)
             self._next_row = (
-                (row["id"], row["category"], False) if row is not None else None
+                (row["id"], row["category"], False, None) if row is not None else None
             )
             self.rowcount = 1 if row else 0
             return
@@ -185,7 +185,12 @@ class TraitCompilerCursor:
             return
 
         if normalized.startswith("INSERT INTO ENTITY_TAGS"):
-            entity_id, tag_id, _world_time, source_kind = params
+            if len(params) == 4:
+                entity_id, tag_id, _world_time, source_kind = params
+            else:
+                entity_id, tag_id, _world_time, _expires_at_world_time, source_kind = (
+                    params[:5]
+                )
             active = [
                 row
                 for row in self.entity_tags
