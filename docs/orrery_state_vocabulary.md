@@ -134,11 +134,11 @@ The table marks each row's registry status against the live `event_types` table.
 | `confrontation_resolved` | **existing** | `enraged` (alternate path — confronted-and-de-escalated without retaliation) |
 | `circumstance_reversed` | **existing** | `despairing` |
 | `mourning_completed` | **existing** | `grieving` (authored fallback — the sweeper handles the primary time-decay path) |
-| *(none — time-cleared via sweeper)* | sweeper #328 | `grieving` (primary), all `intoxicated:*` |
+| *(none — time-cleared via sweeper)* | **existing** | `grieving` (primary), all `intoxicated:*` |
 
 Several alignments with existing vocab dropped synonymous proposals: `tended`/`healed` collapse to the existing `tended_wound` + `wound_healed` pair; `released` collapses to `captivity_ended`; `vengeance_taken` collapses to `retaliation_executed`. The remaining new-registrations are anchors that don't currently have an event-type partner in the live registry.
 
-**Substrate gap on `clearance_kind`.** The per-cluster tables above use `time` and `time + authored` in the Clearance kind column. The live `entity_tag_clearance_kind` enum only has `{event, semantic, authored}` (migration 023) — no `time` value. Adding `time` is implicitly bundled with the sweeper work in #328; without it, migrations for time-cleared tags will fail with a cast error. The enum extension should land before any tag template references `'time'::entity_tag_clearance_kind`.
+**Substrate note on `clearance_kind`.** Migration 051 adds `time` to the live `entity_tag_clearance_kind` enum so `tag_clearance_log` can distinguish elapsed-time sweeps from event, semantic, and authored clearances. Time-cleared tag templates can now use `'time'::entity_tag_clearance_kind` once their vocabulary rows ship.
 
 ---
 
@@ -150,7 +150,7 @@ Several alignments with existing vocab dropped synonymous proposals: `tended`/`h
 4. **`contacts_available` overload — resolved.** PR #327 (migration 047) shipped the kind-qualified `contact:<lodging|social|intimate>` pair-tag family, replacing the overloaded `contacts_available` ephemeral and closing #317. Not a `state` issue — noted only for cross-reference; the substrate fix applies cleanly to needs templates per `orrery_needs.md` R3.
 5. **`entity_tags` substrate enrichment for additive-timer pharmacologics — resolved.** Migration 049 adds `entity_tags.expires_at_world_time` and the expiring-row index, and `_insert_entity_tag` now dispatches `new_row` / `extend_expiry` / `replace` from each tag's existing `reapplication_policy` field.
    
-   The remaining sibling is **#328** (sweeper). The pharmacologic cluster still needs the sweeper before `intoxicated:*` becomes a fully working time-cleared state family.
+   The sweeper is resolved by #328: accepted ticks now clear open rows whose `expires_at_world_time` has passed and record `tag_clearance_log` rows with mechanism `time`.
 
 ---
 

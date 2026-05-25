@@ -43,6 +43,7 @@ class RecordingCursor:
         travel_state_update_rowcount=1,
         character_entity_ids=None,
         inbound_pair_tag_clear_count=0,
+        expired_entity_tags=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -63,6 +64,7 @@ class RecordingCursor:
             {11: 1} if character_entity_ids is None else character_entity_ids
         )
         self.inbound_pair_tag_clear_count = inbound_pair_tag_clear_count
+        self.expired_entity_tags = list(expired_entity_tags or [])
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -288,6 +290,15 @@ class RecordingCursor:
             self._fetchone = {"id": 20}
         elif "SELECT et.id FROM entity_tags et JOIN tags t" in normalized:
             self._fetchall = [{"id": tag_id} for tag_id in self.clear_tag_ids]
+        elif "SELECT et.id, et.expires_at_world_time FROM entity_tags et" in (
+            normalized
+        ):
+            (world_time,) = params
+            self._fetchall = [
+                row
+                for row in self.expired_entity_tags
+                if row["expires_at_world_time"] <= world_time
+            ]
         elif "SELECT et.id FROM entity_tags et WHERE" in normalized:
             entity_id, tag_id = params
             tags_by_id = {value: key for key, value in self.known_tags.items()}
@@ -499,7 +510,7 @@ def test_response_to_incubator_serializes_orrery_adjudications() -> None:
 
 
 def test_commit_orrery_tick_ignores_scene_pressures() -> None:
-    """Prompt-only pressures do not materialize canonical Orrery writes."""
+    """Prompt-only pressures do not materialize resolution/event writes."""
 
     proposal = OrreryTickProposal(
         anchor_chunk_id=99,
@@ -521,7 +532,54 @@ def test_commit_orrery_tick_ignores_scene_pressures() -> None:
     assert result.resolution_count == 0
     assert result.event_count == 0
     assert result.tag_mutation_count == 0
-    assert cursor.executed == []
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    assert "INSERT INTO orrery_resolutions" not in statements
+    assert "INSERT INTO world_events" not in statements
+
+
+def test_commit_orrery_tick_sweeps_expired_entity_tags_without_resolution() -> None:
+    """Accepted ticks clear elapsed-time tags even when no package commits."""
+
+    expired_at = datetime(2073, 10, 31, 17, tzinfo=timezone.utc)
+    future_at = datetime(2073, 10, 31, 19, tzinfo=timezone.utc)
+    cursor = RecordingCursor(
+        expired_entity_tags=[
+            {"id": 501, "expires_at_world_time": expired_at},
+            {"id": 502, "expires_at_world_time": future_at},
+        ]
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        None,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    clearance_logs = [
+        params
+        for sql, params in cursor.executed
+        if "INSERT INTO tag_clearance_log" in sql
+    ]
+    update_stmts = [
+        params
+        for sql, params in cursor.executed
+        if "UPDATE entity_tags SET cleared_at" in sql
+    ]
+
+    assert result.resolution_count == 0
+    assert result.event_count == 0
+    assert result.cleared_tag_count == 1
+    assert update_stmts == [(501,)]
+    assert clearance_logs == [
+        (
+            501,
+            cursor.world_time,
+            json.dumps({"expires_at_world_time": str(expired_at)}),
+            100,
+        )
+    ]
 
 
 def test_commit_orrery_tick_materializes_resolution_event_and_tags() -> None:

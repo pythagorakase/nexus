@@ -603,6 +603,21 @@ def test_state_clearance_event_type_migration_registers_new_events() -> None:
     assert "synonym_for = NULL" in migration_source
 
 
+def test_time_clearance_kind_migration_extends_tag_clearance_enum() -> None:
+    """Migration 051 adds the time mechanism used by expiry sweeps."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "051_orrery_time_tag_clearance_kind.py"
+    ).read_text()
+
+    assert "ALTER TYPE entity_tag_clearance_kind ADD VALUE IF NOT EXISTS" in (
+        migration_source
+    )
+    assert 'sql.Literal("time")' in migration_source
+
+
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
     """Migration 049 DDL is idempotent against a real slot schema."""

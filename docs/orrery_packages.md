@@ -1771,6 +1771,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/048_orrery_hunting_pair_tag.py`
 - `migrations/049_orrery_entity_tag_expiry_substrate.py`
 - `migrations/050_orrery_state_clearance_event_types.py`
+- `migrations/051_orrery_time_tag_clearance_kind.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

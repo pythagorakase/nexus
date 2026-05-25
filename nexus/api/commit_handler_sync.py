@@ -549,6 +549,7 @@ def commit_incubator_to_database_sync(
                 orrery_result.resolution_count
                 or orrery_result.skipped_existing_count
                 or orrery_result.adjudication_count
+                or orrery_result.cleared_tag_count
             ):
                 logger.info(
                     "Committed Orrery tick for chunk %s: %s resolutions, %s events, "
