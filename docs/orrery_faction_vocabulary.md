@@ -253,7 +253,14 @@ This table is deliberately a clearance design, not a migration. A later migratio
 | `operational_secrecy` | `operational_mode` |
 | `resource_class` | `resource_base` |
 | `hidden_agenda_class` | `agenda` |
+| `state` (faction only, if any rows exist) | no tag replacement; decompose into `power_status`, `agenda`, pair-tags, event history, or prose |
 | `history_class` | no tag replacement; migrate to `world_events` / prose |
+
+The faction-only `state` row is a legacy draft category, not the canonical
+character `state` category. A future implementation migration should either
+verify that no `(entity_kind='faction', category='state')` rows exist in target
+slots or mark the faction category deprecated with no replacement before the
+backfill runs.
 
 ### Example Value Mapping
 
@@ -270,6 +277,17 @@ This table is deliberately a clearance design, not a migration. A later migratio
 | `underground` | `legitimacy:underground` or `operational_mode:covert` only if secrecy, not recognition, is the key fact |
 | `hidden` / `secretive` | `operational_mode:covert` |
 
+### Deterministic Seeding Rules
+
+- Seed `resource_base:territory` when the faction has at least one active
+  `claims(faction -> place)` row, or when legacy prose/column data explicitly
+  names territorial control as a capacity source. Do not infer it merely from
+  having a `primary_location` or `operates_from` base.
+- Seed `operational_mode` from existing `operational_secrecy` tag rows when
+  present. The `factions` table has no source column for this axis, so slots
+  without legacy tags should leave `operational_mode` unset unless prose review
+  supplies a clear mapping.
+
 ### `factions` Table Cleanup
 
 Move to tags:
@@ -278,6 +296,9 @@ Move to tags:
 - `power_level` -> `power_status`
 - `hidden_agenda` -> `agenda`
 - `resources` -> `resource_base`
+
+No direct table column feeds `operational_mode`; it comes from the legacy
+`operational_secrecy` tag category or later prose/manual review.
 
 Do not move to tags:
 

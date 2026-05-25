@@ -776,6 +776,7 @@ Compiler surfaces:
 - `docs/orrery_design_plan.md` — broader Orrery system design.
 - `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific open decisions.
 - `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, and faction table cleanup implications.
+- `migrations/043_orrery_category_refactor_phase1.py` — registers the six faction category names (`ideology`, `power_status`, `agenda`, `resource_base`, `legitimacy`, `operational_mode`) and records the legacy-to-replacement mappings.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
