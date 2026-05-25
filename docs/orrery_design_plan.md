@@ -84,7 +84,7 @@ Current-tick Orrery resolutions are surfaced to Skald as `orrery_imminent_activi
 
 **Implicit `replace` detection:** commit also infers `replace` without prose parsing when Skald's structured character `state_updates` touch the same actor/field that an Orrery proposal would change. This prevents Orrery from overwriting ordinary authoritative state writes such as `current_activity` or movement-related `current_location`.
 
-**Replacement scope is bounded.** `OrreryReplacementStateDelta` accepts only a constrained vocabulary (e.g., `character_current_activity`, `entity_tags_add`, `entity_tags_remove`, `entity_tags_target_add`) — Skald cannot replace with arbitrary world-state mutations. This is the safety property that keeps replacement from being arbitrary world-rewriting.
+**Replacement scope is bounded.** `OrreryReplacementStateDelta` accepts only a constrained vocabulary (e.g., `character_current_activity`, `entity_tags_add`, `entity_tags_remove`, `entity_tags_target_add`, `entity_pair_tags_target_clear_inbound`) — Skald cannot replace with arbitrary world-state mutations. This is the safety property that keeps replacement from being arbitrary world-rewriting.
 
 **Audit:** every adjudication writes a row to `orrery_adjudication_log` with `adjudication_source: 'explicit' | 'structured_state_update'`, `original_state_delta`, `replacement_state_delta`, and optional `skald_note`. The log enables retrospective questions: how often does Skald veto? Replace? What patterns of intervention exist?
 

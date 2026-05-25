@@ -536,6 +536,26 @@ def test_kind_qualified_contact_migration_deprecates_contact_flags() -> None:
     assert "SET deprecated = TRUE" in migration_source
 
 
+def test_hunting_pair_tag_migration_retires_pursuit_vocabulary() -> None:
+    """Migration 048 moves active-targeting vocabulary to hunting."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "048_orrery_hunting_pair_tag.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert "physical chase physics" in migration.PURSUING_REPLACEMENT_NOTE
+    assert "who was hunting" in migration.UNDER_ACTIVE_PURSUIT_REPLACEMENT_NOTE
+    assert "INSERT INTO pair_tags" in migration_source
+    assert "WHERE tag = 'pursuing'" in migration_source
+    assert "UPDATE entity_pair_tags" in migration_source
+    assert "SET pair_tag_id = %s" in migration_source
+    assert "WHERE tag = 'under_active_pursuit'" in migration_source
+
+
 @pytest.mark.requires_postgres
 def test_kind_qualified_contact_migration_executes_against_slot_db() -> None:
     """Migration 047 seeds kinded contacts and deprecates legacy rows."""

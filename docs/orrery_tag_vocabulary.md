@@ -639,7 +639,7 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
-| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). **⏳ DESIGN-TARGET rename:** live seeded data still uses `pursuing` from migration 042. The `hunting` rename and needs-template migration are tracked by issue #318. Use `pursuing` in shipped code until that lands. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept isn't physical-chase-specific.* |
+| `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). Migration 048 renames live `pursuing` rows to `hunting`, deprecates the old pair-tag, and retires the single-entity `under_active_pursuit` signal. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept is not physical-chase-specific.* |
 | `handles` | character | character | Operative-handler relationship; covert/operational |
 | `obligation` | character \| faction | character \| faction | Debt / oath / loyalty; kind inferable from establishing event |
 | `authority_over` | character \| faction | character \| faction | Interpersonal/positional power over a specific other entity. Distinct from scope-bound status (a king has `authority_over` a vassal directly; a senior officer in an institution holds `status:senior(→ faction)` against that institution's membership) |
@@ -718,7 +718,7 @@ Compiler surfaces:
 | `Resources` | Writes `role.resources:<level>` when typed input supplies `destitute`, `poor`, `comfortable`, `wealthy`, or `magnate`. | `comfortable` is the default/ordinary tier; absence of typed input is reported, not guessed. |
 | `Allies` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `ally(char → char)` in the same transaction. | Per #303, affective relationship row first; pair-tag only when a package gate needs the binary edge. |
 | `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` requires `contact_kind` (`lodging`, `social`, or `intimate`) or an explicit `contact:<kind>` pair-tag. | The bare `contact` pair-tag is deprecated as a package gate. Needs templates consume `has_contact_of_kind(...)` predicates. |
-| `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Active pursuit remains the `pursuing`/future-`hunting` pair-tag track, not default `hostile_to` (#318). |
+| `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Acute targeting remains the `hunting` pair-tag track, not default `hostile_to`. |
 | `Domain` | Current MVP returns a prose-only remainder. | Target design: create/identify a place entity and write `claims(char → place)`; registry polymorphism is ready, compiler input/schema is not. |
 | `Patron` | Current MVP returns a prose-only remainder. | Target design: one `character_relationships` row for the patron-client bond; package-specific pair-tags later as needed. This preserves the #305 resolution: patron is not decomposed into a default OR/AND bundle of mentor, sponsor, protector, and authority edges. |
 | `Dependents` | Current MVP returns a prose-only remainder. | Target design: `protects(char → dependent)` plus affective relationship row; no default `authority_over`/`obligation` edge. |
@@ -752,7 +752,7 @@ Compiler surfaces:
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
-6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Follow-up work is now specific: `under_active_pursuit` → inbound `hunting` (#318), and any future pair-tag-derived binding composers demanded by package implementations.
+6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
 7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
 8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
 9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan tracked by issue #326 are ready.
@@ -767,17 +767,18 @@ Compiler surfaces:
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
+- `migrations/048_orrery_hunting_pair_tag.py` — `pursuing` → `hunting` pair-tag rename plus deprecation of `under_active_pursuit`.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
-- Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `pursuing` / future-`hunting` tags confer targeted detection sensitivity). *Open.*
+- Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
 - PR #284 — DB-level multi-entity tag predicates (`pair_tag_exists`, inbound/outbound subject lookups). *Merged.*
 - Issue #290 / PR #323 — structured trait-compiler audit and opt-in `nexus trait-audit` CLI. *Merged.*
 - Issue #291 — pair-tag-vs-`character_relationships` reconciliation. *Closed.*
-- Issue #317 — Replace `contacts_available` overload with kind-qualified contact pair-tag predicates.
+- Issue #317 — Replace `contacts_available` overload with kind-qualified contact pair-tag predicates. *Closed.*
+- Issue #318 — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate. *Implemented.*
 
 ### Implementation Contracts (Open)
 
 These are the downstream mechanical pre-requisites surfaced during the design-doc review. Each is tracked as its own issue so substrate work can be sequenced independently of further doc edits.
 
 - Issue #292 — Place/faction tag subcategory refactor + resolver adapter for `in_location_class()` gates.
-- Issue #318 — Replace `under_active_pursuit` ephemeral with inbound `hunting` pair-tag predicate.

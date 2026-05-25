@@ -26,6 +26,7 @@ from nexus.agents.orrery.substrate import (
     has_any_intimacy_suppressor,
     has_contact_of_kind,
     has_established_partner_co_located,
+    has_inbound_pair_tag,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag,
@@ -246,7 +247,26 @@ def test_pair_tag_predicates_are_direction_sensitive() -> None:
     assert has_pair_tag("mentors")(state, bindings)
     assert has_any_pair_tag("claims", "protects")(state, bindings)
     assert not has_pair_tag("mentors")(state, reversed_bindings)
-    assert not has_pair_tag("pursuing")(state, bindings)
+    assert not has_pair_tag("hunting")(state, bindings)
+
+
+def test_inbound_pair_tag_predicate_matches_any_subject() -> None:
+    """Inbound pair-tag gates ask who points a relation at a slot entity."""
+
+    state = WorldState(
+        pair_tags={
+            (1, 2): frozenset({"hunting"}),
+            (3, 2): frozenset({"hunting"}),
+            (2, 4): frozenset({"hunting"}),
+        }
+    )
+
+    assert has_inbound_pair_tag("hunting")(state, {Slot.ACTOR: 2})
+    assert not has_inbound_pair_tag("hunting")(state, {Slot.ACTOR: 1})
+    assert has_inbound_pair_tag("hunting", slot=Slot.TARGET)(
+        state,
+        {Slot.ACTOR: 99, Slot.TARGET: 4},
+    )
 
 
 def test_contact_kind_predicate_reads_outbound_kind_specific_edges() -> None:

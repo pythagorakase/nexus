@@ -58,7 +58,7 @@ PAIR_TAG_SEED: Sequence[PairTagSeedRow] = (
     ),
     # Character / faction relations
     (
-        "pursuing",
+        "hunting",
         ["character", "faction"],
         ["character"],
         True,

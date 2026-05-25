@@ -41,6 +41,7 @@ class RecordingCursor:
         authored_route_edges=None,
         travel_state_update_rowcount=1,
         character_entity_ids=None,
+        inbound_pair_tag_clear_count=0,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -60,6 +61,7 @@ class RecordingCursor:
         self.character_entity_ids = (
             {11: 1} if character_entity_ids is None else character_entity_ids
         )
+        self.inbound_pair_tag_clear_count = inbound_pair_tag_clear_count
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -279,6 +281,8 @@ class RecordingCursor:
             self.rowcount = self.travel_state_update_rowcount
         elif "UPDATE characters SET current_location" in normalized:
             self.rowcount = 1
+        elif "UPDATE entity_pair_tags ept SET cleared_at = now()" in normalized:
+            self.rowcount = self.inbound_pair_tag_clear_count
         elif "INSERT INTO world_events" in normalized:
             self._fetchone = {"id": 20}
         elif "SELECT et.id FROM entity_tags et JOIN tags t" in normalized:
@@ -932,6 +936,50 @@ def test_commit_orrery_tick_applies_target_tag_deltas() -> None:
     assert "VALUES (%s, 'target', %s)" in statements
     assert "mechanism, justification, source_chunk_id" in statements
     assert event_params[3] == 2
+
+
+def test_commit_orrery_tick_clears_inbound_target_pair_tags() -> None:
+    """Multi-slot packages can clear relational pressure aimed at a target."""
+
+    draft = OrreryResolutionDraft(
+        template_id="protect_kin",
+        priority=95,
+        binding_hash="protect-1",
+        bindings={"actor": 1, "target": 2},
+        branch_label="Physically intervene at the target's location",
+        narrative_stub="{actor} pulls {target} out of danger.",
+        state_delta={
+            "character.current_activity": "shielding kin from active threat",
+            "entity_pair_tags_target.clear_inbound": ["hunting"],
+        },
+        event_type="protective_intervention",
+        changed_fields=("character.current_activity", "entity_pair_tags"),
+        magnitude=0.78,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(inbound_pair_tag_clear_count=2)
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    statements = "\n".join(sql for sql, _params in cursor.executed)
+    pair_clear_params = next(
+        params for sql, params in cursor.executed if "UPDATE entity_pair_tags" in sql
+    )
+
+    assert result.tag_mutation_count == 2
+    assert "FROM pair_tags pt" in statements
+    assert pair_clear_params == (2, "hunting")
 
 
 def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> None:

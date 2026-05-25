@@ -10,10 +10,10 @@ Seeds the 12 multi-entity relations settled in
 
 - Place-bound (6): `knows_location`, `can_access`, `claims`, `resides_at`,
   `operates_from`, `originates_from`
-- Character/faction relations (6): `pursuing`, `handles`, `obligation`,
+- Character/faction relations (6): `hunting`, `handles`, `obligation`,
   `authority_over`, `protects`, `mentors`
 
-`pursuing` is the only seeded ephemeral relation; the rest are durable.
+`hunting` is the only seeded ephemeral relation; the rest are durable.
 
 The companion writer lives in `nexus.agents.orrery.tag_writer`
 (`apply_pair_tag_bestowal`, `clear_pair_tag`). Read predicates

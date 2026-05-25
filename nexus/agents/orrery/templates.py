@@ -21,6 +21,7 @@ from nexus.agents.orrery.substrate import (
     has_contact_of_kind,
     has_ephemeral,
     has_established_partner_co_located,
+    has_inbound_pair_tag,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_relationship_of_type,
@@ -31,7 +32,6 @@ from nexus.agents.orrery.substrate import (
     is_constrained,
     is_hidden,
     is_in_transit,
-    lacks_tag,
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
@@ -52,7 +52,7 @@ EVADE_PURSUERS = Template(
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         OR(
-            has_ephemeral("under_active_pursuit"),
+            has_inbound_pair_tag("hunting"),
             recent_event("compliance_alert", within_ticks=5, target_slot=Slot.ACTOR),
         ),
         NOT(is_constrained()),
@@ -129,7 +129,7 @@ HIDE = Template(
     package_gate=AND(
         has_minimal_context(),
         is_hidden(),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(is_constrained()),
         since_last_event_at_least("hideout_maintained", minimum_ticks=6),
         since_last_event_at_least("signal_exposure_reduced", minimum_ticks=6),
@@ -318,8 +318,7 @@ PURSUE_GHOST_LEAD = Template(
     package_gate=AND(
         has_tag("seeking_identity"),
         time_of_day_in("evening", "night"),
-        lacks_tag("under_active_pursuit"),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -477,10 +476,10 @@ MAINTAIN_COVER = Template(
 #
 # Writer contract:
 #
-#   * Cross-actor state_delta keys (entity_tags_target.add/remove) are
-#     routed by convention to Slot.TARGET by CommitOrreryTick. Define a
-#     state_delta TypedDict/dataclass if the implicit-string convention
-#     grows past this small vocabulary.
+#   * Cross-actor state_delta keys (entity_tags_target.add/remove and narrow
+#     target-directed pair-tag clears) are routed by convention to Slot.TARGET
+#     by CommitOrreryTick. Define a state_delta TypedDict/dataclass if the
+#     implicit-string convention grows past this small vocabulary.
 #   * present_target_policy=STORYTELLER_PRESSURE allows a present TARGET only
 #     as prompt-only scene pressure. Present ACTORs are still excluded, and
 #     pressure drafts never commit state deltas or world events directly.
@@ -511,7 +510,7 @@ EXTRACT_VENGEANCE = Template(
         ),
         since_last_event_at_least("retaliation_attempted", minimum_ticks=8),
         since_last_event_at_least("retaliation_executed", minimum_ticks=8),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -608,7 +607,7 @@ PROTECT_KIN = Template(
             has_symmetric_relationship_of_type("comrade"),
         ),
         OR(
-            has_ephemeral("under_active_pursuit", slot=Slot.TARGET),
+            has_inbound_pair_tag("hunting", slot=Slot.TARGET),
             has_ephemeral("wounded", slot=Slot.TARGET),
             recent_event(
                 "threat_issued",
@@ -616,14 +615,14 @@ PROTECT_KIN = Template(
                 target_slot=Slot.TARGET,
             ),
         ),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
             label="Physically intervene at the target's location",
             conditions=AND(
                 co_located(Slot.ACTOR, Slot.TARGET),
-                has_ephemeral("under_active_pursuit", slot=Slot.TARGET),
+                has_inbound_pair_tag("hunting", slot=Slot.TARGET),
             ),
             narrative_stub=(
                 "{actor} reaches {target} as the noose tightens — pulling them "
@@ -633,7 +632,7 @@ PROTECT_KIN = Template(
             state_delta={
                 "character.current_activity": "shielding kin from active threat",
                 "entity_tags.add": ["recently_protective"],
-                "entity_tags_target.remove": ["under_active_pursuit"],
+                "entity_pair_tags_target.clear_inbound": ["hunting"],
             },
             event_type="protective_intervention",
             changed_fields=(
@@ -725,7 +724,7 @@ SURVEIL = Template(
     package_gate=AND(
         has_minimal_context(),
         NOT(is_constrained()),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
         OR(
             is_hidden(),
@@ -926,7 +925,7 @@ CULTIVATE_INFORMANT = Template(
             target_slot=Slot.TARGET,
         ),
         time_of_day_in("evening", "night"),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
     ),
     branches=(
@@ -1036,9 +1035,8 @@ CULTIVATE_INFORMANT = Template(
 #     it), so this gate uses `has_ephemeral` instead. Branch prose unchanged.
 #
 #   * TEND_WOUNDED's magical-healing branch clears `wounded` from the target
-#     via `entity_tags_target.remove` — closing the loop with PROTECT_KIN
-#     (which reads `wounded` but had no template emitting `wound_healed`
-#     until now).
+#     via `entity_tags_target.remove`, matching PROTECT_KIN's target-directed
+#     clear of inbound `hunting` pair-tags.
 #
 #   * `grieving` / `dying` / `unconscious` ephemerals are seeded with
 #     event-based clearance pointing at `mourning_completed` / `death_recorded`
@@ -1062,8 +1060,8 @@ TEND_WOUNDED = Template(
     package_gate=AND(
         has_ephemeral("wounded", slot=Slot.TARGET),
         co_located(Slot.ACTOR, Slot.TARGET),
-        NOT(has_ephemeral("under_active_pursuit")),
-        NOT(has_ephemeral("under_active_pursuit", slot=Slot.TARGET)),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_inbound_pair_tag("hunting", slot=Slot.TARGET)),
         since_last_event_at_least(
             "tended_wound", minimum_ticks=2, target_slot=Slot.TARGET
         ),
@@ -1173,7 +1171,7 @@ MOURN_LOSS = Template(
     package_gate=AND(
         has_ephemeral("grieving"),
         since_last_event_at_least("mourning_act", minimum_ticks=3),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -1278,7 +1276,7 @@ KEEP_VIGIL = Template(
             has_relationship_of_type("captor"),
         ),
         since_last_event_at_least("vigil_held", minimum_ticks=2),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -1512,7 +1510,7 @@ WORK = Template(
         NOT(is_in_transit()),
         since_last_event_at_least("work_performed", minimum_ticks=4),
         since_last_event_at_least("household_work_performed", minimum_ticks=4),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("wounded")),
         NOT(has_ephemeral("grieving")),
     ),
@@ -1659,7 +1657,7 @@ TEND_CRAFT = Template(
             "loremaster",
         ),
         since_last_event_at_least("craft_tended", minimum_ticks=4),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("wounded")),
         NOT(has_ephemeral("grieving")),
     ),
@@ -1866,9 +1864,9 @@ WARN_ALLY = Template(
                 within_ticks=3,
                 target_slot=Slot.TARGET,
             ),
-            has_ephemeral("under_active_pursuit", slot=Slot.TARGET),
+            has_inbound_pair_tag("hunting", slot=Slot.TARGET),
         ),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -1976,7 +1974,7 @@ CHECK_ON_DEPENDENT = Template(
         since_last_event_at_least(
             "welfare_check", minimum_ticks=12, target_slot=Slot.TARGET
         ),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
     ),
     branches=(
@@ -2063,7 +2061,7 @@ REACH_OUT_TO_KIN = Template(
         since_last_event_at_least(
             "contact_deferred", minimum_ticks=8, target_slot=Slot.TARGET
         ),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grudge_active")),
     ),
     branches=(
@@ -2195,7 +2193,7 @@ CONSULT_RIVAL = Template(
             "rival_consulted", minimum_ticks=20, target_slot=Slot.TARGET
         ),
         NOT(has_ephemeral("grudge_active")),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -2296,7 +2294,7 @@ SLEEP = Template(
             has_need_debt_at_or_above("sleep", 16),
         ),
         NOT(has_ephemeral("cns_stimulated")),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -2407,7 +2405,7 @@ DRINK = Template(
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         has_need_debt_at_or_above("thirst", 2),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -2524,7 +2522,7 @@ EAT = Template(
             time_of_day_in("morning", "afternoon", "evening"),
             has_need_debt_at_or_above("hunger", 8),
         ),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
         Branch(
@@ -2686,7 +2684,7 @@ SOCIALIZE = Template(
         has_need_debt_at_or_above("socialize", 24),
         since_last_event_at_least("socialized", minimum_ticks=4),
         since_last_event_at_least("socialized_alone", minimum_ticks=4),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grieving")),
         NOT(has_ephemeral("wounded")),
     ),
@@ -2832,7 +2830,7 @@ INTIMACY = Template(
         since_last_event_at_least("intimacy_pursued", minimum_ticks=8),
         since_last_event_at_least("intimacy_partial", minimum_ticks=8),
         since_last_event_at_least("intimacy_deferred", minimum_ticks=8),
-        NOT(has_ephemeral("under_active_pursuit")),
+        NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("wounded")),
         NOT(has_ephemeral("grieving")),
     ),

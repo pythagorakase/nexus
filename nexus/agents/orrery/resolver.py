@@ -548,6 +548,24 @@ def compose_actor_bindings(
     ).mappings():
         actor_ids.add(row["entity_id"])
 
+    for row in session.execute(
+        text(
+            """
+            /* orrery:actor_bindings_inbound_ephemeral_pair_tags */
+            SELECT DISTINCT ept.object_entity_id AS entity_id
+            FROM entity_pair_tags ept
+            JOIN pair_tags pt ON pt.id = ept.pair_tag_id
+            JOIN entities e ON e.id = ept.object_entity_id
+            WHERE ept.cleared_at IS NULL
+              AND pt.is_ephemeral = true
+              AND NOT pt.deprecated
+              AND e.kind = 'character'
+              AND e.is_active = true
+            """
+        )
+    ).mappings():
+        actor_ids.add(row["entity_id"])
+
     offscreen_actor_ids = actor_ids - present_actor_ids
     return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(offscreen_actor_ids))
 

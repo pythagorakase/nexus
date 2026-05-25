@@ -43,8 +43,10 @@ def build_presets() -> Dict[str, WorldState]:
     return {
         "hunted": WorldState(
             tags={ACTOR_ID: frozenset({"seeking_identity"})},
-            ephemeral_tags={ACTOR_ID: frozenset({"under_active_pursuit"})},
-            pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:lodging"})},
+            pair_tags={
+                (ACTOR_ID, TARGET_ID): frozenset({"contact:lodging"}),
+                (TARGET_ID, ACTOR_ID): frozenset({"hunting"}),
+            },
             locations=common_locations,
             location_class=location_classes,
             recent_events=(
@@ -151,7 +153,7 @@ def build_multi_slot_presets() -> Dict[str, dict]:
         },
         "kin_danger": {
             "state": WorldState(
-                ephemeral_tags={TARGET_ID: frozenset({"under_active_pursuit"})},
+                pair_tags={(3, TARGET_ID): frozenset({"hunting"})},
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
                 location_class=location_classes,
