@@ -747,7 +747,7 @@ Compiler surfaces:
 
 ## Open Items
 
-1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. `state` remains to enumerate — couples with clearance-event vocabulary (item 3).
+1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. The `state` category vocabulary is now specified in `docs/orrery_state_vocabulary.md`; implementation remains coupled to clearance-event vocabulary (item 3) and the substrate debts named there.
 2. **Faction category values.** Settle the sample tags above into a complete set. Smaller scope.
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
@@ -763,6 +763,7 @@ Compiler surfaces:
 
 - `docs/trait_menu.md` — player-facing trait selection system; alignment documented above.
 - `docs/orrery_design_plan.md` — broader Orrery system design.
+- `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific open decisions.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.

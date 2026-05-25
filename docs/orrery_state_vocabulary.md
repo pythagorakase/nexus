@@ -1,6 +1,6 @@
 # Orrery `state` Category — Vocabulary
 
-**Status:** authoritative spec for the `state` category — three clusters (physical, affective, pharmacologic) plus a flagged set of circumstantial survivors. Companion to `orrery_tag_vocabulary.md` (settled substrate) and `orrery_needs.md` (needs subsystem boundary). Clearance contracts are named inline per anchor. Resolved decisions and migration debts are tracked toward the bottom; remaining open decisions follow.
+**Status:** authoritative spec for the `state` category — four clusters (physical, affective, pharmacologic, circumstantial). Companion to `orrery_tag_vocabulary.md` (settled substrate) and `orrery_needs.md` (needs subsystem boundary). Clearance contracts are named inline per anchor. Resolved decisions and migration debts are tracked toward the bottom; remaining open decisions follow.
 
 ---
 
@@ -99,9 +99,9 @@ Replaces the vague `intoxicated` with one tag per **pharmacological class**, usi
 
 ---
 
-## Flagged — Circumstantial / Positional Survivors (placement decision needed)
+## Cluster 4 — Circumstantial / Positional Condition
 
-These passed the membership test in earlier passes but belong to none of the three clusters cleanly — they are about the character's *situation and how they are perceived*, not body / affect / chemistry. Decide whether they fold into Physical (as "condition & circumstance"), form a fourth micro-cluster, or split.
+These passed the membership test in earlier passes but belong to none of the first three clusters cleanly — they are about the character's *situation and how they are perceived*, not body / affect / chemistry. They form a fourth micro-cluster rather than folding into Physical: `imprisoned` is sustained situational constraint, while `concealed` and `disguised` are perception-facing states.
 
 | State | Meaning | Clears on | Clearance kind | Degree |
 |---|---|---|---|---|
@@ -110,6 +110,8 @@ These passed the membership test in earlier passes but belong to none of the thr
 | `disguised` | Seen but misidentified; suppresses recognition specifically | `unmasked` / `exposed` event | event | binary |
 
 **Rationale.** `concealed` defeats *detection* (not seen at all); `disguised` defeats *recognition* (seen, read as someone else) — an evasion package and an infiltration package gate on different ones, so both are kept. `imprisoned` is the character's own freedom-of-action condition (the captor, if it matters, is a separate pair-tag). The social-cluster casualties from earlier (`fugitive`, `under_suspicion`, `disgraced`, `outlawed`) stay dropped — they decomposed cleanly into `hunting(X → char)` pair-tags, `concealed`, and scope-bound `status` levels.
+
+**Scope rule.** `concealed` and `disguised` are single-entity states by default: global obscurity / misidentification is the common case and keeps the write surface cheap. Do not fan these out to every possible perceiver. When a package needs scoped perception ("hidden from Dynacorp but not from the town guard"), add a targeted pair-tag overlay rather than replacing the base state. Prefer separate overlay names for detection vs recognition if/when this substrate lands; do not overload one vague `evading` relation for both.
 
 ---
 
@@ -148,22 +150,27 @@ Several alignments with existing vocab dropped synonymous proposals: `tended`/`h
 4. **`contacts_available` overload — resolved.** PR #327 (migration 047) shipped the kind-qualified `contact:<lodging|social|intimate>` pair-tag family, replacing the overloaded `contacts_available` ephemeral and closing #317. Not a `state` issue — noted only for cross-reference; the substrate fix applies cleanly to needs templates per `orrery_needs.md` R3.
 5. **`entity_tags` substrate enrichment for additive-timer pharmacologics.** The pharmacologic cluster's same-class re-dose behavior requires two substrate additions:
    - `entity_tags.expires_at_world_time` column (currently absent — the table has `cleared_at` for actual clearance, but no scheduled-expiry field for the sweeper to read).
-   - `_insert_entity_tag`'s `ON CONFLICT ... DO NOTHING` becomes policy-dispatched: `ignore` / `extend` / `replace`, declared on the tag template (`on_conflict_policy` field).
+   - `_insert_entity_tag`'s `ON CONFLICT ... DO NOTHING` becomes policy-dispatched: `new_row` / `extend_expiry` / `replace`, declared on the tag template via the existing `reapplication_policy` field.
    
    Tracked in **#329**; sibling to **#328** (sweeper). The pharmacologic cluster blocks on both — neither shipping in isolation gives you a working `intoxicated:*` tag.
 
 ---
 
-## Open Decisions
+## Resolved Decisions from OQ #5-#8
+
+5. **Circumstantial placement.** `imprisoned`, `concealed`, and `disguised` form Cluster 4 — Circumstantial / Positional Condition. They do not fold into Physical, and `imprisoned` is not split away from the perception-facing pair; the shared trait is "current situation that constrains action or perception."
+6. **`concealed` / `disguised` scope.** Keep as single-entity states for the global/common case. Add targeted pair-tag overlays only when a package needs scoped perception against a specific faction, character, or audience. If that overlay becomes real substrate, use distinct relation names for hidden-from vs misidentified-by rather than one vague catch-all.
+7. **Template ownership.** The doc adopts an ownership marker concept, but names it `derivation_owner` rather than `owned_by_subsystem`. It should distinguish who may derive or re-tier a tag track (`needs`, `event`, `sweeper`, `skald` / `authored`), so future maintenance passes do not accidentally mutate event-assigned tracks such as possible `wounded_N` tiers. This can start as template metadata and only needs a registry column once runtime code consumes it.
+8. **Maintenance provenance.** Add `maintenance` to `entity_tag_source_kind` when a maintenance pass first writes general `state` tags. Engine-tick applications are auditably different from resolver/template/event writes, and `system` is too broad for debugging state drift.
+
+---
+
+## Remaining Open Decisions
 
 1. **Affective gate-vs-pressure fork.** Does any package gate on affective *severity* (e.g., `MOURN_LOSS` on grief depth, panic/flee on fear level)? If yes, those anchors adopt graduated `_N_label`; if all affective states are pure `STORYTELLER_PRESSURE`, the whole cluster stays binary. **Determines whether the affective cluster reuses the needs severity machinery.**
 2. **`wounded` / `sick` degree.** Binary, or graduated? Hinges on whether a collapse / seek-treatment branch thresholds on severity.
 3. **`hallucinogen` vs `dissociative` split.** Keep separate only if a dissociative's detachment beat gates or prompts differently from a hallucinogen's perceptual distortion. Name the divergence before committing the split, or merge.
 4. **`intoxicated:opioid` as a fifth class?** Pharmacologically a depressant, but a distinct analgesia-plus-sedation profile. Same gating test, stated actively: **name the gate or prompt that reads `:opioid` differently from `:depressant`, or merge.** A reviewer who can name one admits the class; a reviewer who can't, merges.
-5. **Placement of the circumstantial survivors** (`imprisoned`, `concealed`, `disguised`): fold into Physical (as "condition & circumstance"), constitute a fourth micro-cluster, or split between Physical (`imprisoned`) and a new perception-cluster (`concealed` / `disguised`).
-6. **`concealed` / `disguised` — single-entity state vs per-perceiver pair-tag?** Concealed *from town guards* but not *from the rival faction* is the same scope-binding move that `status` makes; if detection is per-perceiver (which the fame-as-detection-radius work suggests), these are edge-properties of a pair-tag, not single-entity state. Default recommendation: keep as single-entity state (global obscurity) and let specific packages overlay an outbound `evading(char → faction)` pair-tag when targeted concealment matters — same Pete-pattern as `hostile_to` / `hunting`. Open for review.
-7. **`owned_by_subsystem` field on tag templates.** `wounded` / `sick` tiers (if adopted in OQ #2) are event-assigned, not maintenance-pass-derived. Without an explicit "this track is event-owned" marker on the template, a future refactor of the needs maintenance pass could accidentally re-derive a `wounded_2` down to `wounded_1` because the body "isn't accumulating debt." Cheap fix: tag templates carry an `owned_by: needs | events | skald` field; maintenance pass skips anything not its own. Worth doing pre-emptively, or wait for the first collision?
-8. **`source_kind` provenance for state tags.** Three application paths: Skald inline declarations → `skald_inline`; substrate-resolved offscreen events → `system`; maintenance pass → no clean fit in the current enum (`{authored, llm_generated, system, template, auto_registered, skald_inline}`). Add a `maintenance` enum value so engine-tick applications are auditably distinct from event-driven ones, or fold into `system`?
 
 ---
 
