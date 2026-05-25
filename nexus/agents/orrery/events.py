@@ -247,7 +247,6 @@ def commit_orrery_tick_sync(
         _validate_adjudications(coerced, adjudication_map)
     else:
         adjudication_map = {}
-        need_tuning = coerce_need_tuning(sunhelm_settings)
 
     with conn.cursor() as cur:
         expired_tag_count = _sweep_expired_entity_tags_sync(
@@ -410,7 +409,6 @@ async def commit_orrery_tick_async(
         _validate_adjudications(coerced, adjudication_map)
     else:
         adjudication_map = {}
-        need_tuning = coerce_need_tuning(sunhelm_settings)
 
     expired_tag_count = await _sweep_expired_entity_tags_async(
         conn,

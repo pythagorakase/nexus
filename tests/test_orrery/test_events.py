@@ -562,10 +562,16 @@ def test_commit_orrery_tick_sweeps_expired_entity_tags_without_resolution() -> N
         for sql, params in cursor.executed
         if "INSERT INTO tag_clearance_log" in sql
     ]
+    update_stmts = [
+        params
+        for sql, params in cursor.executed
+        if "UPDATE entity_tags SET cleared_at" in sql
+    ]
 
     assert result.resolution_count == 0
     assert result.event_count == 0
     assert result.cleared_tag_count == 1
+    assert update_stmts == [(501,)]
     assert clearance_logs == [
         (
             501,
