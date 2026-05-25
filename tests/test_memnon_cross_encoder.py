@@ -21,6 +21,20 @@ class FakeCrossEncoderModel:
         return np.array([len(passage) / 10 for _query, passage in pairs])
 
 
+class BatchFailingCrossEncoderModel(FakeCrossEncoderModel):
+    """Fake that models a batch-level failure plus one bad passage."""
+
+    def predict(self, pairs, batch_size=None):
+        pairs = list(pairs)
+        self.calls.append({"pairs": pairs, "batch_size": batch_size})
+        if len(pairs) > 1:
+            raise RuntimeError("batch failed")
+        _query, passage = pairs[0]
+        if passage == "bad":
+            raise RuntimeError("single failed")
+        return np.array([len(passage) / 10])
+
+
 def make_reranker(model, max_length=512):
     """Build a reranker around a fake model without running __init__."""
     reranker = CrossEncoderReranker.__new__(CrossEncoderReranker)
@@ -101,3 +115,24 @@ def test_rerank_batch_normalizes_raw_logits_like_score_pair():
     )
 
     assert scores == pytest.approx([1 / (1 + np.exp(2.0)), 0.25])
+
+
+def test_rerank_batch_falls_back_to_per_passage_on_batch_error():
+    model = BatchFailingCrossEncoderModel()
+    reranker = make_reranker(model)
+
+    scores = reranker.rerank_batch(
+        "query",
+        ["aa", "bad", "cccc"],
+        batch_size=3,
+        use_sliding_window=False,
+    )
+
+    assert scores == pytest.approx([0.2, 0.0, 0.4])
+    assert [call["batch_size"] for call in model.calls] == [3, None, None, None]
+    assert [call["pairs"] for call in model.calls] == [
+        [("query", "aa"), ("query", "bad"), ("query", "cccc")],
+        [("query", "aa")],
+        [("query", "bad")],
+        [("query", "cccc")],
+    ]

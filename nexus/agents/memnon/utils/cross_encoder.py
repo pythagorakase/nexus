@@ -181,8 +181,10 @@ class CrossEncoderReranker:
 
             return [self._normalize_score(score) for score in score_values]
         except Exception as e:
-            logger.error(f"Error scoring batch: {e}")
-            return [0.0 for _ in passages]
+            logger.error(
+                f"Error scoring batch: {e}; falling back to per-passage scoring"
+            )
+            return [self.score_pair(query, passage) for passage in passages]
 
     def score_pair_with_sliding_window(self, query: str, passage: str) -> float:
         """
