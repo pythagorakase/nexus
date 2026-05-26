@@ -279,6 +279,7 @@ def _print_faction_manifest(payload: Dict[str, Any]) -> None:
 
     print()
     print("Counters:")
+    printed_counters = set()
     for key in (
         "operation_items",
         "ready_operations",
@@ -291,6 +292,9 @@ def _print_faction_manifest(payload: Dict[str, Any]) -> None:
         "drop_legacy_tag_after_review_operations",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
+        printed_counters.add(key)
+    for key in sorted(key for key in counters if key not in printed_counters):
+        print(f"  {key}: {counters[key]}")
 
     review_factions = [
         item for item in factions if item.get("review_required_operations", 0)
@@ -1071,7 +1075,7 @@ def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("SET TRANSACTION READ ONLY")
+            cur.execute("BEGIN READ ONLY")
             audit = build_faction_table_audit(cur)
 
     return {
@@ -1096,7 +1100,7 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("SET TRANSACTION READ ONLY")
+            cur.execute("BEGIN READ ONLY")
             audit = build_faction_table_audit(cur)
 
     manifest = build_faction_migration_manifest(

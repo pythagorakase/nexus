@@ -451,6 +451,10 @@ def test_faction_migration_manifest_classifies_operations() -> None:
         operation["operation_id"].startswith("faction-migration-")
         for operation in manifest["operations"]
     )
+    assert all(
+        operation["review_required"] == (operation["status"] != "ready")
+        for operation in manifest["operations"]
+    )
 
 
 @pytest.mark.requires_postgres
@@ -486,6 +490,7 @@ def test_cli_prints_faction_manifest_summary(capsys) -> None:
                     "operation_items": 2,
                     "ready_operations": 1,
                     "review_required_operations": 1,
+                    "manual_review_operations": 1,
                 },
                 "factions": [
                     {
@@ -503,4 +508,5 @@ def test_cli_prints_faction_manifest_summary(capsys) -> None:
 
     assert "operation_items: 2" in output
     assert "ready_operations: 1" in output
+    assert "manual_review_operations: 1" in output
     assert "Canal League (id 11): 1 item(s)" in output

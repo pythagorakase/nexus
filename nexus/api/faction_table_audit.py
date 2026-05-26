@@ -1107,12 +1107,9 @@ def _manifest_operation(
 ) -> dict[str, Any]:
     target_kind = str(candidate.get("target_kind") or "manual_review")
     if target_kind == "entity_tag":
-        operation_type = (
-            "insert_entity_tag"
-            if _candidate_is_apply_ready(candidate)
-            else "review_entity_tag"
-        )
-        status = "ready" if _candidate_is_apply_ready(candidate) else "review_required"
+        apply_ready = _candidate_is_apply_ready(candidate)
+        operation_type = "insert_entity_tag" if apply_ready else "review_entity_tag"
+        status = "ready" if apply_ready else "review_required"
         target = {
             "entity_kind": "faction",
             "entity_id": faction.get("entity_id"),
@@ -1158,7 +1155,7 @@ def _manifest_operation(
         },
         "target": target,
         "confidence": candidate.get("confidence"),
-        "review_required": bool(candidate.get("review_required", True)),
+        "review_required": status != "ready",
         "reason": candidate.get("reason") or "",
     }
     return operation
