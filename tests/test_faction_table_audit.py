@@ -17,6 +17,7 @@ from nexus.api.faction_table_audit import (
     LEGACY_TAG_CATEGORIES,
     LegacyTagRow,
     audit_faction_row,
+    build_faction_migration_manifest,
     build_faction_table_audit,
 )
 
@@ -391,3 +392,115 @@ def test_cli_prints_all_pair_edge_counters(capsys) -> None:
 
     assert "active_claim_edges: 2" in output
     assert "active_operates_from_edges: 3" in output
+
+
+def test_faction_migration_manifest_classifies_operations() -> None:
+    """The manifest should separate ready writes from review-only work."""
+
+    entry = audit_faction_row(
+        {
+            "id": 11,
+            "name": "Canal League",
+            "entity_id": 1111,
+            "ideology": "mercantilist",
+            "history": "Founded after the river war.",
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": "controls the canal district",
+            "primary_location": None,
+            "power_level": None,
+            "resources": "network",
+        },
+        existing_pair_tags={},
+        legacy_tags=[
+            LegacyTagRow(
+                faction_id=11,
+                faction_name="Canal League",
+                entity_id=1111,
+                category="history_class",
+                tag="ancient_continuous",
+            )
+        ],
+    )
+    audit = {
+        "counters": {},
+        "source_columns": ["ideology", "history", "territory", "resources"],
+        "keep_columns": ["id", "name"],
+        "factions": [asdict(entry)],
+    }
+
+    manifest = build_faction_migration_manifest(
+        audit,
+        slot=2,
+        dbname="save_02",
+    )
+    operation_types = {
+        operation["operation_type"] for operation in manifest["operations"]
+    }
+
+    assert manifest["schema_version"] == "faction-migration-manifest.v1"
+    assert manifest["dry_run"] is True
+    assert manifest["source"]["slot"] == 2
+    assert manifest["counters"]["ready_operations"] == 1
+    assert manifest["counters"]["insert_entity_tag_operations"] == 1
+    assert "review_entity_tag" in operation_types
+    assert "resolve_pair_tag_target" in operation_types
+    assert "preserve_prose" in operation_types
+    assert "drop_legacy_tag_after_review" in operation_types
+    assert all(
+        operation["operation_id"].startswith("faction-migration-")
+        for operation in manifest["operations"]
+    )
+
+
+@pytest.mark.requires_postgres
+def test_cli_faction_manifest_returns_live_slot2_payload() -> None:
+    """The faction manifest CLI should build from the real slot 2 audit."""
+
+    try:
+        result = cli.run_faction_manifest(Namespace(slot=2))
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    finally:
+        close_pool(TEST_DBNAME)
+
+    manifest = result["faction_manifest"]
+
+    assert result["success"] is True
+    assert result["slot"] == 2
+    assert manifest["dry_run"] is True
+    assert manifest["counters"]["operation_items"] >= 1
+    assert manifest["counters"]["operation_items"] == len(manifest["operations"])
+
+
+def test_cli_prints_faction_manifest_summary(capsys) -> None:
+    """Human faction manifest output should show operation counters."""
+
+    cli.emit_output(
+        {
+            "message": "Faction migration manifest for slot 2 (dry run).",
+            "faction_manifest": {
+                "schema_version": "faction-migration-manifest.v1",
+                "dry_run": True,
+                "counters": {
+                    "operation_items": 2,
+                    "ready_operations": 1,
+                    "review_required_operations": 1,
+                },
+                "factions": [
+                    {
+                        "faction_id": 11,
+                        "faction_name": "Canal League",
+                        "review_required_operations": 1,
+                    }
+                ],
+            },
+        },
+        as_json=False,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "operation_items: 2" in output
+    assert "ready_operations: 1" in output
+    assert "Canal League (id 11): 1 item(s)" in output

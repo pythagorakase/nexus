@@ -9,6 +9,7 @@ Commands:
     nexus model --slot N        Get or set the model for a slot
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
+    nexus faction-manifest --slot N  Build reviewed faction migration manifest
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -265,6 +266,49 @@ def _print_faction_audit(payload: Dict[str, Any]) -> None:
             print(f"  ...{len(review_factions) - 10} more")
 
 
+def _print_faction_manifest(payload: Dict[str, Any]) -> None:
+    """Print a faction migration manifest summary."""
+
+    manifest = payload.get("faction_manifest") or {}
+    counters = manifest.get("counters") or {}
+    factions = manifest.get("factions") or []
+
+    print("Manifest:")
+    print(f"  schema_version: {manifest.get('schema_version')}")
+    print(f"  dry_run: {manifest.get('dry_run')}")
+
+    print()
+    print("Counters:")
+    for key in (
+        "operation_items",
+        "ready_operations",
+        "review_required_operations",
+        "insert_entity_tag_operations",
+        "review_entity_tag_operations",
+        "resolve_pair_tag_target_operations",
+        "preserve_prose_operations",
+        "classify_structured_remainder_operations",
+        "drop_legacy_tag_after_review_operations",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+
+    review_factions = [
+        item for item in factions if item.get("review_required_operations", 0)
+    ]
+    if review_factions:
+        print()
+        print("Manual review:")
+        for item in review_factions[:10]:
+            print(
+                "  - "
+                f"{item['faction_name']} "
+                f"(id {item['faction_id']}): "
+                f"{item.get('review_required_operations', 0)} item(s)"
+            )
+        if len(review_factions) > 10:
+            print(f"  ...{len(review_factions) - 10} more")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -288,6 +332,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("faction_audit"):
         _print_faction_audit(payload)
+        print()
+
+    if payload.get("faction_manifest"):
+        _print_faction_manifest(payload)
         print()
 
     # Get display elements
@@ -1035,6 +1083,36 @@ def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build a read-only faction migration manifest from the audit output."""
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.faction_table_audit import (
+        build_faction_migration_manifest,
+        build_faction_table_audit,
+    )
+    from nexus.api.slot_utils import slot_dbname
+
+    dbname = slot_dbname(args.slot)
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SET TRANSACTION READ ONLY")
+            audit = build_faction_table_audit(cur)
+
+    manifest = build_faction_migration_manifest(
+        audit,
+        slot=args.slot,
+        dbname=dbname,
+    )
+    return {
+        "success": True,
+        "message": f"Faction migration manifest for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "faction_manifest": manifest,
+    }
+
+
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Lock a slot to prevent modifications.
@@ -1106,6 +1184,7 @@ Examples:
   nexus unlock --slot 2         Unlock slot to allow modifications
   nexus trait-audit --slot 5    Dry-run trait compiler audit
   nexus faction-audit --slot 2  Dry-run faction column migration audit
+  nexus faction-manifest --slot 2  Build faction migration manifest
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1241,6 +1320,15 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
+    # faction-manifest command
+    faction_manifest_parser = subparsers.add_parser(
+        "faction-manifest",
+        help="Build read-only faction migration manifest from audit output",
+    )
+    faction_manifest_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -1274,6 +1362,7 @@ def main() -> int:
         "clear",
         "trait-audit",
         "faction-audit",
+        "faction-manifest",
         "lock",
         "unlock",
     ):
@@ -1306,6 +1395,8 @@ def main() -> int:
         result = run_trait_audit(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
+    elif args.command == "faction-manifest":
+        result = run_faction_manifest(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":

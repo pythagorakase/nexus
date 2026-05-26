@@ -319,6 +319,12 @@ Preflight command:
   faction columns, existing `claims` / `operates_from` pair-tags, and legacy
   faction tag categories. Review its JSON output before any destructive data
   rewrite or column-drop migration.
+- `nexus faction-manifest --slot N` folds the audit into a read-only migration
+  manifest with stable operation IDs. It separates deterministic entity-tag
+  inserts from review-required tag candidates, pair-tag target resolution,
+  prose/world-event preservation, structured remainders, and no-replacement
+  legacy tag drops. The manifest is a review/apply contract for a later script;
+  it does not authorize destructive mutations by itself.
 
 ---
 

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
+import hashlib
 import importlib
 import re
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 
+FACTION_MANIFEST_SCHEMA_VERSION = "faction-migration-manifest.v1"
 _CATEGORY_REFACTOR = importlib.import_module(
     "migrations.043_orrery_category_refactor_phase1"
 )
@@ -352,6 +354,81 @@ def build_faction_table_audit(cur: Any) -> dict[str, Any]:
         "counters": counters,
         "non_null_counts": non_null_counts,
         "factions": [_entry_to_dict(entry) for entry in entries],
+    }
+
+
+def build_faction_migration_manifest(
+    audit: Mapping[str, Any],
+    *,
+    slot: Optional[int] = None,
+    dbname: Optional[str] = None,
+) -> dict[str, Any]:
+    """Convert a faction audit into explicit review/apply operations.
+
+    The manifest is intentionally read-only: it names what a later migration
+    could do, but never mutates tags, pair-tags, prose, or legacy columns.
+    """
+
+    operations: list[dict[str, Any]] = []
+    factions: list[dict[str, Any]] = []
+    for faction in audit.get("factions", []):
+        faction_operations: list[dict[str, Any]] = []
+        for candidate in faction.get("mapping_candidates", []):
+            operation = _manifest_operation(faction, candidate)
+            operations.append(operation)
+            faction_operations.append(operation)
+
+        factions.append(
+            {
+                "faction_id": faction.get("faction_id"),
+                "faction_name": faction.get("faction_name"),
+                "entity_id": faction.get("entity_id"),
+                "operation_ids": [
+                    operation["operation_id"] for operation in faction_operations
+                ],
+                "ready_operations": sum(
+                    1
+                    for operation in faction_operations
+                    if operation["status"] == "ready"
+                ),
+                "review_required_operations": sum(
+                    1
+                    for operation in faction_operations
+                    if operation["status"] != "ready"
+                ),
+            }
+        )
+
+    counters = _build_manifest_counters(operations)
+    return {
+        "schema_version": FACTION_MANIFEST_SCHEMA_VERSION,
+        "dry_run": True,
+        "source": {
+            "slot": slot,
+            "dbname": dbname,
+            "audit_counters": dict(audit.get("counters") or {}),
+            "source_columns": list(audit.get("source_columns") or []),
+            "keep_columns": list(audit.get("keep_columns") or []),
+        },
+        "review_policy": {
+            "ready": (
+                "Only deterministic entity-tag candidates that require no review "
+                "are apply-ready."
+            ),
+            "review_required": (
+                "Suggested, ambiguous, prose, pair-tag, structured remainder, "
+                "and no-replacement operations need human review before any "
+                "apply script consumes them."
+            ),
+            "destructive_mutations": (
+                "This manifest performs no writes and does not authorize column "
+                "drops; destructive work needs a later migration with backup or "
+                "test-slot scoping."
+            ),
+        },
+        "counters": counters,
+        "factions": factions,
+        "operations": operations,
     }
 
 
@@ -1022,6 +1099,117 @@ def _map_controlled_legacy_tag_row(
             reason=unknown_reason,
         )
     ]
+
+
+def _manifest_operation(
+    faction: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> dict[str, Any]:
+    target_kind = str(candidate.get("target_kind") or "manual_review")
+    if target_kind == "entity_tag":
+        operation_type = (
+            "insert_entity_tag"
+            if _candidate_is_apply_ready(candidate)
+            else "review_entity_tag"
+        )
+        status = "ready" if _candidate_is_apply_ready(candidate) else "review_required"
+        target = {
+            "entity_kind": "faction",
+            "entity_id": faction.get("entity_id"),
+            "category": candidate.get("target_category"),
+            "tag": candidate.get("target_tag"),
+        }
+    elif target_kind == "pair_tag":
+        operation_type = "resolve_pair_tag_target"
+        status = "review_required"
+        target = {
+            "subject_entity_kind": "faction",
+            "subject_entity_id": faction.get("entity_id"),
+            "pair_tag": candidate.get("target_pair_tag"),
+            "object_entity_id": None,
+        }
+    elif target_kind == "world_event_or_prose":
+        operation_type = "preserve_prose"
+        status = "review_required"
+        target = {"destination": "world_event_or_summary_prose"}
+    elif target_kind == "no_replacement":
+        operation_type = "drop_legacy_tag_after_review"
+        status = "review_required"
+        target = {"replacement": None}
+    elif target_kind == "structured_remainder":
+        operation_type = "classify_structured_remainder"
+        status = "review_required"
+        target = {"target_category": candidate.get("target_category")}
+    else:
+        operation_type = "manual_review"
+        status = "review_required"
+        target = {}
+
+    operation = {
+        "operation_id": _manifest_operation_id(faction, candidate),
+        "operation_type": operation_type,
+        "status": status,
+        "faction_id": faction.get("faction_id"),
+        "faction_name": faction.get("faction_name"),
+        "entity_id": faction.get("entity_id"),
+        "source": {
+            "column": candidate.get("source_column"),
+            "value": candidate.get("source_value"),
+        },
+        "target": target,
+        "confidence": candidate.get("confidence"),
+        "review_required": bool(candidate.get("review_required", True)),
+        "reason": candidate.get("reason") or "",
+    }
+    return operation
+
+
+def _candidate_is_apply_ready(candidate: Mapping[str, Any]) -> bool:
+    return (
+        candidate.get("target_kind") == "entity_tag"
+        and candidate.get("confidence") == "deterministic"
+        and not bool(candidate.get("review_required", True))
+        and bool(candidate.get("target_category"))
+        and bool(candidate.get("target_tag"))
+    )
+
+
+def _manifest_operation_id(
+    faction: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+) -> str:
+    parts = (
+        str(faction.get("faction_id") or ""),
+        str(faction.get("entity_id") or ""),
+        str(candidate.get("source_column") or ""),
+        str(candidate.get("source_value") or ""),
+        str(candidate.get("target_kind") or ""),
+        str(candidate.get("target_category") or ""),
+        str(candidate.get("target_tag") or ""),
+        str(candidate.get("target_pair_tag") or ""),
+    )
+    digest = hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:12]
+    return f"faction-migration-{digest}"
+
+
+def _build_manifest_counters(
+    operations: Sequence[Mapping[str, Any]],
+) -> dict[str, int]:
+    counters = {
+        "operation_items": len(operations),
+        "ready_operations": 0,
+        "review_required_operations": 0,
+    }
+    for operation in operations:
+        operation_type = str(operation["operation_type"])
+        counters[f"{operation_type}_operations"] = (
+            counters.get(f"{operation_type}_operations", 0) + 1
+        )
+        if operation["status"] == "ready":
+            counters["ready_operations"] += 1
+        else:
+            counters["review_required_operations"] += 1
+    return counters
 
 
 def _obsolete_values(row: Mapping[str, Any]) -> dict[str, Any]:
