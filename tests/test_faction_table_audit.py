@@ -3,104 +3,37 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from dataclasses import asdict
 from decimal import Decimal
+import json
 from typing import Any
 
+import psycopg2  # type: ignore[import-untyped]
+import pytest
+
 from nexus import cli
+from nexus.api.db_pool import close_pool, get_connection
 from nexus.api.faction_table_audit import (
+    LEGACY_TAG_CATEGORIES,
     LegacyTagRow,
     audit_faction_row,
     build_faction_table_audit,
 )
 
 
-class FakeFactionAuditConnection:
-    """Context-manager connection double for faction audit CLI tests."""
-
-    def __enter__(self) -> "FakeFactionAuditConnection":
-        """Enter connection context."""
-
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """Exit connection context."""
-
-        return None
-
-    def cursor(self) -> "FakeFactionAuditCursor":
-        """Return a context-manager cursor double."""
-
-        return FakeFactionAuditCursor()
+TEST_DBNAME = "save_02"
 
 
-class FakeFactionAuditCursor:
-    """Cursor double for the read-only faction audit query sequence."""
-
-    def __init__(self) -> None:
-        self._result: list[dict[str, Any]] = []
-        self.executed_sql: list[str] = []
-
-    def __enter__(self) -> "FakeFactionAuditCursor":
-        """Enter cursor context."""
-
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """Exit cursor context."""
-
-        return None
-
-    def execute(self, sql: str, params: Any = None) -> None:
-        """Return canned rows for each audit query."""
-
-        del params
-        self.executed_sql.append(sql)
-        if "SET TRANSACTION READ ONLY" in sql:
-            self._result = []
-        elif "FROM factions" in sql and "entity_tags_current" not in sql:
-            self._result = [
-                {
-                    "id": 1,
-                    "name": "Canal League",
-                    "entity_id": 101,
-                    "ideology": "mercantilist",
-                    "history": "Founded after the river war.",
-                    "current_activity": "expansion",
-                    "hidden_agenda": "network",
-                    "territory": "controls the canal district",
-                    "primary_location": 44,
-                    "power_level": Decimal("0.72"),
-                    "resources": "network",
-                }
-            ]
-        elif "FROM entity_pair_tags" in sql:
-            self._result = [
-                {"entity_id": 101, "tag": "claims", "active_count": 2},
-            ]
-        elif "FROM entity_tags_current" in sql:
-            self._result = [
-                {
-                    "faction_id": 1,
-                    "faction_name": "Canal League",
-                    "entity_id": 101,
-                    "category": "operational_secrecy",
-                    "tag": "hidden",
-                },
-                {
-                    "faction_id": 1,
-                    "faction_name": "Canal League",
-                    "entity_id": 101,
-                    "category": "state",
-                    "tag": "mobilized",
-                },
-            ]
-        else:
-            raise AssertionError(f"Unexpected SQL: {sql}")
-
-    def fetchall(self) -> list[dict[str, Any]]:
-        """Return rows from the most recent execute call."""
-
-        return self._result
+def _slot2_faction_audit() -> dict[str, Any]:
+    try:
+        with get_connection(TEST_DBNAME, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SET TRANSACTION READ ONLY")
+                return build_faction_table_audit(cur)
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    finally:
+        close_pool(TEST_DBNAME)
 
 
 def test_audit_faction_row_flags_network_resource_ambiguity() -> None:
@@ -137,19 +70,88 @@ def test_audit_faction_row_flags_network_resource_ambiguity() -> None:
     assert all(item.confidence == "ambiguous" for item in resource_candidates)
 
 
-def test_build_faction_table_audit_reports_legacy_tag_and_claim_counts() -> None:
-    """Audit counters should expose dry-run work and review pressure."""
+def test_audit_faction_row_maps_specific_network_resource() -> None:
+    """Specific network prose should reach the keyword matcher."""
 
-    audit = build_faction_table_audit(FakeFactionAuditCursor())
+    entry = audit_faction_row(
+        {
+            "id": 8,
+            "name": "Ledger Ring",
+            "entity_id": 808,
+            "ideology": None,
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": None,
+            "resources": "information network",
+        },
+        existing_pair_tags={},
+        legacy_tags=[],
+    )
+
+    resource_candidates = [
+        item for item in entry.mapping_candidates if item.source_column == "resources"
+    ]
+
+    assert [(item.target_tag, item.confidence) for item in resource_candidates] == [
+        ("information", "suggested")
+    ]
+
+
+def test_power_level_point_one_maps_to_declining() -> None:
+    """The 0.10 band edge should not collapse the faction."""
+
+    entry = audit_faction_row(
+        {
+            "id": 9,
+            "name": "Thin Crown",
+            "entity_id": 909,
+            "ideology": None,
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": Decimal("0.10"),
+            "resources": None,
+        },
+        existing_pair_tags={},
+        legacy_tags=[],
+    )
+
+    candidates = [
+        item for item in entry.mapping_candidates if item.source_column == "power_level"
+    ]
+
+    assert candidates[0].target_tag == "declining"
+
+
+@pytest.mark.requires_postgres
+def test_build_faction_table_audit_reads_slot2_legacy_tag_categories() -> None:
+    """The audit should cover every legacy faction category present in slot 2."""
+
+    audit = _slot2_faction_audit()
+    counters = audit["counters"]
+    factions = audit["factions"]
+    legacy_categories = {
+        tag["category"] for faction in factions for tag in faction["legacy_tags"]
+    }
+    candidate_sources = {
+        candidate["source_column"]
+        for faction in factions
+        for candidate in faction["mapping_candidates"]
+    }
 
     assert audit["dry_run"] is True
-    assert audit["non_null_counts"]["resources"] == 1
-    assert audit["counters"]["factions_scanned"] == 1
-    assert audit["counters"]["active_claim_edges"] == 2
-    assert audit["counters"]["legacy_operational_secrecy_tags"] == 1
-    assert audit["counters"]["legacy_faction_state_tags"] == 1
-    assert audit["counters"]["ambiguous_resource_values"] == 1
-    assert audit["factions"][0]["review_required"] is True
+    assert "legacy_tag_rows" not in audit
+    assert counters["factions_scanned"] >= 1
+    assert counters["legacy_tag_rows"] >= len(legacy_categories)
+    assert legacy_categories <= set(LEGACY_TAG_CATEGORIES)
+    assert "state" not in legacy_categories
+    for category in legacy_categories:
+        assert f"entity_tags_current.{category}" in candidate_sources
 
 
 def test_operational_secrecy_hidden_maps_to_operational_mode_covert() -> None:
@@ -232,24 +234,139 @@ def test_operational_secrecy_cellular_maps_to_reviewable_covert() -> None:
     assert candidates[0].review_required is True
 
 
-def test_cli_faction_audit_returns_dry_run_payload(monkeypatch) -> None:
-    """The faction audit CLI should resolve the slot and keep the DB read-only."""
+def test_legitimacy_status_gray_legal_maps_to_shadow_legal() -> None:
+    """Legacy legitimacy rows should point at the new legitimacy category."""
 
-    from nexus.api import db_pool
-
-    monkeypatch.setattr(
-        db_pool,
-        "get_connection",
-        lambda *args, **kwargs: FakeFactionAuditConnection(),
+    entry = audit_faction_row(
+        {
+            "id": 5,
+            "name": "Licensed Knives",
+            "entity_id": 505,
+            "ideology": None,
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": None,
+            "resources": None,
+        },
+        existing_pair_tags={},
+        legacy_tags=[
+            LegacyTagRow(
+                faction_id=5,
+                faction_name="Licensed Knives",
+                entity_id=505,
+                category="legitimacy_status",
+                tag="gray_legal",
+            )
+        ],
     )
 
-    result = cli.run_faction_audit(Namespace(slot=2))
+    candidates = [
+        item
+        for item in entry.mapping_candidates
+        if item.source_column == "entity_tags_current.legitimacy_status"
+    ]
+
+    assert candidates[0].target_category == "legitimacy"
+    assert candidates[0].target_tag == "shadow_legal"
+    assert candidates[0].review_required is True
+
+
+def test_history_class_is_explicit_no_replacement() -> None:
+    """No-replacement legacy categories should be visible in dry-run output."""
+
+    entry = audit_faction_row(
+        {
+            "id": 6,
+            "name": "Old Compact",
+            "entity_id": 606,
+            "ideology": None,
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": None,
+            "resources": None,
+        },
+        existing_pair_tags={},
+        legacy_tags=[
+            LegacyTagRow(
+                faction_id=6,
+                faction_name="Old Compact",
+                entity_id=606,
+                category="history_class",
+                tag="ancient_continuous",
+            )
+        ],
+    )
+
+    candidates = [
+        item
+        for item in entry.mapping_candidates
+        if item.source_column == "entity_tags_current.history_class"
+    ]
+
+    assert candidates[0].target_kind == "no_replacement"
+    assert candidates[0].review_required is True
+
+
+@pytest.mark.requires_postgres
+def test_cli_faction_audit_returns_live_slot2_payload() -> None:
+    """The faction audit CLI should resolve slot 2 against the real database."""
+
+    try:
+        result = cli.run_faction_audit(Namespace(slot=2))
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    finally:
+        close_pool(TEST_DBNAME)
 
     assert result["success"] is True
     assert result["slot"] == 2
     assert result["dbname"] == "save_02"
     assert result["faction_audit"]["dry_run"] is True
-    assert result["faction_audit"]["counters"]["factions_scanned"] == 1
+    assert result["faction_audit"]["counters"]["factions_scanned"] >= 1
+
+
+def test_cli_faction_audit_json_output_handles_decimal_payload(capsys) -> None:
+    """Faction audit JSON output should round-trip Decimal-origin values."""
+
+    entry = audit_faction_row(
+        {
+            "id": 10,
+            "name": "Measured Guild",
+            "entity_id": 1010,
+            "ideology": None,
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": Decimal("0.10"),
+            "resources": None,
+        },
+        existing_pair_tags={},
+        legacy_tags=[],
+    )
+    payload = {
+        "message": "Faction table audit for slot 2 (dry run).",
+        "faction_audit": {
+            "counters": {},
+            "non_null_counts": {"power_level": 1},
+            "factions": [asdict(entry)],
+        },
+    }
+
+    cli.emit_output(payload, as_json=True)
+    decoded = json.loads(capsys.readouterr().out)
+
+    assert (
+        decoded["faction_audit"]["factions"][0]["obsolete_columns"]["power_level"]
+        == 0.1
+    )
 
 
 def test_cli_prints_all_pair_edge_counters(capsys) -> None:
@@ -265,7 +382,6 @@ def test_cli_prints_all_pair_edge_counters(capsys) -> None:
                 },
                 "non_null_counts": {},
                 "factions": [],
-                "runtime_write_surfaces": [],
             },
         },
         as_json=False,

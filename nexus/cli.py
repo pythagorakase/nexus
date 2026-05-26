@@ -228,12 +228,19 @@ def _print_faction_audit(payload: Dict[str, Any]) -> None:
         "candidate_entity_tags",
         "candidate_pair_tags",
         "prose_or_remainder_items",
+        "no_replacement_items",
         "manual_review_items",
         "ambiguous_resource_values",
         "active_claim_edges",
         "active_operates_from_edges",
+        "legacy_tag_rows",
+        "legacy_ideology_axis_tags",
+        "legacy_power_posture_tags",
+        "legacy_legitimacy_status_tags",
         "legacy_operational_secrecy_tags",
-        "legacy_faction_state_tags",
+        "legacy_resource_class_tags",
+        "legacy_hidden_agenda_class_tags",
+        "legacy_history_class_tags",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
 
@@ -256,13 +263,6 @@ def _print_faction_audit(payload: Dict[str, Any]) -> None:
             )
         if len(review_factions) > 10:
             print(f"  ...{len(review_factions) - 10} more")
-
-    write_surfaces = audit.get("runtime_write_surfaces") or []
-    if write_surfaces:
-        print()
-        print("Known runtime write surfaces still requiring cleanup:")
-        for surface in write_surfaces:
-            print(f"  - {surface}")
 
 
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:

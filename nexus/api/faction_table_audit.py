@@ -4,9 +4,24 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
+import importlib
 import re
 from typing import Any, Mapping, Optional
 
+
+_CATEGORY_REFACTOR = importlib.import_module(
+    "migrations.043_orrery_category_refactor_phase1"
+)
+LEGACY_CATEGORY_REPLACEMENTS: dict[str, tuple[str, ...]] = {
+    legacy_category: tuple(replacement_categories or ())
+    for (
+        legacy_category,
+        entity_kind,
+        replacement_categories,
+    ) in _CATEGORY_REFACTOR.DEPRECATED_CATEGORY_REPLACEMENTS
+    if entity_kind == "faction"
+}
+LEGACY_TAG_CATEGORIES = tuple(LEGACY_CATEGORY_REPLACEMENTS)
 
 LEGACY_FACTION_COLUMNS = (
     "ideology",
@@ -27,17 +42,9 @@ KEEP_FACTION_COLUMNS = (
     "updated_at",
     "extra_data",
 )
-LEGACY_TAG_CATEGORIES = ("operational_secrecy", "state")
-RUNTIME_WRITE_SURFACES = (
-    "nexus/api/db_converters.py::create_new_faction",
-    "nexus/api/commit_handler_sync.py::create_new_faction_sync",
-    "nexus/api/commit_handler.py::commit_state_updates",
-    "nexus/api/commit_handler_sync.py::commit_state_updates_sync",
-    "nexus/agents/logon/apex_schema.py::NewFaction",
-    "nexus/agents/logon/apex_schema.py::FactionStateUpdate",
-    "nexus/api/lore_adapter.py::extract_state_updates",
-)
 
+# Tag values mirror docs/orrery_faction_vocabulary.md. Migration 043 owns the
+# category registry, but the faction tag-value bank is still a design document.
 IDEOLOGY_TAGS = frozenset(
     {
         "authoritarian",
@@ -76,6 +83,17 @@ RESOURCE_BASE_TAGS = frozenset(
     }
 )
 OPERATIONAL_MODE_TAGS = frozenset({"overt", "covert", "hybrid"})
+LEGITIMACY_TAGS = frozenset(
+    {
+        "state_recognized",
+        "customary",
+        "tolerated",
+        "shadow_legal",
+        "underground",
+        "outlaw",
+        "contested",
+    }
+)
 POWER_STATUS_TAGS = frozenset(
     {
         "dominant",
@@ -110,6 +128,45 @@ AGENDA_TAGS = frozenset(
         "retaliate",
     }
 )
+# Hand-curated from docs/orrery_faction_vocabulary.md plus the observed slot-2
+# legacy scan on 2026-05-26. Aliases stay reviewable unless already canonical.
+LEGACY_IDEOLOGY_ALIASES = {
+    "anarchist_collective": ("egalitarian", "communalist"),
+    "esoteric_metaphysical": ("theocratic",),
+    "mutual_aid_norms": ("communalist", "egalitarian"),
+    "transhumanist_program": ("technocratic", "progressive"),
+}
+LEGACY_LEGITIMACY_ALIASES = {
+    "recognized": ("state_recognized",),
+    "sanctioned": ("state_recognized",),
+    "chartered": ("state_recognized",),
+    "legal": ("state_recognized",),
+    "custom": ("customary",),
+    "customary": ("customary",),
+    "tolerated": ("tolerated",),
+    "gray_legal": ("shadow_legal",),
+    "grey_legal": ("shadow_legal",),
+    "shadow": ("shadow_legal",),
+    "shadow_legal": ("shadow_legal",),
+    "criminal_underground": ("outlaw",),
+    "proscribed": ("outlaw",),
+    "outlawed": ("outlaw",),
+    "outlaw": ("outlaw",),
+    "underground": ("underground",),
+    "contested": ("contested",),
+}
+LEGACY_RESOURCE_ALIASES = {
+    "barter_economy": ("capital",),
+    "information_intensive": ("information",),
+    "materiel_stockpile": ("force", "supply_lines"),
+    "patron_dependent": ("patronage",),
+    "salvage_economy": ("industry", "supply_lines"),
+}
+LEGACY_HIDDEN_AGENDA_ALIASES = {
+    "covert_loyalty_play": ("infiltrate", "secure_alliance"),
+    "expansionist_ambition": ("expand_control",),
+    "schismatic_internal_threat": ("suppress_dissent", "settle_succession"),
+}
 LEGACY_AGENDA_ALIASES = {
     "revanchist": "recover_losses",
     "infiltration": "infiltrate",
@@ -292,10 +349,8 @@ def build_faction_table_audit(cur: Any) -> dict[str, Any]:
         "dry_run": True,
         "source_columns": list(LEGACY_FACTION_COLUMNS),
         "keep_columns": list(KEEP_FACTION_COLUMNS),
-        "runtime_write_surfaces": list(RUNTIME_WRITE_SURFACES),
         "counters": counters,
         "non_null_counts": non_null_counts,
-        "legacy_tag_rows": [asdict(row) for row in legacy_tags],
         "factions": [_entry_to_dict(entry) for entry in entries],
     }
 
@@ -446,6 +501,7 @@ def _build_counters(
     entity_tag_candidates = 0
     pair_tag_candidates = 0
     prose_remainders = 0
+    no_replacement_items = 0
     for entry in entries:
         for candidate in entry.mapping_candidates:
             if candidate.review_required:
@@ -459,6 +515,8 @@ def _build_counters(
                 "structured_remainder",
             }:
                 prose_remainders += 1
+            elif candidate.target_kind == "no_replacement":
+                no_replacement_items += 1
         if any(
             candidate.source_column == "resources"
             and candidate.confidence == "ambiguous"
@@ -477,6 +535,7 @@ def _build_counters(
         "candidate_entity_tags": entity_tag_candidates,
         "candidate_pair_tags": pair_tag_candidates,
         "prose_or_remainder_items": prose_remainders,
+        "no_replacement_items": no_replacement_items,
         "manual_review_items": manual_review_items,
         "ambiguous_resource_values": ambiguous_resource_values,
         "active_claim_edges": sum(
@@ -485,11 +544,27 @@ def _build_counters(
         "active_operates_from_edges": sum(
             entry.existing_pair_tags.get("operates_from", 0) for entry in entries
         ),
+        "legacy_tag_rows": len(legacy_tags),
+        "legacy_ideology_axis_tags": sum(
+            1 for row in legacy_tags if row.category == "ideology_axis"
+        ),
+        "legacy_power_posture_tags": sum(
+            1 for row in legacy_tags if row.category == "power_posture"
+        ),
+        "legacy_legitimacy_status_tags": sum(
+            1 for row in legacy_tags if row.category == "legitimacy_status"
+        ),
         "legacy_operational_secrecy_tags": sum(
             1 for row in legacy_tags if row.category == "operational_secrecy"
         ),
-        "legacy_faction_state_tags": sum(
-            1 for row in legacy_tags if row.category == "state"
+        "legacy_resource_class_tags": sum(
+            1 for row in legacy_tags if row.category == "resource_class"
+        ),
+        "legacy_hidden_agenda_class_tags": sum(
+            1 for row in legacy_tags if row.category == "hidden_agenda_class"
+        ),
+        "legacy_history_class_tags": sum(
+            1 for row in legacy_tags if row.category == "history_class"
         ),
     }
 
@@ -685,7 +760,7 @@ def _map_power_level(value: Any) -> list[FactionMappingCandidate]:
         tag = "stable"
     elif numeric >= 0.30:
         tag = "pressured"
-    elif numeric > 0.10:
+    elif numeric >= 0.10:
         tag = "declining"
     elif numeric > 0.0:
         tag = "fragile"
@@ -729,24 +804,6 @@ def _map_resources(value: Any) -> list[FactionMappingCandidate]:
                 ),
             )
         ]
-    if "network" in _tokens(text):
-        return [
-            FactionMappingCandidate(
-                source_column="resources",
-                source_value=text,
-                target_kind="entity_tag",
-                target_category="resource_base",
-                target_tag=tag,
-                confidence="ambiguous",
-                review_required=True,
-                reason=(
-                    "Legacy 'network' is overloaded; choose the specific "
-                    "resource_base reading manually."
-                ),
-            )
-            for tag in NETWORK_AMBIGUOUS_RESOURCE_TAGS
-        ]
-
     matched = [
         tag
         for tag, keywords in RESOURCE_KEYWORDS.items()
@@ -766,6 +823,23 @@ def _map_resources(value: Any) -> list[FactionMappingCandidate]:
             )
             for tag in sorted(set(matched))
         ]
+    if normalized == "network":
+        return [
+            FactionMappingCandidate(
+                source_column="resources",
+                source_value=text,
+                target_kind="entity_tag",
+                target_category="resource_base",
+                target_tag=tag,
+                confidence="ambiguous",
+                review_required=True,
+                reason=(
+                    "Legacy 'network' is overloaded; choose the specific "
+                    "resource_base reading manually."
+                ),
+            )
+            for tag in NETWORK_AMBIGUOUS_RESOURCE_TAGS
+        ]
     return [
         FactionMappingCandidate(
             source_column="resources",
@@ -780,51 +854,174 @@ def _map_resources(value: Any) -> list[FactionMappingCandidate]:
 
 
 def _map_legacy_tag_row(row: LegacyTagRow) -> list[FactionMappingCandidate]:
+    if row.category == "ideology_axis":
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="ideology",
+            allowed_tags=IDEOLOGY_TAGS,
+            aliases=LEGACY_IDEOLOGY_ALIASES,
+            unknown_reason=(
+                "Legacy ideology_axis tag has no direct canonical ideology "
+                "reading; review before migration."
+            ),
+        )
+    if row.category == "power_posture":
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="power_status",
+            allowed_tags=POWER_STATUS_TAGS,
+            aliases={},
+            unknown_reason=(
+                "Legacy power_posture tag is not an accepted power_status "
+                "value; review trajectory and capacity before migration."
+            ),
+        )
+    if row.category == "legitimacy_status":
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="legitimacy",
+            allowed_tags=LEGITIMACY_TAGS,
+            aliases=LEGACY_LEGITIMACY_ALIASES,
+            unknown_reason=(
+                "Legacy legitimacy_status tag needs manual legitimacy review."
+            ),
+        )
     if row.category == "operational_secrecy":
-        normalized = _normalize_token(row.tag)
-        tag = OPERATIONAL_MODE_ALIASES.get(normalized, normalized)
-        if tag in OPERATIONAL_MODE_TAGS:
-            return [
-                FactionMappingCandidate(
-                    source_column="entity_tags_current.operational_secrecy",
-                    source_value=row.tag,
-                    target_kind="entity_tag",
-                    target_category="operational_mode",
-                    target_tag=tag,
-                    confidence="deterministic" if normalized == tag else "suggested",
-                    review_required=normalized != tag,
-                    reason=(
-                        "Legacy operational_secrecy tag maps to " "operational_mode."
-                    ),
-                )
-            ]
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="operational_mode",
+            allowed_tags=OPERATIONAL_MODE_TAGS,
+            aliases=OPERATIONAL_MODE_ALIASES,
+            unknown_reason="Unknown operational_secrecy value needs manual mapping.",
+        )
+    if row.category == "resource_class":
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="resource_base",
+            allowed_tags=RESOURCE_BASE_TAGS,
+            aliases=LEGACY_RESOURCE_ALIASES,
+            unknown_reason=(
+                "Legacy resource_class tag needs manual resource_base review."
+            ),
+        )
+    if row.category == "hidden_agenda_class":
+        return _map_controlled_legacy_tag_row(
+            row,
+            target_category="agenda",
+            allowed_tags=AGENDA_TAGS,
+            aliases=LEGACY_HIDDEN_AGENDA_ALIASES,
+            unknown_reason="Legacy hidden_agenda_class tag needs agenda review.",
+        )
+    if row.category == "history_class":
         return [
             FactionMappingCandidate(
-                source_column="entity_tags_current.operational_secrecy",
+                source_column="entity_tags_current.history_class",
                 source_value=row.tag,
-                target_kind="structured_remainder",
-                target_category="operational_mode",
-                confidence="manual_review",
-                review_required=True,
-                reason="Unknown operational_secrecy value needs manual mapping.",
-            )
-        ]
-    if row.category == "state":
-        return [
-            FactionMappingCandidate(
-                source_column="entity_tags_current.state",
-                source_value=row.tag,
-                target_kind="structured_remainder",
+                target_kind="no_replacement",
                 confidence="manual_review",
                 review_required=True,
                 reason=(
-                    "Faction-only state has no canonical replacement; "
-                    "decompose into power_status, agenda, pair-tags, events, "
-                    "or prose."
+                    "Migration 043 marks history_class with no replacement; "
+                    "preserve useful detail as world_events or prose before "
+                    "dropping the legacy tag."
                 ),
             )
         ]
-    return []
+    return [
+        FactionMappingCandidate(
+            source_column=f"entity_tags_current.{row.category}",
+            source_value=row.tag,
+            target_kind="structured_remainder",
+            confidence="manual_review",
+            review_required=True,
+            reason="Unrecognized legacy faction tag category needs manual review.",
+        )
+    ]
+
+
+def _map_controlled_legacy_tag_row(
+    row: LegacyTagRow,
+    *,
+    target_category: str,
+    allowed_tags: frozenset[str],
+    aliases: Mapping[str, str | tuple[str, ...]],
+    unknown_reason: str,
+) -> list[FactionMappingCandidate]:
+    source_column = f"entity_tags_current.{row.category}"
+    normalized = _normalize_token(row.tag)
+    alias = aliases.get(normalized)
+    alias_tags: tuple[str, ...]
+    if isinstance(alias, str):
+        alias_tags = (alias,)
+    else:
+        alias_tags = alias or ()
+
+    valid_alias_tags = tuple(tag for tag in alias_tags if tag in allowed_tags)
+    if valid_alias_tags:
+        return [
+            FactionMappingCandidate(
+                source_column=source_column,
+                source_value=row.tag,
+                target_kind="entity_tag",
+                target_category=target_category,
+                target_tag=tag,
+                confidence="deterministic" if normalized == tag else "suggested",
+                review_required=normalized != tag,
+                reason=(
+                    f"Legacy {row.category} tag maps to {target_category}; "
+                    "review alias-derived readings before migration."
+                ),
+            )
+            for tag in valid_alias_tags
+        ]
+
+    if normalized in allowed_tags:
+        return [
+            FactionMappingCandidate(
+                source_column=source_column,
+                source_value=row.tag,
+                target_kind="entity_tag",
+                target_category=target_category,
+                target_tag=normalized,
+                confidence="deterministic",
+                review_required=False,
+                reason=(
+                    f"Legacy {row.category} tag already matches accepted "
+                    f"{target_category} vocabulary."
+                ),
+            )
+        ]
+
+    matched = _match_controlled_values(row.tag, allowed_tags)
+    if matched:
+        return [
+            FactionMappingCandidate(
+                source_column=source_column,
+                source_value=row.tag,
+                target_kind="entity_tag",
+                target_category=target_category,
+                target_tag=tag,
+                confidence="suggested",
+                review_required=True,
+                reason=(
+                    f"Legacy {row.category} text contains accepted "
+                    f"{target_category} vocabulary."
+                ),
+            )
+            for tag in matched
+        ]
+
+    return [
+        FactionMappingCandidate(
+            source_column=source_column,
+            source_value=row.tag,
+            target_kind="structured_remainder",
+            target_category=target_category,
+            confidence="manual_review",
+            review_required=True,
+            reason=unknown_reason,
+        )
+    ]
 
 
 def _obsolete_values(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -875,10 +1072,6 @@ def _normalize_token(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
 
 
-def _tokens(value: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9_]+", value.lower()))
-
-
 def _contains_phrase(text: str, phrase: str) -> bool:
     pattern = r"(?<![a-z0-9_])" + re.escape(phrase.lower()) + r"(?![a-z0-9_])"
     return re.search(pattern, text.lower()) is not None
@@ -888,6 +1081,8 @@ def _match_controlled_values(text: str, allowed: frozenset[str]) -> list[str]:
     normalized = _normalize_token(text)
     if normalized in allowed:
         return [normalized]
+    # Match both prose spelling ("criminal network") and canonical spelling
+    # ("criminal_network") so old free text can still point at tag anchors.
     matches = [tag for tag in allowed if _contains_phrase(text, tag.replace("_", " "))]
     matches.extend(tag for tag in allowed if _contains_phrase(text, tag))
     return sorted(set(matches))
