@@ -313,6 +313,13 @@ Keep as columns:
 - `primary_location`
 - `created_at`, `updated_at`, `extra_data`
 
+Preflight command:
+
+- `nexus faction-audit --slot N` performs a read-only dry run over the legacy
+  faction columns, existing `claims` / `operates_from` pair-tags, and legacy
+  faction tag categories. Review its JSON output before any destructive data
+  rewrite or column-drop migration.
+
 ---
 
 ## Mechanical Implications

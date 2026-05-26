@@ -8,6 +8,7 @@ Commands:
     nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
+    nexus faction-audit --slot N  Dry-run legacy faction column migration audit
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -211,6 +212,59 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
         print("Policy: failed because --fail-on-remainders was set.")
 
 
+def _print_faction_audit(payload: Dict[str, Any]) -> None:
+    """Print a dry-run faction table migration audit in a compact CLI format."""
+
+    audit = payload.get("faction_audit") or {}
+    counters = audit.get("counters") or {}
+    non_null_counts = audit.get("non_null_counts") or {}
+    factions = audit.get("factions") or []
+
+    print("Counters:")
+    for key in (
+        "factions_scanned",
+        "factions_with_legacy_values",
+        "non_null_legacy_values",
+        "candidate_entity_tags",
+        "candidate_pair_tags",
+        "prose_or_remainder_items",
+        "no_replacement_items",
+        "manual_review_items",
+        "ambiguous_resource_values",
+        "active_claim_edges",
+        "active_operates_from_edges",
+        "legacy_tag_rows",
+        "legacy_ideology_axis_tags",
+        "legacy_power_posture_tags",
+        "legacy_legitimacy_status_tags",
+        "legacy_operational_secrecy_tags",
+        "legacy_resource_class_tags",
+        "legacy_hidden_agenda_class_tags",
+        "legacy_history_class_tags",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+
+    if non_null_counts:
+        print()
+        print("Legacy column values:")
+        for column, count in non_null_counts.items():
+            print(f"  {column}: {count}")
+
+    review_factions = [item for item in factions if item.get("review_required")]
+    if review_factions:
+        print()
+        print("Manual review:")
+        for item in review_factions[:10]:
+            print(
+                "  - "
+                f"{item['faction_name']} "
+                f"(id {item['faction_id']}): "
+                f"{item.get('manual_review_items', 0)} item(s)"
+            )
+        if len(review_factions) > 10:
+            print(f"  ...{len(review_factions) - 10} more")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -230,6 +284,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("trait_audit"):
         _print_trait_audit(payload)
+        print()
+
+    if payload.get("faction_audit"):
+        _print_faction_audit(payload)
         print()
 
     # Get display elements
@@ -955,6 +1013,28 @@ def run_trait_audit(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dry-run the legacy faction table to Orrery substrate migration."""
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.faction_table_audit import build_faction_table_audit
+    from nexus.api.slot_utils import slot_dbname
+
+    dbname = slot_dbname(args.slot)
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SET TRANSACTION READ ONLY")
+            audit = build_faction_table_audit(cur)
+
+    return {
+        "success": True,
+        "message": f"Faction table audit for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "faction_audit": audit,
+    }
+
+
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Lock a slot to prevent modifications.
@@ -1025,6 +1105,7 @@ Examples:
   nexus lock --slot 1           Lock slot to prevent modifications
   nexus unlock --slot 2         Unlock slot to allow modifications
   nexus trait-audit --slot 5    Dry-run trait compiler audit
+  nexus faction-audit --slot 2  Dry-run faction column migration audit
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1151,6 +1232,15 @@ Examples:
         ),
     )
 
+    # faction-audit command
+    faction_audit_parser = subparsers.add_parser(
+        "faction-audit",
+        help="Dry-run legacy faction column migration into Orrery substrate",
+    )
+    faction_audit_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -1183,6 +1273,7 @@ def main() -> int:
         "regenerate",
         "clear",
         "trait-audit",
+        "faction-audit",
         "lock",
         "unlock",
     ):
@@ -1213,6 +1304,8 @@ def main() -> int:
         result = run_clear(args)
     elif args.command == "trait-audit":
         result = run_trait_audit(args)
+    elif args.command == "faction-audit":
+        result = run_faction_audit(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":
