@@ -7,7 +7,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { FontProvider } from "@/contexts/FontContext";
 import { ModelProvider } from "@/contexts/ModelContext";
-import { NexusLayout } from "@/components/NexusLayout";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
@@ -16,7 +15,6 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={SplashPage} />
-      <Route path="/nexus" component={NexusLayout} />
       <Route path="/new-story" component={NewStoryPage} />
       <Route component={NotFound} />
     </Switch>
