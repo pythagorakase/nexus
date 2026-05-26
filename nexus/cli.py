@@ -231,6 +231,7 @@ def _print_faction_audit(payload: Dict[str, Any]) -> None:
         "manual_review_items",
         "ambiguous_resource_values",
         "active_claim_edges",
+        "active_operates_from_edges",
         "legacy_operational_secrecy_tags",
         "legacy_faction_state_tags",
     ):

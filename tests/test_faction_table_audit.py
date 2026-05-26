@@ -250,3 +250,28 @@ def test_cli_faction_audit_returns_dry_run_payload(monkeypatch) -> None:
     assert result["dbname"] == "save_02"
     assert result["faction_audit"]["dry_run"] is True
     assert result["faction_audit"]["counters"]["factions_scanned"] == 1
+
+
+def test_cli_prints_all_pair_edge_counters(capsys) -> None:
+    """Human faction audit output should include both relation edge counters."""
+
+    cli.emit_output(
+        {
+            "message": "Faction table audit for slot 2 (dry run).",
+            "faction_audit": {
+                "counters": {
+                    "active_claim_edges": 2,
+                    "active_operates_from_edges": 3,
+                },
+                "non_null_counts": {},
+                "factions": [],
+                "runtime_write_surfaces": [],
+            },
+        },
+        as_json=False,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "active_claim_edges: 2" in output
+    assert "active_operates_from_edges: 3" in output
