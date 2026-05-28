@@ -29,8 +29,10 @@ The skill ships with a self-contained venv. If `.venv/` is missing (fresh checko
 ```bash
 cd .claude/skills/extract-vector-grid
 python3 -m venv .venv
-.venv/bin/pip install svgelements cairosvg
+.venv/bin/pip install -r requirements.txt
 ```
+
+Versions are pinned in `requirements.txt` because the coord-scale reconciliation in `extract.py` depends on `svgelements`' specific `pt`→`px` normalization. If you upgrade either package, re-run the validation acceptance test described below.
 
 External dependencies:
 - `poppler-utils` (provides `pdftocairo`) — required for PDF-backed `.ai` files

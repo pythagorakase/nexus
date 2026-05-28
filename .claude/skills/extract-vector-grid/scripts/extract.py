@@ -17,6 +17,8 @@ Hard-won failure modes baked in:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -158,13 +160,12 @@ def drop_page_background(
 # Stage 3: projection-profile gutter detection
 # --------------------------------------------------------------------------- #
 
-def find_gutter_midpoints(
-    bboxes: Iterable[BBox], axis: str, page_lo: float, page_hi: float
-) -> list[float]:
+def find_gutter_midpoints(bboxes: Iterable[BBox], axis: str) -> list[float]:
     """Find midpoints of empty bands along an axis.
 
-    `axis` is 'x' or 'y'. Returns cut coordinates in ascending order, excluding
-    the page boundary itself (we use boundaries as the outer cell limits).
+    `axis` is 'x' or 'y'. Returns cut coordinates in ascending order. Page
+    boundaries are implicit (they define the outer cell limits, not internal
+    cuts), so this returns only the *internal* gutter midpoints.
     """
     if axis == "x":
         intervals = [(bb.xmin, bb.xmax) for bb in bboxes]
@@ -233,97 +234,140 @@ def read_viewbox_width(svg_path: Path) -> float | None:
     return float(parts[2])
 
 
-def emit_cell_svg(
+SHAPE_TAGS = {
+    f"{{{SVG_NS}}}{t}"
+    for t in ("path", "rect", "circle", "ellipse", "line", "polyline", "polygon")
+}
+NON_RENDERING_TAGS = {
+    f"{{{SVG_NS}}}{t}"
+    for t in ("defs", "clipPath", "mask", "symbol", "pattern", "marker")
+}
+
+
+def _shape_signature(shape: Shape) -> tuple | None:
+    """Stable signature for matching svgelements Shape ↔ source XML node.
+
+    Combines reified bbox + element tag + fill + a short hash of the path
+    string. The tag and fill, plus the path hash (not just length), defeat
+    collisions between identical symmetric ornaments (e.g. four corner
+    flourishes with the same bbox and same path-length).
+    """
+    bb = shape.bbox()
+    if bb is None:
+        return None
+    xmin, ymin, xmax, ymax = bb
+    if xmax <= xmin or ymax <= ymin:
+        return None
+    rounded = (round(xmin, 3), round(ymin, 3), round(xmax, 3), round(ymax, 3))
+    try:
+        d = shape.d()
+    except Exception:
+        d = ""
+    d_hash = hashlib.sha1(d.encode("utf-8")).hexdigest()[:16] if d else ""
+    fill = getattr(shape, "fill", None)
+    fill_str = str(fill) if fill is not None else ""
+    tag = type(shape).__name__
+    return rounded + (tag, fill_str, d_hash)
+
+
+def prepare_shape_index(
     flat_svg_path: Path,
+) -> tuple[SVG, list[ET.Element], list[Shape], dict[ET.Element, ET.Element]]:
+    """Parse the flat SVG once, return everything needed to emit cells.
+
+    Returns:
+      reified            — svgelements parse, transforms baked into bboxes
+      xml_nodes_in_order — every rendering shape-bearing XML node, in doc order
+      shapes_in_order    — svgelements Shape walk in the SAME doc order
+      parent_map         — child→parent map over the raw XML tree, used to
+                           preserve ancestor transforms when cloning leaves
+    """
+    reified = SVG.parse(str(flat_svg_path), reify=True)
+    tree = ET.parse(flat_svg_path)
+    root = tree.getroot()
+
+    parent_map: dict[ET.Element, ET.Element] = {}
+    xml_nodes_in_order: list[ET.Element] = []
+
+    def walk(node: ET.Element) -> None:
+        if node.tag in NON_RENDERING_TAGS:
+            return
+        if node.tag in SHAPE_TAGS:
+            xml_nodes_in_order.append(node)
+        for child in node:
+            parent_map[child] = node
+            walk(child)
+
+    walk(root)
+
+    shapes_in_order: list[Shape] = [
+        e for e in reified.elements() if isinstance(e, Shape)
+    ]
+    if len(xml_nodes_in_order) != len(shapes_in_order):
+        raise RuntimeError(
+            f"Shape-count mismatch between XML walk "
+            f"({len(xml_nodes_in_order)}) and svgelements parse "
+            f"({len(shapes_in_order)}); cannot safely map back."
+        )
+    return reified, xml_nodes_in_order, shapes_in_order, parent_map
+
+
+def compose_ancestor_transform(
+    leaf: ET.Element, parent_map: dict[ET.Element, ET.Element]
+) -> str | None:
+    """Walk parents → root, concatenating any inherited transform= strings.
+
+    Returned in outer-to-inner order so the composed transform applies in the
+    same order SVG rendering does. Returns None when no ancestor carries a
+    transform — most pdftocairo output, for example.
+    """
+    transforms: list[str] = []
+    node = parent_map.get(leaf)
+    while node is not None:
+        t = node.attrib.get("transform")
+        if t:
+            transforms.append(t.strip())
+        node = parent_map.get(node)
+    if not transforms:
+        return None
+    # Outer-most ancestor applies first; we collected inner-to-outer, so reverse
+    return " ".join(reversed(transforms))
+
+
+def emit_cell_svg(
     cell_shapes: list[tuple[Shape, BBox]],
     bbox: BBox,
     out_path: Path,
     padding: float,
     coord_scale: float,
+    xml_nodes_in_order: list[ET.Element],
+    shapes_in_order: list[Shape],
+    parent_map: dict[ET.Element, ET.Element],
 ) -> int:
     """Write a minimal SVG containing only `cell_shapes`, translated to origin.
 
-    Returns the path/shape count emitted. The XML walk and the svgelements
-    walk are kept in parallel doc-order so we can map svgelements shapes back
-    to their original XML nodes (and clone the original `d=` strings verbatim).
+    Original `d=` strings are cloned verbatim (lossless). Any ancestor
+    `<g transform=...>` chain is composed into a wrapping transform on the
+    clone so geometry lands in the same absolute-coord space the bbox was
+    computed in.
     """
-    reified = SVG.parse(str(flat_svg_path), reify=True)
-
-    # Match by stable signature: (rounded bbox, length-of-path-string).
-    # Returns None for shapes that would have been filtered upstream so the
-    # two parallel walks (svgelements + XML) stay aligned by *raw* doc order.
-    def signature(shape: Shape) -> tuple | None:
-        bb = shape.bbox()
-        if bb is None:
-            return None
-        xmin, ymin, xmax, ymax = bb
-        if xmax <= xmin or ymax <= ymin:
-            return None
-        rounded = (round(xmin, 3), round(ymin, 3), round(xmax, 3), round(ymax, 3))
-        try:
-            d = shape.d()
-        except Exception:
-            d = ""
-        return rounded + (len(d),)
-
     keep_sigs: dict[tuple, int] = {}
     for s, _ in cell_shapes:
-        sig = signature(s)
+        sig = _shape_signature(s)
         if sig is None:
             continue
         keep_sigs[sig] = keep_sigs.get(sig, 0) + 1
 
-    # Now walk the XML; for each shape-bearing element, reify just that one and
-    # compute its signature; if it's in keep_sigs (counter > 0), keep it.
-    tree = ET.parse(flat_svg_path)
-    root = tree.getroot()
-    # Drop anything that isn't a shape-bearing tag at the leaf, but preserve
-    # ancestor <g> structure so transforms (if any survived) still apply.
-    shape_tags = {f"{{{SVG_NS}}}{t}" for t in (
-        "path", "rect", "circle", "ellipse", "line", "polyline", "polygon"
-    )}
-
-    # Walk the reified shapes in doc order in parallel with the XML's
-    # shape-tagged elements in doc order. svgelements skips shapes that live
-    # inside <defs>, <clipPath>, <mask>, <symbol>, <pattern> (they're not
-    # rendered), so the XML walk must skip those subtrees too to keep the
-    # parallel iteration aligned.
-    non_rendering_tags = {
-        f"{{{SVG_NS}}}{t}"
-        for t in ("defs", "clipPath", "mask", "symbol", "pattern", "marker")
-    }
-    all_shape_xml_nodes: list[ET.Element] = []
-
-    def walk(node: ET.Element) -> None:
-        if node.tag in non_rendering_tags:
-            return
-        if node.tag in shape_tags:
-            all_shape_xml_nodes.append(node)
-        for child in node:
-            walk(child)
-
-    walk(root)
-    reified_shapes_in_order: list[Shape] = [
-        e for e in reified.elements() if isinstance(e, Shape)
-    ]
-    if len(all_shape_xml_nodes) != len(reified_shapes_in_order):
-        raise RuntimeError(
-            f"Shape-count mismatch between XML walk "
-            f"({len(all_shape_xml_nodes)}) and svgelements parse "
-            f"({len(reified_shapes_in_order)}); cannot safely map back."
-        )
-    keep_xml: set[int] = set()
-    for xml_node, shape in zip(all_shape_xml_nodes, reified_shapes_in_order):
-        sig = signature(shape)
+    keep_xml: list[ET.Element] = []
+    for xml_node, shape in zip(xml_nodes_in_order, shapes_in_order):
+        sig = _shape_signature(shape)
         if keep_sigs.get(sig, 0) > 0:
-            keep_xml.add(id(xml_node))
+            keep_xml.append(xml_node)
             keep_sigs[sig] -= 1
 
-    # Build a new SVG with viewBox at the (padded) cell bbox and shapes
-    # translated to origin via an outer <g transform="translate(-x, -y)">.
-    # All values are scaled into the source SVG's viewBox-unit coordinate
-    # system (which is what the cloned path `d=` strings use) — svgelements
-    # bboxes come back in px-normalized space, so we undo that here.
+    # Build the new SVG. viewBox + translate values are in the source's
+    # viewBox-unit coordinate system (what the cloned path `d=` strings use).
+    # svgelements bboxes are in px-normalized space, so we undo that here.
     pad_xmin = (bbox.xmin - padding) * coord_scale
     pad_ymin = (bbox.ymin - padding) * coord_scale
     pad_w = (bbox.w + 2 * padding) * coord_scale
@@ -337,26 +381,29 @@ def emit_cell_svg(
             "height": f"{pad_h}",
         },
     )
-    g = ET.SubElement(
+    translate_g = ET.SubElement(
         new_root,
         f"{{{SVG_NS}}}g",
         {"transform": f"translate({-pad_xmin} {-pad_ymin})"},
     )
 
-    kept = 0
-    for xml_node in all_shape_xml_nodes:
-        if id(xml_node) in keep_xml:
-            # Copy the node (and reset any id to avoid collisions)
-            clone = ET.fromstring(ET.tostring(xml_node))
-            if "id" in clone.attrib:
-                del clone.attrib["id"]
-            g.append(clone)
-            kept += 1
+    for xml_node in keep_xml:
+        clone = ET.fromstring(ET.tostring(xml_node))
+        if "id" in clone.attrib:
+            del clone.attrib["id"]
+        ancestor_t = compose_ancestor_transform(xml_node, parent_map)
+        if ancestor_t:
+            wrapper = ET.SubElement(
+                translate_g, f"{{{SVG_NS}}}g", {"transform": ancestor_t}
+            )
+            wrapper.append(clone)
+        else:
+            translate_g.append(clone)
 
     ET.ElementTree(new_root).write(
         out_path, encoding="utf-8", xml_declaration=True
     )
-    return kept
+    return len(keep_xml)
 
 
 # --------------------------------------------------------------------------- #
@@ -403,8 +450,8 @@ def extract(
             )
 
         bbs = [bb for _, bb in kept]
-        x_cuts = find_gutter_midpoints(bbs, "x", page.xmin, page.xmax)
-        y_cuts = find_gutter_midpoints(bbs, "y", page.ymin, page.ymax)
+        x_cuts = find_gutter_midpoints(bbs, "x")
+        y_cuts = find_gutter_midpoints(bbs, "y")
         cols = len(x_cuts) + 1
         rows = len(y_cuts) + 1
         if verbose:
@@ -417,14 +464,24 @@ def extract(
 
         cells = assign_to_cells(kept, x_cuts, y_cuts)
 
+        # Parse the flat SVG once and share the XML / reified walks across all
+        # cells — keeps emit_cell_svg's per-call cost O(cell_shapes), not
+        # O(total_shapes) × O(cells).
+        _, xml_nodes_in_order, shapes_in_order, parent_map = prepare_shape_index(
+            flat
+        )
+
         manifest: list[dict] = []
         for (r, c), items in sorted(cells.items()):
             ubox = union_bbox(items)
             out_name = f"{name_prefix}-r{r+1}c{c+1}.svg"
             out_path = output_dir / out_name
             shape_count = emit_cell_svg(
-                flat, items, ubox, out_path,
+                items, ubox, out_path,
                 padding=padding, coord_scale=coord_scale,
+                xml_nodes_in_order=xml_nodes_in_order,
+                shapes_in_order=shapes_in_order,
+                parent_map=parent_map,
             )
             manifest.append(
                 {
@@ -489,8 +546,6 @@ def main() -> int:
         bg_coverage=args.bg_coverage,
         verbose=not args.quiet,
     )
-    import json
-
     print(json.dumps(report, indent=2))
     return 0
 
