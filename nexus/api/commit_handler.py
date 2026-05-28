@@ -241,8 +241,9 @@ async def apply_state_updates(
     """
     Apply entity state updates from the LLM response.
 
-    This updates current_activity, emotional_state, etc. for characters,
-    and similar fields for places and factions.
+    This updates scalar state for characters and places. Faction semantics are
+    intentionally not written to legacy faction prose columns; use Orrery tag
+    deltas / pair-tags and world events instead.
     """
     # Update character states
     for char_update in state_updates.characters:
@@ -292,19 +293,12 @@ async def apply_state_updates(
             )
             logger.info(f"Updated place {place_update.place_id}")
 
-    # Update faction states
     for faction_update in state_updates.factions:
-        if faction_update.faction_id and faction_update.current_activity:
-            await conn.execute(
-                """
-                UPDATE factions
-                SET current_activity = $1
-                WHERE id = $2
-                """,
-                faction_update.current_activity,
+        if faction_update.faction_id:
+            logger.debug(
+                "Skipping legacy faction column update for faction %s",
                 faction_update.faction_id,
             )
-            logger.info(f"Updated faction {faction_update.faction_id}")
 
 
 async def clear_incubator(conn: asyncpg.Connection, session_id: str = None) -> None:

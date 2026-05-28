@@ -786,6 +786,7 @@ Compiler surfaces:
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
 - `migrations/048_orrery_hunting_pair_tag.py` — `pursuing` → `hunting` pair-tag rename plus deprecation of `under_active_pursuit`.
 - `migrations/052_orrery_faction_tag_vocab.py` — seeds the 65 faction tag anchors across `ideology`, `resource_base`, `legitimacy`, `operational_mode`, `power_status`, and `agenda`.
+- `migrations/053_retire_faction_legacy_write_defaults.py` — drops the legacy `factions.power_level` default so new runtime inserts do not create fresh obsolete faction strength values.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*

@@ -657,6 +657,21 @@ def test_faction_tag_vocab_migration_seeds_closed_anchor_set() -> None:
     assert "'replace'::entity_tag_reapplication_policy" in migration_path.read_text()
 
 
+def test_faction_legacy_write_default_migration_drops_power_default() -> None:
+    """Migration 053 should stop new inserts from creating power_level data."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "053_retire_faction_legacy_write_defaults.py"
+    )
+    source = migration_path.read_text()
+
+    assert "ALTER TABLE factions" in source
+    assert "ALTER COLUMN power_level DROP DEFAULT" in source
+    assert "Orrery power_status tags" in source
+
+
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
     """Migration 049 DDL is idempotent against a real slot schema."""

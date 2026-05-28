@@ -389,22 +389,13 @@ async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) 
     # Insert faction
     faction_id = await conn.fetchval("""
         INSERT INTO factions (
-            id, name, summary, ideology, history, current_activity,
-            hidden_agenda, territory, power_level, resources,
-            primary_location, extra_data
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            id, name, summary, primary_location, extra_data
+        ) VALUES ($1, $2, $3, $4, $5)
         RETURNING id
     """,
         faction_id,
         new_faction.name,
         new_faction.summary,
-        new_faction.ideology,
-        new_faction.history,
-        new_faction.current_activity,
-        new_faction.hidden_agenda,
-        new_faction.territory,
-        new_faction.power_level,
-        new_faction.resources,
         new_faction.primary_location,
         _json_dumps_model(new_faction.extra_data),
     )

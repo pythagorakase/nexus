@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from nexus.agents.logon.apex_schema import (
     FactionStateUpdate,
+    NewFaction,
     NewPlace,
     OrreryAdjudication,
     PlaceType,
@@ -65,15 +66,36 @@ def test_new_place_normalization_does_not_mutate_input_payload() -> None:
     assert place.type == PlaceType.FIXED_LOCATION
 
 
-def test_faction_state_update_accepts_current_activity() -> None:
-    """Faction updates can carry the activity field commit handlers persist."""
+def test_faction_state_update_rejects_legacy_current_activity() -> None:
+    """Faction updates should use Orrery tags, not legacy activity columns."""
 
-    update = FactionStateUpdate(
-        faction_id=42,
-        current_activity="Watching the station exits.",
+    with pytest.raises(ValidationError):
+        FactionStateUpdate(
+            faction_id=42,
+            current_activity="Watching the station exits.",
+        )
+
+
+def test_new_faction_schema_excludes_obsolete_legacy_columns() -> None:
+    """New faction creation should no longer advertise obsolete table columns."""
+
+    obsolete_fields = {
+        "ideology",
+        "history",
+        "current_activity",
+        "hidden_agenda",
+        "territory",
+        "power_level",
+        "resources",
+    }
+
+    assert obsolete_fields.isdisjoint(NewFaction.model_fields)
+    assert {"name", "summary", "primary_location", "extra_data", "orrery_tags"} <= set(
+        NewFaction.model_fields
     )
 
-    assert update.current_activity == "Watching the station exits."
+    with pytest.raises(ValidationError):
+        NewFaction(name="The Glass Choir", ideology="memory control")
 
 
 def test_orrery_adjudication_schema_accepts_replace_delta() -> None:
@@ -149,13 +171,13 @@ def test_extended_response_accepts_partial_new_character_context() -> None:
                 {
                     "new_faction": {
                         "name": "The Glass Choir",
-                        "ideology": "Control the city by controlling what it remembers.",
-                        "history": "Formed after the station fire.",
-                        "hidden_agenda": "Recover a witness list before dawn.",
-                        "territory": "Transit stops, pharmacies, and late-night diners.",
-                        "resources": "Lookouts, dead drops, and radio scanners.",
+                        "summary": "A memory-control conspiracy around transit stops.",
                         "primary_location": None,
                         "extra_data": {"leader": "unknown"},
+                        "orrery_tags": {
+                            "applied_tags": ["covert", "information"],
+                            "tags_to_clear": [],
+                        },
                     },
                     "reference_type": "mentioned",
                 }

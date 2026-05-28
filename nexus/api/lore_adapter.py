@@ -282,8 +282,6 @@ def extract_entity_updates(response: StoryTurnResponse) -> Dict[str, Any]:
 
                 if hasattr(faction, "faction_name") and faction.faction_name:
                     update["faction_name"] = faction.faction_name
-                if hasattr(faction, "current_activity") and faction.current_activity:
-                    update["current_activity"] = faction.current_activity
 
                 entity_updates["factions"].append(update)
 

@@ -270,23 +270,14 @@ def create_new_faction_sync(cur, new_faction):
     cur.execute(
         """
         INSERT INTO factions (
-            id, name, summary, ideology, history, current_activity,
-            hidden_agenda, territory, power_level, resources,
-            primary_location, extra_data
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            id, name, summary, primary_location, extra_data
+        ) VALUES (%s, %s, %s, %s, %s)
         RETURNING id, entity_id
     """,
         (
             faction_id,
             new_faction.name,
             new_faction.summary,
-            new_faction.ideology,
-            new_faction.history,
-            new_faction.current_activity,
-            new_faction.hidden_agenda,
-            new_faction.territory,
-            new_faction.power_level,
-            new_faction.resources,
             new_faction.primary_location,
             _json_dumps_model(new_faction.extra_data),
         ),
@@ -651,13 +642,6 @@ def apply_state_updates_sync(conn, state_updates: StateUpdates):
 
         # Update faction states
         for faction_update in state_updates.factions:
-            if faction_update.faction_id and faction_update.current_activity:
-                cur.execute(
-                    "UPDATE factions SET current_activity = %s WHERE id = %s",
-                    (faction_update.current_activity, faction_update.faction_id),
-                )
-                logger.info(f"Updated faction {faction_update.faction_id}")
-
             bestowal = getattr(faction_update, "orrery_tags", None)
             if faction_update.faction_id and bestowal is not None:
                 _apply_state_tags(

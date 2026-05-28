@@ -360,41 +360,20 @@ class NewPlace(BaseModel):
 
 class NewFaction(BaseModel):
     """
-    Schema for introducing a new faction - aligned with DB schema.
-    Leader info goes in extra_data or character relationships.
+    Schema for introducing a new faction.
+
+    Faction semantics live in Orrery tags and pair-tags, not legacy prose
+    columns. Leader/member/color detail goes in extra_data or relationships.
     """
 
     name: str = Field(description="Faction name")
     summary: Optional[str] = Field(
         default=None,
         max_length=500,
-        description="Brief faction description (max 500 chars)",
-    )
-    ideology: Optional[str] = Field(
-        default=None, description="Faction's core ideology or purpose"
-    )
-    history: Optional[str] = Field(
-        default=None, description="Faction origins, past events, and evolution"
-    )
-    current_activity: Optional[str] = Field(
-        default=None, description="What the faction is currently doing"
-    )
-    hidden_agenda: Optional[str] = Field(
-        default=None,
-        description="Secret goals, plots, and agendas (like place secrets - narrative gold!)",
-    )
-    territory: Optional[str] = Field(
-        default=None,
-        description="Controlled areas, zones of influence, or operational reach",
-    )
-    power_level: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Faction influence/power rating (0.0-1.0, default 0.5 for new factions)",
-    )
-    resources: Optional[str] = Field(
-        default=None, description="Assets, capabilities, personnel, and resources"
+        description=(
+            "Brief faction description (max 500 chars). Put narrative prose "
+            "here when no accepted Orrery tag applies."
+        ),
     )
     primary_location: Optional[int] = Field(
         default=None,
@@ -407,12 +386,13 @@ class NewFaction(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Semantic Orrery tags for this faction (ideology_axis, "
-            "power_posture, legitimacy_status, operational_secrecy, "
-            "resource_class, hidden_agenda_class, history_class). Propose new "
-            "ones when the setting needs vocabulary that doesn't yet exist."
+            "Closed-vocabulary Orrery tags for this faction. Use registered "
+            "tags from ideology, resource_base, legitimacy, operational_mode, "
+            "power_status, and agenda; omit tags when prose is more accurate."
         ),
     )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # ============================================================================
@@ -703,7 +683,7 @@ class LocationStateUpdate(BaseModel):
 
 class FactionStateUpdate(BaseModel):
     """
-    Update to a faction's state.
+    Update to a faction's Orrery state.
     """
 
     faction_id: Optional[int] = Field(
@@ -712,11 +692,12 @@ class FactionStateUpdate(BaseModel):
     faction_name: Optional[str] = Field(
         default=None, description="Faction name (if ID unknown)"
     )
-    current_activity: Optional[str] = Field(
-        default=None, description="Current faction activity or operational focus"
-    )
     recent_actions: Optional[List[str]] = Field(
-        default_factory=list, description="Recent faction actions"
+        default_factory=list,
+        description=(
+            "Recent faction actions for narrative context. Persist durable "
+            "facts through world_events or accepted Orrery tags."
+        ),
     )
     stance_changes: Optional[Dict[str, str]] = Field(
         default=None, description="Changes in stance toward other entities"
@@ -724,11 +705,14 @@ class FactionStateUpdate(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Tag deltas for this faction. Use applied_tags to add tags (e.g., "
-            "they just lost state sanction → ousted_remnant), tags_to_clear to "
-            "retire ones that no longer apply."
+            "Tag deltas for this faction. Use applied_tags to add registered "
+            "faction tags such as ideology, resource_base, legitimacy, "
+            "operational_mode, power_status, or agenda values; use "
+            "tags_to_clear to retire active tags that no longer apply."
         ),
     )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class StateUpdates(BaseModel):
