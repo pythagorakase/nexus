@@ -14,8 +14,10 @@ import pytest
 from nexus import cli
 from nexus.api.db_pool import close_pool, get_connection
 from nexus.api.faction_table_audit import (
+    FACTION_MANIFEST_SCHEMA_VERSION,
     LEGACY_TAG_CATEGORIES,
     LegacyTagRow,
+    apply_faction_migration_manifest,
     audit_faction_row,
     build_faction_migration_manifest,
     build_faction_table_audit,
@@ -23,6 +25,176 @@ from nexus.api.faction_table_audit import (
 
 
 TEST_DBNAME = "save_02"
+
+
+class FactionApplyCursor:
+    """Small fake cursor for deterministic faction manifest apply tests."""
+
+    def __init__(
+        self,
+        *,
+        active_entity_tags: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.source_kinds = {"system", "skald_inline", "llm_generated"}
+        self.allowed_categories = {
+            "agenda",
+            "ideology",
+            "legitimacy",
+            "operational_mode",
+            "power_status",
+            "resource_base",
+        }
+        self.tags: dict[tuple[str, str], dict[str, Any]] = {
+            ("ideology", "mercantilist"): {
+                "id": 101,
+                "tag": "mercantilist",
+                "category": "ideology",
+            },
+            ("legitimacy", "outlaw"): {
+                "id": 202,
+                "tag": "outlaw",
+                "category": "legitimacy",
+            },
+            ("legitimacy", "contested"): {
+                "id": 203,
+                "tag": "contested",
+                "category": "legitimacy",
+            },
+        }
+        self.tag_by_id: dict[int, dict[str, Any]] = {
+            int(row["id"]): row for row in self.tags.values()
+        }
+        self.entities: dict[int, str] = {1111: "faction"}
+        self.entity_tags: list[dict[str, Any]] = list(active_entity_tags or [])
+        self.next_entity_tag_id = 9001
+        self.rowcount = 0
+        self._rows: list[dict[str, Any]] = []
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+        """Handle the SQL shapes emitted by faction apply."""
+
+        normalized = " ".join(sql.split())
+        self.rowcount = 0
+        if "FROM pg_enum" in normalized:
+            source_kind = str(params[0])
+            self._rows = [{"exists": 1}] if source_kind in self.source_kinds else []
+        elif "FROM tag_category_registry" in normalized:
+            self._rows = [
+                {"category": category} for category in sorted(self.allowed_categories)
+            ]
+        elif normalized == "SELECT max(world_time) AS world_time FROM chunk_metadata":
+            self._rows = [{"world_time": None}]
+        elif "FROM tags" in normalized and "WHERE tag = %s" in normalized:
+            tag, category = params
+            row = self.tags.get((str(category), str(tag)))
+            self._rows = [row] if row else []
+        elif "FROM entities" in normalized:
+            entity_id = int(params[0])
+            kind = self.entities.get(entity_id)
+            self._rows = [{"id": entity_id, "kind": kind}] if kind else []
+        elif (
+            normalized.startswith("SELECT id FROM entity_tags")
+            and "tag_id = %s" in normalized
+        ):
+            entity_id, tag_id = (int(params[0]), int(params[1]))
+            self._rows = [
+                {"id": row["id"]}
+                for row in self.entity_tags
+                if row["entity_id"] == entity_id
+                and row["tag_id"] == tag_id
+                and row.get("cleared_at") is None
+            ]
+        elif "JOIN tags t ON t.id = et.tag_id" in normalized:
+            entity_id, category, excluded_tag_id = (
+                int(params[0]),
+                str(params[1]),
+                int(params[2]),
+            )
+            self._rows = []
+            for row in self.entity_tags:
+                tag_row = self.tag_by_id[int(row["tag_id"])]
+                if (
+                    row["entity_id"] == entity_id
+                    and row.get("cleared_at") is None
+                    and tag_row["category"] == category
+                    and tag_row["id"] != excluded_tag_id
+                ):
+                    self._rows.append({"tag": tag_row["tag"]})
+            self._rows.sort(key=lambda item: item["tag"])
+        elif normalized.startswith("INSERT INTO entity_tags"):
+            entity_id, tag_id, world_time, source_kind = params
+            existing = [
+                row
+                for row in self.entity_tags
+                if row["entity_id"] == entity_id
+                and row["tag_id"] == tag_id
+                and row.get("cleared_at") is None
+            ]
+            if existing:
+                self._rows = []
+                return
+
+            entity_tag_id = self.next_entity_tag_id
+            self.next_entity_tag_id += 1
+            self.entity_tags.append(
+                {
+                    "id": entity_tag_id,
+                    "entity_id": entity_id,
+                    "tag_id": tag_id,
+                    "applied_at_world_time": world_time,
+                    "source_kind": source_kind,
+                    "cleared_at": None,
+                }
+            )
+            self.rowcount = 1
+            self._rows = [{"id": entity_tag_id}]
+        else:
+            raise AssertionError(f"Unhandled SQL in fake cursor: {normalized}")
+
+    def fetchone(self) -> dict[str, Any] | None:
+        """Return one pending row."""
+
+        if not self._rows:
+            return None
+        return self._rows.pop(0)
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        """Return all pending rows."""
+
+        rows = list(self._rows)
+        self._rows.clear()
+        return rows
+
+
+def _manifest_operation(
+    *,
+    operation_id: str,
+    status: str,
+    operation_type: str,
+    target: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "operation_id": operation_id,
+        "operation_type": operation_type,
+        "status": status,
+        "faction_id": 11,
+        "faction_name": "Canal League",
+        "entity_id": target.get("entity_id"),
+        "source": {"column": "ideology", "value": "mercantilist"},
+        "target": target,
+        "confidence": "deterministic",
+        "review_required": status != "ready",
+        "reason": "test",
+    }
+
+
+def _apply_manifest(operations: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "schema_version": FACTION_MANIFEST_SCHEMA_VERSION,
+        "dry_run": True,
+        "operations": operations,
+        "source": {"slot": 2, "dbname": "save_02"},
+    }
 
 
 def _slot2_faction_audit() -> dict[str, Any]:
@@ -457,6 +629,163 @@ def test_faction_migration_manifest_classifies_operations() -> None:
     )
 
 
+def test_manifest_requires_entity_id_for_ready_entity_tag_operations() -> None:
+    """A deterministic mapping cannot be ready if the faction has no entity."""
+
+    entry = audit_faction_row(
+        {
+            "id": 12,
+            "name": "Unattached League",
+            "entity_id": None,
+            "ideology": "mercantilist",
+            "history": None,
+            "current_activity": None,
+            "hidden_agenda": None,
+            "territory": None,
+            "primary_location": None,
+            "power_level": None,
+            "resources": None,
+        },
+        existing_pair_tags={},
+        legacy_tags=[],
+    )
+    audit = {
+        "counters": {},
+        "source_columns": ["ideology"],
+        "keep_columns": ["id", "name"],
+        "factions": [asdict(entry)],
+    }
+
+    manifest = build_faction_migration_manifest(
+        audit,
+        slot=2,
+        dbname="save_02",
+    )
+
+    assert manifest["counters"]["ready_operations"] == 0
+    assert manifest["operations"][0]["operation_type"] == "review_entity_tag"
+    assert "no entity_id" in manifest["operations"][0]["reason"]
+
+
+def test_apply_faction_manifest_dry_run_only_counts_ready_writes() -> None:
+    """The apply pass should report ready inserts without mutating in dry run."""
+
+    cur = FactionApplyCursor()
+    manifest = _apply_manifest(
+        [
+            _manifest_operation(
+                operation_id="ready",
+                status="ready",
+                operation_type="insert_entity_tag",
+                target={
+                    "entity_kind": "faction",
+                    "entity_id": 1111,
+                    "category": "ideology",
+                    "tag": "mercantilist",
+                },
+            ),
+            _manifest_operation(
+                operation_id="review",
+                status="review_required",
+                operation_type="review_entity_tag",
+                target={
+                    "entity_kind": "faction",
+                    "entity_id": 1111,
+                    "category": "ideology",
+                    "tag": "mercantilist",
+                },
+            ),
+        ]
+    )
+
+    result = apply_faction_migration_manifest(cur, manifest, dry_run=True)
+
+    assert result["dry_run"] is True
+    assert result["counters"]["ready_entity_tag_operations"] == 1
+    assert result["counters"]["entity_tags_would_insert"] == 1
+    assert result["counters"]["review_required_operations_skipped"] == 1
+    assert result["counters"].get("entity_tags_inserted", 0) == 0
+    assert cur.entity_tags == []
+    assert [operation["status"] for operation in result["operations"]] == [
+        "would_insert",
+        "skipped_review_required",
+    ]
+
+
+def test_apply_faction_manifest_execute_inserts_ready_tag() -> None:
+    """The execute pass should insert ready faction entity tags."""
+
+    cur = FactionApplyCursor()
+    manifest = _apply_manifest(
+        [
+            _manifest_operation(
+                operation_id="ready",
+                status="ready",
+                operation_type="insert_entity_tag",
+                target={
+                    "entity_kind": "faction",
+                    "entity_id": 1111,
+                    "category": "ideology",
+                    "tag": "mercantilist",
+                },
+            )
+        ]
+    )
+
+    result = apply_faction_migration_manifest(cur, manifest, dry_run=False)
+
+    assert result["dry_run"] is False
+    assert result["counters"]["entity_tags_inserted"] == 1
+    assert result["operations"][0]["status"] == "inserted"
+    assert cur.entity_tags == [
+        {
+            "id": 9001,
+            "entity_id": 1111,
+            "tag_id": 101,
+            "applied_at_world_time": None,
+            "source_kind": "system",
+            "cleared_at": None,
+        }
+    ]
+
+
+def test_apply_faction_manifest_blocks_exclusive_category_conflicts() -> None:
+    """Exclusive faction axes should not be overwritten without review."""
+
+    cur = FactionApplyCursor(
+        active_entity_tags=[
+            {
+                "id": 8001,
+                "entity_id": 1111,
+                "tag_id": 203,
+                "cleared_at": None,
+            }
+        ],
+    )
+    manifest = _apply_manifest(
+        [
+            _manifest_operation(
+                operation_id="ready",
+                status="ready",
+                operation_type="insert_entity_tag",
+                target={
+                    "entity_kind": "faction",
+                    "entity_id": 1111,
+                    "category": "legitimacy",
+                    "tag": "outlaw",
+                },
+            )
+        ]
+    )
+
+    result = apply_faction_migration_manifest(cur, manifest, dry_run=False)
+
+    assert result["counters"]["blocked_existing_sibling_operations"] == 1
+    assert result["operations"][0]["status"] == "blocked_existing_sibling"
+    assert result["operations"][0]["existing_sibling_tags"] == ["contested"]
+    assert len(cur.entity_tags) == 1
+
+
 @pytest.mark.requires_postgres
 def test_cli_faction_manifest_returns_live_slot2_payload() -> None:
     """The faction manifest CLI should build from the real slot 2 audit."""
@@ -475,6 +804,37 @@ def test_cli_faction_manifest_returns_live_slot2_payload() -> None:
     assert manifest["dry_run"] is True
     assert manifest["counters"]["operation_items"] >= 1
     assert manifest["counters"]["operation_items"] == len(manifest["operations"])
+
+
+@pytest.mark.requires_postgres
+def test_cli_faction_apply_dry_run_returns_live_slot2_payload() -> None:
+    """The faction apply CLI should validate ready writes without mutating."""
+
+    try:
+        result = cli.run_faction_apply(
+            Namespace(slot=2, execute=False, source_kind="system")
+        )
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    except ValueError as exc:
+        message = str(exc)
+        if (
+            "Unknown or deprecated faction tag" in message
+            or "No Orrery tag categories registered" in message
+            or "not registered for factions" in message
+        ):
+            pytest.skip(f"{TEST_DBNAME} faction vocabulary not seeded: {exc}")
+        raise
+    finally:
+        close_pool(TEST_DBNAME)
+
+    apply_result = result["faction_apply"]
+
+    assert result["success"] is True
+    assert result["slot"] == 2
+    assert apply_result["dry_run"] is True
+    assert apply_result["counters"]["operation_items"] >= 1
+    assert apply_result["counters"]["ready_entity_tag_operations"] >= 0
 
 
 def test_cli_prints_faction_manifest_summary(capsys) -> None:
@@ -510,3 +870,33 @@ def test_cli_prints_faction_manifest_summary(capsys) -> None:
     assert "ready_operations: 1" in output
     assert "manual_review_operations: 1" in output
     assert "Canal League (id 11): 1 item(s)" in output
+
+
+def test_cli_prints_faction_apply_summary(capsys) -> None:
+    """Human faction apply output should show write/read-only counters."""
+
+    cli.emit_output(
+        {
+            "message": "Faction migration apply for slot 2 (dry run).",
+            "faction_apply": {
+                "schema_version": "faction-migration-apply.v1",
+                "dry_run": True,
+                "source_kind": "system",
+                "counters": {
+                    "operation_items": 2,
+                    "ready_entity_tag_operations": 1,
+                    "entity_tags_would_insert": 1,
+                    "review_required_operations_skipped": 1,
+                },
+                "operations": [],
+            },
+        },
+        as_json=False,
+    )
+
+    output = capsys.readouterr().out
+
+    assert "schema_version: faction-migration-apply.v1" in output
+    assert "dry_run: True" in output
+    assert "entity_tags_would_insert: 1" in output
+    assert "review_required_operations_skipped: 1" in output

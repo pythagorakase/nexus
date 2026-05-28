@@ -10,6 +10,7 @@ Commands:
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
+    nexus faction-apply --slot N  Dry-run/apply ready faction manifest operations
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -313,6 +314,56 @@ def _print_faction_manifest(payload: Dict[str, Any]) -> None:
             print(f"  ...{len(review_factions) - 10} more")
 
 
+def _print_faction_apply(payload: Dict[str, Any]) -> None:
+    """Print a faction migration apply summary."""
+
+    apply_result = payload.get("faction_apply") or {}
+    counters = apply_result.get("counters") or {}
+    operations = apply_result.get("operations") or []
+
+    print("Apply:")
+    print(f"  schema_version: {apply_result.get('schema_version')}")
+    print(f"  dry_run: {apply_result.get('dry_run')}")
+    print(f"  source_kind: {apply_result.get('source_kind')}")
+
+    print()
+    print("Counters:")
+    printed_counters = set()
+    for key in (
+        "operation_items",
+        "ready_entity_tag_operations",
+        "entity_tags_would_insert",
+        "entity_tags_inserted",
+        "entity_tags_already_present",
+        "duplicate_ready_operations_skipped",
+        "blocked_existing_sibling_operations",
+        "review_required_operations_skipped",
+        "non_entity_tag_operations_skipped",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+        printed_counters.add(key)
+    for key in sorted(key for key in counters if key not in printed_counters):
+        print(f"  {key}: {counters[key]}")
+
+    blocked = [
+        item for item in operations if item.get("status") == "blocked_existing_sibling"
+    ]
+    if blocked:
+        print()
+        print("Blocked by existing exclusive-category tags:")
+        for item in blocked[:10]:
+            siblings = ", ".join(item.get("existing_sibling_tags") or [])
+            print(
+                "  - "
+                f"{item.get('faction_name')} "
+                f"(id {item.get('faction_id')}): "
+                f"{item.get('category')}:{item.get('tag')} conflicts with "
+                f"{siblings}"
+            )
+        if len(blocked) > 10:
+            print(f"  ...{len(blocked) - 10} more")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -340,6 +391,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("faction_manifest"):
         _print_faction_manifest(payload)
+        print()
+
+    if payload.get("faction_apply"):
+        _print_faction_apply(payload)
         print()
 
     # Get display elements
@@ -1117,6 +1172,46 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dry-run or execute ready faction manifest operations."""
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.faction_table_audit import (
+        apply_faction_migration_manifest,
+        build_faction_migration_manifest,
+        build_faction_table_audit,
+    )
+    from nexus.api.slot_utils import slot_dbname
+
+    dbname = slot_dbname(args.slot)
+    dry_run = not args.execute
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            if dry_run:
+                cur.execute("BEGIN READ ONLY")
+            audit = build_faction_table_audit(cur)
+            manifest = build_faction_migration_manifest(
+                audit,
+                slot=args.slot,
+                dbname=dbname,
+            )
+            apply_result = apply_faction_migration_manifest(
+                cur,
+                manifest,
+                dry_run=dry_run,
+                source_kind=args.source_kind,
+            )
+
+    mode = "dry run" if dry_run else "executed"
+    return {
+        "success": True,
+        "message": f"Faction migration apply for slot {args.slot} ({mode}).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "faction_apply": apply_result,
+    }
+
+
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
     """
     Lock a slot to prevent modifications.
@@ -1189,6 +1284,7 @@ Examples:
   nexus trait-audit --slot 5    Dry-run trait compiler audit
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
+  nexus faction-apply --slot 2  Dry-run ready faction manifest operations
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1333,6 +1429,30 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
 
+    # faction-apply command
+    faction_apply_parser = subparsers.add_parser(
+        "faction-apply",
+        help=(
+            "Dry-run or execute ready faction manifest operations " "into entity_tags"
+        ),
+    )
+    faction_apply_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    faction_apply_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "Write ready entity_tags. Without this flag the command uses a "
+            "read-only dry run."
+        ),
+    )
+    faction_apply_parser.add_argument(
+        "--source-kind",
+        default="system",
+        help="entity_tag_source_kind stamped on inserted rows when --execute is set.",
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -1367,6 +1487,7 @@ def main() -> int:
         "trait-audit",
         "faction-audit",
         "faction-manifest",
+        "faction-apply",
         "lock",
         "unlock",
     ):
@@ -1401,6 +1522,8 @@ def main() -> int:
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":
         result = run_faction_manifest(args)
+    elif args.command == "faction-apply":
+        result = run_faction_apply(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":

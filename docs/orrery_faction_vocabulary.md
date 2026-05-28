@@ -327,6 +327,13 @@ Preflight command:
   prose/world-event preservation, structured remainders, and no-replacement
   legacy tag drops. The manifest is a review/apply contract for a later script;
   it does not authorize destructive mutations by itself.
+- `nexus faction-apply --slot N` validates the same manifest and reports which
+  deterministic `insert_entity_tag` operations would write. Add `--execute` to
+  insert only those ready rows into `entity_tags` with `source_kind=system`.
+  Review-required operations, pair-tags, prose preservation, structured
+  remainders, legacy-tag drops, and existing exclusive-category conflicts are
+  skipped rather than inferred. This still does not clear legacy columns or
+  old tag rows.
 
 ---
 
