@@ -672,6 +672,185 @@ def test_faction_legacy_write_default_migration_drops_power_default() -> None:
     assert "Orrery power_status tags" in source
 
 
+def test_completed_tag_vocab_migration_seeds_state_and_place_anchors() -> None:
+    """Migration 054 seeds completed state/place vocabulary without collisions."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "054_orrery_completed_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    place_durable = {
+        (tag, category) for tag, category, _description in migration.PLACE_DURABLE_TAGS
+    }
+    place_ephemeral = {
+        (tag, category)
+        for tag, category, _clear_on_json, _description in (
+            migration.PLACE_EPHEMERAL_TAGS
+        )
+    }
+    state_event = {
+        tag
+        for tag, _clear_on_json, _reapplication_policy, _description in (
+            migration.STATE_EVENT_TAGS
+        )
+    }
+    state_time = {
+        tag for tag, _reapplication_policy, _description in migration.STATE_TIME_TAGS
+    }
+    tag_names = (
+        {tag for tag, _category in place_durable | place_ephemeral}
+        | state_event
+        | state_time
+    )
+
+    assert len(tag_names) == 52
+    assert len(tag_names) == (
+        len(migration.PLACE_DURABLE_TAGS)
+        + len(migration.PLACE_EPHEMERAL_TAGS)
+        + len(migration.STATE_EVENT_TAGS)
+        + len(migration.STATE_TIME_TAGS)
+    )
+    assert len(migration.PLACE_DURABLE_TAGS) == 35
+    assert len(migration.PLACE_EPHEMERAL_TAGS) == 3
+    assert len(migration.STATE_EVENT_TAGS) == 10
+    assert len(migration.STATE_TIME_TAGS) == 4
+    assert {
+        "place_known",
+        "place_hidden",
+        "place_open",
+        "place_restricted",
+        "place_contested",
+        "place_medical",
+        "water_source",
+        "administration",
+        "intoxicated:stimulant",
+        "disguised",
+    } <= tag_names
+    assert not ({"known", "medical", "contested"} & tag_names)
+    assert {
+        "place_function",
+        "place_visibility",
+        "place_access",
+        "place_environment",
+    } == {category for _tag, category in place_durable}
+    assert {"place_threat"} == {category for _tag, category in place_ephemeral}
+    assert {
+        tag for tag, _reapplication_policy, _description in migration.STATE_TIME_TAGS
+    } == {
+        "intoxicated:stimulant",
+        "intoxicated:depressant",
+        "intoxicated:hallucinogen",
+        "intoxicated:dissociative",
+    }
+    assert {
+        reapplication_policy
+        for _tag, reapplication_policy, _description in migration.STATE_TIME_TAGS
+    } == {"extend_expiry"}
+    assert migration.ALLOWED_CATEGORY_REWRITES == {
+        "wilderness": frozenset({"place_affordance"})
+    }
+
+
+@pytest.mark.requires_postgres
+def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
+    """Migration 054 executes its guard, upserts, and post-check on a real slot."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "054_orrery_completed_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    clearance_kind_migration = migrate._load_python_migration(
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "051_orrery_time_tag_clearance_kind.py"
+    )
+    expected = migration._expected_rows()
+    tag_names = list(expected)
+
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    snapshot = _snapshot_tags(conn, tag_names)
+    try:
+        clearance_kind_migration.run(conn)
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO tags (
+                        tag, category, is_ephemeral, clearance_kind,
+                        reapplication_policy, clear_on, synonym_for,
+                        deprecated, description
+                    ) VALUES (
+                        'wilderness', 'place_affordance', FALSE, NULL,
+                        NULL, NULL, NULL, FALSE,
+                        'legacy wilderness test seed.'
+                    )
+                    ON CONFLICT (tag) DO UPDATE SET
+                        category = EXCLUDED.category,
+                        is_ephemeral = EXCLUDED.is_ephemeral,
+                        clearance_kind = EXCLUDED.clearance_kind,
+                        reapplication_policy = EXCLUDED.reapplication_policy,
+                        clear_on = EXCLUDED.clear_on,
+                        synonym_for = NULL,
+                        deprecated = FALSE,
+                        description = EXCLUDED.description
+                    """
+                )
+
+        migration.run(conn)
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag,
+                       category,
+                       is_ephemeral,
+                       clearance_kind::text,
+                       reapplication_policy::text,
+                       clear_on,
+                       deprecated,
+                       synonym_for,
+                       description
+                FROM tags
+                WHERE tag = ANY(%s)
+                ORDER BY tag
+                """,
+                (tag_names,),
+            )
+            rows = {
+                row[0]: (
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    _normalize_jsonb(row[5]),
+                    row[6],
+                    row[7],
+                    row[8],
+                )
+                for row in cur.fetchall()
+            }
+
+        assert set(rows) == set(expected)
+        for tag, expected_row in expected.items():
+            assert rows[tag] == (*expected_row[:-1], None, expected_row[-1])
+        assert rows["wilderness"][0] == "place_environment"
+        assert rows["intoxicated:stimulant"][3] == "extend_expiry"
+    finally:
+        conn.rollback()
+        _restore_tags(conn, snapshot, tag_names)
+        conn.close()
+
+
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
     """Migration 049 DDL is idempotent against a real slot schema."""

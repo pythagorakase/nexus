@@ -948,8 +948,8 @@ Compiler surfaces:
 
 ## Open Items
 
-1. **Character category implementation.** `bodyform`, `disposition`, `capacity`, the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`), and the companion `state` vocabulary are now drafted. Remaining work is implementation-specific: seed any still-missing tags and keep compiler support aligned with typed inputs.
-2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories, but follow-up work still needs to seed the new place anchors, migrate/deprecate legacy `place_affordance` rows, and remove the resolver shim after backfill.
+1. **Character category implementation.** `bodyform`, `disposition`, `capacity`, the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`), and the companion `state` vocabulary are now drafted. Migration 054 seeds the completed `state` anchors; remaining work is implementation-specific compiler/template alignment.
+2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories and migration 054 seeds the place anchors; follow-up work still needs to migrate/deprecate legacy `place_affordance` rows and remove the resolver shim after backfill.
 3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
 4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, blocked on an entity-kind/category-registration migration and not a blocker for current packages.
 5. **Clearance vocabulary for ephemerals.** State clearance events are enumerated in `docs/orrery_state_vocabulary.md`. Faction `agenda` / `power_status`, `place_threat`, and any future ephemeral pair-tags still need event-collapse passes before event-cleared registry rows replace today's semantic-clearance defaults.
@@ -976,6 +976,7 @@ Compiler surfaces:
 - `migrations/048_orrery_hunting_pair_tag.py` — `pursuing` → `hunting` pair-tag rename plus deprecation of `under_active_pursuit`.
 - `migrations/052_orrery_faction_tag_vocab.py` — seeds the 65 faction tag anchors across `ideology`, `resource_base`, `legitimacy`, `operational_mode`, `power_status`, and `agenda`.
 - `migrations/053_retire_faction_legacy_write_defaults.py` — drops the legacy `factions.power_level` default so new runtime inserts do not create fresh obsolete faction strength values.
+- `migrations/054_orrery_completed_tag_vocab.py` — seeds completed state and place anchors, including globally unique place registry names and the `wilderness` legacy-category rewrite.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
