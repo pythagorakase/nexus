@@ -589,7 +589,7 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 - `docs/orrery_retrograde_spec.md` — design spec for deep-history generation (Orrery run backward at wizard-time and per-entity stub maturation at runtime). Phase 3+ work.
 - `docs/orrery_tag_vocabulary.md` — registry-level closed-vocabulary specification for tag categories (single-entity tags, multi-entity pair tags, place / faction categories, trait_menu alignment).
 - `docs/orrery_state_vocabulary.md` — state-tag vocabulary, clearance contracts, pharmacologic/time-cleared states, and current substrate debts.
-- `docs/orrery_faction_vocabulary.md` — faction tag vocabulary seeded by migration 052, legacy category mapping, and faction-table cleanup implications.
+- `docs/orrery_faction_vocabulary.md` — faction tag vocabulary seeded by migration 052, deterministic `faction-apply` rewrite slice, legacy category mapping, and remaining faction-table cleanup implications.
 
 ---
 
