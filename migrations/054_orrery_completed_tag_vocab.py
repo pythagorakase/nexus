@@ -153,16 +153,26 @@ STATE_EVENT_TAGS: Sequence[tuple[str, str, str, str]] = (
     ),
 )
 
-# (tag, description)
-STATE_TIME_TAGS: Sequence[tuple[str, str]] = (
-    ("intoxicated:stimulant", "Character is wired or activated by a stimulant."),
-    ("intoxicated:depressant", "Character is sedated or impaired by a depressant."),
+# (tag, reapplication_policy, description)
+STATE_TIME_TAGS: Sequence[tuple[str, str, str]] = (
+    (
+        "intoxicated:stimulant",
+        "extend_expiry",
+        "Character is wired or activated by a stimulant.",
+    ),
+    (
+        "intoxicated:depressant",
+        "extend_expiry",
+        "Character is sedated or impaired by a depressant.",
+    ),
     (
         "intoxicated:hallucinogen",
+        "extend_expiry",
         "Character has perceptual distortion from a hallucinogen.",
     ),
     (
         "intoxicated:dissociative",
+        "extend_expiry",
         "Character is detached or depersonalized by a dissociative.",
     ),
 )
@@ -176,8 +186,9 @@ ALLOWED_CATEGORY_REWRITES: dict[str, frozenset[str]] = {
 def run(conn: connection) -> None:
     """Seed completed vocabulary rows idempotently."""
 
+    expected = _expected_rows()
     with conn.cursor() as cur:
-        _assert_no_unexpected_category_conflicts(cur)
+        _assert_no_unexpected_category_conflicts(cur, expected)
         for tag, category, description in PLACE_DURABLE_TAGS:
             _upsert_tag(
                 cur,
@@ -214,19 +225,19 @@ def run(conn: connection) -> None:
                 description=description,
             )
 
-        for tag, description in STATE_TIME_TAGS:
+        for tag, reapplication_policy, description in STATE_TIME_TAGS:
             _upsert_tag(
                 cur,
                 tag=tag,
                 category="state",
                 is_ephemeral=True,
                 clearance_kind="time",
-                reapplication_policy="extend_expiry",
+                reapplication_policy=reapplication_policy,
                 clear_on_json=None,
                 description=description,
             )
 
-        _assert_seeded_tags(cur)
+        _assert_seeded_tags(cur, expected)
     conn.commit()
 
 
@@ -276,8 +287,11 @@ def _upsert_tag(
     )
 
 
-def _assert_no_unexpected_category_conflicts(cur: Any) -> None:
-    expected_categories = _expected_categories()
+def _assert_no_unexpected_category_conflicts(
+    cur: Any,
+    expected: dict[str, tuple[Any, ...]],
+) -> None:
+    expected_categories = {tag: row[0] for tag, row in expected.items()}
     cur.execute(
         """
         SELECT tag, category
@@ -304,8 +318,7 @@ def _assert_no_unexpected_category_conflicts(cur: Any) -> None:
         raise RuntimeError(f"Completed vocabulary tag name collisions: {detail}")
 
 
-def _assert_seeded_tags(cur: Any) -> None:
-    expected = _expected_rows()
+def _assert_seeded_tags(cur: Any, expected: dict[str, tuple[Any, ...]]) -> None:
     cur.execute(
         """
         SELECT tag,
@@ -358,10 +371,6 @@ def _assert_seeded_tags(cur: Any) -> None:
         raise RuntimeError(message)
 
 
-def _expected_categories() -> dict[str, str]:
-    return {tag: row[0] for tag, row in _expected_rows().items()}
-
-
 def _expected_rows() -> dict[str, tuple[Any, ...]]:
     expected: dict[str, tuple[Any, ...]] = {
         tag: (category, False, None, None, None, False, description)
@@ -402,8 +411,8 @@ def _expected_rows() -> dict[str, tuple[Any, ...]]:
     )
     expected.update(
         {
-            tag: ("state", True, "time", "extend_expiry", None, False, description)
-            for tag, description in STATE_TIME_TAGS
+            tag: ("state", True, "time", reapplication_policy, None, False, description)
+            for tag, reapplication_policy, description in STATE_TIME_TAGS
         }
     )
     return expected
