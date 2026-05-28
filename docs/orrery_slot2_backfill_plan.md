@@ -20,9 +20,9 @@ Registry and substrate prerequisites:
 - Migration 043 registers replacement place and faction categories and marks
   legacy cutover categories deprecated.
 - Migration 052 seeds the closed faction tag bank.
-- Hard prerequisite gate: PR #346 / migration 054 must be merged and applied to
-  the target slot before any place or state apply step. Until that lands, the
-  place/state rewrite is planning-only.
+- Hard prerequisite gate: migration 054 must be applied to the target slot
+  before any place or state apply step. Until that lands, the place/state
+  rewrite is planning-only.
 - Character `role.function` remains a registry alignment decision: the design
   spec names `role.function`, but live migrations currently keep function tags
   under `role` and only split `role.fame` / `role.resources`. Do not run a
@@ -199,10 +199,10 @@ Next actions:
 
 ## Execution Order
 
-Do not begin any apply step until PR #346 is merged and migration 054 has been
-applied to the target slot.
+Do not begin any apply step until migration 054 has been applied to the target
+slot.
 
-1. Merge PR #346 so the state/place seed exists in target slots.
+1. Apply migration 054 so the state/place seed exists in target slots.
 2. Resolve the character registry alignment blocker.
 3. Resolve globally colliding character anchor names before seeding or applying
    character rows.
