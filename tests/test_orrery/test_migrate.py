@@ -1,5 +1,6 @@
 """Tests for migration discovery around Orrery's Python migration."""
 
+import json
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -711,8 +712,8 @@ def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
         for tag, category, description in migration.DURABLE_TAGS
     }
     ephemeral = {
-        tag: (category, description)
-        for tag, category, _clear_on_json, description in migration.EPHEMERAL_TAGS
+        tag: (category, json.loads(clear_on_json), description)
+        for tag, category, clear_on_json, description in migration.EPHEMERAL_TAGS
     }
     faction_tags = [*durable, *ephemeral]
 
@@ -730,14 +731,26 @@ def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
             cur.execute(
                 """
                 SELECT tag, category, is_ephemeral, clearance_kind::text,
-                       reapplication_policy::text, clear_on IS NOT NULL,
+                       reapplication_policy::text, clear_on,
                        deprecated, synonym_for, description
                 FROM tags
                 WHERE tag = ANY(%s)
                 """,
                 (faction_tags,),
             )
-            rows = {row[0]: row[1:] for row in cur.fetchall()}
+            rows = {
+                row[0]: (
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    _normalize_jsonb(row[5]),
+                    row[6],
+                    row[7],
+                    row[8],
+                )
+                for row in cur.fetchall()
+            }
 
         assert set(rows) == set(faction_tags)
         for tag, (category, description) in durable.items():
@@ -746,18 +759,18 @@ def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
                 False,
                 None,
                 None,
-                False,
+                None,
                 False,
                 None,
                 description,
             )
-        for tag, (category, description) in ephemeral.items():
+        for tag, (category, clear_on, description) in ephemeral.items():
             assert rows[tag] == (
                 category,
                 True,
                 "semantic",
                 "replace",
-                True,
+                clear_on,
                 False,
                 None,
                 description,
@@ -1070,6 +1083,12 @@ def _index_definition(conn: Any, index_name: str) -> str | None:
         )
         row = cur.fetchone()
         return row[0] if row is not None else None
+
+
+def _normalize_jsonb(value: Any) -> Any:
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def _snapshot_event_types(

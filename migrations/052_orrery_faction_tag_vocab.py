@@ -534,7 +534,7 @@ def _assert_seeded_tags(cur: Any) -> None:
         )
     missing = sorted(set(expected) - set(actual))
     mismatched = sorted(
-        f"{tag}={actual[tag]}"
+        f"{tag}: expected={expected[tag]!r}, got={actual[tag]!r}"
         for tag in set(expected) & set(actual)
         if actual[tag] != expected[tag]
     )
@@ -552,6 +552,8 @@ def _expected_categories() -> dict[str, str]:
 
 
 def _normalize_clear_on(value: Any) -> Any:
+    # psycopg2 normally decodes JSONB to dicts on read. The string path covers
+    # Python-side fixture literals and any custom connection that returns text.
     if isinstance(value, str):
         return json.loads(value)
     return value
