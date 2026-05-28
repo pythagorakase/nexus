@@ -21,6 +21,18 @@ TARGET_PLACE_CATEGORIES = frozenset(
         "place_threat",
     }
 )
+PLACE_CATEGORY_CARDINALITY = {
+    "place_function": "multi",
+    "place_visibility": "exclusive",
+    "place_access": "exclusive",
+    "place_environment": "multi",
+    "place_threat": "exclusive",
+}
+EXCLUSIVE_PLACE_CATEGORIES = frozenset(
+    category
+    for category, cardinality in PLACE_CATEGORY_CARDINALITY.items()
+    if cardinality == "exclusive"
+)
 LEGACY_PLACE_CATEGORIES: Sequence[str] = ("place_affordance",)
 
 LEGACY_PLACE_AFFORDANCE_MAP: Mapping[str, tuple[str, ...]] = {

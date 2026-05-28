@@ -45,12 +45,14 @@ def test_character_manifest_canonicalizes_resolved_collision_names() -> None:
     assert manifest["counters"]["legacy_character_tag_rows"] == 5
     assert manifest["counters"]["review_required_operations"] == 5
     assert operations["bodyform:android"]["target"]["tag"] == "inorganic"
+    assert operations["bodyform:android"]["target"]["entity_id"] == 1042
     assert operations["bodyform:android"]["target"]["category"] == ("bodyform.lineage")
     assert operations["traditionalist"]["target"]["tag"] == "tradition_bound"
     assert operations["hunter"]["target"]["category"] == "role.function"
     assert operations["contacts_available"]["operation_type"] == (
         "resolve_pair_tag_target"
     )
+    assert operations["contacts_available"]["target"]["object_entity_id"] == 1042
     assert operations["uploaded_consciousness"]["operation_type"] == "preserve_prose"
 
 
@@ -70,6 +72,17 @@ def test_character_manifest_reports_missing_target_tags() -> None:
     assert manifest["counters"]["missing_target_tag_operations"] == 1
 
 
+def test_cli_character_apply_requires_manifest_for_execute() -> None:
+    """Execute mode must consume a reviewed manifest."""
+
+    result = cli.run_character_apply(
+        Namespace(slot=2, execute=True, manifest=None, source_kind="system")
+    )
+
+    assert result["success"] is False
+    assert "--manifest is required with --execute" in result["error"]
+
+
 @pytest.mark.requires_postgres
 def test_cli_character_manifest_returns_live_slot2_payload() -> None:
     """CLI character-manifest should read the slot and return a manifest."""
@@ -87,6 +100,27 @@ def test_cli_character_manifest_returns_live_slot2_payload() -> None:
     )
     assert result["character_manifest"]["dry_run"] is True
     assert result["character_manifest"]["source"]["slot"] == 2
+
+
+@pytest.mark.requires_postgres
+def test_cli_character_apply_dry_run_skips_unreviewed_slot2_manifest() -> None:
+    """CLI character-apply should not write generated review-required rows."""
+
+    try:
+        result = cli.run_character_apply(
+            Namespace(slot=2, execute=False, manifest=None, source_kind="system")
+        )
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    finally:
+        close_pool(TEST_DBNAME)
+
+    assert result["success"] is True
+    apply_result = result["character_apply"]
+    assert apply_result["dry_run"] is True
+    assert apply_result["entity_kind"] == "character"
+    assert apply_result["counters"]["ready_entity_tag_operations"] == 0
+    assert apply_result["counters"]["review_required_operations_skipped"] > 0
 
 
 def _row(

@@ -1,7 +1,7 @@
 # Orrery Slot 2 Backfill Plan
 
-**Status:** Phase 4 checkpoint for issue #326. This document is the review
-contract before any mature Slot 2 vocabulary rewrite mutates data.
+**Status:** Phase 6 apply-surface checkpoint for issue #326. This document is
+the review contract before any mature Slot 2 vocabulary rewrite mutates data.
 
 ## Source Vocabulary
 
@@ -50,6 +50,8 @@ poetry run python scripts/migrate.py --slot 2 --dry-run
 poetry run nexus --json faction-manifest --slot 2 --output temp/slot2_backfill/faction_manifest_phase4_post055.json
 poetry run nexus --json character-manifest --slot 2 --output temp/slot2_backfill/character_manifest_phase4_post055.json
 poetry run nexus --json faction-apply --slot 2 --manifest temp/slot2_backfill/faction_manifest_phase4_post055.json
+poetry run nexus --json character-apply --slot 2
+poetry run nexus --json place-apply --slot 2
 ```
 
 Observed entity counts:
@@ -80,7 +82,8 @@ Post-migration manifest results:
 | Manifest | Operations | Ready | Review-required | Notes |
 |---|---:|---:|---:|---|
 | faction | 145 | 0 | 145 | `faction-apply` dry-run skipped all rows as review-required and would insert 0 tags. |
-| character | 188 | 0 | 188 | 15 candidate renames resolve to registered target tags; 118 operations still lack registered target tags and need review/prose/pair-tag handling. |
+| character | 188 | 0 | 188 | 15 candidate renames resolve to registered target tags; 118 operations still lack registered target tags and need review/prose/pair-tag handling. `character-apply` dry-run skipped all rows and would insert 0 tags. |
+| place | 889 | 0 | 889 | All target tags are registered; `place-apply` dry-run skipped all rows and would insert 0 tags. |
 
 Registry spot-checks:
 
@@ -109,6 +112,19 @@ Every backfill manifest should classify operations into one of these classes:
 The manifest is not authorization to clear old rows or drop columns. It is a
 review surface. Apply commands may insert reviewed ready rows, but destructive
 cleanup remains a later data-rewrite migration scoped to Slot 2.
+
+Reviewed apply commands now exist for all single-entity manifest families:
+
+- `nexus faction-apply --slot N --manifest PATH [--execute]`
+- `nexus character-apply --slot N --manifest PATH [--execute]`
+- `nexus place-apply --slot N --manifest PATH [--execute]`
+
+`--execute` always requires a reviewed manifest file. Without `--execute`, the
+commands run read-only and may rebuild the live manifest when no manifest path
+is supplied. The shared character/place apply path consumes only operations that
+have been manually promoted to `status=ready` with `review_required=false`; it
+will not clear legacy rows, write pair-tags, edit prose, drop columns, or remove
+resolver shims.
 
 ## Category Plans
 
@@ -147,6 +163,7 @@ Current status: read-only manifest coverage exists, but Slot 2 has no active
 Existing surface:
 
 - `nexus place-manifest --slot N --output PATH`
+- `nexus place-apply --slot N --manifest PATH [--execute]`
 
 Slot 2 dry-run result: 889 operations across 78 places, all review-required.
 Every target tag is registered; there are no ready writes. The manifest scans
@@ -176,15 +193,21 @@ Safe deterministic defaults:
 Next actions:
 
 1. Review generated Slot 2 place candidates before any apply step.
-2. Promote only unambiguous place operations to `ready` if/when a place apply
-   path exists.
+2. Promote only unambiguous place operations to `ready`, then dry-run
+   `nexus place-apply --slot 2 --manifest PATH`.
 3. Remove the `place_affordance` resolver shim only after migrated rows and
    predicate tests prove that package gates still match.
 
 ### Characters
 
 Current status: largest remaining data-rewrite surface. The read-only manifest
-now runs against the final durable-character registry.
+now runs against the final durable-character registry, and ready-row apply
+coverage exists for reviewed single-entity tag inserts.
+
+Existing surfaces:
+
+- `nexus character-manifest --slot N --output PATH`
+- `nexus character-apply --slot N --manifest PATH [--execute]`
 
 Do not run a broad character apply until these remaining surfaces are reviewed:
 
@@ -218,7 +241,9 @@ Next actions:
    surface after human review. Bodyform canonicalizations may be good first
    candidates, but they still require review because they can encode history
    rather than current embodiment.
-3. Reconcile the existing Slot 2 reference taggings in
+3. Dry-run `nexus character-apply --slot 2 --manifest PATH` before executing
+   any reviewed ready rows.
+4. Reconcile the existing Slot 2 reference taggings in
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
 ## Execution Order
@@ -232,13 +257,13 @@ checkpoint.
 2. Apply migration 055 so the durable character seed and collision resolutions
    exist in target slots. **Done locally for Slot 2.**
 3. Generate three read-only manifests for Slot 2: faction, place, character.
-   Faction and character are generated; place still needs a prose/metadata
-   manifest surface because Slot 2 has no active `place_affordance` rows to
-   rewrite mechanically.
+   **Done.**
 4. Review manifests in that order: faction first because tooling exists, place
    second because there are no existing place rows to preserve, character last
    because it has the most category drift.
-5. Apply ready non-destructive `insert_entity_tag` rows to Slot 2 only.
+5. Apply ready non-destructive entity-tag rows to Slot 2 only. **Apply
+   commands are in place; current manifests have 0 ready rows, so dry-runs
+   insert 0 tags.**
 6. Re-run Orrery resolver/template tests and a Slot 2 dry run.
 7. Only then clear legacy rows, drop obsolete faction columns, and remove
    resolver shims in separate migrations.

@@ -30,6 +30,21 @@ TARGET_CHARACTER_CATEGORIES = frozenset(
         "state",
     }
 )
+CHARACTER_CATEGORY_CARDINALITY = {
+    "bodyform.lineage": "multi",
+    "bodyform.condition": "multi",
+    "disposition": "multi",
+    "capacity": "multi",
+    "role.function": "multi",
+    "role.fame": "exclusive",
+    "role.resources": "exclusive",
+    "state": "multi",
+}
+EXCLUSIVE_CHARACTER_CATEGORIES = frozenset(
+    category
+    for category, cardinality in CHARACTER_CATEGORY_CARDINALITY.items()
+    if cardinality == "exclusive"
+)
 
 WATCHED_COLLISION_TAGS = frozenset(
     {
@@ -188,7 +203,7 @@ def _operation_for_row(
 ) -> dict[str, Any]:
     source_tag = str(row["tag"])
     source_category = str(row["category"])
-    character_id = int(row["character_id"])
+    entity_id = int(row["entity_id"])
 
     if source_tag in RELATIONAL_REMAINDERS:
         pair_tag, reason = RELATIONAL_REMAINDERS[source_tag]
@@ -198,10 +213,10 @@ def _operation_for_row(
             operation_type="resolve_pair_tag_target",
             target={
                 "entity_kind": "character",
-                "entity_id": character_id,
+                "entity_id": entity_id,
                 "pair_tag": pair_tag,
                 "subject_entity_id": None,
-                "object_entity_id": character_id,
+                "object_entity_id": entity_id,
             },
             reason=reason,
         )
@@ -211,7 +226,7 @@ def _operation_for_row(
             row,
             operation_index=operation_index,
             operation_type="structured_remainder",
-            target={"entity_kind": "character", "entity_id": character_id},
+            target={"entity_kind": "character", "entity_id": entity_id},
             reason=STRUCTURED_REMAINDERS[source_tag],
         )
 
@@ -220,7 +235,7 @@ def _operation_for_row(
             row,
             operation_index=operation_index,
             operation_type="preserve_prose",
-            target={"entity_kind": "character", "entity_id": character_id},
+            target={"entity_kind": "character", "entity_id": entity_id},
             reason=PROSE_REMAINDERS[source_tag],
         )
 
@@ -247,7 +262,7 @@ def _operation_for_row(
         operation_type="review_entity_tag",
         target={
             "entity_kind": "character",
-            "entity_id": character_id,
+            "entity_id": entity_id,
             "category": target_category,
             "tag": target_tag,
             "target_registered": target_row is not None,
