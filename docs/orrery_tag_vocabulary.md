@@ -584,7 +584,9 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 
 ## Faction Categories
 
-Draft companion: `docs/orrery_faction_vocabulary.md`.
+Companion: `docs/orrery_faction_vocabulary.md`. Migration 052 seeds the 65
+faction tag anchors; Slot 2 data rewrite, faction table cleanup, and
+clearance-event collapse remain follow-up work.
 
 Faction categories describe group-level actors: institutions, movements,
 corporations, gangs, churches, polities, guilds, scenes, families, and other
@@ -593,7 +595,7 @@ by migration 043 and does not add a generic faction `state` category; passive
 faction conditions decompose into `power_status`, `agenda`, pair-tags, event
 history, or prose.
 
-| Category | Cardinality | Ephemerality | Draft tags |
+| Category | Cardinality | Ephemerality | Seeded tags |
 |---|---|---|---|
 | `ideology` | Multi-valued | Durable | `authoritarian`, `egalitarian`, `traditionalist`, `progressive`, `theocratic`, `secularist`, `nationalist`, `cosmopolitan`, `imperial`, `communalist`, `mercantilist`, `technocratic`, `revolutionary`, `restorationist`, `isolationist` |
 | `resource_base` | Multi-valued | Durable | `capital`, `force`, `information`, `faith`, `industry`, `labor`, `territory`, `patronage`, `bureaucracy`, `technology`, `specialized_knowledge`, `criminal_network`, `supply_lines`, `mobility` |
@@ -607,7 +609,7 @@ Legacy sample values rename for clarity: `revanchist` -> `recover_losses`,
 `infiltration` -> `infiltrate`, `expansion` -> `expand_control`, and
 `consolidation` -> `consolidate_control`.
 
-### `factions` Table Cleanup (in Scope for the Migration)
+### `factions` Table Cleanup (Future Data Migration Scope)
 
 **Drop columns (move to tags):**
 - `ideology` → tag category `ideology`
@@ -759,7 +761,7 @@ Compiler surfaces:
 ## Open Items
 
 1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. The `state` category vocabulary is now specified in `docs/orrery_state_vocabulary.md`; implementation remains coupled to clearance-event vocabulary (item 3) and the substrate debts named there.
-2. **Faction category values.** Drafted in `docs/orrery_faction_vocabulary.md`; still needs review, seeding migration, Slot 2 mapping, and clearance-event collapse.
+2. **Faction category values.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
 3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
 4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
 5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
@@ -775,12 +777,13 @@ Compiler surfaces:
 - `docs/trait_menu.md` — player-facing trait selection system; alignment documented above.
 - `docs/orrery_design_plan.md` — broader Orrery system design.
 - `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific open decisions.
-- `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, and faction table cleanup implications.
+- `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, seeded anchors, and faction table cleanup implications.
 - `migrations/043_orrery_category_refactor_phase1.py` — registers the six faction category names (`ideology`, `power_status`, `agenda`, `resource_base`, `legitimacy`, `operational_mode`) and records the legacy-to-replacement mappings.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
 - `migrations/048_orrery_hunting_pair_tag.py` — `pursuing` → `hunting` pair-tag rename plus deprecation of `under_active_pursuit`.
+- `migrations/052_orrery_faction_tag_vocab.py` — seeds the 65 faction tag anchors across `ideology`, `resource_base`, `legitimacy`, `operational_mode`, `power_status`, and `agenda`.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*
