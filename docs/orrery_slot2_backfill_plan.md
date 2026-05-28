@@ -144,6 +144,12 @@ Do not run a broad character apply until these are decided:
 - Whether old prefixed bodyform tags such as `bodyform:android` become
   canonical aliases or are migrated to unprefixed anchors such as `inorganic`
   and `virtual`.
+- Global tag-name collisions created by category-qualified design language.
+  The live `tags` table keys by global tag string, not by `(category, tag)`.
+  Known blockers include `disposition:traditionalist` colliding with faction
+  `ideology:traditionalist`, and `role.function:hunter` colliding with the
+  legacy `capacity:hunter` row. Resolve these with globally unique tag names,
+  aliases, or category rewrites before inserting character rows.
 - Which legacy `orrery_state` values move to canonical `state`, which move to
   dedicated need/travel/work/intimacy substrates, and which become prose.
 - Which old `profession_lite` rows are tag renames, role-function folds, or
@@ -165,25 +171,29 @@ Initial classification:
 Next actions:
 
 1. Resolve `role.function` registry alignment.
-2. Seed any missing accepted character anchors and aliases.
-3. Add a character manifest builder that reports keep/rename/drop/pair-tag/prose
+2. Resolve global character vocabulary collisions against the live
+   single-string tag registry.
+3. Seed any missing accepted character anchors and aliases.
+4. Add a character manifest builder that reports keep/rename/drop/pair-tag/prose
    decisions without applying them.
-4. Reconcile the existing Slot 2 reference taggings in
+5. Reconcile the existing Slot 2 reference taggings in
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
 ## Execution Order
 
 1. Merge PR #346 so the state/place seed exists in target slots.
 2. Resolve the character registry alignment blocker.
-3. Generate three read-only manifests for Slot 2: faction, place, character.
-4. Review manifests in that order: faction first because tooling exists, place
+3. Resolve globally colliding character anchor names before seeding or applying
+   character rows.
+4. Generate three read-only manifests for Slot 2: faction, place, character.
+5. Review manifests in that order: faction first because tooling exists, place
    second because there are no existing place rows to preserve, character last
    because it has the most category drift.
-5. Apply ready non-destructive `insert_entity_tag` rows to Slot 2 only.
-6. Re-run Orrery resolver/template tests and a Slot 2 dry run.
-7. Only then clear legacy rows, drop obsolete faction columns, and remove
+6. Apply ready non-destructive `insert_entity_tag` rows to Slot 2 only.
+7. Re-run Orrery resolver/template tests and a Slot 2 dry run.
+8. Only then clear legacy rows, drop obsolete faction columns, and remove
    resolver shims in separate migrations.
-8. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
+9. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
    rewrite is stable.
 
 ## Stop Conditions
