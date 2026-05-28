@@ -754,6 +754,172 @@ def test_completed_tag_vocab_migration_seeds_state_and_place_anchors() -> None:
     }
 
 
+def test_character_tag_vocab_migration_resolves_registry_collisions() -> None:
+    """Migration 055 seeds durable character anchors with global tag names."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "055_orrery_character_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    expected = migration._expected_rows()
+    registered = {
+        (category, entity_kind)
+        for category, entity_kind, _order, _description in (
+            migration.NEW_CATEGORY_REGISTRY
+        )
+    }
+    deprecated = {
+        (category, entity_kind): replacements
+        for category, entity_kind, replacements in (
+            migration.DEPRECATED_CATEGORY_REPLACEMENTS
+        )
+    }
+
+    assert {
+        ("bodyform.lineage", "character"),
+        ("bodyform.condition", "character"),
+        ("role.function", "character"),
+    } <= registered
+    assert deprecated[("bodyform", "character")] == (
+        "bodyform.lineage",
+        "bodyform.condition",
+    )
+    assert deprecated[("role", "character")] == ("role.function",)
+    assert deprecated[("profession_lite", "character")] == ("role.function",)
+    assert expected["tradition_bound"][0] == "disposition"
+    assert "traditionalist" not in expected
+    assert expected["hunter"][0] == "role.function"
+    assert "hunter" not in migration.CAPACITY_TAGS
+    assert migration.ALLOWED_CATEGORY_REWRITES["hunter"] == frozenset(
+        {"capacity", "role"}
+    )
+    assert len(expected) == (
+        len(migration.BODYFORM_LINEAGE_TAGS)
+        + len(migration.BODYFORM_CONDITION_TAGS)
+        + len(migration.DISPOSITION_TAGS)
+        + len(migration.CAPACITY_TAGS)
+        + len(migration.ROLE_FUNCTION_TAGS)
+    )
+    source = migration_path.read_text()
+    assert "COMMENT ON COLUMN tag_category_registry.deprecated" in source
+    assert "COMMENT ON COLUMN tag_category_registry.replacement_categories" in source
+
+
+def test_character_tag_vocab_guard_rejects_silent_alias_promotion() -> None:
+    """Migration 055 guard should catch deprecated or synonym collisions."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "055_orrery_character_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    class FakeCursor:
+        def execute(self, _sql: str, _params: object = None) -> None:
+            return None
+
+        def fetchall(self) -> list[tuple[str, str, bool, int | None]]:
+            return [
+                ("human", "bodyform", True, None),
+                ("elf", "bodyform", False, 101),
+            ]
+
+    with pytest.raises(RuntimeError, match="cannot be promoted implicitly"):
+        migration._assert_no_unexpected_category_conflicts(
+            FakeCursor(),
+            migration._expected_rows(),
+        )
+
+
+@pytest.mark.requires_postgres
+def test_character_tag_vocab_migration_executes_against_slot_db() -> None:
+    """Migration 055 executes guard, registry updates, and tag seed live."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "055_orrery_character_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    expected = migration._expected_rows()
+    tag_names = list(expected)
+    category_names = [
+        *(
+            category
+            for category, _kind, _order, _description in (
+                migration.NEW_CATEGORY_REGISTRY
+            )
+        ),
+        *(
+            category
+            for category, _kind, _replacements in (
+                migration.DEPRECATED_CATEGORY_REPLACEMENTS
+            )
+        ),
+    ]
+
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    tag_snapshot = _snapshot_tags(conn, tag_names)
+    category_snapshot = _snapshot_tag_categories(conn, category_names)
+    try:
+        migration.run(conn)
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag, category, is_ephemeral, deprecated, synonym_for,
+                       description
+                FROM tags
+                WHERE tag = ANY(%s)
+                """,
+                (tag_names,),
+            )
+            rows = {row[0]: row[1:] for row in cur.fetchall()}
+
+            cur.execute(
+                """
+                SELECT category, entity_kind::text, deprecated,
+                       replacement_categories
+                FROM tag_category_registry
+                WHERE category = ANY(%s)
+                """,
+                (category_names,),
+            )
+            categories = {row[0]: row[1:] for row in cur.fetchall()}
+
+        assert set(rows) == set(expected)
+        for tag, (category, description) in expected.items():
+            assert rows[tag] == (category, False, False, None, description)
+        assert categories["bodyform.lineage"] == ("character", False, None)
+        assert categories["bodyform.condition"] == ("character", False, None)
+        assert categories["role.function"] == ("character", False, None)
+        assert categories["bodyform"] == (
+            "character",
+            True,
+            ["bodyform.lineage", "bodyform.condition"],
+        )
+        assert categories["role"] == ("character", True, ["role.function"])
+        assert categories["profession_lite"] == (
+            "character",
+            True,
+            ["role.function"],
+        )
+        assert rows["hunter"][0] == "role.function"
+    finally:
+        conn.rollback()
+        _restore_tags(conn, tag_snapshot, tag_names)
+        _restore_tag_categories(conn, category_snapshot, category_names)
+        conn.close()
+
+
 @pytest.mark.requires_postgres
 def test_completed_tag_vocab_migration_executes_against_slot_db() -> None:
     """Migration 054 executes its guard, upserts, and post-check on a real slot."""
@@ -1423,4 +1589,50 @@ def _restore_tags(
                     WHERE tag = %s
                     """,
                     (*row, tag),
+                )
+
+
+def _snapshot_tag_categories(
+    conn: Any,
+    category_names: Iterable[str],
+) -> dict[str, tuple[Any, ...]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT category, entity_kind::text, prompt_order, description,
+                   deprecated, replacement_categories
+            FROM tag_category_registry
+            WHERE category = ANY(%s)
+            """,
+            (list(category_names),),
+        )
+        return {row[0]: row[1:] for row in cur.fetchall()}
+
+
+def _restore_tag_categories(
+    conn: Any,
+    snapshot: dict[str, tuple[Any, ...]],
+    category_names: Iterable[str],
+) -> None:
+    with conn:
+        with conn.cursor() as cur:
+            for category in category_names:
+                row = snapshot.get(category)
+                if row is None:
+                    cur.execute(
+                        "DELETE FROM tag_category_registry WHERE category = %s",
+                        (category,),
+                    )
+                    continue
+                cur.execute(
+                    """
+                    UPDATE tag_category_registry
+                    SET entity_kind = %s::entity_kind,
+                        prompt_order = %s,
+                        description = %s,
+                        deprecated = %s,
+                        replacement_categories = %s
+                    WHERE category = %s
+                    """,
+                    (*row, category),
                 )

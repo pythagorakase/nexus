@@ -23,11 +23,11 @@ Registry and substrate prerequisites:
 - Hard prerequisite gate: migration 054 must be applied to the target slot
   before any place or state apply step. Until that lands, the place/state
   rewrite is planning-only.
-- Character `role.function` remains a registry alignment decision: the design
-  spec names `role.function`, but live migrations currently keep function tags
-  under `role` and only split `role.fame` / `role.resources`. Do not run a
-  destructive character rewrite until this is resolved by either a registry
-  migration or an explicit doc correction.
+- Migration 055 resolves the durable-character registry target: it keeps
+  `tags.tag` globally keyed, registers `bodyform.lineage`,
+  `bodyform.condition`, and `role.function`, seeds accepted durable character
+  anchors, stores character lawfulness as `tradition_bound`, and moves the
+  `hunter` tag definition to `role.function`.
 
 ## Slot 2 Preflight
 
@@ -53,22 +53,20 @@ Observed active legacy/rewrite surface:
 | `place_affordance` entity tags | 0 | No existing place tags to rewrite deterministically; place backfill must come from place prose/manual review. |
 | faction manifest operations | 145 | All review-required; no ready writes should be applied without human review. |
 | faction legacy tag rows | 56 | Covered by `nexus faction-audit` / `faction-manifest`. |
-| `profession_lite` rows | 26 | Character function rewrite needed after `role` vs `role.function` decision. |
+| `profession_lite` rows | 26 | Character function rewrite needed into `role.function`; migration 055 resolves the target category but does not rewrite rows. |
 | `orrery_signal` rows | 1 | `under_active_pursuit` should become inbound `hunting` pair-tag or be dropped if already represented. |
 | `orrery_state` rows | 50 | Mixed old semantic states; classify into canonical state, need/travel/work/intimacy substrate, pair-tags, or prose. |
-| old `role` rows | 110 | Many remain useful, but target category is blocked by role registry alignment. |
+| old `role` rows | 110 | Many remain useful; accepted function anchors now target `role.function`, while noncanonical legacy role rows need review. |
 | `role.fame` / `role.resources` rows | 0 | No live rows to rewrite; future compiler/backfill may add reviewed values. |
 
 Registry spot-checks:
 
-- The current Slot 2 `tags` table has no `traditionalist` row. Re-check the
-  live category before applying either faction or character rows because
-  `traditionalist` cannot simultaneously be faction `ideology` and character
-  `disposition` while `tags.tag` is globally keyed.
-- The current Slot 2 `hunter` row is still category `capacity`. The accepted
-  capacity vocabulary no longer retains `hunter`, so the migration decision is
-  whether to retire/alias that legacy row into the role-function vocabulary
-  after the `role` vs `role.function` target is settled.
+- The current Slot 2 `tags` table had no `traditionalist` row before migration
+  055. The resolved character anchor is `tradition_bound`; faction ideology
+  keeps `traditionalist`.
+- The current Slot 2 `hunter` row was category `capacity` before migration 055.
+  The accepted capacity vocabulary no longer retains `hunter`; migration 055
+  moves the tag definition to `role.function` without clearing entity rows.
 
 ## Manifest Operation Classes
 
@@ -150,24 +148,15 @@ Next actions:
 
 ### Characters
 
-Current status: largest unresolved planning surface.
+Current status: largest remaining data-rewrite surface.
 
-Do not run a broad character apply until these are decided:
+Do not run a broad character apply until these remaining surfaces are reviewed:
 
-- `role` vs `role.function` registry target.
-- Whether old prefixed bodyform tags such as `bodyform:android` become
-  canonical aliases or are migrated to unprefixed anchors such as `inorganic`
-  and `virtual`.
-- Global tag-name collisions created by category-qualified design language.
-  The live `tags` table keys by global tag string, not by `(category, tag)`.
-  Known blockers include `disposition:traditionalist` colliding with faction
-  `ideology:traditionalist`. Verify the current live `traditionalist` category
-  before apply because one side may already be absent or overwritten in a
-  migrated slot. `role.function:hunter` also collides with legacy
-  `capacity:hunter`; because the accepted capacity vocabulary drops `hunter`,
-  resolve this as a retirement/alias decision rather than a simple rename.
-  Resolve these with globally unique tag names, aliases, or category rewrites
-  before inserting character rows.
+- Legacy `role` / `profession_lite` rows that do not match an accepted
+  `role.function` anchor.
+- Ambiguous bodyform history rows such as `uploaded_consciousness` and
+  `bodyform:biologically_immortal`; deterministic legacy proposals canonicalize
+  through `CANONICAL_TAGS`, but these history-bearing rows need review.
 - Which legacy `orrery_state` values move to canonical `state`, which move to
   dedicated need/travel/work/intimacy substrates, and which become prose.
 - Which old `profession_lite` rows are tag renames, role-function folds, or
@@ -177,8 +166,8 @@ Initial classification:
 
 | Legacy surface | Default classification |
 |---|---|
-| `profession_lite` | Rename/fold into function role after registry decision. |
-| old `role` | Keep or migrate category, depending on `role.function` decision. |
+| `profession_lite` | Rename/fold into `role.function`, or prose/pair-tag remainder when no accepted function anchor fits. |
+| old `role` | Accepted anchors migrate to `role.function`; noncanonical legacy role rows remain review items. |
 | `orrery_signal:under_active_pursuit` | Convert to inbound `hunting` pair-tag, or drop if already represented. |
 | `orrery_signal:debt_pulse_active` | Drop or structured remainder; Skald sovereignty model supersedes debt-pulse forcing. |
 | `orrery_state:contacts_available` | Decompose to `contact:<kind>` pair-tags or relationship rows; never keep as single entity state. |
@@ -188,33 +177,29 @@ Initial classification:
 
 Next actions:
 
-1. Resolve `role.function` registry alignment.
-2. Resolve global character vocabulary collisions against the live
-   single-string tag registry.
-3. Seed any missing accepted character anchors and aliases.
-4. Add a character manifest builder that reports keep/rename/drop/pair-tag/prose
-   decisions without applying them.
-5. Reconcile the existing Slot 2 reference taggings in
+1. Apply migration 055 before building the final reviewed character manifest.
+2. Run `nexus character-manifest --slot 2 --output PATH` to report
+   keep/rename/drop/pair-tag/prose decisions without applying them.
+3. Reconcile the existing Slot 2 reference taggings in
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
 ## Execution Order
 
-Do not begin any apply step until migration 054 has been applied to the target
-slot.
+Do not begin any apply step until migrations 054 and 055 have been applied to
+the target slot.
 
 1. Apply migration 054 so the state/place seed exists in target slots.
-2. Resolve the character registry alignment blocker.
-3. Resolve globally colliding character anchor names before seeding or applying
-   character rows.
-4. Generate three read-only manifests for Slot 2: faction, place, character.
-5. Review manifests in that order: faction first because tooling exists, place
+2. Apply migration 055 so the durable character seed and collision resolutions
+   exist in target slots.
+3. Generate three read-only manifests for Slot 2: faction, place, character.
+4. Review manifests in that order: faction first because tooling exists, place
    second because there are no existing place rows to preserve, character last
    because it has the most category drift.
-6. Apply ready non-destructive `insert_entity_tag` rows to Slot 2 only.
-7. Re-run Orrery resolver/template tests and a Slot 2 dry run.
-8. Only then clear legacy rows, drop obsolete faction columns, and remove
+5. Apply ready non-destructive `insert_entity_tag` rows to Slot 2 only.
+6. Re-run Orrery resolver/template tests and a Slot 2 dry run.
+7. Only then clear legacy rows, drop obsolete faction columns, and remove
    resolver shims in separate migrations.
-9. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
+8. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
    rewrite is stable.
 
 ## Stop Conditions

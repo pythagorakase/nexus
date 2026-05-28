@@ -12,11 +12,16 @@ from typing import Mapping
 
 CANONICAL_TAGS: Mapping[str, str] = {
     "bereaved": "grieving",
+    "bodyform:android": "inorganic",
+    "bodyform:construct": "inorganic",
+    "bodyform:non_corporeal": "virtual",
+    "bodyform:undead": "undead",
     "bridge_linked": "bridge_aware",
     "captive_subject": "captive",
     "collapse_survivor": "trauma_survivor",
     "corporate_defector": "corporate_exile",
-    "digital_consciousness": "digital_mind",
+    "digital_consciousness": "virtual",
+    "digital_mind": "virtual",
     "disaster_survivor": "trauma_survivor",
     "echo_survivor": "trauma_survivor",
     "estranged_parent": "parent",

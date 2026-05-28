@@ -215,7 +215,7 @@ An `extroversion_low` character can go weeks before reaching `under_socialized_2
 | `libido_moderate` | Default | Default mapping |
 | `libido_high` | Strong need; shorter tolerance | Severity triggers at ~0.6× default debt values |
 
-`libido_absent` is the cleanest immunity pattern — maintenance pass skips severity computation entirely. Unlike `bodyform:android` (categorical embodiment), `libido_absent` is about orientation/identity and can apply to fully embodied characters.
+`libido_absent` is the cleanest immunity pattern — maintenance pass skips severity computation entirely. Unlike `bodyform.lineage:inorganic` (categorical embodiment), `libido_absent` is about orientation/identity and can apply to fully embodied characters.
 
 ---
 
@@ -244,11 +244,10 @@ Single namespace, applied at character-creation time and never removed by the si
 
 | Tag | Immunity scope |
 |---|---|
-| `bodyform:android` | All basic needs (no rows in `character_need_states`) |
-| `bodyform:undead` | Setting-specific — some variants null all needs, some redefine |
-| `bodyform:construct` | Typically all basic needs |
-| `bodyform:non_corporeal` | All embodied needs (basic + intimacy) |
-| `bodyform:biologically_immortal` | Tracks all needs but with attenuated curves |
+| `bodyform.lineage:inorganic` | Typically all basic needs; legacy `bodyform:android` / `bodyform:construct` proposals canonicalize here |
+| `bodyform.condition:undead` | Setting-specific — some variants null all needs, some redefine |
+| `bodyform.condition:virtual` | All embodied needs (basic + intimacy); legacy `bodyform:non_corporeal` / `digital_mind` proposals canonicalize here |
+| reviewed prose / future modifier | Biologically immortal characters track all needs but may have attenuated curves; no canonical `bodyform:biologically_immortal` alias is automatic |
 
 Setting-specific supernaturals (fae, golems, intelligent undead variants, AI uplifts) get their bodyform tags seeded in setting-specific migrations. The bodyform tags remain durable identity facts; they should not be consulted repeatedly by every basic-needs branch — the maintenance pass simply doesn't create rows for immune needs.
 

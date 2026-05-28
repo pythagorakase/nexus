@@ -1,6 +1,6 @@
 # Orrery Tag Vocabulary
 
-The closed-vocabulary registry for Orrery's tag system: entity-property tag categories (`bodyform`, `disposition`, `capacity`, `role`, `state`), multi-entity (relational) tag families, place + faction categories, and the trait_menu alignment layer. Companion to `docs/orrery_design_plan.md`.
+The closed-vocabulary registry for Orrery's tag system: entity-property tag categories (`bodyform.lineage`, `bodyform.condition`, `disposition`, `capacity`, `role.function`, `role.fame`, `role.resources`, `state`), multi-entity (relational) tag families, place + faction categories, and the trait_menu alignment layer. Companion to `docs/orrery_design_plan.md`.
 
 Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is filtered through three design tests (differential + gating, reskinning, granularity — see Architectural Foundations). The auditable invariant is **"tags must do work prose can't,"** not a fixed count.
 
@@ -12,7 +12,7 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 
 | Structure | Application table | Carries | Example |
 |---|---|---|---|
-| **Single-entity tag** | `entity_tags` (existing) | Property of one entity | `bodyform:cybernetic` on Nyati |
+| **Single-entity tag** | `entity_tags` (existing) | Property of one entity | `bodyform.condition:cybernetic` on Nyati |
 | **Multi-entity tag** | `entity_pair_tags` (shipped — see PR #283) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
 | **Rich relationship** | `character_relationships` (existing) | Affective/social state with valence, history, sub-states | Alex/Emilia trust=high, valence=positive |
 
@@ -69,7 +69,7 @@ A property earns a tag only if BOTH:
 - *Differential:* it differs meaningfully across characters. If the tag would fire on most characters, it's an entity attribute, not a tag. Universal-with-variation identity attributes (pronouns, gender identity, biographical detail) go in entity metadata (columns or `extra_data`); historical events go in `world_events`; relational properties (sexual orientation) are compositionally inferred from `character_relationships`.
 - *Gating:* at least one narrative or adjudication decision needs to read it to function. If prose already carries the information for Skald, the tag is decorative.
 
-Examples: `bodyform:undead` fires on a small subset and gates package/affordance decisions → tag. `gender:female` fires on most characters and Skald reads pronouns from prose anyway → entity metadata. `disposition:cautious` fires differentially and gates Skald's plausible-action set → tag.
+Examples: `bodyform.condition:undead` fires on a small subset and gates package/affordance decisions → tag. `gender:female` fires on most characters and Skald reads pronouns from prose anyway → entity metadata. `disposition:cautious` fires differentially and gates Skald's plausible-action set → tag.
 
 The pattern: **a tag must do work that prose and metadata can't already do.**
 
@@ -107,10 +107,13 @@ A candidate that passes all three earns its place in the registry.
 
 | Category      | Cardinality  | Ephemerality     | Notes                                 |
 | ------------- | ------------ | ---------------- | ------------------------------------- |
-| `bodyform`    | Multi-valued | Durable          | Hybrid lineages, layered augmentation |
+| `bodyform.lineage` | Multi-valued | Durable      | Essential lineage or personhood substrate |
+| `bodyform.condition` | Multi-valued | Durable    | Fundamental embodiment conditions layered onto lineage |
 | `capacity`    | Multi-valued | Durable (mostly) | Capabilities and affordances          |
 | `disposition` | Multi-valued | Durable          | Stable behavioral patterns            |
-| `role`        | Multi-valued | Durable          | Merged from role + profession_lite    |
+| `role.function` | Multi-valued | Durable       | Social or operational function recognized by others |
+| `role.fame` | Exclusive | Durable             | Ambient recognition radius            |
+| `role.resources` | Exclusive | Durable        | Economic capacity / wealth tier       |
 | `state`       | Multi-valued | Ephemeral        | Merged from state + orrery_signal     |
 
 ### `bodyform`
@@ -185,6 +188,10 @@ Alina (character ID 4) was a human; then became virtualized, and her body destro
 
 Subtype hierarchy is deferred by default. `undead` remains the only admitted undead condition; `vampire`, `lich`, `zombie`, and similar subtypes stay in prose plus composition (`undead` + `enchanted`, needs pressure, vulnerability prose, event history) until a package names a gate that must distinguish them. If that happens, add a deliberate registry migration using the same colon-subtype convention as `intoxicated:*`; do not improvise runtime sub-tags.
 
+#### Legacy Alias Decisions
+
+Migration 055 seeds `bodyform.lineage` and `bodyform.condition` as the registry categories. Deterministic legacy proposal names canonicalize through `CANONICAL_TAGS`: `bodyform:android` and `bodyform:construct` become `inorganic`; `bodyform:non_corporeal` and `digital_mind` become `virtual`; `bodyform:undead` becomes `undead`. Ambiguous history-bearing rows such as `uploaded_consciousness` and `bodyform:biologically_immortal` are not auto-aliased; the Slot 2 backfill manifest must review them as prose/event history or compose them with current bodyform evidence.
+
 ---
 
 ### `disposition`
@@ -200,7 +207,7 @@ Disposition tags are organized along twelve single-word axes, each capturing one
 | **Loyalty** | Commitment to persons/groups | `loyal`, `treacherous`, `trusting`, `suspicious` |
 | **Compassion** | Response to others' suffering | `compassionate`, `callous`, `merciful`, `cruel`, `generous`, `miserly` |
 | **Honesty** | Relationship with truth | `forthright`, `deceitful`, `honorable`, `manipulative` |
-| **Lawfulness** | Posture toward institutional structure | `dutiful`, `independent`, `traditionalist`, `iconoclast`, `principled`, `expedient` |
+| **Lawfulness** | Posture toward institutional structure | `dutiful`, `independent`, `tradition_bound`, `iconoclast`, `principled`, `expedient` |
 | **Mutuality** | Reciprocity orientation in relations | `reciprocal`, `transactional`, `cooperative`, `exploitative` |
 | **Drive** | Ambition and effort | `ambitious`, `complacent`, `industrious`, `indolent` |
 | **Will** | Self-mastery over impulse, appetite, emotion, and commitment | `disciplined`, `impulsive`, `temperate`, `hedonistic`, `stoic`, `volatile`, `resolute`, `wavering` |
@@ -246,6 +253,7 @@ Intentionally **not** imported:
 1. **`idealistic` Outlook anchor.** Kept. It did not fire in the initial six-character pass, but the wildcard round later exercised it across Sam, Black Kite, and the Bridge.
 2. **`pessimistic` Outlook anchor.** Not admitted. Emilia and Pete can be read through `cynical`, `realistic`, `insecure`, and prose without adding a neighboring Outlook anchor that gates differently.
 3. **Will anchor count.** Kept. Eight anchors held up across the twelve-character stress test: max-self-mastery (Alina), high-cluster (`disciplined` + `stoic` + `resolute`), moderate (`disciplined` alone), and opposite-pole (`impulsive` + `volatile` + `wavering`). No trim warranted.
+4. **`traditionalist` collision.** The faction ideology vocabulary already owns the global tag string `traditionalist`. Because `tags.tag` is globally keyed, the character disposition anchor is stored as `tradition_bound` instead of overloading the same physical tag name.
 
 ### `role`
 
@@ -939,7 +947,7 @@ Compiler surfaces:
 | `controls` | Too vague — Skald-confusion attractor |
 | `orrery_state` (category) | System-bookkeeping moves to dedicated tables |
 | `place_affordance` (category) | Decomposed into function / visibility / access / environment / threat. Migration 043 marks the category deprecated and registers replacement categories; legacy tag rows remain readable through the resolver shim until data rewrite. |
-| `profession_lite` (category) | Merged into `role`. Migration 043 marks the category deprecated; legacy tag rows remain live until rewritten. |
+| `profession_lite` (category) | Merged into `role.function`. Migration 055 updates the replacement category; legacy tag rows remain live until rewritten. |
 | `orrery_signal` (category) | Merged into `state`. Migration 043 marks the category deprecated; legacy tag rows remain live until rewritten. |
 | `defensive_position` (place_function value) | Renamed to `fortification`; `haven` added |
 | Vocabulary Growth Contract | Replaced by locked-vocabulary discipline |
@@ -948,7 +956,7 @@ Compiler surfaces:
 
 ## Open Items
 
-1. **Character category implementation.** `bodyform`, `disposition`, `capacity`, the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`), and the companion `state` vocabulary are now drafted. Migration 054 seeds the completed `state` anchors; remaining work is implementation-specific compiler/template alignment.
+1. **Character category implementation.** `bodyform.lineage`, `bodyform.condition`, `disposition`, `capacity`, `role.function`, `role.resources`, `role.fame`, scope-bound `status`, and the companion `state` vocabulary are now drafted. Migration 054 seeds the completed `state` anchors; migration 055 seeds the durable character anchors and resolves the `traditionalist` / `hunter` registry collisions. Remaining work is Slot 2 backfill plus compiler/template alignment.
 2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories and migration 054 seeds the place anchors; follow-up work still needs to migrate/deprecate legacy `place_affordance` rows and remove the resolver shim after backfill.
 3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
 4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, blocked on an entity-kind/category-registration migration and not a blocker for current packages.

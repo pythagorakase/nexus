@@ -11,6 +11,7 @@ Commands:
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
+    nexus character-manifest --slot N  Build reviewed character tag manifest
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -372,6 +373,53 @@ def _print_faction_apply(payload: Dict[str, Any]) -> None:
             print(f"  ...{len(blocked) - 10} more")
 
 
+def _print_character_manifest(payload: Dict[str, Any]) -> None:
+    """Print a character tag migration manifest summary."""
+
+    manifest = payload.get("character_manifest") or {}
+    counters = manifest.get("counters") or {}
+    characters = manifest.get("characters") or []
+
+    print("Manifest:")
+    print(f"  schema_version: {manifest.get('schema_version')}")
+    print(f"  dry_run: {manifest.get('dry_run')}")
+
+    print()
+    print("Counters:")
+    printed_counters = set()
+    for key in (
+        "legacy_character_tag_rows",
+        "operation_items",
+        "review_required_operations",
+        "review_entity_tag_operations",
+        "resolve_pair_tag_target_operations",
+        "structured_remainder_operations",
+        "preserve_prose_operations",
+        "candidate_renames",
+        "missing_target_tag_operations",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+        printed_counters.add(key)
+    for key in sorted(key for key in counters if key not in printed_counters):
+        print(f"  {key}: {counters[key]}")
+
+    review_characters = [
+        item for item in characters if item.get("review_required_operations", 0)
+    ]
+    if review_characters:
+        print()
+        print("Manual review:")
+        for item in review_characters[:10]:
+            print(
+                "  - "
+                f"{item['character_name']} "
+                f"(id {item['character_id']}): "
+                f"{item.get('review_required_operations', 0)} item(s)"
+            )
+        if len(review_characters) > 10:
+            print(f"  ...{len(review_characters) - 10} more")
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -403,6 +451,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("faction_apply"):
         _print_faction_apply(payload)
+        print()
+
+    if payload.get("character_manifest"):
+        _print_character_manifest(payload)
         print()
 
     # Get display elements
@@ -1188,6 +1240,40 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_character_manifest(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build a read-only character tag migration manifest."""
+
+    from nexus.api.character_tag_manifest import build_character_migration_manifest
+    from nexus.api.db_pool import get_connection
+    from nexus.api.slot_utils import slot_dbname
+
+    dbname = slot_dbname(args.slot)
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("BEGIN READ ONLY")
+            manifest = build_character_migration_manifest(
+                cur,
+                slot=args.slot,
+                dbname=dbname,
+            )
+
+    output_path = getattr(args, "output", None)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    return {
+        "success": True,
+        "message": f"Character tag migration manifest for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "character_manifest": manifest,
+        "manifest_output": str(output_path) if output_path is not None else None,
+    }
+
+
 def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run or execute ready faction manifest operations."""
 
@@ -1357,6 +1443,7 @@ Examples:
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
   nexus faction-apply --slot 2 --manifest manifest.json --execute
+  nexus character-manifest --slot 2  Build character tag manifest
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1539,6 +1626,20 @@ Examples:
         help="entity_tag_source_kind stamped on inserted rows when --execute is set.",
     )
 
+    # character-manifest command
+    character_manifest_parser = subparsers.add_parser(
+        "character-manifest",
+        help="Build read-only character tag migration manifest",
+    )
+    character_manifest_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    character_manifest_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the raw character migration manifest JSON.",
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -1574,6 +1675,7 @@ def main() -> int:
         "faction-audit",
         "faction-manifest",
         "faction-apply",
+        "character-manifest",
         "lock",
         "unlock",
     ):
@@ -1610,6 +1712,8 @@ def main() -> int:
         result = run_faction_manifest(args)
     elif args.command == "faction-apply":
         result = run_faction_apply(args)
+    elif args.command == "character-manifest":
+        result = run_character_manifest(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":

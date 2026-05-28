@@ -6,7 +6,7 @@
 
 ## Scope and Boundaries
 
-`state` is the **only ephemeral character category** — durable categories (bodyform, disposition, capacity, role) answer *what a character is*; `state` answers *what is currently true that wasn't always and won't always be*.
+`state` is the **only ephemeral character category** — durable categories (`bodyform.lineage`, `bodyform.condition`, disposition, capacity, and role subcategories) answer *what a character is*; `state` answers *what is currently true that wasn't always and won't always be*.
 
 **Membership test (temporal, not semantic):** a state is a character condition that came from a describable event and ends at a describable event — or, for the pharmacologic cluster, at a describable *time*. If you cannot name what clears it, it is not a state: it is a durable tag, a need, or prose.
 
