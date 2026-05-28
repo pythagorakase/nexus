@@ -240,6 +240,17 @@ def test_place_manifest_keeps_unregistered_candidates_reviewable() -> None:
     )
 
 
+def test_cli_place_apply_requires_manifest_for_execute() -> None:
+    """Execute mode must consume a reviewed manifest."""
+
+    result = cli.run_place_apply(
+        Namespace(slot=2, execute=True, manifest=None, source_kind="system")
+    )
+
+    assert result["success"] is False
+    assert "--manifest is required with --execute" in result["error"]
+
+
 @pytest.mark.requires_postgres
 def test_cli_place_manifest_returns_live_slot2_payload() -> None:
     """CLI place-manifest should read the slot and return a manifest."""
@@ -255,3 +266,24 @@ def test_cli_place_manifest_returns_live_slot2_payload() -> None:
     assert result["place_manifest"]["schema_version"] == (PLACE_MANIFEST_SCHEMA_VERSION)
     assert result["place_manifest"]["dry_run"] is True
     assert result["place_manifest"]["source"]["slot"] == 2
+
+
+@pytest.mark.requires_postgres
+def test_cli_place_apply_dry_run_skips_unreviewed_slot2_manifest() -> None:
+    """CLI place-apply should not write generated review-required rows."""
+
+    try:
+        result = cli.run_place_apply(
+            Namespace(slot=2, execute=False, manifest=None, source_kind="system")
+        )
+    except psycopg2.Error as exc:
+        pytest.skip(f"{TEST_DBNAME} PostgreSQL test database unavailable: {exc}")
+    finally:
+        close_pool(TEST_DBNAME)
+
+    assert result["success"] is True
+    apply_result = result["place_apply"]
+    assert apply_result["dry_run"] is True
+    assert apply_result["entity_kind"] == "place"
+    assert apply_result["counters"]["ready_entity_tag_operations"] == 0
+    assert apply_result["counters"]["review_required_operations_skipped"] > 0
