@@ -9,6 +9,7 @@ import pytest
 
 from nexus import cli
 from nexus.api.place_tag_manifest import (
+    LEGACY_PLACE_AFFORDANCE_MAP,
     PLACE_MANIFEST_SCHEMA_VERSION,
     build_place_migration_manifest_from_rows,
 )
@@ -141,14 +142,12 @@ def test_place_manifest_maps_legacy_affordances_without_ready_writes() -> None:
         for operation in manifest["operations"]
         if operation["source"]["kind"] == "legacy_entity_tag"
     ]
-    assert len(legacy_operations) == 4
+    expected_tags = set(LEGACY_PLACE_AFFORDANCE_MAP["safe_house"])
+    assert len(legacy_operations) == len(expected_tags)
     assert "ready_operations" not in manifest["counters"]
-    assert {operation["target"]["tag"] for operation in legacy_operations} == {
-        "dwelling",
-        "haven",
-        "place_hidden",
-        "place_restricted",
-    }
+    assert {operation["target"]["tag"] for operation in legacy_operations} == (
+        expected_tags
+    )
     assert all(
         operation["target"]["entity_id"] == 100 for operation in legacy_operations
     )
@@ -156,6 +155,59 @@ def test_place_manifest_maps_legacy_affordances_without_ready_writes() -> None:
         operation["source"]["kind"] == "legacy_entity_tag"
         for operation in legacy_operations
     )
+
+
+def test_place_manifest_keeps_multiple_unmapped_legacy_tags() -> None:
+    """Each unmapped legacy affordance should survive as its own remainder."""
+
+    manifest = build_place_migration_manifest_from_rows(
+        [
+            {
+                "place_id": 10,
+                "place_name": "Quiet Lot",
+                "entity_id": 100,
+                "type": "fixed_location",
+                "summary": "",
+                "history": "",
+                "current_status": "",
+                "secrets": "",
+                "extra_data": {},
+            }
+        ],
+        [
+            {
+                "place_id": 10,
+                "place_name": "Quiet Lot",
+                "entity_id": 100,
+                "type": "fixed_location",
+                "tag_id": 5,
+                "tag": "legacy_alpha",
+                "category": "place_affordance",
+            },
+            {
+                "place_id": 10,
+                "place_name": "Quiet Lot",
+                "entity_id": 100,
+                "type": "fixed_location",
+                "tag_id": 6,
+                "tag": "legacy_beta",
+                "category": "place_affordance",
+            },
+        ],
+        registered_tags={},
+        slot=2,
+        dbname="save_02",
+    )
+
+    remainders = [
+        operation
+        for operation in manifest["operations"]
+        if operation["operation_type"] == "structured_remainder"
+    ]
+    assert {operation["source"]["tag"] for operation in remainders} == {
+        "legacy_alpha",
+        "legacy_beta",
+    }
 
 
 def test_place_manifest_keeps_unregistered_candidates_reviewable() -> None:

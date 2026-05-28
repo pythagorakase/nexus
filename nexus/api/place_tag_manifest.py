@@ -554,11 +554,12 @@ def _append_operation(
 ) -> None:
     place_id = int(operation["place_id"])
     target = operation.get("target", {})
+    source = operation.get("source", {})
     dedupe_key = (
         place_id,
         str(operation["operation_type"]),
-        str(target.get("category")),
-        str(target.get("tag")),
+        str(target.get("category") or source.get("category")),
+        str(target.get("tag") or source.get("tag")),
     )
     if dedupe_key in seen_operations:
         counters["duplicate_candidate_operations"] += 1
@@ -686,8 +687,12 @@ def _matches_for_rule(
 
 
 def _keyword_hit(keyword: str, text: str) -> bool:
+    return _keyword_match(keyword, text) is not None
+
+
+def _keyword_match(keyword: str, text: str) -> re.Match[str] | None:
     pattern = rf"(?<![A-Za-z0-9_]){re.escape(keyword.lower())}(?![A-Za-z0-9_])"
-    return re.search(pattern, text.lower()) is not None
+    return re.search(pattern, text.lower())
 
 
 def _place_field_text(row: Mapping[str, Any]) -> dict[str, str]:
@@ -713,10 +718,10 @@ def _stringify_extra_data(value: Any) -> str:
 
 
 def _excerpt(text: str, keyword: str, *, radius: int = 80) -> str:
-    lowered = text.lower()
-    index = lowered.find(keyword.lower())
-    if index < 0:
+    match = _keyword_match(keyword, text)
+    if match is None:
         return text[: radius * 2].strip()
+    index = match.start()
     start = max(0, index - radius)
     end = min(len(text), index + len(keyword) + radius)
     prefix = "..." if start else ""
