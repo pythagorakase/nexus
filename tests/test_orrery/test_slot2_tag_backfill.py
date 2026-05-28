@@ -29,6 +29,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
                 ],
                 "unregistered_tag_candidates": [
                     {"tag": "found_family_anchor", "confidence": "high"},
+                    {"tag": "bodyform:android", "confidence": "high"},
                     {"tag": "unknown_one_off", "confidence": "high"},
                 ],
             },
@@ -50,6 +51,9 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
         ),
         "corporate_exile": TagDefinition(id=2, category="state", is_ephemeral=False),
         "extended_household": TagDefinition(id=3, category="role", is_ephemeral=False),
+        "inorganic": TagDefinition(
+            id=7, category="bodyform.lineage", is_ephemeral=False
+        ),
         "militarized": TagDefinition(
             id=4, category="power_posture", is_ephemeral=False
         ),
@@ -69,7 +73,13 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
         manifest,
         tags=tags,
         allowed_categories={
-            "character": {"orrery_need", "orrery_state", "role", "state"},
+            "character": {
+                "bodyform.lineage",
+                "orrery_need",
+                "orrery_state",
+                "role",
+                "state",
+            },
             "faction": {"power_posture"},
             "place": {"place_affordance"},
         },
@@ -80,6 +90,7 @@ def test_slot2_tag_backfill_filters_and_canonicalizes_proposals() -> None:
 
     assert [(candidate.entity_id, candidate.tag) for candidate in candidates] == [
         (1, "extended_household"),
+        (1, "inorganic"),
         (1, "sleep_deprived_1_mild"),
         (2, "militarized"),
     ]

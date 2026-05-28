@@ -301,6 +301,8 @@ def _registered(*entries):
 def _default_category_registry() -> dict[str, set[str]]:
     return {
         "bodyform": {"character"},
+        "bodyform.condition": {"character"},
+        "bodyform.lineage": {"character"},
         "capacity": {"character"},
         "disposition": {"character"},
         "orrery_need": {"character"},
@@ -308,6 +310,7 @@ def _default_category_registry() -> dict[str, set[str]]:
         "place_affordance": {"place"},
         "power_posture": {"faction"},
         "profession_lite": {"character"},
+        "role.function": {"character"},
         "role.fame": {"character"},
         "role.resources": {"character"},
         "state": {"character"},
@@ -655,6 +658,21 @@ def test_canonical_alias_applied_as_canonical():
     )
     assert counters["applied"] == 1
     canonical_id = hash("corporate_exile") & 0xFFFFFF
+    assert cur.inserted_entity_tag_rows[0]["tag_id"] == canonical_id
+
+
+def test_bodyform_alias_applied_as_canonical_character_anchor():
+    cur = FakeCursor(tags=_registered(("inorganic", "bodyform.lineage", False)))
+
+    counters = apply_tag_bestowal(
+        cur,
+        entity_id=42,
+        entity_kind="character",
+        bestowal=OrreryTagBestowal(applied_tags=["bodyform:android"]),
+    )
+
+    assert counters["applied"] == 1
+    canonical_id = hash("inorganic") & 0xFFFFFF
     assert cur.inserted_entity_tag_rows[0]["tag_id"] == canonical_id
 
 
