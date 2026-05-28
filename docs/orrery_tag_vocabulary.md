@@ -41,7 +41,7 @@ A tag name that requires its description field to be understandable is wrong. Na
 
 | Mode | Within one category | Example |
 |---|---|---|
-| **Exclusive** | One tag per entity (XOR) | `place_visibility:known` XOR `hidden` |
+| **Exclusive** | One tag per entity (XOR) | `place_visibility:place_known` XOR `place_hidden` |
 | **Multi-valued** | Many tags per entity | `place_function:commerce` AND `place_function:dwelling` |
 
 **Default is multi-valued; exclusive is the exception.** The test for exclusivity: *"is there genuinely only one truth about this entity in this dimension?"* For visibility and access: yes. For bodyform / ideology / disposition / role / state / function: no — compositions are normal (half-cyborg elf is a feature, not a bug).
@@ -560,13 +560,19 @@ facts. A place can be many things at once; the old `place_affordance` bucket was
 too vague because it mixed function, geography, secrecy, permissions, and
 danger into one axis.
 
+**Registry-name constraint.** The live `tags` registry keys by global `tag`
+string, not by `(category, tag)`. Place anchors therefore avoid bare common
+words that already mean something elsewhere (`known` is `role.fame`, `medical`
+is `capacity`, `contested` is `legitimacy`). The category still carries the
+axis; the tag string stays globally unique.
+
 | Category | Cardinality | Ephemerality | Anchors |
 |---|---|---|---|
-| `place_function` | Multi-valued | Durable | `commerce`, `dwelling`, `medical`, `transit`, `archive`, `fortification`, `haven`, `sacred`, `meeting`, `tomb`, `confinement`, `learning`, `craft`, `military`, `production`, `administration`, `water_source`, `entertainment` |
-| `place_visibility` | Exclusive | Durable | `known`, `hidden` |
-| `place_access` | Exclusive | Durable | `open`, `restricted` |
+| `place_function` | Multi-valued | Durable | `commerce`, `dwelling`, `place_medical`, `transit`, `archive`, `fortification`, `haven`, `sacred`, `meeting`, `tomb`, `confinement`, `learning`, `craft`, `military`, `production`, `administration`, `water_source`, `entertainment` |
+| `place_visibility` | Exclusive | Durable | `place_known`, `place_hidden` |
+| `place_access` | Exclusive | Durable | `place_open`, `place_restricted` |
 | `place_environment` | Multi-valued | Durable | `urban_dense`, `urban_sparse`, `rural`, `wilderness`, `subterranean`, `underwater`, `aerial`, `mountainous`, `forest`, `desert`, `polar`, `marshland`, `coastal` |
-| `place_threat` | Exclusive | Ephemeral | `safe`, `contested`, `dangerous` |
+| `place_threat` | Exclusive | Ephemeral | `place_safe`, `place_contested`, `place_dangerous` |
 
 ### `place_function` (Multi-Valued, Durable)
 
@@ -579,11 +585,11 @@ safe-house is `dwelling` + `haven`.
 |---|---|
 | `commerce` | Goods, services, markets, meals, rooms, brokerage, or ordinary buying/selling can happen here. |
 | `dwelling` | Habitual or temporary shelter; supports sleep, domestic routines, private recovery, or household scenes. |
-| `medical` | Care, triage, healing, diagnosis, surgery, apothecary work, body-mod, or magical treatment. |
+| `place_medical` | Care, triage, healing, diagnosis, surgery, apothecary work, body-mod, or magical treatment. |
 | `transit` | Movement node or passage: street, road, station, port, stable, garage, tunnel, gate, airlock, or route junction. |
 | `archive` | Records, memory, libraries, logs, vaults, databases, museums, or evidence repositories. |
 | `fortification` | Defensible structure or prepared position; improves defense / resistance branches. |
-| `haven` | Shelter that is discreet or safe enough for hiding, recovery, or pressure relief. Usually composes with `hidden` and/or `restricted`, but not always. |
+| `haven` | Shelter that is discreet or safe enough for hiding, recovery, or pressure relief. Usually composes with `place_hidden` and/or `place_restricted`, but not always. |
 | `sacred` | Ritual, worship, taboo, blessing, curse, pilgrimage, memorial, or divine/social awe. |
 | `meeting` | Plausible gathering or negotiation venue; neutral-ground readings emerge from claims/access/status, not a separate tag. |
 | `tomb` | Burial, remembrance, grave-tending, ancestor contact, or the dangerous boundary between dead and living. |
@@ -607,10 +613,10 @@ Whether the place's existence and location are generally discoverable.
 
 | Tag | Meaning / Package Reading |
 |---|---|
-| `known` | Ordinary locals / relevant actors can learn or find it without special knowledge. Usually the default and may be omitted until cardinality enforcement exists. |
-| `hidden` | Existence or route is concealed, secret, unmapped, warded, socially obscured, or otherwise unavailable to ordinary search. |
+| `place_known` | Ordinary locals / relevant actors can learn or find it without special knowledge. Usually the default and may be omitted until cardinality enforcement exists. |
+| `place_hidden` | Existence or route is concealed, secret, unmapped, warded, socially obscured, or otherwise unavailable to ordinary search. |
 
-If `hidden`, use `knows_location(character -> place)` rows to specify who can
+If `place_hidden`, use `knows_location(character -> place)` rows to specify who can
 find it. Do not encode "known to Alex but hidden from Dynacorp" in the place
 tag itself; the tag is the global posture, and the pair-tags carry exceptions.
 
@@ -620,10 +626,10 @@ Whether entry/use is ordinarily available.
 
 | Tag | Meaning / Package Reading |
 |---|---|
-| `open` | A character can enter or use it without special permission, membership, cover, coercion, or key. |
-| `restricted` | Entry/use requires permission, membership, disguise, key, bribe, invitation, clearance, taboo status, or force. |
+| `place_open` | A character can enter or use it without special permission, membership, cover, coercion, or key. |
+| `place_restricted` | Entry/use requires permission, membership, disguise, key, bribe, invitation, clearance, taboo status, or force. |
 
-If `restricted`, use `can_access(character|faction -> place)` rows for known
+If `place_restricted`, use `can_access(character|faction -> place)` rows for known
 permissions. A faction-mediated access row lets ordinary members or agents
 derive access by story context without writing one row per character.
 
@@ -663,13 +669,14 @@ than stack contradictory rows.
 
 | Tag | Meaning / Package Reading |
 |---|---|
-| `safe` | Currently low-risk enough that rest, recovery, negotiation, or routine work can proceed without threat pressure. Not a permanent promise. |
-| `contested` | Active dispute, occupation, tension, surveillance, siege, jurisdictional conflict, or factional pressure. |
-| `dangerous` | Immediate or predictable harm: violence, monsters, disaster, toxic conditions, traps, hostile patrols, collapse risk. |
+| `place_safe` | Currently low-risk enough that rest, recovery, negotiation, or routine work can proceed without threat pressure. Not a permanent promise. |
+| `place_contested` | Active dispute, occupation, tension, surveillance, siege, jurisdictional conflict, or factional pressure. |
+| `place_dangerous` | Immediate or predictable harm: violence, monsters, disaster, toxic conditions, traps, hostile patrols, collapse risk. |
 
 **Clearance / replacement.** `place_threat` should use semantic replacement
-initially: `safe` becomes `dangerous` after an attack, `contested` after a claim
-or occupation, `safe` again after a settlement / cleanup / protection event.
+initially: `place_safe` becomes `place_dangerous` after an attack,
+`place_contested` after a claim or occupation, `place_safe` again after a
+settlement / cleanup / protection event.
 Do not overbuild a bespoke event table before Slot 2 backfill reveals which
 place-threat transitions actually recur.
 
@@ -685,18 +692,18 @@ starting points:
 |---|---|
 | `home` | `place_function:dwelling`; add `resides_at(character -> place)` for actual residents. |
 | `lodgings` | `place_function:dwelling` + usually `commerce`; access depends on story. |
-| `safe_house` | `place_function:dwelling` + `haven` + usually `place_visibility:hidden` and `place_access:restricted`. |
+| `safe_house` | `place_function:dwelling` + `haven` + usually `place_visibility:place_hidden` and `place_access:place_restricted`. |
 | `tavern` / `teahouse` / `cafe` / `restaurant` / `cookshop` | `place_function:commerce`; add `meeting`, `entertainment`, `dwelling`, or `water_source` only when the venue really supports that branch. |
-| `market` | `place_function:commerce` + `meeting`; often `place_access:open`. |
+| `market` | `place_function:commerce` + `meeting`; often `place_access:place_open`. |
 | `public_water` | `place_function:water_source`; access/visibility as appropriate. |
 | `wilderness` | `place_environment:wilderness`; add `water_source`, `forest`, `mountainous`, etc. only from prose. |
 | `street` / `transit_hub` | `place_function:transit`; pair with `urban_dense`, `urban_sparse`, or other environment tags. |
 | `the_roots` | `place_environment:subterranean` plus `place_function:transit`, `archive`, `dwelling`, or `production` depending on the specific Roots location. |
-| `the_glow` | `place_environment:urban_dense`; usually `place_visibility:known`, often `place_access:open`. |
+| `the_glow` | `place_environment:urban_dense`; usually `place_visibility:place_known`, often `place_access:place_open`. |
 | `town_square` / `public_space` / `general_social_venue` / `neutral_ground` | `place_function:meeting`; neutrality emerges from claims/access/status rows, not a tag. |
 | `intimate_social_venue` / `intimate_services_establishment` | `place_function:meeting` and/or `entertainment`; contracted access should use `contact:intimate` where package gates need a relationship edge. |
-| `private_quarters` | `place_function:dwelling` + usually `place_access:restricted`. |
-| `workplace` / `worksite` / `administrative_office` | `administration`, `production`, `craft`, `medical`, `military`, or another concrete function based on the actual work. |
+| `private_quarters` | `place_function:dwelling` + usually `place_access:place_restricted`. |
+| `workplace` / `worksite` / `administrative_office` | `administration`, `production`, `craft`, `place_medical`, `military`, or another concrete function based on the actual work. |
 | `place_of_remembrance` | `tomb` and/or `sacred`; use `meeting` only for public memorial sites. |
 
 ---
