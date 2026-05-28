@@ -1,6 +1,6 @@
 # Orrery `state` Category — Vocabulary
 
-**Status:** authoritative spec for the `state` category — four clusters (physical, affective, pharmacologic, circumstantial). Companion to `orrery_tag_vocabulary.md` (settled substrate) and `orrery_needs.md` (needs subsystem boundary). Clearance contracts are named inline per anchor. Resolved decisions and migration debts are tracked toward the bottom; remaining open decisions follow.
+**Status:** authoritative spec for the `state` category — four clusters (physical, affective, pharmacologic, circumstantial). Companion to `orrery_tag_vocabulary.md` (settled substrate) and `orrery_needs.md` (needs subsystem boundary). Clearance contracts are named inline per anchor. Resolved decisions and migration debts are tracked toward the bottom.
 
 ---
 
@@ -25,7 +25,7 @@ The "no numbers" discipline that governs durable categories (`martial:3` was cor
 - **Gate input** (a branch fires only above some severity) → adopt the needs convention: graduated `anchor_N_label` tags, mutually exclusive within track, reusing `has_severity_tag_at_or_above`. Do **not** invent a parallel numbering scheme.
 - **Pressure material** (surfaced to Skald via `PresentActorPolicy.STORYTELLER_PRESSURE`; Skald reads degree from prose) → binary presence. The tag fires or it doesn't; "how much" is prose.
 
-Most affective states are pressure material → binary. `wounded`/`sick` are the candidates that *might* gate on severity; flagged as open decisions below.
+Most affective states are pressure material → binary. `wounded`/`sick` are also binary in the locked vocabulary; graduated state tracks should be introduced only when a package names a thresholded branch.
 
 ---
 
@@ -47,11 +47,16 @@ The body's current condition. The most package-load-bearing cluster, and the one
 
 | State | Meaning | Clears on | Clearance kind | Degree |
 |---|---|---|---|---|
-| `wounded` | Injured; physical scenes resolve unfavorably, travel impeded | `tended` / `healed` event | event | **decision** — binary, or graduated if a collapse / seek-treatment branch gates on severity |
-| `sick` | Illness / disease | `recovered` / `cured` event; mild cases may also time-decay | event (primary) | **decision** — as `wounded` |
+| `wounded` | Injured; physical scenes resolve unfavorably, travel impeded | `tended` / `healed` event | event | binary |
+| `sick` | Illness / disease | `recovered` / `cured` event; mild cases may also time-decay | event (primary) | binary |
 | `restrained` | Physically bound, pinned, immobilized — cannot move freely *this scene* | `freed` / `escaped` event | event | binary |
 
-**Rationale.** `wounded` and `sick` are the two anchors where graduated severity is genuinely plausible, because a "collapse from blood loss" or "seek medical attention" branch would threshold on degree exactly as the needs branches do. The difference from needs: there is no clock computing the tier — wounding is event-driven, so the tier (if adopted) is assigned by the establishing event, not re-derived each pass. That is admissible under the degree test (the integer is still a gate input), but it means the maintenance pass does not own these tiers — so re-tiering on a *second* wounding event must clear the prior tier explicitly. If no package actually gates on wound severity, keep them binary and let prose carry degree. **This is the call to make before these ship.**
+**Rationale.** `wounded` and `sick` are admitted as binary anchors for the
+initial vocabulary lock. Degree stays in prose/current status until a package
+names a branch that thresholds on severity. If that happens, add a separate
+graduated track using the needs convention (`wounded_1_mild`,
+`wounded_2_serious`, etc.) and explicit event-owned re-tiering; do not smuggle
+severity into ad-hoc descriptions of the binary row.
 
 `restrained` vs `imprisoned` (below): `restrained` is the immediate physical fact (tied up, pinned, this scene); `imprisoned` is the sustained condition across chunks. They gate similarly but clear on different events, so both are kept.
 
@@ -68,7 +73,12 @@ The current emotional reading — the transient counterpart to disposition. The 
 | `grieving` | Acute grief / loss | time-decay (primary) + authored moment of moving on | time + authored | binary (pressure material) |
 | `despairing` | Hopelessness; withdrawal-biased | `circumstance_reversed` event, or time-decay | event or time | binary (pressure material) |
 
-**Rationale.** These are primarily `STORYTELLER_PRESSURE` material: surfaced to Skald, who narrates the register and intensity. Hence binary by default — nothing thresholds on a stored fear-integer. **The open fork** (below): if a specific package gates on affective severity — a `MOURN_LOSS` branch keyed to grief depth, a panic / flee package keyed to fear level — *those specific anchors* inherit the graduated convention. Until a package demands it, they stay flat.
+**Rationale.** These are primarily `STORYTELLER_PRESSURE` material: surfaced to
+Skald, who narrates the register and intensity. Hence binary by default —
+nothing currently thresholds on a stored fear-integer. If a future package gates
+on affective severity — a `MOURN_LOSS` branch keyed to grief depth, a panic /
+flee package keyed to fear level — that package should propose a graduated
+track by migration. The current locked vocabulary stays flat.
 
 **`despairing` is wellbeing-adjacent.** Any package or prompt reading it should be written for narrative care, not mechanical consequence. Resist enumerating finer distress shades; `despairing` covers the gating need and finer gradations belong in prose.
 
@@ -78,7 +88,7 @@ The current emotional reading — the transient counterpart to disposition. The 
 
 ## Cluster 3 — Pharmacologic Condition
 
-Replaces the vague `intoxicated` with one tag per **pharmacological class**, using the colon-subtype convention (`bodyform:cyborg`, `place_function:market`). The classes gate differently, so the split passes granularity where the vague tag failed.
+Replaces the vague `intoxicated` with one tag per **pharmacological class**, using the colon-subtype convention (`intoxicated:stimulant`, `intoxicated:depressant`). The classes gate differently, so the split passes granularity where the vague tag failed.
 
 | State | Meaning / primary gate effect | Clears on | Clearance kind | Degree |
 |---|---|---|---|---|
@@ -163,15 +173,24 @@ Several alignments with existing vocab dropped synonymous proposals: `tended`/`h
 
 ---
 
-## Remaining Open Decisions
+## Resolved Decisions from Vocabulary Completion Pass
 
-1. **Affective gate-vs-pressure fork.** Does any package gate on affective *severity* (e.g., `MOURN_LOSS` on grief depth, panic/flee on fear level)? If yes, those anchors adopt graduated `_N_label`; if all affective states are pure `STORYTELLER_PRESSURE`, the whole cluster stays binary. **Determines whether the affective cluster reuses the needs severity machinery.**
-2. **`wounded` / `sick` degree.** Binary, or graduated? Hinges on whether a collapse / seek-treatment branch thresholds on severity.
-3. **`hallucinogen` vs `dissociative` split.** Keep separate only if a dissociative's detachment beat gates or prompts differently from a hallucinogen's perceptual distortion. Name the divergence before committing the split, or merge.
-4. **`intoxicated:opioid` as a fifth class?** Pharmacologically a depressant, but a distinct analgesia-plus-sedation profile. Same gating test, stated actively: **name the gate or prompt that reads `:opioid` differently from `:depressant`, or merge.** A reviewer who can name one admits the class; a reviewer who can't, merges.
+1. **Affective gate-vs-pressure fork.** Resolved binary. Current affective
+states are pressure material, not severity-gated tracks. Add graduated affective
+tracks later only when a specific package names the thresholded branch.
+2. **`wounded` / `sick` degree.** Resolved binary for the locked vocabulary.
+Severity belongs in prose/current status until a package proves it needs
+threshold predicates.
+3. **`hallucinogen` vs `dissociative` split.** Keep separate. Hallucinogens
+primarily distort perception and witness reliability; dissociatives primarily
+affect embodiment, agency, and self-continuity. Those prompt differently enough
+to keep both anchors.
+4. **`intoxicated:opioid` as a fifth class.** Not admitted. Opioids collapse to
+`intoxicated:depressant` until a concrete analgesia-specific package gate or
+prompt beat needs a distinct anchor.
 
 ---
 
 ## Count
 
-Physical 3 (`wounded`, `sick`, `restrained`) · Affective 4 (`enraged`, `afraid`, `grieving`, `despairing`) · Pharmacologic 4 (`intoxicated:stimulant` / `:depressant` / `:hallucinogen` / `:dissociative`) · Circumstantial 3 (`imprisoned`, `concealed`, `disguised`) = **14 anchors**, +1 if `intoxicated:opioid` is admitted. Deliberately lean — the name-the-clearance rule did the culling, and the near-total dissolution of the old social cluster is the clearest sign the test is doing real work.
+Physical 3 (`wounded`, `sick`, `restrained`) · Affective 4 (`enraged`, `afraid`, `grieving`, `despairing`) · Pharmacologic 4 (`intoxicated:stimulant` / `:depressant` / `:hallucinogen` / `:dissociative`) · Circumstantial 3 (`imprisoned`, `concealed`, `disguised`) = **14 anchors**. Deliberately lean — the name-the-clearance rule did the culling, and the near-total dissolution of the old social cluster is the clearest sign the test is doing real work.
