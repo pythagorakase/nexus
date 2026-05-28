@@ -2,24 +2,27 @@
 
 **Source:** Adobe Stock
 **Asset ID:** 482408992
-**License:** Adobe Stock Standard / On-Demand
-**Purchased:** 2026-05-23
+**License type:** Extended License
+**Purchase mechanism:** On-Demand (credit-based, non-subscription)
+**Purchase date:** 2026-05-23
 
-## Standard On-Demand license terms
+## Governing terms
 
-Per Adobe Stock's standard license, these assets may be used in personal and
-commercial projects, modified, and incorporated into derivative works subject
-to Adobe's terms of use. They may not be redistributed standalone, used in
-templates intended for resale, or used in ways that imply Adobe sponsorship.
+These assets are licensed under the **Extended License** clauses of Adobe's
+*Stock Product Specific Terms*. The version in effect at the time of purchase
+is archived in this repository at `licenses/adobe-stock-2026-01-16.pdf`
+(last updated 2026-01-16 per the cover page).
 
-Full current terms: <https://stock.adobe.com/license-terms>
+Canonical (live) URL:
+<https://www.adobe.com/cc-shared/assets/pdf/legal/servicetou/stock-product-specific-terms-en-us-20260116.pdf>
 
-## Proof of license
+## Purchase invoice (not the license itself)
 
-The original purchase invoice is held locally at
-`ui/attached_assets/AdobeStock-482408992-License.PDF` (gitignored, not part
-of this repository). Retain that file as proof of license in the event of an
-Adobe audit.
+The PDF held locally at `ui/attached_assets/AdobeStock-482408992-License.PDF`
+(gitignored) is the **purchase invoice**, not the license document. It records
+that this asset was purchased; the rights granted are defined by the
+*Stock Product Specific Terms* above. Retain the invoice as proof of purchase
+in the event of an Adobe audit.
 
 ## Provenance
 

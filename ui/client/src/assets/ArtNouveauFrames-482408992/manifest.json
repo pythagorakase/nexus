@@ -5,7 +5,12 @@
     "asset_id": "482408992",
     "purchased": "2026-05-23"
   },
-  "license": "Adobe Stock Standard / On-Demand (see LICENSE.md)",
+  "license": {
+    "type": "Adobe Stock Extended License",
+    "purchase_mechanism": "On-Demand",
+    "terms_document": "licenses/adobe-stock-2026-01-16.pdf",
+    "see_also": "LICENSE.md"
+  },
   "extracted_from": "AdobeStock-482408992-ArtNouveauFrames.ai",
   "extractor": "/.claude/skills/extract-vector-grid",
   "grid": {"rows": 2, "cols": 5},
