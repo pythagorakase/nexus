@@ -15,6 +15,7 @@ Commands:
     nexus character-apply --slot N  Dry-run ready character manifest operations
     nexus place-manifest --slot N  Build reviewed place tag manifest
     nexus place-apply --slot N  Dry-run ready place manifest operations
+    nexus backfill-review-packet --slot N  Summarize manifest review queues
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -520,6 +521,46 @@ def _print_entity_tag_apply(payload: Dict[str, Any], payload_key: str) -> None:
             print(f"  ...{len(blocked) - 10} more")
 
 
+def _print_backfill_review_packet(payload: Dict[str, Any]) -> None:
+    """Print a Slot backfill review packet summary."""
+
+    packet = payload.get("backfill_review_packet") or {}
+    counters = packet.get("counters") or {}
+    families = packet.get("families") or {}
+    print("Review packet:")
+    print(f"  schema_version: {packet.get('schema_version')}")
+    print(f"  slot: {packet.get('slot')}")
+    if payload.get("packet_output"):
+        print(f"  output: {payload.get('packet_output')}")
+
+    print()
+    print("Counters:")
+    for key in (
+        "operation_items",
+        "ready_operations",
+        "review_required_operations",
+        "queue:registered_single_entity",
+        "queue:missing_target_tag",
+        "queue:pair_target_resolution",
+        "queue:prose_or_event",
+        "queue:structured_remainder",
+        "queue:drop_after_review",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+
+    print()
+    print("Families:")
+    for family in ("faction", "character", "place"):
+        family_packet = families.get(family) or {}
+        family_counters = family_packet.get("counters") or {}
+        print(
+            "  - "
+            f"{family}: {family_counters.get('operation_items', 0)} ops, "
+            f"{family_counters.get('ready_operations', 0)} ready, "
+            f"{family_counters.get('review_required_operations', 0)} review-required"
+        )
+
+
 def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) -> None:
     """Emit payload to stdout in JSON or human-readable format."""
     if as_json:
@@ -567,6 +608,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("place_apply"):
         _print_entity_tag_apply(payload, "place_apply")
+        print()
+
+    if payload.get("backfill_review_packet"):
+        _print_backfill_review_packet(payload)
         print()
 
     # Get display elements
@@ -1612,6 +1657,47 @@ def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_backfill_review_packet(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build a read-only review packet from Slot backfill manifests."""
+
+    from nexus.api.backfill_review_packet import (
+        build_backfill_review_packet,
+        render_backfill_review_packet_markdown,
+    )
+
+    manifests = {
+        "faction": _load_faction_manifest_file(args.faction_manifest),
+        "character": _load_entity_manifest_file(
+            args.character_manifest,
+            payload_key="character_manifest",
+        ),
+        "place": _load_entity_manifest_file(
+            args.place_manifest,
+            payload_key="place_manifest",
+        ),
+    }
+    packet = build_backfill_review_packet(
+        manifests,
+        slot=args.slot,
+        examples_per_queue=args.examples_per_queue,
+    )
+    packet_markdown = render_backfill_review_packet_markdown(packet)
+
+    output_path = getattr(args, "output", None)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(packet_markdown, encoding="utf-8")
+
+    return {
+        "success": True,
+        "message": f"Backfill review packet for slot {args.slot}.",
+        "slot": args.slot,
+        "backfill_review_packet": packet,
+        "packet_output": str(output_path) if output_path is not None else None,
+        "packet_markdown": None if output_path is not None else packet_markdown,
+    }
+
+
 def _load_faction_manifest_file(path: Path) -> Mapping[str, Any]:
     """Load a raw faction manifest or full CLI JSON payload from disk."""
 
@@ -1771,7 +1857,8 @@ Examples:
   nexus character-apply --slot 2  Dry-run ready character manifest operations
   nexus place-manifest --slot 2  Build place tag manifest
   nexus place-apply --slot 2  Dry-run ready place manifest operations
-""",
+  nexus backfill-review-packet --slot 2 --faction-manifest faction.json ...
+        """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
     parser.add_argument(
@@ -2043,6 +2130,44 @@ Examples:
         help="entity_tag_source_kind stamped on inserted rows when --execute is set.",
     )
 
+    # backfill-review-packet command
+    review_packet_parser = subparsers.add_parser(
+        "backfill-review-packet",
+        help="Build a read-only review packet from backfill manifests",
+    )
+    review_packet_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    review_packet_parser.add_argument(
+        "--faction-manifest",
+        type=Path,
+        required=True,
+        help="Faction manifest JSON to summarize.",
+    )
+    review_packet_parser.add_argument(
+        "--character-manifest",
+        type=Path,
+        required=True,
+        help="Character manifest JSON to summarize.",
+    )
+    review_packet_parser.add_argument(
+        "--place-manifest",
+        type=Path,
+        required=True,
+        help="Place manifest JSON to summarize.",
+    )
+    review_packet_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional Markdown output path for the review packet.",
+    )
+    review_packet_parser.add_argument(
+        "--examples-per-queue",
+        type=int,
+        default=5,
+        help="Maximum example rows to show per family review queue.",
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -2082,6 +2207,7 @@ def main() -> int:
         "character-apply",
         "place-manifest",
         "place-apply",
+        "backfill-review-packet",
         "lock",
         "unlock",
     ):
@@ -2126,6 +2252,8 @@ def main() -> int:
         result = run_place_manifest(args)
     elif args.command == "place-apply":
         result = run_place_apply(args)
+    elif args.command == "backfill-review-packet":
+        result = run_backfill_review_packet(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":

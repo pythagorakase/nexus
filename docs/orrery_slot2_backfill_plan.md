@@ -52,6 +52,11 @@ poetry run nexus --json character-manifest --slot 2 --output temp/slot2_backfill
 poetry run nexus --json faction-apply --slot 2 --manifest temp/slot2_backfill/faction_manifest_phase4_post055.json
 poetry run nexus --json character-apply --slot 2
 poetry run nexus --json place-apply --slot 2
+poetry run nexus backfill-review-packet --slot 2 \
+  --faction-manifest temp/slot2_backfill/faction_manifest_phase4_post055.json \
+  --character-manifest temp/slot2_backfill/character_manifest_phase4_post055.json \
+  --place-manifest temp/slot2_backfill/place_manifest_phase5.json \
+  --output temp/slot2_backfill/review_packet_phase6.md
 ```
 
 Observed entity counts:
@@ -84,6 +89,17 @@ Post-migration manifest results:
 | faction | 145 | 0 | 145 | `faction-apply` dry-run skipped all rows as review-required and would insert 0 tags. |
 | character | 188 | 0 | 188 | 15 candidate renames resolve to registered target tags; 118 operations still lack registered target tags and need review/prose/pair-tag handling. `character-apply` dry-run skipped all rows and would insert 0 tags. |
 | place | 889 | 0 | 889 | All target tags are registered; `place-apply` dry-run skipped all rows and would insert 0 tags. |
+
+Review packet result:
+
+| Queue | Operations | Reading |
+|---|---:|---|
+| registered single-entity candidates | 980 | Narrowest non-destructive review surface; still not apply-ready until the reviewer promotes individual rows. |
+| missing target tags | 118 | Requires vocabulary, prose, or pair-tag decisions. |
+| pair target resolution | 36 | Requires endpoint decisions before any pair-tag apply path. |
+| prose/event rows | 36 | Outside `entity_tags`; preserve or convert through a later prose/world-event slice. |
+| structured remainders | 50 | Requires a substrate decision before mutation. |
+| drop-after-review rows | 2 | Destructive; later reviewed cleanup only. |
 
 Registry spot-checks:
 
@@ -138,6 +154,7 @@ Existing surfaces:
 - `nexus faction-audit --slot N`
 - `nexus faction-manifest --slot N --output PATH`
 - `nexus faction-apply --slot N --manifest PATH [--execute]`
+- `nexus backfill-review-packet --slot N ...`
 
 Slot 2 dry-run result: 145 operations, all review-required. This is expected
 because faction columns are prose-heavy and many legacy values are aliases or
@@ -164,6 +181,7 @@ Existing surface:
 
 - `nexus place-manifest --slot N --output PATH`
 - `nexus place-apply --slot N --manifest PATH [--execute]`
+- `nexus backfill-review-packet --slot N ...`
 
 Slot 2 dry-run result: 889 operations across 78 places, all review-required.
 Every target tag is registered; there are no ready writes. The manifest scans
@@ -208,6 +226,7 @@ Existing surfaces:
 
 - `nexus character-manifest --slot N --output PATH`
 - `nexus character-apply --slot N --manifest PATH [--execute]`
+- `nexus backfill-review-packet --slot N ...`
 
 Do not run a broad character apply until these remaining surfaces are reviewed:
 
@@ -258,16 +277,18 @@ checkpoint.
    exist in target slots. **Done locally for Slot 2.**
 3. Generate three read-only manifests for Slot 2: faction, place, character.
    **Done.**
-4. Review manifests in that order: faction first because tooling exists, place
+4. Generate a read-only review packet from the three manifests. **Done.**
+5. Review manifests in that order: faction first because tooling exists, place
    second because there are no existing place rows to preserve, character last
-   because it has the most category drift.
-5. Apply ready non-destructive entity-tag rows to Slot 2 only. **Apply
+   because it has the most category drift. Use the review packet queues to find
+   narrow registered single-entity candidates before pair/prose/remainder work.
+6. Apply ready non-destructive entity-tag rows to Slot 2 only. **Apply
    commands are in place; current manifests have 0 ready rows, so dry-runs
    insert 0 tags.**
-6. Re-run Orrery resolver/template tests and a Slot 2 dry run.
-7. Only then clear legacy rows, drop obsolete faction columns, and remove
+7. Re-run Orrery resolver/template tests and a Slot 2 dry run.
+8. Only then clear legacy rows, drop obsolete faction columns, and remove
    resolver shims in separate migrations.
-8. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
+9. Refresh retrograde seed vocabulary/config after the registry-backed Slot 2
    rewrite is stable.
 
 ## Stop Conditions
