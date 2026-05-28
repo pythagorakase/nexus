@@ -177,9 +177,9 @@ Initial classification:
 
 Next actions:
 
-1. Apply migration 055 before building a character manifest.
-2. Add a character manifest builder that reports keep/rename/drop/pair-tag/prose
-   decisions without applying them.
+1. Apply migration 055 before building the final reviewed character manifest.
+2. Run `nexus character-manifest --slot 2 --output PATH` to report
+   keep/rename/drop/pair-tag/prose decisions without applying them.
 3. Reconcile the existing Slot 2 reference taggings in
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
