@@ -15,12 +15,18 @@ from typing import Any, Mapping, Optional, Sequence
 FACTION_MANIFEST_SCHEMA_VERSION = "faction-migration-manifest.v1"
 FACTION_APPLY_SCHEMA_VERSION = "faction-migration-apply.v1"
 FACTION_MIGRATION_SOURCE_KIND = "system"
+FACTION_CATEGORY_CARDINALITY = {
+    "ideology": "multi",
+    "resource_base": "multi",
+    "legitimacy": "exclusive",
+    "operational_mode": "exclusive",
+    "power_status": "exclusive",
+    "agenda": "multi",
+}
 EXCLUSIVE_FACTION_CATEGORIES = frozenset(
-    {
-        "legitimacy",
-        "operational_mode",
-        "power_status",
-    }
+    category
+    for category, cardinality in FACTION_CATEGORY_CARDINALITY.items()
+    if cardinality == "exclusive"
 )
 _CATEGORY_REFACTOR = importlib.import_module(
     "migrations.043_orrery_category_refactor_phase1"
@@ -1314,8 +1320,8 @@ def _manifest_operation(
 ) -> dict[str, Any]:
     target_kind = str(candidate.get("target_kind") or "manual_review")
     if target_kind == "entity_tag":
-        apply_ready = _candidate_is_apply_ready(candidate) and bool(
-            faction.get("entity_id")
+        apply_ready = _candidate_is_apply_ready(candidate) and (
+            faction.get("entity_id") is not None
         )
         operation_type = "insert_entity_tag" if apply_ready else "review_entity_tag"
         status = "ready" if apply_ready else "review_required"
@@ -1428,7 +1434,7 @@ def _manifest_operation_reason(
     if (
         status != "ready"
         and candidate.get("target_kind") == "entity_tag"
-        and not faction.get("entity_id")
+        and faction.get("entity_id") is None
     ):
         suffix = "Faction row has no entity_id, so an entity_tag cannot be written."
         return f"{reason} {suffix}".strip()
@@ -1525,7 +1531,10 @@ def _load_current_world_time(cur: Any) -> Any:
     row = cur.fetchone()
     if row is None:
         return None
-    return _row_value(row, "world_time")
+    world_time = _row_value(row, "world_time")
+    if world_time is None:
+        return None
+    return world_time
 
 
 def _lookup_apply_tag(cur: Any, *, tag: str, category: str) -> Mapping[str, Any]:

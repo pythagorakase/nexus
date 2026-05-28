@@ -585,10 +585,10 @@ Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `m
 ## Faction Categories
 
 Companion: `docs/orrery_faction_vocabulary.md`. Migration 052 seeds the 65
-faction tag anchors, and `nexus faction-apply --slot N [--execute]` covers the
-deterministic entity-tag rewrite slice. Review-required Slot 2 values, faction
-table API cleanup, column drops, and clearance-event collapse remain follow-up
-work.
+faction tag anchors, and `nexus faction-apply --slot N --manifest PATH
+[--execute]` covers the reviewed deterministic entity-tag rewrite slice.
+Review-required Slot 2 values, faction table API cleanup, column drops, and
+clearance-event collapse remain follow-up work.
 
 Faction categories describe group-level actors: institutions, movements,
 corporations, gangs, churches, polities, guilds, scenes, families, and other

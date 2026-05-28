@@ -10,7 +10,7 @@ Commands:
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
-    nexus faction-apply --slot N  Dry-run/apply ready faction manifest operations
+    nexus faction-apply --slot N  Dry-run ready faction manifest operations
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -21,9 +21,10 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import requests
 
@@ -39,6 +40,13 @@ TERMINAL_GENERATION_STATUSES = {
     "committed",
 }
 GENERATION_POLL_SECONDS = 240
+FACTION_APPLY_SOURCE_KIND_CHOICES = (
+    "authored",
+    "llm_generated",
+    "system",
+    "template",
+    "skald_inline",
+)
 
 
 def get_api_url() -> str:
@@ -1163,12 +1171,20 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
         slot=args.slot,
         dbname=dbname,
     )
+    output_path = getattr(args, "output", None)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
     return {
         "success": True,
         "message": f"Faction migration manifest for slot {args.slot} (dry run).",
         "slot": args.slot,
         "dbname": dbname,
         "faction_manifest": manifest,
+        "manifest_output": str(output_path) if output_path is not None else None,
     }
 
 
@@ -1185,16 +1201,58 @@ def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
 
     dbname = slot_dbname(args.slot)
     dry_run = not args.execute
+    if args.source_kind not in FACTION_APPLY_SOURCE_KIND_CHOICES:
+        return {
+            "success": False,
+            "error": (
+                f"--source-kind must be one of "
+                f"{', '.join(FACTION_APPLY_SOURCE_KIND_CHOICES)}"
+            ),
+        }
+
+    manifest_path = getattr(args, "manifest", None)
+    if args.execute and manifest_path is None:
+        return {
+            "success": False,
+            "error": (
+                "--manifest is required with --execute; first persist a reviewed "
+                "manifest with `nexus faction-manifest --slot N --output PATH`."
+            ),
+        }
+
+    manifest: Mapping[str, Any] | None = None
+    if manifest_path is not None:
+        manifest = _load_faction_manifest_file(manifest_path)
+        manifest_slot = (manifest.get("source") or {}).get("slot")
+        manifest_dbname = (manifest.get("source") or {}).get("dbname")
+        if manifest_slot is not None and int(manifest_slot) != args.slot:
+            return {
+                "success": False,
+                "error": (
+                    f"Manifest slot {manifest_slot} does not match "
+                    f"--slot {args.slot}"
+                ),
+            }
+        if manifest_dbname is not None and manifest_dbname != dbname:
+            return {
+                "success": False,
+                "error": (
+                    f"Manifest dbname {manifest_dbname!r} does not match "
+                    f"slot {args.slot} dbname {dbname!r}"
+                ),
+            }
+
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             if dry_run:
                 cur.execute("BEGIN READ ONLY")
-            audit = build_faction_table_audit(cur)
-            manifest = build_faction_migration_manifest(
-                audit,
-                slot=args.slot,
-                dbname=dbname,
-            )
+            if manifest is None:
+                audit = build_faction_table_audit(cur)
+                manifest = build_faction_migration_manifest(
+                    audit,
+                    slot=args.slot,
+                    dbname=dbname,
+                )
             apply_result = apply_faction_migration_manifest(
                 cur,
                 manifest,
@@ -1210,6 +1268,19 @@ def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
         "dbname": dbname,
         "faction_apply": apply_result,
     }
+
+
+def _load_faction_manifest_file(path: Path) -> Mapping[str, Any]:
+    """Load a raw faction manifest or full CLI JSON payload from disk."""
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError("Faction manifest file must contain a JSON object")
+
+    manifest = data.get("faction_manifest", data)
+    if not isinstance(manifest, dict):
+        raise ValueError("Faction manifest payload must be a JSON object")
+    return manifest
 
 
 def run_lock(args: argparse.Namespace) -> Dict[str, Any]:
@@ -1285,6 +1356,7 @@ Examples:
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
+  nexus faction-apply --slot 2 --manifest manifest.json --execute
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1428,6 +1500,11 @@ Examples:
     faction_manifest_parser.add_argument(
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
+    faction_manifest_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the raw faction migration manifest JSON.",
+    )
 
     # faction-apply command
     faction_apply_parser = subparsers.add_parser(
@@ -1440,16 +1517,25 @@ Examples:
         "--slot", type=int, required=True, help="Slot number (1-5)"
     )
     faction_apply_parser.add_argument(
+        "--manifest",
+        type=Path,
+        help=(
+            "Reviewed manifest JSON to apply. Required with --execute; "
+            "without it, dry-run rebuilds the manifest from the live slot."
+        ),
+    )
+    faction_apply_parser.add_argument(
         "--execute",
         action="store_true",
         help=(
-            "Write ready entity_tags. Without this flag the command uses a "
-            "read-only dry run."
+            "Write ready entity_tags from --manifest. Without this flag the "
+            "command uses a read-only dry run."
         ),
     )
     faction_apply_parser.add_argument(
         "--source-kind",
         default="system",
+        choices=FACTION_APPLY_SOURCE_KIND_CHOICES,
         help="entity_tag_source_kind stamped on inserted rows when --execute is set.",
     )
 
