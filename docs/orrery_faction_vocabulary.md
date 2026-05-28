@@ -1,6 +1,6 @@
 # Orrery Faction Vocabulary
 
-**Status:** draft design spec for faction single-entity tag categories. Companion to `docs/orrery_tag_vocabulary.md`; downstream implementation is expected to seed these tags, rewrite legacy Slot 2 faction tags, and update any faction table cleanup plan.
+**Status:** draft design spec for faction single-entity tag categories. Companion to `docs/orrery_tag_vocabulary.md`; migration 052 seeds the 65 tag anchors. Legacy Slot 2 faction tag rewrite, faction-table cleanup, and clearance-event collapse remain separate follow-up work.
 
 ---
 
@@ -197,6 +197,8 @@ The replacement names are longer, but they are easier to guess without peeking a
 
 Faction ephemerals need a clearance/replacement plan before they ship as seeded tags. The state vocabulary's rule applies here too: clearance belongs to the tag row's `clear_on`, not to a central event table. Event names below are design targets unless a migration already registers them.
 
+Migration 052 seeds `power_status` and `agenda` rows with `clearance_kind='semantic'`, `reapplication_policy='replace'`, and per-row `clear_on.description` text so runtime bestowal can begin without duration overrides or unregistered event dependencies. A later clearance migration can promote specific rows to event clearance after the event names are collapsed and registered.
+
 ### `power_status`
 
 `power_status` should usually be replaced rather than cleared to absence. A faction without an active power row is "unknown," not necessarily stable.
@@ -330,7 +332,7 @@ Preflight command:
 
 ## Mechanical Implications
 
-1. **Registry categories.** Migration 043 already registers the six categories used here. The draft intentionally avoids adding faction `state`, so a future seeding migration can stay within that surface unless review admits a seventh category.
+1. **Registry categories.** Migration 043 registers the six categories used here, and migration 052 seeds the 65 canonical tag rows. The draft intentionally avoids adding faction `state`; any future seventh category needs a separate category-registration migration.
 2. **Cardinality enforcement.** `legitimacy`, `operational_mode`, and `power_status` are exclusive design categories. Until the `tags.cardinality` column ships, application writers must clear sibling rows explicitly, as with current exclusive character categories.
 3. **Slot 2 backfill.** Existing faction tags should be classified as keep/rename/drop/convert-to-pair-tag. Ambiguous `resource_class:network` rows need manual review because "network" may mean information, patronage, criminal logistics, or membership.
 4. **Package gates.** Packages should prefer category-specific predicates when they care about the axis. A gate that cares whether a faction is public should read `operational_mode`, not `legitimacy`; a gate that cares whether public association is risky should read `legitimacy`.

@@ -9,11 +9,11 @@ Orrery's shape borrows openly from two reference points:
 - **Bethesda's Radiant AI** (Skyrim, Fallout): NPCs have schedules, dispositions, and faction-affiliated routines that run independent of player presence. Off-screen state isn't fiction; it's the canonical answer to "what is this NPC doing right now?"
 - **Dwarf Fortress**: autonomous agents with needs, relationships, and emergent off-screen events that produce historical record. The world simulates regardless of where attention is currently pointed.
 
-What distinguishes Orrery from either of those is LLM-native integration: deterministic resolution feeds prose generation, prose feeds a *curated bleed menu*, and the storyteller (Skald) retains full authorial latitude over what makes it into the actual narrative chunk. The deterministic substrate decides what's *true*; the storyteller decides what's *said*.
+What distinguishes Orrery from either of those is LLM-native integration: deterministic resolution feeds Skald a structured proposal stream, Skald retains full authorial authority over current-tick proposals, and accepted off-screen outcomes can later feed narration plus a *curated bleed menu*. The deterministic substrate creates pressure and defaults; Skald decides what becomes canonical for the visible story.
 
 ## Motivating Example
 
-An NPC the player interrogated fifty chunks ago protested that their life was over. Behind the scenes, packages on that NPC tick through fifty chunks of deterministic state resolution. Eventually a high-magnitude branch fires — say, the NPC's retaliation against the player's faction. Prose is generated, persisted into `offscreen_narrations`, never directly surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city, and the storyteller has the option of having a character hear distant sirens. If they do, MEMNON has substrate for retrieval and the moment connects to the long-ago interrogation. If they don't, the dramatic irony lives quietly in the database, available for any future scene that wants it.
+An NPC the player interrogated fifty chunks ago protested that their life was over. Behind the scenes, packages on that NPC tick through fifty chunks of deterministic state resolution. Eventually a high-magnitude branch fires — say, the NPC's retaliation against the player's faction. Orrery surfaces the proposal to Skald as imminent activity; if Skald ignores it, the proposal is ratified and committed. Prose is generated, persisted into `offscreen_narrations`, never directly surfaced. Two chunks later the player is in an intimacy scene in an entirely different part of the city, and the storyteller has the option of having a character hear distant sirens. If they do, MEMNON has substrate for retrieval and the moment connects to the long-ago interrogation. If they don't, the dramatic irony lives quietly in the database, available for any future scene that wants it.
 
 This is the shape: the world ticks for everyone, the dramatic salience filter is deterministic, the authorial choice is LLM-authored.
 
@@ -39,12 +39,12 @@ This is the shape: the world ticks for everyone, the dramatic salience filter is
 |---|---|---|---|
 | **Resolve** (Stage 1) | Free (pure Python) | Evaluate templates against per-entity bindings; produce an `OrreryTickProposal` (no writes) | In-cycle, during LORE Phase 4.5 |
 | **Commit** (Stage 2) | Free (SQL) | Stamp `tick_chunk_id`, materialize the proposal into canonical tables, enqueue narration jobs | Inside the accepted-chunk commit transaction |
-| **Clear** (Stage 3) | Deterministic | Event-based clearance runs in the commit transaction; semantic clearance currently no-op | Commit (event-driven) |
+| **Clear** (Stage 3) | Deterministic | Event-based clearance and scheduled-expiry sweeps run in the commit transaction; semantic clearance currently no-op | Commit (event/time-driven) |
 | **Promote** (Stage 4) | Deterministic | Decide which resolutions deserve frontier prose | Post-commit |
 | **Narrate** (Stage 5) | Frontier LLM, async via durable outbox | Generate prose for promoted resolutions; persist into `offscreen_narrations` | Async after commit; durable across process restart |
 | **Bleed** (Stage 6) | Deterministic, storyteller-time | Offer a bounded menu from already-filtered succeeded narrations | LORE Phase 5 (`payload_assembly`), each player turn |
 
-**Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survive two earlier gates — salience-based promotion, then optional bleed selection. The only LLM call in the Orrery path is the Narration step; Promote and Bleed are both deterministic.
+**Cost shape (load-bearing):** Resolve is free and runs at full breadth. Each downstream stage is more expensive per call but operates on a smaller surface. Frontier prose only generates for resolutions that survive promotion. Skald adjudication happens inside the ordinary storyteller call; there is no separate local-LLM adjudicator. The only Orrery-owned frontier call is Narrate; Promote and Bleed are deterministic.
 
 ---
 
@@ -178,7 +178,13 @@ The existing six triplicate relationship/reference tables (`chunk_character_refe
 
 ```sql
 CREATE TYPE entity_tag_source_kind AS ENUM (
-  'authored', 'llm_generated', 'system', 'template', 'auto_registered', 'skald_inline'
+  'authored', 'llm_generated', 'system', 'template',
+  'auto_registered', -- retired legacy literal; writers reject it
+  'skald_inline'
+);
+
+CREATE TYPE entity_tag_clearance_kind AS ENUM (
+  'event', 'semantic', 'authored', 'time'
 );
 
 CREATE TABLE tags (
@@ -202,6 +208,7 @@ CREATE TABLE entity_tags (
   tag_id                 bigint NOT NULL REFERENCES tags(id),
   applied_at             timestamp NOT NULL DEFAULT now(),
   applied_at_world_time  timestamptz,
+  expires_at_world_time  timestamptz,
   clear_on_override      jsonb,
   cleared_at             timestamp,                   -- NULL means current
   template_id            text,                        -- if applied by a template
@@ -209,10 +216,15 @@ CREATE TABLE entity_tags (
   UNIQUE (entity_id, tag_id, applied_at)
 );
 
+CREATE UNIQUE INDEX ix_entity_tags_current
+  ON entity_tags (entity_id, tag_id)
+  WHERE cleared_at IS NULL;
+
 CREATE VIEW entity_tags_current AS
   SELECT et.id AS entity_tag_id, et.entity_id, e.kind AS entity_kind,
          t.tag, t.category, t.is_ephemeral, t.clearance_kind,
-         et.applied_at, et.applied_at_world_time, et.source_kind, et.template_id
+         et.applied_at, et.applied_at_world_time, et.expires_at_world_time,
+         et.source_kind, et.template_id
   FROM entity_tags et
   JOIN entities e ON e.id = et.entity_id
   JOIN tags t ON t.id = et.tag_id
@@ -238,8 +250,59 @@ Design constraints:
 - Surrogate `entity_tags.id` (not composite key); allows multiple historical applications.
 - Single FK to `entities(id)`, no discriminator column.
 - `cleared_at` column for cheap current-view reads.
-- Three clearance kinds: `event` / `semantic` / `authored`. No clock-based expiry.
-- `source_kind` as a real PG enum. `'auto_registered'` satisfies the Vocabulary Growth contract; `'skald_inline'` is the runtime path from Skald tagging during structured-output entity registration.
+- Four clearance kinds: `event` / `semantic` / `authored` / `time`. `semantic` remains a conservative no-op until a non-local clearance signal exists; `time` records scheduled-expiry sweeps.
+- `entity_tags.expires_at_world_time` supports duration-bearing states. The accepted-tick commit path clears expired rows and records `tag_clearance_log.mechanism = 'time'`.
+- `source_kind` is a real PG enum. `skald_inline` is the runtime path from Skald tagging during structured-output entity registration. `auto_registered` remains an old enum literal for migration compatibility only; closed-vocabulary writers reject it.
+- Runtime tag bestowal is closed-vocabulary: unknown, deprecated, or entity-kind-incompatible tags raise.
+
+### Pair Tag System
+
+Multi-entity tags are directed binary relations between rows in the entity
+spine. They live in `entity_pair_tags`, with vocabulary and endpoint-kind
+constraints in `pair_tags`.
+
+```sql
+CREATE TABLE pair_tags (
+  id                   bigserial PRIMARY KEY,
+  tag                  text UNIQUE NOT NULL,
+  subject_kinds        text[] NOT NULL,
+  object_kinds         text[] NOT NULL,
+  is_ephemeral         boolean NOT NULL DEFAULT false,
+  clearance_kind       entity_tag_clearance_kind,
+  reapplication_policy entity_tag_reapplication_policy,
+  clear_on             jsonb,
+  deprecated           boolean NOT NULL DEFAULT false,
+  description          text,
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  CHECK (is_ephemeral = (clearance_kind IS NOT NULL)),
+  CHECK (cardinality(subject_kinds) >= 1),
+  CHECK (cardinality(object_kinds) >= 1)
+);
+
+CREATE TABLE entity_pair_tags (
+  id                    bigserial PRIMARY KEY,
+  subject_entity_id     bigint NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  object_entity_id      bigint NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  pair_tag_id           bigint NOT NULL REFERENCES pair_tags(id),
+  applied_at            timestamptz NOT NULL DEFAULT now(),
+  applied_at_world_time timestamptz,
+  source_kind           entity_tag_source_kind NOT NULL,
+  cleared_at            timestamptz,
+  clear_on_override     jsonb,
+  template_id           text,
+  CHECK (subject_entity_id <> object_entity_id)
+);
+
+CREATE UNIQUE INDEX ix_entity_pair_tags_current
+  ON entity_pair_tags (subject_entity_id, object_entity_id, pair_tag_id)
+  WHERE cleared_at IS NULL;
+```
+
+Design constraints:
+- Pair tags are not rich relationship rows. They are package-facing facts such as `claims(faction -> place)`, `knows_location(character -> place)`, `hunting(faction -> character)`, or `status:senior(character -> faction)`.
+- Endpoint polymorphism is declared in `pair_tags.subject_kinds` and `pair_tags.object_kinds`; writers validate against the entity spine before inserting.
+- The active-edge uniqueness index gives one current row per `(subject, object, pair_tag)`, while historical cleared rows remain available for audit.
+- Seeded families now include the original relation set (migration 042), trait/status additions and `claims` subject-kind extension (migration 045), kind-qualified `contact:<kind>` rows (migration 047), and the `pursuing` -> `hunting` rename (migration 048).
 
 ### Event Stream
 
@@ -383,6 +446,7 @@ Storyteller-time Bleed chooses deterministically from these eligible narrated ev
 - **Resolve runs in-cycle** during LORE Phase 4.5 (`TurnPhase.ORRERY_RESOLVE`), between `DEEP_QUERIES` and `PAYLOAD_ASSEMBLY`. Pure Python; no writes.
 - **CommitOrreryTick** runs as Step 8.5 inside `commit_incubator_to_database{,_sync}`. All canonical writes happen here.
 - **Clear (event)** runs in the same commit transaction as the triggering event.
+- **Clear (time)** sweeps open `entity_tags` rows whose `expires_at_world_time` is at or before the accepted tick's world time, recording `tag_clearance_log` rows with mechanism `time`.
 - **Clear (semantic)** is currently a conservative no-op until a non-local clearance signal exists.
 - **Promote** runs post-commit, deterministically, batched per tick.
 - **Narrate** is async via durable outbox. Bleed reads only `state='succeeded'` narrations + deterministic briefs.
@@ -429,11 +493,14 @@ Postgres FKs enforce existence; `EntityRef` is a typed read-side convenience tha
 
 ## Invariants and Contracts
 
-### Vocabulary Growth Contract
+### Closed Vocabulary Contract
 
 When a tag or `event_type` is referenced that the registry hasn't seen:
 - **Resolver-sourced**: fail loudly. Templates must register their vocabulary before use.
-- **Apex/Skald-sourced**: auto-register with `source_kind='auto_registered'` or `'skald_inline'` and `description='AUTO: pending review'`. Surfaces in periodic curation.
+- **Apex/Skald-sourced tags**: fail loudly. Skald may bestow only registered, non-deprecated tags allowed for the target entity kind. `skald_inline` is provenance, not a vocabulary-growth loophole.
+- **Event types**: fail loudly for authored templates and structured replacement events. Register event vocabulary in migrations before a template or adjudication contract depends on it.
+
+`auto_registered` remains in the PostgreSQL enum because enum-value removal is not worth the migration risk, but runtime code treats it as disallowed.
 
 ### ALWAYS-Fallback Invariant
 
@@ -508,7 +575,7 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 - `nexus/agents/orrery/substrate.py` — package primitive (`Template`, `Branch`, predicates, `evaluate`, `evaluate_stack`)
 - `nexus/agents/orrery/templates.py` — package catalog
 - `nexus/agents/orrery/resolver.py` — `resolve_dry_run` + binding composers
-- `nexus/agents/orrery/events.py` — canonical event writer (`emit_state_updates_events`, `emit_event`)
+- `nexus/agents/orrery/events.py` — canonical event writer (`emit_state_updates_events`, `emit_event`), event tag clearance, and scheduled-expiry sweeps
 - `nexus/agents/orrery/bleed.py` — bleed candidate query + offer bookkeeping
 - `nexus/agents/orrery/worker.py` — Promote / narration outbox drain
 - `nexus/api/trait_compiler.py` — new-story trait → Orrery compiler, final apply, dry-run compile, and pair-tag/relationship drift reconciliation
@@ -521,6 +588,8 @@ Every model reference uses the `@provider.role` syntax that the config loader re
 - `docs/orrery_needs.md` — design rationale for the physiological and interpersonal need packages (SLEEP, EAT, DRINK, SOCIALIZE, INTIMACY): the substrate-vs-storyteller principle, the graduated severity pattern, the stimulant gate-suppression pattern, modulator tags, intimacy suppressors, the Pete worked example, and open questions. Companion to the mechanical catalog at `docs/orrery_packages.md`.
 - `docs/orrery_retrograde_spec.md` — design spec for deep-history generation (Orrery run backward at wizard-time and per-entity stub maturation at runtime). Phase 3+ work.
 - `docs/orrery_tag_vocabulary.md` — registry-level closed-vocabulary specification for tag categories (single-entity tags, multi-entity pair tags, place / faction categories, trait_menu alignment).
+- `docs/orrery_state_vocabulary.md` — state-tag vocabulary, clearance contracts, pharmacologic/time-cleared states, and current substrate debts.
+- `docs/orrery_faction_vocabulary.md` — faction tag vocabulary seeded by migration 052, legacy category mapping, and faction-table cleanup implications.
 
 ---
 

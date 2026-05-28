@@ -1,5 +1,6 @@
 """Tests for migration discovery around Orrery's Python migration."""
 
+import json
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -618,6 +619,44 @@ def test_time_clearance_kind_migration_extends_tag_clearance_enum() -> None:
     assert 'sql.Literal("time")' in migration_source
 
 
+def test_faction_tag_vocab_migration_seeds_closed_anchor_set() -> None:
+    """Migration 052 seeds the closed faction vocabulary from the doc draft."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "052_orrery_faction_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    durable_tags = {
+        (tag, category) for tag, category, _description in migration.DURABLE_TAGS
+    }
+    ephemeral_tags = {
+        (tag, category)
+        for tag, category, _clear_on_json, _description in migration.EPHEMERAL_TAGS
+    }
+    tag_names = {tag for tag, _category in durable_tags | ephemeral_tags}
+
+    assert len(tag_names) == 65
+    assert len(migration.DURABLE_TAGS) == 39
+    assert len(migration.EPHEMERAL_TAGS) == 26
+    assert {
+        "ideology",
+        "resource_base",
+        "legitimacy",
+        "operational_mode",
+    } == {category for _tag, category in durable_tags}
+    assert {"power_status", "agenda"} == {category for _tag, category in ephemeral_tags}
+    assert {
+        "stable",
+        "capital",
+        "territory",
+        "underground",
+        "retaliate",
+    } <= tag_names
+    assert "'replace'::entity_tag_reapplication_policy" in migration_path.read_text()
+
+
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
     """Migration 049 DDL is idempotent against a real slot schema."""
@@ -655,6 +694,90 @@ def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> Non
                         "ALTER TABLE entity_tags "
                         "DROP COLUMN IF EXISTS expires_at_world_time"
                     )
+        conn.close()
+
+
+@pytest.mark.requires_postgres
+def test_faction_tag_vocab_migration_executes_against_slot_db() -> None:
+    """Migration 052 seeds all faction anchors idempotently against a real slot."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "052_orrery_faction_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    durable = {
+        tag: (category, description)
+        for tag, category, description in migration.DURABLE_TAGS
+    }
+    ephemeral = {
+        tag: (category, json.loads(clear_on_json), description)
+        for tag, category, clear_on_json, description in migration.EPHEMERAL_TAGS
+    }
+    faction_tags = [*durable, *ephemeral]
+
+    try:
+        conn = psycopg2.connect(get_slot_db_url(dbname="save_05"))
+    except psycopg2.Error as exc:
+        pytest.skip(f"save_05 PostgreSQL test database unavailable: {exc}")
+
+    snapshot = _snapshot_tags(conn, faction_tags)
+    try:
+        migration.run(conn)
+        migration.run(conn)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tag, category, is_ephemeral, clearance_kind::text,
+                       reapplication_policy::text, clear_on,
+                       deprecated, synonym_for, description
+                FROM tags
+                WHERE tag = ANY(%s)
+                """,
+                (faction_tags,),
+            )
+            rows = {
+                row[0]: (
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    _normalize_jsonb(row[5]),
+                    row[6],
+                    row[7],
+                    row[8],
+                )
+                for row in cur.fetchall()
+            }
+
+        assert set(rows) == set(faction_tags)
+        for tag, (category, description) in durable.items():
+            assert rows[tag] == (
+                category,
+                False,
+                None,
+                None,
+                None,
+                False,
+                None,
+                description,
+            )
+        for tag, (category, clear_on, description) in ephemeral.items():
+            assert rows[tag] == (
+                category,
+                True,
+                "semantic",
+                "replace",
+                clear_on,
+                False,
+                None,
+                description,
+            )
+    finally:
+        conn.rollback()
+        _restore_tags(conn, snapshot, faction_tags)
         conn.close()
 
 
@@ -960,6 +1083,12 @@ def _index_definition(conn: Any, index_name: str) -> str | None:
         )
         row = cur.fetchone()
         return row[0] if row is not None else None
+
+
+def _normalize_jsonb(value: Any) -> Any:
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def _snapshot_event_types(
