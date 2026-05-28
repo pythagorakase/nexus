@@ -23,6 +23,7 @@ from nexus.agents.logon.apex_schema import (
     ReferenceType,
     ReferencedEntities
 )
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
 
 logger = logging.getLogger("nexus.api.db_converters")
 
@@ -400,4 +401,32 @@ async def create_new_faction(conn: asyncpg.Connection, new_faction: NewFaction) 
         _json_dumps_model(new_faction.extra_data),
     )
 
+    await apply_new_faction_tags(conn, faction_id, new_faction)
     return faction_id
+
+
+async def apply_new_faction_tags(
+    conn: asyncpg.Connection, faction_id: int, new_faction: NewFaction
+) -> None:
+    """Apply inline Orrery tags for async-created factions."""
+
+    bestowal = getattr(new_faction, "orrery_tags", None)
+    if bestowal is None:
+        return
+
+    entity_id = await conn.fetchval(
+        "SELECT entity_id FROM factions WHERE id = $1",
+        faction_id,
+    )
+    if entity_id is None:
+        raise ValueError(f"Faction ID {faction_id} not found for tag bestowal")
+
+    counters = await apply_tag_bestowal_async(
+        conn,
+        entity_id=entity_id,
+        entity_kind="faction",
+        bestowal=bestowal,
+        source_kind="skald_inline",
+    )
+    if any(counters.values()):
+        logger.info(f"Tag bestowal faction/{faction_id}: {counters}")

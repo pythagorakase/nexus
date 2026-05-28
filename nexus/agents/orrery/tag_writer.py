@@ -144,6 +144,91 @@ def apply_tag_bestowal(
     return counters
 
 
+async def apply_tag_bestowal_async(
+    conn: Any,
+    *,
+    entity_id: int,
+    entity_kind: str,
+    bestowal: Optional[OrreryTagBestowal],
+    source_kind: str = "skald_inline",
+    world_time: Optional[datetime] = None,
+    duration_override: Optional[timedelta] = None,
+) -> dict[str, int]:
+    """Asyncpg equivalent of apply_tag_bestowal for async commit paths."""
+
+    counters = {
+        "applied": 0,
+        "cleared": 0,
+    }
+
+    if bestowal is None:
+        return counters
+
+    _validate_source_kind(source_kind)
+    if entity_kind not in VALID_ENTITY_KINDS:
+        raise ValueError(
+            f"Unknown entity_kind={entity_kind!r}; expected one of "
+            f"{sorted(VALID_ENTITY_KINDS)}"
+        )
+
+    allowed = await _lookup_allowed_categories_async(conn, entity_kind)
+    if not allowed:
+        raise ValueError(
+            f"No Orrery tag categories registered for entity_kind={entity_kind!r}"
+        )
+
+    if world_time is None:
+        world_time = await _load_world_time_async(conn)
+
+    tags_to_apply: list[_TagApplication] = []
+    for tag_name in bestowal.applied_tags:
+        canonical_name, tag_row = await _lookup_canonical_tag_async(conn, tag_name)
+        category = _row_value(tag_row, "category", 1)
+        _validate_allowed_category(
+            category=category,
+            allowed=allowed,
+            tag_name=canonical_name,
+            entity_kind=entity_kind,
+        )
+        tags_to_apply.append(
+            _TagApplication(
+                tag_id=_row_value(tag_row, "id", 0),
+                reapplication_policy=_row_value(tag_row, "reapplication_policy", 3),
+            )
+        )
+
+    tags_to_clear: list[int] = []
+    for clear_name in bestowal.tags_to_clear:
+        canonical_clear, tag_row = await _lookup_canonical_tag_async(conn, clear_name)
+        category = _row_value(tag_row, "category", 1)
+        _validate_allowed_category(
+            category=category,
+            allowed=allowed,
+            tag_name=canonical_clear,
+            entity_kind=entity_kind,
+        )
+        tags_to_clear.append(_row_value(tag_row, "id", 0))
+
+    for tag_application in tags_to_apply:
+        applied = await _insert_entity_tag_async(
+            conn,
+            entity_id=entity_id,
+            tag_id=tag_application.tag_id,
+            source_kind=source_kind,
+            world_time=world_time,
+            duration_override=duration_override,
+            reapplication_policy=tag_application.reapplication_policy,
+        )
+        if applied:
+            counters["applied"] += 1
+
+    for tag_id in tags_to_clear:
+        if await _clear_entity_tag_async(conn, entity_id=entity_id, tag_id=tag_id):
+            counters["cleared"] += 1
+
+    return counters
+
+
 def apply_exclusive_tag_bestowal(
     cur: Any,
     *,
@@ -223,6 +308,18 @@ def _lookup_allowed_categories(cur: Any, entity_kind: str) -> set[str]:
     return {_row_value(row, "category", 0) for row in cur.fetchall()}
 
 
+async def _lookup_allowed_categories_async(conn: Any, entity_kind: str) -> set[str]:
+    rows = await conn.fetch(
+        """
+        SELECT category
+        FROM tag_category_registry
+        WHERE entity_kind = $1::entity_kind
+        """,
+        entity_kind,
+    )
+    return {_row_value(row, "category", 0) for row in rows}
+
+
 def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
     cur.execute(
         """
@@ -235,9 +332,33 @@ def _lookup_tag(cur: Any, tag_name: str) -> Optional[Any]:
     return cur.fetchone()
 
 
+async def _lookup_tag_async(conn: Any, tag_name: str) -> Optional[Any]:
+    return await conn.fetchrow(
+        """
+        SELECT id, category, is_ephemeral, reapplication_policy
+        FROM tags
+        WHERE tag = $1 AND NOT deprecated AND synonym_for IS NULL
+        """,
+        tag_name,
+    )
+
+
 def _lookup_canonical_tag(cur: Any, tag_name: str) -> tuple[str, Any]:
     canonical_name = CANONICAL_TAGS.get(tag_name, tag_name)
     tag_row = _lookup_tag(cur, canonical_name)
+    if tag_row is None:
+        if canonical_name == tag_name:
+            raise ValueError(f"Unknown or deprecated Orrery tag {tag_name!r}")
+        raise ValueError(
+            f"Unknown or deprecated Orrery tag {tag_name!r} "
+            f"(canonicalized to {canonical_name!r})"
+        )
+    return canonical_name, tag_row
+
+
+async def _lookup_canonical_tag_async(conn: Any, tag_name: str) -> tuple[str, Any]:
+    canonical_name = CANONICAL_TAGS.get(tag_name, tag_name)
+    tag_row = await _lookup_tag_async(conn, canonical_name)
     if tag_row is None:
         if canonical_name == tag_name:
             raise ValueError(f"Unknown or deprecated Orrery tag {tag_name!r}")
@@ -273,6 +394,15 @@ def _validate_source_kind(source_kind: str) -> None:
 def _load_world_time(cur: Any) -> Optional[datetime]:
     cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
     row = cur.fetchone()
+    if row is None:
+        return None
+    return _row_value(row, "world_time", 0)
+
+
+async def _load_world_time_async(conn: Any) -> Optional[datetime]:
+    row = await conn.fetchrow(
+        "SELECT max(world_time) AS world_time FROM chunk_metadata"
+    )
     if row is None:
         return None
     return _row_value(row, "world_time", 0)
@@ -374,6 +504,106 @@ def _insert_entity_tag(
     return bool(cur.rowcount)
 
 
+async def _insert_entity_tag_async(
+    conn: Any,
+    *,
+    entity_id: int,
+    tag_id: int,
+    source_kind: str,
+    world_time: Optional[datetime],
+    duration_override: Optional[timedelta],
+    reapplication_policy: Optional[ReapplicationPolicy],
+) -> bool:
+    reapplication_policy = reapplication_policy or "new_row"
+    if reapplication_policy not in _REAPPLICATION_POLICIES:
+        raise ValueError(
+            f"Unsupported entity tag reapplication_policy={reapplication_policy!r}"
+        )
+    if reapplication_policy == "extend_expiry" and duration_override is None:
+        raise ValueError(
+            "reapplication_policy='extend_expiry' requires duration_override"
+        )
+
+    expires_at_world_time = _compute_expires_at_world_time(
+        world_time=world_time,
+        duration_override=duration_override,
+    )
+
+    if reapplication_policy == "replace":
+        result = await conn.execute(
+            """
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind
+            )
+            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = EXCLUDED.expires_at_world_time,
+                source_kind = EXCLUDED.source_kind
+            """,
+            entity_id,
+            tag_id,
+            world_time,
+            expires_at_world_time,
+            source_kind,
+        )
+        return _asyncpg_status_changed(result)
+
+    if reapplication_policy == "extend_expiry":
+        result = await conn.execute(
+            """
+            INSERT INTO entity_tags (
+                entity_id, tag_id, applied_at_world_time,
+                expires_at_world_time, source_kind
+            )
+            VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+            ON CONFLICT (entity_id, tag_id)
+              WHERE cleared_at IS NULL
+              DO UPDATE SET
+                applied_at = now(),
+                applied_at_world_time = EXCLUDED.applied_at_world_time,
+                expires_at_world_time = GREATEST(
+                    COALESCE(
+                        entity_tags.expires_at_world_time,
+                        EXCLUDED.applied_at_world_time
+                    ),
+                    EXCLUDED.applied_at_world_time
+                ) + $6,
+                source_kind = EXCLUDED.source_kind
+            """,
+            entity_id,
+            tag_id,
+            world_time,
+            expires_at_world_time,
+            source_kind,
+            duration_override,
+        )
+        return _asyncpg_status_changed(result)
+
+    result = await conn.execute(
+        """
+        INSERT INTO entity_tags (
+            entity_id, tag_id, applied_at_world_time,
+            expires_at_world_time, source_kind
+        )
+        VALUES ($1, $2, $3, $4, $5::entity_tag_source_kind)
+        ON CONFLICT (entity_id, tag_id)
+          WHERE cleared_at IS NULL
+          DO NOTHING
+        """,
+        entity_id,
+        tag_id,
+        world_time,
+        expires_at_world_time,
+        source_kind,
+    )
+    return _asyncpg_status_changed(result)
+
+
 def _compute_expires_at_world_time(
     *,
     world_time: Optional[datetime],
@@ -453,6 +683,26 @@ def _clear_entity_tag(cur: Any, *, entity_id: int, tag_id: int) -> bool:
         (entity_id, tag_id),
     )
     return bool(cur.rowcount)
+
+
+async def _clear_entity_tag_async(conn: Any, *, entity_id: int, tag_id: int) -> bool:
+    result = await conn.execute(
+        """
+        UPDATE entity_tags
+        SET cleared_at = now()
+        WHERE entity_id = $1 AND tag_id = $2 AND cleared_at IS NULL
+        """,
+        entity_id,
+        tag_id,
+    )
+    return _asyncpg_status_changed(result)
+
+
+def _asyncpg_status_changed(status: str) -> bool:
+    try:
+        return int(status.rsplit(" ", 1)[-1]) > 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _row_value(row: Any, key: str, index: int) -> Any:
