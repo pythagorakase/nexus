@@ -12,7 +12,7 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 
 | Structure | Application table | Carries | Example |
 |---|---|---|---|
-| **Single-entity tag** | `entity_tags` (existing) | Property of one entity | `bodyform:cyborg` on Alex |
+| **Single-entity tag** | `entity_tags` (existing) | Property of one entity | `bodyform:cybernetic` on Nyati |
 | **Multi-entity tag** | `entity_pair_tags` (shipped — see PR #283) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
 | **Rich relationship** | `character_relationships` (existing) | Affective/social state with valence, history, sub-states | Alex/Emilia trust=high, valence=positive |
 
@@ -41,8 +41,8 @@ A tag name that requires its description field to be understandable is wrong. Na
 
 | Mode | Within one category | Example |
 |---|---|---|
-| **Exclusive** | One tag per entity (XOR) | `place_visibility:known` XOR `hidden` |
-| **Multi-valued** | Many tags per entity | `place_function:market` AND `place_function:residence` |
+| **Exclusive** | One tag per entity (XOR) | `place_visibility:place_known` XOR `place_hidden` |
+| **Multi-valued** | Many tags per entity | `place_function:commerce` AND `place_function:dwelling` |
 
 **Default is multi-valued; exclusive is the exception.** The test for exclusivity: *"is there genuinely only one truth about this entity in this dimension?"* For visibility and access: yes. For bodyform / ideology / disposition / role / state / function: no — compositions are normal (half-cyborg elf is a feature, not a bug).
 
@@ -141,7 +141,7 @@ These designations carry the most semantic meaning. Some distinctions will have 
 - `enchanted`
 - `awakened`
 - `virtual`
--  `extraplanar`
+- `extraplanar`
 - `cybernetic`
 
 **Note on `cybernetic`:** the condition requires surgical-grade integration — augmentation that needs medical intervention to remove. Removable wearable tech, however functionally indispensable, does not qualify. (Pete's cyber-goggles are accessory; Nyati's embedded circuit-lattice is `cybernetic`.)
@@ -175,12 +175,15 @@ Alina (character ID 4) was a human; then became virtualized, and her body destro
 2. loses `human` (?); gains `virtual`
 3. gains `inorganic`; probably retains `virtual`?
 
-#### Open Questions
+#### Resolved Boundary Decisions
 
-`alien` vs `eldritch` vs `extra*`: I'm not sure where we settle here, and whether these are more like lineages or conditions. A human born on a Mars colony probably doesn't gate differently. Kryptonian probably does. A Trisolaran or shoggoth certainly does. A Tleilaxu—who knows?
+`alien`, `eldritch`, and `extraplanar` are deliberately different axes:
 
-Subtypes — Stacking vs Hierarchy: 
-If we include common subtypes, accepting some redundancy may be worth the simplicity for predicates: `undead` + `vampire` vs `undead(vampire)`. In addition to the large semantic gulf between `vampire`vs `lich` vs `zombie`, per our functional axes test, they gate differently on sustenance and vulnerability. If these three were the only ones we wanted to support with sub-tags, a solo `undead` could cover the long tail
+- `alien` is a lineage for beings whose ordinary biology / cognition is non-terrestrial or otherwise non-local enough that package affordances change. A human born on a Mars colony is still `human`; a Kryptonian-like person is `alien` unless a later lineage split earns its keep.
+- `eldritch` is a lineage for beings whose nature is reality-strange, cognitively illegible, mythic, or non-rational in a way packages and Skald must handle differently. It is not merely "from elsewhere." Sam and the Bridge stress-test this use.
+- `extraplanar` is a condition, not a lineage: the being's origin or metaphysical binding is elsewhere, but its essential bodyform is still read through another lineage (`human` + `extraplanar`, `spirit` + `extraplanar`, `fey` + `extraplanar`).
+
+Subtype hierarchy is deferred by default. `undead` remains the only admitted undead condition; `vampire`, `lich`, `zombie`, and similar subtypes stay in prose plus composition (`undead` + `enchanted`, needs pressure, vulnerability prose, event history) until a package names a gate that must distinguish them. If that happens, add a deliberate registry migration using the same colon-subtype convention as `intoxicated:*`; do not improvise runtime sub-tags.
 
 ---
 
@@ -238,11 +241,11 @@ Intentionally **not** imported:
 - Pendragon's piety / chastity — religion-specific
 - D&D `lawful` / `chaotic` literal tags — too alignment-loaded; Skald might import unwanted subtext
 
-#### Open Questions
+#### Resolved Stress-Test Notes
 
-1. **`idealistic` Outlook anchor.** Has not fired on any of the six characters in the slot 2 stress test (see Reference Taggings section below). Soft signal — possibly decorative, possibly holding space for an unmet archetype (true believer, ideologue). Watch on supporting-character rounds.
-2. **`pessimistic` Outlook anchor (potential addition).** Emilia and Pete trend pessimistic; `cynical` covered both with semantic strain. Reassess after wildcard round.
-3. **Will anchor count, post-stress-test.** Eight anchors held up across six characters: max-self-mastery (Alina — 4 anchors); high-cluster (Emilia, Nyati, Victor — `disciplined`+`stoic`+`resolute`); moderate (Pete — `disciplined` alone); opposite pole (Alex — `impulsive`+`volatile`+`wavering`). All anchors fired. No trim warranted yet.
+1. **`idealistic` Outlook anchor.** Kept. It did not fire in the initial six-character pass, but the wildcard round later exercised it across Sam, Black Kite, and the Bridge.
+2. **`pessimistic` Outlook anchor.** Not admitted. Emilia and Pete can be read through `cynical`, `realistic`, `insecure`, and prose without adding a neighboring Outlook anchor that gates differently.
+3. **Will anchor count.** Kept. Eight anchors held up across the twelve-character stress test: max-self-mastery (Alina), high-cluster (`disciplined` + `stoic` + `resolute`), moderate (`disciplined` alone), and opposite-pole (`impulsive` + `volatile` + `wavering`). No trim warranted.
 
 ### `role`
 
@@ -399,10 +402,10 @@ Intentionally **not** imported:
 - Per-character bound (Frosthaven's three-traits-per-character limit) — NEXUS allows arbitrary multi-valued; the cross-genre breadth makes a fixed bound too restrictive.
 - Levels-within-anchor (e.g. `martial:3` for "expert") — would constitute skill scores, which the project has explicitly avoided. Magnitude stays compositional.
 
-#### Open Questions
+#### Resolved Usage Notes
 
-1. **`urban` saturation in cyberpunk-flavored slots.** Most modern / cyberpunk characters will fire `urban` by default, so in those genres it's the *absence* of `urban` (the off-grid hermit, the Badlands survivor) that's diagnostic. Watch on stress-tests; if `urban` fires on too high a fraction in slot 2, consider treating it like a baseline-absent default for some genres.
-2. **Tristate-logic implication of negative anchors.** Negative anchors (`frail`, `clumsy`, etc.) make capacity gating *three-state*: positive-tag-fires, no-tag-fires (baseline), negative-tag-fires. Package authors must handle all three branches when a relevant capacity gates an outcome — not just "positive vs. absent." The expressiveness gain (an elderly scholar tagged `frail` resolves physical scenes differently from an untagged-but-not-explicit civilian) was the explicit design choice; the cost is more branches in package gates. Acknowledge and accept; do not silently collapse negative-absence to baseline-absence in package logic.
+1. **`urban` in modern / cyberpunk slots.** Keep it, but apply it only when street-level, city-navigation competence is diagnostic. A character who merely lives in a city is not automatically `urban`; the off-grid hermit remains untagged, and the skip tracer / courier / fixer earns the tag.
+2. **Negative anchors imply tristate gates.** Accepted. Negative anchors (`frail`, `clumsy`, etc.) make capacity gating three-state: positive-tag-fires, no-tag-fires (baseline), negative-tag-fires. Package authors must handle all three branches when the capacity matters. Do not silently collapse negative-absence to baseline-absence in package logic.
 
 ---
 
@@ -550,35 +553,163 @@ Diagnostic batch covering non-mainline characters and entity types that stress-t
 
 ## Place Categories
 
+Place tags describe package-relevant facts about a location. They deliberately
+avoid ownership, residence, factional control, and route topology: those are
+multi-entity rows (`claims`, `resides_at`, `operates_from`) or travel substrate
+facts. A place can be many things at once; the old `place_affordance` bucket was
+too vague because it mixed function, geography, secrecy, permissions, and
+danger into one axis.
+
+**Registry-name constraint.** The live `tags` registry keys by global `tag`
+string, not by `(category, tag)`. Place anchors therefore avoid bare common
+words that already mean something elsewhere (`known` is `role.fame`, `medical`
+is `capacity`, `contested` is `legitimacy`). The category still carries the
+axis; the tag string stays globally unique.
+
+| Category | Cardinality | Ephemerality | Anchors |
+|---|---|---|---|
+| `place_function` | Multi-valued | Durable | `commerce`, `dwelling`, `place_medical`, `transit`, `archive`, `fortification`, `haven`, `sacred`, `meeting`, `tomb`, `confinement`, `learning`, `craft`, `military`, `production`, `administration`, `water_source`, `entertainment` |
+| `place_visibility` | Exclusive | Durable | `place_known`, `place_hidden` |
+| `place_access` | Exclusive | Durable | `place_open`, `place_restricted` |
+| `place_environment` | Multi-valued | Durable | `urban_dense`, `urban_sparse`, `rural`, `wilderness`, `subterranean`, `underwater`, `aerial`, `mountainous`, `forest`, `desert`, `polar`, `marshland`, `coastal` |
+| `place_threat` | Exclusive | Ephemeral | `place_safe`, `place_contested`, `place_dangerous` |
+
 ### `place_function` (Multi-Valued, Durable)
 
-`commerce`, `dwelling`, `medical`, `transit`, `archive`, `fortification`, `haven`, `sacred`, `meeting`, `tomb`, `confinement`, `learning`, `craft`, `military`, `production`, `entertainment`.
+The functional role a place serves. Multi-valued because real places stack
+functions freely: a medieval tavern is `commerce` + `dwelling` + `meeting` +
+`entertainment`; a monastery is `sacred` + `dwelling` + `learning`; the Burrow
+safe-house is `dwelling` + `haven`.
 
-Compositions are normal: a medieval tavern is `commerce` + `dwelling` + `meeting` + `entertainment`. A monastery is `sacred` + `dwelling` + `learning`. The Burrow safe-house is `dwelling` + `haven`.
+| Tag | Meaning / Package Reading |
+|---|---|
+| `commerce` | Goods, services, markets, meals, rooms, brokerage, or ordinary buying/selling can happen here. |
+| `dwelling` | Habitual or temporary shelter; supports sleep, domestic routines, private recovery, or household scenes. |
+| `place_medical` | Care, triage, healing, diagnosis, surgery, apothecary work, body-mod, or magical treatment. |
+| `transit` | Movement node or passage: street, road, station, port, stable, garage, tunnel, gate, airlock, or route junction. |
+| `archive` | Records, memory, libraries, logs, vaults, databases, museums, or evidence repositories. |
+| `fortification` | Defensible structure or prepared position; improves defense / resistance branches. |
+| `haven` | Shelter that is discreet or safe enough for hiding, recovery, or pressure relief. Usually composes with `place_hidden` and/or `place_restricted`, but not always. Durable until an authored/event update changes the place's facts; a burned or discovered safe-house gets rewritten, not time-cleared. |
+| `sacred` | Ritual, worship, taboo, blessing, curse, pilgrimage, memorial, or divine/social awe. |
+| `meeting` | Plausible gathering or negotiation venue; neutral-ground readings emerge from claims/access/status, not a separate tag. |
+| `tomb` | Burial, remembrance, grave-tending, ancestor contact, or the dangerous boundary between dead and living. |
+| `confinement` | Prison, cell, cage, holding facility, quarantine, asylum, detention office, or magical containment. |
+| `learning` | Instruction, study, apprenticeship, school, academy, dojo, lab seminar, or knowledge transfer. |
+| `craft` | Small-scale making/repair: workshop, forge, studio, garage bench, occult circle, body-mod chair. |
+| `military` | Barracks, command post, armory, drill yard, war room, police precinct, mercenary camp. |
+| `production` | Large-scale extraction, agriculture, manufacturing, energy, food preparation, server farms, or industrial throughput. |
+| `administration` | Bureaucratic, clerical, judicial, corporate, planning, permit, accounting, or institutional paperwork work. |
+| `water_source` | Routine or urgent water access: fountain, well, pump, riverbank, cistern, oasis, hydration station. |
+| `entertainment` | Performance, leisure, gaming, spectacle, drinking culture, sex-work venue, theatre, club, festival ground. |
+
+**Boundary rule.** `commerce` says "transactions can happen here," not "food is
+always available." `water_source` earns a separate anchor because thirst gates
+read it differently from ordinary commerce. Likewise, `haven` is not a claim of
+ownership or secrecy by itself; it is the place's practical shelter quality.
 
 ### `place_visibility` (Exclusive, Durable)
 
-`known`, `hidden`.
+Whether the place's existence and location are generally discoverable.
 
-If `hidden`: requires complementary `knows_location` multi-entity-tags to specify who can find it.
+| Tag | Meaning / Package Reading |
+|---|---|
+| `place_known` | Ordinary locals / relevant actors can learn or find it without special knowledge. Usually the default and may be omitted until cardinality enforcement exists. |
+| `place_hidden` | Existence or route is concealed, secret, unmapped, warded, socially obscured, or otherwise unavailable to ordinary search. |
+
+If `place_hidden`, use `knows_location(character -> place)` rows to specify who can
+find it. Do not encode "known to Alex but hidden from Dynacorp" in the place
+tag itself; the tag is the global posture, and the pair-tags carry exceptions.
 
 ### `place_access` (Exclusive, Durable)
 
-`open`, `restricted`.
+Whether entry/use is ordinarily available.
 
-If `restricted`: requires complementary `can_access` multi-entity-tags to specify who can enter (direct individual or faction-mediated).
+| Tag | Meaning / Package Reading |
+|---|---|
+| `place_open` | A character can enter or use it without special permission, membership, cover, coercion, or key. |
+| `place_restricted` | Entry/use requires permission, membership, disguise, key, bribe, invitation, clearance, taboo status, or force. |
+
+If `place_restricted`, use `can_access(character|faction -> place)` rows for known
+permissions. A faction-mediated access row lets ordinary members or agents
+derive access by story context without writing one row per character.
 
 ### `place_environment` (Multi-Valued, Durable)
 
-`urban_dense`, `urban_sparse`, `rural`, `wilderness`, `subterranean`, `underwater`, `aerial`, `mountainous`, `forest`, `desert`, `polar`, `marshland`, `coastal`.
+Physical or geographic environment. Multi-valued because geography composes:
+Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `mountainous` +
+`forest`; a flooded subway can be `subterranean` + `underwater` + `urban_dense`.
 
-Compositions: Hong Kong is `urban_dense` + `coastal`; a castle in the Alps is `mountainous` + `forest`.
+| Tag | Meaning / Package Reading |
+|---|---|
+| `urban_dense` | High-density built environment: crowds, infrastructure, surveillance, businesses, alleys, verticality. |
+| `urban_sparse` | Built environment with lower density: suburbs, small towns, industrial outskirts, scattered services. |
+| `rural` | Cultivated or settled countryside: farms, hamlets, estates, roads, fields. |
+| `wilderness` | Uncultivated or minimally settled terrain; supports foraging, tracking, exposure, rough travel. |
+| `subterranean` | Underground, buried, tunnelled, cavernous, basement, sewer, bunker, root-space. |
+| `underwater` | Submerged or aquatic environment; gates breath, pressure, visibility, equipment. |
+| `aerial` | Airborne, skyborne, floating, cliff-suspended, orbital-in-atmosphere, or otherwise height-dominant. |
+| `mountainous` | Steep terrain, altitude, passes, cliffs, avalanches, thin air, defensible approaches. |
+| `forest` | Dense tree/vegetation cover; gates concealment, travel, hunting, navigation. |
+| `desert` | Arid exposure, water scarcity, heat/cold swings, sparse settlement. |
+| `polar` | Extreme cold, ice, snow, seasonal darkness, survival pressure. |
+| `marshland` | Wetlands, bog, swamp, reeds, unstable ground, insects, hidden channels. |
+| `coastal` | Shore, port, tide, sea access, beach, cliffs, fisheries, flood risk. |
+
+Do not create era-specific environmental tags (`spaceport`, `arcology`,
+`wizard_tower`) unless the reskinned function or environment cannot be expressed
+by composition. A spaceport is usually `transit` + `military` or `commerce` +
+`urban_dense`; a wizard tower is `learning` + `archive` + `fortification` +
+maybe `sacred`.
 
 ### `place_threat` (Exclusive, Ephemeral)
 
-`safe`, `contested`, `dangerous`.
+Current danger posture. Exclusive and ephemeral because threat shifts after
+events; new major danger/safety events should replace the current row rather
+than stack contradictory rows.
 
-**Dropped:** `place_affordance` — decomposed into the categories above.
+| Tag | Meaning / Package Reading |
+|---|---|
+| `place_safe` | Currently low-risk enough that rest, recovery, negotiation, or routine work can proceed without threat pressure. Not a permanent promise. |
+| `place_contested` | Active dispute, occupation, tension, surveillance, siege, jurisdictional conflict, or factional pressure. |
+| `place_dangerous` | Immediate or predictable harm: violence, monsters, disaster, toxic conditions, traps, hostile patrols, collapse risk. |
+
+**Clearance / replacement.** `place_threat` should use semantic replacement
+initially: `place_safe` becomes `place_dangerous` after an attack,
+`place_contested` after a claim or occupation, `place_safe` again after a
+settlement / cleanup / protection event.
+Do not overbuild a bespoke event table before Slot 2 backfill reveals which
+place-threat transitions actually recur.
+
+### Legacy `place_affordance` Mapping
+
+`place_affordance` is dropped as a category. Migration 043 marks it deprecated
+and registers the replacement categories; the resolver shim reads old and new
+rows until the data rewrite lands. Migration/backfill should use a reviewed
+manifest rather than a one-size-fits-all mapping, but these defaults are safe
+starting points:
+
+**Seed prerequisite.** This mapping cannot be applied until a registry migration
+seeds the target place anchors. `administration` and `water_source` are newly
+introduced by this draft, and the rest of the replacement anchors also need
+real `tags` rows because migration 043 registered only category names.
+
+| Legacy / Sample Value | New Reading |
+|---|---|
+| `home` | `place_function:dwelling`; add `resides_at(character -> place)` for actual residents. |
+| `lodgings` | `place_function:dwelling` + usually `commerce`; access depends on story. |
+| `safe_house` | `place_function:dwelling` + `haven` + usually `place_visibility:place_hidden` and `place_access:place_restricted`. |
+| `tavern` / `teahouse` / `cafe` / `restaurant` / `cookshop` | `place_function:commerce`; add `meeting`, `entertainment`, `dwelling`, or `water_source` only when the venue really supports that branch. |
+| `market` | `place_function:commerce` + `meeting`; often `place_access:place_open`. |
+| `public_water` | `place_function:water_source`; access/visibility as appropriate. |
+| `wilderness` | `place_environment:wilderness`; add `water_source`, `forest`, `mountainous`, etc. only from prose. |
+| `street` / `transit_hub` | `place_function:transit`; pair with `urban_dense`, `urban_sparse`, or other environment tags. |
+| `the_roots` | `place_environment:subterranean` plus `place_function:transit`, `archive`, `dwelling`, or `production` depending on the specific Roots location. |
+| `the_glow` | `place_environment:urban_dense`; usually `place_visibility:place_known`, often `place_access:place_open`. |
+| `town_square` / `public_space` / `general_social_venue` / `neutral_ground` | `place_function:meeting`; neutrality emerges from claims/access/status rows, not a tag. |
+| `intimate_social_venue` / `intimate_services_establishment` | `place_function:meeting` and/or `entertainment`; contracted access should use `contact:intimate` where package gates need a relationship edge. |
+| `private_quarters` | `place_function:dwelling` + usually `place_access:place_restricted`. |
+| `workplace` / `worksite` / `administrative_office` | `administration`, `production`, `craft`, `place_medical`, `military`, or another concrete function based on the actual work. |
+| `place_of_remembrance` | `tomb` and/or `sacred`; use `meeting` only for public memorial sites. |
 
 ---
 
@@ -629,6 +760,61 @@ Legacy sample values rename for clarity: `revanchist` -> `recover_losses`,
 - `summary` (true narrative prose)
 - `primary_location` (FK to places)
 - `created_at`, `updated_at`, `extra_data`
+
+---
+
+## Story Slot / Genre Tags
+
+Genre is informational metadata about the story slot. It can guide prompts,
+Retrograde seeding, weirdness calibration, UI grouping, and package
+interpretation, but it **does not gate vocabulary admission**. A fantasy slot
+may contain cybernetics; a cyberpunk slot may reveal goblins. The closed
+vocabulary remains universal.
+
+The authoritative runtime source today is the new-story setting enum
+(`nexus/api/new_story_schemas.py::Genre`) persisted as `setting_genre` and
+`setting_secondary_genres`. If these are mirrored into the Orrery registry, use
+a story-slot `genre` category with the same canonical values below; UI/prompt
+surfaces may display them as `genre:<value>`.
+
+**Registration status.** No current migration registers a story-slot `genre`
+category in `tag_category_registry`, and the current `entity_kind` enum has no
+story-slot kind. Treat registry mirroring as blocked on a dedicated substrate
+migration; today these values remain setting-column metadata.
+
+### `genre` (Multi-Valued, Durable, Story Slot)
+
+Primary and secondary genres share one closed vocabulary. The primary genre is
+the story's dominant contract; secondary genres are modifiers. The category is
+multi-valued because blended stories are normal.
+
+| Tag | Meaning / Reading |
+|---|---|
+| `fantasy` | Magic, mythic beings, secondary-world or folkloric possibility. |
+| `scifi` | Speculative science / technology as a major story premise. Canonical value remains `scifi`, matching the existing enum; do not spell this `science_fiction` in registry rows. |
+| `horror` | Fear, dread, violation, monstrosity, or survival under uncanny threat. |
+| `mystery` | Discovery of hidden facts drives the central contract. |
+| `historical` | Past era or alternate-history grounding is central to the setting contract. |
+| `contemporary` | Present-day or near-present mundane baseline. |
+| `postapocalyptic` | Social order after collapse, catastrophe, extinction pressure, or ruined infrastructure. |
+| `cyberpunk` | High-tech / low-trust social order; identity, surveillance, augmentation, networks, corporations, or illicit tech scenes are central. |
+| `steampunk` | Industrial-era speculative machinery, retrofuturism, alternate engineering, or gaslamp-technological romance. |
+| `urban_fantasy` | Supernatural or mythic elements embedded in a modern / urban ordinary world. |
+| `space_opera` | Large-scale interstellar adventure, politics, war, exploration, or mythic science-fiction scope. |
+| `noir` | Cynical investigation, moral compromise, shadows, corruption, fatalism, or hardboiled social texture. |
+| `thriller` | High-tension danger, pursuit pressure, conspiracy, countdowns, or suspense-forward pacing. |
+
+**Alias discipline.** `postapoc` is an API/enum member name but the stored value
+is `postapocalyptic`; `science_fiction` is a human synonym but the stored value
+is `scifi`. Do not add aliases to the tag registry unless import/backfill code
+needs to canonicalize legacy rows. `romance`, `western`, `cozy`, `grimdark`,
+and similar candidates are not admitted until the setting enum and any
+per-genre Retrograde config are updated together.
+
+**Mechanical boundary.** Packages may read genre as context when ranking or
+wording branches, but package predicates should not say "only fantasy can have
+`arcane`" or "only scifi can have `cybernetic`." Genre selects expectations;
+entity tags describe facts.
 
 ---
 
@@ -762,15 +948,16 @@ Compiler surfaces:
 
 ## Open Items
 
-1. **Character category values.** `bodyform`, `disposition`, `capacity`, and the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`) are settled. `role.resources`, `role.fame`, and `status:*` have substrate support via migration 045 and compiler MVP support where typed inputs exist. The `state` category vocabulary is now specified in `docs/orrery_state_vocabulary.md`; implementation remains coupled to clearance-event vocabulary (item 3) and the substrate debts named there.
-2. **Faction category values.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
-3. **Clearance vocabulary for ephemerals.** What `world_event` types clear which ephemeral tags? Needs enumeration per ephemeral tag (single-entity and multi-entity).
-4. **Genre tag set.** Settle the values for `genre:*` informational tags on the story slot. Sample: `fantasy`, `science_fiction`, `horror`, `noir`, `romance`, etc. + subgenres as composable tags.
-5. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
-6. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
-7. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
-8. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-9. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; deferred until the full vocabulary draft and data-rewrite plan tracked by issue #326 are ready.
+1. **Character category implementation.** `bodyform`, `disposition`, `capacity`, the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`), and the companion `state` vocabulary are now drafted. Remaining work is implementation-specific: seed any still-missing tags and keep compiler support aligned with typed inputs.
+2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories, but follow-up work still needs to seed the new place anchors, migrate/deprecate legacy `place_affordance` rows, and remove the resolver shim after backfill.
+3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
+4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, blocked on an entity-kind/category-registration migration and not a blocker for current packages.
+5. **Clearance vocabulary for ephemerals.** State clearance events are enumerated in `docs/orrery_state_vocabulary.md`. Faction `agenda` / `power_status`, `place_threat`, and any future ephemeral pair-tags still need event-collapse passes before event-cleared registry rows replace today's semantic-clearance defaults.
+6. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
+7. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
+8. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
+9. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
+10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; this is ready to plan against the completed vocabulary draft and remains tracked by issue #326.
 
 ---
 
@@ -778,9 +965,11 @@ Compiler surfaces:
 
 - `docs/trait_menu.md` — player-facing trait selection system; alignment documented above.
 - `docs/orrery_design_plan.md` — broader Orrery system design.
-- `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific open decisions.
+- `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific migration notes.
 - `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, seeded anchors, and faction table cleanup implications.
-- `migrations/043_orrery_category_refactor_phase1.py` — registers the six faction category names (`ideology`, `power_status`, `agenda`, `resource_base`, `legitimacy`, `operational_mode`) and records the legacy-to-replacement mappings.
+- `nexus/api/new_story_schemas.py::Genre` — current runtime source of truth for the story genre values mirrored in the Story Slot / Genre Tags section.
+- `nexus/agents/orrery/resolver.py::LOCATION_CLASS_TAG_CATEGORIES` — cutover shim that hydrates legacy `place_affordance` plus the replacement place categories into `WorldState.location_classes` until the data rewrite removes the old rows.
+- `migrations/043_orrery_category_refactor_phase1.py` — registers the place and faction replacement category names and records the legacy-to-replacement mappings.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
 - `migrations/047_kind_qualified_contact_pair_tags.py` — `contact:<kind>` registry additions plus deprecation of `contacts_available`, `intimate_services_contact`, and bare `contact`.
