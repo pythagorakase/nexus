@@ -802,6 +802,36 @@ def test_character_tag_vocab_migration_resolves_registry_collisions() -> None:
         + len(migration.CAPACITY_TAGS)
         + len(migration.ROLE_FUNCTION_TAGS)
     )
+    source = migration_path.read_text()
+    assert "COMMENT ON COLUMN tag_category_registry.deprecated" in source
+    assert "COMMENT ON COLUMN tag_category_registry.replacement_categories" in source
+
+
+def test_character_tag_vocab_guard_rejects_silent_alias_promotion() -> None:
+    """Migration 055 guard should catch deprecated or synonym collisions."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "055_orrery_character_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    class FakeCursor:
+        def execute(self, _sql: str, _params: object = None) -> None:
+            return None
+
+        def fetchall(self) -> list[tuple[str, str, bool, int | None]]:
+            return [
+                ("human", "bodyform", True, None),
+                ("elf", "bodyform", False, 101),
+            ]
+
+    with pytest.raises(RuntimeError, match="cannot be promoted implicitly"):
+        migration._assert_no_unexpected_category_conflicts(
+            FakeCursor(),
+            migration._expected_rows(),
+        )
 
 
 @pytest.mark.requires_postgres

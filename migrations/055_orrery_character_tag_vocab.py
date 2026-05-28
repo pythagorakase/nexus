@@ -180,9 +180,10 @@ ROLE_FUNCTION_TAGS: Sequence[str] = (
 )
 
 ALLOWED_CATEGORY_REWRITES: dict[str, frozenset[str]] = {
-    **{tag: frozenset({"role"}) for tag in ROLE_FUNCTION_TAGS},
-    "hunter": frozenset({"capacity", "role"}),
+    tag: frozenset({"role"}) for tag in ROLE_FUNCTION_TAGS
 }
+# ``hunter`` used to be a capacity anchor before the role.function split.
+ALLOWED_CATEGORY_REWRITES["hunter"] = frozenset({"capacity", "role"})
 
 
 def run(conn: connection) -> None:
@@ -239,6 +240,20 @@ def _ensure_category_cutover_columns(cur: Any) -> None:
         """
         ALTER TABLE tag_category_registry
         ADD COLUMN IF NOT EXISTS replacement_categories text[]
+        """
+    )
+    cur.execute(
+        """
+        COMMENT ON COLUMN tag_category_registry.deprecated IS
+            'Category-level cutover marker; existing tag rows remain live '
+            'until a reviewed data migration rewrites or clears them.'
+        """
+    )
+    cur.execute(
+        """
+        COMMENT ON COLUMN tag_category_registry.replacement_categories IS
+            'Preferred successor categories for deprecated category rows, '
+            'when any exist.'
         """
     )
 
@@ -303,17 +318,23 @@ def _assert_no_unexpected_category_conflicts(
     cur.execute(
         """
         SELECT tag, category
+             , deprecated
+             , synonym_for
         FROM tags
         WHERE tag = ANY(%s)
-          AND deprecated = FALSE
-          AND synonym_for IS NULL
         ORDER BY tag
         """,
         (list(expected),),
     )
     conflicts = []
-    for tag, existing_category in cur.fetchall():
+    for tag, existing_category, deprecated, synonym_for in cur.fetchall():
         expected_category = expected[tag][0]
+        if deprecated:
+            conflicts.append(f"{tag}: deprecated row cannot be promoted implicitly")
+            continue
+        if synonym_for is not None:
+            conflicts.append(f"{tag}: synonym row cannot be promoted implicitly")
+            continue
         if existing_category == expected_category:
             continue
         if existing_category in ALLOWED_CATEGORY_REWRITES.get(tag, frozenset()):
