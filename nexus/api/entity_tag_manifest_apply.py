@@ -54,6 +54,7 @@ def apply_entity_tag_manifest(
     counters["operation_items"] = len(operations)
     applied_operations: list[dict[str, Any]] = []
     planned_entity_tags: set[tuple[int, int]] = set()
+    planned_exclusive_tags: dict[tuple[int, str], list[str]] = {}
 
     for operation in operations:
         operation_type = str(operation.get("operation_type") or "")
@@ -133,6 +134,23 @@ def apply_entity_tag_manifest(
             )
             continue
 
+        planned_sibling_tags = _planned_exclusive_sibling_tags(
+            planned_exclusive_tags,
+            entity_id=entity_id,
+            category=target["category"],
+            exclusive_categories=exclusive_category_set,
+        )
+        if planned_sibling_tags:
+            counters["blocked_planned_sibling_operations"] += 1
+            applied_operations.append(
+                {
+                    **base_result,
+                    "status": "blocked_planned_sibling",
+                    "planned_sibling_tags": planned_sibling_tags,
+                }
+            )
+            continue
+
         sibling_tags = _active_exclusive_sibling_tags(
             cur,
             entity_id=entity_id,
@@ -153,6 +171,13 @@ def apply_entity_tag_manifest(
 
         planned_entity_tags.add(entity_tag_key)
         if dry_run:
+            _plan_exclusive_tag(
+                planned_exclusive_tags,
+                entity_id=entity_id,
+                category=target["category"],
+                tag=target["tag"],
+                exclusive_categories=exclusive_category_set,
+            )
             counters["entity_tags_would_insert"] += 1
             applied_operations.append({**base_result, "status": "would_insert"})
             continue
@@ -168,6 +193,13 @@ def apply_entity_tag_manifest(
             counters["entity_tags_already_present"] += 1
             applied_operations.append({**base_result, "status": "already_present"})
             continue
+        _plan_exclusive_tag(
+            planned_exclusive_tags,
+            entity_id=entity_id,
+            category=target["category"],
+            tag=target["tag"],
+            exclusive_categories=exclusive_category_set,
+        )
         counters["entity_tags_inserted"] += 1
         applied_operations.append(
             {
@@ -184,6 +216,7 @@ def apply_entity_tag_manifest(
         "entity_tags_already_present",
         "duplicate_ready_operations_skipped",
         "blocked_existing_sibling_operations",
+        "blocked_planned_sibling_operations",
         "review_required_operations_skipped",
         "non_entity_tag_operations_skipped",
     ):
@@ -242,6 +275,31 @@ def _apply_operation_result(
     if tag is not None:
         result["tag"] = tag
     return result
+
+
+def _planned_exclusive_sibling_tags(
+    planned_exclusive_tags: Mapping[tuple[int, str], list[str]],
+    *,
+    entity_id: int,
+    category: str,
+    exclusive_categories: set[str],
+) -> list[str]:
+    if category not in exclusive_categories:
+        return []
+    return list(planned_exclusive_tags.get((entity_id, category), ()))
+
+
+def _plan_exclusive_tag(
+    planned_exclusive_tags: dict[tuple[int, str], list[str]],
+    *,
+    entity_id: int,
+    category: str,
+    tag: str,
+    exclusive_categories: set[str],
+) -> None:
+    if category not in exclusive_categories:
+        return
+    planned_exclusive_tags.setdefault((entity_id, category), []).append(tag)
 
 
 def _coerce_entity_tag_target(

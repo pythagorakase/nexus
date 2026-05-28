@@ -261,6 +261,58 @@ def test_apply_entity_tag_manifest_blocks_existing_exclusive_sibling() -> None:
     assert result["operations"][0]["existing_sibling_tags"] == ["known"]
 
 
+def test_apply_entity_tag_manifest_blocks_planned_exclusive_sibling() -> None:
+    """Dry runs mirror execute-time exclusive sibling conflicts."""
+
+    result = apply_entity_tag_manifest(
+        EntityApplyCursor(),
+        _manifest(
+            [
+                _operation(
+                    operation_id="ready-known",
+                    status="ready",
+                    review_required=False,
+                    operation_type="review_entity_tag",
+                    target={
+                        "entity_kind": "character",
+                        "entity_id": 1001,
+                        "category": "role.fame",
+                        "tag": "known",
+                        "target_registered": True,
+                    },
+                ),
+                _operation(
+                    operation_id="ready-renown",
+                    status="ready",
+                    review_required=False,
+                    operation_type="review_entity_tag",
+                    target={
+                        "entity_kind": "character",
+                        "entity_id": 1001,
+                        "category": "role.fame",
+                        "tag": "renowned",
+                        "target_registered": True,
+                    },
+                ),
+            ]
+        ),
+        manifest_schema_version="test-manifest.v1",
+        entity_kind="character",
+        allowed_categories=("role.function", "role.fame"),
+        exclusive_categories=("role.fame",),
+        dry_run=True,
+    )
+
+    assert result["counters"]["ready_entity_tag_operations"] == 2
+    assert result["counters"]["entity_tags_would_insert"] == 1
+    assert result["counters"]["blocked_planned_sibling_operations"] == 1
+    assert [operation["status"] for operation in result["operations"]] == [
+        "would_insert",
+        "blocked_planned_sibling",
+    ]
+    assert result["operations"][1]["planned_sibling_tags"] == ["known"]
+
+
 def test_apply_entity_tag_manifest_rejects_ready_unregistered_target() -> None:
     """Ready rows may not carry target_registered=false."""
 
