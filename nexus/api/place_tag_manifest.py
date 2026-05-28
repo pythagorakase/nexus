@@ -424,7 +424,6 @@ def build_place_migration_manifest_from_rows(
     seen_operations: set[tuple[int, str, str, str]] = set()
 
     for row in place_rows:
-        place_id = int(row["place_id"])
         counters["places_scanned"] += 1
         _ensure_place_summary(places, row)
         for tag, category, reason in _type_candidates(row):
@@ -470,7 +469,6 @@ def build_place_migration_manifest_from_rows(
             )
 
     for row in legacy_tag_rows:
-        place_id = int(row["place_id"])
         counters["legacy_place_tag_rows"] += 1
         counters[f"legacy_category:{row['category']}"] += 1
         _ensure_place_summary(places, row)
@@ -487,7 +485,7 @@ def build_place_migration_manifest_from_rows(
                     "tag": source_tag,
                     "category": str(row["category"]),
                 },
-                target={"entity_kind": "place", "entity_id": place_id},
+                target={"entity_kind": "place", "entity_id": int(row["entity_id"])},
                 reason=(
                     "Legacy place_affordance tag has no deterministic mapping; "
                     "review as prose, pair-tag, or future vocabulary."
@@ -597,7 +595,7 @@ def _review_entity_tag_operation(
         source=source,
         target={
             "entity_kind": "place",
-            "entity_id": int(row["place_id"]),
+            "entity_id": int(row["entity_id"]),
             "category": target_category,
             "tag": target_tag,
             "target_registered": target_registered,

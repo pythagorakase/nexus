@@ -92,6 +92,7 @@ def test_place_manifest_suggests_registered_place_tags_from_prose() -> None:
         "fortification",
     }:
         assert targets[tag]["target"]["target_registered"] is True
+        assert targets[tag]["target"]["entity_id"] == 9001
     assert manifest["counters"]["candidate_entity_tags"] == len(manifest["operations"])
 
 
@@ -148,6 +149,9 @@ def test_place_manifest_maps_legacy_affordances_without_ready_writes() -> None:
         "place_hidden",
         "place_restricted",
     }
+    assert all(
+        operation["target"]["entity_id"] == 100 for operation in legacy_operations
+    )
     assert all(
         operation["source"]["kind"] == "legacy_entity_tag"
         for operation in legacy_operations
