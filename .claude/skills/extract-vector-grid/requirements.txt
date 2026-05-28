@@ -1,0 +1,5 @@
+# Pinned because coord-scale reconciliation in extract.py depends on
+# svgelements' specific pt→px normalization behavior. If you bump these,
+# re-run the validation acceptance test (per SKILL.md).
+svgelements==1.9.6
+CairoSVG==2.9.0

@@ -25,6 +25,10 @@
 
 /.claude/*
 !/.claude/commands/
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/extract-vector-grid/
+/.claude/skills/extract-vector-grid/.venv/
 
 # Ignore logs and temporary files
 /temp*.*
