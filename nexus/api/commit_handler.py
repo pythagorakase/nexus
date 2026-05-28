@@ -19,6 +19,7 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_async
+from nexus.agents.orrery.tag_writer import apply_tag_bestowal_async
 from nexus.api.db_converters import (
     chronology_to_db_values,
     resolve_character_references,
@@ -241,8 +242,9 @@ async def apply_state_updates(
     """
     Apply entity state updates from the LLM response.
 
-    This updates current_activity, emotional_state, etc. for characters,
-    and similar fields for places and factions.
+    This updates scalar state for characters and places. Faction semantics are
+    intentionally not written to legacy faction prose columns; use Orrery tag
+    deltas / pair-tags and world events instead.
     """
     # Update character states
     for char_update in state_updates.characters:
@@ -278,6 +280,16 @@ async def apply_state_updates(
                 )
                 logger.info(f"Updated character {char_update.character_id}")
 
+            bestowal = getattr(char_update, "orrery_tags", None)
+            if bestowal is not None:
+                await apply_state_tags_async(
+                    conn,
+                    kind="character",
+                    subtype_table="characters",
+                    subtype_id=char_update.character_id,
+                    bestowal=bestowal,
+                )
+
     # Update place states
     for place_update in state_updates.locations:
         if place_update.place_id and place_update.current_status:
@@ -292,19 +304,55 @@ async def apply_state_updates(
             )
             logger.info(f"Updated place {place_update.place_id}")
 
-    # Update faction states
-    for faction_update in state_updates.factions:
-        if faction_update.faction_id and faction_update.current_activity:
-            await conn.execute(
-                """
-                UPDATE factions
-                SET current_activity = $1
-                WHERE id = $2
-                """,
-                faction_update.current_activity,
-                faction_update.faction_id,
+        bestowal = getattr(place_update, "orrery_tags", None)
+        if place_update.place_id and bestowal is not None:
+            await apply_state_tags_async(
+                conn,
+                kind="place",
+                subtype_table="places",
+                subtype_id=place_update.place_id,
+                bestowal=bestowal,
             )
-            logger.info(f"Updated faction {faction_update.faction_id}")
+
+    for faction_update in state_updates.factions:
+        bestowal = getattr(faction_update, "orrery_tags", None)
+        if faction_update.faction_id and bestowal is not None:
+            await apply_state_tags_async(
+                conn,
+                kind="faction",
+                subtype_table="factions",
+                subtype_id=faction_update.faction_id,
+                bestowal=bestowal,
+            )
+
+
+async def apply_state_tags_async(
+    conn: asyncpg.Connection,
+    *,
+    kind: str,
+    subtype_table: str,
+    subtype_id: int,
+    bestowal,
+) -> None:
+    """Look up the entity_id for a subtype row and apply Skald-bestowed tags."""
+
+    row = await conn.fetchrow(
+        f"SELECT entity_id FROM {subtype_table} WHERE id = $1",
+        subtype_id,
+    )
+    if row is None:
+        logger.warning(f"Skipping tag bestowal: no {kind} row for id={subtype_id}")
+        return
+
+    counters = await apply_tag_bestowal_async(
+        conn,
+        entity_id=row["entity_id"],
+        entity_kind=kind,
+        bestowal=bestowal,
+        source_kind="skald_inline",
+    )
+    if any(counters.values()):
+        logger.info(f"Tag bestowal {kind}/{subtype_id}: {counters}")
 
 
 async def clear_incubator(conn: asyncpg.Connection, session_id: str = None) -> None:

@@ -335,6 +335,16 @@ Preflight command:
   exclusive-category conflicts are skipped rather than inferred. This still
   does not clear legacy columns or old tag rows.
 
+Runtime write boundary:
+
+- New faction creation and faction state updates should not write
+  `ideology`, `history`, `current_activity`, `hidden_agenda`, `territory`,
+  `power_level`, or `resources`. New prose goes in `summary` / `extra_data`
+  when it is descriptive context; package-relevant facts go through
+  `orrery_tags` or reviewed pair-tag/world-event paths.
+- Migration 053 removes the `factions.power_level` default so omitted runtime
+  inserts do not silently create fresh legacy `0.5` values.
+
 ---
 
 ## Mechanical Implications
