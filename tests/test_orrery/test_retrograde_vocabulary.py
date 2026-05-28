@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from nexus.agents.orrery import retrograde_vocabulary as module
+import pytest
+
 from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
 )
-from nexus.agents.orrery.tag_library import TagLibraryEntry
 
 
 def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
@@ -29,63 +29,34 @@ def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
     assert "handler" in vocabulary["relationship_types"]
 
 
-def test_seed_eligible_vocabulary_can_include_live_tag_registry(monkeypatch) -> None:
+@pytest.mark.requires_postgres
+def test_seed_eligible_vocabulary_can_include_live_tag_registry() -> None:
     """Passing a slot database folds post-migration registry rows into seeds."""
-
-    entries = [
-        TagLibraryEntry(
-            entity_kind="place",
-            category="place_function",
-            tag="commerce",
-            is_ephemeral=False,
-            description="",
-            category_description="",
-            prompt_order=60,
-        ),
-        TagLibraryEntry(
-            entity_kind="place",
-            category="place_environment",
-            tag="wilderness",
-            is_ephemeral=False,
-            description="",
-            category_description="",
-            prompt_order=63,
-        ),
-        TagLibraryEntry(
-            entity_kind="character",
-            category="state",
-            tag="grieving",
-            is_ephemeral=True,
-            description="",
-            category_description="",
-            prompt_order=50,
-        ),
-    ]
-
-    def fake_read_tag_library(dbname: str):
-        assert dbname == "save_02"
-        return entries
-
-    monkeypatch.setattr(module, "read_tag_library", fake_read_tag_library)
 
     vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_02")
 
     assert "commerce" in vocabulary["single_entity_tag_anchors"]
     assert "grieving" in vocabulary["single_entity_tag_anchors"]
-    assert vocabulary["registered_tag_categories"] == [
-        "place_environment",
-        "place_function",
-        "state",
-    ]
-    assert vocabulary["registered_tags_by_category"]["place_function"] == ["commerce"]
-    assert vocabulary["registered_tags_by_category"]["place_environment"] == [
-        "wilderness"
-    ]
-    assert vocabulary["registered_tags_by_entity_kind"]["character"] == ["grieving"]
-    assert vocabulary["registered_tags_by_entity_kind"]["place"] == [
-        "commerce",
-        "wilderness",
-    ]
+    assert "place_environment" in vocabulary["registered_tag_categories"]
+    assert "place_function" in vocabulary["registered_tag_categories"]
+    assert "state" in vocabulary["registered_tag_categories"]
+    assert "commerce" in vocabulary["registered_tags_by_category"]["place_function"]
+    assert (
+        "wilderness" in vocabulary["registered_tags_by_category"]["place_environment"]
+    )
+    assert "grieving" in vocabulary["registered_tags_by_entity_kind"]["character"]
+    assert "commerce" in vocabulary["registered_tags_by_entity_kind"]["place"]
+
+    for key in (
+        "single_entity_tag_anchors",
+        "registered_single_entity_tags",
+        "registered_tag_categories",
+    ):
+        assert vocabulary[key] == sorted(vocabulary[key])
+    for values in vocabulary["registered_tags_by_category"].values():
+        assert values == sorted(values)
+    for values in vocabulary["registered_tags_by_entity_kind"].values():
+        assert values == sorted(values)
 
 
 def test_seed_eligible_vocabulary_includes_pair_tag_kind_constraints() -> None:

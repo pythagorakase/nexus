@@ -133,7 +133,7 @@ def _add_registry_entry(
 ) -> None:
     """Add one tag to a registry grouping."""
 
-    target.setdefault(str(key), set()).add(str(tag))
+    target.setdefault(key, set()).add(tag)
 
 
 def _sort_registry_mapping(values: dict[str, set[str]]) -> dict[str, list[str]]:
