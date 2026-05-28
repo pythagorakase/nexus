@@ -1302,7 +1302,7 @@ def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("BEGIN READ ONLY")
+            cur.execute("SET TRANSACTION READ ONLY")
             audit = build_faction_table_audit(cur)
 
     return {
@@ -1327,7 +1327,7 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("BEGIN READ ONLY")
+            cur.execute("SET TRANSACTION READ ONLY")
             audit = build_faction_table_audit(cur)
 
     manifest = build_faction_migration_manifest(
@@ -1362,7 +1362,7 @@ def run_character_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("BEGIN READ ONLY")
+            cur.execute("SET TRANSACTION READ ONLY")
             manifest = build_character_migration_manifest(
                 cur,
                 slot=args.slot,
@@ -1396,7 +1396,7 @@ def run_place_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     dbname = slot_dbname(args.slot)
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
-            cur.execute("BEGIN READ ONLY")
+            cur.execute("SET TRANSACTION READ ONLY")
             manifest = build_place_migration_manifest(
                 cur,
                 slot=args.slot,
@@ -1446,7 +1446,7 @@ def run_character_apply(args: argparse.Namespace) -> Dict[str, Any]:
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             if dry_run:
-                cur.execute("BEGIN READ ONLY")
+                cur.execute("SET TRANSACTION READ ONLY")
             raw_manifest = manifest.get("manifest")
             if raw_manifest is None:
                 raw_manifest = build_character_migration_manifest(
@@ -1501,7 +1501,7 @@ def run_place_apply(args: argparse.Namespace) -> Dict[str, Any]:
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             if dry_run:
-                cur.execute("BEGIN READ ONLY")
+                cur.execute("SET TRANSACTION READ ONLY")
             raw_manifest = manifest.get("manifest")
             if raw_manifest is None:
                 raw_manifest = build_place_migration_manifest(
@@ -1587,7 +1587,7 @@ def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
     with get_connection(dbname, dict_cursor=True) as conn:
         with conn.cursor() as cur:
             if dry_run:
-                cur.execute("BEGIN READ ONLY")
+                cur.execute("SET TRANSACTION READ ONLY")
             if manifest is None:
                 audit = build_faction_table_audit(cur)
                 manifest = build_faction_migration_manifest(

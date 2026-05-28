@@ -17,6 +17,7 @@ class EntityApplyCursor:
         *,
         entity_kind: str = "character",
         active_entity_tags: list[dict[str, Any]] | None = None,
+        world_time: int | None = None,
     ) -> None:
         self.source_kinds = {"system", "skald_inline", "llm_generated"}
         self.registered_categories = {
@@ -50,6 +51,7 @@ class EntityApplyCursor:
         }
         self.entities: dict[int, str] = {1001: entity_kind}
         self.entity_tags: list[dict[str, Any]] = list(active_entity_tags or [])
+        self.world_time = world_time
         self.next_entity_tag_id = 9001
         self._rows: list[dict[str, Any]] = []
         self.rowcount = 0
@@ -69,7 +71,7 @@ class EntityApplyCursor:
                 for category in sorted(self.registered_categories.get(entity_kind, ()))
             ]
         elif normalized == "SELECT max(world_time) AS world_time FROM chunk_metadata":
-            self._rows = [{"world_time": None}]
+            self._rows = [{"world_time": self.world_time}]
         elif "FROM tags" in normalized and "WHERE tag = %s" in normalized:
             tag, category = params
             row = self.tags.get((str(category), str(tag)))
@@ -342,6 +344,101 @@ def test_apply_entity_tag_manifest_rejects_ready_unregistered_target() -> None:
             exclusive_categories=("role.fame",),
             dry_run=True,
         )
+
+
+def test_apply_entity_tag_manifest_rejects_ready_missing_review_flag() -> None:
+    """Ready rows must explicitly carry review_required=false."""
+
+    operation = _operation(
+        operation_id="missing-review-flag",
+        status="ready",
+        review_required=False,
+        operation_type="review_entity_tag",
+        target={
+            "entity_kind": "character",
+            "entity_id": 1001,
+            "category": "role.function",
+            "tag": "scholar",
+            "target_registered": True,
+        },
+    )
+    del operation["review_required"]
+
+    with pytest.raises(ValueError, match="missing review_required=false"):
+        apply_entity_tag_manifest(
+            EntityApplyCursor(),
+            _manifest([operation]),
+            manifest_schema_version="test-manifest.v1",
+            entity_kind="character",
+            allowed_categories=("role.function", "role.fame"),
+            exclusive_categories=("role.fame",),
+            dry_run=True,
+        )
+
+
+def test_apply_entity_tag_manifest_execute_rejects_empty_world_time() -> None:
+    """Execute mode must not write NULL applied_at_world_time values."""
+
+    with pytest.raises(ValueError, match="chunk_metadata is empty"):
+        apply_entity_tag_manifest(
+            EntityApplyCursor(world_time=None),
+            _manifest(
+                [
+                    _operation(
+                        operation_id="ready-scholar",
+                        status="ready",
+                        review_required=False,
+                        operation_type="review_entity_tag",
+                        target={
+                            "entity_kind": "character",
+                            "entity_id": 1001,
+                            "category": "role.function",
+                            "tag": "scholar",
+                            "target_registered": True,
+                        },
+                    )
+                ]
+            ),
+            manifest_schema_version="test-manifest.v1",
+            entity_kind="character",
+            allowed_categories=("role.function", "role.fame"),
+            exclusive_categories=("role.fame",),
+            dry_run=False,
+        )
+
+
+def test_apply_entity_tag_manifest_execute_records_world_time() -> None:
+    """Inserted entity tags preserve the current narrative world time."""
+
+    cursor = EntityApplyCursor(world_time=123)
+    result = apply_entity_tag_manifest(
+        cursor,
+        _manifest(
+            [
+                _operation(
+                    operation_id="ready-scholar",
+                    status="ready",
+                    review_required=False,
+                    operation_type="review_entity_tag",
+                    target={
+                        "entity_kind": "character",
+                        "entity_id": 1001,
+                        "category": "role.function",
+                        "tag": "scholar",
+                        "target_registered": True,
+                    },
+                )
+            ]
+        ),
+        manifest_schema_version="test-manifest.v1",
+        entity_kind="character",
+        allowed_categories=("role.function", "role.fame"),
+        exclusive_categories=("role.fame",),
+        dry_run=False,
+    )
+
+    assert result["counters"]["entity_tags_inserted"] == 1
+    assert cursor.entity_tags[0]["applied_at_world_time"] == 123
 
 
 def _manifest(operations: list[dict[str, Any]]) -> dict[str, Any]:

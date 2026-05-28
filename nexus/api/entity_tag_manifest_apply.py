@@ -48,7 +48,7 @@ def apply_entity_tag_manifest(
             f"{', '.join(sorted(missing_categories))}"
         )
 
-    world_time = _load_current_world_time(cur)
+    world_time: Any | None = None
     operations = list(manifest.get("operations") or [])
     counters: Counter[str] = Counter()
     counters["operation_items"] = len(operations)
@@ -59,7 +59,12 @@ def apply_entity_tag_manifest(
     for operation in operations:
         operation_type = str(operation.get("operation_type") or "")
         status = str(operation.get("status") or "")
-        if status != "ready" or bool(operation.get("review_required", True)):
+        if status == "ready" and "review_required" not in operation:
+            raise ValueError(
+                f"Operation {operation.get('operation_id')!r} is ready but missing "
+                "review_required=false"
+            )
+        if status != "ready" or operation.get("review_required") is not False:
             counters["review_required_operations_skipped"] += 1
             applied_operations.append(
                 _apply_operation_result(
@@ -182,6 +187,8 @@ def apply_entity_tag_manifest(
             applied_operations.append({**base_result, "status": "would_insert"})
             continue
 
+        if world_time is None:
+            world_time = _load_current_world_time(cur)
         inserted_id = _insert_entity_tag_operation(
             cur,
             entity_id=entity_id,
@@ -372,8 +379,15 @@ def _load_current_world_time(cur: Any) -> Any:
     cur.execute("SELECT max(world_time) AS world_time FROM chunk_metadata")
     row = cur.fetchone()
     if row is None:
-        return None
-    return _row_value(row, "world_time")
+        raise ValueError(
+            "chunk_metadata is empty; cannot determine world_time for apply"
+        )
+    world_time = _row_value(row, "world_time")
+    if world_time is None:
+        raise ValueError(
+            "chunk_metadata is empty; cannot determine world_time for apply"
+        )
+    return world_time
 
 
 def _lookup_apply_tag(cur: Any, *, tag: str, category: str) -> Mapping[str, Any]:
