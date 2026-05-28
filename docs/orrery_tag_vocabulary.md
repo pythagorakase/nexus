@@ -589,7 +589,7 @@ safe-house is `dwelling` + `haven`.
 | `transit` | Movement node or passage: street, road, station, port, stable, garage, tunnel, gate, airlock, or route junction. |
 | `archive` | Records, memory, libraries, logs, vaults, databases, museums, or evidence repositories. |
 | `fortification` | Defensible structure or prepared position; improves defense / resistance branches. |
-| `haven` | Shelter that is discreet or safe enough for hiding, recovery, or pressure relief. Usually composes with `place_hidden` and/or `place_restricted`, but not always. |
+| `haven` | Shelter that is discreet or safe enough for hiding, recovery, or pressure relief. Usually composes with `place_hidden` and/or `place_restricted`, but not always. Durable until an authored/event update changes the place's facts; a burned or discovered safe-house gets rewritten, not time-cleared. |
 | `sacred` | Ritual, worship, taboo, blessing, curse, pilgrimage, memorial, or divine/social awe. |
 | `meeting` | Plausible gathering or negotiation venue; neutral-ground readings emerge from claims/access/status, not a separate tag. |
 | `tomb` | Burial, remembrance, grave-tending, ancestor contact, or the dangerous boundary between dead and living. |
@@ -688,6 +688,11 @@ rows until the data rewrite lands. Migration/backfill should use a reviewed
 manifest rather than a one-size-fits-all mapping, but these defaults are safe
 starting points:
 
+**Seed prerequisite.** This mapping cannot be applied until a registry migration
+seeds the target place anchors. `administration` and `water_source` are newly
+introduced by this draft, and the rest of the replacement anchors also need
+real `tags` rows because migration 043 registered only category names.
+
 | Legacy / Sample Value | New Reading |
 |---|---|
 | `home` | `place_function:dwelling`; add `resides_at(character -> place)` for actual residents. |
@@ -771,6 +776,11 @@ The authoritative runtime source today is the new-story setting enum
 `setting_secondary_genres`. If these are mirrored into the Orrery registry, use
 a story-slot `genre` category with the same canonical values below; UI/prompt
 surfaces may display them as `genre:<value>`.
+
+**Registration status.** No current migration registers a story-slot `genre`
+category in `tag_category_registry`, and the current `entity_kind` enum has no
+story-slot kind. Treat registry mirroring as blocked on a dedicated substrate
+migration; today these values remain setting-column metadata.
 
 ### `genre` (Multi-Valued, Durable, Story Slot)
 
@@ -941,7 +951,7 @@ Compiler surfaces:
 1. **Character category implementation.** `bodyform`, `disposition`, `capacity`, the role split (`role.function`, `role.resources`, `role.fame`, scope-bound `status`), and the companion `state` vocabulary are now drafted. Remaining work is implementation-specific: seed any still-missing tags and keep compiler support aligned with typed inputs.
 2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories, but follow-up work still needs to seed the new place anchors, migrate/deprecate legacy `place_affordance` rows, and remove the resolver shim after backfill.
 3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
-4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, not a blocker for current packages.
+4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, blocked on an entity-kind/category-registration migration and not a blocker for current packages.
 5. **Clearance vocabulary for ephemerals.** State clearance events are enumerated in `docs/orrery_state_vocabulary.md`. Faction `agenda` / `power_status`, `place_threat`, and any future ephemeral pair-tags still need event-collapse passes before event-cleared registry rows replace today's semantic-clearance defaults.
 6. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
 7. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
@@ -958,6 +968,7 @@ Compiler surfaces:
 - `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific migration notes.
 - `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, seeded anchors, and faction table cleanup implications.
 - `nexus/api/new_story_schemas.py::Genre` — current runtime source of truth for the story genre values mirrored in the Story Slot / Genre Tags section.
+- `nexus/agents/orrery/resolver.py::LOCATION_CLASS_TAG_CATEGORIES` — cutover shim that hydrates legacy `place_affordance` plus the replacement place categories into `WorldState.location_classes` until the data rewrite removes the old rows.
 - `migrations/043_orrery_category_refactor_phase1.py` — registers the place and faction replacement category names and records the legacy-to-replacement mappings.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.
