@@ -20,8 +20,9 @@ Registry and substrate prerequisites:
 - Migration 043 registers replacement place and faction categories and marks
   legacy cutover categories deprecated.
 - Migration 052 seeds the closed faction tag bank.
-- PR #346 / migration 054 seeds completed state and place anchors. Until that
-  lands in the target slot, the place/state rewrite is planning-only.
+- Hard prerequisite gate: PR #346 / migration 054 must be merged and applied to
+  the target slot before any place or state apply step. Until that lands, the
+  place/state rewrite is planning-only.
 - Character `role.function` remains a registry alignment decision: the design
   spec names `role.function`, but live migrations currently keep function tags
   under `role` and only split `role.fame` / `role.resources`. Do not run a
@@ -57,6 +58,17 @@ Observed active legacy/rewrite surface:
 | `orrery_state` rows | 50 | Mixed old semantic states; classify into canonical state, need/travel/work/intimacy substrate, pair-tags, or prose. |
 | old `role` rows | 110 | Many remain useful, but target category is blocked by role registry alignment. |
 | `role.fame` / `role.resources` rows | 0 | No live rows to rewrite; future compiler/backfill may add reviewed values. |
+
+Registry spot-checks:
+
+- The current Slot 2 `tags` table has no `traditionalist` row. Re-check the
+  live category before applying either faction or character rows because
+  `traditionalist` cannot simultaneously be faction `ideology` and character
+  `disposition` while `tags.tag` is globally keyed.
+- The current Slot 2 `hunter` row is still category `capacity`. The accepted
+  capacity vocabulary no longer retains `hunter`, so the migration decision is
+  whether to retire/alias that legacy row into the role-function vocabulary
+  after the `role` vs `role.function` target is settled.
 
 ## Manifest Operation Classes
 
@@ -97,7 +109,9 @@ Next actions:
 
 1. Review the generated faction manifest manually.
 2. Promote only unambiguous operations to `ready`.
-3. Run `nexus faction-apply --slot 2 --manifest PATH` as dry run.
+3. Run `nexus faction-apply --slot 2 --manifest PATH` as a dry-run sanity
+   check of the reviewed manifest. Omit `--manifest PATH` only when previewing
+   a newly built live manifest instead.
 4. Execute only ready `insert_entity_tag` rows.
 5. Leave column drops, legacy tag clearing, pair-tag target resolution, prose
    preservation, and world-event extraction to later reviewed slices.
@@ -147,9 +161,13 @@ Do not run a broad character apply until these are decided:
 - Global tag-name collisions created by category-qualified design language.
   The live `tags` table keys by global tag string, not by `(category, tag)`.
   Known blockers include `disposition:traditionalist` colliding with faction
-  `ideology:traditionalist`, and `role.function:hunter` colliding with the
-  legacy `capacity:hunter` row. Resolve these with globally unique tag names,
-  aliases, or category rewrites before inserting character rows.
+  `ideology:traditionalist`. Verify the current live `traditionalist` category
+  before apply because one side may already be absent or overwritten in a
+  migrated slot. `role.function:hunter` also collides with legacy
+  `capacity:hunter`; because the accepted capacity vocabulary drops `hunter`,
+  resolve this as a retirement/alias decision rather than a simple rename.
+  Resolve these with globally unique tag names, aliases, or category rewrites
+  before inserting character rows.
 - Which legacy `orrery_state` values move to canonical `state`, which move to
   dedicated need/travel/work/intimacy substrates, and which become prose.
 - Which old `profession_lite` rows are tag renames, role-function folds, or
@@ -180,6 +198,9 @@ Next actions:
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
 ## Execution Order
+
+Do not begin any apply step until PR #346 is merged and migration 054 has been
+applied to the target slot.
 
 1. Merge PR #346 so the state/place seed exists in target slots.
 2. Resolve the character registry alignment blocker.
