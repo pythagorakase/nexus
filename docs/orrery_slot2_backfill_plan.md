@@ -1,7 +1,7 @@
 # Orrery Slot 2 Backfill Plan
 
-**Status:** Phase 3 planning artifact for issue #326. This document is the
-review contract before any mature Slot 2 vocabulary rewrite mutates data.
+**Status:** Phase 4 checkpoint for issue #326. This document is the review
+contract before any mature Slot 2 vocabulary rewrite mutates data.
 
 ## Source Vocabulary
 
@@ -21,21 +21,33 @@ Registry and substrate prerequisites:
   legacy cutover categories deprecated.
 - Migration 052 seeds the closed faction tag bank.
 - Hard prerequisite gate: migration 054 must be applied to the target slot
-  before any place or state apply step. Until that lands, the place/state
-  rewrite is planning-only.
+  before any place or state apply step.
 - Migration 055 resolves the durable-character registry target: it keeps
   `tags.tag` globally keyed, registers `bodyform.lineage`,
   `bodyform.condition`, and `role.function`, seeds accepted durable character
   anchors, stores character lawfulness as `tradition_bound`, and moves the
   `hunter` tag definition to `role.function`.
+- Local Slot 2 was brought current through migration 055 on 2026-05-28 for
+  review-manifest generation. The rewrite remains review-only; no ready tag
+  rows were applied.
 
 ## Slot 2 Preflight
 
-Read-only checks run on 2026-05-28:
+Read-only checks run on 2026-05-28 before applying migrations 047-055:
 
 ```bash
 poetry run nexus --json faction-audit --slot 2
 poetry run nexus faction-manifest --slot 2 --output temp/slot2_backfill/faction_manifest_phase3.json
+```
+
+Post-migration checkpoint run on 2026-05-28:
+
+```bash
+poetry run python scripts/migrate.py --slot 2
+poetry run python scripts/migrate.py --slot 2 --dry-run
+poetry run nexus --json faction-manifest --slot 2 --output temp/slot2_backfill/faction_manifest_phase4_post055.json
+poetry run nexus --json character-manifest --slot 2 --output temp/slot2_backfill/character_manifest_phase4_post055.json
+poetry run nexus --json faction-apply --slot 2 --manifest temp/slot2_backfill/faction_manifest_phase4_post055.json
 ```
 
 Observed entity counts:
@@ -56,8 +68,15 @@ Observed active legacy/rewrite surface:
 | `profession_lite` rows | 26 | Character function rewrite needed into `role.function`; migration 055 resolves the target category but does not rewrite rows. |
 | `orrery_signal` rows | 1 | `under_active_pursuit` should become inbound `hunting` pair-tag or be dropped if already represented. |
 | `orrery_state` rows | 50 | Mixed old semantic states; classify into canonical state, need/travel/work/intimacy substrate, pair-tags, or prose. |
-| old `role` rows | 110 | Many remain useful; accepted function anchors now target `role.function`, while noncanonical legacy role rows need review. |
+| old `role` rows | 92 | Many remain useful; accepted function anchors now target `role.function`, while noncanonical legacy role rows need review. |
 | `role.fame` / `role.resources` rows | 0 | No live rows to rewrite; future compiler/backfill may add reviewed values. |
+
+Post-migration manifest results:
+
+| Manifest | Operations | Ready | Review-required | Notes |
+|---|---:|---:|---:|---|
+| faction | 145 | 0 | 145 | `faction-apply` dry-run skipped all rows as review-required and would insert 0 tags. |
+| character | 188 | 0 | 188 | 15 candidate renames resolve to registered target tags; 118 operations still lack registered target tags and need review/prose/pair-tag handling. |
 
 Registry spot-checks:
 
@@ -91,7 +110,8 @@ cleanup remains a later data-rewrite migration scoped to Slot 2.
 
 ### Factions
 
-Current status: strongest implementation coverage.
+Current status: strongest implementation coverage. Slot 2 has post-migration
+manifest and apply dry-run coverage.
 
 Existing surfaces:
 
@@ -101,7 +121,8 @@ Existing surfaces:
 
 Slot 2 dry-run result: 145 operations, all review-required. This is expected
 because faction columns are prose-heavy and many legacy values are aliases or
-structured remainders rather than deterministic tag writes.
+structured remainders rather than deterministic tag writes. The `faction-apply`
+dry-run against the generated manifest found 0 ready entity-tag writes.
 
 Next actions:
 
@@ -148,7 +169,8 @@ Next actions:
 
 ### Characters
 
-Current status: largest remaining data-rewrite surface.
+Current status: largest remaining data-rewrite surface. The read-only manifest
+now runs against the final durable-character registry.
 
 Do not run a broad character apply until these remaining surfaces are reviewed:
 
@@ -177,21 +199,28 @@ Initial classification:
 
 Next actions:
 
-1. Apply migration 055 before building the final reviewed character manifest.
-2. Run `nexus character-manifest --slot 2 --output PATH` to report
-   keep/rename/drop/pair-tag/prose decisions without applying them.
+1. Review `temp/slot2_backfill/character_manifest_phase4_post055.json`.
+2. Promote only unambiguous, non-destructive operations to a ready apply
+   surface after human review. Bodyform canonicalizations may be good first
+   candidates, but they still require review because they can encode history
+   rather than current embodiment.
 3. Reconcile the existing Slot 2 reference taggings in
    `docs/orrery_tag_vocabulary.md` against the manifest output.
 
 ## Execution Order
 
 Do not begin any apply step until migrations 054 and 055 have been applied to
-the target slot.
+the target slot. Slot 2 satisfies that prerequisite as of the 2026-05-28
+checkpoint.
 
-1. Apply migration 054 so the state/place seed exists in target slots.
+1. Apply migration 054 so the state/place seed exists in target slots. **Done
+   locally for Slot 2.**
 2. Apply migration 055 so the durable character seed and collision resolutions
-   exist in target slots.
+   exist in target slots. **Done locally for Slot 2.**
 3. Generate three read-only manifests for Slot 2: faction, place, character.
+   Faction and character are generated; place still needs a prose/metadata
+   manifest surface because Slot 2 has no active `place_affordance` rows to
+   rewrite mechanically.
 4. Review manifests in that order: faction first because tooling exists, place
    second because there are no existing place rows to preserve, character last
    because it has the most category drift.

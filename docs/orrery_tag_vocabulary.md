@@ -696,10 +696,10 @@ rows until the data rewrite lands. Migration/backfill should use a reviewed
 manifest rather than a one-size-fits-all mapping, but these defaults are safe
 starting points:
 
-**Seed prerequisite.** This mapping cannot be applied until a registry migration
-seeds the target place anchors. `administration` and `water_source` are newly
-introduced by this draft, and the rest of the replacement anchors also need
-real `tags` rows because migration 043 registered only category names.
+**Seed prerequisite.** Migration 054 seeds the target place anchors. A reviewed
+backfill manifest still needs to decide which rows to write; Slot 2 has no
+active `place_affordance` rows, so the place rewrite must start from place
+prose/metadata rather than a simple legacy-row remap.
 
 | Legacy / Sample Value | New Reading |
 |---|---|
@@ -963,9 +963,9 @@ Compiler surfaces:
 5. **Clearance vocabulary for ephemerals.** State clearance events are enumerated in `docs/orrery_state_vocabulary.md`. Faction `agenda` / `power_status`, `place_threat`, and any future ephemeral pair-tags still need event-collapse passes before event-cleared registry rows replace today's semantic-clearance defaults.
 6. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
 7. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
-8. **Audit pass on existing slot 2 vocabulary.** Per-tag classification: keep (in new categories), rename, drop, or convert to multi-entity tag.
+8. **Audit pass on existing slot 2 vocabulary.** Faction and character dry-run manifests exist for Slot 2 after migrations 054/055. Place still needs a prose/metadata manifest because there are no active `place_affordance` rows to rewrite directly.
 9. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; this is ready to plan against the completed vocabulary draft and remains tracked by issue #326.
+10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; issue #326 tracks the reviewed manifest flow and the stop condition that no current faction/character operations are ready to apply without human review.
 
 ---
 
