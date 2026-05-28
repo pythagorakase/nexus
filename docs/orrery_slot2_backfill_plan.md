@@ -38,6 +38,8 @@ Read-only checks run on 2026-05-28 before applying migrations 047-055:
 ```bash
 poetry run nexus --json faction-audit --slot 2
 poetry run nexus faction-manifest --slot 2 --output temp/slot2_backfill/faction_manifest_phase3.json
+poetry run nexus place-manifest --slot 2 --output temp/slot2_backfill/place_manifest_phase5.json
+poetry run nexus character-manifest --slot 2 --output temp/slot2_backfill/character_manifest_phase4_post055.json
 ```
 
 Post-migration checkpoint run on 2026-05-28:
@@ -63,8 +65,10 @@ Observed active legacy/rewrite surface:
 | Surface | Active rows / operations | Reading |
 |---|---:|---|
 | `place_affordance` entity tags | 0 | No existing place tags to rewrite deterministically; place backfill must come from place prose/manual review. |
+| place manifest operations | 889 | All review-required; all target tags registered; generated from place type plus bounded prose/metadata keyword evidence. |
 | faction manifest operations | 145 | All review-required; no ready writes should be applied without human review. |
 | faction legacy tag rows | 56 | Covered by `nexus faction-audit` / `faction-manifest`. |
+| character manifest operations | 188 | All review-required; 15 candidate renames and 118 missing target-tag operations remain review items. |
 | `profession_lite` rows | 26 | Character function rewrite needed into `role.function`; migration 055 resolves the target category but does not rewrite rows. |
 | `orrery_signal` rows | 1 | `under_active_pursuit` should become inbound `hunting` pair-tag or be dropped if already represented. |
 | `orrery_state` rows | 50 | Mixed old semantic states; classify into canonical state, need/travel/work/intimacy substrate, pair-tags, or prose. |
@@ -137,8 +141,19 @@ Next actions:
 
 ### Places
 
-Current status: registry and resolver shim are ready or nearly ready, but Slot
-2 has no active `place_affordance` rows to rewrite.
+Current status: read-only manifest coverage exists, but Slot 2 has no active
+`place_affordance` rows to rewrite.
+
+Existing surface:
+
+- `nexus place-manifest --slot N --output PATH`
+
+Slot 2 dry-run result: 889 operations across 78 places, all review-required.
+Every target tag is registered; there are no ready writes. The manifest scans
+place type plus bounded keyword evidence from name, summary, history,
+`current_status`, secrets, and `extra_data`. Keywords use word/phrase boundary
+matching so review candidates do not come from substring accidents such as
+`port` inside `Department` or `crypt` inside `encrypted`.
 
 Implications:
 
@@ -160,11 +175,10 @@ Safe deterministic defaults:
 
 Next actions:
 
-1. Add a read-only `place-audit` / `place-manifest` surface, or fold places into
-   a broader `vocabulary-audit` command.
-2. Generate Slot 2 place candidates from place prose and existing references.
-3. Review place candidates before any apply step.
-4. Remove the `place_affordance` resolver shim only after migrated rows and
+1. Review generated Slot 2 place candidates before any apply step.
+2. Promote only unambiguous place operations to `ready` if/when a place apply
+   path exists.
+3. Remove the `place_affordance` resolver shim only after migrated rows and
    predicate tests prove that package gates still match.
 
 ### Characters

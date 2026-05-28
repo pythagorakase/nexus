@@ -12,6 +12,7 @@ Commands:
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
     nexus character-manifest --slot N  Build reviewed character tag manifest
+    nexus place-manifest --slot N  Build reviewed place tag manifest
 
 The CLI is slot-centric: only --slot N is required. The backend resolves
 all other state (wizard phase, current chunk, thread ID) automatically.
@@ -1274,6 +1275,40 @@ def run_character_manifest(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_place_manifest(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build a read-only place tag migration manifest."""
+
+    from nexus.api.db_pool import get_connection
+    from nexus.api.place_tag_manifest import build_place_migration_manifest
+    from nexus.api.slot_utils import slot_dbname
+
+    dbname = slot_dbname(args.slot)
+    with get_connection(dbname, dict_cursor=True) as conn:
+        with conn.cursor() as cur:
+            cur.execute("BEGIN READ ONLY")
+            manifest = build_place_migration_manifest(
+                cur,
+                slot=args.slot,
+                dbname=dbname,
+            )
+
+    output_path = getattr(args, "output", None)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+    return {
+        "success": True,
+        "message": f"Place tag migration manifest for slot {args.slot} (dry run).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "place_manifest": manifest,
+        "manifest_output": str(output_path) if output_path is not None else None,
+    }
+
+
 def run_faction_apply(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run or execute ready faction manifest operations."""
 
@@ -1444,6 +1479,7 @@ Examples:
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
   nexus faction-apply --slot 2 --manifest manifest.json --execute
   nexus character-manifest --slot 2  Build character tag manifest
+  nexus place-manifest --slot 2  Build place tag manifest
 """,
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON output")
@@ -1640,6 +1676,20 @@ Examples:
         help="Optional path for the raw character migration manifest JSON.",
     )
 
+    # place-manifest command
+    place_manifest_parser = subparsers.add_parser(
+        "place-manifest",
+        help="Build read-only place tag migration manifest",
+    )
+    place_manifest_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    place_manifest_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the raw place migration manifest JSON.",
+    )
+
     # lock command
     lock_parser = subparsers.add_parser(
         "lock", help="Lock a slot to prevent modifications"
@@ -1676,6 +1726,7 @@ def main() -> int:
         "faction-manifest",
         "faction-apply",
         "character-manifest",
+        "place-manifest",
         "lock",
         "unlock",
     ):
@@ -1714,6 +1765,8 @@ def main() -> int:
         result = run_faction_apply(args)
     elif args.command == "character-manifest":
         result = run_character_manifest(args)
+    elif args.command == "place-manifest":
+        result = run_place_manifest(args)
     elif args.command == "lock":
         result = run_lock(args)
     elif args.command == "unlock":
