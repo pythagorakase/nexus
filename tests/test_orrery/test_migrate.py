@@ -672,6 +672,81 @@ def test_faction_legacy_write_default_migration_drops_power_default() -> None:
     assert "Orrery power_status tags" in source
 
 
+def test_completed_tag_vocab_migration_seeds_state_and_place_anchors() -> None:
+    """Migration 054 seeds completed state/place vocabulary without collisions."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "054_orrery_completed_tag_vocab.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+
+    place_durable = {
+        (tag, category) for tag, category, _description in migration.PLACE_DURABLE_TAGS
+    }
+    place_ephemeral = {
+        (tag, category)
+        for tag, category, _clear_on_json, _description in (
+            migration.PLACE_EPHEMERAL_TAGS
+        )
+    }
+    state_event = {
+        tag
+        for tag, _clear_on_json, _reapplication_policy, _description in (
+            migration.STATE_EVENT_TAGS
+        )
+    }
+    state_time = {tag for tag, _description in migration.STATE_TIME_TAGS}
+    tag_names = (
+        {tag for tag, _category in place_durable | place_ephemeral}
+        | state_event
+        | state_time
+    )
+
+    assert len(tag_names) == 52
+    assert len(tag_names) == (
+        len(migration.PLACE_DURABLE_TAGS)
+        + len(migration.PLACE_EPHEMERAL_TAGS)
+        + len(migration.STATE_EVENT_TAGS)
+        + len(migration.STATE_TIME_TAGS)
+    )
+    assert len(migration.PLACE_DURABLE_TAGS) == 35
+    assert len(migration.PLACE_EPHEMERAL_TAGS) == 3
+    assert len(migration.STATE_EVENT_TAGS) == 10
+    assert len(migration.STATE_TIME_TAGS) == 4
+    assert {
+        "place_known",
+        "place_hidden",
+        "place_open",
+        "place_restricted",
+        "place_contested",
+        "place_medical",
+        "water_source",
+        "administration",
+        "intoxicated:stimulant",
+        "disguised",
+    } <= tag_names
+    assert not ({"known", "medical", "contested"} & tag_names)
+    assert {
+        "place_function",
+        "place_visibility",
+        "place_access",
+        "place_environment",
+    } == {category for _tag, category in place_durable}
+    assert {"place_threat"} == {category for _tag, category in place_ephemeral}
+    assert {tag for tag, _description in migration.STATE_TIME_TAGS} == {
+        "intoxicated:stimulant",
+        "intoxicated:depressant",
+        "intoxicated:hallucinogen",
+        "intoxicated:dissociative",
+    }
+    assert migration.ALLOWED_CATEGORY_REWRITES == {
+        "wilderness": frozenset({"place_affordance"})
+    }
+    assert "Completed vocabulary tag name collisions" in migration_path.read_text()
+
+
 @pytest.mark.requires_postgres
 def test_entity_tag_expiry_substrate_migration_executes_against_slot_db() -> None:
     """Migration 049 DDL is idempotent against a real slot schema."""
