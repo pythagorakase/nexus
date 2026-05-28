@@ -1664,16 +1664,24 @@ def run_backfill_review_packet(args: argparse.Namespace) -> Dict[str, Any]:
         build_backfill_review_packet,
         render_backfill_review_packet_markdown,
     )
+    from nexus.api.character_tag_manifest import CHARACTER_MANIFEST_SCHEMA_VERSION
+    from nexus.api.faction_table_audit import FACTION_MANIFEST_SCHEMA_VERSION
+    from nexus.api.place_tag_manifest import PLACE_MANIFEST_SCHEMA_VERSION
 
     manifests = {
-        "faction": _load_faction_manifest_file(args.faction_manifest),
+        "faction": _load_faction_manifest_file(
+            args.faction_manifest,
+            expected_schema_version=FACTION_MANIFEST_SCHEMA_VERSION,
+        ),
         "character": _load_entity_manifest_file(
             args.character_manifest,
             payload_key="character_manifest",
+            expected_schema_version=CHARACTER_MANIFEST_SCHEMA_VERSION,
         ),
         "place": _load_entity_manifest_file(
             args.place_manifest,
             payload_key="place_manifest",
+            expected_schema_version=PLACE_MANIFEST_SCHEMA_VERSION,
         ),
     }
     packet = build_backfill_review_packet(
@@ -1698,30 +1706,81 @@ def run_backfill_review_packet(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
-def _load_faction_manifest_file(path: Path) -> Mapping[str, Any]:
+def _load_faction_manifest_file(
+    path: Path,
+    *,
+    expected_schema_version: Optional[str] = None,
+) -> Mapping[str, Any]:
     """Load a raw faction manifest or full CLI JSON payload from disk."""
 
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Faction manifest file must contain a JSON object")
 
+    _reject_mismatched_manifest_payload(data, expected_key="faction_manifest")
     manifest = data.get("faction_manifest", data)
     if not isinstance(manifest, dict):
         raise ValueError("Faction manifest payload must be a JSON object")
+    _validate_manifest_schema(
+        manifest,
+        expected_schema_version=expected_schema_version,
+        manifest_label="Faction",
+    )
     return manifest
 
 
-def _load_entity_manifest_file(path: Path, *, payload_key: str) -> Mapping[str, Any]:
+def _load_entity_manifest_file(
+    path: Path,
+    *,
+    payload_key: str,
+    expected_schema_version: Optional[str] = None,
+) -> Mapping[str, Any]:
     """Load a raw entity-tag manifest or full CLI JSON payload from disk."""
 
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError("Entity-tag manifest file must contain a JSON object")
 
+    _reject_mismatched_manifest_payload(data, expected_key=payload_key)
     manifest = data.get(payload_key, data)
     if not isinstance(manifest, dict):
         raise ValueError("Entity-tag manifest payload must be a JSON object")
+    _validate_manifest_schema(
+        manifest,
+        expected_schema_version=expected_schema_version,
+        manifest_label=payload_key.removesuffix("_manifest").title(),
+    )
     return manifest
+
+
+def _reject_mismatched_manifest_payload(
+    data: Mapping[str, Any],
+    *,
+    expected_key: str,
+) -> None:
+    manifest_keys = sorted(
+        key for key in data if key.endswith("_manifest") and key != expected_key
+    )
+    if manifest_keys and expected_key not in data:
+        raise ValueError(
+            f"Expected {expected_key} payload; found {', '.join(manifest_keys)}"
+        )
+
+
+def _validate_manifest_schema(
+    manifest: Mapping[str, Any],
+    *,
+    expected_schema_version: Optional[str],
+    manifest_label: str,
+) -> None:
+    if expected_schema_version is None:
+        return
+    schema_version = manifest.get("schema_version")
+    if schema_version != expected_schema_version:
+        raise ValueError(
+            f"{manifest_label} manifest requires {expected_schema_version}; "
+            f"got {schema_version!r}"
+        )
 
 
 def _load_optional_entity_manifest(

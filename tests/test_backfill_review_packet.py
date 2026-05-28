@@ -164,6 +164,70 @@ def test_cli_backfill_review_packet_writes_markdown(tmp_path) -> None:
     )
 
 
+def test_cli_backfill_review_packet_rejects_swapped_manifest_payload(tmp_path) -> None:
+    """A wrong-family CLI payload should fail instead of counting zero rows."""
+
+    faction_path = tmp_path / "faction.json"
+    character_path = tmp_path / "character.json"
+    place_path = tmp_path / "place.json"
+    faction_path.write_text(
+        json.dumps(_manifest("faction-migration-manifest.v1", [])),
+        encoding="utf-8",
+    )
+    character_path.write_text(
+        json.dumps({"place_manifest": _manifest("orrery_place_manifest.v1", [])}),
+        encoding="utf-8",
+    )
+    place_path.write_text(
+        json.dumps({"place_manifest": _manifest("orrery_place_manifest.v1", [])}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Expected character_manifest payload"):
+        cli.run_backfill_review_packet(
+            Namespace(
+                slot=2,
+                faction_manifest=faction_path,
+                character_manifest=character_path,
+                place_manifest=place_path,
+                output=None,
+                examples_per_queue=2,
+            )
+        )
+
+
+def test_cli_backfill_review_packet_rejects_raw_wrong_schema(tmp_path) -> None:
+    """A raw manifest with the wrong schema should fail before summarizing."""
+
+    faction_path = tmp_path / "faction.json"
+    character_path = tmp_path / "character.json"
+    place_path = tmp_path / "place.json"
+    faction_path.write_text(
+        json.dumps(_manifest("faction-migration-manifest.v1", [])),
+        encoding="utf-8",
+    )
+    character_path.write_text(
+        json.dumps(_manifest("orrery_place_manifest.v1", [])),
+        encoding="utf-8",
+    )
+    place_path.write_text(
+        json.dumps(_manifest("orrery_place_manifest.v1", [])),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Character manifest requires"):
+        cli.run_backfill_review_packet(
+            Namespace(
+                slot=2,
+                faction_manifest=faction_path,
+                character_manifest=character_path,
+                place_manifest=place_path,
+                output=None,
+                examples_per_queue=2,
+            )
+        )
+
+
 def _manifest(
     schema_version: str,
     operations: list[dict[str, object]],
