@@ -545,8 +545,11 @@ def _print_backfill_review_packet(payload: Dict[str, Any]) -> None:
         "queue:prose_or_event",
         "queue:structured_remainder",
         "queue:drop_after_review",
+        "queue:other_review",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
+    if counters.get("queue:other_review", 0):
+        print("  warning: other_review rows need manifest/tooling classification")
 
     print()
     print("Families:")
@@ -1380,7 +1383,7 @@ def run_faction_manifest(args: argparse.Namespace) -> Dict[str, Any]:
         slot=args.slot,
         dbname=dbname,
     )
-    output_path = getattr(args, "output", None)
+    output_path = args.output
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(

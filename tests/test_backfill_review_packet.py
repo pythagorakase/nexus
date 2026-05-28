@@ -35,6 +35,12 @@ def test_build_backfill_review_packet_groups_review_queues() -> None:
                         source={"column": "legacy", "value": "old"},
                         target={"destination": "drop_after_review"},
                     ),
+                    _operation(
+                        operation_id="faction-unknown",
+                        operation_type="future_operation",
+                        source={"column": "future", "value": "unknown"},
+                        target={},
+                    ),
                 ],
             ),
             "character": _manifest(
@@ -82,13 +88,14 @@ def test_build_backfill_review_packet_groups_review_queues() -> None:
     assert packet["policy"]["mutates_data"] is False
     assert packet["policy"]["promotes_ready_rows"] is False
     counters = packet["counters"]
-    assert counters["operation_items"] == 5
+    assert counters["operation_items"] == 6
     assert counters["ready_operations"] == 0
-    assert counters["review_required_operations"] == 5
+    assert counters["review_required_operations"] == 6
     assert counters["queue:registered_single_entity"] == 2
     assert counters["queue:missing_target_tag"] == 1
     assert counters["queue:pair_target_resolution"] == 1
     assert counters["queue:drop_after_review"] == 1
+    assert counters["queue:other_review"] == 1
 
 
 def test_render_backfill_review_packet_markdown_names_gate() -> None:
@@ -106,6 +113,7 @@ def test_render_backfill_review_packet_markdown_names_gate() -> None:
 
     assert "# Slot 2 Orrery Backfill Review Packet" in markdown
     assert "does not mark any manifest row ready" in markdown
+    assert "Other review" in markdown
     assert "| faction | 0 | 0 | 0 |" in markdown
 
 
@@ -117,6 +125,23 @@ def test_backfill_review_packet_rejects_slot_mismatch() -> None:
             {
                 "faction": _manifest("test.v1", []),
                 "character": _manifest("test.v1", [], slot=3),
+                "place": _manifest("test.v1", []),
+            },
+            slot=2,
+        )
+
+
+def test_backfill_review_packet_rejects_non_integer_slot() -> None:
+    """Malformed slot metadata should produce a contextual error."""
+
+    manifest = _manifest("test.v1", [])
+    manifest["source"] = {"slot": "save_02", "dbname": "save_02"}
+
+    with pytest.raises(ValueError, match="character manifest has non-integer slot"):
+        build_backfill_review_packet(
+            {
+                "faction": _manifest("test.v1", []),
+                "character": manifest,
                 "place": _manifest("test.v1", []),
             },
             slot=2,
@@ -162,6 +187,43 @@ def test_cli_backfill_review_packet_writes_markdown(tmp_path) -> None:
     assert "Slot 2 Orrery Backfill Review Packet" in output_path.read_text(
         encoding="utf-8"
     )
+
+
+def test_cli_backfill_review_packet_returns_markdown_without_output(tmp_path) -> None:
+    """Without --output, the Markdown packet should remain in the return payload."""
+
+    faction_path = tmp_path / "faction.json"
+    character_path = tmp_path / "character.json"
+    place_path = tmp_path / "place.json"
+    faction_path.write_text(
+        json.dumps(_manifest("faction-migration-manifest.v1", [])),
+        encoding="utf-8",
+    )
+    character_path.write_text(
+        json.dumps(
+            {"character_manifest": _manifest("orrery_character_manifest.v1", [])}
+        ),
+        encoding="utf-8",
+    )
+    place_path.write_text(
+        json.dumps({"place_manifest": _manifest("orrery_place_manifest.v1", [])}),
+        encoding="utf-8",
+    )
+
+    result = cli.run_backfill_review_packet(
+        Namespace(
+            slot=2,
+            faction_manifest=faction_path,
+            character_manifest=character_path,
+            place_manifest=place_path,
+            output=None,
+            examples_per_queue=2,
+        )
+    )
+
+    assert result["success"] is True
+    assert result["packet_output"] is None
+    assert "Slot 2 Orrery Backfill Review Packet" in result["packet_markdown"]
 
 
 def test_cli_backfill_review_packet_rejects_swapped_manifest_payload(tmp_path) -> None:

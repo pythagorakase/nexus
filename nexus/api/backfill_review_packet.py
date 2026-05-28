@@ -102,8 +102,8 @@ def render_backfill_review_packet_markdown(packet: Mapping[str, Any]) -> str:
         "",
         "| Family | Operations | Ready | Review-required | Registered entity "
         "candidates | Missing target tags | Pair target rows | Prose/event rows | "
-        "Remainders | Drops |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "Remainders | Drops | Other review |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
 
     families = packet.get("families") or {}
@@ -114,7 +114,8 @@ def render_backfill_review_packet_markdown(packet: Mapping[str, Any]) -> str:
             "| {family} | {operation_items} | {ready_operations} | "
             "{review_required_operations} | {registered_single_entity} | "
             "{missing_target_tag} | {pair_target_resolution} | "
-            "{prose_or_event} | {structured_remainder} | {drop_after_review} |".format(
+            "{prose_or_event} | {structured_remainder} | {drop_after_review} | "
+            "{other_review} |".format(
                 family=family,
                 operation_items=counters.get("operation_items", 0),
                 ready_operations=counters.get("ready_operations", 0),
@@ -129,6 +130,7 @@ def render_backfill_review_packet_markdown(packet: Mapping[str, Any]) -> str:
                 prose_or_event=counters.get("queue:prose_or_event", 0),
                 structured_remainder=counters.get("queue:structured_remainder", 0),
                 drop_after_review=counters.get("queue:drop_after_review", 0),
+                other_review=counters.get("queue:other_review", 0),
             )
         )
 
@@ -218,7 +220,15 @@ def _validate_manifest_slot(
 ) -> None:
     source = manifest.get("source") or {}
     manifest_slot = source.get("slot")
-    if manifest_slot is not None and int(manifest_slot) != slot:
+    if manifest_slot is None:
+        return
+    try:
+        normalized_slot = int(manifest_slot)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{family} manifest has non-integer slot {manifest_slot!r}"
+        ) from exc
+    if normalized_slot != slot:
         raise ValueError(
             f"{family} manifest slot {manifest_slot} does not match --slot {slot}"
         )
