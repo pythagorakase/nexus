@@ -136,7 +136,12 @@ def collect_shapes(svg_path: Path) -> tuple[list[tuple[Shape, BBox]], BBox]:
         if bb is None:
             continue
         xmin, ymin, xmax, ymax = bb
-        if xmax <= xmin or ymax <= ymin:
+        # Keep axis-aligned line segments. A horizontal line has ymax == ymin
+        # and a vertical line has xmax == xmin, so a `<=` test on either axis
+        # silently discards every straight stroke (frame borders, radial ticks)
+        # — catastrophic for line-art sheets. Reject only inverted boxes and
+        # true zero-extent points (degenerate on BOTH axes).
+        if xmax < xmin or ymax < ymin or (xmax == xmin and ymax == ymin):
             continue
         shapes.append((element, BBox(xmin, ymin, xmax, ymax)))
     return shapes, page
@@ -256,7 +261,10 @@ def _shape_signature(shape: Shape) -> tuple | None:
     if bb is None:
         return None
     xmin, ymin, xmax, ymax = bb
-    if xmax <= xmin or ymax <= ymin:
+    # Mirror collect_shapes: keep zero-area line segments (frame borders, ticks);
+    # reject only inverted boxes and true zero-extent points. A `<=` test here
+    # would re-introduce the line-dropping bug at the emit/match stage.
+    if xmax < xmin or ymax < ymin or (xmax == xmin and ymax == ymin):
         return None
     rounded = (round(xmin, 3), round(ymin, 3), round(xmax, 3), round(ymax, 3))
     try:
@@ -499,6 +507,24 @@ def extract(
                     f"bbox={ubox.w:.1f}x{ubox.h:.1f}",
                     file=sys.stderr,
                 )
+
+        # Path-conservation guard. Every renderable shape node pdftocairo/Inkscape
+        # emitted must be accounted for — emitted into a cell or dropped as the
+        # page background. If the totals don't reconcile, a path was silently
+        # lost (the class of bug where a degenerate-bbox filter eats axis-aligned
+        # lines). Fail loudly rather than ship a lossy extraction.
+        total_nodes = len(xml_nodes_in_order)
+        emitted_total = sum(m["shape_count"] for m in manifest)
+        if emitted_total + dropped != total_nodes:
+            raise RuntimeError(
+                f"Path-conservation check failed: flat SVG has {total_nodes} "
+                f"renderable shape nodes, but {emitted_total} were emitted into "
+                f"cells + {dropped} dropped as background = "
+                f"{emitted_total + dropped}. "
+                f"{total_nodes - (emitted_total + dropped)} path(s) were lost — "
+                f"commonly axis-aligned lines rejected by a degenerate-bbox "
+                f"filter (xmax<=xmin / ymax<=ymin)."
+            )
 
         return {
             "input": str(input_path),

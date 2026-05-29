@@ -14,6 +14,7 @@ It bakes in several hard-won failure modes that naïve grid-cutters hit:
 3. **There is usually a page-spanning background shape.** Detect it generically by bbox-area ≈ page area (no fill-color assumption, no assumption a background exists).
 4. **Never cut on nominal grid divisions** (`page_width / cols`). Ornaments routinely overhang their cell by a few points — cutting on grid lines amputates corner details. Use projection-profile gutter detection and cut through the **middle of the empty bands**.
 5. **`svgelements` normalizes `width="...pt"` to 96-DPI pixels**, but the original path `d=` strings stay in viewBox user-units. The two coordinate systems must be reconciled before emitting per-cell SVGs (a 0.75 factor for any `pt`-declared source).
+6. **Axis-aligned line segments have a zero-area bbox — never reject them.** A horizontal line has `ymax == ymin`; a vertical line has `xmax == xmin`. A `bbox` filter written as `xmax <= xmin or ymax <= ymin` silently discards *every* straight stroke — catastrophic for line-art (frame borders, radial ticks), which is mostly straight lines. Reject only inverted boxes and true zero-extent points (degenerate on **both** axes). This is enforced two ways: the filters in `collect_shapes`/`_shape_signature`, and a **path-conservation guard** in `extract()` that fails loudly if `emitted + background_dropped != total_shape_nodes`. Curve-heavy sets (e.g. Art Nouveau) hid this bug for a while; line-art (Art Deco) is the adversarial case. Regression test: `.venv/bin/python scripts/selftest.py`.
 
 ## When to invoke
 
@@ -61,7 +62,21 @@ Per-design renaming (e.g. `…-CrescentMoon.svg`) is left to the human because t
 
 ## Validation
 
-After extraction, render PNGs against a tinted background to visually verify:
+**Visual checking is necessary but NOT sufficient.** Thin dropped strokes read
+as ordinary frame borders at a glance — a per-frame visual pass once missed 6 of
+7 broken frames in a real set. Always pair the eyeball check with a path-level
+check.
+
+1. **Path conservation (authoritative).** `extract()` raises if
+   `emitted + background_dropped != total_shape_nodes`, so a lossy extraction
+   fails loudly at generation time. To audit an *existing* set, diff the `d=`
+   strings of the per-cell SVGs against the flat converter SVG — every
+   non-background converter path must appear in exactly one cell.
+2. **Regression test.** `.venv/bin/python scripts/selftest.py` — confirms
+   axis-aligned line segments survive (guards failure mode #6). Re-run after any
+   `svgelements`/`CairoSVG` version bump.
+3. **Visual.** Render PNGs against a background that contrasts the ink color
+   (cream for black linework, dark for gold/white linework — `--bg` matters):
 
 ```bash
 .claude/skills/extract-vector-grid/.venv/bin/python \
