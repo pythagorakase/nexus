@@ -24,6 +24,10 @@ that this asset was purchased; the rights granted are defined by the
 *Stock Product Specific Terms* above. Retain the invoice as proof of purchase
 in the event of an Adobe audit.
 
+The `-Invoice.PDF` filename is recorded as downloaded from Adobe's order portal
+and is intentionally not normalized to a fixed convention — do not assume a
+`<asset_id>-License.PDF` pattern across sets.
+
 ## Provenance
 
 Frames in this directory were extracted from
