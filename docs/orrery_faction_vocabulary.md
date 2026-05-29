@@ -1,6 +1,6 @@
 # Orrery Faction Vocabulary
 
-**Status:** draft design spec for faction single-entity tag categories. Companion to `docs/orrery_tag_vocabulary.md`; migration 052 seeds the 65 tag anchors. Legacy Slot 2 faction tag rewrite, faction-table cleanup, and clearance-event collapse remain separate follow-up work.
+**Status:** implemented design spec for faction single-entity tag categories. Companion to `docs/orrery_tag_vocabulary.md`; migration 052 seeds the 65 tag anchors. The Slot 2 vocabulary rewrite applied reviewed faction rows on 2026-05-29; faction-table cleanup and clearance-event collapse remain separate follow-up work.
 
 ---
 
@@ -351,7 +351,7 @@ Runtime write boundary:
 
 1. **Registry categories.** Migration 043 registers the six categories used here, and migration 052 seeds the 65 canonical tag rows. The draft intentionally avoids adding faction `state`; any future seventh category needs a separate category-registration migration.
 2. **Cardinality enforcement.** `legitimacy`, `operational_mode`, and `power_status` are exclusive design categories. Until the `tags.cardinality` column ships, application writers must clear sibling rows explicitly, as with current exclusive character categories.
-3. **Slot 2 backfill.** Existing faction tags should be classified as keep/rename/drop/convert-to-pair-tag. Ambiguous `resource_class:network` rows need manual review because "network" may mean information, patronage, criminal logistics, or membership.
+3. **Faction table cleanup.** The Slot 2 entity-tag rewrite is applied. The remaining faction data work is to migrate or drop obsolete `factions` columns once downstream callers no longer depend on them, and to keep ambiguous values such as legacy `resource_class:network` in prose or reviewed pair-tag surfaces rather than recreating them as vague single-entity tags.
 4. **Package gates.** Packages should prefer category-specific predicates when they care about the axis. A gate that cares whether a faction is public should read `operational_mode`, not `legitimacy`; a gate that cares whether public association is risky should read `legitimacy`.
 5. **Status flavor.** Scope-bound `status:<level>(subject -> faction)` derives formal/informal flavor from the faction's `legitimacy` and `operational_mode`. Do not split `status:senior` into formal/informal variants.
 6. **Retrograde.** Stage R1/R2 seed generation can use the durable categories freely. Ephemeral `power_status` and `agenda` should be generated sparingly and anchored to a recent or active `world_event`, not sprinkled as timeless backstory.

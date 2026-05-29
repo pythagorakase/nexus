@@ -8,6 +8,7 @@ from nexus.agents.orrery.substrate import (
     NOT,
     OR,
     Branch,
+    Condition,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -45,6 +46,41 @@ from nexus.agents.orrery.substrate import (
 )
 
 
+def _place_any(*classes: str) -> Condition:
+    conditions = tuple(in_location_class(location_class) for location_class in classes)
+    return conditions[0] if len(conditions) == 1 else OR(*conditions)
+
+
+def _place_all(*classes: str) -> Condition:
+    conditions = tuple(in_location_class(location_class) for location_class in classes)
+    return conditions[0] if len(conditions) == 1 else AND(*conditions)
+
+
+ROOTS_TRANSIT_PLACE = _place_all("subterranean", "transit")
+SAFEHOUSE_PLACE = _place_any("haven")
+URBAN_PUBLIC_FLOW_PLACE = _place_any(
+    "urban_dense", "place_open", "transit", "commerce", "meeting"
+)
+URBAN_BROKERAGE_PLACE = _place_any("urban_dense", "commerce", "meeting")
+REMEMBRANCE_PLACE = _place_any("tomb", "sacred")
+TRANSIT_PLACE = _place_any("transit")
+WORKPLACE_PLACE = _place_any(
+    "administration", "craft", "military", "place_medical", "production"
+)
+WORKSITE_PLACE = _place_any("craft", "military", "production")
+ADMINISTRATION_PLACE = _place_any("administration")
+PUBLIC_MEETING_PLACE = _place_any("meeting", "commerce", "place_open")
+DWELLING_PLACE = _place_any("dwelling")
+SAFE_LODGING_PLACE = _place_any("dwelling", "haven")
+PUBLIC_DRINK_PLACE = _place_any("commerce", "entertainment", "meeting")
+PUBLIC_WATER_PLACE = _place_any("water_source", "wilderness")
+PUBLIC_DINING_PLACE = _place_any("commerce", "entertainment", "meeting", "production")
+SOCIAL_VENUE_PLACE = _place_any("commerce", "entertainment", "meeting", "place_open")
+INTIMATE_SOCIAL_PLACE = _place_any("entertainment", "meeting")
+INTIMATE_SERVICES_PLACE = _place_any("commerce", "entertainment")
+PRIVATE_PLACE = _place_any("dwelling", "place_restricted")
+
+
 EVADE_PURSUERS = Template(
     id="evade_pursuers",
     priority=100,
@@ -57,7 +93,7 @@ EVADE_PURSUERS = Template(
         ),
         NOT(is_constrained()),
         OR(
-            in_location_class("the_roots"),
+            ROOTS_TRANSIT_PLACE,
             has_contact_of_kind("lodging"),
             can_move_publicly(),
         ),
@@ -65,7 +101,7 @@ EVADE_PURSUERS = Template(
     branches=(
         Branch(
             label="Go to ground in flooded tunnels",
-            conditions=AND(in_location_class("the_roots"), weather_is("rain")),
+            conditions=AND(ROOTS_TRANSIT_PLACE, weather_is("rain")),
             narrative_stub=(
                 "{actor} slips off a Rootline platform into a flooded service "
                 "corridor and kills every transmitter on their person."
@@ -139,7 +175,7 @@ HIDE = Template(
         Branch(
             label="Harden or sanitize a safehouse",
             conditions=AND(
-                in_location_class("safe_house"),
+                SAFEHOUSE_PLACE,
                 OR(
                     has_contact_of_kind("lodging"),
                     has_any_current_tag(
@@ -268,9 +304,7 @@ HONOR_DEBT = Template(
     branches=(
         Branch(
             label="Activate the Ghostprint Key at a sympathetic node",
-            conditions=AND(
-                has_tag("ghostprint_active"), in_location_class("the_roots")
-            ),
+            conditions=AND(has_tag("ghostprint_active"), ROOTS_TRANSIT_PLACE),
             narrative_stub=(
                 "{actor} finds a half-decommissioned authentication terminal "
                 "and pulses the Key against it."
@@ -323,7 +357,7 @@ PURSUE_GHOST_LEAD = Template(
     branches=(
         Branch(
             label="Recon a hideout their body remembers",
-            conditions=in_location_class("the_roots"),
+            conditions=ROOTS_TRANSIT_PLACE,
             narrative_stub=(
                 "{actor} picks through maintenance corridors to a place their "
                 "body recognizes before memory can explain why."
@@ -380,16 +414,14 @@ MAINTAIN_COVER = Template(
                 "public_role",
                 "undercover",
             ),
-            in_location_class("the_glow"),
-            in_location_class("market"),
-            in_location_class("transit_hub"),
+            URBAN_PUBLIC_FLOW_PLACE,
         ),
         since_last_event_at_least("maintain_cover", minimum_ticks=6),
     ),
     branches=(
         Branch(
             label="Run a low-level courier job",
-            conditions=AND(in_location_class("the_glow"), can_move_publicly()),
+            conditions=AND(URBAN_PUBLIC_FLOW_PLACE, can_move_publicly()),
             narrative_stub=(
                 "{actor} picks up a benign data packet, walks it across the "
                 "district, and earns just enough to register as ordinary."
@@ -548,7 +580,7 @@ EXTRACT_VENGEANCE = Template(
             label="Surface a reputation attack in the right channels",
             conditions=AND(
                 has_contact_of_kind("social"),
-                in_location_class("the_glow"),
+                URBAN_BROKERAGE_PLACE,
             ),
             narrative_stub=(
                 "{actor} feeds a curated dossier on {target} into three brokers "
@@ -1176,7 +1208,7 @@ MOURN_LOSS = Template(
     branches=(
         Branch(
             label="Visit the place of remembrance",
-            conditions=in_location_class("place_of_remembrance"),
+            conditions=REMEMBRANCE_PLACE,
             narrative_stub=(
                 "{actor} returns to the place where the dead are kept — "
                 "stone, name, photograph, marker, whatever this world has "
@@ -1440,7 +1472,7 @@ TRAVEL = Template(
                     has_tag("travel_ready"),
                     has_tag("travel_provisioned"),
                     has_tag("route_familiar"),
-                    in_location_class("transit_hub"),
+                    TRANSIT_PLACE,
                 ),
             ),
             narrative_stub=(
@@ -1503,9 +1535,9 @@ WORK = Template(
                 "researcher",
                 "academic",
             ),
-            in_location_class("workplace"),
-            in_location_class("worksite"),
-            in_location_class("administrative_office"),
+            WORKPLACE_PLACE,
+            WORKSITE_PLACE,
+            ADMINISTRATION_PLACE,
         ),
         NOT(is_in_transit()),
         since_last_event_at_least("work_performed", minimum_ticks=4),
@@ -1518,8 +1550,8 @@ WORK = Template(
         Branch(
             label="Work a public-facing shift",
             conditions=OR(
-                in_location_class("workplace"),
-                in_location_class("market"),
+                WORKPLACE_PLACE,
+                in_location_class("commerce"),
                 has_any_tag("keeps_shop", "merchant", "innkeeper", "trader"),
             ),
             narrative_stub=(
@@ -1536,7 +1568,7 @@ WORK = Template(
         ),
         Branch(
             label="Handle field or maintenance work",
-            conditions=OR(in_location_class("worksite"), has_tag("field_worker")),
+            conditions=OR(WORKSITE_PLACE, has_tag("field_worker")),
             narrative_stub=(
                 "{actor} spends the hour in practical labor: repairs, "
                 "inspection, hauling, checking systems whose importance "
@@ -1552,7 +1584,7 @@ WORK = Template(
         Branch(
             label="Keep administrative obligations moving",
             conditions=OR(
-                in_location_class("administrative_office"),
+                ADMINISTRATION_PLACE,
                 has_any_tag("researcher", "academic", "soldier"),
             ),
             narrative_stub=(
@@ -2200,7 +2232,7 @@ CONSULT_RIVAL = Template(
             label="Meet face-to-face on neutral ground",
             conditions=AND(
                 co_located(Slot.ACTOR, Slot.TARGET),
-                in_location_class("neutral_ground"),
+                PUBLIC_MEETING_PLACE,
             ),
             narrative_stub=(
                 "{actor} and {target} arrange to be in the same place at "
@@ -2323,7 +2355,7 @@ SLEEP = Template(
         ),
         Branch(
             label="Sleep at home",
-            conditions=in_location_class("home"),
+            conditions=DWELLING_PLACE,
             narrative_stub=(
                 "{actor} reaches familiar shelter and lets sleep take them "
                 "where the room already knows their shape."
@@ -2347,8 +2379,7 @@ SLEEP = Template(
         Branch(
             label="Sleep in safe lodgings",
             conditions=OR(
-                in_location_class("lodgings"),
-                in_location_class("safe_house"),
+                SAFE_LODGING_PLACE,
                 has_contact_of_kind("lodging"),
             ),
             narrative_stub=(
@@ -2432,12 +2463,7 @@ DRINK = Template(
         ),
         Branch(
             label="Drink in a public room",
-            conditions=OR(
-                in_location_class("tavern"),
-                in_location_class("teahouse"),
-                in_location_class("cafe"),
-                in_location_class("market"),
-            ),
+            conditions=PUBLIC_DRINK_PLACE,
             narrative_stub=(
                 "{actor} drinks what the room serves and lets the small "
                 "ritual of holding a cup make the hour easier."
@@ -2459,10 +2485,7 @@ DRINK = Template(
         ),
         Branch(
             label="Drink from a public or wild source",
-            conditions=OR(
-                in_location_class("public_water"),
-                in_location_class("wilderness"),
-            ),
+            conditions=PUBLIC_WATER_PLACE,
             narrative_stub=(
                 "{actor} drinks from whatever the place provides, and the "
                 "relief of water makes the rest of the day briefly simpler."
@@ -2550,7 +2573,7 @@ EAT = Template(
         Branch(
             label="Eat at home with household",
             conditions=AND(
-                in_location_class("home"),
+                DWELLING_PLACE,
                 has_any_tag("married", "parent", "extended_household"),
             ),
             narrative_stub=(
@@ -2574,12 +2597,7 @@ EAT = Template(
         ),
         Branch(
             label="Eat in a public dining place",
-            conditions=OR(
-                in_location_class("tavern"),
-                in_location_class("restaurant"),
-                in_location_class("market"),
-                in_location_class("cookshop"),
-            ),
+            conditions=PUBLIC_DINING_PLACE,
             narrative_stub=(
                 "{actor} eats something the place can provide and watches "
                 "the room continue its public life around them."
@@ -2739,14 +2757,7 @@ SOCIALIZE = Template(
         ),
         Branch(
             label="Go where people are",
-            conditions=OR(
-                in_location_class("tavern"),
-                in_location_class("teahouse"),
-                in_location_class("market"),
-                in_location_class("town_square"),
-                in_location_class("public_space"),
-                in_location_class("general_social_venue"),
-            ),
+            conditions=SOCIAL_VENUE_PLACE,
             narrative_stub=(
                 "{actor} goes to one of the places built around the fact "
                 "that people gather there, and stays long enough to become "
@@ -2838,7 +2849,7 @@ INTIMACY = Template(
         Branch(
             label="Spend private time with an established partner",
             conditions=AND(
-                in_location_class("home"),
+                DWELLING_PLACE,
                 has_established_partner_co_located(),
             ),
             narrative_stub=(
@@ -2864,7 +2875,7 @@ INTIMACY = Template(
         Branch(
             label="Visit a place where compatible company gathers",
             conditions=AND(
-                in_location_class("intimate_social_venue"),
+                INTIMATE_SOCIAL_PLACE,
                 has_need_debt_at_or_above("intimacy", 168),
                 NOT(has_tag("partnered_exclusively")),
             ),
@@ -2891,7 +2902,7 @@ INTIMACY = Template(
         Branch(
             label="Engage contracted intimate company",
             conditions=AND(
-                in_location_class("intimate_services_establishment"),
+                INTIMATE_SERVICES_PLACE,
                 has_contact_of_kind("intimate"),
                 NOT(has_tag("partnered_exclusively")),
                 NOT(
@@ -2925,7 +2936,7 @@ INTIMACY = Template(
         Branch(
             label="Attend to the need in private",
             conditions=AND(
-                OR(in_location_class("home"), in_location_class("private_quarters")),
+                PRIVATE_PLACE,
                 NOT(count_co_located(1)),
             ),
             narrative_stub=(

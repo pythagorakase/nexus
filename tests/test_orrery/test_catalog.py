@@ -78,8 +78,8 @@ def test_catalog_vocabulary_appendix_collects_referenced_terms() -> None:
     assert "grudge_active" in vocab["ephemeral_tags"]
     assert "intelligence_asset_active" in vocab["current_tags"]
     assert "retaliation_executed" in vocab["event_types"]
-    assert "home" in vocab["place_affordances"]
-    assert "wilderness" in vocab["place_affordances"]
+    assert "dwelling" in vocab["place_classes"]
+    assert "wilderness" in vocab["place_classes"]
     assert "family" in vocab["relationship_types"]
     assert "handler" in vocab["relationship_types"]
 

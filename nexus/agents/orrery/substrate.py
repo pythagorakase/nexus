@@ -98,15 +98,15 @@ PUBLIC_MOBILITY_TAGS: frozenset[str] = frozenset(
         "travel_ready",
     }
 )
-PUBLIC_PLACE_AFFORDANCES: frozenset[str] = frozenset(
+PUBLIC_PLACE_CLASSES: frozenset[str] = frozenset(
     {
-        "market",
-        "public_space",
-        "street",
-        "the_glow",
-        "the_roots",
-        "transit_hub",
-        "workplace",
+        "commerce",
+        "meeting",
+        "place_open",
+        "transit",
+        "urban_dense",
+        "urban_sparse",
+        "water_source",
     }
 )
 DRAMATIC_CONTACT_TAGS: frozenset[str] = HIDDEN_TAGS | frozenset(
@@ -444,10 +444,10 @@ def can_move_publicly(slot: Slot = Slot.ACTOR) -> Condition:
         if location_id is None:
             return False
         semantic_classes = state.location_classes.get(location_id, frozenset())
-        if PUBLIC_PLACE_AFFORDANCES & semantic_classes:
+        if PUBLIC_PLACE_CLASSES & semantic_classes:
             return True
         location_class = state.location_class.get(location_id)
-        return bool(location_class and location_class in PUBLIC_PLACE_AFFORDANCES)
+        return bool(location_class and location_class in PUBLIC_PLACE_CLASSES)
 
     return _named(_condition, f"can_move_publicly(@{slot.value})")
 

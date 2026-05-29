@@ -31,7 +31,6 @@ from nexus.agents.orrery.needs import (
 )
 
 LOCATION_CLASS_TAG_CATEGORIES: tuple[str, ...] = (
-    "place_affordance",
     "place_function",
     "place_visibility",
     "place_access",

@@ -330,7 +330,7 @@ def test_public_mobility_requires_public_context_and_freedom() -> None:
 
     public_state = WorldState(
         locations={1: 10},
-        location_classes={10: frozenset({"market"})},
+        location_classes={10: frozenset({"commerce"})},
     )
     private_state = WorldState(
         locations={1: 11},
@@ -340,7 +340,7 @@ def test_public_mobility_requires_public_context_and_freedom() -> None:
         tags={1: frozenset({"route_familiar"})},
         ephemeral_tags={1: frozenset({"captive"})},
         locations={1: 10},
-        location_classes={10: frozenset({"market"})},
+        location_classes={10: frozenset({"commerce"})},
     )
 
     assert can_move_publicly()(public_state, {Slot.ACTOR: 1})
@@ -448,7 +448,7 @@ def test_targeted_events_fire_builtin_package_gates() -> None:
 
     state = WorldState(
         locations={1: 10},
-        location_class={10: "the_roots"},
+        location_classes={10: frozenset({"subterranean", "transit"})},
         recent_events=(
             EventRecord(
                 event_type="compliance_alert",
@@ -514,15 +514,15 @@ def test_need_debt_condition_reads_world_state_scores() -> None:
 
 
 def test_location_class_condition_reads_semantic_place_classes() -> None:
-    """Location predicates can match one of several place affordance tags."""
+    """Location predicates can match one of several semantic place tags."""
 
     state = WorldState(
         locations={1: 10},
-        location_classes={10: frozenset({"fixed_location", "home", "safe_house"})},
+        location_classes={10: frozenset({"fixed_location", "dwelling", "haven"})},
     )
 
-    assert in_location_class("home")(state, {Slot.ACTOR: 1})
-    assert in_location_class("safe_house")(state, {Slot.ACTOR: 1})
+    assert in_location_class("dwelling")(state, {Slot.ACTOR: 1})
+    assert in_location_class("haven")(state, {Slot.ACTOR: 1})
     assert not in_location_class("wilderness")(state, {Slot.ACTOR: 1})
 
 

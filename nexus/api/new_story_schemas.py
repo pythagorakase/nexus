@@ -293,9 +293,7 @@ class TraitRationales(BaseModel):
     status: Optional[str] = Field(
         None, description="Why status trait fits this character"
     )
-    fame: Optional[str] = Field(
-        None, description="Why fame trait fits this character"
-    )
+    fame: Optional[str] = Field(None, description="Why fame trait fits this character")
     reputation: Optional[str] = Field(
         None, description="Why reputation/fame trait fits this character"
     )
@@ -882,14 +880,14 @@ class PlaceProfile(BaseModel):
         None, description="Additional attributes stored in places.extra_data"
     )
 
-    # Orrery place_affordance tagging for the starting location.
+    # Orrery semantic place tagging for the starting location.
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Semantic place_affordance tags for this location (e.g., "
-            "sheltered, public, isolated, defensible, ritually_charged). "
-            "Apply only registered tag names. See the Orrery Awareness section "
-            "of your system prompt."
+            "Semantic place tags for this location (e.g., commerce, dwelling, "
+            "haven, transit, place_hidden, place_open, wilderness). Apply only "
+            "registered tag names. See the Orrery Awareness section of your "
+            "system prompt."
         ),
     )
 
