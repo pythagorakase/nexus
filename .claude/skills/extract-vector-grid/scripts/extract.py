@@ -136,11 +136,11 @@ def collect_shapes(svg_path: Path) -> tuple[list[tuple[Shape, BBox]], BBox]:
         if bb is None:
             continue
         xmin, ymin, xmax, ymax = bb
-        # Keep axis-aligned line segments. A horizontal line has ymax == ymin
-        # and a vertical line has xmax == xmin, so a `<=` test on either axis
-        # silently discards every straight stroke (frame borders, radial ticks)
-        # — catastrophic for line-art sheets. Reject only inverted boxes and
-        # true zero-extent points (degenerate on BOTH axes).
+        # Axis-aligned line segments have a zero-area bbox by definition
+        # (horizontal: ymax == ymin; vertical: xmax == xmin) yet are real
+        # strokes — keep them; reject only inverted boxes and true points.
+        # Exact `==` is deliberate: cull only mathematically zero-extent
+        # points, never thin-but-real geometry.
         if xmax < xmin or ymax < ymin or (xmax == xmin and ymax == ymin):
             continue
         shapes.append((element, BBox(xmin, ymin, xmax, ymax)))
@@ -261,9 +261,8 @@ def _shape_signature(shape: Shape) -> tuple | None:
     if bb is None:
         return None
     xmin, ymin, xmax, ymax = bb
-    # Mirror collect_shapes: keep zero-area line segments (frame borders, ticks);
-    # reject only inverted boxes and true zero-extent points. A `<=` test here
-    # would re-introduce the line-dropping bug at the emit/match stage.
+    # Mirror collect_shapes (see there for rationale): keep zero-area line
+    # segments; reject only inverted boxes and true zero-extent points.
     if xmax < xmin or ymax < ymin or (xmax == xmin and ymax == ymin):
         return None
     rounded = (round(xmin, 3), round(ymin, 3), round(xmax, 3), round(ymax, 3))
@@ -516,14 +515,14 @@ def extract(
         total_nodes = len(xml_nodes_in_order)
         emitted_total = sum(m["shape_count"] for m in manifest)
         if emitted_total + dropped != total_nodes:
+            unaccounted = total_nodes - (emitted_total + dropped)
             raise RuntimeError(
                 f"Path-conservation check failed: flat SVG has {total_nodes} "
-                f"renderable shape nodes, but {emitted_total} were emitted into "
-                f"cells + {dropped} dropped as background = "
-                f"{emitted_total + dropped}. "
-                f"{total_nodes - (emitted_total + dropped)} path(s) were lost — "
-                f"commonly axis-aligned lines rejected by a degenerate-bbox "
-                f"filter (xmax<=xmin / ymax<=ymin)."
+                f"renderable shape node(s); {emitted_total} emitted into cells "
+                f"+ {dropped} dropped as background = {emitted_total + dropped}. "
+                f"{unaccounted} shape node(s) unaccounted for — check the bbox "
+                f"filters (collect_shapes / _shape_signature), background "
+                f"detection, and cell coverage."
             )
 
         return {

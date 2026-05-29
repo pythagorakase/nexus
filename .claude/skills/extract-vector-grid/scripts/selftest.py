@@ -23,6 +23,7 @@ from extract import (  # noqa: E402
     drop_page_background,
     find_gutter_midpoints,
     assign_to_cells,
+    extract,
 )
 
 # Two frames built ENTIRELY from axis-aligned line segments (4 borders each),
@@ -69,6 +70,27 @@ def main() -> None:
     assert len(cells) == 2, f"expected 2 cells, got {len(cells)}"
     assert emitted == 8, f"expected all 8 lines bucketed into cells, got {emitted}"
     print("PASS: 8 axis-aligned line segments preserved across 2 cells")
+
+    # End-to-end through extract(): the low-level path above bypasses
+    # _shape_signature (the emit-stage filter) and the path-conservation guard.
+    # Running extract() exercises both — it raises if the guard trips.
+    with tempfile.TemporaryDirectory() as td:
+        svg = Path(td) / "synth.svg"
+        svg.write_text(SYNTH_SVG)
+        report = extract(
+            svg,
+            Path(td) / "out",
+            name_prefix="selftest",
+            padding=8.0,
+            bg_coverage=0.9,
+            verbose=False,
+        )
+    assert (
+        len(report["cells"]) == 2
+    ), f"extract() found {len(report['cells'])} cells, expected 2"
+    e2e = sum(c["shape_count"] for c in report["cells"])
+    assert e2e == 8, f"extract() emitted {e2e} line segments, expected 8"
+    print("PASS: extract() end-to-end emitted 8 segments; conservation guard satisfied")
 
 
 if __name__ == "__main__":
