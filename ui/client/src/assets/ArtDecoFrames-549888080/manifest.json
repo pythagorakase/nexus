@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "set": "Art Deco Frames",
+  "source": {
+    "provider": "Adobe Stock",
+    "asset_id": "549888080",
+    "purchased": "2026-05-28"
+  },
+  "license": {
+    "type": "Adobe Stock Extended License",
+    "purchase_mechanism": "On-Demand",
+    "terms_document": "licenses/adobe-stock-2026-01-16.pdf",
+    "see_also": "LICENSE.md"
+  },
+  "extracted_from": "AdobeStock-549888080-ArtDecoFrames.ai",
+  "extractor": ".claude/skills/extract-vector-grid",
+  "naming_convention": "`name` is always non-null. When `name` equals the file stem (e.g. \"r1c2\"), the frame still awaits a human-vetted descriptive label. When `name` differs (e.g. \"CrescentMoon\"), it's a curated label.",
+  "grid": {"rows": 3, "cols": 3},
+  "frames": [
+    {"file": "r1c1.svg", "position": [1, 1], "name": "r1c1"},
+    {"file": "r1c2.svg", "position": [1, 2], "name": "r1c2"},
+    {"file": "r1c3.svg", "position": [1, 3], "name": "r1c3"},
+    {"file": "r2c1.svg", "position": [2, 1], "name": "r2c1"},
+    {"file": "r2c2.svg", "position": [2, 2], "name": "r2c2"},
+    {"file": "r2c3.svg", "position": [2, 3], "name": "r2c3"},
+    {"file": "r3c1.svg", "position": [3, 1], "name": "r3c1"},
+    {"file": "r3c2.svg", "position": [3, 2], "name": "r3c2"},
+    {"file": "r3c3.svg", "position": [3, 3], "name": "r3c3"}
+  ]
+}
