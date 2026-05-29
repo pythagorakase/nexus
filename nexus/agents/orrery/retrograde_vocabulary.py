@@ -37,7 +37,7 @@ class SeedEligibleVocabulary(TypedDict):
     multi_entity_tag_families: list[str]
     multi_entity_tag_definitions: list[PairTagPrimitive]
     event_types: list[str]
-    place_affordances: list[str]
+    place_classes: list[str]
     relationship_types: list[str]
 
 
@@ -84,7 +84,7 @@ def enumerate_seed_eligible_vocabulary(
         "multi_entity_tag_families": [item["tag"] for item in pair_tag_definitions],
         "multi_entity_tag_definitions": pair_tag_definitions,
         "event_types": _sorted_strings(template_vocab["event_types"]),
-        "place_affordances": _sorted_strings(template_vocab["place_affordances"]),
+        "place_classes": _sorted_strings(template_vocab["place_classes"]),
         "relationship_types": _sorted_strings(template_vocab["relationship_types"]),
     }
 

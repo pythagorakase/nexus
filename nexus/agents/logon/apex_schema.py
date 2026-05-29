@@ -311,10 +311,10 @@ class NewPlace(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Semantic place_affordance tags for this location (e.g., "
-            "sheltered, public, isolated, defensible, ritually_charged). "
-            "Propose new ones when the setting needs vocabulary that doesn't "
-            "yet exist."
+            "Semantic place tags for this location (e.g., commerce, dwelling, "
+            "haven, transit, place_hidden, place_open, wilderness). Apply "
+            "registered tags by name; omit tags when the closed registry has "
+            "no exact fit."
         ),
     )
 
@@ -674,9 +674,9 @@ class LocationStateUpdate(BaseModel):
     orrery_tags: Optional[OrreryTagBestowal] = Field(
         default=None,
         description=(
-            "Tag deltas for this place. Use applied_tags to add new "
-            "place_affordance tags, tags_to_clear to retire ones that no longer "
-            "apply (e.g., a sheltered hideout is now compromised)."
+            "Tag deltas for this place. Use applied_tags to add registered "
+            "semantic place tags, and tags_to_clear to retire ones that no "
+            "longer apply (e.g., a haven is now compromised)."
         ),
     )
 

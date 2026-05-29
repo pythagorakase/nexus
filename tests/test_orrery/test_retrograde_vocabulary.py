@@ -21,8 +21,8 @@ def test_seed_eligible_vocabulary_includes_template_primitives() -> None:
     assert "reputation_compromised" in vocabulary["single_entity_tag_anchors"]
     assert "retaliation_executed" in vocabulary["event_types"]
     assert "evade_pursuit" in vocabulary["event_types"]
-    assert "home" in vocabulary["place_affordances"]
-    assert "wilderness" in vocabulary["place_affordances"]
+    assert "dwelling" in vocabulary["place_classes"]
+    assert "wilderness" in vocabulary["place_classes"]
     assert vocabulary["registered_single_entity_tags"] == []
     assert vocabulary["registered_tags_by_category"] == {}
     assert "family" in vocabulary["relationship_types"]
@@ -91,7 +91,7 @@ def test_seed_eligible_pair_tags_are_sorted() -> None:
         "registered_tag_categories",
         "multi_entity_tag_families",
         "event_types",
-        "place_affordances",
+        "place_classes",
         "relationship_types",
     )
 

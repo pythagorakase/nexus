@@ -691,14 +691,15 @@ place-threat transitions actually recur.
 ### Legacy `place_affordance` Mapping
 
 `place_affordance` is dropped as a category. Migration 043 marks it deprecated
-and registers the replacement categories; the resolver shim reads old and new
-rows until the data rewrite lands. Migration/backfill should use a reviewed
-manifest rather than a one-size-fits-all mapping, but these defaults are safe
-starting points:
+and registers the replacement categories. The Slot 2 rewrite cleared active
+legacy rows and applied reviewed replacement rows on 2026-05-29; the resolver no
+longer hydrates `place_affordance` rows into `WorldState.location_classes`.
+Migration/backfill should use a reviewed manifest rather than a one-size-fits-all
+mapping, but these defaults are safe starting points:
 
 **Seed prerequisite.** Migration 054 seeds the target place anchors. A reviewed
-backfill manifest still needs to decide which rows to write; Slot 2 has no
-active `place_affordance` rows, so the place rewrite must start from place
+backfill manifest still needs to decide which rows to write. Slot 2 had no
+active `place_affordance` rows, so its place rewrite was sourced from place
 prose/metadata rather than a simple legacy-row remap.
 
 | Legacy / Sample Value | New Reading |
@@ -726,8 +727,8 @@ prose/metadata rather than a simple legacy-row remap.
 Companion: `docs/orrery_faction_vocabulary.md`. Migration 052 seeds the 65
 faction tag anchors, and `nexus faction-apply --slot N --manifest PATH
 [--execute]` covers the reviewed deterministic entity-tag rewrite slice.
-Review-required Slot 2 values, faction table API cleanup, column drops, and
-clearance-event collapse remain follow-up work.
+The reviewed Slot 2 faction entity-tag rewrite is applied. Faction table API
+cleanup, column drops, and clearance-event collapse remain follow-up work.
 
 Faction categories describe group-level actors: institutions, movements,
 corporations, gangs, churches, polities, guilds, scenes, families, and other
@@ -946,7 +947,7 @@ Compiler surfaces:
 | `bound_to` + `owes` | Merged into `obligation` |
 | `controls` | Too vague — Skald-confusion attractor |
 | `orrery_state` (category) | System-bookkeeping moves to dedicated tables |
-| `place_affordance` (category) | Decomposed into function / visibility / access / environment / threat. Migration 043 marks the category deprecated and registers replacement categories; legacy tag rows remain readable through the resolver shim until data rewrite. |
+| `place_affordance` (category) | Decomposed into function / visibility / access / environment / threat. Migration 043 marks the category deprecated and registers replacement categories; the Slot 2 rewrite cleared active legacy rows and the resolver no longer reads this category. |
 | `profession_lite` (category) | Merged into `role.function`. Migration 055 updates the replacement category; legacy tag rows remain live until rewritten. |
 | `orrery_signal` (category) | Merged into `state`. Migration 043 marks the category deprecated; legacy tag rows remain live until rewritten. |
 | `defensive_position` (place_function value) | Renamed to `fortification`; `haven` added |
@@ -956,16 +957,16 @@ Compiler surfaces:
 
 ## Open Items
 
-1. **Character category implementation.** `bodyform.lineage`, `bodyform.condition`, `disposition`, `capacity`, `role.function`, `role.resources`, `role.fame`, scope-bound `status`, and the companion `state` vocabulary are now drafted. Migration 054 seeds the completed `state` anchors; migration 055 seeds the durable character anchors and resolves the `traditionalist` / `hunter` registry collisions. `nexus character-manifest --slot N --output PATH` and `nexus character-apply --slot N --manifest PATH [--execute]` cover reviewed ready-row application for single-entity tag inserts. Remaining work is Slot 2 data review plus compiler/template alignment.
-2. **Place category implementation.** Values are drafted here. Migration 043 registers the replacement categories and migration 054 seeds the place anchors; `nexus place-manifest --slot N --output PATH` now produces a read-only review manifest from place type plus bounded prose/metadata keyword evidence, and `nexus place-apply --slot N --manifest PATH [--execute]` consumes only reviewed ready rows. Follow-up work still needs reviewed Slot 2 place tagging, legacy `place_affordance` deprecation cleanup, and resolver-shim removal after backfill.
-3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. Remaining work: Slot 2 mapping, faction-table cleanup, and clearance-event collapse.
+1. **Character category implementation.** `bodyform.lineage`, `bodyform.condition`, `disposition`, `capacity`, `role.function`, `role.resources`, `role.fame`, scope-bound `status`, and the companion `state` vocabulary are now drafted. Migration 054 seeds the completed `state` anchors; migration 055 seeds the durable character anchors and resolves the `traditionalist` / `hunter` registry collisions. `nexus character-manifest --slot N --output PATH` and `nexus character-apply --slot N --manifest PATH [--execute]` cover reviewed ready-row application for single-entity tag inserts. The Slot 2 rewrite applied the reviewed character rows; remaining work is compiler/template alignment and any later prose/pair-tag decisions the review packet intentionally withheld.
+2. **Place category implementation.** Values are implemented here. Migration 043 registers the replacement categories and migration 054 seeds the place anchors; `nexus place-manifest --slot N --output PATH` produces a review manifest from place type plus bounded prose/metadata keyword evidence, and `nexus place-apply --slot N --manifest PATH [--execute]` consumes reviewed ready rows. The Slot 2 rewrite applied reviewed place tags, withheld exclusive conflicts for later review, and removed the resolver shim for legacy `place_affordance` reads.
+3. **Faction category implementation.** Drafted in `docs/orrery_faction_vocabulary.md`; migration 052 seeds the closed 65-anchor tag vocabulary. The reviewed Slot 2 mapping is applied; remaining work is faction-table cleanup and clearance-event collapse.
 4. **Story/genre implementation.** Values are drafted here from the existing `Genre` enum. The runtime currently stores them on new-story setting columns; a story-slot entity/category mirror is optional future substrate, blocked on an entity-kind/category-registration migration and not a blocker for current packages.
 5. **Clearance vocabulary for ephemerals.** State clearance events are enumerated in `docs/orrery_state_vocabulary.md`. Faction `agenda` / `power_status`, `place_threat`, and any future ephemeral pair-tags still need event-collapse passes before event-cleared registry rows replace today's semantic-clearance defaults.
 6. **Cardinality column on `tags` registry.** Migration to add `cardinality enum('exclusive', 'multi')`.
 7. **`entity_pair_tags` substrate** — mostly landed. PR #283 shipped the migration (`042_orrery_entity_pair_tags.py`), the `pair_tags` registry, the `entity_pair_tags` table, and the writer functions (`apply_pair_tag_bestowal`, `clear_pair_tag`). PR #284 shipped the DB-level predicates (`pair_tag_exists`, `lookup_pair_tag_subjects`, `lookup_pair_tag_objects`). PR #285 shipped WorldState hydration + Condition-shape predicates (`has_pair_tag` over hydrated state). Migration 048 adds the `hunting` rename plus `has_inbound_pair_tag(...)` template gates; future work is now limited to any additional pair-tag-derived binding composers demanded by package implementations.
-8. **Audit pass on existing slot 2 vocabulary.** Faction, character, and place dry-run manifests exist for Slot 2 after migrations 054/055. All current operations are review-required; the apply commands dry-run cleanly and insert 0 tags until reviewed rows are promoted to `ready`.
+8. **Audit pass on existing slot 2 vocabulary.** Faction, character, and place manifests plus the review packet were generated for Slot 2 after migrations 054/055. Reviewed single-entity rows were promoted and applied on 2026-05-29; active deprecated/legacy entity tags are now zero.
 9. **Template rewrite.** `NEXUS_template` schema/seed updates downstream of vocabulary lock-in.
-10. **Slot 2 backfill data plan.** Re-apply settled tags to existing slot 2 entities; issue #326 tracks the reviewed manifest flow and the stop condition that no current faction/character/place operations are ready to apply without human review.
+10. **Slot 2 backfill data plan.** Issue #326 tracks the reviewed manifest flow. The non-destructive entity-tag rewrite is applied for Slot 2; remaining follow-up is withheld exclusive conflicts, prose/pair-tag/remainder decisions, obsolete faction-column cleanup, and broader template/UI consumers.
 
 ---
 
@@ -976,7 +977,7 @@ Compiler surfaces:
 - `docs/orrery_state_vocabulary.md` — authoritative spec for the `state` category; kept separate from this registry overview because it carries clearance contracts, substrate debts, and state-specific migration notes.
 - `docs/orrery_faction_vocabulary.md` — draft spec for faction tag categories, legacy category mapping, seeded anchors, and faction table cleanup implications.
 - `nexus/api/new_story_schemas.py::Genre` — current runtime source of truth for the story genre values mirrored in the Story Slot / Genre Tags section.
-- `nexus/agents/orrery/resolver.py::LOCATION_CLASS_TAG_CATEGORIES` — cutover shim that hydrates legacy `place_affordance` plus the replacement place categories into `WorldState.location_classes` until the data rewrite removes the old rows.
+- `nexus/agents/orrery/resolver.py::LOCATION_CLASS_TAG_CATEGORIES` — hydrates registry-backed place function / visibility / access / environment / threat categories into `WorldState.location_classes`.
 - `migrations/043_orrery_category_refactor_phase1.py` — registers the place and faction replacement category names and records the legacy-to-replacement mappings.
 - `migrations/042_orrery_entity_pair_tags.py` — source-of-truth for seeded multi-entity tags (registry rows in `pair_tags`).
 - `migrations/045_trait_compiler_substrate.py` — trait-compiler registry additions, `claims` subject-kind extension, `reputation` → `fame` data update, and audit cache column.

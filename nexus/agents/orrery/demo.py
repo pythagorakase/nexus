@@ -33,12 +33,19 @@ def build_presets() -> Dict[str, WorldState]:
         2: ROOTS_PLACE_ID,
         3: GLOW_PLACE_ID,
     }
-    location_classes = {
-        ROOTS_PLACE_ID: "the_roots",
-        GLOW_PLACE_ID: "the_glow",
-        STACKS_PLACE_ID: "the_stacks",
-        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
-        NEUTRAL_PLACE_ID: "neutral_ground",
+    legacy_location_class = {
+        ROOTS_PLACE_ID: "fixed_location",
+        GLOW_PLACE_ID: "fixed_location",
+        STACKS_PLACE_ID: "fixed_location",
+        REMEMBRANCE_PLACE_ID: "fixed_location",
+        NEUTRAL_PLACE_ID: "fixed_location",
+    }
+    semantic_location_classes = {
+        ROOTS_PLACE_ID: frozenset({"subterranean", "transit"}),
+        GLOW_PLACE_ID: frozenset({"commerce", "meeting", "place_open", "urban_dense"}),
+        STACKS_PLACE_ID: frozenset({"craft", "place_restricted", "production"}),
+        REMEMBRANCE_PLACE_ID: frozenset({"sacred", "tomb"}),
+        NEUTRAL_PLACE_ID: frozenset({"meeting", "place_open"}),
     }
     return {
         "hunted": WorldState(
@@ -48,7 +55,6 @@ def build_presets() -> Dict[str, WorldState]:
                 (TARGET_ID, ACTOR_ID): frozenset({"hunting"}),
             },
             locations=common_locations,
-            location_class=location_classes,
             recent_events=(
                 EventRecord(
                     event_type="compliance_alert",
@@ -59,12 +65,15 @@ def build_presets() -> Dict[str, WorldState]:
             time_of_day="night",
             weather="rain",
             current_tick=100,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
         ),
         "fragment": WorldState(
             tags={ACTOR_ID: frozenset({"seeking_identity", "ghostprint_active"})},
             pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:social"})},
             locations=common_locations,
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             time_of_day="evening",
             weather="rain",
             current_tick=100,
@@ -74,7 +83,8 @@ def build_presets() -> Dict[str, WorldState]:
             ephemeral_tags={ACTOR_ID: frozenset({"debt_pulse_active"})},
             pair_tags={(ACTOR_ID, TARGET_ID): frozenset({"contact:social"})},
             locations={ACTOR_ID: STACKS_PLACE_ID},
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             recent_events=(
                 EventRecord(
                     event_type="encoded_message",
@@ -89,7 +99,8 @@ def build_presets() -> Dict[str, WorldState]:
         "quiet": WorldState(
             tags={ACTOR_ID: frozenset({"seeking_identity"})},
             locations={ACTOR_ID: GLOW_PLACE_ID},
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             time_of_day="midday",
             weather="clear",
             current_tick=100,
@@ -97,7 +108,8 @@ def build_presets() -> Dict[str, WorldState]:
         "hiding": WorldState(
             tags={ACTOR_ID: frozenset({"off_grid"})},
             locations={ACTOR_ID: ROOTS_PLACE_ID},
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             time_of_day="night",
             weather="clear",
             current_tick=100,
@@ -106,7 +118,8 @@ def build_presets() -> Dict[str, WorldState]:
         "mourning": WorldState(
             ephemeral_tags={ACTOR_ID: frozenset({"grieving"})},
             locations={ACTOR_ID: REMEMBRANCE_PLACE_ID},
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             time_of_day="evening",
             weather="clear",
             current_tick=100,
@@ -114,7 +127,8 @@ def build_presets() -> Dict[str, WorldState]:
         "craft_soldier": WorldState(
             tags={ACTOR_ID: frozenset({"soldier"})},
             locations={ACTOR_ID: STACKS_PLACE_ID},
-            location_class=location_classes,
+            location_class=legacy_location_class,
+            location_classes=semantic_location_classes,
             time_of_day="evening",
             weather="clear",
             current_tick=100,
@@ -130,12 +144,19 @@ def build_multi_slot_presets() -> Dict[str, dict]:
     against real database state.
     """
 
-    location_classes = {
-        ROOTS_PLACE_ID: "the_roots",
-        GLOW_PLACE_ID: "the_glow",
-        STACKS_PLACE_ID: "the_stacks",
-        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
-        NEUTRAL_PLACE_ID: "neutral_ground",
+    legacy_location_class = {
+        ROOTS_PLACE_ID: "fixed_location",
+        GLOW_PLACE_ID: "fixed_location",
+        STACKS_PLACE_ID: "fixed_location",
+        REMEMBRANCE_PLACE_ID: "fixed_location",
+        NEUTRAL_PLACE_ID: "fixed_location",
+    }
+    semantic_location_classes = {
+        ROOTS_PLACE_ID: frozenset({"subterranean", "transit"}),
+        GLOW_PLACE_ID: frozenset({"commerce", "meeting", "place_open", "urban_dense"}),
+        STACKS_PLACE_ID: frozenset({"craft", "place_restricted", "production"}),
+        REMEMBRANCE_PLACE_ID: frozenset({"sacred", "tomb"}),
+        NEUTRAL_PLACE_ID: frozenset({"meeting", "place_open"}),
     }
     return {
         "vengeance": {
@@ -144,7 +165,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 ephemeral_tags={ACTOR_ID: frozenset({"grudge_active"})},
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"enemy"})},
                 locations={ACTOR_ID: ROOTS_PLACE_ID, TARGET_ID: ROOTS_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="night",
                 weather="clear",
                 current_tick=100,
@@ -156,7 +178,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 pair_tags={(3, TARGET_ID): frozenset({"hunting"})},
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="evening",
                 weather="clear",
                 current_tick=100,
@@ -168,7 +191,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 tags={ACTOR_ID: frozenset({"informant_handler"})},
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"handler"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="evening",
                 weather="clear",
                 current_tick=100,
@@ -179,7 +203,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
             "state": WorldState(
                 tags={ACTOR_ID: frozenset({"signal_operator"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: ROOTS_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="night",
                 weather="clear",
                 current_tick=100,
@@ -192,7 +217,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 tags={ACTOR_ID: frozenset({"magical_healing"})},
                 ephemeral_tags={TARGET_ID: frozenset({"wounded"})},
                 locations={ACTOR_ID: STACKS_PLACE_ID, TARGET_ID: STACKS_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="evening",
                 weather="clear",
                 current_tick=100,
@@ -205,7 +231,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 ephemeral_tags={TARGET_ID: frozenset({"dying"})},
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
                 locations={ACTOR_ID: STACKS_PLACE_ID, TARGET_ID: STACKS_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="night",
                 weather="clear",
                 current_tick=100,
@@ -216,7 +243,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
             "state": WorldState(
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"ally"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 recent_events=(
                     EventRecord(
                         event_type="threat_issued",
@@ -234,7 +262,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
             "state": WorldState(
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"mentor"})},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="afternoon",
                 weather="clear",
                 current_tick=100,
@@ -246,7 +275,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"family"})},
                 trust={(ACTOR_ID, TARGET_ID): 3, (TARGET_ID, ACTOR_ID): 2},
                 locations={ACTOR_ID: GLOW_PLACE_ID, TARGET_ID: GLOW_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 time_of_day="afternoon",
                 weather="clear",
                 current_tick=100,
@@ -257,7 +287,8 @@ def build_multi_slot_presets() -> Dict[str, dict]:
             "state": WorldState(
                 relationship_types={(ACTOR_ID, TARGET_ID): frozenset({"rival"})},
                 locations={ACTOR_ID: NEUTRAL_PLACE_ID, TARGET_ID: NEUTRAL_PLACE_ID},
-                location_class=location_classes,
+                location_class=legacy_location_class,
+                location_classes=semantic_location_classes,
                 recent_events=(
                     EventRecord(
                         event_type="compliance_alert",

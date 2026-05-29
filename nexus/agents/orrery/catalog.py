@@ -108,6 +108,13 @@ _register(
     ),
 )
 _register(
+    r"has_pair_tag_to_current_location\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has `{m.group('tag')}` pair tag "
+        "to current location"
+    ),
+)
+_register(
     r"has_inbound_pair_tag\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (f"{_slot(m.group('slot'))} has inbound " f"`{m.group('tag')}` pair tag"),
 )
@@ -166,7 +173,7 @@ _register(
 # Location predicates
 _register(
     r"in_location_class\((?P<lc>[^@()]+)@(?P<slot>\w+)\)",
-    lambda m: f"{_slot(m.group('slot'))} is in `{m.group('lc')}` place affordance",
+    lambda m: f"{_slot(m.group('slot'))} is in `{m.group('lc')}` place class",
 )
 _register(
     r"in_location\((?P<lid>\d+)@(?P<slot>\w+)\)",
@@ -528,12 +535,13 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("pair_tag", re.compile(r"has_pair_tag\(([^@()]+)@")),
     ("pair_tag", re.compile(r"lacks_pair_tag\(([^@()]+)@")),
+    ("pair_tag", re.compile(r"has_pair_tag_to_current_location\(([^@()]+)@")),
     ("pair_tag", re.compile(r"has_inbound_pair_tag\(([^@()]+)@")),
     ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
     ("contact_kind", re.compile(r"has_contact_of_kind\(([^@()]+)@")),
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
-    ("place_affordance", re.compile(r"in_location_class\(([^@()]+)@")),
+    ("place_class", re.compile(r"in_location_class\(([^@()]+)@")),
     ("relationship", re.compile(r"has_relationship_of_type\(([^,()]+),")),
     (
         "relationship",
@@ -561,7 +569,7 @@ def _collect_vocabulary(
     applied: set[str] = set()
     pair_tags: set[str] = set()
     events: set[str] = set()
-    place_affordances: set[str] = set()
+    place_classes: set[str] = set()
     relationships: set[str] = set()
 
     def visit(condition: Any) -> None:
@@ -594,8 +602,8 @@ def _collect_vocabulary(
                 pair_tags.add(f"contact:{captured}")
             elif kind == "event_type":
                 events.add(captured)
-            elif kind == "place_affordance":
-                place_affordances.add(captured)
+            elif kind == "place_class":
+                place_classes.add(captured)
             elif kind == "relationship":
                 relationships.add(captured)
             # First-match-wins: prevents future overlapping patterns from
@@ -634,7 +642,7 @@ def _collect_vocabulary(
         "applied_tags": sorted(applied),
         "pair_tags": sorted(pair_tags),
         "event_types": sorted(events),
-        "place_affordances": sorted(place_affordances),
+        "place_classes": sorted(place_classes),
         "relationship_types": sorted(relationships),
     }
 
@@ -694,8 +702,8 @@ def _render_vocabulary_appendix(templates: Iterable[Template]) -> List[str]:
         ("Pair tags queried by directed predicates", vocab["pair_tags"]),
         ("Event types", vocab["event_types"]),
         (
-            "Place affordances queried by location predicates",
-            vocab["place_affordances"],
+            "Place classes queried by location predicates",
+            vocab["place_classes"],
         ),
         ("Relationship types", vocab["relationship_types"]),
     ]

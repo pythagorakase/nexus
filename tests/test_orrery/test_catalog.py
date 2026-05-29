@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from nexus.agents.orrery import templates as template_module
 from nexus.agents.orrery.catalog import (
     _collect_vocabulary,
     _render_predicate_name,
@@ -78,10 +81,21 @@ def test_catalog_vocabulary_appendix_collects_referenced_terms() -> None:
     assert "grudge_active" in vocab["ephemeral_tags"]
     assert "intelligence_asset_active" in vocab["current_tags"]
     assert "retaliation_executed" in vocab["event_types"]
-    assert "home" in vocab["place_affordances"]
-    assert "wilderness" in vocab["place_affordances"]
+    assert "dwelling" in vocab["place_classes"]
+    assert "wilderness" in vocab["place_classes"]
+    assert "home" not in vocab["place_classes"]
+    assert "place_affordances" not in vocab
     assert "family" in vocab["relationship_types"]
     assert "handler" in vocab["relationship_types"]
+
+
+def test_place_class_wrappers_reject_empty_inputs() -> None:
+    """Private place-class helpers fail visibly if called without classes."""
+
+    with pytest.raises(ValueError, match="requires at least one place class"):
+        template_module._place_any()
+    with pytest.raises(ValueError, match="requires at least one place class"):
+        template_module._place_all()
 
 
 def test_render_predicate_name_handles_known_predicates() -> None:

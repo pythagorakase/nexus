@@ -25,7 +25,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - recent `compliance_alert` event targeting actor in last 5 ticks
   - **NOT:** actor is constrained or immobilized
   - **OR:**
-    - actor is in `the_roots` place affordance
+    - **AND:**
+      - actor is in `subterranean` place class
+      - actor is in `transit` place class
     - actor has outbound `contact:lodging` pair tag
     - actor can plausibly move through public flow
 
@@ -34,7 +36,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `the_roots` place affordance
+  - **AND:**
+    - actor is in `subterranean` place class
+    - actor is in `transit` place class
   - weather is one of [rain]
 
 **Does:** activity → "hiding from active pursuit"; adds `off_grid` to actor
@@ -197,7 +201,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has outbound `contact:social` pair tag
-  - actor is in `the_glow` place affordance
+  - **OR:**
+    - actor is in `urban_dense` place class
+    - actor is in `commerce` place class
+    - actor is in `meeting` place class
 
 **Does:** activity → "running a reputation attack"; adds `reputation_compromised` to target
 **Event:** `retaliation_attempted`
@@ -316,7 +323,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `safe_house` place affordance
+  - actor is in `haven` place class
   - **OR:**
     - actor has outbound `contact:lodging` pair tag
     - actor has any current tag of [`fixer`, `route_familiar`, `safehouse_operator`, `survivalist`]
@@ -396,7 +403,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `ghostprint_active` tag
-  - actor is in `the_roots` place affordance
+  - **AND:**
+    - actor is in `subterranean` place class
+    - actor is in `transit` place class
 
 **Does:** activity → "signaling through a sympathetic node"
 **Event:** `honor_debt`
@@ -507,7 +516,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Recon a hideout their body remembers  *(mag 0.64)*
 
-**When:** actor is in `the_roots` place affordance
+**When:**
+
+- **AND:**
+  - actor is in `subterranean` place class
+  - actor is in `transit` place class
 
 **Does:** activity → "reconning remembered terrain"
 **Event:** `pursue_identity_lead`
@@ -960,7 +973,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor and target are co-located
-  - actor is in `neutral_ground` place affordance
+  - **OR:**
+    - actor is in `meeting` place class
+    - actor is in `commerce` place class
+    - actor is in `place_open` place class
 
 **Does:** activity → "meeting a rival under truce"; adds `under_truce` to actor; adds `under_truce` to target
 **Event:** `rival_consulted`
@@ -1014,7 +1030,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 1 — Visit the place of remembrance  *(mag 0.42)*
 
-**When:** actor is in `place_of_remembrance` place affordance
+**When:**
+
+- **OR:**
+  - actor is in `tomb` place class
+  - actor is in `sacred` place class
 
 **Does:** activity → "tending the dead"
 **Event:** `mourning_act`
@@ -1078,7 +1098,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Sleep at home  *(mag 0.22)*
 
-**When:** actor is in `home` place affordance
+**When:**
+
+- **AND:**
+  - actor is in `dwelling` place class
+  - actor has `resides_at` pair tag to current location
 
 **Does:** activity → "sleeping at home"; fulfills `sleep` need, quality `good`, discharge 10
 **Event:** `slept`
@@ -1090,8 +1114,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `lodgings` place affordance
-  - actor is in `safe_house` place affordance
+  - **OR:**
+    - actor is in `dwelling` place class
+    - actor is in `haven` place class
   - actor has outbound `contact:lodging` pair tag
 
 **Does:** activity → "sleeping in safe lodgings"; fulfills `sleep` need, quality `adequate`, discharge 7
@@ -1136,10 +1161,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `tavern` place affordance
-  - actor is in `teahouse` place affordance
-  - actor is in `cafe` place affordance
-  - actor is in `market` place affordance
+  - actor is in `commerce` place class
+  - actor is in `entertainment` place class
+  - actor is in `meeting` place class
 
 **Does:** activity → "drinking in company"; fulfills `thirst` need, quality `social`, discharge 9999
 **Event:** `drank`
@@ -1151,8 +1175,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `public_water` place affordance
-  - actor is in `wilderness` place affordance
+  - actor is in `water_source` place class
+  - actor is in `wilderness` place class
 
 **Does:** activity → "drinking from an available source"; fulfills `thirst` need, quality `available_source`, discharge 9999
 **Event:** `drank`
@@ -1199,7 +1223,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `home` place affordance
+  - **AND:**
+    - actor is in `dwelling` place class
+    - actor has `resides_at` pair tag to current location
   - actor has any of [`married`, `parent`, `extended_household`]
 
 **Does:** activity → "sharing a household meal"; fulfills `hunger` need, quality `household_meal`, discharge 9999
@@ -1212,10 +1238,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `tavern` place affordance
-  - actor is in `restaurant` place affordance
-  - actor is in `market` place affordance
-  - actor is in `cookshop` place affordance
+  - actor is in `commerce` place class
+  - actor is in `entertainment` place class
+  - actor is in `meeting` place class
+  - actor is in `production` place class
 
 **Does:** activity → "eating in a public place"; fulfills `hunger` need, quality `public_meal`, discharge 9999
 **Event:** `ate`
@@ -1227,7 +1253,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `wilderness` place affordance
+  - actor is in `wilderness` place class
   - actor has any of [`forager`, `hunter`, `survivalist`, `ranger`, `scout`]
 
 **Does:** activity → "foraging for a meal"; fulfills `hunger` need, quality `wild_meal`, discharge 9999
@@ -1318,7 +1344,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
     - actor has `travel_ready` tag
     - actor has `travel_provisioned` tag
     - actor has `route_familiar` tag
-    - actor is in `transit_hub` place affordance
+    - actor is in `transit` place class
 
 **Does:** activity → "departing toward destination"; starts planned travel
 **Event:** `travel_departed`
@@ -1375,12 +1401,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `tavern` place affordance
-  - actor is in `teahouse` place affordance
-  - actor is in `market` place affordance
-  - actor is in `town_square` place affordance
-  - actor is in `public_space` place affordance
-  - actor is in `general_social_venue` place affordance
+  - actor is in `commerce` place class
+  - actor is in `entertainment` place class
+  - actor is in `meeting` place class
+  - actor is in `place_open` place class
 
 **Does:** activity → "passing time in a populated place"; fulfills `socialize` need, quality `public_company`, discharge 9999
 **Event:** `socialized`
@@ -1431,7 +1455,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `home` place affordance
+  - **AND:**
+    - actor is in `dwelling` place class
+    - actor has `resides_at` pair tag to current location
   - actor has an established partner co-located
 
 **Does:** activity → "spending private time with partner"; fulfills `intimacy` need, quality `established_partner`, discharge 9999
@@ -1444,7 +1470,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `intimate_social_venue` place affordance
+  - **OR:**
+    - actor is in `entertainment` place class
+    - actor is in `meeting` place class
   - actor has `intimacy` debt ≥ 168
   - **NOT:** actor has `partnered_exclusively` tag
 
@@ -1458,7 +1486,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `intimate_services_establishment` place affordance
+  - **OR:**
+    - actor is in `commerce` place class
+    - actor is in `entertainment` place class
   - actor has outbound `contact:intimate` pair tag
   - **NOT:** actor has `partnered_exclusively` tag
   - **NOT:** actor has any of [`vow_of_celibacy`, `religiously_abstinent`, `ethically_opposed_to_contracted_intimacy`]
@@ -1474,8 +1504,8 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - **OR:**
-    - actor is in `home` place affordance
-    - actor is in `private_quarters` place affordance
+    - actor is in `dwelling` place class
+    - actor is in `place_restricted` place class
   - **NOT:** 1+ other entities co-located with actor
 
 **Does:** activity → "private personal time"; fulfills `intimacy` need, quality `private_solo`, discharge 48
@@ -1604,9 +1634,12 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **OR:**
     - actor has `work_obligation` tag
     - actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `field_worker`, `soldier`, `researcher`, `academic`]
-    - actor is in `workplace` place affordance
-    - actor is in `worksite` place affordance
-    - actor is in `administrative_office` place affordance
+    - **OR:**
+      - actor is in `administration` place class
+      - actor is in `craft` place class
+      - actor is in `military` place class
+      - actor is in `place_medical` place class
+      - actor is in `production` place class
   - **NOT:** actor is in transit
   - ≥ 4 ticks since last `work_performed` event for actor
   - ≥ 4 ticks since last `household_work_performed` event for actor
@@ -1619,8 +1652,13 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `workplace` place affordance
-  - actor is in `market` place affordance
+  - **OR:**
+    - actor is in `administration` place class
+    - actor is in `craft` place class
+    - actor is in `military` place class
+    - actor is in `place_medical` place class
+    - actor is in `production` place class
+  - actor is in `commerce` place class
   - actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`]
 
 **Does:** activity → "working a public-facing shift"
@@ -1633,7 +1671,10 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `worksite` place affordance
+  - **OR:**
+    - actor is in `craft` place class
+    - actor is in `military` place class
+    - actor is in `production` place class
   - actor has `field_worker` tag
 
 **Does:** activity → "handling field maintenance work"
@@ -1646,7 +1687,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **OR:**
-  - actor is in `administrative_office` place affordance
+  - actor is in `administration` place class
   - actor has any of [`researcher`, `academic`, `soldier`]
 
 **Does:** activity → "handling administrative work"
@@ -1689,9 +1730,12 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is in transit
   - **OR:**
     - actor has any current tag of [`broker`, `cover_identity`, `fixer`, `operative`, `public_role`, `undercover`]
-    - actor is in `the_glow` place affordance
-    - actor is in `market` place affordance
-    - actor is in `transit_hub` place affordance
+    - **OR:**
+      - actor is in `urban_dense` place class
+      - actor is in `place_open` place class
+      - actor is in `transit` place class
+      - actor is in `commerce` place class
+      - actor is in `meeting` place class
   - ≥ 6 ticks since last `maintain_cover` event for actor
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*
@@ -1699,7 +1743,12 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `the_glow` place affordance
+  - **OR:**
+    - actor is in `urban_dense` place class
+    - actor is in `place_open` place class
+    - actor is in `transit` place class
+    - actor is in `commerce` place class
+    - actor is in `meeting` place class
   - actor can plausibly move through public flow
 
 **Does:** activity → "running low-level cover work"
@@ -1896,6 +1945,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `contact:lodging`
 - `contact:social`
 - `hunting`
+- `resides_at`
 
 ### Event types
 
@@ -1945,33 +1995,27 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `work_performed`
 - `wound_healed`
 
-### Place affordances queried by location predicates
+### Place classes queried by location predicates
 
-- `administrative_office`
-- `cafe`
-- `cookshop`
-- `general_social_venue`
-- `home`
-- `intimate_services_establishment`
-- `intimate_social_venue`
-- `lodgings`
-- `market`
-- `neutral_ground`
-- `place_of_remembrance`
-- `private_quarters`
-- `public_space`
-- `public_water`
-- `restaurant`
-- `safe_house`
-- `tavern`
-- `teahouse`
-- `the_glow`
-- `the_roots`
-- `town_square`
-- `transit_hub`
+- `administration`
+- `commerce`
+- `craft`
+- `dwelling`
+- `entertainment`
+- `haven`
+- `meeting`
+- `military`
+- `place_medical`
+- `place_open`
+- `place_restricted`
+- `production`
+- `sacred`
+- `subterranean`
+- `tomb`
+- `transit`
+- `urban_dense`
+- `water_source`
 - `wilderness`
-- `workplace`
-- `worksite`
 
 ### Relationship types
 

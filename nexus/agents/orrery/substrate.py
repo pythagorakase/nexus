@@ -98,15 +98,15 @@ PUBLIC_MOBILITY_TAGS: frozenset[str] = frozenset(
         "travel_ready",
     }
 )
-PUBLIC_PLACE_AFFORDANCES: frozenset[str] = frozenset(
+PUBLIC_PLACE_CLASSES: frozenset[str] = frozenset(
     {
-        "market",
-        "public_space",
-        "street",
-        "the_glow",
-        "the_roots",
-        "transit_hub",
-        "workplace",
+        "commerce",
+        "meeting",
+        "place_open",
+        "transit",
+        "urban_dense",
+        "urban_sparse",
+        "water_source",
     }
 )
 DRAMATIC_CONTACT_TAGS: frozenset[str] = HIDDEN_TAGS | frozenset(
@@ -175,6 +175,7 @@ class WorldState:
     faction_memberships: Mapping[int, frozenset[int]] = field(default_factory=dict)
     location_class: Mapping[int, str] = field(default_factory=dict)
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
+    location_entity_ids: Mapping[int, int] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
@@ -311,6 +312,27 @@ def has_any_pair_tag(
     )
 
 
+def has_pair_tag_to_current_location(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity has ``tag`` to its current place."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        location_id = state.locations.get(entity_id)
+        if location_id is None:
+            return False
+        location_entity_id = state.location_entity_ids.get(location_id)
+        if location_entity_id is None:
+            return False
+        return tag in state.pair_tags.get((entity_id, location_entity_id), frozenset())
+
+    return _named(
+        _condition,
+        f"has_pair_tag_to_current_location({tag}@{slot.value})",
+    )
+
+
 def has_inbound_pair_tag(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether any subject points ``tag`` at the slot-bound entity."""
 
@@ -444,10 +466,10 @@ def can_move_publicly(slot: Slot = Slot.ACTOR) -> Condition:
         if location_id is None:
             return False
         semantic_classes = state.location_classes.get(location_id, frozenset())
-        if PUBLIC_PLACE_AFFORDANCES & semantic_classes:
+        if PUBLIC_PLACE_CLASSES & semantic_classes:
             return True
         location_class = state.location_class.get(location_id)
-        return bool(location_class and location_class in PUBLIC_PLACE_AFFORDANCES)
+        return bool(location_class and location_class in PUBLIC_PLACE_CLASSES)
 
     return _named(_condition, f"can_move_publicly(@{slot.value})")
 

@@ -488,7 +488,7 @@ class NewStoryDatabaseMapper:
                 (place_id, character_id),
             )
 
-            # Apply Skald-bestowed place_affordance tags
+            # Apply Skald-bestowed semantic place tags.
             tag_counters = apply_tag_bestowal(
                 cur,
                 entity_id=place_entity_id,
