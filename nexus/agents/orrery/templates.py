@@ -25,6 +25,7 @@ from nexus.agents.orrery.substrate import (
     has_inbound_pair_tag,
     has_minimal_context,
     has_need_debt_at_or_above,
+    has_pair_tag_to_current_location,
     has_relationship_of_type,
     has_symmetric_relationship_of_type,
     has_tag,
@@ -47,11 +48,15 @@ from nexus.agents.orrery.substrate import (
 
 
 def _place_any(*classes: str) -> Condition:
+    if not classes:
+        raise ValueError("_place_any requires at least one place class")
     conditions = tuple(in_location_class(location_class) for location_class in classes)
     return conditions[0] if len(conditions) == 1 else OR(*conditions)
 
 
 def _place_all(*classes: str) -> Condition:
+    if not classes:
+        raise ValueError("_place_all requires at least one place class")
     conditions = tuple(in_location_class(location_class) for location_class in classes)
     return conditions[0] if len(conditions) == 1 else AND(*conditions)
 
@@ -71,6 +76,7 @@ WORKSITE_PLACE = _place_any("craft", "military", "production")
 ADMINISTRATION_PLACE = _place_any("administration")
 PUBLIC_MEETING_PLACE = _place_any("meeting", "commerce", "place_open")
 DWELLING_PLACE = _place_any("dwelling")
+HOME_PLACE = AND(DWELLING_PLACE, has_pair_tag_to_current_location("resides_at"))
 SAFE_LODGING_PLACE = _place_any("dwelling", "haven")
 PUBLIC_DRINK_PLACE = _place_any("commerce", "entertainment", "meeting")
 PUBLIC_WATER_PLACE = _place_any("water_source", "wilderness")
@@ -1536,8 +1542,6 @@ WORK = Template(
                 "academic",
             ),
             WORKPLACE_PLACE,
-            WORKSITE_PLACE,
-            ADMINISTRATION_PLACE,
         ),
         NOT(is_in_transit()),
         since_last_event_at_least("work_performed", minimum_ticks=4),
@@ -2355,7 +2359,7 @@ SLEEP = Template(
         ),
         Branch(
             label="Sleep at home",
-            conditions=DWELLING_PLACE,
+            conditions=HOME_PLACE,
             narrative_stub=(
                 "{actor} reaches familiar shelter and lets sleep take them "
                 "where the room already knows their shape."
@@ -2573,7 +2577,7 @@ EAT = Template(
         Branch(
             label="Eat at home with household",
             conditions=AND(
-                DWELLING_PLACE,
+                HOME_PLACE,
                 has_any_tag("married", "parent", "extended_household"),
             ),
             narrative_stub=(
@@ -2849,7 +2853,7 @@ INTIMACY = Template(
         Branch(
             label="Spend private time with an established partner",
             conditions=AND(
-                DWELLING_PLACE,
+                HOME_PLACE,
                 has_established_partner_co_located(),
             ),
             narrative_stub=(

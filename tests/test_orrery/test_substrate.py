@@ -30,6 +30,7 @@ from nexus.agents.orrery.substrate import (
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag,
+    has_pair_tag_to_current_location,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
     in_location,
@@ -303,6 +304,22 @@ def test_lacks_pair_tag_is_inverse_for_bound_slots() -> None:
     assert lacks_pair_tag("mentors")(state, {Slot.ACTOR: 2, Slot.TARGET: 1})
     assert lacks_pair_tag("protects")(state, {Slot.ACTOR: 1, Slot.TARGET: 2})
     assert lacks_pair_tag("mentors")(state, {Slot.ACTOR: 1})
+
+
+def test_pair_tag_to_current_location_uses_place_entity_id() -> None:
+    """Current-location pair checks bridge places.id to place entity ids."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_entity_ids={10: 1000},
+        pair_tags={(1, 1000): frozenset({"resides_at"})},
+    )
+
+    assert has_pair_tag_to_current_location("resides_at")(state, {Slot.ACTOR: 1})
+    assert not has_pair_tag_to_current_location("operates_from")(state, {Slot.ACTOR: 1})
+    assert not has_pair_tag_to_current_location("resides_at")(
+        WorldState(locations={1: 10}), {Slot.ACTOR: 1}
+    )
 
 
 def test_context_and_constraint_predicates_read_current_tags() -> None:

@@ -175,6 +175,7 @@ class WorldState:
     faction_memberships: Mapping[int, frozenset[int]] = field(default_factory=dict)
     location_class: Mapping[int, str] = field(default_factory=dict)
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
+    location_entity_ids: Mapping[int, int] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
@@ -308,6 +309,27 @@ def has_any_pair_tag(
     return _named(
         _condition,
         f"has_any_pair_tag({','.join(tags)}@{subject_slot.value}->{object_slot.value})",
+    )
+
+
+def has_pair_tag_to_current_location(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity has ``tag`` to its current place."""
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        location_id = state.locations.get(entity_id)
+        if location_id is None:
+            return False
+        location_entity_id = state.location_entity_ids.get(location_id)
+        if location_entity_id is None:
+            return False
+        return tag in state.pair_tags.get((entity_id, location_entity_id), frozenset())
+
+    return _named(
+        _condition,
+        f"has_pair_tag_to_current_location({tag}@{slot.value})",
     )
 
 

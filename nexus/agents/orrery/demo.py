@@ -34,16 +34,16 @@ def build_presets() -> Dict[str, WorldState]:
         3: GLOW_PLACE_ID,
     }
     legacy_location_class = {
-        ROOTS_PLACE_ID: "the_roots",
-        GLOW_PLACE_ID: "the_glow",
-        STACKS_PLACE_ID: "the_stacks",
-        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
-        NEUTRAL_PLACE_ID: "neutral_ground",
+        ROOTS_PLACE_ID: "fixed_location",
+        GLOW_PLACE_ID: "fixed_location",
+        STACKS_PLACE_ID: "fixed_location",
+        REMEMBRANCE_PLACE_ID: "fixed_location",
+        NEUTRAL_PLACE_ID: "fixed_location",
     }
     semantic_location_classes = {
         ROOTS_PLACE_ID: frozenset({"subterranean", "transit"}),
         GLOW_PLACE_ID: frozenset({"commerce", "meeting", "place_open", "urban_dense"}),
-        STACKS_PLACE_ID: frozenset({"archive", "learning", "place_restricted"}),
+        STACKS_PLACE_ID: frozenset({"craft", "place_restricted", "production"}),
         REMEMBRANCE_PLACE_ID: frozenset({"sacred", "tomb"}),
         NEUTRAL_PLACE_ID: frozenset({"meeting", "place_open"}),
     }
@@ -145,16 +145,16 @@ def build_multi_slot_presets() -> Dict[str, dict]:
     """
 
     legacy_location_class = {
-        ROOTS_PLACE_ID: "the_roots",
-        GLOW_PLACE_ID: "the_glow",
-        STACKS_PLACE_ID: "the_stacks",
-        REMEMBRANCE_PLACE_ID: "place_of_remembrance",
-        NEUTRAL_PLACE_ID: "neutral_ground",
+        ROOTS_PLACE_ID: "fixed_location",
+        GLOW_PLACE_ID: "fixed_location",
+        STACKS_PLACE_ID: "fixed_location",
+        REMEMBRANCE_PLACE_ID: "fixed_location",
+        NEUTRAL_PLACE_ID: "fixed_location",
     }
     semantic_location_classes = {
         ROOTS_PLACE_ID: frozenset({"subterranean", "transit"}),
         GLOW_PLACE_ID: frozenset({"commerce", "meeting", "place_open", "urban_dense"}),
-        STACKS_PLACE_ID: frozenset({"archive", "learning", "place_restricted"}),
+        STACKS_PLACE_ID: frozenset({"craft", "place_restricted", "production"}),
         REMEMBRANCE_PLACE_ID: frozenset({"sacred", "tomb"}),
         NEUTRAL_PLACE_ID: frozenset({"meeting", "place_open"}),
     }

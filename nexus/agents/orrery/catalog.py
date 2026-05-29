@@ -108,6 +108,13 @@ _register(
     ),
 )
 _register(
+    r"has_pair_tag_to_current_location\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} has `{m.group('tag')}` pair tag "
+        "to current location"
+    ),
+)
+_register(
     r"has_inbound_pair_tag\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (f"{_slot(m.group('slot'))} has inbound " f"`{m.group('tag')}` pair tag"),
 )
@@ -528,6 +535,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("ephemeral_tag", re.compile(r"has_ephemeral\(([^@()]+)@")),
     ("pair_tag", re.compile(r"has_pair_tag\(([^@()]+)@")),
     ("pair_tag", re.compile(r"lacks_pair_tag\(([^@()]+)@")),
+    ("pair_tag", re.compile(r"has_pair_tag_to_current_location\(([^@()]+)@")),
     ("pair_tag", re.compile(r"has_inbound_pair_tag\(([^@()]+)@")),
     ("pair_tag_list", re.compile(r"has_any_pair_tag\(([^@()]+)@")),
     ("contact_kind", re.compile(r"has_contact_of_kind\(([^@()]+)@")),

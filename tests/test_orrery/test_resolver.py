@@ -662,6 +662,93 @@ def test_resolve_dry_run_fires_intimacy_need_template_without_pairing() -> None:
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "intimacy"
 
 
+def test_sleep_home_branch_requires_residence_pair_tag() -> None:
+    """Ordinary dwellings are lodgings unless the actor resides there."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_class_rows=[
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "dwelling",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "sleep",
+                    "debt_score": 20,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "sleep"
+    assert proposal.resolutions[0].branch_label == "Sleep in safe lodgings"
+
+
+def test_sleep_home_branch_uses_residence_pair_tag() -> None:
+    """A dwelling with resides_at keeps the home-quality sleep branch."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_class_rows=[
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "dwelling",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
+            ],
+            pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 1000,
+                    "tag": "resides_at",
+                }
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "sleep",
+                    "debt_score": 20,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "sleep"
+    assert proposal.resolutions[0].branch_label == "Sleep at home"
+
+
 def test_intimacy_partner_branch_requires_partner_relationship() -> None:
     """Established-partner intimacy uses relationship-aware co-location."""
 
@@ -672,8 +759,25 @@ def test_intimacy_partner_branch_requires_partner_relationship() -> None:
                 {"entity_id": 2, "current_location": 10},
             ],
             location_class_rows=[
-                {"id": 10, "location_class": "dwelling", "is_primary": False},
-                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "dwelling",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
+            ],
+            pair_tag_rows=[
+                {
+                    "subject_entity_id": 1,
+                    "object_entity_id": 1000,
+                    "tag": "resides_at",
+                }
             ],
             relationship_rows=[
                 {
@@ -882,9 +986,24 @@ def test_hydrate_world_state_loads_semantic_place_classes() -> None:
     state = hydrate_world_state(
         FakeSession(
             location_class_rows=[
-                {"id": 10, "location_class": "dwelling", "is_primary": False},
-                {"id": 10, "location_class": "haven", "is_primary": False},
-                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "dwelling",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "haven",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
             ],
         ),
         anchor_chunk_id=100,
@@ -892,6 +1011,7 @@ def test_hydrate_world_state_loads_semantic_place_classes() -> None:
     )
 
     assert state.location_class[10] == "fixed_location"
+    assert state.location_entity_ids[10] == 1000
     assert state.location_classes[10] == frozenset(
         {"fixed_location", "dwelling", "haven"}
     )

@@ -1098,7 +1098,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ### Branch 2 — Sleep at home  *(mag 0.22)*
 
-**When:** actor is in `dwelling` place class
+**When:**
+
+- **AND:**
+  - actor is in `dwelling` place class
+  - actor has `resides_at` pair tag to current location
 
 **Does:** activity → "sleeping at home"; fulfills `sleep` need, quality `good`, discharge 10
 **Event:** `slept`
@@ -1219,7 +1223,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `dwelling` place class
+  - **AND:**
+    - actor is in `dwelling` place class
+    - actor has `resides_at` pair tag to current location
   - actor has any of [`married`, `parent`, `extended_household`]
 
 **Does:** activity → "sharing a household meal"; fulfills `hunger` need, quality `household_meal`, discharge 9999
@@ -1449,7 +1455,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 **When:**
 
 - **AND:**
-  - actor is in `dwelling` place class
+  - **AND:**
+    - actor is in `dwelling` place class
+    - actor has `resides_at` pair tag to current location
   - actor has an established partner co-located
 
 **Does:** activity → "spending private time with partner"; fulfills `intimacy` need, quality `established_partner`, discharge 9999
@@ -1632,11 +1640,6 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
       - actor is in `military` place class
       - actor is in `place_medical` place class
       - actor is in `production` place class
-    - **OR:**
-      - actor is in `craft` place class
-      - actor is in `military` place class
-      - actor is in `production` place class
-    - actor is in `administration` place class
   - **NOT:** actor is in transit
   - ≥ 4 ticks since last `work_performed` event for actor
   - ≥ 4 ticks since last `household_work_performed` event for actor
@@ -1942,6 +1945,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `contact:lodging`
 - `contact:social`
 - `hunting`
+- `resides_at`
 
 ### Event types
 

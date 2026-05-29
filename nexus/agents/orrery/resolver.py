@@ -270,15 +270,22 @@ def hydrate_world_state(
 
     location_class: dict[int, str] = {}
     location_classes: dict[int, set[str]] = {}
+    location_entity_ids: dict[int, int] = {}
     for row in session.execute(
         text(
             f"""
             /* orrery:location_classes */
-            SELECT p.id, p.type::text AS location_class, true AS is_primary
+            SELECT p.id,
+                   p.entity_id AS place_entity_id,
+                   p.type::text AS location_class,
+                   true AS is_primary
             FROM places p
             WHERE p.type IS NOT NULL
             UNION ALL
-            SELECT p.id, etc.tag AS location_class, false AS is_primary
+            SELECT p.id,
+                   p.entity_id AS place_entity_id,
+                   etc.tag AS location_class,
+                   false AS is_primary
             FROM places p
             JOIN entity_tags_current etc ON etc.entity_id = p.entity_id
             WHERE etc.entity_kind = 'place'
@@ -290,6 +297,9 @@ def hydrate_world_state(
         class_name = row["location_class"]
         if class_name is None:
             continue
+        place_entity_id = row.get("place_entity_id")
+        if place_entity_id is not None:
+            location_entity_ids[place_id] = place_entity_id
         location_classes.setdefault(place_id, set()).add(class_name)
         if row["is_primary"]:
             location_class[place_id] = class_name
@@ -413,6 +423,7 @@ def hydrate_world_state(
             location_id: frozenset(values)
             for location_id, values in location_classes.items()
         },
+        location_entity_ids=location_entity_ids,
         need_debt_scores=need_debt_scores,
         travel_states=travel_states,
         recent_events=recent_events,
