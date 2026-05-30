@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
@@ -23,7 +24,6 @@ from nexus.agents.orrery.resolver import (
     compose_actor_bindings,
     compose_actor_target_bindings,
     hydrate_world_state,
-    _present_actor_ids_at_anchor,
 )
 from nexus.agents.orrery.substrate import PresentTargetPolicy, Slot, evaluate
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
@@ -201,6 +201,20 @@ def fetch_actor_sources(
     ).mappings():
         sources[row["entity_id"]].append(f"ephemeral:{row['tag']}")
 
+    for row in session.execute(
+        text(
+            """
+            SELECT DISTINCT cra.character_entity_id AS entity_id,
+                   cra.anchor_type::text AS anchor_type
+            FROM character_routine_anchors cra
+            WHERE cra.character_entity_id = ANY(:ids)
+              AND cra.mobility_policy NOT IN ('none', 'nomadic')
+            """
+        ),
+        {"ids": list(actor_ids)},
+    ).mappings():
+        sources[row["entity_id"]].append(f"routine:{row['anchor_type']}")
+
     return sources
 
 
@@ -239,17 +253,87 @@ def fetch_first_reference_chunk(
 
 
 def fetch_chunk_context(session: Session, anchor_chunk_id: int) -> Optional[dict]:
-    row = session.execute(
-        text(
-            """
+    row = (
+        session.execute(
+            text(
+                """
             SELECT id AS chunk_id, world_time, LEFT(raw_text, 320) AS preview
             FROM narrative_view
             WHERE id = :chunk_id
             """
-        ),
-        {"chunk_id": anchor_chunk_id},
-    ).mappings().first()
+            ),
+            {"chunk_id": anchor_chunk_id},
+        )
+        .mappings()
+        .first()
+    )
     return dict(row) if row else None
+
+
+def parse_location_overrides(raw_values: list[str]) -> list[tuple[str, str]]:
+    """Parse CHARACTER=PLACE override specs for test harness dry-runs."""
+
+    overrides = []
+    for raw in raw_values:
+        if "=" not in raw:
+            raise ValueError(
+                "--override-location must use CHARACTER=PLACE, got " f"{raw!r}"
+            )
+        character, place = raw.split("=", 1)
+        character = character.strip()
+        place = place.strip()
+        if not character or not place:
+            raise ValueError(
+                "--override-location must include both CHARACTER and PLACE, "
+                f"got {raw!r}"
+            )
+        overrides.append((character, place))
+    return overrides
+
+
+def resolve_location_overrides(
+    session: Session,
+    overrides: list[tuple[str, str]],
+) -> tuple[dict[int, int], list[str]]:
+    """Resolve parsed location override names to read-side state ids."""
+
+    resolved: dict[int, int] = {}
+    labels: list[str] = []
+    for character_name, place_name in overrides:
+        rows = list(
+            session.execute(
+                text(
+                    """
+                    SELECT c.entity_id AS character_entity_id,
+                           c.name AS character_name,
+                           p.id AS place_id,
+                           p.name AS place_name
+                    FROM characters c
+                    CROSS JOIN places p
+                    WHERE lower(c.name) = lower(:character_name)
+                      AND lower(p.name) = lower(:place_name)
+                    LIMIT 2
+                    """
+                ),
+                {
+                    "character_name": character_name,
+                    "place_name": place_name,
+                },
+            ).mappings()
+        )
+        if not rows:
+            raise ValueError(
+                "Could not resolve --override-location "
+                f"{character_name!r}={place_name!r}"
+            )
+        if len(rows) > 1:
+            raise ValueError(
+                "Ambiguous --override-location " f"{character_name!r}={place_name!r}"
+            )
+        row = rows[0]
+        resolved[row["character_entity_id"]] = row["place_id"]
+        labels.append(f"{row['character_name']} → {row['place_name']}")
+    return resolved, labels
 
 
 def render_stub(stub: Optional[str], bindings: dict, names: dict[int, str]) -> str:
@@ -259,9 +343,13 @@ def render_stub(stub: Optional[str], bindings: dict, names: dict[int, str]) -> s
     actor_id = bindings.get(Slot.ACTOR)
     target_id = bindings.get(Slot.TARGET)
     if actor_id is not None:
-        s = s.replace("{actor}", names.get(actor_id, f"entity_{actor_id}").split(" (")[0])
+        s = s.replace(
+            "{actor}", names.get(actor_id, f"entity_{actor_id}").split(" (")[0]
+        )
     if target_id is not None:
-        s = s.replace("{target}", names.get(target_id, f"entity_{target_id}").split(" (")[0])
+        s = s.replace(
+            "{target}", names.get(target_id, f"entity_{target_id}").split(" (")[0]
+        )
     return s
 
 
@@ -277,6 +365,7 @@ def render_markdown(
     anchor_chunk_id: int,
     window_chunks: int,
     chunk_ctx: Optional[dict],
+    world_time_override: Optional[datetime],
     binding_reports: list[BindingReport],
     sources: dict[int, list[str]],
     names: dict[int, str],
@@ -284,15 +373,19 @@ def render_markdown(
     raw_candidate_count: int,
     filtered_out_actor_ids: list[int],
     first_chunks: dict[int, int],
+    location_override_labels: list[str],
 ) -> str:
     lines = []
     lines.append(f"# Orrery Dry Run — chunk_{anchor_chunk_id:04d}")
     lines.append("")
     lines.append(f"- **Slot**: {slot}")
     lines.append(f"- **Anchor chunk**: {anchor_chunk_id}")
-    lines.append(
-        f"- **World time**: {chunk_ctx['world_time'] if chunk_ctx else 'unknown'}"
-    )
+    world_time = world_time_override or (chunk_ctx["world_time"] if chunk_ctx else None)
+    lines.append(f"- **World time**: {world_time if world_time else 'unknown'}")
+    if world_time_override is not None:
+        lines.append("- **World time source**: command-line override")
+    if location_override_labels:
+        lines.append("- **Location overrides**: " + "; ".join(location_override_labels))
     lines.append(
         f"- **Window**: {window_chunks} chunks "
         f"({max(0, anchor_chunk_id - window_chunks + 1)} → {anchor_chunk_id})"
@@ -322,9 +415,7 @@ def render_markdown(
 
     # Filtered-out actors
     if filtered_out_actor_ids:
-        lines.append(
-            f"## Filtered as not-yet-existing ({len(filtered_out_actor_ids)})"
-        )
+        lines.append(f"## Filtered as not-yet-existing ({len(filtered_out_actor_ids)})")
         lines.append("")
         lines.append(
             "Actors whose first appearance in `chunk_entity_references_v` "
@@ -378,15 +469,23 @@ def render_markdown(
     lines.append(f"## Fired — off-screen activity ({len(offscreen_fired)})")
     lines.append("")
     if offscreen_fired:
-        lines.append("| Actor | Target | Template | Pri | Branch | Rendered stub | event_type | mag |")
+        lines.append(
+            "| Actor | Target | Template | Pri | Branch | Rendered stub | "
+            "event_type | mag |"
+        )
         lines.append("|---|---|---|---|---|---|---|---|")
         for br, e in sorted(offscreen_fired, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
-            target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
+            target = (
+                name_for(br.bindings.get(Slot.TARGET), names)
+                if Slot.TARGET in br.bindings
+                else "—"
+            )
             stub = render_stub(e.narrative_stub, br.bindings, names)
             lines.append(
                 f"| {actor} | {target} | `{e.template_id}` | {e.priority} | "
-                f"{e.branch_label or '—'} | {stub} | {e.event_type or '—'} | {e.magnitude:.2f} |"
+                f"{e.branch_label or '—'} | {stub} | "
+                f"{e.event_type or '—'} | {e.magnitude:.2f} |"
             )
         lines.append("")
         lines.append("### State deltas for fired resolutions")
@@ -399,7 +498,9 @@ def render_markdown(
         lines.append("(none)")
         lines.append("")
 
-    lines.append(f"## Fired — scene pressures (present-target) ({len(scene_pressure_fired)})")
+    lines.append(
+        f"## Fired — scene pressures (present-target) ({len(scene_pressure_fired)})"
+    )
     lines.append("")
     if scene_pressure_fired:
         lines.append(
@@ -408,19 +509,30 @@ def render_markdown(
             "them as Storyteller-facing scene pressures."
         )
         lines.append("")
-        lines.append("| Actor | Present target | Template | Pri | Branch | Rendered stub | event_type | mag |")
+        lines.append(
+            "| Actor | Present target | Template | Pri | Branch | Rendered stub | "
+            "event_type | mag |"
+        )
         lines.append("|---|---|---|---|---|---|---|---|")
         for br, e in sorted(scene_pressure_fired, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
-            target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
+            target = (
+                name_for(br.bindings.get(Slot.TARGET), names)
+                if Slot.TARGET in br.bindings
+                else "—"
+            )
             stub = render_stub(e.narrative_stub, br.bindings, names)
             lines.append(
                 f"| {actor} | {target} | `{e.template_id}` | {e.priority} | "
-                f"{e.branch_label or '—'} | {stub} | {e.event_type or '—'} | {e.magnitude:.2f} |"
+                f"{e.branch_label or '—'} | {stub} | "
+                f"{e.event_type or '—'} | {e.magnitude:.2f} |"
             )
         lines.append("")
     else:
-        lines.append("(none — either no pressure-policy templates eligible, or no on-screen targets at this anchor)")
+        lines.append(
+            "(none — either no pressure-policy templates eligible, or no "
+            "on-screen targets at this anchor)"
+        )
         lines.append("")
 
     # Priority-loss
@@ -437,7 +549,11 @@ def render_markdown(
         lines.append("|---|---|---|---|---|---|")
         for br, e in sorted(pl, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
-            target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
+            target = (
+                name_for(br.bindings.get(Slot.TARGET), names)
+                if Slot.TARGET in br.bindings
+                else "—"
+            )
             stub = render_stub(e.narrative_stub, br.bindings, names)
             lines.append(
                 f"| {actor} | {target} | `{e.template_id}` | {e.priority} | "
@@ -464,7 +580,11 @@ def render_markdown(
         lines.append("|---|---|---|---|")
         for br, e in sorted(nbm, key=lambda x: -x[1].priority):
             actor = name_for(br.bindings.get(Slot.ACTOR), names)
-            target = name_for(br.bindings.get(Slot.TARGET), names) if Slot.TARGET in br.bindings else "—"
+            target = (
+                name_for(br.bindings.get(Slot.TARGET), names)
+                if Slot.TARGET in br.bindings
+                else "—"
+            )
             lines.append(f"| {actor} | {target} | `{e.template_id}` | {e.priority} |")
         lines.append("")
     else:
@@ -478,14 +598,14 @@ def render_markdown(
             if e.outcome == "gate_fail":
                 gf_by_template[e.template_id] += 1
     total_gf = sum(gf_by_template.values())
-    lines.append(f"## Gate-fail summary ({total_gf} total, top 10 templates by frequency)")
+    lines.append(
+        f"## Gate-fail summary ({total_gf} total, top 10 templates by frequency)"
+    )
     lines.append("")
     if gf_by_template:
         lines.append("| Template | Bindings rejected |")
         lines.append("|---|---|")
-        for tid, count in sorted(
-            gf_by_template.items(), key=lambda x: -x[1]
-        )[:10]:
+        for tid, count in sorted(gf_by_template.items(), key=lambda x: -x[1])[:10]:
             lines.append(f"| `{tid}` | {count} |")
         lines.append("")
     else:
@@ -528,7 +648,15 @@ def render_markdown(
     return "\n".join(lines)
 
 
-def sample_anchor(slot: int, anchor_chunk_id: int, window_chunks: int, output_dir: Path) -> Path:
+def sample_anchor(
+    slot: int,
+    anchor_chunk_id: int,
+    window_chunks: int,
+    output_dir: Path,
+    *,
+    world_time_override: Optional[datetime] = None,
+    location_overrides: Optional[list[tuple[str, str]]] = None,
+) -> Path:
     engine = create_engine(get_slot_db_url(slot=slot))
     with Session(engine) as session:
         actor_only_templates = [
@@ -543,7 +671,22 @@ def sample_anchor(slot: int, anchor_chunk_id: int, window_chunks: int, output_di
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             need_tuning=None,
+            world_time_override=world_time_override,
         )
+        override_locations, override_labels = resolve_location_overrides(
+            session,
+            location_overrides or [],
+        )
+        if override_locations:
+            state = replace(
+                state,
+                locations={**state.locations, **override_locations},
+                travel_states={
+                    entity_id: travel_state
+                    for entity_id, travel_state in state.travel_states.items()
+                    if entity_id not in override_locations
+                },
+            )
 
         raw_actor_bindings = compose_actor_bindings(
             session,
@@ -685,6 +828,7 @@ def sample_anchor(slot: int, anchor_chunk_id: int, window_chunks: int, output_di
             anchor_chunk_id=anchor_chunk_id,
             window_chunks=window_chunks,
             chunk_ctx=chunk_ctx,
+            world_time_override=world_time_override,
             binding_reports=binding_reports,
             sources=sources,
             names=names,
@@ -692,6 +836,7 @@ def sample_anchor(slot: int, anchor_chunk_id: int, window_chunks: int, output_di
             raw_candidate_count=len(raw_actor_bindings),
             filtered_out_actor_ids=filtered_out_actor_ids,
             first_chunks=first_chunks,
+            location_override_labels=override_labels,
         )
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -711,9 +856,32 @@ def main() -> None:
         type=Path,
         default=Path("docs/orrery_dry_runs"),
     )
+    parser.add_argument(
+        "--world-time",
+        type=datetime.fromisoformat,
+        default=None,
+        help="Override anchor world_time for schedule/need dry-runs.",
+    )
+    parser.add_argument(
+        "--override-location",
+        action="append",
+        default=[],
+        metavar="CHARACTER=PLACE",
+        help=(
+            "Override a character's current place in the dry-run state only. "
+            "May be repeated."
+        ),
+    )
     args = parser.parse_args()
 
-    out = sample_anchor(args.slot, args.anchor, args.window_chunks, args.output_dir)
+    out = sample_anchor(
+        args.slot,
+        args.anchor,
+        args.window_chunks,
+        args.output_dir,
+        world_time_override=args.world_time,
+        location_overrides=parse_location_overrides(args.override_location),
+    )
     print(f"Wrote {out}")
 
 

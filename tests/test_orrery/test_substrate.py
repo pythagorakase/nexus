@@ -1,5 +1,6 @@
 """Tests for the Orrery pure-Python behavior substrate."""
 
+from datetime import datetime, timezone
 import re
 from typing import Any
 
@@ -11,11 +12,14 @@ from nexus.agents.orrery.substrate import (
     Branch,
     CompoundCondition,
     PresentTargetPolicy,
+    RoutineAnchor,
     Slot,
     Template,
     TravelState,
     WorldState,
+    at_routine_anchor,
     binding_hash,
+    away_from_routine_anchor,
     can_move_publicly,
     co_located,
     count_co_located,
@@ -31,6 +35,7 @@ from nexus.agents.orrery.substrate import (
     has_need_debt_at_or_above,
     has_pair_tag,
     has_pair_tag_to_current_location,
+    has_routine_anchor,
     has_severity_tag_at_or_above,
     has_symmetric_relationship_of_type,
     in_location,
@@ -41,6 +46,7 @@ from nexus.agents.orrery.substrate import (
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
+    routine_anchor_due,
     since_last_event_at_least,
     validate_always_fallbacks,
 )
@@ -322,6 +328,67 @@ def test_pair_tag_to_current_location_uses_place_entity_id() -> None:
     )
 
 
+def test_routine_anchor_predicates_use_schedule_and_place() -> None:
+    """Routine anchors are explicit actor facts with clock windows."""
+
+    state = WorldState(
+        locations={1: 10},
+        routine_anchors={
+            (1, "work"): RoutineAnchor(
+                anchor_type="work",
+                place_id=10,
+                schedule={
+                    "weekdays": [0, 1, 2, 3, 4],
+                    "start": "09:00",
+                    "end": "17:00",
+                },
+            )
+        },
+        world_time=datetime(2073, 10, 30, 10, 30, tzinfo=timezone.utc),
+    )
+
+    assert has_routine_anchor("work")(state, {Slot.ACTOR: 1})
+    assert routine_anchor_due("work")(state, {Slot.ACTOR: 1})
+    assert at_routine_anchor("work")(state, {Slot.ACTOR: 1})
+    assert not away_from_routine_anchor("work")(state, {Slot.ACTOR: 1})
+
+
+def test_routine_anchor_predicates_support_overnight_home_windows() -> None:
+    """Home schedules can cross midnight without special-case templates."""
+
+    state = WorldState(
+        locations={1: 10},
+        routine_anchors={
+            (1, "home"): RoutineAnchor(
+                anchor_type="home",
+                place_id=10,
+                schedule={"start": "17:00", "end": "08:30"},
+            )
+        },
+        world_time=datetime(2073, 10, 31, 0, 15, tzinfo=timezone.utc),
+    )
+
+    assert routine_anchor_due("home")(state, {Slot.ACTOR: 1})
+    assert at_routine_anchor("home")(state, {Slot.ACTOR: 1})
+
+
+def test_work_from_home_anchor_resolves_against_home_anchor() -> None:
+    """A work anchor can intentionally collapse onto the home place."""
+
+    state = WorldState(
+        locations={1: 10},
+        routine_anchors={
+            (1, "home"): RoutineAnchor(anchor_type="home", place_id=10),
+            (1, "work"): RoutineAnchor(
+                anchor_type="work",
+                mobility_policy="works_from_home",
+            ),
+        },
+    )
+
+    assert at_routine_anchor("work")(state, {Slot.ACTOR: 1})
+
+
 def test_context_and_constraint_predicates_read_current_tags() -> None:
     """Package guards can distinguish hydrated actors from constrained ones."""
 
@@ -481,6 +548,29 @@ def test_targeted_events_fire_builtin_package_gates() -> None:
 
     assert result is not None
     assert result.template_id == "evade_pursuers"
+
+
+def test_mealtime_at_home_beats_routine_thirst() -> None:
+    """Moderate thirst yields to dinner when a home meal is otherwise due."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_classes={10: frozenset({"dwelling"})},
+        location_entity_ids={10: 100},
+        pair_tags={(1, 100): frozenset({"resides_at"})},
+        need_debt_scores={
+            (1, "hunger"): 8.0,
+            (1, "thirst"): 8.0,
+        },
+        time_of_day="evening",
+        current_tick=100,
+    )
+
+    result = evaluate_stack(BUILTIN_TEMPLATES, state, {Slot.ACTOR: 1})
+
+    assert result is not None
+    assert result.template_id == "eat"
+    assert result.branch_label == "Eat at home alone"
 
 
 def test_count_co_located_condition_filters_by_tag() -> None:

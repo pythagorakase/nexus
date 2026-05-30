@@ -1015,6 +1015,70 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 ---
 
+## ROUTINE_COMMUTE — priority 26
+
+> Ordinary home/work movement from explicit routine anchors.
+
+**Slots:** ACTOR
+
+**Gate:**
+
+- **AND:**
+  - actor has enough hydrated context
+  - **NOT:** actor is constrained or immobilized
+  - **NOT:** actor is in transit
+  - **NOT:** actor has inbound `hunting` pair tag
+  - **NOT:** actor has `wounded` ephemeral
+  - **NOT:** actor has `grieving` ephemeral
+  - **OR:**
+    - **AND:**
+      - actor has `work` routine anchor
+      - actor's `work` routine is due now
+      - actor is away from `work` anchor
+    - **AND:**
+      - actor has `home` routine anchor
+      - actor's `home` routine is due now
+      - actor is away from `home` anchor
+
+### Branch 1 — Commute to the scheduled workplace  *(mag 0.16)*
+
+**When:**
+
+- **AND:**
+  - actor has `work` routine anchor
+  - actor's `work` routine is due now
+  - actor is away from `work` anchor
+
+**Does:** activity → "commuting to work"; starts planned travel
+**Event:** `travel_departed`
+
+> {actor} follows the ordinary route toward work: not a quest, not a crisis, just the daily movement that keeps a normal life legible.
+
+### Branch 2 — Commute home after the day's obligations  *(mag 0.14)*
+
+**When:**
+
+- **AND:**
+  - actor has `home` routine anchor
+  - actor's `home` routine is due now
+  - actor is away from `home` anchor
+
+**Does:** activity → "commuting home"; starts planned travel
+**Event:** `travel_departed`
+
+> {actor} turns toward home with the unremarkable certainty of someone whose day has a next place.
+
+### Branch 3 — Recheck routine before moving  *(mag 0.04)*
+
+**When:** *(always)*
+
+**Does:** activity → "checking routine timing"
+**Event:** `travel_prepared`
+
+> {actor} pauses at the edge of routine and checks the ordinary facts before moving: where they are, where the day says they should be, and whether the next leg is real.
+
+---
+
 ## MOURN_LOSS — priority 25
 
 > A loss settles into the body across many quiet days.
@@ -1145,6 +1209,21 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `thirst` debt ≥ 2
+  - **OR:**
+    - actor has `thirst` debt ≥ 16
+    - **NOT:**
+      - **AND:**
+        - actor has `hunger` debt ≥ 4
+        - time of day is one of [morning, afternoon, evening]
+        - **OR:**
+          - **AND:**
+            - actor is in `dwelling` place class
+            - actor has `resides_at` pair tag to current location
+          - **OR:**
+            - actor is in `commerce` place class
+            - actor is in `entertainment` place class
+            - actor is in `meeting` place class
+            - actor is in `production` place class
   - **NOT:** actor has inbound `hunting` pair tag
 
 ### Branch 1 — Drink desperately, whatever is available  *(mag 0.56)*
@@ -1233,7 +1312,20 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} sits down to the meal that home means and lets being-with stand in for being-alone for a while.
 
-### Branch 3 — Eat in a public dining place  *(mag 0.26)*
+### Branch 3 — Eat at home alone  *(mag 0.2)*
+
+**When:**
+
+- **AND:**
+  - actor is in `dwelling` place class
+  - actor has `resides_at` pair tag to current location
+
+**Does:** activity → "eating at home"; fulfills `hunger` need, quality `home_meal`, discharge 9999
+**Event:** `ate`
+
+> {actor} makes the kind of meal home makes possible: unremarkable, private, and enough to let the evening continue on ordinary terms.
+
+### Branch 4 — Eat in a public dining place  *(mag 0.26)*
 
 **When:**
 
@@ -1248,7 +1340,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} eats something the place can provide and watches the room continue its public life around them.
 
-### Branch 4 — Forage or hunt from the country  *(mag 0.38)*
+### Branch 5 — Forage or hunt from the country  *(mag 0.38)*
 
 **When:**
 
@@ -1261,7 +1353,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} works the country for what the season has put within reach and makes a meal out of survival knowledge.
 
-### Branch 5 — Eat from rations or what was packed  *(mag 0.18)*
+### Branch 6 — Eat from rations or what was packed  *(mag 0.18)*
 
 **When:** actor has `travel_provisioned` tag
 
@@ -1270,7 +1362,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > {actor} eats what was packed for exactly this kind of hour: practical, portable, and enough.
 
-### Branch 6 — Find something and eat it  *(mag 0.14)*
+### Branch 7 — Find something and eat it  *(mag 0.14)*
 
 **When:** *(always)*
 
@@ -1632,14 +1724,12 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - **OR:**
+    - **AND:**
+      - actor has `work` routine anchor
+      - actor's `work` routine is due now
+      - actor is at `work` anchor
     - actor has `work_obligation` tag
-    - actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`, `domestic_role`, `cares_for_household`, `field_worker`, `soldier`, `researcher`, `academic`]
-    - **OR:**
-      - actor is in `administration` place class
-      - actor is in `craft` place class
-      - actor is in `military` place class
-      - actor is in `place_medical` place class
-      - actor is in `production` place class
+    - actor has any of [`domestic_role`, `cares_for_household`, `field_worker`]
   - **NOT:** actor is in transit
   - ≥ 4 ticks since last `work_performed` event for actor
   - ≥ 4 ticks since last `household_work_performed` event for actor
@@ -1730,12 +1820,6 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is in transit
   - **OR:**
     - actor has any current tag of [`broker`, `cover_identity`, `fixer`, `operative`, `public_role`, `undercover`]
-    - **OR:**
-      - actor is in `urban_dense` place class
-      - actor is in `place_open` place class
-      - actor is in `transit` place class
-      - actor is in `commerce` place class
-      - actor is in `meeting` place class
   - ≥ 6 ticks since last `maintain_cover` event for actor
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*
@@ -1824,6 +1908,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/052_orrery_faction_tag_vocab.py`
 - `migrations/054_orrery_completed_tag_vocab.py`
 - `migrations/055_orrery_character_tag_vocab.py`
+- `migrations/056_orrery_routine_anchors.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

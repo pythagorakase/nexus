@@ -30,6 +30,7 @@ from nexus.agents.orrery.substrate import (
     has_symmetric_relationship_of_type,
     has_tag,
     has_travel_destination,
+    has_routine_anchor,
     in_location_class,
     is_constrained,
     is_hidden,
@@ -37,6 +38,9 @@ from nexus.agents.orrery.substrate import (
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
+    at_routine_anchor,
+    away_from_routine_anchor,
+    routine_anchor_due,
     since_last_event_at_least,
     time_of_day_in,
     travel_progress_at_or_above,
@@ -420,7 +424,6 @@ MAINTAIN_COVER = Template(
                 "public_role",
                 "undercover",
             ),
-            URBAN_PUBLIC_FLOW_PLACE,
         ),
         since_last_event_at_least("maintain_cover", minimum_ticks=6),
     ),
@@ -1391,6 +1394,106 @@ KEEP_VIGIL = Template(
 # Section B — Maintenance of self
 
 
+ROUTINE_COMMUTE = Template(
+    id="routine_commute",
+    priority=26,
+    blurb="Ordinary home/work movement from explicit routine anchors.",
+    required_slots=(Slot.ACTOR,),
+    package_gate=AND(
+        has_minimal_context(),
+        NOT(is_constrained()),
+        NOT(is_in_transit()),
+        NOT(has_inbound_pair_tag("hunting")),
+        NOT(has_ephemeral("wounded")),
+        NOT(has_ephemeral("grieving")),
+        OR(
+            AND(
+                has_routine_anchor("work"),
+                routine_anchor_due("work"),
+                away_from_routine_anchor("work"),
+            ),
+            AND(
+                has_routine_anchor("home"),
+                routine_anchor_due("home"),
+                away_from_routine_anchor("home"),
+            ),
+        ),
+    ),
+    branches=(
+        Branch(
+            label="Commute to the scheduled workplace",
+            conditions=AND(
+                has_routine_anchor("work"),
+                routine_anchor_due("work"),
+                away_from_routine_anchor("work"),
+            ),
+            narrative_stub=(
+                "{actor} follows the ordinary route toward work: not a quest, "
+                "not a crisis, just the daily movement that keeps a normal "
+                "life legible."
+            ),
+            state_delta={
+                "character.current_activity": "commuting to work",
+                "travel.start": {
+                    "destination_anchor": "work",
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
+                },
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.16,
+        ),
+        Branch(
+            label="Commute home after the day's obligations",
+            conditions=AND(
+                has_routine_anchor("home"),
+                routine_anchor_due("home"),
+                away_from_routine_anchor("home"),
+            ),
+            narrative_stub=(
+                "{actor} turns toward home with the unremarkable certainty of "
+                "someone whose day has a next place."
+            ),
+            state_delta={
+                "character.current_activity": "commuting home",
+                "travel.start": {
+                    "destination_anchor": "home",
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
+                },
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.14,
+        ),
+        Branch(
+            label="Recheck routine before moving",
+            conditions=ALWAYS,
+            narrative_stub=(
+                "{actor} pauses at the edge of routine and checks the "
+                "ordinary facts before moving: where they are, where the "
+                "day says they should be, and whether the next leg is real."
+            ),
+            state_delta={
+                "character.current_activity": "checking routine timing",
+            },
+            event_type="travel_prepared",
+            changed_fields=("character.current_activity",),
+            magnitude=0.04,
+        ),
+    ),
+)
+
+
 TRAVEL = Template(
     id="travel",
     priority=21,
@@ -1528,20 +1631,13 @@ WORK = Template(
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         OR(
-            has_tag("work_obligation"),
-            has_any_tag(
-                "keeps_shop",
-                "merchant",
-                "innkeeper",
-                "trader",
-                "domestic_role",
-                "cares_for_household",
-                "field_worker",
-                "soldier",
-                "researcher",
-                "academic",
+            AND(
+                has_routine_anchor("work"),
+                routine_anchor_due("work"),
+                at_routine_anchor("work"),
             ),
-            WORKPLACE_PLACE,
+            has_tag("work_obligation"),
+            has_any_tag("domestic_role", "cares_for_household", "field_worker"),
         ),
         NOT(is_in_transit()),
         since_last_event_at_least("work_performed", minimum_ticks=4),
@@ -2440,6 +2536,16 @@ DRINK = Template(
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
         has_need_debt_at_or_above("thirst", 2),
+        OR(
+            has_need_debt_at_or_above("thirst", 16),
+            NOT(
+                AND(
+                    has_need_debt_at_or_above("hunger", 4),
+                    time_of_day_in("morning", "afternoon", "evening"),
+                    OR(HOME_PLACE, PUBLIC_DINING_PLACE),
+                )
+            ),
+        ),
         NOT(has_inbound_pair_tag("hunting")),
     ),
     branches=(
@@ -2598,6 +2704,29 @@ EAT = Template(
                 "character_need_states.debt_score",
             ),
             magnitude=0.22,
+        ),
+        Branch(
+            label="Eat at home alone",
+            conditions=HOME_PLACE,
+            narrative_stub=(
+                "{actor} makes the kind of meal home makes possible: "
+                "unremarkable, private, and enough to let the evening "
+                "continue on ordinary terms."
+            ),
+            state_delta={
+                "character.current_activity": "eating at home",
+                "need.fulfill": {
+                    "type": "hunger",
+                    "quality": "home_meal",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="ate",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.20,
         ),
         Branch(
             label="Eat in a public dining place",
@@ -2998,6 +3127,7 @@ BUILTIN_TEMPLATES = (
     REACH_OUT_TO_KIN,
     CONSULT_RIVAL,
     MOURN_LOSS,
+    ROUTINE_COMMUTE,
     TRAVEL,
     WORK,
     TEND_CRAFT,

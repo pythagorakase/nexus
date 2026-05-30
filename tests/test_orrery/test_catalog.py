@@ -137,6 +137,18 @@ def test_render_predicate_name_handles_known_predicates() -> None:
             "actor has inbound `hunting` pair tag",
         ),
         (
+            "has_routine_anchor(work@actor)",
+            "actor has `work` routine anchor",
+        ),
+        (
+            "routine_anchor_due(home@actor)",
+            "actor's `home` routine is due now",
+        ),
+        (
+            "away_from_routine_anchor(home@actor)",
+            "actor is away from `home` anchor",
+        ),
+        (
             "has_any_pair_tag(claims,protects@actor->target)",
             "actor has any of [`claims`, `protects`] pair tags to target",
         ),

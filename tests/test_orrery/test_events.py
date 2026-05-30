@@ -44,6 +44,7 @@ class RecordingCursor:
         character_entity_ids=None,
         inbound_pair_tag_clear_count=0,
         expired_entity_tags=None,
+        routine_anchors=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -65,6 +66,7 @@ class RecordingCursor:
         )
         self.inbound_pair_tag_clear_count = inbound_pair_tag_clear_count
         self.expired_entity_tags = list(expired_entity_tags or [])
+        self.routine_anchors = dict(routine_anchors or {})
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -278,6 +280,9 @@ class RecordingCursor:
             self._fetchone = {"geodesic_distance_m": self.geodesic_distance_m}
         elif "SELECT current_location FROM characters" in normalized:
             self._fetchone = {"current_location": self.current_location}
+        elif "FROM character_routine_anchors" in normalized:
+            actor_entity_id, anchor_type = params
+            self._fetchone = self.routine_anchors.get((actor_entity_id, anchor_type))
         elif "INSERT INTO character_travel_states" in normalized:
             self.rowcount = 1
         elif "UPDATE character_travel_states" in normalized:
@@ -1124,6 +1129,114 @@ def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> No
     assert route_metadata["destination_place_id"] == 42
     assert route_metadata["travel_mode"] == "vehicle"
     assert route_metadata["detour_factor"] > 1
+
+
+def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:
+    """Routine commute branches can name a home/work anchor, not a place id."""
+
+    draft = OrreryResolutionDraft(
+        template_id="routine_commute",
+        priority=26,
+        binding_hash="routine-home-1",
+        bindings={"actor": 1},
+        branch_label="Commute home after the day's obligations",
+        narrative_stub="{actor} starts home.",
+        state_delta={
+            "character.current_activity": "commuting home",
+            "travel.start": {
+                "destination_anchor": "home",
+                "mode": "mixed",
+                "initial_progress": 0.05,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=("character_travel_states.status",),
+        magnitude=0.14,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        current_location=99,
+        routine_anchors={
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            }
+        },
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+
+    assert travel_row["origin_place_id"] == 99
+    assert travel_row["destination_place_id"] == 7
+    assert travel_row["progress_ratio"] == pytest.approx(0.05)
+
+
+def test_commit_orrery_tick_resolves_work_from_home_anchor() -> None:
+    """Work-from-home anchors collapse work travel to the home anchor."""
+
+    draft = OrreryResolutionDraft(
+        template_id="routine_commute",
+        priority=26,
+        binding_hash="routine-work-from-home-1",
+        bindings={"actor": 1},
+        branch_label="Commute to the scheduled workplace",
+        narrative_stub="{actor} starts work.",
+        state_delta={
+            "travel.start": {
+                "destination_anchor": "work",
+                "mode": "mixed",
+                "initial_progress": 0.05,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=("character_travel_states.status",),
+        magnitude=0.16,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        current_location=99,
+        routine_anchors={
+            (1, "work"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            },
+        },
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    assert _travel_insert_row(cursor)["destination_place_id"] == 7
 
 
 def test_commit_orrery_tick_prefers_osm_graph_route() -> None:

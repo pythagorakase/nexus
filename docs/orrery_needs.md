@@ -146,6 +146,8 @@ The same pattern applies to INTIMACY suppressors (`closeted`, `vow_of_celibacy`,
 
 Mechanical details (gates, branch conditions, magnitudes, scene-pressure stubs) live in `docs/orrery_packages.md`. This section is the orientation layer.
 
+Home/work routines are now driven by `character_routine_anchors` rather than by place-class inference. The needs packages read the actor's current place and pair-tags (`resides_at`, place functions, travel state), while `ROUTINE_COMMUTE` handles movement between scheduled anchors. In practice this means a normal citizen can commute home before EAT/SLEEP fire, while a character with `nomadic`, `none`, or `works_from_home` policy does not get forced into a generic 9-5 loop.
+
 ### SLEEP (priority 25)
 
 The architecturally most significant of the basic-needs templates. Sleep is the substrate's most reliable source of small narrative texture — most ticks where it fires produce no prose, but the cumulative record of *where* a character has been sleeping is one of the densest queryable signals about their life situation.
@@ -168,7 +170,7 @@ Architectural sibling to SLEEP. Same severity-tag gate pattern, location-discrim
 
 Slightly higher priority than EAT because thirst ramps faster. Structurally simpler — fewer branches, faster cooldown, more uniformly low magnitudes because routine hydration is rarely narratively interesting on its own.
 
-- **Gate**: `has_severity_tag("thirsty")` OR routine (no time window — humans drink throughout the day). Plus `NOT(has_ephemeral("recently_drunk"))`.
+- **Gate**: `has_severity_tag("thirsty")` OR routine (no time window — humans drink throughout the day). Plus `NOT(has_ephemeral("recently_drunk"))`. Routine thirst yields to an otherwise-due home/public meal unless thirst is severe; the dinner package gets to carry the ordinary "food and drink together" beat, while dehydration still interrupts.
 - **Why not merged with EAT?** Different ramping curves, different cultural rhythms (water all day vs. meals at mealtimes), different fulfillment-affordances. Reuse belongs in primitives and maintenance helpers; merging would create one template with awkwardly disjoint branches.
 - **Branches**: desperate-drink (severe-thirst), drink socially in public room, public/wild water source, routine drinking.
 

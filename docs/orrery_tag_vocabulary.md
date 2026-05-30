@@ -16,6 +16,16 @@ Closed-vocabulary discipline: tags do not grow at runtime. Every candidate is fi
 | **Multi-entity tag** | `entity_pair_tags` (shipped — see PR #283) | Binary property of an ordered pair | `knows_location(Alex → Burrow)` |
 | **Rich relationship** | `character_relationships` (existing) | Affective/social state with valence, history, sub-states | Alex/Emilia trust=high, valence=positive |
 
+### What Is Not a Tag
+
+Use the tag registry for properties that need differential gating. Use dedicated structured surfaces for facts that have their own shape:
+
+- Home/work schedules live in `character_routine_anchors`, not `role.function` or place tags. A character can be unemployed, nomadic, work from home, or have only a zone-level anchor without needing fake profession vocabulary.
+- Current movement lives in `character_travel_states`, not transient location tags.
+- Canonical residence and access are pair-tags (`resides_at`, `can_access`) when the relation itself matters; routine anchors can reference those places but do not replace the relation.
+
+This distinction keeps the closed vocabulary from absorbing every row-shaped fact just because Orrery can read it.
+
 ### Locked Vocabulary — No Runtime Growth
 
 Skald applies from a closed registry. `skald_inline` remains the provenance marker for runtime bestowals of registered tags; the `auto_registered` source kind and runtime vocabulary-growth path are removed. Bestowal of an unknown tag name is a hard error, not an opportunity to auto-register.
