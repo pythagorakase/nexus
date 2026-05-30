@@ -1033,11 +1033,11 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **OR:**
     - **AND:**
       - actor has `work` routine anchor
-      - actor's `work` routine is due now
+      - actor's `work` routine is due now (weekdays 0=Monday; empty schedule always due)
       - actor is away from `work` anchor
     - **AND:**
       - actor has `home` routine anchor
-      - actor's `home` routine is due now
+      - actor's `home` routine is due now (weekdays 0=Monday; empty schedule always due)
       - actor is away from `home` anchor
 
 ### Branch 1 — Commute to the scheduled workplace  *(mag 0.16)*
@@ -1046,8 +1046,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `work` routine anchor
-  - actor's `work` routine is due now
+  - actor's `work` routine is due now (weekdays 0=Monday; empty schedule always due)
   - actor is away from `work` anchor
+  - actor's `work` routine can resolve a destination
 
 **Does:** activity → "commuting to work"; starts planned travel
 **Event:** `travel_departed`
@@ -1060,8 +1061,9 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 - **AND:**
   - actor has `home` routine anchor
-  - actor's `home` routine is due now
+  - actor's `home` routine is due now (weekdays 0=Monday; empty schedule always due)
   - actor is away from `home` anchor
+  - actor's `home` routine can resolve a destination
 
 **Does:** activity → "commuting home"; starts planned travel
 **Event:** `travel_departed`
@@ -1726,7 +1728,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **OR:**
     - **AND:**
       - actor has `work` routine anchor
-      - actor's `work` routine is due now
+      - actor's `work` routine is due now (weekdays 0=Monday; empty schedule always due)
       - actor is at `work` anchor
     - actor has `work_obligation` tag
     - actor has any of [`domestic_role`, `cares_for_household`, `field_worker`]
@@ -1820,6 +1822,12 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
   - **NOT:** actor is in transit
   - **OR:**
     - actor has any current tag of [`broker`, `cover_identity`, `fixer`, `operative`, `public_role`, `undercover`]
+  - **OR:**
+    - actor is in `urban_dense` place class
+    - actor is in `place_open` place class
+    - actor is in `transit` place class
+    - actor is in `commerce` place class
+    - actor is in `meeting` place class
   - ≥ 6 ticks since last `maintain_cover` event for actor
 
 ### Branch 1 — Run a low-level courier job  *(mag 0.16)*

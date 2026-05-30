@@ -47,6 +47,7 @@ from nexus.agents.orrery.substrate import (
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
     routine_anchor_due,
+    routine_anchor_has_destination,
     since_last_event_at_least,
     validate_always_fallbacks,
 )
@@ -387,6 +388,42 @@ def test_work_from_home_anchor_resolves_against_home_anchor() -> None:
     )
 
     assert at_routine_anchor("work")(state, {Slot.ACTOR: 1})
+    assert routine_anchor_has_destination("work")(state, {Slot.ACTOR: 1})
+
+
+def test_malformed_home_work_from_home_anchor_does_not_recurse() -> None:
+    """In-memory fixtures fail closed if home is accidentally work-from-home."""
+
+    state = WorldState(
+        locations={1: 10},
+        routine_anchors={
+            (1, "home"): RoutineAnchor(
+                anchor_type="home",
+                mobility_policy="works_from_home",
+            ),
+        },
+    )
+
+    assert not at_routine_anchor("home")(state, {Slot.ACTOR: 1})
+    assert not routine_anchor_has_destination("home")(state, {Slot.ACTOR: 1})
+
+
+def test_routine_schedule_reports_non_numeric_times_cleanly() -> None:
+    """Malformed schedule times raise the same actionable HH:MM error."""
+
+    state = WorldState(
+        routine_anchors={
+            (1, "home"): RoutineAnchor(
+                anchor_type="home",
+                place_id=10,
+                schedule={"start": "HH:MM", "end": "08:30"},
+            ),
+        },
+        world_time=datetime(2073, 10, 31, 0, 15, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(ValueError, match="must be HH:MM"):
+        routine_anchor_due("home")(state, {Slot.ACTOR: 1})
 
 
 def test_context_and_constraint_predicates_read_current_tags() -> None:

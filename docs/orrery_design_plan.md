@@ -477,7 +477,7 @@ Travel route selection cascades: local OSM-derived `osm_graph` routing first, th
 
 ### Routine Anchors
 
-Ordinary home/work routines are explicit actor facts, not inferred from the class of the place an actor happens to occupy. `character_routine_anchors` records a character entity, an `anchor_type` (`home` or `work` in the MVP), an optional concrete `place_id`, an optional coarse `zone_id`, a `mobility_policy`, and a JSON schedule window (`weekdays`, `start`, `end`). This gives Orrery a Radiant-AI-style surface for boring citizens without inventing a generic job for every entity standing in a mall, tavern, lab, or public street.
+Ordinary home/work routines are explicit actor facts, not inferred from the class of the place an actor happens to occupy. `character_routine_anchors` records a character entity, an `anchor_type` (`home` or `work` in the MVP), an optional concrete `place_id`, an optional coarse `zone_id`, a `mobility_policy`, and a JSON schedule window (`weekdays`, `start`, `end`). `weekdays` uses Python `datetime.weekday()` numbering (`0=Monday` through `6=Sunday`), and an empty schedule means "always due" rather than "not scheduled." This gives Orrery a Radiant-AI-style surface for boring citizens without inventing a generic job for every entity standing in a mall, tavern, lab, or public street.
 
 Mobility policy is the exception surface:
 

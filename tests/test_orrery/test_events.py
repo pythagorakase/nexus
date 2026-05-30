@@ -328,6 +328,20 @@ class RecordingConn:
         return self.cursor_obj
 
 
+class AsyncRoutineConn:
+    """Small asyncpg stand-in for routine destination helper tests."""
+
+    def __init__(self, *, routine_anchors=None, zone_destination=None):
+        self.routine_anchors = dict(routine_anchors or {})
+        self.zone_destination = zone_destination
+
+    async def fetchrow(self, _sql, actor_entity_id, anchor_type):
+        return self.routine_anchors.get((actor_entity_id, anchor_type))
+
+    async def fetchval(self, _sql, _preferred_tags, _zone_id):
+        return self.zone_destination
+
+
 class MinimalStoryResponse:
     """Tiny response object for lore_adapter serialization tests."""
 
@@ -1237,6 +1251,104 @@ def test_commit_orrery_tick_resolves_work_from_home_anchor() -> None:
     )
 
     assert _travel_insert_row(cursor)["destination_place_id"] == 7
+
+
+def test_sync_malformed_home_work_from_home_anchor_fails_closed() -> None:
+    """Sync helper avoids recursive home->home work-from-home loops."""
+
+    cursor = RecordingCursor(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+        }
+    )
+
+    assert (
+        orrery_events._routine_anchor_destination_sync(
+            cursor,
+            actor_entity_id=1,
+            anchor_type="home",
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_routine_anchor_destination_resolves_work_from_home() -> None:
+    """Async travel start helper matches sync work-from-home resolution."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "work"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            },
+        }
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="work",
+    )
+
+    assert destination == 7
+
+
+@pytest.mark.asyncio
+async def test_async_routine_anchor_destination_resolves_zone() -> None:
+    """Async zone-resolved anchors use the preferred-place query result."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": 5,
+                "mobility_policy": "zone_resolved",
+            },
+        },
+        zone_destination=42,
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="home",
+    )
+
+    assert destination == 42
+
+
+@pytest.mark.asyncio
+async def test_async_malformed_home_work_from_home_anchor_fails_closed() -> None:
+    """Async helper avoids recursive home->home work-from-home loops."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+        }
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="home",
+    )
+
+    assert destination is None
 
 
 def test_commit_orrery_tick_prefers_osm_graph_route() -> None:

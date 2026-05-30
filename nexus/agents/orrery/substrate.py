@@ -816,6 +816,26 @@ def away_from_routine_anchor(anchor_type: str, slot: Slot = Slot.ACTOR) -> Condi
     return _named(_condition, f"away_from_routine_anchor({normalized}@{slot.value})")
 
 
+def routine_anchor_has_destination(
+    anchor_type: str,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether the actor's anchor can resolve to a place destination."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return _routine_anchor_destination_available(state, entity_id, normalized)
+
+    return _named(
+        _condition,
+        f"routine_anchor_has_destination({normalized}@{slot.value})",
+    )
+
+
 def _routine_anchor(
     state: WorldState,
     entity_id: int,
@@ -829,6 +849,8 @@ def _at_routine_anchor(state: WorldState, entity_id: int, anchor_type: str) -> b
     if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
         return False
     if anchor.mobility_policy == "works_from_home":
+        if anchor_type == "home":
+            return False
         return _at_routine_anchor(state, entity_id, "home")
     current_place_id = state.locations.get(entity_id)
     if current_place_id is None:
@@ -837,6 +859,35 @@ def _at_routine_anchor(state: WorldState, entity_id: int, anchor_type: str) -> b
         return current_place_id == anchor.place_id
     if anchor.zone_id is not None:
         return state.location_zones.get(current_place_id) == anchor.zone_id
+    return False
+
+
+def _routine_anchor_destination_available(
+    state: WorldState,
+    entity_id: int,
+    anchor_type: str,
+    seen: frozenset[str] = frozenset(),
+) -> bool:
+    if anchor_type in seen:
+        return False
+    anchor = _routine_anchor(state, entity_id, anchor_type)
+    if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
+        return False
+    if anchor.mobility_policy == "fixed_place":
+        return anchor.place_id is not None
+    if anchor.mobility_policy == "zone_resolved":
+        return anchor.zone_id is not None and anchor.zone_id in set(
+            state.location_zones.values()
+        )
+    if anchor.mobility_policy == "works_from_home":
+        if anchor_type == "home":
+            return False
+        return _routine_anchor_destination_available(
+            state,
+            entity_id,
+            "home",
+            seen | {anchor_type},
+        )
     return False
 
 
@@ -868,8 +919,11 @@ def _minute_of_day(value: Any) -> Optional[int]:
     parts = raw.split(":", 1)
     if len(parts) != 2:
         raise ValueError(f"Routine schedule time must be HH:MM, got {raw!r}")
-    hour = int(parts[0])
-    minute = int(parts[1])
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError as exc:
+        raise ValueError(f"Routine schedule time must be HH:MM, got {raw!r}") from exc
     if not 0 <= hour <= 23 or not 0 <= minute <= 59:
         raise ValueError(f"Routine schedule time out of range: {raw!r}")
     return hour * 60 + minute

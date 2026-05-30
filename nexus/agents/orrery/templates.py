@@ -41,6 +41,7 @@ from nexus.agents.orrery.substrate import (
     at_routine_anchor,
     away_from_routine_anchor,
     routine_anchor_due,
+    routine_anchor_has_destination,
     since_last_event_at_least,
     time_of_day_in,
     travel_progress_at_or_above,
@@ -425,6 +426,7 @@ MAINTAIN_COVER = Template(
                 "undercover",
             ),
         ),
+        URBAN_PUBLIC_FLOW_PLACE,
         since_last_event_at_least("maintain_cover", minimum_ticks=6),
     ),
     branches=(
@@ -1426,6 +1428,7 @@ ROUTINE_COMMUTE = Template(
                 has_routine_anchor("work"),
                 routine_anchor_due("work"),
                 away_from_routine_anchor("work"),
+                routine_anchor_has_destination("work"),
             ),
             narrative_stub=(
                 "{actor} follows the ordinary route toward work: not a quest, "
@@ -1454,6 +1457,7 @@ ROUTINE_COMMUTE = Template(
                 has_routine_anchor("home"),
                 routine_anchor_due("home"),
                 away_from_routine_anchor("home"),
+                routine_anchor_has_destination("home"),
             ),
             narrative_stub=(
                 "{actor} turns toward home with the unremarkable certainty of "

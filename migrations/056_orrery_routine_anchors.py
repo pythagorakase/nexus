@@ -118,7 +118,9 @@ def _create_routine_anchor_table(conn: connection) -> None:
                 work-from-home, nomadic, or intentionally absent.';
             COMMENT ON COLUMN character_routine_anchors.schedule IS
                 'JSON schedule. Supported MVP shape: weekdays array, start
-                HH:MM, end HH:MM. Windows may cross midnight.';
+                HH:MM, end HH:MM. Weekdays use Python datetime.weekday()
+                numbering: 0=Monday through 6=Sunday. Empty JSON means always
+                due. Windows may cross midnight.';
             COMMENT ON COLUMN character_routine_anchors.source IS
                 'Human/source provenance for the anchor.';
             """

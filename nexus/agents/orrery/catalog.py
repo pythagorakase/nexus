@@ -212,7 +212,10 @@ _register(
 )
 _register(
     r"routine_anchor_due\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
-    lambda m: (f"{_slot(m.group('slot'))}'s `{m.group('anchor')}` routine is due now"),
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s `{m.group('anchor')}` routine is due now "
+        "(weekdays 0=Monday; empty schedule always due)"
+    ),
 )
 _register(
     r"at_routine_anchor\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
@@ -221,6 +224,13 @@ _register(
 _register(
     r"away_from_routine_anchor\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} is away from `{m.group('anchor')}` anchor",
+)
+_register(
+    r"routine_anchor_has_destination\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s `{m.group('anchor')}` routine "
+        "can resolve a destination"
+    ),
 )
 _register(
     r"travel_progress_at_or_above\((?P<threshold>[\d.]+)@(?P<slot>\w+)\)",

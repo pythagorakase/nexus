@@ -2444,6 +2444,8 @@ def _routine_anchor_destination_sync(
     if policy == "fixed_place":
         return place_id
     if policy == "works_from_home":
+        if anchor_type == "home":
+            return None
         return _routine_anchor_destination_sync(
             cur,
             actor_entity_id=actor_entity_id,
@@ -2529,6 +2531,8 @@ async def _routine_anchor_destination_async(
     if policy == "fixed_place":
         return place_id
     if policy == "works_from_home":
+        if anchor_type == "home":
+            return None
         return await _routine_anchor_destination_async(
             conn,
             actor_entity_id=actor_entity_id,

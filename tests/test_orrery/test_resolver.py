@@ -240,6 +240,10 @@ def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
                 {"entity_id": 3, "current_location": 10},
                 {"entity_id": 4, "current_location": 10},
             ],
+            location_class_rows=[
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {"id": 10, "location_class": "place_open", "is_primary": False},
+            ],
             activity_rows=[
                 {"entity_id": 1, "current_activity": "in scene"},
                 {"entity_id": 2, "current_activity": "mentioned elsewhere"},
@@ -356,7 +360,8 @@ def test_maintain_cover_requires_positive_cover_context() -> None:
         FakeSession(
             tag_rows=[{"entity_id": 1, "tag": "cover_identity", "is_ephemeral": False}],
             location_class_rows=[
-                {"id": 10, "location_class": "fixed_location", "is_primary": True}
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {"id": 10, "location_class": "place_open", "is_primary": False},
             ],
         ),
         BUILTIN_TEMPLATES,
@@ -366,7 +371,7 @@ def test_maintain_cover_requires_positive_cover_context() -> None:
 
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "maintain_cover"
-    assert proposal.resolutions[0].branch_label == "Maintain a specific cover identity"
+    assert proposal.resolutions[0].branch_label == "Run a low-level courier job"
 
 
 def test_maintain_cover_skips_constrained_actor() -> None:
@@ -1315,6 +1320,36 @@ def test_routine_commute_sends_actor_home_after_work_window() -> None:
         proposal.resolutions[0].state_delta["travel.start"]["destination_anchor"]
         == "home"
     )
+
+
+def test_routine_commute_fallback_handles_incomplete_anchor() -> None:
+    """The terminal fallback is reachable for malformed in-memory anchors."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[],
+            location_rows=[{"entity_id": 1, "current_location": 10}],
+            routine_anchor_rows=[
+                {
+                    "character_entity_id": 1,
+                    "anchor_type": "home",
+                    "place_id": None,
+                    "zone_id": None,
+                    "mobility_policy": "fixed_place",
+                    "schedule": {"start": "17:00", "end": "08:30"},
+                },
+            ],
+            world_time=datetime(2073, 10, 30, 17, 30, tzinfo=timezone.utc),
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.actor_count == 1
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "routine_commute"
+    assert proposal.resolutions[0].branch_label == "Recheck routine before moving"
 
 
 def test_work_template_uses_one_global_work_cooldown() -> None:

@@ -127,7 +127,7 @@ def seed(slot: int) -> dict[str, Any]:
                     character_entity_id=character["entity_id"],
                     anchor_type="work",
                     place_id=work_place["id"],
-                    zone_id=work_place["zone_id"],
+                    zone_id=None,
                     schedule=WORK_SCHEDULE,
                 )
                 _upsert_anchor(
@@ -135,7 +135,7 @@ def seed(slot: int) -> dict[str, Any]:
                     character_entity_id=character["entity_id"],
                     anchor_type="home",
                     place_id=home_place["id"],
-                    zone_id=home_place["zone_id"],
+                    zone_id=None,
                     schedule=HOME_SCHEDULE,
                 )
                 inserted_residence = apply_pair_tag_bestowal(
