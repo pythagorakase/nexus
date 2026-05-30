@@ -44,6 +44,7 @@ class RecordingCursor:
         character_entity_ids=None,
         inbound_pair_tag_clear_count=0,
         expired_entity_tags=None,
+        routine_anchors=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -65,6 +66,7 @@ class RecordingCursor:
         )
         self.inbound_pair_tag_clear_count = inbound_pair_tag_clear_count
         self.expired_entity_tags = list(expired_entity_tags or [])
+        self.routine_anchors = dict(routine_anchors or {})
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -278,6 +280,9 @@ class RecordingCursor:
             self._fetchone = {"geodesic_distance_m": self.geodesic_distance_m}
         elif "SELECT current_location FROM characters" in normalized:
             self._fetchone = {"current_location": self.current_location}
+        elif "FROM character_routine_anchors" in normalized:
+            actor_entity_id, anchor_type = params
+            self._fetchone = self.routine_anchors.get((actor_entity_id, anchor_type))
         elif "INSERT INTO character_travel_states" in normalized:
             self.rowcount = 1
         elif "UPDATE character_travel_states" in normalized:
@@ -321,6 +326,20 @@ class RecordingConn:
 
     def cursor(self):
         return self.cursor_obj
+
+
+class AsyncRoutineConn:
+    """Small asyncpg stand-in for routine destination helper tests."""
+
+    def __init__(self, *, routine_anchors=None, zone_destination=None):
+        self.routine_anchors = dict(routine_anchors or {})
+        self.zone_destination = zone_destination
+
+    async def fetchrow(self, _sql, actor_entity_id, anchor_type):
+        return self.routine_anchors.get((actor_entity_id, anchor_type))
+
+    async def fetchval(self, _sql, _preferred_tags, _zone_id):
+        return self.zone_destination
 
 
 class MinimalStoryResponse:
@@ -1124,6 +1143,212 @@ def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> No
     assert route_metadata["destination_place_id"] == 42
     assert route_metadata["travel_mode"] == "vehicle"
     assert route_metadata["detour_factor"] > 1
+
+
+def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:
+    """Routine commute branches can name a home/work anchor, not a place id."""
+
+    draft = OrreryResolutionDraft(
+        template_id="routine_commute",
+        priority=26,
+        binding_hash="routine-home-1",
+        bindings={"actor": 1},
+        branch_label="Commute home after the day's obligations",
+        narrative_stub="{actor} starts home.",
+        state_delta={
+            "character.current_activity": "commuting home",
+            "travel.start": {
+                "destination_anchor": "home",
+                "mode": "mixed",
+                "initial_progress": 0.05,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=("character_travel_states.status",),
+        magnitude=0.14,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        current_location=99,
+        routine_anchors={
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            }
+        },
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+
+    assert travel_row["origin_place_id"] == 99
+    assert travel_row["destination_place_id"] == 7
+    assert travel_row["progress_ratio"] == pytest.approx(0.05)
+
+
+def test_commit_orrery_tick_resolves_work_from_home_anchor() -> None:
+    """Work-from-home anchors collapse work travel to the home anchor."""
+
+    draft = OrreryResolutionDraft(
+        template_id="routine_commute",
+        priority=26,
+        binding_hash="routine-work-from-home-1",
+        bindings={"actor": 1},
+        branch_label="Commute to the scheduled workplace",
+        narrative_stub="{actor} starts work.",
+        state_delta={
+            "travel.start": {
+                "destination_anchor": "work",
+                "mode": "mixed",
+                "initial_progress": 0.05,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=("character_travel_states.status",),
+        magnitude=0.16,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        current_location=99,
+        routine_anchors={
+            (1, "work"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            },
+        },
+    )
+
+    commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    assert _travel_insert_row(cursor)["destination_place_id"] == 7
+
+
+def test_sync_malformed_home_work_from_home_anchor_fails_closed() -> None:
+    """Sync helper avoids recursive home->home work-from-home loops."""
+
+    cursor = RecordingCursor(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+        }
+    )
+
+    assert (
+        orrery_events._routine_anchor_destination_sync(
+            cursor,
+            actor_entity_id=1,
+            anchor_type="home",
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_async_routine_anchor_destination_resolves_work_from_home() -> None:
+    """Async travel start helper matches sync work-from-home resolution."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "work"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+            (1, "home"): {
+                "place_id": 7,
+                "zone_id": None,
+                "mobility_policy": "fixed_place",
+            },
+        }
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="work",
+    )
+
+    assert destination == 7
+
+
+@pytest.mark.asyncio
+async def test_async_routine_anchor_destination_resolves_zone() -> None:
+    """Async zone-resolved anchors use the preferred-place query result."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": 5,
+                "mobility_policy": "zone_resolved",
+            },
+        },
+        zone_destination=42,
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="home",
+    )
+
+    assert destination == 42
+
+
+@pytest.mark.asyncio
+async def test_async_malformed_home_work_from_home_anchor_fails_closed() -> None:
+    """Async helper avoids recursive home->home work-from-home loops."""
+
+    conn = AsyncRoutineConn(
+        routine_anchors={
+            (1, "home"): {
+                "place_id": None,
+                "zone_id": None,
+                "mobility_policy": "works_from_home",
+            },
+        }
+    )
+
+    destination = await orrery_events._routine_anchor_destination_async(
+        conn,
+        actor_entity_id=1,
+        anchor_type="home",
+    )
+
+    assert destination is None
 
 
 def test_commit_orrery_tick_prefers_osm_graph_route() -> None:

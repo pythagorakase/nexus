@@ -1401,7 +1401,15 @@ def _apply_travel_start_sync(
     )
     destination_place_id = data.get("destination_place_id")
     if destination_place_id is None:
-        destination_place_id = _planned_destination_sync(cur, actor_entity_id)
+        destination_anchor = data.get("destination_anchor")
+        if destination_anchor is not None:
+            destination_place_id = _routine_anchor_destination_sync(
+                cur,
+                actor_entity_id=actor_entity_id,
+                anchor_type=str(destination_anchor),
+            )
+        else:
+            destination_place_id = _planned_destination_sync(cur, actor_entity_id)
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
@@ -1488,7 +1496,17 @@ async def _apply_travel_start_async(
     )
     destination_place_id = data.get("destination_place_id")
     if destination_place_id is None:
-        destination_place_id = await _planned_destination_async(conn, actor_entity_id)
+        destination_anchor = data.get("destination_anchor")
+        if destination_anchor is not None:
+            destination_place_id = await _routine_anchor_destination_async(
+                conn,
+                actor_entity_id=actor_entity_id,
+                anchor_type=str(destination_anchor),
+            )
+        else:
+            destination_place_id = await _planned_destination_async(
+                conn, actor_entity_id
+            )
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
@@ -2402,6 +2420,81 @@ def _planned_destination_sync(cur: Any, actor_entity_id: int) -> Optional[int]:
     return _row_get(row, "destination_place_id", 0) if row else None
 
 
+def _routine_anchor_destination_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    anchor_type: str,
+) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT place_id, zone_id, mobility_policy::text AS mobility_policy
+        FROM character_routine_anchors
+        WHERE character_entity_id = %s
+          AND anchor_type = %s::orrery_routine_anchor_type
+        """,
+        (actor_entity_id, anchor_type),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    policy = _row_get(row, "mobility_policy", 2)
+    place_id = _row_get(row, "place_id", 0)
+    zone_id = _row_get(row, "zone_id", 1)
+    if policy == "fixed_place":
+        return place_id
+    if policy == "works_from_home":
+        if anchor_type == "home":
+            return None
+        return _routine_anchor_destination_sync(
+            cur,
+            actor_entity_id=actor_entity_id,
+            anchor_type="home",
+        )
+    if policy == "zone_resolved" and zone_id is not None:
+        return _routine_zone_destination_sync(
+            cur, zone_id=int(zone_id), anchor_type=anchor_type
+        )
+    return None
+
+
+def _routine_zone_destination_sync(
+    cur: Any,
+    *,
+    zone_id: int,
+    anchor_type: str,
+) -> Optional[int]:
+    preferred_tags = (
+        ("dwelling", "haven")
+        if anchor_type == "home"
+        else (
+            "commerce",
+            "administration",
+            "craft",
+            "production",
+            "place_medical",
+            "military",
+        )
+    )
+    cur.execute(
+        """
+        SELECT p.id
+        FROM places p
+        LEFT JOIN entity_tags_current etc
+          ON etc.entity_id = p.entity_id
+         AND etc.category = 'place_function'
+         AND etc.tag = ANY(%s)
+        WHERE p.zone = %s
+        GROUP BY p.id
+        ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
+        LIMIT 1
+        """,
+        (list(preferred_tags), zone_id),
+    )
+    row = cur.fetchone()
+    return _row_get(row, "id", 0) if row else None
+
+
 async def _planned_destination_async(conn: Any, actor_entity_id: int) -> Optional[int]:
     return await conn.fetchval(
         """
@@ -2411,6 +2504,82 @@ async def _planned_destination_async(conn: Any, actor_entity_id: int) -> Optiona
           AND status = 'planned'
         """,
         actor_entity_id,
+    )
+
+
+async def _routine_anchor_destination_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    anchor_type: str,
+) -> Optional[int]:
+    row = await conn.fetchrow(
+        """
+        SELECT place_id, zone_id, mobility_policy::text AS mobility_policy
+        FROM character_routine_anchors
+        WHERE character_entity_id = $1
+          AND anchor_type = $2::orrery_routine_anchor_type
+        """,
+        actor_entity_id,
+        anchor_type,
+    )
+    if row is None:
+        return None
+    policy = _row_get(row, "mobility_policy", 2)
+    place_id = _row_get(row, "place_id", 0)
+    zone_id = _row_get(row, "zone_id", 1)
+    if policy == "fixed_place":
+        return place_id
+    if policy == "works_from_home":
+        if anchor_type == "home":
+            return None
+        return await _routine_anchor_destination_async(
+            conn,
+            actor_entity_id=actor_entity_id,
+            anchor_type="home",
+        )
+    if policy == "zone_resolved" and zone_id is not None:
+        return await _routine_zone_destination_async(
+            conn,
+            zone_id=int(zone_id),
+            anchor_type=anchor_type,
+        )
+    return None
+
+
+async def _routine_zone_destination_async(
+    conn: Any,
+    *,
+    zone_id: int,
+    anchor_type: str,
+) -> Optional[int]:
+    preferred_tags = (
+        ("dwelling", "haven")
+        if anchor_type == "home"
+        else (
+            "commerce",
+            "administration",
+            "craft",
+            "production",
+            "place_medical",
+            "military",
+        )
+    )
+    return await conn.fetchval(
+        """
+        SELECT p.id
+        FROM places p
+        LEFT JOIN entity_tags_current etc
+          ON etc.entity_id = p.entity_id
+         AND etc.category = 'place_function'
+         AND etc.tag = ANY($1::text[])
+        WHERE p.zone = $2
+        GROUP BY p.id
+        ORDER BY CASE WHEN count(etc.tag) > 0 THEN 0 ELSE 1 END, p.id
+        LIMIT 1
+        """,
+        list(preferred_tags),
+        zone_id,
     )
 
 

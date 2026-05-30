@@ -157,6 +157,22 @@ def test_slot2_semantic_vocab_documents_new_faction_categories() -> None:
     } <= documented
 
 
+def test_routine_anchor_migration_creates_explicit_schedule_surface() -> None:
+    """Routine anchors model home/work facts instead of inferring from places."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "056_orrery_routine_anchors.py"
+    ).read_text()
+
+    assert "character_routine_anchors" in migration_source
+    assert "orrery_routine_anchor_type" in migration_source
+    assert "orrery_routine_mobility_policy" in migration_source
+    assert '"works_from_home"' in migration_source
+    assert "UNIQUE (character_entity_id, anchor_type)" in migration_source
+
+
 def test_interpersonal_need_migration_extends_need_vocab() -> None:
     """Migration 032 seeds the interpersonal need vocabulary."""
 

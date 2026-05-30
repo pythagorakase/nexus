@@ -15,6 +15,7 @@ from nexus.agents.orrery.substrate import (
     INTIMACY_SUPPRESSOR_TAGS,
     PresentTargetPolicy,
     Resolution,
+    RoutineAnchor,
     Slot,
     Template,
     TravelState,
@@ -234,6 +235,7 @@ def hydrate_world_state(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
     need_tuning: Optional[NeedTuning] = None,
+    world_time_override: Optional[datetime] = None,
 ) -> WorldState:
     """Hydrate the read-side Orrery state snapshot from database tables."""
 
@@ -271,12 +273,14 @@ def hydrate_world_state(
     location_class: dict[int, str] = {}
     location_classes: dict[int, set[str]] = {}
     location_entity_ids: dict[int, int] = {}
+    location_zones: dict[int, int] = {}
     for row in session.execute(
         text(
             f"""
             /* orrery:location_classes */
             SELECT p.id,
                    p.entity_id AS place_entity_id,
+                   p.zone AS zone_id,
                    p.type::text AS location_class,
                    true AS is_primary
             FROM places p
@@ -284,6 +288,7 @@ def hydrate_world_state(
             UNION ALL
             SELECT p.id,
                    p.entity_id AS place_entity_id,
+                   p.zone AS zone_id,
                    etc.tag AS location_class,
                    false AS is_primary
             FROM places p
@@ -300,6 +305,9 @@ def hydrate_world_state(
         place_entity_id = row.get("place_entity_id")
         if place_entity_id is not None:
             location_entity_ids[place_id] = place_entity_id
+        zone_id = row.get("zone_id")
+        if zone_id is not None:
+            location_zones[place_id] = zone_id
         location_classes.setdefault(place_id, set()).add(class_name)
         if row["is_primary"]:
             location_class[place_id] = class_name
@@ -390,7 +398,9 @@ def hydrate_world_state(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
     )
-    world_time = _load_world_time(session, anchor_chunk_id=anchor_chunk_id)
+    world_time = world_time_override or _load_world_time(
+        session, anchor_chunk_id=anchor_chunk_id
+    )
     time_of_day = _load_time_of_day(world_time)
     weather = _load_weather(session)
     need_debt_scores = _load_need_debt_scores(
@@ -399,6 +409,7 @@ def hydrate_world_state(
         need_tuning=need_tuning,
     )
     travel_states = _load_travel_states(session)
+    routine_anchors = _load_routine_anchors(session)
 
     return WorldState(
         tags={entity_id: frozenset(values) for entity_id, values in tags.items()},
@@ -424,13 +435,49 @@ def hydrate_world_state(
             for location_id, values in location_classes.items()
         },
         location_entity_ids=location_entity_ids,
+        location_zones=location_zones,
         need_debt_scores=need_debt_scores,
         travel_states=travel_states,
+        routine_anchors=routine_anchors,
         recent_events=recent_events,
         time_of_day=time_of_day,
+        world_time=world_time,
         weather=weather,
         current_tick=anchor_chunk_id or 0,
     )
+
+
+def _load_routine_anchors(session: Any) -> dict[tuple[int, str], RoutineAnchor]:
+    """Load explicit home/work anchors for routine package gates."""
+
+    anchors: dict[tuple[int, str], RoutineAnchor] = {}
+    for row in session.execute(
+        text(
+            """
+            /* orrery:routine_anchors */
+            SELECT cra.character_entity_id,
+                   cra.anchor_type::text AS anchor_type,
+                   cra.place_id,
+                   cra.zone_id,
+                   cra.mobility_policy::text AS mobility_policy,
+                   cra.schedule
+            FROM character_routine_anchors cra
+            JOIN entities e
+              ON e.id = cra.character_entity_id
+             AND e.kind = 'character'
+             AND e.is_active = true
+            """
+        )
+    ).mappings():
+        anchor_type = str(row["anchor_type"])
+        anchors[(row["character_entity_id"], anchor_type)] = RoutineAnchor(
+            anchor_type=anchor_type,
+            place_id=row.get("place_id"),
+            zone_id=row.get("zone_id"),
+            mobility_policy=str(row["mobility_policy"]),
+            schedule=row.get("schedule") or {},
+        )
+    return anchors
 
 
 def _load_travel_states(session: Any) -> dict[int, TravelState]:
@@ -579,6 +626,21 @@ def compose_actor_bindings(
     ).mappings():
         actor_ids.add(row["entity_id"])
 
+    for row in session.execute(
+        text(
+            """
+            /* orrery:actor_bindings_routine_anchors */
+            SELECT DISTINCT cra.character_entity_id AS entity_id
+            FROM character_routine_anchors cra
+            JOIN entities e ON e.id = cra.character_entity_id
+            WHERE e.kind = 'character'
+              AND e.is_active = true
+              AND cra.mobility_policy NOT IN ('none', 'nomadic')
+            """
+        )
+    ).mappings():
+        actor_ids.add(row["entity_id"])
+
     offscreen_actor_ids = actor_ids - present_actor_ids
     return tuple({Slot.ACTOR: actor_id} for actor_id in sorted(offscreen_actor_ids))
 
@@ -721,6 +783,7 @@ def resolve_dry_run(
     anchor_chunk_id: Optional[int],
     window_chunks: int,
     sunhelm_settings: Optional[Any] = None,
+    world_time_override: Optional[datetime] = None,
 ) -> OrreryTickProposal:
     """Hydrate, bind, and evaluate Orrery packages without database writes."""
 
@@ -730,6 +793,7 @@ def resolve_dry_run(
         anchor_chunk_id=anchor_chunk_id,
         window_chunks=window_chunks,
         need_tuning=need_tuning,
+        world_time_override=world_time_override,
     )
 
     templates_list = list(templates)

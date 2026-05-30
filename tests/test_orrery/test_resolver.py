@@ -65,6 +65,7 @@ class FakeSession:
         entity_name_rows=None,
         need_debt_rows=None,
         travel_state_rows=None,
+        routine_anchor_rows=None,
         world_time=None,
         weather="",
         max_chunk_id=100,
@@ -94,6 +95,7 @@ class FakeSession:
         ]
         self.need_debt_rows = need_debt_rows or []
         self.travel_state_rows = travel_state_rows or []
+        self.routine_anchor_rows = routine_anchor_rows or []
         self.world_time = world_time or datetime(2073, 10, 31, 12, tzinfo=timezone.utc)
         self.weather = weather
         self.max_chunk_id = max_chunk_id
@@ -146,6 +148,15 @@ class FakeSession:
             assert "NOT pt.deprecated" in sql
             assert "subject_entity.is_active = true" in sql
             return FakeResult(self.inbound_ephemeral_pair_actor_rows)
+        if "/* orrery:actor_bindings_routine_anchors */" in sql:
+            return FakeResult(
+                [
+                    {"entity_id": row["character_entity_id"]}
+                    for row in self.routine_anchor_rows
+                    if row.get("mobility_policy", "fixed_place")
+                    not in {"none", "nomadic"}
+                ]
+            )
         if "/* orrery:present_actor_ids_at_anchor */" in sql:
             return FakeResult(self.present_actor_rows)
         if "/* orrery:actor_target_bindings_character_relationships */" in sql:
@@ -161,6 +172,10 @@ class FakeSession:
             assert "JOIN entities e" in sql
             assert "e.is_active = true" in sql
             return FakeResult(self.travel_state_rows)
+        if "/* orrery:routine_anchors */" in sql:
+            assert "JOIN entities e" in sql
+            assert "e.is_active = true" in sql
+            return FakeResult(self.routine_anchor_rows)
         if "/* orrery:anchor_world_time */" in sql:
             self.world_time_queries += 1
             return FakeResult([{"world_time": self.world_time}])
@@ -224,6 +239,10 @@ def test_resolve_dry_run_excludes_anchor_present_characters() -> None:
                 {"entity_id": 2, "current_location": 10},
                 {"entity_id": 3, "current_location": 10},
                 {"entity_id": 4, "current_location": 10},
+            ],
+            location_class_rows=[
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {"id": 10, "location_class": "place_open", "is_primary": False},
             ],
             activity_rows=[
                 {"entity_id": 1, "current_activity": "in scene"},
@@ -341,7 +360,8 @@ def test_maintain_cover_requires_positive_cover_context() -> None:
         FakeSession(
             tag_rows=[{"entity_id": 1, "tag": "cover_identity", "is_ephemeral": False}],
             location_class_rows=[
-                {"id": 10, "location_class": "fixed_location", "is_primary": True}
+                {"id": 10, "location_class": "fixed_location", "is_primary": True},
+                {"id": 10, "location_class": "place_open", "is_primary": False},
             ],
         ),
         BUILTIN_TEMPLATES,
@@ -351,7 +371,7 @@ def test_maintain_cover_requires_positive_cover_context() -> None:
 
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "maintain_cover"
-    assert proposal.resolutions[0].branch_label == "Maintain a specific cover identity"
+    assert proposal.resolutions[0].branch_label == "Run a low-level courier job"
 
 
 def test_maintain_cover_skips_constrained_actor() -> None:
@@ -1160,6 +1180,176 @@ def test_resolve_dry_run_fires_work_for_obligation_without_craft_tags() -> None:
     assert proposal.resolution_count == 1
     assert proposal.resolutions[0].template_id == "work"
     assert proposal.resolutions[0].branch_label == "Keep the obligation from slipping"
+
+
+def test_work_does_not_fire_from_workplace_place_class_alone() -> None:
+    """A workplace-like place is not proof that every actor has a job."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_class_rows=[
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "zone_id": 5,
+                    "location_class": "commerce",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "zone_id": 5,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+
+
+def test_routine_work_anchor_allows_scheduled_work_at_workplace() -> None:
+    """Explicit work anchors make boring citizen work routine eligible."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[],
+            location_class_rows=[
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "zone_id": 5,
+                    "location_class": "commerce",
+                    "is_primary": False,
+                },
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "zone_id": 5,
+                    "location_class": "fixed_location",
+                    "is_primary": True,
+                },
+            ],
+            routine_anchor_rows=[
+                {
+                    "character_entity_id": 1,
+                    "anchor_type": "work",
+                    "place_id": 10,
+                    "zone_id": None,
+                    "mobility_policy": "fixed_place",
+                    "schedule": {
+                        "weekdays": [0, 1, 2, 3, 4],
+                        "start": "09:00",
+                        "end": "17:00",
+                    },
+                }
+            ],
+            world_time=datetime(2073, 10, 30, 10, 30, tzinfo=timezone.utc),
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.actor_count == 1
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "work"
+    assert proposal.resolutions[0].branch_label == "Work a public-facing shift"
+
+
+def test_routine_commute_sends_actor_home_after_work_window() -> None:
+    """Due home anchors start travel instead of leaving actors at work forever."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[],
+            location_rows=[{"entity_id": 1, "current_location": 10}],
+            location_class_rows=[
+                {
+                    "id": 10,
+                    "place_entity_id": 1000,
+                    "zone_id": 5,
+                    "location_class": "commerce",
+                    "is_primary": False,
+                },
+                {
+                    "id": 20,
+                    "place_entity_id": 2000,
+                    "zone_id": 5,
+                    "location_class": "dwelling",
+                    "is_primary": False,
+                },
+            ],
+            routine_anchor_rows=[
+                {
+                    "character_entity_id": 1,
+                    "anchor_type": "work",
+                    "place_id": 10,
+                    "zone_id": None,
+                    "mobility_policy": "fixed_place",
+                    "schedule": {"start": "09:00", "end": "17:00"},
+                },
+                {
+                    "character_entity_id": 1,
+                    "anchor_type": "home",
+                    "place_id": 20,
+                    "zone_id": None,
+                    "mobility_policy": "fixed_place",
+                    "schedule": {"start": "17:00", "end": "08:30"},
+                },
+            ],
+            world_time=datetime(2073, 10, 30, 17, 30, tzinfo=timezone.utc),
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.actor_count == 1
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "routine_commute"
+    assert (
+        proposal.resolutions[0].branch_label
+        == "Commute home after the day's obligations"
+    )
+    assert (
+        proposal.resolutions[0].state_delta["travel.start"]["destination_anchor"]
+        == "home"
+    )
+
+
+def test_routine_commute_fallback_handles_incomplete_anchor() -> None:
+    """The terminal fallback is reachable for malformed in-memory anchors."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            chunk_ref_actor_rows=[],
+            location_rows=[{"entity_id": 1, "current_location": 10}],
+            routine_anchor_rows=[
+                {
+                    "character_entity_id": 1,
+                    "anchor_type": "home",
+                    "place_id": None,
+                    "zone_id": None,
+                    "mobility_policy": "fixed_place",
+                    "schedule": {"start": "17:00", "end": "08:30"},
+                },
+            ],
+            world_time=datetime(2073, 10, 30, 17, 30, tzinfo=timezone.utc),
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.actor_count == 1
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "routine_commute"
+    assert proposal.resolutions[0].branch_label == "Recheck routine before moving"
 
 
 def test_work_template_uses_one_global_work_cooldown() -> None:

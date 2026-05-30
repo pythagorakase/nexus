@@ -475,6 +475,19 @@ Travel-state lifecycle is additive to existing location tracking. `characters.cu
 
 Travel route selection cascades: local OSM-derived `osm_graph` routing first, then authored `orrery_travel_edges`, then a coordinate-distance estimate. The graph path is intentionally offline — normal Orrery ticks read only local tables and never call map APIs or inference. Authored edges (`mixed` generic, plus authored overrides) are an exception surface. See `docs/orrery_route_graph.md` for the graph importer contract.
 
+### Routine Anchors
+
+Ordinary home/work routines are explicit actor facts, not inferred from the class of the place an actor happens to occupy. `character_routine_anchors` records a character entity, an `anchor_type` (`home` or `work` in the MVP), an optional concrete `place_id`, an optional coarse `zone_id`, a `mobility_policy`, and a JSON schedule window (`weekdays`, `start`, `end`). `weekdays` uses Python `datetime.weekday()` numbering (`0=Monday` through `6=Sunday`), and an empty schedule means "always due" rather than "not scheduled." This gives Orrery a Radiant-AI-style surface for boring citizens without inventing a generic job for every entity standing in a mall, tavern, lab, or public street.
+
+Mobility policy is the exception surface:
+
+- `fixed_place` — the routine resolves to a known place row.
+- `zone_resolved` — the routine resolves to a preferred place in the zone at runtime. This is for "lives somewhere in District 07" or "works somewhere in the industrial district" before a precise place row is worth authoring.
+- `works_from_home` — a work anchor that resolves through the character's home anchor.
+- `nomadic` / `none` — explicit non-routine cases. These keep Orrery from backfilling normality onto travelers, drifters, abyssal aliens, fugitives, and other exceptions.
+
+The `WORK` package now requires an actor-side work surface (`has_routine_anchor("work")` due now and at that anchor, or legacy semantic tags such as `work_obligation`, `domestic_role`, `cares_for_household`, `field_worker`). Workplace-like place classes are branch discriminators only. The `ROUTINE_COMMUTE` package owns schedule-driven movement between anchors and emits `travel.start` with `destination_anchor`; commit-time travel materialization resolves that anchor into a concrete place before writing `character_travel_states`.
+
 ### EntityRef Helper
 
 ```python
@@ -512,7 +525,7 @@ If a template package gate includes `since_last_event_at_least(...)` cooldowns, 
 
 ### Sliding-Window Binding Scope
 
-The binding composer filters to recently-relevant entities: `(referenced in chunk_character_references in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded world_events in last N chunks)`. N is config-tunable via `[orrery.binding] window_chunks`; default is 30.
+The binding composer filters to recently-relevant entities: `(referenced in chunk_character_references in last N chunks) ∪ (has an active ephemeral tag) ∪ (has un-superseded world_events in last N chunks) ∪ (has an active routine anchor)`. Routine anchors are deliberately outside the recency window so boring off-screen citizens can still tick through work/home/needs cycles when the story camera has not looked at them recently. N is config-tunable via `[orrery.binding] window_chunks`; default is 30.
 
 ---
 
@@ -601,7 +614,7 @@ Verification uses live NEXUS flows where the feature touches LORE, LOGON, MEMNON
 - **Resolver tests**: hydration shape, binding composition (actor-only and actor-target), `evaluate_stack` semantics, dry-run against fixture `WorldState`.
 - **Integration tests**: idempotency (UNIQUE key fires on regeneration), incubator-rejection rollback (Step 8.5 writes get reverted), warm-slice contamination (none), deterministic promotion behavior, async-worker state transitions (`queued → leased → succeeded|failed`).
 - **Bleed tests**: apt-bleed (ambient peripheral surfaces in payload), null-bleed (no candidates produces empty menu and no inference call), chronology/surfacing boundary (only accepted prior narrated resolutions are eligible).
-- **Live dry-runs** against mature-state slots (typically slot 2) to validate package behavior against canonical narrative content; see `scripts/orrery_sample.py` for the harness.
+- **Live dry-runs** against mature-state slots (typically slot 2) to validate package behavior against canonical narrative content; see `scripts/orrery_sample.py` for the harness. The harness supports `--world-time` and `--override-location CHARACTER=PLACE` so routine cycles can be probed without making Skald API calls or permanently moving test-slot characters.
 - **Trait compiler audits**: `poetry run nexus trait-audit --slot N` for opt-in wizard-cache inspection, plus `--fail-on-remainders` when a test loop should fail on any prose-only fallback.
 
 ---

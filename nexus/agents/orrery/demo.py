@@ -97,7 +97,7 @@ def build_presets() -> Dict[str, WorldState]:
             current_tick=100,
         ),
         "quiet": WorldState(
-            tags={ACTOR_ID: frozenset({"seeking_identity"})},
+            tags={ACTOR_ID: frozenset({"public_role", "seeking_identity"})},
             locations={ACTOR_ID: GLOW_PLACE_ID},
             location_class=legacy_location_class,
             location_classes=semantic_location_classes,

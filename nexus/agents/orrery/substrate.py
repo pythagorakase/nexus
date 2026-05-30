@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from hashlib import sha256
 import json
@@ -146,6 +147,27 @@ class TravelState:
 
 
 @dataclass(frozen=True, slots=True)
+class RoutineAnchor:
+    """Read-side home/work routine anchor for one character."""
+
+    anchor_type: str
+    place_id: Optional[int] = None
+    zone_id: Optional[int] = None
+    mobility_policy: str = "fixed_place"
+    schedule: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def has_destination(self) -> bool:
+        """Return whether this anchor can resolve to a concrete destination."""
+
+        return self.mobility_policy in {
+            "fixed_place",
+            "zone_resolved",
+            "works_from_home",
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class EventRecord:
     """Compact read-side event shape consumed by condition predicates."""
 
@@ -176,11 +198,16 @@ class WorldState:
     location_class: Mapping[int, str] = field(default_factory=dict)
     location_classes: Mapping[int, frozenset[str]] = field(default_factory=dict)
     location_entity_ids: Mapping[int, int] = field(default_factory=dict)
+    location_zones: Mapping[int, int] = field(default_factory=dict)
     orbit_distance: Mapping[Tuple[int, int], int] = field(default_factory=dict)
     need_debt_scores: Mapping[Tuple[int, str], float] = field(default_factory=dict)
     travel_states: Mapping[int, TravelState] = field(default_factory=dict)
+    routine_anchors: Mapping[Tuple[int, str], RoutineAnchor] = field(
+        default_factory=dict
+    )
     recent_events: Tuple[EventRecord, ...] = ()
     time_of_day: str = "midday"
+    world_time: Optional[datetime] = None
     weather: str = "clear"
     current_tick: int = 0
 
@@ -724,6 +751,182 @@ def has_travel_destination(slot: Slot = Slot.ACTOR) -> Condition:
         return bool(travel_state and travel_state.destination_place_id is not None)
 
     return _named(_condition, f"has_travel_destination(@{slot.value})")
+
+
+def has_routine_anchor(anchor_type: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the slot-bound actor has an active routine anchor."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        anchor = _routine_anchor(state, entity_id, normalized)
+        return bool(anchor and anchor.mobility_policy not in {"none", "nomadic"})
+
+    return _named(_condition, f"has_routine_anchor({normalized}@{slot.value})")
+
+
+def routine_anchor_due(anchor_type: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the actor's anchor is scheduled for the current time."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        anchor = _routine_anchor(state, entity_id, normalized)
+        if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
+            return False
+        return _routine_schedule_due(anchor.schedule, state.world_time)
+
+    return _named(_condition, f"routine_anchor_due({normalized}@{slot.value})")
+
+
+def at_routine_anchor(anchor_type: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the actor is currently at the named routine anchor."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return _at_routine_anchor(state, entity_id, normalized)
+
+    return _named(_condition, f"at_routine_anchor({normalized}@{slot.value})")
+
+
+def away_from_routine_anchor(anchor_type: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the actor is not currently at the named routine anchor."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        anchor = _routine_anchor(state, entity_id, normalized)
+        if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
+            return False
+        return not _at_routine_anchor(state, entity_id, normalized)
+
+    return _named(_condition, f"away_from_routine_anchor({normalized}@{slot.value})")
+
+
+def routine_anchor_has_destination(
+    anchor_type: str,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether the actor's anchor can resolve to a place destination."""
+
+    normalized = str(anchor_type)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return _routine_anchor_destination_available(state, entity_id, normalized)
+
+    return _named(
+        _condition,
+        f"routine_anchor_has_destination({normalized}@{slot.value})",
+    )
+
+
+def _routine_anchor(
+    state: WorldState,
+    entity_id: int,
+    anchor_type: str,
+) -> Optional[RoutineAnchor]:
+    return state.routine_anchors.get((entity_id, anchor_type))
+
+
+def _at_routine_anchor(state: WorldState, entity_id: int, anchor_type: str) -> bool:
+    anchor = _routine_anchor(state, entity_id, anchor_type)
+    if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
+        return False
+    if anchor.mobility_policy == "works_from_home":
+        if anchor_type == "home":
+            return False
+        return _at_routine_anchor(state, entity_id, "home")
+    current_place_id = state.locations.get(entity_id)
+    if current_place_id is None:
+        return False
+    if anchor.place_id is not None:
+        return current_place_id == anchor.place_id
+    if anchor.zone_id is not None:
+        return state.location_zones.get(current_place_id) == anchor.zone_id
+    return False
+
+
+def _routine_anchor_destination_available(
+    state: WorldState,
+    entity_id: int,
+    anchor_type: str,
+    seen: frozenset[str] = frozenset(),
+) -> bool:
+    if anchor_type in seen:
+        return False
+    anchor = _routine_anchor(state, entity_id, anchor_type)
+    if anchor is None or anchor.mobility_policy in {"none", "nomadic"}:
+        return False
+    if anchor.mobility_policy == "fixed_place":
+        return anchor.place_id is not None
+    if anchor.mobility_policy == "zone_resolved":
+        return anchor.zone_id is not None and anchor.zone_id in set(
+            state.location_zones.values()
+        )
+    if anchor.mobility_policy == "works_from_home":
+        if anchor_type == "home":
+            return False
+        return _routine_anchor_destination_available(
+            state,
+            entity_id,
+            "home",
+            seen | {anchor_type},
+        )
+    return False
+
+
+def _routine_schedule_due(
+    schedule: Mapping[str, Any],
+    world_time: Optional[datetime],
+) -> bool:
+    if world_time is None or not schedule:
+        return True
+    weekdays = schedule.get("weekdays")
+    if weekdays is not None and world_time.weekday() not in {
+        int(day) for day in weekdays
+    }:
+        return False
+    start = _minute_of_day(schedule.get("start"))
+    end = _minute_of_day(schedule.get("end"))
+    if start is None or end is None:
+        return True
+    minute = world_time.hour * 60 + world_time.minute
+    if start <= end:
+        return start <= minute < end
+    return minute >= start or minute < end
+
+
+def _minute_of_day(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    raw = str(value)
+    parts = raw.split(":", 1)
+    if len(parts) != 2:
+        raise ValueError(f"Routine schedule time must be HH:MM, got {raw!r}")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError as exc:
+        raise ValueError(f"Routine schedule time must be HH:MM, got {raw!r}") from exc
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise ValueError(f"Routine schedule time out of range: {raw!r}")
+    return hour * 60 + minute
 
 
 def travel_progress_at_or_above(
