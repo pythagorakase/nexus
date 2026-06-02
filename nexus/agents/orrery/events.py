@@ -15,9 +15,10 @@ from typing import Any, Mapping, Optional
 from nexus.agents.orrery.needs import (
     NeedTuning,
     coerce_need_tuning,
+    need_applies_to_tags,
+    normalize_need_type,
     severity_tag_for_debt,
     severity_tags_for_need,
-    normalize_need_type,
 )
 from nexus.agents.orrery.resolver import (
     OrreryResolutionDraft,
@@ -1833,6 +1834,15 @@ def _load_or_create_need_debt_sync(
     world_time: Any,
     need_tuning: NeedTuning,
 ) -> float:
+    if not _need_applies_to_entity_sync(
+        cur,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    ):
+        raise ValueError(
+            f"Orrery need {need_type!r} does not apply to actor {actor_entity_id}"
+        )
+
     cur.execute(
         """
         INSERT INTO character_need_states (
@@ -1874,6 +1884,15 @@ async def _load_or_create_need_debt_async(
     world_time: Any,
     need_tuning: NeedTuning,
 ) -> float:
+    if not await _need_applies_to_entity_async(
+        conn,
+        actor_entity_id=actor_entity_id,
+        need_type=need_type,
+    ):
+        raise ValueError(
+            f"Orrery need {need_type!r} does not apply to actor {actor_entity_id}"
+        )
+
     await conn.execute(
         """
         INSERT INTO character_need_states (
@@ -1907,6 +1926,46 @@ async def _load_or_create_need_debt_async(
     if elapsed <= 0:
         return max(0.0, debt_score)
     return max(0.0, debt_score + elapsed * need_tuning.accrual_rates[need_type])
+
+
+def _need_applies_to_entity_sync(
+    cur: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> bool:
+    cur.execute(
+        """
+        SELECT etc.tag
+        FROM entity_tags_current etc
+        WHERE etc.entity_id = %s
+        """,
+        (actor_entity_id,),
+    )
+    return need_applies_to_tags(
+        need_type,
+        (str(_row_get(row, "tag", 0)) for row in cur.fetchall()),
+    )
+
+
+async def _need_applies_to_entity_async(
+    conn: Any,
+    *,
+    actor_entity_id: int,
+    need_type: str,
+) -> bool:
+    rows = await conn.fetch(
+        """
+        SELECT etc.tag
+        FROM entity_tags_current etc
+        WHERE etc.entity_id = $1
+        """,
+        actor_entity_id,
+    )
+    return need_applies_to_tags(
+        need_type,
+        (str(_row_get(row, "tag", 0)) for row in rows),
+    )
 
 
 def _sync_need_severity_tags_sync(

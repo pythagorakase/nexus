@@ -28,6 +28,7 @@ from nexus.agents.orrery.needs import (
     NeedTuning,
     coerce_need_tuning,
     effective_debt_score,
+    need_applies_to_tags,
     severity_for_debt,
 )
 
@@ -407,6 +408,9 @@ def hydrate_world_state(
         session,
         current_world_time=world_time,
         need_tuning=need_tuning,
+        tags_by_entity={
+            entity_id: frozenset(values) for entity_id, values in tags.items()
+        },
     )
     travel_states = _load_travel_states(session)
     routine_anchors = _load_routine_anchors(session)
@@ -990,6 +994,7 @@ def _load_need_debt_scores(
     *,
     current_world_time: Optional[datetime],
     need_tuning: NeedTuning,
+    tags_by_entity: Mapping[int, frozenset[str]],
 ) -> dict[tuple[int, str], float]:
     """Load effective need debt scores without mutating canonical state."""
 
@@ -1011,6 +1016,11 @@ def _load_need_debt_scores(
         )
     ).mappings():
         need_type = str(row["need_type"])
+        if not need_applies_to_tags(
+            need_type,
+            tags_by_entity.get(row["character_entity_id"], frozenset()),
+        ):
+            continue
         scores[(row["character_entity_id"], need_type)] = effective_debt_score(
             need_type,
             float(row["debt_score"] or 0.0),

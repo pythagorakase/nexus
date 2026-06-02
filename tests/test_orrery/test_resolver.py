@@ -621,6 +621,74 @@ def test_resolve_dry_run_fires_sunhelm_need_template() -> None:
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "sleep"
 
 
+@pytest.mark.parametrize(
+    ("tag", "need_type"),
+    [
+        ("inorganic", "sleep"),
+        ("inorganic", "hunger"),
+        ("inorganic", "thirst"),
+        ("virtual", "sleep"),
+        ("virtual", "hunger"),
+        ("virtual", "thirst"),
+        ("virtual", "intimacy"),
+        ("libido_absent", "intimacy"),
+    ],
+)
+def test_resolve_dry_run_filters_inapplicable_need_rows(
+    tag: str,
+    need_type: str,
+) -> None:
+    """Stale need rows for immune bodyforms do not hydrate into packages."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": tag, "is_ephemeral": False}],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": need_type,
+                    "debt_score": 999,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 0
+    assert proposal.pressure_count == 0
+
+
+def test_resolve_dry_run_keeps_socialize_for_virtual_characters() -> None:
+    """Virtual minds do not snack, but they can still need company."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "virtual", "is_ephemeral": False}],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "socialize",
+                    "debt_score": 200,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "socialize"
+
+
 def test_resolve_dry_run_fires_socialize_need_template() -> None:
     """Interpersonal need debt can resolve through SOCIALIZE."""
 
