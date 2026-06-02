@@ -143,6 +143,16 @@ class RecordingCursor:
                 "debt_score": debt_score,
                 "last_evaluated_at": world_time,
             }
+        elif (
+            "SELECT t.tag FROM entity_tags et JOIN tags t" in normalized
+            and "t.tag = ANY" not in normalized
+        ):
+            entity_id = params[0]
+            self._fetchall = [
+                {"tag": tag}
+                for current_entity_id, tag in self.current_tags
+                if current_entity_id == entity_id
+            ]
         elif "SELECT t.tag FROM entity_tags et JOIN tags t" in normalized:
             entity_id, tags = params
             self._fetchall = [
@@ -2167,6 +2177,39 @@ def test_commit_orrery_tick_reports_missing_need_type() -> None:
     with pytest.raises(ValueError, match="must include a 'type' or 'need' field"):
         commit_orrery_tick_sync(
             RecordingConn(RecordingCursor()),
+            proposal,
+            tick_chunk_id=100,
+            slot=5,
+            world_layer="primary",
+        )
+
+
+def test_commit_orrery_tick_rejects_inapplicable_need_fulfillment() -> None:
+    """Commit-time need fulfillment refuses bodyform-impossible clocks."""
+
+    draft = OrreryResolutionDraft(
+        template_id="sleep",
+        priority=25,
+        binding_hash="sleep-1",
+        bindings={"actor": 1},
+        branch_label="Sleep rough in cover or transit",
+        narrative_stub="{actor} sleeps in fragments.",
+        state_delta={"need.fulfill": {"type": "sleep", "quality": "rough"}},
+        event_type="slept",
+        changed_fields=("character_need_states.debt_score",),
+        magnitude=0.36,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(current_tags={(1, "virtual")})
+
+    with pytest.raises(ValueError, match="does not apply to actor 1"):
+        commit_orrery_tick_sync(
+            RecordingConn(cursor),
             proposal,
             tick_chunk_id=100,
             slot=5,

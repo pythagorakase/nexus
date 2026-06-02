@@ -253,6 +253,8 @@ Single namespace, applied at character-creation time and never removed by the si
 
 Setting-specific supernaturals (fae, golems, intelligent undead variants, AI uplifts) get their bodyform tags seeded in setting-specific migrations. The bodyform tags remain durable identity facts; they should not be consulted repeatedly by every basic-needs branch — the maintenance pass simply doesn't create rows for immune needs.
 
+**Implementation status.** Migration 057 installs `orrery_sync_character_need_states()`, rewires the character initializer through that helper, and adds an `entity_tags` trigger so bodyform/modulator changes prune or restore need rows. The resolver also filters stale inapplicable rows at hydration time, so pre-migration or queued data cannot make `inorganic` / `virtual` characters fire ordinary SLEEP / EAT / DRINK packages. `virtual` also suppresses INTIMACY row hydration; SOCIALIZE remains available because disembodied minds can still need company.
+
 ---
 
 ## DF Heritage and Where NEXUS Diverges

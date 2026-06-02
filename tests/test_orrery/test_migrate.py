@@ -221,6 +221,33 @@ def test_interpersonal_need_migration_uses_safe_enum_extension_pattern() -> None
     assert "ADD VALUE IF NOT EXISTS" not in migration_source
 
 
+def test_need_applicability_migration_syncs_bodyform_immunity() -> None:
+    """Migration 057 updates triggers and prunes impossible bodyform need rows."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "057_orrery_need_bodyform_applicability.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert migration.NEED_TYPES == (
+        "sleep",
+        "hunger",
+        "thirst",
+        "socialize",
+        "intimacy",
+    )
+    assert "orrery_need_applies_to_tags" in migration_source
+    assert "orrery_sync_character_need_states" in migration_source
+    assert "trg_entity_tags_need_state_applicability" in migration_source
+    assert "DELETE FROM character_need_states" in migration_source
+    assert "inorganic" in migration_source
+    assert "virtual" in migration_source
+    assert "libido_absent" in migration_source
+
+
 def test_travel_work_migration_keeps_routing_schema_extensible() -> None:
     """Migration 033 stores estimates now while leaving space for real routes."""
 

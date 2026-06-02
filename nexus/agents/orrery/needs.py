@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from functools import lru_cache
-from typing import Any, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 
 class NeedType(str, Enum):
@@ -26,6 +26,47 @@ NEED_SEVERITY_PREFIX: Mapping[str, str] = {
     NeedType.THIRST.value: "thirsty",
     NeedType.SOCIALIZE.value: "under_socialized",
     NeedType.INTIMACY.value: "intimacy_starved",
+}
+NEED_IMMUNITY_TAGS: Mapping[str, frozenset[str]] = {
+    NeedType.SLEEP.value: frozenset(
+        {
+            "bodyform:android",
+            "bodyform:construct",
+            "bodyform:non_corporeal",
+            "digital_mind",
+            "inorganic",
+            "virtual",
+        }
+    ),
+    NeedType.HUNGER.value: frozenset(
+        {
+            "bodyform:android",
+            "bodyform:construct",
+            "bodyform:non_corporeal",
+            "digital_mind",
+            "inorganic",
+            "virtual",
+        }
+    ),
+    NeedType.THIRST.value: frozenset(
+        {
+            "bodyform:android",
+            "bodyform:construct",
+            "bodyform:non_corporeal",
+            "digital_mind",
+            "inorganic",
+            "virtual",
+        }
+    ),
+    NeedType.SOCIALIZE.value: frozenset(),
+    NeedType.INTIMACY.value: frozenset(
+        {
+            "bodyform:non_corporeal",
+            "digital_mind",
+            "libido_absent",
+            "virtual",
+        }
+    ),
 }
 NEED_SEVERITY_LEVELS: tuple[tuple[int, str], ...] = (
     (4, "critical"),
@@ -220,6 +261,14 @@ def normalize_need_type(need_type: str) -> str:
     if normalized not in NEED_TYPES:
         raise ValueError(f"Unsupported Orrery need type: {need_type!r}")
     return normalized
+
+
+def need_applies_to_tags(need_type: str, tags: Iterable[str]) -> bool:
+    """Return whether a need clock should exist for an entity's active tags."""
+
+    normalized = normalize_need_type(need_type)
+    active_tags = frozenset(str(tag) for tag in tags)
+    return not bool(NEED_IMMUNITY_TAGS[normalized] & active_tags)
 
 
 def effective_debt_score(
