@@ -1936,11 +1936,9 @@ def _need_applies_to_entity_sync(
 ) -> bool:
     cur.execute(
         """
-        SELECT t.tag
-        FROM entity_tags et
-        JOIN tags t ON t.id = et.tag_id
-        WHERE et.entity_id = %s
-          AND et.cleared_at IS NULL
+        SELECT etc.tag
+        FROM entity_tags_current etc
+        WHERE etc.entity_id = %s
         """,
         (actor_entity_id,),
     )
@@ -1958,11 +1956,9 @@ async def _need_applies_to_entity_async(
 ) -> bool:
     rows = await conn.fetch(
         """
-        SELECT t.tag
-        FROM entity_tags et
-        JOIN tags t ON t.id = et.tag_id
-        WHERE et.entity_id = $1
-          AND et.cleared_at IS NULL
+        SELECT etc.tag
+        FROM entity_tags_current etc
+        WHERE etc.entity_id = $1
         """,
         actor_entity_id,
     )

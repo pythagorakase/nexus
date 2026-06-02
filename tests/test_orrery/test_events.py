@@ -143,10 +143,7 @@ class RecordingCursor:
                 "debt_score": debt_score,
                 "last_evaluated_at": world_time,
             }
-        elif (
-            "SELECT t.tag FROM entity_tags et JOIN tags t" in normalized
-            and "t.tag = ANY" not in normalized
-        ):
+        elif "SELECT etc.tag FROM entity_tags_current etc" in normalized:
             entity_id = params[0]
             self._fetchall = [
                 {"tag": tag}

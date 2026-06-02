@@ -6,6 +6,26 @@ from psycopg2.extensions import connection
 
 
 NEED_TYPES: tuple[str, ...] = ("sleep", "hunger", "thirst", "socialize", "intimacy")
+EMBODIED_NEED_IMMUNITY_TAGS: tuple[str, ...] = (
+    "bodyform:android",
+    "bodyform:construct",
+    "bodyform:non_corporeal",
+    "digital_mind",
+    "inorganic",
+    "virtual",
+)
+NEED_IMMUNITY_TAGS: dict[str, tuple[str, ...]] = {
+    "sleep": EMBODIED_NEED_IMMUNITY_TAGS,
+    "hunger": EMBODIED_NEED_IMMUNITY_TAGS,
+    "thirst": EMBODIED_NEED_IMMUNITY_TAGS,
+    "socialize": (),
+    "intimacy": (
+        "bodyform:non_corporeal",
+        "digital_mind",
+        "libido_absent",
+        "virtual",
+    ),
+}
 
 
 def run(conn: connection) -> None:
@@ -20,8 +40,10 @@ def run(conn: connection) -> None:
 
 
 def _install_applicability_functions(cur) -> None:
+    embodied_immunity = _sql_text_array(EMBODIED_NEED_IMMUNITY_TAGS)
+    intimacy_immunity = _sql_text_array(NEED_IMMUNITY_TAGS["intimacy"])
     cur.execute(
-        """
+        f"""
         CREATE OR REPLACE FUNCTION orrery_need_applies_to_tags(
             p_need_type character_need_type,
             p_active_tags text[]
@@ -31,24 +53,12 @@ def _install_applicability_functions(cur) -> None:
             active_tags text[] := COALESCE(p_active_tags, ARRAY[]::text[]);
         BEGIN
             IF p_need_type::text IN ('sleep', 'hunger', 'thirst')
-               AND active_tags && ARRAY[
-                   'bodyform:android',
-                   'bodyform:construct',
-                   'bodyform:non_corporeal',
-                   'digital_mind',
-                   'inorganic',
-                   'virtual'
-               ]::text[] THEN
+               AND active_tags && {embodied_immunity} THEN
                 RETURN FALSE;
             END IF;
 
             IF p_need_type::text = 'intimacy'
-               AND active_tags && ARRAY[
-                   'bodyform:non_corporeal',
-                   'digital_mind',
-                   'libido_absent',
-                   'virtual'
-               ]::text[] THEN
+               AND active_tags && {intimacy_immunity} THEN
                 RETURN FALSE;
             END IF;
 
@@ -109,7 +119,7 @@ def _install_applicability_functions(cur) -> None:
                    needs.need_type::character_need_type,
                    0,
                    anchor_world_time,
-                   '{"synced_by": "need_applicability"}'::jsonb
+                   '{{"synced_by": "need_applicability"}}'::jsonb
             FROM (
                 VALUES
                     ('sleep'),
@@ -194,6 +204,10 @@ def _install_entity_tag_sync_trigger(cur) -> None:
         DECLARE
             affected_entity_id bigint;
         BEGIN
+            IF pg_trigger_depth() > 1 THEN
+                RETURN COALESCE(NEW, OLD);
+            END IF;
+
             affected_entity_id := COALESCE(NEW.entity_id, OLD.entity_id);
             PERFORM orrery_sync_character_need_states(affected_entity_id);
             RETURN COALESCE(NEW, OLD);
@@ -214,9 +228,14 @@ def _install_entity_tag_sync_trigger(cur) -> None:
 def _sync_existing_characters(cur) -> None:
     cur.execute(
         """
-        SELECT orrery_sync_character_need_states(e.id)
+        SELECT count(orrery_sync_character_need_states(e.id))
         FROM entities e
         WHERE e.kind = 'character'
           AND e.is_active = true
         """
     )
+
+
+def _sql_text_array(tags: tuple[str, ...]) -> str:
+    values = ", ".join(f"'{tag}'" for tag in tags)
+    return f"ARRAY[{values}]::text[]"

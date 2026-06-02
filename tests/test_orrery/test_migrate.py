@@ -8,6 +8,8 @@ import psycopg2
 import pytest
 
 import scripts.migrate as migrate
+from nexus.agents.orrery.needs import NEED_IMMUNITY_TAGS as RUNTIME_NEED_IMMUNITY_TAGS
+from nexus.agents.orrery.needs import NEED_TYPES, need_applies_to_tags
 from nexus.api.slot_utils import get_slot_db_url
 
 
@@ -246,6 +248,30 @@ def test_need_applicability_migration_syncs_bodyform_immunity() -> None:
     assert "inorganic" in migration_source
     assert "virtual" in migration_source
     assert "libido_absent" in migration_source
+
+
+def test_need_applicability_migration_matches_runtime_immunity_map() -> None:
+    """Migration 057's SQL source map should stay equivalent to runtime gates."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "057_orrery_need_bodyform_applicability.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_map = {
+        need_type: frozenset(tags)
+        for need_type, tags in migration.NEED_IMMUNITY_TAGS.items()
+    }
+
+    assert migration_map == dict(RUNTIME_NEED_IMMUNITY_TAGS)
+
+    tags = sorted(set().union(*migration_map.values()))
+    for need_type in NEED_TYPES:
+        for tag in tags:
+            assert need_applies_to_tags(need_type, {tag}) is (
+                tag not in migration_map[need_type]
+            )
 
 
 def test_travel_work_migration_keeps_routing_schema_extensible() -> None:
