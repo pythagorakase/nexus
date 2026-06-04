@@ -5,10 +5,10 @@ only against known entities from the database. No regex patterns, no guessing,
 just exact matches against characters (including aliases), places, and factions.
 """
 
+from dataclasses import dataclass
 import logging
 import re
-from typing import Dict, List, Set, Optional, Any
-from dataclasses import dataclass
+from typing import Any, Dict, List
 
 from sqlalchemy import text as sql_text
 
@@ -144,13 +144,13 @@ class HighSpecificityEntityDetector:
     def _load_factions(self) -> None:
         """Load factions from database."""
         result = self._execute(
-            "SELECT id, name, ideology FROM factions WHERE name IS NOT NULL"
+            "SELECT id, name, summary FROM factions WHERE name IS NOT NULL"
         )
         for row in result:
             faction_record = {
                 "id": row.id,
                 "name": row.name,
-                "ideology": row.ideology,
+                "summary": row.summary,
             }
             # Add to lookup (case-insensitive)
             self.faction_lookup[row.name.lower()] = faction_record
@@ -232,7 +232,8 @@ class HighSpecificityEntityDetector:
 
         if result.detected:
             logger.info(
-                "High-specificity detection found: %d characters, %d places, %d factions",
+                "High-specificity detection found: %d characters, %d places, "
+                "%d factions",
                 len(result.characters),
                 len(result.places),
                 len(result.factions),

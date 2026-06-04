@@ -62,7 +62,19 @@ async def test_live_async_faction_writes_tags_without_legacy_columns():
                 ADD COLUMN IF NOT EXISTS expires_at_world_time timestamptz
             """
         )
-        await conn.execute("ALTER TABLE factions ALTER COLUMN power_level DROP DEFAULT")
+        has_power_level = await conn.fetchval(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'factions'
+              AND column_name = 'power_level'
+            """
+        )
+        if has_power_level:
+            await conn.execute(
+                "ALTER TABLE factions ALTER COLUMN power_level DROP DEFAULT"
+            )
         tag_suffix = uuid.uuid4().hex[:12]
         created_tag = f"test_async_faction_created_{tag_suffix}"
         updated_tag = f"test_async_faction_updated_{tag_suffix}"
@@ -80,21 +92,45 @@ async def test_live_async_faction_writes_tags_without_legacy_columns():
         )
         faction = await conn.fetchrow(
             """
-            SELECT entity_id, ideology, history, current_activity, hidden_agenda,
-                   territory, power_level, resources
+            SELECT entity_id
             FROM factions
             WHERE id = $1
             """,
             faction_id,
         )
         assert faction is not None
-        assert faction["ideology"] is None
-        assert faction["history"] is None
-        assert faction["current_activity"] is None
-        assert faction["hidden_agenda"] is None
-        assert faction["territory"] is None
-        assert faction["power_level"] is None
-        assert faction["resources"] is None
+        legacy_columns = await conn.fetch(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'factions'
+              AND column_name = ANY($1::text[])
+            ORDER BY column_name
+            """,
+            [
+                "ideology",
+                "history",
+                "current_activity",
+                "hidden_agenda",
+                "territory",
+                "power_level",
+                "resources",
+            ],
+        )
+        if legacy_columns:
+            column_names = [row["column_name"] for row in legacy_columns]
+            legacy_row = await conn.fetchrow(
+                f"""
+                SELECT {', '.join(column_names)}
+                FROM factions
+                WHERE id = $1
+                """,
+                faction_id,
+            )
+            assert legacy_row is not None
+            for column_name in column_names:
+                assert legacy_row[column_name] is None
         assert await _has_active_tag(conn, faction["entity_id"], created_tag)
 
         await apply_state_updates(

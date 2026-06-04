@@ -493,31 +493,35 @@ class LogonUtility:
                     sections.append("\nAll Factions (brief):")
                     for faction in baseline_factions:
                         name = faction.get("name", "Unknown")
-                        activity = faction.get("current_activity", "")
-                        sections.append(f"- {name}: {activity}")
+                        tags = faction.get("orrery_tag_summary") or ""
+                        summary = faction.get("summary") or ""
+                        detail = tags or summary
+                        sections.append(f"- {name}: {detail}")
 
                 if featured_factions:
                     sections.append("\nFeatured Factions (full details):")
                     for faction in featured_factions:
                         name = faction.get("name", "Unknown")
                         summary = faction.get("summary", "")
-                        sections.append(f"- {name}: {summary}")
+                        tags = faction.get("orrery_tag_summary") or ""
+                        detail = f"{summary} Tags: {tags}" if tags else summary
+                        sections.append(f"- {name}: {detail}")
             else:
                 # Flat format (backward compatibility)
                 if characters:
                     sections.append("\nCharacters:")
                     for char in characters:
-                        sections.append(
-                            f"- {char.get('name', 'Unknown')}: {char.get('summary', '')}"
-                        )
+                        name = char.get("name", "Unknown")
+                        summary = char.get("summary", "")
+                        sections.append(f"- {name}: {summary}")
 
                 locations = entity_data.get("locations", [])
                 if locations:
                     sections.append("\nLocations:")
                     for loc in locations:
-                        sections.append(
-                            f"- {loc.get('name', 'Unknown')}: {loc.get('description', '') or loc.get('summary', '')}"
-                        )
+                        name = loc.get("name", "Unknown")
+                        summary = loc.get("description", "") or loc.get("summary", "")
+                        sections.append(f"- {name}: {summary}")
 
             # Relationships, events, threats (same for both formats)
             relationships = entity_data.get("relationships", [])
