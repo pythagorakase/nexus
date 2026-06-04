@@ -20,6 +20,7 @@ from nexus.api.faction_table_audit import (
     FACTION_MANIFEST_SCHEMA_VERSION,
     LEGACY_TAG_CATEGORIES,
     LegacyTagRow,
+    _faction_column_select_expr,
     apply_faction_migration_manifest,
     audit_faction_row,
     build_faction_migration_manifest,
@@ -423,6 +424,13 @@ def test_build_faction_table_audit_handles_retired_legacy_columns() -> None:
     }
     assert audit["counters"]["factions_scanned"] == 1
     assert audit["counters"]["non_null_legacy_values"] == 0
+
+
+def test_missing_unknown_faction_column_type_fails_loudly() -> None:
+    """Only known retired columns should get synthetic NULL expressions."""
+
+    with pytest.raises(ValueError, match="Required factions column"):
+        _faction_column_select_expr("created_at", existing_columns=set())
 
 
 @pytest.mark.requires_postgres

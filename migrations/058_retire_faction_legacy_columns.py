@@ -47,16 +47,26 @@ def _existing_legacy_columns(cur) -> tuple[str, ...]:
 
 
 def _snapshot_legacy_columns(cur, legacy_columns: tuple[str, ...]) -> None:
-    snapshot_pairs = ", ".join(f"'{column}', {column}" for column in legacy_columns)
-    snapshot_expr = f"jsonb_strip_nulls(jsonb_build_object({snapshot_pairs}))"
+    snapshot_pairs = ", ".join(f"'{column}', f.{column}" for column in legacy_columns)
     cur.execute(
         f"""
-        UPDATE factions
+        WITH legacy_snapshots AS (
+            SELECT
+                f.id,
+                snapshot.value AS snapshot
+            FROM factions AS f
+            CROSS JOIN LATERAL (
+                VALUES (jsonb_strip_nulls(jsonb_build_object({snapshot_pairs})))
+            ) AS snapshot(value)
+            WHERE snapshot.value <> '{{}}'::jsonb
+        )
+        UPDATE factions AS f
         SET extra_data = jsonb_set(
             jsonb_set(
-                COALESCE(extra_data, '{{}}'::jsonb),
+                COALESCE(f.extra_data, '{{}}'::jsonb),
                 %s,
-                COALESCE(extra_data -> %s, '{{}}'::jsonb) || {snapshot_expr},
+                COALESCE(f.extra_data -> %s, '{{}}'::jsonb)
+                    || legacy_snapshots.snapshot,
                 true
             ),
             %s,
@@ -68,7 +78,8 @@ def _snapshot_legacy_columns(cur, legacy_columns: tuple[str, ...]) -> None:
             ),
             true
         )
-        WHERE {snapshot_expr} <> '{{}}'::jsonb
+        FROM legacy_snapshots
+        WHERE f.id = legacy_snapshots.id
         """,
         (
             [SNAPSHOT_KEY],
@@ -81,5 +92,7 @@ def _snapshot_legacy_columns(cur, legacy_columns: tuple[str, ...]) -> None:
 
 
 def _drop_legacy_columns(cur, legacy_columns: tuple[str, ...]) -> None:
-    for column in legacy_columns:
-        cur.execute(f"ALTER TABLE factions DROP COLUMN IF EXISTS {column}")
+    drop_clauses = ",\n    ".join(
+        f"DROP COLUMN IF EXISTS {column}" for column in legacy_columns
+    )
+    cur.execute(f"ALTER TABLE factions\n    {drop_clauses}")

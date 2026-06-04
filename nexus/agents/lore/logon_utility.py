@@ -504,7 +504,10 @@ class LogonUtility:
                         name = faction.get("name", "Unknown")
                         summary = faction.get("summary", "")
                         tags = faction.get("orrery_tag_summary") or ""
-                        detail = f"{summary} Tags: {tags}" if tags else summary
+                        tag_detail = f"Tags: {tags}" if tags else ""
+                        detail = " ".join(
+                            part for part in (summary, tag_detail) if part
+                        )
                         sections.append(f"- {name}: {detail}")
             else:
                 # Flat format (backward compatibility)

@@ -763,7 +763,9 @@ def test_faction_legacy_column_retirement_snapshots_before_drop() -> None:
     )
     assert "legacy_faction_columns" in source
     assert "legacy_faction_column_retirement" in source
+    assert "CROSS JOIN LATERAL" in source
     assert "jsonb_strip_nulls(jsonb_build_object" in source
+    assert source.count("ALTER TABLE factions") == 1
     assert "DROP COLUMN IF EXISTS" in source
 
 

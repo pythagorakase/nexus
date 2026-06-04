@@ -51,6 +51,15 @@ LEGACY_FACTION_COLUMNS = (
     "power_level",
     "resources",
 )
+MISSING_FACTION_COLUMN_SELECTS = {
+    "ideology": "NULL::text AS ideology",
+    "history": "NULL::text AS history",
+    "current_activity": "NULL::text AS current_activity",
+    "hidden_agenda": "NULL::text AS hidden_agenda",
+    "territory": "NULL::text AS territory",
+    "power_level": "NULL::numeric AS power_level",
+    "resources": "NULL::text AS resources",
+}
 KEEP_FACTION_COLUMNS = (
     "id",
     "name",
@@ -752,9 +761,9 @@ def _fetch_faction_rows(
 def _faction_column_select_expr(column: str, *, existing_columns: set[str]) -> str:
     if column in existing_columns:
         return column
-    if column == "power_level":
-        return "NULL::numeric AS power_level"
-    return f"NULL::text AS {column}"
+    if column in MISSING_FACTION_COLUMN_SELECTS:
+        return MISSING_FACTION_COLUMN_SELECTS[column]
+    raise ValueError(f"Required factions column {column!r} is missing")
 
 
 def _fetch_pair_tag_counts(cur: Any) -> dict[int, dict[str, int]]:

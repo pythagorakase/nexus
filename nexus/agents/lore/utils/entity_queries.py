@@ -11,6 +11,18 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger("nexus.lore.entity_queries")
 
+FACTION_TAG_CONTEXT_CATEGORIES = (
+    "ideology",
+    "resource_base",
+    "legitimacy",
+    "operational_mode",
+    "power_status",
+    "agenda",
+)
+FACTION_TAG_CONTEXT_CATEGORY_SQL = ", ".join(
+    f"'{category}'" for category in FACTION_TAG_CONTEXT_CATEGORIES
+)
+
 
 def fetch_all_characters_with_references(
     session: Session,
@@ -200,7 +212,7 @@ def fetch_all_factions_with_references(
     """
     # Get ALL factions with baseline fields
     baseline_query = text(
-        """
+        f"""
         SELECT
             f.id,
             f.name,
@@ -217,15 +229,8 @@ def fetch_all_factions_with_references(
         LEFT JOIN entity_tags_current etc
                ON etc.entity_id = f.entity_id
               AND etc.entity_kind = 'faction'
-              AND etc.category IN (
-                  'ideology',
-                  'resource_base',
-                  'legitimacy',
-                  'operational_mode',
-                  'power_status',
-                  'agenda'
-              )
-        GROUP BY f.id, f.name, f.summary
+              AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
+        GROUP BY f.id
         ORDER BY f.name
     """
     )
@@ -250,7 +255,7 @@ def fetch_all_factions_with_references(
     featured_rows = []
     if featured_ids:
         featured_query = text(
-            """
+            f"""
             SELECT
                 f.id,
                 f.name,
@@ -269,16 +274,9 @@ def fetch_all_factions_with_references(
             LEFT JOIN entity_tags_current etc
                    ON etc.entity_id = f.entity_id
                   AND etc.entity_kind = 'faction'
-                  AND etc.category IN (
-                      'ideology',
-                      'resource_base',
-                      'legitimacy',
-                      'operational_mode',
-                      'power_status',
-                      'agenda'
-                  )
+                  AND etc.category IN ({FACTION_TAG_CONTEXT_CATEGORY_SQL})
             WHERE f.id = ANY(:ids)
-            GROUP BY f.id, f.name, f.summary, f.primary_location, f.extra_data
+            GROUP BY f.id
             ORDER BY f.name
         """
         )
