@@ -183,6 +183,17 @@ Routine-trigger gate plus pressure gate. The routine clause (`count_co_located(1
 - **Parasocial branch** (reading, listening to a recording, watching a serial) uses partial decrement (`socialize_debt_delta: -0.4`) rather than full reset — captures "takes the edge off" without fully discharging.
 - **Branches**: seek-after-critical-isolation, engage with present company, go where people are (tavern/square/market), reach out to a contact, parasocial.
 
+**Social hydration policy.** SOCIALIZE should satisfy ordinary loneliness without
+forcing every implied acquaintance into the database. Branch selection uses four
+layers, in order: real co-located NPCs when present; explicit `contact:social`
+edges when the actor has one; public or semi-public place affordances where
+off-book people can satisfy the need without a concrete character row; and
+parasocial media/ritual contact as a partial fallback. Off-book people are lazily
+hydrated into entities only when Skald attends to them, the interaction repeats,
+or another package needs a concrete target. This keeps the routine social loop
+useful while preserving the broader dehydrated-entity principle used for implied
+spouses, families, coworkers, neighbors, and casual friends.
+
 ### INTIMACY (priority 16)
 
 The most sensitive in the catalog. Single-slot template (ACTOR only); branches that involve a partner read partner identity from the actor's relationship data. **No binding-composer pairing** — see Core Principle above.

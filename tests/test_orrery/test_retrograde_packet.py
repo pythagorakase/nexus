@@ -96,10 +96,95 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
         packet["candidate_scaffolds"]["candidate_seed_contract"]["selection_required"]
         is True
     )
+    seed_request = packet["seed_generation_request"]
+    assert seed_request["mutation_policy"]["writes"] == "none"
+    assert seed_request["budget"]["generate_candidates"] == 12
+    assert seed_request["budget"]["select_target"] == 5
+    assert seed_request["weird_policy"]["level"] == "high"
+    assert (
+        seed_request["selection_rubric"]["coverage_is_checklist_not_scaffold"] is True
+    )
+    assert (
+        "mechanical_hints" in seed_request["candidate_output_schema"]["required_fields"]
+    )
+    sections = seed_request["prompt_sections"]
+    assert all(isinstance(section["items"], list) for section in sections)
+    trait_section = next(
+        section for section in sections if section["heading"] == "Trait hooks"
+    )
+    assert trait_section["items"] == [
+        {"kind": "trait", "name": "resources", "rationale": "Money opens doors."},
+        {
+            "kind": "trait",
+            "name": "status",
+            "rationale": "The badge matters narrowly.",
+        },
+        {
+            "kind": "wildcard",
+            "name": "Storm Marked",
+            "description": "Weather notices her.",
+            "orrery_tags": None,
+        },
+    ]
+    assert {function["id"] for function in seed_request["coverage_functions"]} == {
+        "foundational_wound",
+        "current_power_arrangement",
+        "hidden_truth",
+        "trait_bound_hook",
+        "opening_pressure",
+        "optional_mythic_layer",
+        "unresolved_ledger",
+    }
     assert packet["candidate_scaffolds"]["named_seed_npcs"] == [
         {"kind": "character", "role": "seed_npc", "name": "Vale"}
     ]
     assert packet["vocabulary_summary"]["event_types"] > 0
+
+
+def test_retrograde_seed_request_respects_vocabulary_policy() -> None:
+    """Registered categories are prompt-visible but not equally seed-writeable."""
+
+    vocabulary = enumerate_seed_eligible_vocabulary()
+    vocabulary["registered_category_seed_policies"] = [
+        {
+            "category": "role.function",
+            "entity_kind": "character",
+            "policy": "stable_seed",
+            "reason": "Stable role.",
+        },
+        {
+            "category": "state",
+            "entity_kind": "character",
+            "policy": "event_anchored",
+            "reason": "Needs an event.",
+        },
+        {
+            "category": "experimental_signal",
+            "entity_kind": "character",
+            "policy": "prompt_visible_only",
+            "reason": "Not approved.",
+        },
+    ]
+    vocabulary["registered_tags_by_seed_policy"] = {
+        "stable_seed": ["scholar"],
+        "event_anchored": ["grieving"],
+        "prompt_visible_only": ["untested_signal"],
+    }
+
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=vocabulary,
+        settings=load_settings(),
+        weird_level="medium",
+    )
+    policy = packet["seed_generation_request"]["mechanical_tag_policy"]
+
+    assert policy["stable_seed_categories"] == ["role.function"]
+    assert policy["event_anchored_categories"] == ["state"]
+    assert policy["prompt_visible_only_categories"] == ["experimental_signal"]
+    assert policy["registered_tags_by_seed_policy"]["event_anchored"] == ["grieving"]
 
 
 def test_retrograde_packet_requires_complete_wizard_sections() -> None:
