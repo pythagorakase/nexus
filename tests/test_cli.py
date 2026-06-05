@@ -377,3 +377,4 @@ def test_retrograde_packet_writes_dry_run_packet(monkeypatch, tmp_path) -> None:
     assert packet["dry_run"] is True
     assert packet["mutation_policy"]["writes"] == "none"
     assert packet["weird"]["level"] == "medium"
+    assert packet["seed_generation_request"]["mutation_policy"]["writes"] == "none"

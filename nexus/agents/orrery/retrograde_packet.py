@@ -9,7 +9,43 @@ from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.config.settings_models import Settings
 
 PACKET_SCHEMA_VERSION = "orrery_retrograde_dry_run_packet.v0"
+SEED_REQUEST_SCHEMA_VERSION = "orrery_retrograde_seed_request.v0"
 WEIRD_LEVELS = frozenset({"low", "medium", "high"})
+SEED_BUDGETS: Mapping[str, Mapping[str, int]] = {
+    "low": {"generate_candidates": 6, "select_target": 3, "deferred_secret_cap": 1},
+    "medium": {"generate_candidates": 9, "select_target": 4, "deferred_secret_cap": 2},
+    "high": {"generate_candidates": 12, "select_target": 5, "deferred_secret_cap": 3},
+}
+RETROGRADE_COVERAGE_FUNCTIONS: tuple[dict[str, str], ...] = (
+    {
+        "id": "foundational_wound",
+        "question": "What past harm, loss, bargain, or mistake still pressures now?",
+    },
+    {
+        "id": "current_power_arrangement",
+        "question": "Who benefits from the current order, and who is excluded?",
+    },
+    {
+        "id": "hidden_truth",
+        "question": "What consequential fact is concealed, misunderstood, or misfiled?",
+    },
+    {
+        "id": "trait_bound_hook",
+        "question": "Which selected trait becomes historically load-bearing?",
+    },
+    {
+        "id": "opening_pressure",
+        "question": "What old event makes the starting scenario urgent now?",
+    },
+    {
+        "id": "optional_mythic_layer",
+        "question": "What symbol, omen, legend, or myth can echo without dominating?",
+    },
+    {
+        "id": "unresolved_ledger",
+        "question": "What debt, oath, grudge, promise, or claim remains unpaid?",
+    },
+)
 
 
 def build_retrograde_dry_run_packet(
@@ -75,7 +111,70 @@ def build_retrograde_dry_run_packet(
         "vocabulary_summary": _vocabulary_summary(vocabulary),
         "seed_eligible_vocabulary": vocabulary,
         "candidate_scaffolds": candidate_scaffolds,
+        "seed_generation_request": build_seed_generation_request(
+            candidate_scaffolds=candidate_scaffolds,
+            vocabulary=vocabulary,
+            weird=weird,
+        ),
         "skald_weaver_instructions": _skald_weaver_instructions(),
+    }
+
+
+def build_seed_generation_request(
+    *,
+    candidate_scaffolds: Mapping[str, Any],
+    vocabulary: SeedEligibleVocabulary,
+    weird: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the non-mutating R4/R5 request contract for Skald-as-weaver."""
+
+    level = str(weird.get("level") or "medium")
+    budget = dict(SEED_BUDGETS.get(level, SEED_BUDGETS["medium"]))
+    budget["overgenerate_multiplier"] = max(
+        1,
+        round(budget["generate_candidates"] / budget["select_target"]),
+    )
+
+    return {
+        "schema_version": SEED_REQUEST_SCHEMA_VERSION,
+        "stage": "R4/R5 seed generation and selection input",
+        "mutation_policy": {
+            "writes": "none",
+            "selection_required_before_persistence": True,
+            "discarded_seed_cost": "inference only",
+        },
+        "budget": budget,
+        "weird_policy": _weird_generation_policy(weird),
+        "mechanical_tag_policy": _mechanical_tag_policy(vocabulary),
+        "coverage_functions": list(RETROGRADE_COVERAGE_FUNCTIONS),
+        "selection_rubric": _selection_rubric(level),
+        "prompt_sections": _seed_prompt_sections(candidate_scaffolds),
+        "candidate_output_schema": {
+            "type": "object",
+            "required_fields": [
+                "seed_id",
+                "summary",
+                "origin_friction",
+                "present_leaf_anchor",
+                "coverage_functions",
+                "mechanical_hints",
+                "defer_or_reject_if",
+            ],
+            "mechanical_hints": {
+                "event_types": "Use only seed_eligible_vocabulary.event_types.",
+                "single_entity_tags": (
+                    "Use only seed_eligible_vocabulary.registered_* tags and "
+                    "respect mechanical_tag_policy."
+                ),
+                "pair_tags": (
+                    "Use only seed_eligible_vocabulary.multi_entity_tag_definitions "
+                    "with matching subject/object kinds."
+                ),
+                "relationships": (
+                    "Use only seed_eligible_vocabulary.relationship_types."
+                ),
+            },
+        },
     }
 
 
@@ -128,6 +227,116 @@ def resolve_weird_profile(
         "raw_max": band.max,
         "raw_midpoint": (band.min + band.max) / 2.0,
     }
+
+
+def _weird_generation_policy(weird: Mapping[str, Any]) -> dict[str, Any]:
+    """Describe how the resolved weird profile should affect seed generation."""
+
+    level = str(weird.get("level") or "medium")
+    raw = weird.get("raw")
+    if raw is None:
+        raw = weird.get("raw_midpoint")
+    return {
+        "level": level,
+        "raw": raw,
+        "genre": weird.get("genre"),
+        "rubric_bias": {
+            "low": "favor seeds that serve one or more coverage functions directly",
+            "medium": "mix coverage-serving seeds with stranger connective tissue",
+            "high": "admit orthogonal seeds if the leaf anchor is strong",
+        }.get(level, "mix coverage-serving seeds with stranger connective tissue"),
+        "friction_guidance": {
+            "low": "low origin friction; surprise should feel latent in the premise",
+            "medium": "moderate origin friction; preserve genre coherence",
+            "high": "high origin friction; coherence is enforced at the leaf anchor",
+        }.get(level, "moderate origin friction; preserve genre coherence"),
+    }
+
+
+def _mechanical_tag_policy(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
+    """Summarize how registered vocabulary may be used in seed candidates."""
+
+    policies = vocabulary.get("registered_category_seed_policies", [])
+    categories_by_policy: dict[str, list[str]] = {}
+    for policy in policies:
+        categories_by_policy.setdefault(policy["policy"], []).append(policy["category"])
+
+    return {
+        "stable_seed_categories": sorted(
+            set(categories_by_policy.get("stable_seed", []))
+        ),
+        "event_anchored_categories": sorted(
+            set(categories_by_policy.get("event_anchored", []))
+        ),
+        "prompt_visible_only_categories": sorted(
+            set(categories_by_policy.get("prompt_visible_only", []))
+        ),
+        "registered_tags_by_seed_policy": vocabulary.get(
+            "registered_tags_by_seed_policy", {}
+        ),
+        "rules": [
+            (
+                "Stable seed categories may be proposed as present-state tags "
+                "when supported by the seed."
+            ),
+            (
+                "Event-anchored categories may be proposed only with an explicit "
+                "event that caused or recently refreshed the current state."
+            ),
+            (
+                "Prompt-visible-only categories may guide prose but must not be "
+                "proposed as mechanical writes in this stage."
+            ),
+            "Unknown tag names are invalid; omit marginal mechanics instead.",
+        ],
+    }
+
+
+def _selection_rubric(level: str) -> dict[str, Any]:
+    """Return R5 selection instructions for the generated seed pool."""
+
+    return {
+        "coverage_is_checklist_not_scaffold": True,
+        "priorities": [
+            "Keep seeds with strong leaf anchors to core entities.",
+            "Keep seeds that can be made substrate-legal with registered vocabulary.",
+            (
+                "Reject seeds that require unregistered tags, recursive entity "
+                "expansion, or timeline contortions."
+            ),
+            "Prefer fewer, sharper surviving seeds over a busy history web.",
+        ],
+        "weird_level_adjustment": {
+            "low": "coverage function service is a strong positive prior",
+            "medium": "coverage service and origin surprise should be balanced",
+            "high": "coverage service is optional when the present anchor is strong",
+        }.get(level, "coverage service and origin surprise should be balanced"),
+    }
+
+
+def _seed_prompt_sections(
+    candidate_scaffolds: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Return deterministic prompt sections for R4 seed generation."""
+
+    return [
+        {
+            "heading": "Core entities",
+            "items": _present_items(candidate_scaffolds.get("core_entities")),
+        },
+        {
+            "heading": "Named seed NPCs",
+            "items": _present_items(candidate_scaffolds.get("named_seed_npcs")),
+        },
+        {
+            "heading": "Pressure axes",
+            "items": _present_items(candidate_scaffolds.get("pressure_axes")),
+        },
+        {
+            "heading": "Trait hooks",
+            "items": candidate_scaffolds.get("trait_hooks") or {},
+        },
+    ]
 
 
 def _candidate_scaffolds(
@@ -290,6 +499,12 @@ def _optional_cache_section(
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _present_items(value: Any) -> list[Any]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if item]
 
 
 def _axis(kind: str, text: Any) -> dict[str, Any]:

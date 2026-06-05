@@ -235,6 +235,8 @@ def _print_retrograde_packet(payload: Dict[str, Any]) -> None:
     weird = packet.get("weird") or {}
     summary = packet.get("vocabulary_summary") or {}
     scaffolds = packet.get("candidate_scaffolds") or {}
+    seed_request = packet.get("seed_generation_request") or {}
+    seed_budget = seed_request.get("budget") or {}
 
     print("Packet:")
     print(f"  schema_version: {packet.get('schema_version')}")
@@ -258,6 +260,12 @@ def _print_retrograde_packet(payload: Dict[str, Any]) -> None:
     print(f"  core_entities: {len(scaffolds.get('core_entities') or [])}")
     print(f"  named_seed_npcs: {len(scaffolds.get('named_seed_npcs') or [])}")
     print(f"  pressure_axes: {len(scaffolds.get('pressure_axes') or [])}")
+    if seed_budget:
+        print()
+        print("Seed request:")
+        print(f"  generate_candidates: {seed_budget.get('generate_candidates')}")
+        print(f"  select_target: {seed_budget.get('select_target')}")
+        print(f"  deferred_secret_cap: {seed_budget.get('deferred_secret_cap')}")
     if payload.get("packet_output"):
         print()
         print(f"Output: {payload['packet_output']}")

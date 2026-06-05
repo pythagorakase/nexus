@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from nexus.agents.orrery import retrograde_vocabulary
+from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
 )
@@ -46,6 +48,12 @@ def test_seed_eligible_vocabulary_can_include_live_tag_registry() -> None:
     )
     assert "grieving" in vocabulary["registered_tags_by_entity_kind"]["character"]
     assert "commerce" in vocabulary["registered_tags_by_entity_kind"]["place"]
+    policies = {
+        item["category"]: item["policy"]
+        for item in vocabulary["registered_category_seed_policies"]
+    }
+    assert policies["place_function"] == "stable_seed"
+    assert policies["state"] == "event_anchored"
 
     for key in (
         "single_entity_tag_anchors",
@@ -73,6 +81,65 @@ def test_seed_eligible_vocabulary_includes_pair_tag_kind_constraints() -> None:
     assert definitions["hunting"]["subject_kinds"] == ["character", "faction"]
     assert definitions["hunting"]["object_kinds"] == ["character"]
     assert definitions["hunting"]["is_ephemeral"] is True
+
+
+def test_seed_eligible_vocabulary_classifies_registered_categories(
+    monkeypatch,
+) -> None:
+    """Retrograde distinguishes stable, event-anchored, and prompt-only tags."""
+
+    monkeypatch.setattr(
+        retrograde_vocabulary,
+        "read_tag_library",
+        lambda _dbname: [
+            TagLibraryEntry(
+                entity_kind="character",
+                category="role.function",
+                tag="scholar",
+                is_ephemeral=False,
+                description="",
+                category_description="",
+                prompt_order=10,
+            ),
+            TagLibraryEntry(
+                entity_kind="character",
+                category="state",
+                tag="grieving",
+                is_ephemeral=True,
+                description="",
+                category_description="",
+                prompt_order=20,
+            ),
+            TagLibraryEntry(
+                entity_kind="character",
+                category="experimental_signal",
+                tag="untested_signal",
+                is_ephemeral=False,
+                description="",
+                category_description="",
+                prompt_order=30,
+            ),
+        ],
+    )
+
+    vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_05")
+    policies = {
+        item["category"]: item["policy"]
+        for item in vocabulary["registered_category_seed_policies"]
+    }
+
+    assert policies == {
+        "experimental_signal": "prompt_visible_only",
+        "role.function": "stable_seed",
+        "state": "event_anchored",
+    }
+    assert vocabulary["registered_tags_by_seed_policy"]["stable_seed"] == ["scholar"]
+    assert vocabulary["registered_tags_by_seed_policy"]["event_anchored"] == [
+        "grieving"
+    ]
+    assert vocabulary["registered_tags_by_seed_policy"]["prompt_visible_only"] == [
+        "untested_signal"
+    ]
 
 
 def test_seed_eligible_pair_tags_are_sorted() -> None:
