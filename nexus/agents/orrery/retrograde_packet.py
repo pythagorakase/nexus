@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
+from nexus.agents.orrery.retrograde_seed_candidates import (
+    render_seed_generation_prompt,
+    seed_candidate_response_schema,
+)
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 from nexus.config.settings_models import Settings
 
@@ -80,6 +84,11 @@ def build_retrograde_dry_run_packet(
         zone=zone,
         initial_location=initial_location,
     )
+    seed_generation_request = build_seed_generation_request(
+        candidate_scaffolds=candidate_scaffolds,
+        vocabulary=vocabulary,
+        weird=weird,
+    )
 
     return {
         "schema_version": PACKET_SCHEMA_VERSION,
@@ -111,10 +120,10 @@ def build_retrograde_dry_run_packet(
         "vocabulary_summary": _vocabulary_summary(vocabulary),
         "seed_eligible_vocabulary": vocabulary,
         "candidate_scaffolds": candidate_scaffolds,
-        "seed_generation_request": build_seed_generation_request(
-            candidate_scaffolds=candidate_scaffolds,
+        "seed_generation_request": seed_generation_request,
+        "seed_generation_prompt": render_seed_generation_prompt(
+            seed_generation_request=seed_generation_request,
             vocabulary=vocabulary,
-            weird=weird,
         ),
         "skald_weaver_instructions": _skald_weaver_instructions(),
     }
@@ -151,6 +160,7 @@ def build_seed_generation_request(
         "coverage_functions": list(RETROGRADE_COVERAGE_FUNCTIONS),
         "selection_rubric": _selection_rubric(level),
         "prompt_sections": _seed_prompt_sections(candidate_scaffolds),
+        "candidate_response_schema": seed_candidate_response_schema(),
         "candidate_output_schema": {
             "type": "object",
             "required_fields": [
