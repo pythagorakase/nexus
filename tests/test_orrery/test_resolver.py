@@ -17,6 +17,7 @@ from nexus.agents.orrery.substrate import (
     ALWAYS,
     AND,
     Branch,
+    DriveBand,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -1466,6 +1467,7 @@ def test_resolve_dry_run_trust_predicates_use_hydrated_valence(
     template = Template(
         id="trust_gate_test",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="test trust hydration",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1677,6 +1679,7 @@ def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
     pressure_template = Template(
         id="pressure_test",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="test pressure",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1883,6 +1886,7 @@ def test_default_templates_keep_present_targets_offscreen_only() -> None:
     default_template = Template(
         id="default_present_target",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="default policy",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1918,6 +1922,7 @@ def test_pressure_templates_still_commit_for_offscreen_targets() -> None:
     pressure_template = Template(
         id="dual_mode_pressure",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="dual-mode policy",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1959,6 +1964,7 @@ def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
     weird_template = Template(
         id="weird",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="declares an unsupported slot signature",
         required_slots=(Slot.ACTOR, Slot.FACTION),
         package_gate=ALWAYS,

@@ -32,6 +32,7 @@ from nexus.agents.orrery.substrate import (
     Branch,
     CompoundCondition,
     Template,
+    drive_band_priority_warnings,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
@@ -523,6 +524,21 @@ def _render_present_target_policy(template: Template) -> str | None:
     return f"`{value}`"
 
 
+def _render_drive_band(template: Template) -> str:
+    """Render one template's drive band and any priority rationale."""
+
+    value = template.drive_band.value.replace("_", " ")
+    if template.drive_band_priority_exempt:
+        if not template.priority_override_rationale:
+            return f"{value} — priority-order exempt"
+        return (
+            f"{value} — priority-order exempt: {template.priority_override_rationale}"
+        )
+    if not template.priority_override_rationale:
+        return value
+    return f"{value} — {template.priority_override_rationale}"
+
+
 def _render_template(template: Template) -> List[str]:
     slots = ", ".join(s.value.upper() for s in template.required_slots)
     lines = [
@@ -530,6 +546,7 @@ def _render_template(template: Template) -> List[str]:
         "",
         f"> {template.blurb}",
         "",
+        f"**Drive band:** {_render_drive_band(template)}",
         f"**Slots:** {slots}",
     ]
     policy_prose = _render_present_target_policy(template)
@@ -760,6 +777,12 @@ def render_catalog(templates: Iterable[Template]) -> str:
         "Behavior templates evaluated by the Orrery off-screen resolver, "
         "ordered by priority (highest first).",
         "",
+        "Drive bands are authoring metadata: they explain whether a package is "
+        "crisis/constraint, embodied maintenance, anchored routine, affiliation, "
+        "or project/identity pressure. Static priority still decides resolver "
+        "order; any lower-band package that outranks a higher-band package should "
+        "carry an explicit rationale.",
+        "",
         "**Source-of-truth:** `nexus/agents/orrery/templates.py` "
         "(`BUILTIN_TEMPLATES`).  ",
         "**Substrate:** `nexus/agents/orrery/substrate.py` "
@@ -770,6 +793,20 @@ def render_catalog(templates: Iterable[Template]) -> str:
         "",
     ]
     sorted_templates = sorted(templates, key=lambda t: -t.priority)
+    warnings = drive_band_priority_warnings(sorted_templates)
+    if warnings:
+        lines.extend(
+            [
+                "## Drive-Band Priority Warnings",
+                "",
+                "These package priorities contradict the default drive-band order "
+                "without an explicit rationale:",
+                "",
+            ]
+        )
+        for warning in warnings:
+            lines.append(f"- {warning}")
+        lines.extend(["", "---", ""])
     for template in sorted_templates:
         lines.extend(_render_template(template))
         lines.append("---")

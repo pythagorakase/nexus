@@ -5,6 +5,8 @@
 
 Behavior templates evaluated by the Orrery off-screen resolver, ordered by priority (highest first).
 
+Drive bands are authoring metadata: they explain whether a package is crisis/constraint, embodied maintenance, anchored routine, affiliation, or project/identity pressure. Static priority still decides resolver order; any lower-band package that outranks a higher-band package should carry an explicit rationale.
+
 **Source-of-truth:** `nexus/agents/orrery/templates.py` (`BUILTIN_TEMPLATES`).  
 **Substrate:** `nexus/agents/orrery/substrate.py` (`Template`, `Branch`, `CompoundCondition`).  
 **Design plan:** [docs/orrery_design_plan.md](orrery_design_plan.md)
@@ -15,6 +17,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > When the city is closing in.
 
+**Drive band:** crisis constraint
 **Slots:** ACTOR
 
 **Gate:**
@@ -79,6 +82,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A bond pulls the actor toward someone in active danger.
 
+**Drive band:** crisis constraint
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -162,6 +166,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A grudge ripens until the moment is right to settle it.
 
+**Drive band:** project identity — Active vengeance is a high-pressure identity project; left alone, it should interrupt ordinary life.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -234,6 +239,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A wounded body pulls the actor toward the small work of mending.
 
+**Drive band:** crisis constraint
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -305,6 +311,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Steady-state concealment for people who are already living out of sight.
 
+**Drive band:** crisis constraint
 **Slots:** ACTOR
 
 **Gate:**
@@ -389,6 +396,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A binding obligation surfaces from the blank years.
 
+**Drive band:** project identity — Honor/debt pressure is a story obligation that may preempt ordinary maintenance when the relevant ledger is hot.
 **Slots:** ACTOR
 
 **Gate:**
@@ -436,6 +444,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A threat surfaces; word reaches the people who need to know.
 
+**Drive band:** crisis constraint
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -505,6 +514,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The fragments of a buried identity tug at the actor.
 
+**Drive band:** project identity — Ghost-lead pursuit is a long-arc motive with explicit clue pressure, so it can outrank routine maintenance.
 **Slots:** ACTOR
 
 **Gate:**
@@ -551,6 +561,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A duty of care surfaces between the actor and someone in their charge.
 
+**Drive band:** affiliation — Dependent care is affiliation with responsibility attached, so it can preempt ordinary maintenance.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -604,6 +615,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Patient intelligence work with a specific asset.
 
+**Drive band:** project identity — Informant cultivation is relationship-shaped, but it serves an active project rather than ordinary affiliation.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -674,6 +686,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The actor remains present through a slow, uncertain hour.
 
+**Drive band:** affiliation — Vigil is affiliation under acute pressure, so it can outrank ordinary maintenance while a target is wounded or dying.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -742,6 +755,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Watching from afar without turning observation into contact.
 
+**Drive band:** project identity — Surveillance usually serves live threat or investigation arcs, so it can sit above routine and social maintenance.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -856,6 +870,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A small thread of contact between people who hold each other.
 
+**Drive band:** affiliation — Kin maintenance is allowed to beat everyday self-maintenance when the relationship has gone quiet long enough.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -949,6 +964,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Two people who do not trust each other are forced into contact anyway.
 
+**Drive band:** project identity — Rival consultation is a deliberate project move, not casual social contact, and can outrank routine obligations.
 **Slots:** ACTOR, TARGET
 **Present-target policy:** may target an on-screen entity — but only as a prompt-only scene-pressure draft routed through storyteller LLM review (no direct state mutation, no canonical event)
 
@@ -1019,6 +1035,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Ordinary home/work movement from explicit routine anchors.
 
+**Drive band:** anchored routine — Commute resolves where a routine-bound actor should be before nearby maintenance packages pick a place-shaped branch.
 **Slots:** ACTOR
 
 **Gate:**
@@ -1085,6 +1102,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A loss settles into the body across many quiet days.
 
+**Drive band:** affiliation — Fresh grief suppresses ordinary social, intimacy, and routine loops; it should beat low-grade bodily maintenance.
 **Slots:** ACTOR
 
 **Gate:**
@@ -1140,6 +1158,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The body asks for the thing without which it cannot continue.
 
+**Drive band:** embodied maintenance
 **Slots:** ACTOR
 
 **Gate:**
@@ -1205,6 +1224,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The body asks for water; what it accepts shapes the small hour.
 
+**Drive band:** embodied maintenance
 **Slots:** ACTOR
 
 **Gate:**
@@ -1279,6 +1299,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The body asks for fuel; what it gets matters more than the cookbook suggests.
 
+**Drive band:** embodied maintenance
 **Slots:** ACTOR
 
 **Gate:**
@@ -1379,6 +1400,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A character moves between meaningful places without pretending the road is a room.
 
+**Drive band:** anchored routine
 **Slots:** ACTOR
 
 **Gate:**
@@ -1460,6 +1482,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The need for the company of others, on whatever terms a character can have it.
 
+**Drive band:** affiliation — Accumulated social debt is allowed to interrupt generic work/routine before it becomes a crisis.
 **Slots:** ACTOR
 
 **Gate:**
@@ -1529,6 +1552,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The body asks for the kind of connection that is not conversation.
 
+**Drive band:** affiliation — Intimacy pressure should beat generic work when gates and suppressors allow it, but remain below basic embodied maintenance.
 **Slots:** ACTOR
 
 **Gate:**
@@ -1622,6 +1646,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > A small act of care for the work that defines them.
 
+**Drive band:** project identity — Craft is the low-pressure identity/project floor and intentionally sits just above generic work.
 **Slots:** ACTOR
 
 **Gate:**
@@ -1720,6 +1745,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > The recurring work that keeps a life, household, or organization functioning.
 
+**Drive band:** anchored routine
 **Slots:** ACTOR
 
 **Gate:**
@@ -1811,6 +1837,7 @@ Behavior templates evaluated by the Orrery off-screen resolver, ordered by prior
 
 > Specific public-cover maintenance, not a universal fallback.
 
+**Drive band:** crisis constraint — priority-order exempt: Public-cover upkeep is crisis/constraint-flavored, but it is intentionally a floor package that should not force routine needs or story obligations to justify outranking it.
 **Slots:** ACTOR
 
 **Gate:**

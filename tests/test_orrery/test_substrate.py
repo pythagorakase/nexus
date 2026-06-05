@@ -11,6 +11,7 @@ from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
     CompoundCondition,
+    DriveBand,
     PresentTargetPolicy,
     RoutineAnchor,
     Slot,
@@ -107,6 +108,7 @@ def test_missing_always_fallback_is_rejected() -> None:
     template = Template(
         id="bad_template",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="No terminal fallback.",
         required_slots=(Slot.ACTOR,),
         package_gate=ALWAYS,
@@ -130,6 +132,7 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
         Template(
             id="bad_pressure_template",
             priority=1,
+            drive_band=DriveBand.PROJECT_IDENTITY,
             blurb="Missing prompt-only pressure text.",
             required_slots=(Slot.ACTOR, Slot.TARGET),
             package_gate=ALWAYS,
@@ -816,6 +819,7 @@ def test_evaluate_stack_returns_none_when_no_template_passes() -> None:
     template = Template(
         id="never",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="Never fires.",
         required_slots=(Slot.ACTOR,),
         package_gate=lambda _state, _bindings: False,

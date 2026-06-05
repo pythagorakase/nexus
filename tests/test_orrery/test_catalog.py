@@ -12,6 +12,7 @@ from nexus.agents.orrery.catalog import (
     _render_predicate_name,
     render_catalog,
 )
+from nexus.agents.orrery.substrate import DriveBand, drive_band_priority_warnings
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -26,6 +27,15 @@ def test_catalog_includes_all_templates() -> None:
         assert (
             f"priority {template.priority}" in content
         ), f"Template {template.id} priority missing from header"
+        assert (
+            f"**Drive band:** {template.drive_band.value.replace('_', ' ')}" in content
+        ), f"Template {template.id} drive band missing from catalog"
+
+
+def test_builtin_drive_band_priorities_have_rationales() -> None:
+    """Priority inversions across drive bands must be deliberate."""
+
+    assert drive_band_priority_warnings(BUILTIN_TEMPLATES) == ()
 
 
 def test_catalog_includes_every_branch() -> None:
@@ -206,6 +216,7 @@ def test_pair_tag_predicates_populate_vocabulary_appendix() -> None:
     template = Template(
         id="pair_tag_catalog_fixture",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="Catalog fixture.",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=has_pair_tag("mentors"),
