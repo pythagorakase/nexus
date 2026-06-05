@@ -21,6 +21,7 @@ from nexus.agents.orrery.needs import (
     severity_tags_for_need,
 )
 from nexus.agents.orrery.resolver import (
+    LOCATION_CLASS_TAG_CATEGORIES,
     OrreryResolutionDraft,
     OrreryTickProposal,
 )
@@ -1348,6 +1349,30 @@ def _coerce_travel_payload(raw: Any) -> dict[str, Any]:
     raise ValueError("travel state_delta values must be mappings or true")
 
 
+def _destination_place_classes(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    """Return class-based destination selectors from a travel payload."""
+
+    raw = (
+        payload.get("destination_place_classes")
+        or payload.get("destination_place_class")
+        or payload.get("destination_class")
+    )
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        values = (raw,)
+    elif isinstance(raw, (list, tuple)):
+        values = tuple(raw)
+    else:
+        raise ValueError(
+            "destination place classes must be a string, list, or tuple"
+        )
+    classes = tuple(dict.fromkeys(str(item) for item in values if str(item)))
+    if not classes:
+        raise ValueError("destination place classes cannot be empty")
+    return classes
+
+
 def _travel_mode(payload: Mapping[str, Any], fallback: str = "mixed") -> str:
     mode = str(payload.get("mode") or payload.get("travel_mode") or fallback)
     if mode not in TRAVEL_MODE_DETOUR_FACTOR:
@@ -1410,7 +1435,15 @@ def _apply_travel_start_sync(
                 anchor_type=str(destination_anchor),
             )
         else:
-            destination_place_id = _planned_destination_sync(cur, actor_entity_id)
+            destination_classes = _destination_place_classes(data)
+            if destination_classes and origin_place_id is not None:
+                destination_place_id = _location_class_destination_sync(
+                    cur,
+                    origin_place_id=int(origin_place_id),
+                    location_classes=destination_classes,
+                )
+            else:
+                destination_place_id = _planned_destination_sync(cur, actor_entity_id)
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
@@ -1505,9 +1538,17 @@ async def _apply_travel_start_async(
                 anchor_type=str(destination_anchor),
             )
         else:
-            destination_place_id = await _planned_destination_async(
-                conn, actor_entity_id
-            )
+            destination_classes = _destination_place_classes(data)
+            if destination_classes and origin_place_id is not None:
+                destination_place_id = await _location_class_destination_async(
+                    conn,
+                    origin_place_id=int(origin_place_id),
+                    location_classes=destination_classes,
+                )
+            else:
+                destination_place_id = await _planned_destination_async(
+                    conn, actor_entity_id
+                )
     if origin_place_id is None or destination_place_id is None:
         raise ValueError("travel.start requires origin and destination places")
 
@@ -2554,6 +2595,45 @@ def _routine_zone_destination_sync(
     return _row_get(row, "id", 0) if row else None
 
 
+def _location_class_destination_sync(
+    cur: Any,
+    *,
+    origin_place_id: int,
+    location_classes: tuple[str, ...],
+) -> Optional[int]:
+    cur.execute(
+        """
+        SELECT p.id
+        FROM places p
+        LEFT JOIN places origin ON origin.id = %s
+        LEFT JOIN entity_tags_current etc
+          ON etc.entity_id = p.entity_id
+         AND etc.category = ANY(%s)
+         AND etc.tag = ANY(%s)
+        WHERE p.id <> %s
+          AND (p.type::text = ANY(%s) OR etc.tag IS NOT NULL)
+        -- Collapse multiple matching tags per place before preferring same-zone
+        -- destinations.
+        GROUP BY p.id, p.zone, origin.zone
+        ORDER BY CASE
+                   WHEN origin.zone IS NOT NULL AND p.zone = origin.zone THEN 0
+                   ELSE 1
+                 END,
+                 p.id
+        LIMIT 1
+        """,
+        (
+            origin_place_id,
+            list(LOCATION_CLASS_TAG_CATEGORIES),
+            list(location_classes),
+            origin_place_id,
+            list(location_classes),
+        ),
+    )
+    row = cur.fetchone()
+    return _row_get(row, "id", 0) if row else None
+
+
 async def _planned_destination_async(conn: Any, actor_entity_id: int) -> Optional[int]:
     return await conn.fetchval(
         """
@@ -2639,6 +2719,39 @@ async def _routine_zone_destination_async(
         """,
         list(preferred_tags),
         zone_id,
+    )
+
+
+async def _location_class_destination_async(
+    conn: Any,
+    *,
+    origin_place_id: int,
+    location_classes: tuple[str, ...],
+) -> Optional[int]:
+    return await conn.fetchval(
+        """
+        SELECT p.id
+        FROM places p
+        LEFT JOIN places origin ON origin.id = $1
+        LEFT JOIN entity_tags_current etc
+          ON etc.entity_id = p.entity_id
+         AND etc.category = ANY($2::text[])
+         AND etc.tag = ANY($3::text[])
+        WHERE p.id <> $1
+          AND (p.type::text = ANY($3::text[]) OR etc.tag IS NOT NULL)
+        -- Collapse multiple matching tags per place before preferring same-zone
+        -- destinations.
+        GROUP BY p.id, p.zone, origin.zone
+        ORDER BY CASE
+                   WHEN origin.zone IS NOT NULL AND p.zone = origin.zone THEN 0
+                   ELSE 1
+                 END,
+                 p.id
+        LIMIT 1
+        """,
+        origin_place_id,
+        list(LOCATION_CLASS_TAG_CATEGORIES),
+        list(location_classes),
     )
 
 

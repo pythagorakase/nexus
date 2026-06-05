@@ -13,10 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Pre-commit hooks
 
-Config in `.pre-commit-config.yaml`. Hooks fire on `git commit` when matching
-files are staged. Currently:
+Config in `.pre-commit-config.yaml`. Hooks fire on `git commit`. Currently:
 
-- **regenerate-orrery-catalog** — when `nexus/agents/orrery/{templates,substrate,catalog}.py` changes, regenerates `docs/orrery_packages.md` so the human-readable catalog stays in lockstep with the canonical Python source. The hook modifies the file; if it does, pre-commit aborts the commit and prompts you to re-stage the regenerated doc + commit again.
+- **regenerate-orrery-catalog** — always runs and regenerates `docs/orrery_packages.md` so the human-readable catalog stays in lockstep with the canonical Python source. The hook modifies the file; if it does, pre-commit aborts the commit and prompts you to re-stage the regenerated doc + commit again.
 
 Bypass (use sparingly): `git commit --no-verify`. CI staleness tests still gate merges.
 

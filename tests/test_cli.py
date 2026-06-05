@@ -1,5 +1,6 @@
 """Tests for the NEXUS CLI helpers."""
 
+import json
 import sys
 from argparse import Namespace
 from typing import Any
@@ -146,6 +147,59 @@ class FakeWizardCache:
         }
 
 
+class FakeRetrogradeWizardCache:
+    """Wizard cache double with complete Retrograde packet inputs."""
+
+    def current_phase(self) -> str:
+        return "ready"
+
+    def get_setting_dict(self) -> dict[str, Any]:
+        return {
+            "genre": "cyberpunk",
+            "secondary_genres": [],
+            "world_name": "Glass District",
+        }
+
+    def get_character_dict(self) -> dict[str, Any]:
+        return {
+            "concept": {
+                "name": "Mara",
+                "archetype": "wary operator",
+                "background": "Mara survives by tracking debts.",
+            },
+            "trait_selection": {
+                "selected_traits": ["resources"],
+                "trait_rationales": {"resources": "Money opens doors."},
+            },
+            "wildcard": {
+                "wildcard_name": "Storm Marked",
+                "wildcard_description": "Weather notices her.",
+            },
+        }
+
+    def get_seed_dict(self) -> dict[str, Any]:
+        return {
+            "seed_type": "inciting pressure",
+            "title": "The Ledger Wakes",
+            "situation": "An old debt becomes active.",
+            "hook": "A message arrives in a dead person's voice.",
+            "immediate_goal": "Find who sent it.",
+            "stakes": "Mara's safe names may burn.",
+            "tension_source": "A sponsor wants the secret first.",
+            "key_npcs": ["Vale"],
+            "secrets": "The debt was never hers.",
+        }
+
+    def get_layer_dict(self) -> dict[str, Any]:
+        return {"name": "Night City", "type": "urban"}
+
+    def get_zone_dict(self) -> dict[str, Any]:
+        return {"name": "The Mall", "summary": "Commerce and surveillance."}
+
+    def get_initial_location(self) -> dict[str, Any]:
+        return {"name": "Shutter Hall", "description": "A quiet mall corridor."}
+
+
 class FakeConnection:
     """Context-manager connection double for dry-run compiler tests."""
 
@@ -286,3 +340,40 @@ def test_main_trait_audit_policy_failure_keeps_output(monkeypatch, capsys) -> No
     captured = capsys.readouterr()
     assert "Trait compiler audit for slot 5" in captured.out
     assert "resources: missing_structured_trait_input" in captured.out
+
+
+def test_retrograde_packet_writes_dry_run_packet(monkeypatch, tmp_path) -> None:
+    """The CLI Retrograde packet command is read-only except optional output JSON."""
+
+    from nexus.agents.orrery import retrograde_vocabulary
+    from nexus.api import new_story_cache
+
+    real_enumerator = retrograde_vocabulary.enumerate_seed_eligible_vocabulary
+    output_path = tmp_path / "retrograde_packet.json"
+    monkeypatch.setattr(
+        new_story_cache,
+        "read_cache",
+        lambda dbname: FakeRetrogradeWizardCache(),
+    )
+    monkeypatch.setattr(
+        retrograde_vocabulary,
+        "enumerate_seed_eligible_vocabulary",
+        lambda dbname: real_enumerator(),
+    )
+
+    result = cli.run_retrograde_packet(
+        Namespace(
+            slot=5,
+            weird="medium",
+            weird_raw=None,
+            output=output_path,
+        )
+    )
+
+    packet = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["success"] is True
+    assert result["packet_output"] == str(output_path)
+    assert packet["dry_run"] is True
+    assert packet["mutation_policy"]["writes"] == "none"
+    assert packet["weird"]["level"] == "medium"

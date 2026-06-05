@@ -9,6 +9,7 @@ from nexus.agents.orrery.substrate import (
     OR,
     Branch,
     Condition,
+    DriveBand,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -23,6 +24,7 @@ from nexus.agents.orrery.substrate import (
     has_ephemeral,
     has_established_partner_co_located,
     has_inbound_pair_tag,
+    has_location_class_destination,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag_to_current_location,
@@ -95,6 +97,7 @@ PRIVATE_PLACE = _place_any("dwelling", "place_restricted")
 EVADE_PURSUERS = Template(
     id="evade_pursuers",
     priority=100,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
     blurb="When the city is closing in.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -171,6 +174,7 @@ EVADE_PURSUERS = Template(
 HIDE = Template(
     id="hide",
     priority=84,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
     blurb="Steady-state concealment for people who are already living out of sight.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -306,6 +310,11 @@ HIDE = Template(
 HONOR_DEBT = Template(
     id="honor_debt",
     priority=80,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Honor/debt pressure is a story obligation that may preempt ordinary "
+        "maintenance when the relevant ledger is hot."
+    ),
     blurb="A binding obligation surfaces from the blank years.",
     required_slots=(Slot.ACTOR,),
     package_gate=OR(
@@ -358,6 +367,11 @@ HONOR_DEBT = Template(
 PURSUE_GHOST_LEAD = Template(
     id="pursue_ghost_lead",
     priority=60,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Ghost-lead pursuit is a long-arc motive with explicit clue pressure, "
+        "so it can outrank routine maintenance."
+    ),
     blurb="The fragments of a buried identity tug at the actor.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -409,6 +423,13 @@ PURSUE_GHOST_LEAD = Template(
 MAINTAIN_COVER = Template(
     id="maintain_cover",
     priority=0,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
+    drive_band_priority_exempt=True,
+    priority_override_rationale=(
+        "Public-cover upkeep is crisis/constraint-flavored, but it is "
+        "intentionally a floor package that should not force routine needs or "
+        "story obligations to justify outranking it."
+    ),
     blurb="Specific public-cover maintenance, not a universal fallback.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -535,6 +556,11 @@ MAINTAIN_COVER = Template(
 EXTRACT_VENGEANCE = Template(
     id="extract_vengeance",
     priority=90,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Active vengeance is a high-pressure identity project; left alone, it "
+        "should interrupt ordinary life."
+    ),
     blurb="A grudge ripens until the moment is right to settle it.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Cooldown is intentionally actor-global (no target_slot=): an active
@@ -640,6 +666,7 @@ EXTRACT_VENGEANCE = Template(
 PROTECT_KIN = Template(
     id="protect_kin",
     priority=95,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
     blurb="A bond pulls the actor toward someone in active danger.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     package_gate=AND(
@@ -762,6 +789,11 @@ PROTECT_KIN = Template(
 SURVEIL = Template(
     id="surveil",
     priority=48,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Surveillance usually serves live threat or investigation arcs, so it "
+        "can sit above routine and social maintenance."
+    ),
     blurb="Watching from afar without turning observation into contact.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     package_gate=AND(
@@ -943,6 +975,11 @@ SURVEIL = Template(
 CULTIVATE_INFORMANT = Template(
     id="cultivate_informant",
     priority=50,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Informant cultivation is relationship-shaped, but it serves an active "
+        "project rather than ordinary affiliation."
+    ),
     blurb="Patient intelligence work with a specific asset.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Cooldowns here are per-(actor, target) via target_slot=: handler A
@@ -1096,6 +1133,7 @@ CULTIVATE_INFORMANT = Template(
 TEND_WOUNDED = Template(
     id="tend_wounded",
     priority=88,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
     blurb="A wounded body pulls the actor toward the small work of mending.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Gate must cover both emitted care events: healing the wound is higher
@@ -1209,6 +1247,11 @@ TEND_WOUNDED = Template(
 MOURN_LOSS = Template(
     id="mourn_loss",
     priority=25,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Fresh grief suppresses ordinary social, intimacy, and routine loops; "
+        "it should beat low-grade bodily maintenance."
+    ),
     blurb="A loss settles into the body across many quiet days.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -1297,6 +1340,11 @@ MOURN_LOSS = Template(
 KEEP_VIGIL = Template(
     id="keep_vigil",
     priority=50,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Vigil is affiliation under acute pressure, so it can outrank ordinary "
+        "maintenance while a target is wounded or dying."
+    ),
     blurb="The actor remains present through a slow, uncertain hour.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Divergence: `captive` is ephemeral (per migration 027), so the captive
@@ -1399,6 +1447,11 @@ KEEP_VIGIL = Template(
 ROUTINE_COMMUTE = Template(
     id="routine_commute",
     priority=26,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
+    priority_override_rationale=(
+        "Commute resolves where a routine-bound actor should be before nearby "
+        "maintenance packages pick a place-shaped branch."
+    ),
     blurb="Ordinary home/work movement from explicit routine anchors.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -1501,6 +1554,7 @@ ROUTINE_COMMUTE = Template(
 TRAVEL = Template(
     id="travel",
     priority=21,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
     blurb=(
         "A character moves between meaningful places without pretending the "
         "road is a room."
@@ -1628,6 +1682,7 @@ TRAVEL = Template(
 WORK = Template(
     id="work",
     priority=14,
+    drive_band=DriveBand.ANCHORED_ROUTINE,
     blurb=(
         "The recurring work that keeps a life, household, or organization "
         "functioning."
@@ -1741,6 +1796,11 @@ WORK = Template(
 TEND_CRAFT = Template(
     id="tend_craft",
     priority=15,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Craft is the low-pressure identity/project floor and intentionally "
+        "sits just above generic work."
+    ),
     blurb="A small act of care for the work that defines them.",
     required_slots=(Slot.ACTOR,),
     # Discipline: TEND_CRAFT is for characters with identity-defining
@@ -1978,6 +2038,7 @@ TEND_CRAFT = Template(
 WARN_ALLY = Template(
     id="warn_ally",
     priority=75,
+    drive_band=DriveBand.CRISIS_CONSTRAINT,
     blurb="A threat surfaces; word reaches the people who need to know.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # No contact cooldown — urgency overrides ordinary contact pacing.
@@ -2085,6 +2146,11 @@ WARN_ALLY = Template(
 CHECK_ON_DEPENDENT = Template(
     id="check_on_dependent",
     priority=55,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Dependent care is affiliation with responsibility attached, so it can "
+        "preempt ordinary maintenance."
+    ),
     blurb="A duty of care surfaces between the actor and someone in their charge.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Discipline: CULTIVATE_INFORMANT (priority 50) owns the
@@ -2171,6 +2237,11 @@ CHECK_ON_DEPENDENT = Template(
 REACH_OUT_TO_KIN = Template(
     id="reach_out_to_kin",
     priority=40,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Kin maintenance is allowed to beat everyday self-maintenance when "
+        "the relationship has gone quiet long enough."
+    ),
     blurb="A small thread of contact between people who hold each other.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Cooldown: gate must check BOTH events any branch can emit
@@ -2301,6 +2372,11 @@ REACH_OUT_TO_KIN = Template(
 CONSULT_RIVAL = Template(
     id="consult_rival",
     priority=35,
+    drive_band=DriveBand.PROJECT_IDENTITY,
+    priority_override_rationale=(
+        "Rival consultation is a deliberate project move, not casual social "
+        "contact, and can outrank routine obligations."
+    ),
     blurb="Two people who do not trust each other are forced into contact anyway.",
     required_slots=(Slot.ACTOR, Slot.TARGET),
     # Divergence: the draft included `has_ephemeral("grudge_active")` in the
@@ -2419,6 +2495,7 @@ CONSULT_RIVAL = Template(
 SLEEP = Template(
     id="sleep",
     priority=25,
+    drive_band=DriveBand.EMBODIED_MAINTENANCE,
     blurb="The body asks for the thing without which it cannot continue.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -2536,6 +2613,7 @@ SLEEP = Template(
 DRINK = Template(
     id="drink",
     priority=24,
+    drive_band=DriveBand.EMBODIED_MAINTENANCE,
     blurb="The body asks for water; what it accepts shapes the small hour.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(
@@ -2648,6 +2726,7 @@ DRINK = Template(
 EAT = Template(
     id="eat",
     priority=22,
+    drive_band=DriveBand.EMBODIED_MAINTENANCE,
     blurb=(
         "The body asks for fuel; what it gets matters more than the cookbook "
         "suggests."
@@ -2830,6 +2909,11 @@ EAT = Template(
 SOCIALIZE = Template(
     id="socialize",
     priority=18,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Accumulated social debt is allowed to interrupt generic work/routine "
+        "before it becomes a crisis."
+    ),
     blurb=(
         "The need for the company of others, on whatever terms a character "
         "can have it."
@@ -2839,6 +2923,7 @@ SOCIALIZE = Template(
         has_need_debt_at_or_above("socialize", 24),
         since_last_event_at_least("socialized", minimum_ticks=4),
         since_last_event_at_least("socialized_alone", minimum_ticks=4),
+        since_last_event_at_least("social_travel_departed", minimum_ticks=4),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grieving")),
         NOT(has_ephemeral("wounded")),
@@ -2846,7 +2931,15 @@ SOCIALIZE = Template(
     branches=(
         Branch(
             label="Seek company after extended isolation",
-            conditions=has_need_debt_at_or_above("socialize", 168),
+            conditions=AND(
+                has_need_debt_at_or_above("socialize", 168),
+                NOT(count_co_located(1)),
+                NOT(SOCIAL_VENUE_PLACE),
+                can_move_publicly(),
+                has_location_class_destination(
+                    "commerce", "entertainment", "meeting", "place_open"
+                ),
+            ),
             narrative_stub=(
                 "{actor} feels the particular pressure that comes from going "
                 "too long without other people in their life, and moves "
@@ -2855,16 +2948,22 @@ SOCIALIZE = Template(
             ),
             state_delta={
                 "character.current_activity": "seeking company after isolation",
-                "need.fulfill": {
-                    "type": "socialize",
-                    "quality": "sought_company_after_isolation",
-                    "discharge_debt": 9999,
+                "travel.start": {
+                    "destination_place_classes": [
+                        "commerce",
+                        "entertainment",
+                        "meeting",
+                        "place_open",
+                    ],
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
                 },
             },
-            event_type="socialized",
+            event_type="social_travel_departed",
             changed_fields=(
                 "character.current_activity",
-                "character_need_states.debt_score",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
             ),
             magnitude=0.54,
         ),
@@ -2891,6 +2990,42 @@ SOCIALIZE = Template(
                 "character_need_states.debt_score",
             ),
             magnitude=0.22,
+        ),
+        Branch(
+            label="Set out toward public company",
+            conditions=AND(
+                NOT(count_co_located(1)),
+                NOT(SOCIAL_VENUE_PLACE),
+                can_move_publicly(),
+                has_location_class_destination(
+                    "commerce", "entertainment", "meeting", "place_open"
+                ),
+            ),
+            narrative_stub=(
+                "{actor} chooses movement over more empty time and sets out "
+                "toward a place where other people can be encountered without "
+                "requiring the story to pre-name them."
+            ),
+            state_delta={
+                "character.current_activity": "seeking public company",
+                "travel.start": {
+                    "destination_place_classes": [
+                        "commerce",
+                        "entertainment",
+                        "meeting",
+                        "place_open",
+                    ],
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
+                },
+            },
+            event_type="social_travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.26,
         ),
         Branch(
             label="Go where people are",
@@ -2969,6 +3104,11 @@ SOCIALIZE = Template(
 INTIMACY = Template(
     id="intimacy",
     priority=16,
+    drive_band=DriveBand.AFFILIATION,
+    priority_override_rationale=(
+        "Intimacy pressure should beat generic work when gates and suppressors "
+        "allow it, but remain below basic embodied maintenance."
+    ),
     blurb="The body asks for the kind of connection that is not conversation.",
     required_slots=(Slot.ACTOR,),
     package_gate=AND(

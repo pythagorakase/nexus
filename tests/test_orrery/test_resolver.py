@@ -17,6 +17,7 @@ from nexus.agents.orrery.substrate import (
     ALWAYS,
     AND,
     Branch,
+    DriveBand,
     PresentTargetPolicy,
     Slot,
     Template,
@@ -690,10 +691,15 @@ def test_resolve_dry_run_keeps_socialize_for_virtual_characters() -> None:
 
 
 def test_resolve_dry_run_fires_socialize_need_template() -> None:
-    """Interpersonal need debt can resolve through SOCIALIZE."""
+    """Extreme social debt can start movement toward real company."""
 
     proposal = resolve_dry_run(
         FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "route_familiar", "is_ephemeral": False}],
+            location_class_rows=[
+                {"id": 10, "location_class": "dwelling", "is_primary": True},
+                {"id": 20, "location_class": "meeting", "is_primary": True},
+            ],
             need_debt_rows=[
                 {
                     "character_entity_id": 1,
@@ -715,6 +721,40 @@ def test_resolve_dry_run_fires_socialize_need_template() -> None:
     assert proposal.resolutions[0].branch_label == (
         "Seek company after extended isolation"
     )
+    assert "need.fulfill" not in proposal.resolutions[0].state_delta
+    assert proposal.resolutions[0].state_delta["travel.start"][
+        "destination_place_classes"
+    ] == ["commerce", "entertainment", "meeting", "place_open"]
+
+
+def test_resolve_dry_run_socialize_uses_present_company_before_movement() -> None:
+    """Co-located NPCs can satisfy social pressure without going elsewhere."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_rows=[
+                {"entity_id": 1, "current_location": 10},
+                {"entity_id": 2, "current_location": 10},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "socialize",
+                    "debt_score": 200,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "socialize"
+    assert proposal.resolutions[0].branch_label == "Engage with company already present"
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "socialize"
 
 
@@ -1466,6 +1506,7 @@ def test_resolve_dry_run_trust_predicates_use_hydrated_valence(
     template = Template(
         id="trust_gate_test",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="test trust hydration",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1677,6 +1718,7 @@ def test_resolve_dry_run_routes_present_targets_to_scene_pressures() -> None:
     pressure_template = Template(
         id="pressure_test",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="test pressure",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1883,6 +1925,7 @@ def test_default_templates_keep_present_targets_offscreen_only() -> None:
     default_template = Template(
         id="default_present_target",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="default policy",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1918,6 +1961,7 @@ def test_pressure_templates_still_commit_for_offscreen_targets() -> None:
     pressure_template = Template(
         id="dual_mode_pressure",
         priority=10,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="dual-mode policy",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=ALWAYS,
@@ -1959,6 +2003,7 @@ def test_resolve_dry_run_rejects_unsupported_slot_signatures() -> None:
     weird_template = Template(
         id="weird",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="declares an unsupported slot signature",
         required_slots=(Slot.ACTOR, Slot.FACTION),
         package_gate=ALWAYS,

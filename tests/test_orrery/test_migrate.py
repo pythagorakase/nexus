@@ -769,6 +769,27 @@ def test_faction_legacy_column_retirement_snapshots_before_drop() -> None:
     assert "DROP COLUMN IF EXISTS" in source
 
 
+def test_social_travel_event_migration_registers_scoped_cooldown_event() -> None:
+    """Migration 059 registers the SOCIALIZE travel cooldown event."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "059_orrery_social_travel_event.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    migration_source = migration_path.read_text()
+
+    assert {
+        "social_travel_departed",
+    } == {
+        event_type
+        for event_type, _category, _severity, _description in migration.EVENT_TYPES
+    }
+    assert "ON CONFLICT (type) DO UPDATE SET" in migration_source
+    assert "synonym_for = NULL" in migration_source
+
+
 def test_completed_tag_vocab_migration_seeds_state_and_place_anchors() -> None:
     """Migration 054 seeds completed state/place vocabulary without collisions."""
 

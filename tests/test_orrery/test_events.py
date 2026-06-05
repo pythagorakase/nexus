@@ -45,6 +45,8 @@ class RecordingCursor:
         inbound_pair_tag_clear_count=0,
         expired_entity_tags=None,
         routine_anchors=None,
+        location_class_destinations=None,
+        place_zones=None,
     ):
         self.duplicate_resolution = duplicate_resolution
         self.known_tags = {"off_grid": 77} if known_tags is None else known_tags
@@ -67,6 +69,8 @@ class RecordingCursor:
         self.inbound_pair_tag_clear_count = inbound_pair_tag_clear_count
         self.expired_entity_tags = list(expired_entity_tags or [])
         self.routine_anchors = dict(routine_anchors or {})
+        self.location_class_destinations = list(location_class_destinations or [])
+        self.place_zones = dict(place_zones or {})
         self.executed = []
         self.rowcount = 1
         self._fetchone = None
@@ -287,6 +291,34 @@ class RecordingCursor:
             self._fetchone = {"geodesic_distance_m": self.geodesic_distance_m}
         elif "SELECT current_location FROM characters" in normalized:
             self._fetchone = {"current_location": self.current_location}
+        elif "LEFT JOIN places origin ON origin.id" in normalized:
+            (
+                origin_place_id,
+                _categories,
+                location_classes,
+                excluded_place_id,
+                _type_classes,
+            ) = params
+            requested = set(location_classes)
+            origin_zone = self.place_zones.get(origin_place_id)
+            candidates = []
+            for destination in self.location_class_destinations:
+                place_id = destination["id"]
+                if place_id == excluded_place_id:
+                    continue
+                classes = set(destination.get("classes", ()))
+                if not (classes & requested):
+                    continue
+                zone = destination.get("zone")
+                candidates.append(
+                    (
+                        0 if origin_zone is not None and zone == origin_zone else 1,
+                        place_id,
+                    )
+                )
+            if candidates:
+                _zone_rank, place_id = sorted(candidates)[0]
+                self._fetchone = {"id": place_id}
         elif "FROM character_routine_anchors" in normalized:
             actor_entity_id, anchor_type = params
             self._fetchone = self.routine_anchors.get((actor_entity_id, anchor_type))
@@ -336,16 +368,25 @@ class RecordingConn:
 
 
 class AsyncRoutineConn:
-    """Small asyncpg stand-in for routine destination helper tests."""
+    """Small asyncpg stand-in for destination helper tests."""
 
-    def __init__(self, *, routine_anchors=None, zone_destination=None):
+    def __init__(
+        self,
+        *,
+        routine_anchors=None,
+        zone_destination=None,
+        class_destination=None,
+    ):
         self.routine_anchors = dict(routine_anchors or {})
         self.zone_destination = zone_destination
+        self.class_destination = class_destination
 
     async def fetchrow(self, _sql, actor_entity_id, anchor_type):
         return self.routine_anchors.get((actor_entity_id, anchor_type))
 
-    async def fetchval(self, _sql, _preferred_tags, _zone_id):
+    async def fetchval(self, sql, *params):
+        if "LEFT JOIN places origin ON origin.id" in str(sql):
+            return self.class_destination
         return self.zone_destination
 
 
@@ -465,6 +506,15 @@ def _travel_insert_row(cursor: RecordingCursor) -> dict[str, Any]:
         "estimated_duration_minutes": params[9],
         "route_metadata": json.loads(params[-1]),
     }
+
+
+def test_destination_place_classes_rejects_mapping_payloads() -> None:
+    """Class selectors fail fast instead of accepting dict keys accidentally."""
+
+    with pytest.raises(ValueError, match="string, list, or tuple"):
+        orrery_events._destination_place_classes(
+            {"destination_place_classes": {"commerce": True}}
+        )
 
 
 def test_proposal_round_trips_through_json_shape() -> None:
@@ -1152,6 +1202,61 @@ def test_commit_orrery_tick_starts_estimated_travel_without_moving_actor() -> No
     assert route_metadata["detour_factor"] > 1
 
 
+def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None:
+    """Class-based travel starts with a concrete destination place."""
+
+    draft = OrreryResolutionDraft(
+        template_id="socialize",
+        priority=18,
+        binding_hash="socialize-travel-start-1",
+        bindings={"actor": 1},
+        branch_label="Seek company after extended isolation",
+        narrative_stub="{actor} sets out toward company.",
+        state_delta={
+            "character.current_activity": "seeking public company",
+            "travel.start": {
+                "destination_place_classes": ["meeting", "commerce"],
+                "mode": "mixed",
+                "initial_progress": 0.05,
+            },
+        },
+        event_type="travel_departed",
+        changed_fields=(
+            "character.current_activity",
+            "character_travel_states.status",
+        ),
+        magnitude=0.54,
+    )
+    proposal = OrreryTickProposal(
+        anchor_chunk_id=99,
+        actor_count=1,
+        resolutions=(draft,),
+        generated_at="2073-10-31T18:00:00+00:00",
+    )
+    cursor = RecordingCursor(
+        current_location=99,
+        place_zones={99: 1},
+        location_class_destinations=[
+            {"id": 77, "classes": {"meeting"}, "zone": 2},
+            {"id": 42, "classes": {"commerce"}, "zone": 1},
+        ],
+    )
+
+    result = commit_orrery_tick_sync(
+        RecordingConn(cursor),
+        proposal,
+        tick_chunk_id=100,
+        slot=5,
+        world_layer="primary",
+    )
+
+    travel_row = _travel_insert_row(cursor)
+
+    assert result.resolution_count == 1
+    assert travel_row["origin_place_id"] == 99
+    assert travel_row["destination_place_id"] == 42
+
+
 def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:
     """Routine commute branches can name a home/work anchor, not a place id."""
 
@@ -1330,6 +1435,21 @@ async def test_async_routine_anchor_destination_resolves_zone() -> None:
         conn,
         actor_entity_id=1,
         anchor_type="home",
+    )
+
+    assert destination == 42
+
+
+@pytest.mark.asyncio
+async def test_async_location_class_destination_resolves_place() -> None:
+    """Async class-based destinations use the matching-place query result."""
+
+    conn = AsyncRoutineConn(class_destination=42)
+
+    destination = await orrery_events._location_class_destination_async(
+        conn,
+        origin_place_id=99,
+        location_classes=("meeting", "commerce"),
     )
 
     assert destination == 42

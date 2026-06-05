@@ -10,8 +10,10 @@ from nexus.agents.orrery import templates as template_module
 from nexus.agents.orrery.catalog import (
     _collect_vocabulary,
     _render_predicate_name,
+    _render_state_delta,
     render_catalog,
 )
+from nexus.agents.orrery.substrate import DriveBand, drive_band_priority_warnings
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -26,6 +28,15 @@ def test_catalog_includes_all_templates() -> None:
         assert (
             f"priority {template.priority}" in content
         ), f"Template {template.id} priority missing from header"
+        assert (
+            f"**Drive band:** {template.drive_band.value.replace('_', ' ')}" in content
+        ), f"Template {template.id} drive band missing from catalog"
+
+
+def test_builtin_drive_band_priorities_have_rationales() -> None:
+    """Priority inversions across drive bands must be deliberate."""
+
+    assert drive_band_priority_warnings(BUILTIN_TEMPLATES) == ()
 
 
 def test_catalog_includes_every_branch() -> None:
@@ -87,6 +98,29 @@ def test_catalog_vocabulary_appendix_collects_referenced_terms() -> None:
     assert "place_affordances" not in vocab
     assert "family" in vocab["relationship_types"]
     assert "handler" in vocab["relationship_types"]
+
+
+def test_catalog_renders_destination_class_alias() -> None:
+    """Catalog prose stays in sync with travel payload aliases accepted at commit."""
+
+    rendered = _render_state_delta(
+        {"travel.start": {"destination_class": "commerce", "mode": "mixed"}}
+    )
+
+    assert "starts travel toward a `commerce` destination" in rendered
+
+
+def test_catalog_renders_drive_band_exemption_rationale() -> None:
+    """Priority-exempt templates still show the rationale in the catalog."""
+
+    content = render_catalog(BUILTIN_TEMPLATES)
+
+    assert (
+        "**Drive band:** crisis constraint — priority-order exempt: "
+        "Public-cover upkeep is crisis/constraint-flavored, but it is "
+        "intentionally a floor package that should not force routine needs "
+        "or story obligations to justify outranking it."
+    ) in content
 
 
 def test_place_class_wrappers_reject_empty_inputs() -> None:
@@ -206,6 +240,7 @@ def test_pair_tag_predicates_populate_vocabulary_appendix() -> None:
     template = Template(
         id="pair_tag_catalog_fixture",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="Catalog fixture.",
         required_slots=(Slot.ACTOR, Slot.TARGET),
         package_gate=has_pair_tag("mentors"),

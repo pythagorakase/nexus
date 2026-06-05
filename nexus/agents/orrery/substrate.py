@@ -40,9 +40,31 @@ class PresentTargetPolicy(str, Enum):
     STORYTELLER_PRESSURE = "storyteller_pressure"
 
 
+class DriveBand(str, Enum):
+    """Authoring-level package priority band.
+
+    Drive bands explain why a package sits where it does in the priority
+    ladder. They are not a replacement for static priority; they make unusual
+    ordering choices visible so package composition stays intentional.
+    """
+
+    CRISIS_CONSTRAINT = "crisis_constraint"
+    EMBODIED_MAINTENANCE = "embodied_maintenance"
+    ANCHORED_ROUTINE = "anchored_routine"
+    AFFILIATION = "affiliation"
+    PROJECT_IDENTITY = "project_identity"
+
+
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
 ContactKind = Literal["lodging", "social", "intimate"]
+DRIVE_BAND_ORDER: Mapping[DriveBand, int] = {
+    DriveBand.CRISIS_CONSTRAINT: 0,
+    DriveBand.EMBODIED_MAINTENANCE: 1,
+    DriveBand.ANCHORED_ROUTINE: 2,
+    DriveBand.AFFILIATION: 3,
+    DriveBand.PROJECT_IDENTITY: 4,
+}
 
 INTIMACY_SUPPRESSOR_TAGS: frozenset[str] = frozenset(
     {
@@ -618,6 +640,43 @@ def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition
         )
 
     return _named(_condition, f"in_location_class({location_class}@{slot.value})")
+
+
+def has_location_class_destination(
+    *location_classes: str,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether the actor can target another place by semantic class."""
+
+    classes = tuple(dict.fromkeys(str(item) for item in location_classes if str(item)))
+    if not classes:
+        raise ValueError("has_location_class_destination requires at least one class")
+    class_set = frozenset(classes)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None or _is_in_transit(state, entity_id):
+            return False
+        current_place_id = state.locations.get(entity_id)
+        if current_place_id is None:
+            return False
+        for place_id, semantic_classes in state.location_classes.items():
+            if place_id == current_place_id:
+                continue
+            if class_set & semantic_classes:
+                return True
+        for place_id, location_class in state.location_class.items():
+            if place_id == current_place_id:
+                continue
+            if location_class in class_set:
+                return True
+        return False
+
+    class_names = ",".join(classes)
+    return _named(
+        _condition,
+        f"has_location_class_destination({class_names}@{slot.value})",
+    )
 
 
 def in_location(location_id: int, slot: Slot = Slot.ACTOR) -> Condition:
@@ -1379,26 +1438,32 @@ class Template:
 
     id: str
     priority: int
+    drive_band: DriveBand
     blurb: str
     required_slots: Tuple[Slot, ...]
     package_gate: Condition
     branches: Tuple[Branch, ...]
     present_target_policy: PresentTargetPolicy = PresentTargetPolicy.OFFSCREEN_ONLY
+    priority_override_rationale: Optional[str] = None
+    drive_band_priority_exempt: bool = False
 
     def __post_init__(self) -> None:
         """Validate authoring invariants that affect resolver routing."""
 
-        if self.present_target_policy is not PresentTargetPolicy.STORYTELLER_PRESSURE:
-            return
+        if isinstance(self.drive_band, str):
+            object.__setattr__(self, "drive_band", DriveBand(self.drive_band))
 
-        missing = [
-            branch.label for branch in self.branches if not branch.scene_pressure_stub
-        ]
-        if missing:
-            raise ValueError(
-                f"Template {self.id!r}: STORYTELLER_PRESSURE branches must set "
-                f"scene_pressure_stub; missing on: {missing}"
-            )
+        if self.present_target_policy is PresentTargetPolicy.STORYTELLER_PRESSURE:
+            missing = [
+                branch.label
+                for branch in self.branches
+                if not branch.scene_pressure_stub
+            ]
+            if missing:
+                raise ValueError(
+                    f"Template {self.id!r}: STORYTELLER_PRESSURE branches must set "
+                    f"scene_pressure_stub; missing on: {missing}"
+                )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1498,3 +1563,40 @@ def validate_always_fallbacks(templates: Iterable[Template]) -> None:
             "Orrery templates missing terminal ALWAYS branch: "
             + ", ".join(sorted(missing))
         )
+
+
+def drive_band_priority_warnings(templates: Iterable[Template]) -> Tuple[str, ...]:
+    """Return package priority inversions without explicit rationale.
+
+    A warning means a lower-urgency drive band outranks a higher-urgency band
+    and the outranking template does not explain why. This is deliberately an
+    authoring check, not a runtime resolver rule: Skald-facing story obligations
+    can outrank routine needs, but the catalog should say so.
+    """
+
+    ordered = tuple(templates)
+    warnings: list[str] = []
+    for template in ordered:
+        if template.drive_band_priority_exempt:
+            continue
+        template_rank = DRIVE_BAND_ORDER[template.drive_band]
+        if template.priority_override_rationale:
+            continue
+        contradicted = [
+            other
+            for other in ordered
+            if not other.drive_band_priority_exempt
+            and other.priority < template.priority
+            and DRIVE_BAND_ORDER[other.drive_band] < template_rank
+        ]
+        if contradicted:
+            strongest = min(
+                contradicted, key=lambda item: DRIVE_BAND_ORDER[item.drive_band]
+            )
+            warnings.append(
+                f"{template.id} ({template.drive_band.value}, priority "
+                f"{template.priority}) outranks {strongest.id} "
+                f"({strongest.drive_band.value}, priority {strongest.priority}) "
+                "without priority_override_rationale"
+            )
+    return tuple(sorted(warnings))

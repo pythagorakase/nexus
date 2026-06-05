@@ -11,6 +11,7 @@ from nexus.agents.orrery.substrate import (
     ALWAYS,
     Branch,
     CompoundCondition,
+    DriveBand,
     PresentTargetPolicy,
     RoutineAnchor,
     Slot,
@@ -31,6 +32,7 @@ from nexus.agents.orrery.substrate import (
     has_contact_of_kind,
     has_established_partner_co_located,
     has_inbound_pair_tag,
+    has_location_class_destination,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag,
@@ -107,6 +109,7 @@ def test_missing_always_fallback_is_rejected() -> None:
     template = Template(
         id="bad_template",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="No terminal fallback.",
         required_slots=(Slot.ACTOR,),
         package_gate=ALWAYS,
@@ -130,6 +133,7 @@ def test_storyteller_pressure_templates_require_pressure_stubs() -> None:
         Template(
             id="bad_pressure_template",
             priority=1,
+            drive_band=DriveBand.PROJECT_IDENTITY,
             blurb="Missing prompt-only pressure text.",
             required_slots=(Slot.ACTOR, Slot.TARGET),
             package_gate=ALWAYS,
@@ -678,6 +682,40 @@ def test_location_class_condition_preserves_single_value_fallback() -> None:
     assert in_location_class("the_roots")(state, {Slot.ACTOR: 1})
 
 
+def test_location_class_destination_condition_finds_other_places() -> None:
+    """Movement packages can ask whether a class-resolved destination exists."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_classes={
+            10: frozenset({"dwelling"}),
+            20: frozenset({"meeting", "commerce"}),
+        },
+    )
+    current_only = WorldState(
+        locations={1: 10},
+        location_classes={10: frozenset({"meeting"})},
+    )
+
+    assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+    assert has_location_class_destination("commerce")(state, {Slot.ACTOR: 1})
+    assert not has_location_class_destination("meeting")(current_only, {Slot.ACTOR: 1})
+
+
+def test_location_class_destination_condition_supports_legacy_single_class() -> None:
+    """The destination check also covers the pre-multi-class location mapping."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_class={
+            10: "dwelling",
+            20: "meeting",
+        },
+    )
+
+    assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+
+
 def test_need_debt_condition_rejects_unknown_need_type() -> None:
     """Typos in authored need predicates fail at construction time."""
 
@@ -816,6 +854,7 @@ def test_evaluate_stack_returns_none_when_no_template_passes() -> None:
     template = Template(
         id="never",
         priority=1,
+        drive_band=DriveBand.PROJECT_IDENTITY,
         blurb="Never fires.",
         required_slots=(Slot.ACTOR,),
         package_gate=lambda _state, _bindings: False,

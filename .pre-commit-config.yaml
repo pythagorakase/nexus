@@ -14,10 +14,10 @@ repos:
         entry: poetry run python -m nexus.agents.orrery.catalog --write
         language: system
         pass_filenames: false
-        files: ^nexus/agents/orrery/(templates|substrate|catalog)\.py$
+        always_run: true
         description: >
-          When templates.py, substrate.py, or catalog.py changes, regenerate
-          docs/orrery_packages.md so the human-readable catalog stays in
-          lockstep with the canonical Python source. If the doc changes,
-          pre-commit aborts the commit; re-stage the regenerated file and
-          commit again.
+          Always regenerate docs/orrery_packages.md because the catalog's
+          dependency surface includes migrations and adjacent Orrery vocabulary
+          files, not only templates.py/substrate.py/catalog.py. If the doc
+          changes, pre-commit aborts the commit; re-stage the regenerated file
+          and commit again.

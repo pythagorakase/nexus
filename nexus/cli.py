@@ -8,6 +8,7 @@ Commands:
     nexus regenerate --slot N   Regenerate the last storyteller turn
     nexus model --slot N        Get or set the model for a slot
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
+    nexus retrograde-packet --slot N  Build dry-run Retrograde seed packet
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -225,6 +226,41 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
     if payload.get("failed_policy"):
         print()
         print("Policy: failed because --fail-on-remainders was set.")
+
+
+def _print_retrograde_packet(payload: Dict[str, Any]) -> None:
+    """Print a Retrograde dry-run packet summary."""
+
+    packet = payload.get("retrograde_packet") or {}
+    weird = packet.get("weird") or {}
+    summary = packet.get("vocabulary_summary") or {}
+    scaffolds = packet.get("candidate_scaffolds") or {}
+
+    print("Packet:")
+    print(f"  schema_version: {packet.get('schema_version')}")
+    print(f"  dry_run: {packet.get('dry_run')}")
+    print(f"  mutation_policy: {packet.get('mutation_policy', {}).get('writes')}")
+    print()
+    print("Weird:")
+    print(f"  level: {weird.get('level')}")
+    print(f"  genre: {weird.get('genre')}")
+    print(f"  source: {weird.get('source')}")
+    if weird.get("raw") is not None:
+        print(f"  raw: {weird.get('raw')}")
+    else:
+        print(f"  raw_band: {weird.get('raw_min')}..{weird.get('raw_max')}")
+    print()
+    print("Vocabulary counts:")
+    for key in sorted(summary):
+        print(f"  {key}: {summary[key]}")
+    print()
+    print("Scaffold counts:")
+    print(f"  core_entities: {len(scaffolds.get('core_entities') or [])}")
+    print(f"  named_seed_npcs: {len(scaffolds.get('named_seed_npcs') or [])}")
+    print(f"  pressure_axes: {len(scaffolds.get('pressure_axes') or [])}")
+    if payload.get("packet_output"):
+        print()
+        print(f"Output: {payload['packet_output']}")
 
 
 def _print_faction_audit(payload: Dict[str, Any]) -> None:
@@ -583,6 +619,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("trait_audit"):
         _print_trait_audit(payload)
+        print()
+
+    if payload.get("retrograde_packet"):
+        _print_retrograde_packet(payload)
         print()
 
     if payload.get("faction_audit"):
@@ -1340,6 +1380,56 @@ def run_trait_audit(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_retrograde_packet(args: argparse.Namespace) -> Dict[str, Any]:
+    """Build a non-mutating Retrograde dry-run packet from wizard cache."""
+
+    from nexus.agents.orrery.retrograde_packet import build_retrograde_dry_run_packet
+    from nexus.agents.orrery.retrograde_vocabulary import (
+        enumerate_seed_eligible_vocabulary,
+    )
+    from nexus.api.new_story_cache import read_cache
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.config import load_settings
+
+    dbname = slot_dbname(args.slot)
+    cache = read_cache(dbname)
+    if cache is None:
+        return {
+            "success": False,
+            "error": f"Slot {args.slot} has no new-story wizard cache.",
+        }
+
+    try:
+        packet = build_retrograde_dry_run_packet(
+            slot=args.slot,
+            dbname=dbname,
+            cache=cache,
+            vocabulary=enumerate_seed_eligible_vocabulary(dbname=dbname),
+            settings=load_settings(),
+            weird_level=args.weird,
+            weird_raw=args.weird_raw,
+        )
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    output_path = args.output
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(packet, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    return {
+        "success": True,
+        "message": f"Retrograde dry-run packet for slot {args.slot}.",
+        "slot": args.slot,
+        "dbname": dbname,
+        "retrograde_packet": packet,
+        "packet_output": str(output_path) if output_path is not None else None,
+    }
+
+
 def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run the legacy faction table to Orrery substrate migration."""
 
@@ -1911,6 +2001,7 @@ Examples:
   nexus lock --slot 1           Lock slot to prevent modifications
   nexus unlock --slot 2         Unlock slot to allow modifications
   nexus trait-audit --slot 5    Dry-run trait compiler audit
+  nexus retrograde-packet --slot 5 --output packet.json
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -2044,6 +2135,33 @@ Examples:
             "Exit with status 1 if any trait falls back to prose-only storage; "
             "JSON callers should check the exit code or failed_policy"
         ),
+    )
+
+    # retrograde-packet command
+    retrograde_packet_parser = subparsers.add_parser(
+        "retrograde-packet",
+        help="Build a non-mutating Retrograde seed review packet",
+    )
+    retrograde_packet_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    retrograde_packet_parser.add_argument(
+        "--weird",
+        choices=("low", "medium", "high"),
+        help="Player-facing Retrograde weirdness level for this packet.",
+    )
+    retrograde_packet_parser.add_argument(
+        "--weird-raw",
+        type=float,
+        help=(
+            "Developer calibration override for raw weirdness. This does not "
+            "write to wizard state."
+        ),
+    )
+    retrograde_packet_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the raw Retrograde dry-run packet JSON.",
     )
 
     # faction-audit command
@@ -2262,6 +2380,7 @@ def main() -> int:
         "regenerate",
         "clear",
         "trait-audit",
+        "retrograde-packet",
         "faction-audit",
         "faction-manifest",
         "faction-apply",
@@ -2300,6 +2419,8 @@ def main() -> int:
         result = run_clear(args)
     elif args.command == "trait-audit":
         result = run_trait_audit(args)
+    elif args.command == "retrograde-packet":
+        result = run_retrograde_packet(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":
