@@ -665,7 +665,10 @@ def has_location_class_destination(
                 continue
             if class_set & semantic_classes:
                 return True
-            if state.location_class.get(place_id) in class_set:
+        for place_id, location_class in state.location_class.items():
+            if place_id == current_place_id:
+                continue
+            if location_class in class_set:
                 return True
         return False
 

@@ -702,6 +702,20 @@ def test_location_class_destination_condition_finds_other_places() -> None:
     assert not has_location_class_destination("meeting")(current_only, {Slot.ACTOR: 1})
 
 
+def test_location_class_destination_condition_supports_legacy_single_class() -> None:
+    """The destination check also covers the pre-multi-class location mapping."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_class={
+            10: "dwelling",
+            20: "meeting",
+        },
+    )
+
+    assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+
+
 def test_need_debt_condition_rejects_unknown_need_type() -> None:
     """Typos in authored need predicates fail at construction time."""
 

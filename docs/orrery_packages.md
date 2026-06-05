@@ -1491,7 +1491,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has `socialize` debt ≥ 24
   - ≥ 4 ticks since last `socialized` event for actor
   - ≥ 4 ticks since last `socialized_alone` event for actor
-  - ≥ 4 ticks since last `travel_departed` event for actor
+  - ≥ 4 ticks since last `social_travel_departed` event for actor
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grieving` ephemeral
   - **NOT:** actor has `wounded` ephemeral
@@ -1513,7 +1513,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking company after isolation"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
-**Event:** `travel_departed`
+**Event:** `social_travel_departed`
 
 > {actor} feels the particular pressure that comes from going too long without other people in their life, and moves toward somewhere there will be voices, even if those voices are not for them.
 
@@ -1542,7 +1542,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking public company"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
-**Event:** `travel_departed`
+**Event:** `social_travel_departed`
 
 > {actor} chooses movement over more empty time and sets out toward a place where other people can be encountered without requiring the story to pre-name them.
 
@@ -1978,6 +1978,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/055_orrery_character_tag_vocab.py`
 - `migrations/056_orrery_routine_anchors.py`
 - `migrations/057_orrery_need_bodyform_applicability.py`
+- `migrations/059_orrery_social_travel_event.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 
@@ -2133,6 +2134,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `rival_consulted`
 - `signal_exposure_reduced`
 - `slept`
+- `social_travel_departed`
 - `socialized`
 - `socialized_alone`
 - `surveillance_performed`

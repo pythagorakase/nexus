@@ -1361,10 +1361,12 @@ def _destination_place_classes(payload: Mapping[str, Any]) -> tuple[str, ...]:
         return ()
     if isinstance(raw, str):
         values = (raw,)
-    elif isinstance(raw, Iterable):
+    elif isinstance(raw, (list, tuple)):
         values = tuple(raw)
     else:
-        raise ValueError("destination place classes must be a string or iterable")
+        raise ValueError(
+            "destination place classes must be a string, list, or tuple"
+        )
     classes = tuple(dict.fromkeys(str(item) for item in values if str(item)))
     if not classes:
         raise ValueError("destination place classes cannot be empty")
@@ -2610,6 +2612,8 @@ def _location_class_destination_sync(
          AND etc.tag = ANY(%s)
         WHERE p.id <> %s
           AND (p.type::text = ANY(%s) OR etc.tag IS NOT NULL)
+        -- Collapse multiple matching tags per place before preferring same-zone
+        -- destinations.
         GROUP BY p.id, p.zone, origin.zone
         ORDER BY CASE
                    WHEN origin.zone IS NOT NULL AND p.zone = origin.zone THEN 0
@@ -2735,6 +2739,8 @@ async def _location_class_destination_async(
          AND etc.tag = ANY($3::text[])
         WHERE p.id <> $1
           AND (p.type::text = ANY($3::text[]) OR etc.tag IS NOT NULL)
+        -- Collapse multiple matching tags per place before preferring same-zone
+        -- destinations.
         GROUP BY p.id, p.zone, origin.zone
         ORDER BY CASE
                    WHEN origin.zone IS NOT NULL AND p.zone = origin.zone THEN 0

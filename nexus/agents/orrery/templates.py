@@ -2923,7 +2923,7 @@ SOCIALIZE = Template(
         has_need_debt_at_or_above("socialize", 24),
         since_last_event_at_least("socialized", minimum_ticks=4),
         since_last_event_at_least("socialized_alone", minimum_ticks=4),
-        since_last_event_at_least("travel_departed", minimum_ticks=4),
+        since_last_event_at_least("social_travel_departed", minimum_ticks=4),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grieving")),
         NOT(has_ephemeral("wounded")),
@@ -2959,7 +2959,7 @@ SOCIALIZE = Template(
                     "initial_progress": 0.05,
                 },
             },
-            event_type="travel_departed",
+            event_type="social_travel_departed",
             changed_fields=(
                 "character.current_activity",
                 "character_travel_states.status",
@@ -3019,7 +3019,7 @@ SOCIALIZE = Template(
                     "initial_progress": 0.05,
                 },
             },
-            event_type="travel_departed",
+            event_type="social_travel_departed",
             changed_fields=(
                 "character.current_activity",
                 "character_travel_states.status",

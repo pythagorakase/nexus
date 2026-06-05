@@ -460,7 +460,9 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             if isinstance(value, Mapping):
                 destination_classes = value.get(
                     "destination_place_classes"
-                ) or value.get("destination_place_class")
+                ) or value.get("destination_place_class") or value.get(
+                    "destination_class"
+                )
                 if destination_classes:
                     if isinstance(destination_classes, str):
                         destination = f"`{destination_classes}`"

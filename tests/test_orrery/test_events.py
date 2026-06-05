@@ -508,6 +508,15 @@ def _travel_insert_row(cursor: RecordingCursor) -> dict[str, Any]:
     }
 
 
+def test_destination_place_classes_rejects_mapping_payloads() -> None:
+    """Class selectors fail fast instead of accepting dict keys accidentally."""
+
+    with pytest.raises(ValueError, match="string, list, or tuple"):
+        orrery_events._destination_place_classes(
+            {"destination_place_classes": {"commerce": True}}
+        )
+
+
 def test_proposal_round_trips_through_json_shape() -> None:
     """Commit can hydrate the exact proposal shape stored in incubator JSONB."""
 
