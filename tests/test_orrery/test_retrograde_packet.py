@@ -107,6 +107,25 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
     assert (
         "mechanical_hints" in seed_request["candidate_output_schema"]["required_fields"]
     )
+    sections = seed_request["prompt_sections"]
+    assert all(isinstance(section["items"], list) for section in sections)
+    trait_section = next(
+        section for section in sections if section["heading"] == "Trait hooks"
+    )
+    assert trait_section["items"] == [
+        {"kind": "trait", "name": "resources", "rationale": "Money opens doors."},
+        {
+            "kind": "trait",
+            "name": "status",
+            "rationale": "The badge matters narrowly.",
+        },
+        {
+            "kind": "wildcard",
+            "name": "Storm Marked",
+            "description": "Weather notices her.",
+            "orrery_tags": None,
+        },
+    ]
     assert {function["id"] for function in seed_request["coverage_functions"]} == {
         "foundational_wound",
         "current_power_arrangement",

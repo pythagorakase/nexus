@@ -166,13 +166,13 @@ def _collect_registry_vocabulary(dbname: str | None) -> _RegistryVocabulary:
     tags_by_category: dict[str, set[str]] = {}
     tags_by_entity_kind: dict[str, set[str]] = {}
     tags_by_seed_policy: dict[str, set[str]] = {}
-    category_entity_kinds: dict[tuple[str, str], None] = {}
+    category_entity_kinds: set[tuple[str, str]] = set()
     for entry in entries:
         _add_registry_entry(tags_by_category, entry.category, entry.tag)
         _add_registry_entry(tags_by_entity_kind, entry.entity_kind, entry.tag)
-        seed_policy = category_seed_policy(entry.category)
+        seed_policy = category_seed_policy(entry.category, entry.entity_kind)
         _add_registry_entry(tags_by_seed_policy, seed_policy["policy"], entry.tag)
-        category_entity_kinds[(entry.category, entry.entity_kind)] = None
+        category_entity_kinds.add((entry.category, entry.entity_kind))
     registered_tags = {entry.tag for entry in entries}
     registered_categories = {entry.category for entry in entries}
 
@@ -182,10 +182,7 @@ def _collect_registry_vocabulary(dbname: str | None) -> _RegistryVocabulary:
         "registered_tags_by_category": _sort_registry_mapping(tags_by_category),
         "registered_tags_by_entity_kind": _sort_registry_mapping(tags_by_entity_kind),
         "registered_category_seed_policies": [
-            {
-                **category_seed_policy(category),
-                "entity_kind": entity_kind,
-            }
+            category_seed_policy(category, entity_kind)
             for category, entity_kind in sorted(category_entity_kinds)
         ],
         "registered_tags_by_seed_policy": _sort_registry_mapping(tags_by_seed_policy),
@@ -211,14 +208,15 @@ def _sort_registry_mapping(values: dict[str, set[str]]) -> dict[str, list[str]]:
     }
 
 
-def category_seed_policy(category: str) -> CategorySeedPolicy:
+def category_seed_policy(category: str, entity_kind: str) -> CategorySeedPolicy:
     """Return the Retrograde generation policy for one registered category."""
 
     normalized = str(category)
+    normalized_kind = str(entity_kind)
     if normalized in STABLE_SEED_TAG_CATEGORIES:
         return {
             "category": normalized,
-            "entity_kind": "",
+            "entity_kind": normalized_kind,
             "policy": "stable_seed",
             "reason": (
                 "Stable identity, role, faction, or place affordance tags may "
@@ -228,7 +226,7 @@ def category_seed_policy(category: str) -> CategorySeedPolicy:
     if normalized in EVENT_ANCHORED_TAG_CATEGORIES:
         return {
             "category": normalized,
-            "entity_kind": "",
+            "entity_kind": normalized_kind,
             "policy": "event_anchored",
             "reason": (
                 "Current pressure tags in this category require an explicit "
@@ -237,7 +235,7 @@ def category_seed_policy(category: str) -> CategorySeedPolicy:
         }
     return {
         "category": normalized,
-        "entity_kind": "",
+        "entity_kind": normalized_kind,
         "policy": "prompt_visible_only",
         "reason": (
             "Category is prompt-visible but not yet approved for mechanical "

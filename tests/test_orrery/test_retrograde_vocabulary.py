@@ -7,6 +7,7 @@ import pytest
 from nexus.agents.orrery import retrograde_vocabulary
 from nexus.agents.orrery.tag_library import TagLibraryEntry
 from nexus.agents.orrery.retrograde_vocabulary import (
+    category_seed_policy,
     enumerate_seed_eligible_vocabulary,
 )
 
@@ -140,6 +141,20 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
     assert vocabulary["registered_tags_by_seed_policy"]["prompt_visible_only"] == [
         "untested_signal"
     ]
+
+
+def test_category_seed_policy_returns_complete_struct() -> None:
+    """Direct callers get a complete category/entity policy, not a stub."""
+
+    assert category_seed_policy("role.function", "character") == {
+        "category": "role.function",
+        "entity_kind": "character",
+        "policy": "stable_seed",
+        "reason": (
+            "Stable identity, role, faction, or place affordance tags may "
+            "be proposed as present-state seed outcomes."
+        ),
+    }
 
 
 def test_seed_eligible_pair_tags_are_sorted() -> None:

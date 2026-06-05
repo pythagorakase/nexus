@@ -130,6 +130,8 @@ def build_seed_generation_request(
 
     level = str(weird.get("level") or "medium")
     budget = dict(SEED_BUDGETS.get(level, SEED_BUDGETS["medium"]))
+    # This is a coarse review hint, not an extra tuning knob; the explicit
+    # generate/select counts carry the meaningful level-specific budget.
     budget["overgenerate_multiplier"] = max(
         1,
         round(budget["generate_candidates"] / budget["select_target"]),
@@ -334,7 +336,7 @@ def _seed_prompt_sections(
         },
         {
             "heading": "Trait hooks",
-            "items": candidate_scaffolds.get("trait_hooks") or {},
+            "items": _trait_prompt_items(candidate_scaffolds.get("trait_hooks")),
         },
     ]
 
@@ -505,6 +507,22 @@ def _present_items(value: Any) -> list[Any]:
     if not isinstance(value, list):
         return []
     return [item for item in value if item]
+
+
+def _trait_prompt_items(value: Any) -> list[dict[str, Any]]:
+    hooks = _mapping(value)
+    selected_traits = hooks.get("selected_traits") or []
+    rationales = _mapping(hooks.get("rationales"))
+    wildcard = _mapping(hooks.get("wildcard"))
+
+    items: list[dict[str, Any]] = [
+        {"kind": "trait", "name": trait, "rationale": rationales.get(str(trait))}
+        for trait in selected_traits
+        if trait
+    ]
+    if wildcard:
+        items.append({"kind": "wildcard", **dict(wildcard)})
+    return items
 
 
 def _axis(kind: str, text: Any) -> dict[str, Any]:
