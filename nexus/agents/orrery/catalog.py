@@ -177,6 +177,13 @@ _register(
     lambda m: f"{_slot(m.group('slot'))} is in `{m.group('lc')}` place class",
 )
 _register(
+    r"has_location_class_destination\((?P<lc>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} can resolve a destination with place class "
+        f"`{m.group('lc')}`"
+    ),
+)
+_register(
     r"in_location\((?P<lid>\d+)@(?P<slot>\w+)\)",
     lambda m: f"{_slot(m.group('slot'))} is at location id `{m.group('lid')}`",
 )
@@ -450,7 +457,22 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
                 parts.append(f"fulfills `{value}` need")
             continue
         if key == "travel.start":
-            parts.append("starts planned travel")
+            if isinstance(value, Mapping):
+                destination_classes = value.get(
+                    "destination_place_classes"
+                ) or value.get("destination_place_class")
+                if destination_classes:
+                    if isinstance(destination_classes, str):
+                        destination = f"`{destination_classes}`"
+                    else:
+                        destination = ", ".join(
+                            f"`{item}`" for item in destination_classes
+                        )
+                    parts.append(f"starts travel toward a {destination} destination")
+                else:
+                    parts.append("starts planned travel")
+            else:
+                parts.append("starts planned travel")
             continue
         if key == "travel.advance":
             progress = (
@@ -585,6 +607,7 @@ _VOCAB_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("event_type", re.compile(r"recent_event\(([^,*()]+),")),
     ("event_type", re.compile(r"since_last_event_at_least\(([^,()]+),")),
     ("place_class", re.compile(r"in_location_class\(([^@()]+)@")),
+    ("place_class_list", re.compile(r"has_location_class_destination\(([^@()]+)@")),
     ("relationship", re.compile(r"has_relationship_of_type\(([^,()]+),")),
     (
         "relationship",
@@ -647,6 +670,9 @@ def _collect_vocabulary(
                 events.add(captured)
             elif kind == "place_class":
                 place_classes.add(captured)
+            elif kind == "place_class_list":
+                for tag in captured.split(","):
+                    place_classes.add(tag.strip())
             elif kind == "relationship":
                 relationships.add(captured)
             # First-match-wins: prevents future overlapping patterns from

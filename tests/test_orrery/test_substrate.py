@@ -32,6 +32,7 @@ from nexus.agents.orrery.substrate import (
     has_contact_of_kind,
     has_established_partner_co_located,
     has_inbound_pair_tag,
+    has_location_class_destination,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag,
@@ -679,6 +680,26 @@ def test_location_class_condition_preserves_single_value_fallback() -> None:
     state = WorldState(locations={1: 10}, location_class={10: "the_roots"})
 
     assert in_location_class("the_roots")(state, {Slot.ACTOR: 1})
+
+
+def test_location_class_destination_condition_finds_other_places() -> None:
+    """Movement packages can ask whether a class-resolved destination exists."""
+
+    state = WorldState(
+        locations={1: 10},
+        location_classes={
+            10: frozenset({"dwelling"}),
+            20: frozenset({"meeting", "commerce"}),
+        },
+    )
+    current_only = WorldState(
+        locations={1: 10},
+        location_classes={10: frozenset({"meeting"})},
+    )
+
+    assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+    assert has_location_class_destination("commerce")(state, {Slot.ACTOR: 1})
+    assert not has_location_class_destination("meeting")(current_only, {Slot.ACTOR: 1})
 
 
 def test_need_debt_condition_rejects_unknown_need_type() -> None:

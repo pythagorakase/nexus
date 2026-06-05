@@ -1491,16 +1491,29 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - actor has `socialize` debt ≥ 24
   - ≥ 4 ticks since last `socialized` event for actor
   - ≥ 4 ticks since last `socialized_alone` event for actor
+  - ≥ 4 ticks since last `travel_departed` event for actor
   - **NOT:** actor has inbound `hunting` pair tag
   - **NOT:** actor has `grieving` ephemeral
   - **NOT:** actor has `wounded` ephemeral
 
 ### Branch 1 — Seek company after extended isolation  *(mag 0.54)*
 
-**When:** actor has `socialize` debt ≥ 168
+**When:**
 
-**Does:** activity → "seeking company after isolation"; fulfills `socialize` need, quality `sought_company_after_isolation`, discharge 9999
-**Event:** `socialized`
+- **AND:**
+  - actor has `socialize` debt ≥ 168
+  - **NOT:** 1+ other entities co-located with actor
+  - **NOT:**
+    - **OR:**
+      - actor is in `commerce` place class
+      - actor is in `entertainment` place class
+      - actor is in `meeting` place class
+      - actor is in `place_open` place class
+  - actor can plausibly move through public flow
+  - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
+
+**Does:** activity → "seeking company after isolation"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
+**Event:** `travel_departed`
 
 > {actor} feels the particular pressure that comes from going too long without other people in their life, and moves toward somewhere there will be voices, even if those voices are not for them.
 
@@ -1513,7 +1526,27 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} spends real attention on the people around them — not transactional attention, the other kind — for long enough that the social need is briefly met without anyone naming it as such.
 
-### Branch 3 — Go where people are  *(mag 0.2)*
+### Branch 3 — Set out toward public company  *(mag 0.26)*
+
+**When:**
+
+- **AND:**
+  - **NOT:** 1+ other entities co-located with actor
+  - **NOT:**
+    - **OR:**
+      - actor is in `commerce` place class
+      - actor is in `entertainment` place class
+      - actor is in `meeting` place class
+      - actor is in `place_open` place class
+  - actor can plausibly move through public flow
+  - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
+
+**Does:** activity → "seeking public company"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
+**Event:** `travel_departed`
+
+> {actor} chooses movement over more empty time and sets out toward a place where other people can be encountered without requiring the story to pre-name them.
+
+### Branch 4 — Go where people are  *(mag 0.2)*
 
 **When:**
 
@@ -1528,7 +1561,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} goes to one of the places built around the fact that people gather there, and stays long enough to become part of the room's ordinary texture.
 
-### Branch 4 — Reach out to a contact for no urgent reason  *(mag 0.24)*
+### Branch 5 — Reach out to a contact for no urgent reason  *(mag 0.24)*
 
 **When:** actor has outbound `contact:social` pair tag
 
@@ -1537,7 +1570,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} thinks of someone they have not spoken with in too long and reaches out for no urgent reason, which is its own kind of reason.
 
-### Branch 5 — Practice parasocial company  *(mag 0.16)*
+### Branch 6 — Practice parasocial company  *(mag 0.16)*
 
 **When:** *(always)*
 

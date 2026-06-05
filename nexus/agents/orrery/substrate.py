@@ -642,6 +642,40 @@ def in_location_class(location_class: str, slot: Slot = Slot.ACTOR) -> Condition
     return _named(_condition, f"in_location_class({location_class}@{slot.value})")
 
 
+def has_location_class_destination(
+    *location_classes: str,
+    slot: Slot = Slot.ACTOR,
+) -> Condition:
+    """Return whether the actor can target another place by semantic class."""
+
+    classes = tuple(dict.fromkeys(str(item) for item in location_classes if str(item)))
+    if not classes:
+        raise ValueError("has_location_class_destination requires at least one class")
+    class_set = frozenset(classes)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None or _is_in_transit(state, entity_id):
+            return False
+        current_place_id = state.locations.get(entity_id)
+        if current_place_id is None:
+            return False
+        for place_id, semantic_classes in state.location_classes.items():
+            if place_id == current_place_id:
+                continue
+            if class_set & semantic_classes:
+                return True
+            if state.location_class.get(place_id) in class_set:
+                return True
+        return False
+
+    class_names = ",".join(classes)
+    return _named(
+        _condition,
+        f"has_location_class_destination({class_names}@{slot.value})",
+    )
+
+
 def in_location(location_id: int, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether an entity is currently at a specific place id."""
 

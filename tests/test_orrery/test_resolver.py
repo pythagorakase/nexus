@@ -691,10 +691,15 @@ def test_resolve_dry_run_keeps_socialize_for_virtual_characters() -> None:
 
 
 def test_resolve_dry_run_fires_socialize_need_template() -> None:
-    """Interpersonal need debt can resolve through SOCIALIZE."""
+    """Extreme social debt can start movement toward real company."""
 
     proposal = resolve_dry_run(
         FakeSession(
+            tag_rows=[{"entity_id": 1, "tag": "route_familiar", "is_ephemeral": False}],
+            location_class_rows=[
+                {"id": 10, "location_class": "dwelling", "is_primary": True},
+                {"id": 20, "location_class": "meeting", "is_primary": True},
+            ],
             need_debt_rows=[
                 {
                     "character_entity_id": 1,
@@ -716,6 +721,40 @@ def test_resolve_dry_run_fires_socialize_need_template() -> None:
     assert proposal.resolutions[0].branch_label == (
         "Seek company after extended isolation"
     )
+    assert "need.fulfill" not in proposal.resolutions[0].state_delta
+    assert proposal.resolutions[0].state_delta["travel.start"][
+        "destination_place_classes"
+    ] == ["commerce", "entertainment", "meeting", "place_open"]
+
+
+def test_resolve_dry_run_socialize_uses_present_company_before_movement() -> None:
+    """Co-located NPCs can satisfy social pressure without going elsewhere."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            location_rows=[
+                {"entity_id": 1, "current_location": 10},
+                {"entity_id": 2, "current_location": 10},
+            ],
+            need_debt_rows=[
+                {
+                    "character_entity_id": 1,
+                    "need_type": "socialize",
+                    "debt_score": 200,
+                    "last_evaluated_at": datetime(
+                        2073, 10, 31, 12, tzinfo=timezone.utc
+                    ),
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "socialize"
+    assert proposal.resolutions[0].branch_label == "Engage with company already present"
     assert proposal.resolutions[0].state_delta["need.fulfill"]["type"] == "socialize"
 
 

@@ -24,6 +24,7 @@ from nexus.agents.orrery.substrate import (
     has_ephemeral,
     has_established_partner_co_located,
     has_inbound_pair_tag,
+    has_location_class_destination,
     has_minimal_context,
     has_need_debt_at_or_above,
     has_pair_tag_to_current_location,
@@ -2922,6 +2923,7 @@ SOCIALIZE = Template(
         has_need_debt_at_or_above("socialize", 24),
         since_last_event_at_least("socialized", minimum_ticks=4),
         since_last_event_at_least("socialized_alone", minimum_ticks=4),
+        since_last_event_at_least("travel_departed", minimum_ticks=4),
         NOT(has_inbound_pair_tag("hunting")),
         NOT(has_ephemeral("grieving")),
         NOT(has_ephemeral("wounded")),
@@ -2929,7 +2931,15 @@ SOCIALIZE = Template(
     branches=(
         Branch(
             label="Seek company after extended isolation",
-            conditions=has_need_debt_at_or_above("socialize", 168),
+            conditions=AND(
+                has_need_debt_at_or_above("socialize", 168),
+                NOT(count_co_located(1)),
+                NOT(SOCIAL_VENUE_PLACE),
+                can_move_publicly(),
+                has_location_class_destination(
+                    "commerce", "entertainment", "meeting", "place_open"
+                ),
+            ),
             narrative_stub=(
                 "{actor} feels the particular pressure that comes from going "
                 "too long without other people in their life, and moves "
@@ -2938,16 +2948,22 @@ SOCIALIZE = Template(
             ),
             state_delta={
                 "character.current_activity": "seeking company after isolation",
-                "need.fulfill": {
-                    "type": "socialize",
-                    "quality": "sought_company_after_isolation",
-                    "discharge_debt": 9999,
+                "travel.start": {
+                    "destination_place_classes": [
+                        "commerce",
+                        "entertainment",
+                        "meeting",
+                        "place_open",
+                    ],
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
                 },
             },
-            event_type="socialized",
+            event_type="travel_departed",
             changed_fields=(
                 "character.current_activity",
-                "character_need_states.debt_score",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
             ),
             magnitude=0.54,
         ),
@@ -2974,6 +2990,42 @@ SOCIALIZE = Template(
                 "character_need_states.debt_score",
             ),
             magnitude=0.22,
+        ),
+        Branch(
+            label="Set out toward public company",
+            conditions=AND(
+                NOT(count_co_located(1)),
+                NOT(SOCIAL_VENUE_PLACE),
+                can_move_publicly(),
+                has_location_class_destination(
+                    "commerce", "entertainment", "meeting", "place_open"
+                ),
+            ),
+            narrative_stub=(
+                "{actor} chooses movement over more empty time and sets out "
+                "toward a place where other people can be encountered without "
+                "requiring the story to pre-name them."
+            ),
+            state_delta={
+                "character.current_activity": "seeking public company",
+                "travel.start": {
+                    "destination_place_classes": [
+                        "commerce",
+                        "entertainment",
+                        "meeting",
+                        "place_open",
+                    ],
+                    "mode": "mixed",
+                    "initial_progress": 0.05,
+                },
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.26,
         ),
         Branch(
             label="Go where people are",
