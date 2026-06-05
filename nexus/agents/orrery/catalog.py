@@ -61,6 +61,15 @@ def _slot(value: str) -> str:
     return value.lower()
 
 
+def _render_travel_purpose_predicate(match: re.Match) -> str:
+    """Render travel_purpose_is(...) with singular/plural purpose wording."""
+
+    purposes = [item for item in match.group("purpose").split(",") if item]
+    rendered = ", ".join(f"`{purpose}`" for purpose in purposes)
+    noun = "purpose" if len(purposes) == 1 else "purposes"
+    return f"{_slot(match.group('slot'))} is traveling for {rendered} {noun}"
+
+
 # Tag predicates
 _register(
     r"has_tag\((?P<tag>[^@()]+)@(?P<slot>\w+)\)",
@@ -216,9 +225,7 @@ _register(
 )
 _register(
     r"travel_purpose_is\((?P<purpose>[^@()]+)@(?P<slot>\w+)\)",
-    lambda m: (
-        f"{_slot(m.group('slot'))} is traveling for " f"`{m.group('purpose')}` purpose"
-    ),
+    _render_travel_purpose_predicate,
 )
 _register(
     r"has_routine_anchor\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",

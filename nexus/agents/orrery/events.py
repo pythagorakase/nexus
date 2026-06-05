@@ -31,6 +31,7 @@ from nexus.agents.orrery.routing import (
     RouteGraphEdge,
     shortest_route,
 )
+from nexus.agents.orrery.substrate import SUPPORTED_TRAVEL_PURPOSES
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
@@ -1386,15 +1387,24 @@ def _travel_risk(payload: Mapping[str, Any], fallback: str = "low") -> str:
 
 
 def _travel_intent_metadata(payload: Mapping[str, Any]) -> dict[str, str]:
-    """Return whitelisted route-intent metadata from authored travel payloads."""
+    """Return normalized route-intent metadata from authored travel payloads.
+
+    ``purpose`` identifies the behavioral route purpose that travel packages can
+    branch on. ``purpose_need`` optionally names the underlying need pressure
+    that caused the travel; it can diverge from purpose when one behavior is a
+    means to satisfy another need.
+    """
 
     metadata: dict[str, str] = {}
     purpose = payload.get("purpose") or payload.get("travel_purpose")
     if purpose:
-        metadata["purpose"] = str(purpose)
+        normalized_purpose = str(purpose).strip().lower()
+        if normalized_purpose not in SUPPORTED_TRAVEL_PURPOSES:
+            raise ValueError(f"Unsupported Orrery travel purpose: {purpose!r}")
+        metadata["purpose"] = normalized_purpose
     purpose_need = payload.get("purpose_need")
     if purpose_need:
-        metadata["purpose_need"] = str(purpose_need)
+        metadata["purpose_need"] = normalize_need_type(str(purpose_need).strip())
     return metadata
 
 

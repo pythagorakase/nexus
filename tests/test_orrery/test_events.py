@@ -508,6 +508,32 @@ def _travel_insert_row(cursor: RecordingCursor) -> dict[str, Any]:
     }
 
 
+def test_travel_intent_metadata_normalizes_purpose_and_need() -> None:
+    """Route intent stores canonical purpose and need values."""
+
+    metadata = orrery_events._travel_intent_metadata(
+        {"purpose": " Socialize ", "purpose_need": " INTIMACY "}
+    )
+
+    assert metadata == {"purpose": "socialize", "purpose_need": "intimacy"}
+
+
+def test_travel_intent_metadata_rejects_unknown_purpose() -> None:
+    """Unsupported travel-purpose values fail before they can miss a branch."""
+
+    with pytest.raises(ValueError, match="Unsupported Orrery travel purpose"):
+        orrery_events._travel_intent_metadata({"purpose": "work"})
+
+
+def test_travel_intent_metadata_rejects_unknown_purpose_need() -> None:
+    """Purpose-need metadata must remain inside the Sunhelm need vocabulary."""
+
+    with pytest.raises(ValueError, match="Unsupported Orrery need type"):
+        orrery_events._travel_intent_metadata(
+            {"purpose": "socialize", "purpose_need": "status"}
+        )
+
+
 def test_destination_place_classes_rejects_mapping_payloads() -> None:
     """Class selectors fail fast instead of accepting dict keys accidentally."""
 
@@ -1217,8 +1243,8 @@ def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None
             "travel.start": {
                 "destination_place_classes": ["meeting", "commerce"],
                 "mode": "mixed",
-                "purpose": "socialize",
-                "purpose_need": "socialize",
+                "purpose": "Socialize",
+                "purpose_need": "INTIMACY",
                 "initial_progress": 0.05,
             },
         },
@@ -1258,7 +1284,7 @@ def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None
     assert travel_row["origin_place_id"] == 99
     assert travel_row["destination_place_id"] == 42
     assert travel_row["route_metadata"]["purpose"] == "socialize"
-    assert travel_row["route_metadata"]["purpose_need"] == "socialize"
+    assert travel_row["route_metadata"]["purpose_need"] == "intimacy"
 
 
 def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:

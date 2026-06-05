@@ -51,8 +51,8 @@ from nexus.agents.orrery.substrate import (
     routine_anchor_due,
     routine_anchor_has_destination,
     since_last_event_at_least,
-    validate_always_fallbacks,
     travel_purpose_is,
+    validate_always_fallbacks,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
@@ -722,12 +722,22 @@ def test_travel_purpose_condition_reads_route_metadata() -> None:
 
     state = WorldState(
         travel_states={
-            1: TravelState(status="in_transit", route_purpose="socialize"),
+            1: TravelState(status="in_transit", route_purpose="Socialize"),
         }
     )
 
-    assert travel_purpose_is("socialize")(state, {Slot.ACTOR: 1})
-    assert not travel_purpose_is("work")(state, {Slot.ACTOR: 1})
+    assert travel_purpose_is("SOCIALIZE")(state, {Slot.ACTOR: 1})
+    assert not travel_purpose_is("socialize")(
+        WorldState(travel_states={1: TravelState(status="in_transit")}),
+        {Slot.ACTOR: 1},
+    )
+
+
+def test_travel_purpose_condition_rejects_unknown_purposes() -> None:
+    """Typos in travel-purpose predicates fail at construction time."""
+
+    with pytest.raises(ValueError, match="Unsupported Orrery travel purpose"):
+        travel_purpose_is("work")
 
 
 def test_need_debt_condition_rejects_unknown_need_type() -> None:

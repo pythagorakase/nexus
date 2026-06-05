@@ -58,6 +58,7 @@ class DriveBand(str, Enum):
 Bindings = Dict[Slot, Any]
 Condition = Callable[["WorldState", Bindings], bool]
 ContactKind = Literal["lodging", "social", "intimate"]
+SUPPORTED_TRAVEL_PURPOSES: frozenset[str] = frozenset({"socialize"})
 DRIVE_BAND_ORDER: Mapping[DriveBand, int] = {
     DriveBand.CRISIS_CONSTRAINT: 0,
     DriveBand.EMBODIED_MAINTENANCE: 1,
@@ -1013,9 +1014,18 @@ def travel_progress_at_or_above(
 def travel_purpose_is(*purposes: str, slot: Slot = Slot.ACTOR) -> Condition:
     """Return whether current travel state carries one of the given purposes."""
 
-    purpose_values = tuple(dict.fromkeys(str(item) for item in purposes if str(item)))
+    purpose_values = tuple(
+        dict.fromkeys(
+            normalized for item in purposes if (normalized := str(item).strip().lower())
+        )
+    )
     if not purpose_values:
         raise ValueError("travel_purpose_is requires at least one purpose")
+    unsupported = set(purpose_values) - SUPPORTED_TRAVEL_PURPOSES
+    if unsupported:
+        raise ValueError(
+            f"Unsupported Orrery travel purpose(s): {sorted(unsupported)!r}"
+        )
     candidates = frozenset(purpose_values)
 
     def _condition(state: WorldState, bindings: Bindings) -> bool:
@@ -1023,7 +1033,9 @@ def travel_purpose_is(*purposes: str, slot: Slot = Slot.ACTOR) -> Condition:
         if entity_id is None:
             return False
         travel_state = state.travel_states.get(entity_id)
-        return bool(travel_state and travel_state.route_purpose in candidates)
+        if travel_state is None or travel_state.route_purpose is None:
+            return False
+        return str(travel_state.route_purpose).strip().lower() in candidates
 
     purpose_names = ",".join(purpose_values)
     return _named(_condition, f"travel_purpose_is({purpose_names}@{slot.value})")

@@ -1294,7 +1294,7 @@ def test_resolve_dry_run_fires_social_travel_arrival_by_purpose() -> None:
                     "progress_ratio": 0.96,
                     "estimated_distance_m": 5000,
                     "estimated_duration_minutes": 20,
-                    "route_purpose": "socialize",
+                    "route_purpose": "Socialize",
                 }
             ],
         ),
@@ -1308,6 +1308,7 @@ def test_resolve_dry_run_fires_social_travel_arrival_by_purpose() -> None:
     assert (
         proposal.resolutions[0].branch_label == "Arrive where people can be encountered"
     )
+    assert proposal.resolutions[0].event_type == "travel_arrived"
     assert (
         proposal.resolutions[0].state_delta["character.current_activity"]
         == "arriving where people gather"
