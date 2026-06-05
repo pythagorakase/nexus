@@ -1364,9 +1364,7 @@ def _destination_place_classes(payload: Mapping[str, Any]) -> tuple[str, ...]:
     elif isinstance(raw, (list, tuple)):
         values = tuple(raw)
     else:
-        raise ValueError(
-            "destination place classes must be a string, list, or tuple"
-        )
+        raise ValueError("destination place classes must be a string, list, or tuple")
     classes = tuple(dict.fromkeys(str(item) for item in values if str(item)))
     if not classes:
         raise ValueError("destination place classes cannot be empty")
@@ -1385,6 +1383,19 @@ def _travel_risk(payload: Mapping[str, Any], fallback: str = "low") -> str:
     if risk not in {"low", "moderate", "high", "extreme"}:
         raise ValueError(f"Unsupported Orrery travel risk: {risk!r}")
     return risk
+
+
+def _travel_intent_metadata(payload: Mapping[str, Any]) -> dict[str, str]:
+    """Return whitelisted route-intent metadata from authored travel payloads."""
+
+    metadata: dict[str, str] = {}
+    purpose = payload.get("purpose") or payload.get("travel_purpose")
+    if purpose:
+        metadata["purpose"] = str(purpose)
+    purpose_need = payload.get("purpose_need")
+    if purpose_need:
+        metadata["purpose_need"] = str(purpose_need)
+    return metadata
 
 
 def _route_graph_key(payload: Mapping[str, Any]) -> str:
@@ -1457,6 +1468,8 @@ def _apply_travel_start_sync(
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
+    route_metadata = dict(route["metadata"])
+    route_metadata.update(_travel_intent_metadata(data))
     cur.execute(
         """
         INSERT INTO character_travel_states (
@@ -1506,7 +1519,7 @@ def _apply_travel_start_sync(
             world_time,
             world_time,
             eta,
-            json.dumps(route["metadata"]),
+            json.dumps(route_metadata),
         ),
     )
 
@@ -1562,6 +1575,8 @@ async def _apply_travel_start_async(
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
+    route_metadata = dict(route["metadata"])
+    route_metadata.update(_travel_intent_metadata(data))
     await conn.execute(
         """
         INSERT INTO character_travel_states (
@@ -1610,7 +1625,7 @@ async def _apply_travel_start_async(
         world_time,
         world_time,
         eta,
-        json.dumps(route["metadata"]),
+        json.dumps(route_metadata),
     )
 
 

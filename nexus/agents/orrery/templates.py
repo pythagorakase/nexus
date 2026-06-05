@@ -47,6 +47,7 @@ from nexus.agents.orrery.substrate import (
     since_last_event_at_least,
     time_of_day_in,
     travel_progress_at_or_above,
+    travel_purpose_is,
     travel_risk_is,
     trust_at_least,
     trust_below,
@@ -1567,6 +1568,30 @@ TRAVEL = Template(
     ),
     branches=(
         Branch(
+            label="Arrive where people can be encountered",
+            conditions=AND(
+                is_in_transit(),
+                travel_progress_at_or_above(0.95),
+                travel_purpose_is("socialize"),
+            ),
+            narrative_stub=(
+                "{actor} reaches the place they picked because other people "
+                "would be there. The route ends, and the social possibility "
+                "becomes immediate rather than theoretical."
+            ),
+            state_delta={
+                "character.current_activity": "arriving where people gather",
+                "travel.arrive": True,
+            },
+            event_type="travel_arrived",
+            changed_fields=(
+                "character.current_location",
+                "character.current_activity",
+                "character_travel_states.status",
+            ),
+            magnitude=0.36,
+        ),
+        Branch(
             label="Arrive at the planned destination",
             conditions=AND(is_in_transit(), travel_progress_at_or_above(0.95)),
             narrative_stub=(
@@ -2956,6 +2981,8 @@ SOCIALIZE = Template(
                         "place_open",
                     ],
                     "mode": "mixed",
+                    "purpose": "socialize",
+                    "purpose_need": "socialize",
                     "initial_progress": 0.05,
                 },
             },
@@ -3016,6 +3043,8 @@ SOCIALIZE = Template(
                         "place_open",
                     ],
                     "mode": "mixed",
+                    "purpose": "socialize",
+                    "purpose_need": "socialize",
                     "initial_progress": 0.05,
                 },
             },

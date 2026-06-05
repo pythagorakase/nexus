@@ -1217,6 +1217,8 @@ def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None
             "travel.start": {
                 "destination_place_classes": ["meeting", "commerce"],
                 "mode": "mixed",
+                "purpose": "socialize",
+                "purpose_need": "socialize",
                 "initial_progress": 0.05,
             },
         },
@@ -1255,6 +1257,8 @@ def test_commit_orrery_tick_resolves_travel_destination_by_place_class() -> None
     assert result.resolution_count == 1
     assert travel_row["origin_place_id"] == 99
     assert travel_row["destination_place_id"] == 42
+    assert travel_row["route_metadata"]["purpose"] == "socialize"
+    assert travel_row["route_metadata"]["purpose_need"] == "socialize"
 
 
 def test_commit_orrery_tick_resolves_travel_destination_anchor() -> None:

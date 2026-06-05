@@ -160,6 +160,7 @@ class TravelState:
     progress_ratio: float = 0.0
     estimated_distance_m: Optional[float] = None
     estimated_duration_minutes: Optional[float] = None
+    route_purpose: Optional[str] = None
 
     @property
     def is_in_transit(self) -> bool:
@@ -1007,6 +1008,25 @@ def travel_progress_at_or_above(
         _condition,
         f"travel_progress_at_or_above({threshold:g}@{slot.value})",
     )
+
+
+def travel_purpose_is(*purposes: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether current travel state carries one of the given purposes."""
+
+    purpose_values = tuple(dict.fromkeys(str(item) for item in purposes if str(item)))
+    if not purpose_values:
+        raise ValueError("travel_purpose_is requires at least one purpose")
+    candidates = frozenset(purpose_values)
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        travel_state = state.travel_states.get(entity_id)
+        return bool(travel_state and travel_state.route_purpose in candidates)
+
+    purpose_names = ",".join(purpose_values)
+    return _named(_condition, f"travel_purpose_is({purpose_names}@{slot.value})")
 
 
 def travel_risk_is(*risks: str, slot: Slot = Slot.ACTOR) -> Condition:

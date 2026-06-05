@@ -52,6 +52,7 @@ from nexus.agents.orrery.substrate import (
     routine_anchor_has_destination,
     since_last_event_at_least,
     validate_always_fallbacks,
+    travel_purpose_is,
 )
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
@@ -714,6 +715,19 @@ def test_location_class_destination_condition_supports_legacy_single_class() -> 
     )
 
     assert has_location_class_destination("meeting")(state, {Slot.ACTOR: 1})
+
+
+def test_travel_purpose_condition_reads_route_metadata() -> None:
+    """Travel branches can distinguish why an actor is currently moving."""
+
+    state = WorldState(
+        travel_states={
+            1: TravelState(status="in_transit", route_purpose="socialize"),
+        }
+    )
+
+    assert travel_purpose_is("socialize")(state, {Slot.ACTOR: 1})
+    assert not travel_purpose_is("work")(state, {Slot.ACTOR: 1})
 
 
 def test_need_debt_condition_rejects_unknown_need_type() -> None:

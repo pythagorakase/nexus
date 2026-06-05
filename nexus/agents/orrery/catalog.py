@@ -215,6 +215,12 @@ _register(
     lambda m: f"{_slot(m.group('slot'))} has a planned travel destination",
 )
 _register(
+    r"travel_purpose_is\((?P<purpose>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} is traveling for " f"`{m.group('purpose')}` purpose"
+    ),
+)
+_register(
     r"has_routine_anchor\((?P<anchor>[^@()]+)@(?P<slot>\w+)\)",
     lambda m: (f"{_slot(m.group('slot'))} has `{m.group('anchor')}` routine anchor"),
 )
@@ -458,10 +464,10 @@ def _render_state_delta(delta: Mapping[str, Any]) -> str:
             continue
         if key == "travel.start":
             if isinstance(value, Mapping):
-                destination_classes = value.get(
-                    "destination_place_classes"
-                ) or value.get("destination_place_class") or value.get(
-                    "destination_class"
+                destination_classes = (
+                    value.get("destination_place_classes")
+                    or value.get("destination_place_class")
+                    or value.get("destination_class")
                 )
                 if destination_classes:
                     if isinstance(destination_classes, str):

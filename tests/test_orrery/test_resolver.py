@@ -725,6 +725,11 @@ def test_resolve_dry_run_fires_socialize_need_template() -> None:
     assert proposal.resolutions[0].state_delta["travel.start"][
         "destination_place_classes"
     ] == ["commerce", "entertainment", "meeting", "place_open"]
+    assert proposal.resolutions[0].state_delta["travel.start"]["purpose"] == "socialize"
+    assert (
+        proposal.resolutions[0].state_delta["travel.start"]["purpose_need"]
+        == "socialize"
+    )
 
 
 def test_resolve_dry_run_socialize_uses_present_company_before_movement() -> None:
@@ -1269,6 +1274,44 @@ def test_resolve_dry_run_fires_travel_arrival_at_high_progress() -> None:
     assert proposal.resolutions[0].template_id == "travel"
     assert proposal.resolutions[0].branch_label == "Arrive at the planned destination"
     assert proposal.resolutions[0].state_delta["travel.arrive"] is True
+
+
+def test_resolve_dry_run_fires_social_travel_arrival_by_purpose() -> None:
+    """Social-purpose travel gets a specific arrival beat before generic arrival."""
+
+    proposal = resolve_dry_run(
+        FakeSession(
+            travel_state_rows=[
+                {
+                    "character_entity_id": 1,
+                    "status": "in_transit",
+                    "anchor_place_id": 10,
+                    "origin_place_id": 10,
+                    "destination_place_id": 20,
+                    "route_method": "estimated",
+                    "travel_mode": "mixed",
+                    "risk": "low",
+                    "progress_ratio": 0.96,
+                    "estimated_distance_m": 5000,
+                    "estimated_duration_minutes": 20,
+                    "route_purpose": "socialize",
+                }
+            ],
+        ),
+        BUILTIN_TEMPLATES,
+        anchor_chunk_id=100,
+        window_chunks=30,
+    )
+
+    assert proposal.resolution_count == 1
+    assert proposal.resolutions[0].template_id == "travel"
+    assert (
+        proposal.resolutions[0].branch_label == "Arrive where people can be encountered"
+    )
+    assert (
+        proposal.resolutions[0].state_delta["character.current_activity"]
+        == "arriving where people gather"
+    )
 
 
 def test_resolve_dry_run_fires_work_for_obligation_without_craft_tags() -> None:

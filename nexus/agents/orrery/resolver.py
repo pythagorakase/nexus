@@ -502,7 +502,8 @@ def _load_travel_states(session: Any) -> dict[int, TravelState]:
                    cts.risk::text AS risk,
                    cts.progress_ratio,
                    cts.estimated_distance_m,
-                   cts.estimated_duration_minutes
+                   cts.estimated_duration_minutes,
+                   cts.route_metadata ->> 'purpose' AS route_purpose
             FROM character_travel_states cts
             JOIN entities e
               ON e.id = cts.character_entity_id
@@ -530,6 +531,7 @@ def _load_travel_states(session: Any) -> dict[int, TravelState]:
                 if row["estimated_duration_minutes"] is not None
                 else None
             ),
+            route_purpose=row.get("route_purpose"),
         )
     return states
 
