@@ -51,6 +51,15 @@ LEGACY_FACTION_COLUMNS = (
     "power_level",
     "resources",
 )
+MISSING_FACTION_COLUMN_SELECTS = {
+    "ideology": "NULL::text AS ideology",
+    "history": "NULL::text AS history",
+    "current_activity": "NULL::text AS current_activity",
+    "hidden_agenda": "NULL::text AS hidden_agenda",
+    "territory": "NULL::text AS territory",
+    "power_level": "NULL::numeric AS power_level",
+    "resources": "NULL::text AS resources",
+}
 KEEP_FACTION_COLUMNS = (
     "id",
     "name",
@@ -343,7 +352,8 @@ class FactionAuditEntry:
 def build_faction_table_audit(cur: Any) -> dict[str, Any]:
     """Build a read-only dry-run audit for legacy faction table cleanup."""
 
-    faction_rows = _fetch_faction_rows(cur)
+    existing_columns = _fetch_existing_faction_columns(cur)
+    faction_rows = _fetch_faction_rows(cur, existing_columns=existing_columns)
     pair_counts = _fetch_pair_tag_counts(cur)
     legacy_tags = _fetch_legacy_tag_rows(cur)
     legacy_tags_by_entity = _group_legacy_tags_by_entity(legacy_tags)
@@ -367,6 +377,14 @@ def build_faction_table_audit(cur: Any) -> dict[str, Any]:
     return {
         "dry_run": True,
         "source_columns": list(LEGACY_FACTION_COLUMNS),
+        "available_source_columns": [
+            column for column in LEGACY_FACTION_COLUMNS if column in existing_columns
+        ],
+        "retired_source_columns": [
+            column
+            for column in LEGACY_FACTION_COLUMNS
+            if column not in existing_columns
+        ],
         "keep_columns": list(KEEP_FACTION_COLUMNS),
         "counters": counters,
         "non_null_counts": non_null_counts,
@@ -696,26 +714,56 @@ def audit_faction_row(
     return entry
 
 
-def _fetch_faction_rows(cur: Any) -> list[Mapping[str, Any]]:
+def _fetch_existing_faction_columns(cur: Any) -> set[str]:
     cur.execute(
         """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'factions'
+          AND column_name = ANY(%s)
+        """,
+        (list(KEEP_FACTION_COLUMNS + LEGACY_FACTION_COLUMNS),),
+    )
+    return {str(_row_value(row, "column_name")) for row in cur.fetchall()}
+
+
+def _fetch_faction_rows(
+    cur: Any, *, existing_columns: set[str]
+) -> list[Mapping[str, Any]]:
+    select_columns = [
+        _faction_column_select_expr(column, existing_columns=existing_columns)
+        for column in (
+            "id",
+            "name",
+            "entity_id",
+            "ideology",
+            "history",
+            "current_activity",
+            "hidden_agenda",
+            "territory",
+            "primary_location",
+            "power_level",
+            "resources",
+        )
+    ]
+    cur.execute(
+        f"""
         SELECT
-            id,
-            name,
-            entity_id,
-            ideology,
-            history,
-            current_activity,
-            hidden_agenda,
-            territory,
-            primary_location,
-            power_level,
-            resources
+            {', '.join(select_columns)}
         FROM factions
         ORDER BY id
         """
     )
     return list(cur.fetchall())
+
+
+def _faction_column_select_expr(column: str, *, existing_columns: set[str]) -> str:
+    if column in existing_columns:
+        return column
+    if column in MISSING_FACTION_COLUMN_SELECTS:
+        return MISSING_FACTION_COLUMN_SELECTS[column]
+    raise ValueError(f"Required factions column {column!r} is missing")
 
 
 def _fetch_pair_tag_counts(cur: Any) -> dict[int, dict[str, int]]:

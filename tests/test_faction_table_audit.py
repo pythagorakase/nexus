@@ -20,6 +20,7 @@ from nexus.api.faction_table_audit import (
     FACTION_MANIFEST_SCHEMA_VERSION,
     LEGACY_TAG_CATEGORIES,
     LegacyTagRow,
+    _faction_column_select_expr,
     apply_faction_migration_manifest,
     audit_faction_row,
     build_faction_migration_manifest,
@@ -152,6 +153,72 @@ class FactionApplyCursor:
             )
             self.rowcount = 1
             self._rows = [{"id": entity_tag_id}]
+        else:
+            raise AssertionError(f"Unhandled SQL in fake cursor: {normalized}")
+
+    def fetchone(self) -> dict[str, Any] | None:
+        """Return one pending row."""
+
+        if not self._rows:
+            return None
+        return self._rows.pop(0)
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        """Return all pending rows."""
+
+        rows = list(self._rows)
+        self._rows.clear()
+        return rows
+
+
+class RetiredFactionColumnsAuditCursor:
+    """Fake cursor for auditing after legacy faction columns are dropped."""
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+        self._rows: list[dict[str, Any]] = []
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
+        """Handle the SQL shapes emitted by the audit path."""
+
+        normalized = " ".join(sql.split())
+        self.statements.append(normalized)
+        if "FROM information_schema.columns" in normalized:
+            self._rows = [
+                {"column_name": column}
+                for column in (
+                    "id",
+                    "name",
+                    "entity_id",
+                    "summary",
+                    "primary_location",
+                    "created_at",
+                    "updated_at",
+                    "extra_data",
+                )
+            ]
+        elif "FROM factions ORDER BY id" in normalized:
+            assert "NULL::text AS ideology" in normalized
+            assert "NULL::numeric AS power_level" in normalized
+            self._rows = [
+                {
+                    "id": 1,
+                    "name": "Columnless League",
+                    "entity_id": 1001,
+                    "ideology": None,
+                    "history": None,
+                    "current_activity": None,
+                    "hidden_agenda": None,
+                    "territory": None,
+                    "primary_location": None,
+                    "power_level": None,
+                    "resources": None,
+                }
+            ]
+        elif "FROM entity_pair_tags" in normalized:
+            self._rows = []
+        elif "FROM entity_tags_current" in normalized:
+            self._rows = []
         else:
             raise AssertionError(f"Unhandled SQL in fake cursor: {normalized}")
 
@@ -327,6 +394,43 @@ def test_power_level_point_one_maps_to_declining() -> None:
     ]
 
     assert candidates[0].target_tag == "declining"
+
+
+def test_build_faction_table_audit_handles_retired_legacy_columns() -> None:
+    """The dry-run audit should still work after migration 058 drops columns."""
+
+    cur = RetiredFactionColumnsAuditCursor()
+
+    audit = build_faction_table_audit(cur)
+
+    assert audit["available_source_columns"] == []
+    assert audit["retired_source_columns"] == [
+        "ideology",
+        "history",
+        "current_activity",
+        "hidden_agenda",
+        "territory",
+        "power_level",
+        "resources",
+    ]
+    assert audit["non_null_counts"] == {
+        "ideology": 0,
+        "history": 0,
+        "current_activity": 0,
+        "hidden_agenda": 0,
+        "territory": 0,
+        "power_level": 0,
+        "resources": 0,
+    }
+    assert audit["counters"]["factions_scanned"] == 1
+    assert audit["counters"]["non_null_legacy_values"] == 0
+
+
+def test_missing_unknown_faction_column_type_fails_loudly() -> None:
+    """Only known retired columns should get synthetic NULL expressions."""
+
+    with pytest.raises(ValueError, match="Required factions column"):
+        _faction_column_select_expr("created_at", existing_columns=set())
 
 
 @pytest.mark.requires_postgres

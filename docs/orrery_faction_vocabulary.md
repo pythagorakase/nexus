@@ -320,7 +320,8 @@ Preflight command:
 - `nexus faction-audit --slot N` performs a read-only dry run over the legacy
   faction columns, existing `claims` / `operates_from` pair-tags, and legacy
   faction tag categories. Review its JSON output before any destructive data
-  rewrite or column-drop migration.
+  rewrite or column-drop migration. After column retirement, the command remains
+  valid and reports the legacy source columns as retired.
 - `nexus faction-manifest --slot N --output PATH` folds the audit into a
   read-only migration manifest with stable operation IDs. It separates
   deterministic entity-tag inserts from review-required tag candidates,
@@ -344,6 +345,12 @@ Runtime write boundary:
   `orrery_tags` or reviewed pair-tag/world-event paths.
 - Migration 053 removes the `factions.power_level` default so omitted runtime
   inserts do not silently create fresh legacy `0.5` values.
+- Migration 058 snapshots non-null legacy faction column values under
+  `extra_data.legacy_faction_columns`, records the source columns under
+  `extra_data.legacy_faction_column_retirement`, and drops the obsolete columns.
+  Runtime and LORE context should read faction semantics from Orrery tags,
+  pair-tags, `summary`, and structured `extra_data`, not the retired table
+  columns.
 
 ---
 

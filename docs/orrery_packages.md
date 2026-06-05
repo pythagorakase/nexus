@@ -1917,6 +1917,7 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `migrations/054_orrery_completed_tag_vocab.py`
 - `migrations/055_orrery_character_tag_vocab.py`
 - `migrations/056_orrery_routine_anchors.py`
+- `migrations/057_orrery_need_bodyform_applicability.py`
 
 ### Tags queried as durable (via `has_tag` / `lacks_tag` / `has_any_tag`)
 

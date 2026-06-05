@@ -996,6 +996,7 @@ Compiler surfaces:
 - `migrations/052_orrery_faction_tag_vocab.py` — seeds the 65 faction tag anchors across `ideology`, `resource_base`, `legitimacy`, `operational_mode`, `power_status`, and `agenda`.
 - `migrations/053_retire_faction_legacy_write_defaults.py` — drops the legacy `factions.power_level` default so new runtime inserts do not create fresh obsolete faction strength values.
 - `migrations/054_orrery_completed_tag_vocab.py` — seeds completed state and place anchors, including globally unique place registry names and the `wilderness` legacy-category rewrite.
+- `migrations/058_retire_faction_legacy_columns.py` — snapshots obsolete faction-table semantic columns into `extra_data.legacy_faction_columns` and drops the columns after the Orrery tag cutover.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*

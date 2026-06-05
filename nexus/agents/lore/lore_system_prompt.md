@@ -288,7 +288,7 @@ ITERATION 2 - Targeted Search:
 - Analysis: Eclipse Biotech is key lead
 
 ITERATION 3 - Targeted Follow-up:
-- SQL: SELECT id,name,summary,ideology FROM factions WHERE name ILIKE '%Eclipse%'
+- SQL: SELECT id,name,summary FROM factions WHERE name ILIKE '%Eclipse%'
 - Result: Eclipse Biotech - rival corp, neural tech specialist
 - Text search: "Eclipse Biotech implant Alex discovery"
 - Result: Chunks 1247-1251 contain full discovery sequence

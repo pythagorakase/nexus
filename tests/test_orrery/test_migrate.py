@@ -741,6 +741,34 @@ def test_faction_legacy_write_default_migration_drops_power_default() -> None:
     assert "Orrery power_status tags" in source
 
 
+def test_faction_legacy_column_retirement_snapshots_before_drop() -> None:
+    """Migration 058 should preserve faction prose before removing old columns."""
+
+    migration_path = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "058_retire_faction_legacy_columns.py"
+    )
+    migration = migrate._load_python_migration(migration_path)
+    source = migration_path.read_text()
+
+    assert migration.LEGACY_FACTION_COLUMNS == (
+        "ideology",
+        "history",
+        "current_activity",
+        "hidden_agenda",
+        "territory",
+        "power_level",
+        "resources",
+    )
+    assert "legacy_faction_columns" in source
+    assert "legacy_faction_column_retirement" in source
+    assert "CROSS JOIN LATERAL" in source
+    assert "jsonb_strip_nulls(jsonb_build_object" in source
+    assert source.count("ALTER TABLE factions") == 1
+    assert "DROP COLUMN IF EXISTS" in source
+
+
 def test_completed_tag_vocab_migration_seeds_state_and_place_anchors() -> None:
     """Migration 054 seeds completed state/place vocabulary without collisions."""
 
