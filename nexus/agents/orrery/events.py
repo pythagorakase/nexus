@@ -31,6 +31,7 @@ from nexus.agents.orrery.routing import (
     RouteGraphEdge,
     shortest_route,
 )
+from nexus.agents.orrery.substrate import SUPPORTED_TRAVEL_PURPOSES
 
 
 ENTITY_BINDING_SLOTS = frozenset({"actor", "target", "targets", "faction"})
@@ -1364,9 +1365,7 @@ def _destination_place_classes(payload: Mapping[str, Any]) -> tuple[str, ...]:
     elif isinstance(raw, (list, tuple)):
         values = tuple(raw)
     else:
-        raise ValueError(
-            "destination place classes must be a string, list, or tuple"
-        )
+        raise ValueError("destination place classes must be a string, list, or tuple")
     classes = tuple(dict.fromkeys(str(item) for item in values if str(item)))
     if not classes:
         raise ValueError("destination place classes cannot be empty")
@@ -1385,6 +1384,28 @@ def _travel_risk(payload: Mapping[str, Any], fallback: str = "low") -> str:
     if risk not in {"low", "moderate", "high", "extreme"}:
         raise ValueError(f"Unsupported Orrery travel risk: {risk!r}")
     return risk
+
+
+def _travel_intent_metadata(payload: Mapping[str, Any]) -> dict[str, str]:
+    """Return normalized route-intent metadata from authored travel payloads.
+
+    ``purpose`` identifies the behavioral route purpose that travel packages can
+    branch on. ``purpose_need`` optionally names the underlying need pressure
+    that caused the travel; it can diverge from purpose when one behavior is a
+    means to satisfy another need.
+    """
+
+    metadata: dict[str, str] = {}
+    purpose = payload.get("purpose") or payload.get("travel_purpose")
+    if purpose:
+        normalized_purpose = str(purpose).strip().lower()
+        if normalized_purpose not in SUPPORTED_TRAVEL_PURPOSES:
+            raise ValueError(f"Unsupported Orrery travel purpose: {purpose!r}")
+        metadata["purpose"] = normalized_purpose
+    purpose_need = payload.get("purpose_need")
+    if purpose_need:
+        metadata["purpose_need"] = normalize_need_type(str(purpose_need).strip())
+    return metadata
 
 
 def _route_graph_key(payload: Mapping[str, Any]) -> str:
@@ -1457,6 +1478,8 @@ def _apply_travel_start_sync(
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
+    route_metadata = dict(route["metadata"])
+    route_metadata.update(_travel_intent_metadata(data))
     cur.execute(
         """
         INSERT INTO character_travel_states (
@@ -1506,7 +1529,7 @@ def _apply_travel_start_sync(
             world_time,
             world_time,
             eta,
-            json.dumps(route["metadata"]),
+            json.dumps(route_metadata),
         ),
     )
 
@@ -1562,6 +1585,8 @@ async def _apply_travel_start_async(
     )
     eta = _eta(world_time, route["duration_minutes"])
     progress = float(data.get("initial_progress", 0.0))
+    route_metadata = dict(route["metadata"])
+    route_metadata.update(_travel_intent_metadata(data))
     await conn.execute(
         """
         INSERT INTO character_travel_states (
@@ -1610,7 +1635,7 @@ async def _apply_travel_start_async(
         world_time,
         world_time,
         eta,
-        json.dumps(route["metadata"]),
+        json.dumps(route_metadata),
     )
 
 

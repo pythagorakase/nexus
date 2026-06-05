@@ -188,6 +188,14 @@ def test_render_predicate_name_handles_known_predicates() -> None:
             "actor's `home` routine can resolve a destination",
         ),
         (
+            "travel_purpose_is(socialize@actor)",
+            "actor is traveling for `socialize` purpose",
+        ),
+        (
+            "travel_purpose_is(socialize,errand@actor)",
+            "actor is traveling for `socialize`, `errand` purposes",
+        ),
+        (
             "has_any_pair_tag(claims,protects@actor->target)",
             "actor has any of [`claims`, `protects`] pair tags to target",
         ),

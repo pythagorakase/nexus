@@ -1412,7 +1412,21 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
-### Branch 1 — Arrive at the planned destination  *(mag 0.34)*
+### Branch 1 — Arrive where people can be encountered  *(mag 0.36)*
+
+**When:**
+
+- **AND:**
+  - actor is in transit
+  - actor travel progress ≥ 0.95
+  - actor is traveling for `socialize` purpose
+
+**Does:** activity → "arriving where people gather"; arrives at travel destination
+**Event:** `travel_arrived`
+
+> {actor} reaches the place they picked because other people would be there. The route ends, and the social possibility becomes immediate rather than theoretical.
+
+### Branch 2 — Arrive at the planned destination  *(mag 0.34)*
 
 **When:**
 
@@ -1425,7 +1439,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} reaches the destination at last. The route drops away behind them into the ordinary unreliability of maps, and the place ahead becomes immediate.
 
-### Branch 2 — Lose time to bad conditions or route friction  *(mag 0.24)*
+### Branch 3 — Lose time to bad conditions or route friction  *(mag 0.24)*
 
 **When:**
 
@@ -1440,7 +1454,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} loses time to the route itself — weather, traffic, closed access, or the thousand small refusals a city can make when someone is trying to cross it.
 
-### Branch 3 — Make steady progress along the route  *(mag 0.18)*
+### Branch 4 — Make steady progress along the route  *(mag 0.18)*
 
 **When:** actor is in transit
 
@@ -1449,7 +1463,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} keeps moving: transfers, crossings, service corridors, streets whose names matter less than the fact that each one puts the destination a little closer.
 
-### Branch 4 — Depart toward the planned destination  *(mag 0.28)*
+### Branch 5 — Depart toward the planned destination  *(mag 0.28)*
 
 **When:**
 
@@ -1467,7 +1481,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} starts the journey with enough of a route in mind to make the first leg real. The exact path can change; the destination no longer can.
 
-### Branch 5 — Prepare the journey rather than starting badly  *(mag 0.12)*
+### Branch 6 — Prepare the journey rather than starting badly  *(mag 0.12)*
 
 **When:** *(always)*
 
