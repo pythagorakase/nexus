@@ -1,6 +1,6 @@
 # Orrery Retrograde — Deep-History Generation Spec
 
-**Status:** Design spec, deliberately compressed. Implementation decisions deferred to downstream agents; flagged inline as **[OPEN]**.
+**Status:** Design spec, deliberately compressed. Phase A0 now has a non-mutating dry-run packet surface; larger implementation decisions remain deferred and flagged inline as **[OPEN]**.
 **One-line frame:** Deep history is Orrery run backward. Same substrate, same vocabulary, opposite temporal direction. Output is `world_events` rows retrieved by MEMNON identically to play-generated history. Fires at wizard-time (whole-world cold start, pre-game tick stamps) and at runtime (per-entity stub maturation, current tick stamps) — see Stub Maturation below.
 
 ---
@@ -74,7 +74,7 @@ This is what keeps Retrograde non-recursive: implied entities accrete just enoug
 
 Six stages, labeled **R1–R6** to disambiguate from the forward Orrery pipeline's Stage 1–6 (Resolve/Commit/Clear/Promote/Narrate/Bleed in `orrery_design_plan.md`). Each consumes the prior; **[OPEN]** boundaries may merge during implementation.
 
-- **R1. Vocabulary table.** Enumerate the seed-eligible primitives: event types, tags, relationship types, and semantic place classes already in the Orrery registries. Retrograde generates *only* in existing vocabulary so output is substrate-legal by construction. New vocabulary is out of scope for a generation run. The first-pass enumerator exists at `nexus/agents/orrery/retrograde_vocabulary.py`; pass a target slot `dbname` once migrations are applied so it folds live `tag_category_registry` / `tags` rows into the template-derived primitive set. The remaining pre-Phase-A work is prompt shaping and deciding which registered categories are seed-eligible versus merely prompt-visible.
+- **R1. Vocabulary table.** Enumerate the seed-eligible primitives: event types, tags, relationship types, and semantic place classes already in the Orrery registries. Retrograde generates *only* in existing vocabulary so output is substrate-legal by construction. New vocabulary is out of scope for a generation run. The first-pass enumerator exists at `nexus/agents/orrery/retrograde_vocabulary.py`; pass a target slot `dbname` once migrations are applied so it folds live `tag_category_registry` / `tags` rows into the template-derived primitive set. Phase A0 packet assembly now exists at `nexus/agents/orrery/retrograde_packet.py` and is exposed as `nexus retrograde-packet --slot N [--weird low|medium|high] [--weird-raw FLOAT] [--output packet.json]`. It reads wizard cache + vocabulary + configured weird bands, writes no canonical rows, and produces candidate prompt material for a later Skald-as-weaver selection/expansion pass.
 
 - **R2. Stub generator.** From wizard choices (setting, genre, starting characters, selected traits), emit entity stubs and a sparse relationship graph — the *intentional core*. This is deterministic-ish scaffolding, low entropy, fully implied by wizard input.
 
