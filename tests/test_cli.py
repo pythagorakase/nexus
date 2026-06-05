@@ -378,3 +378,168 @@ def test_retrograde_packet_writes_dry_run_packet(monkeypatch, tmp_path) -> None:
     assert packet["mutation_policy"]["writes"] == "none"
     assert packet["weird"]["level"] == "medium"
     assert packet["seed_generation_request"]["mutation_policy"]["writes"] == "none"
+    assert "candidate_response_schema" in packet["seed_generation_request"]
+    assert "RETROGRADE_SEED_GENERATION_REQUEST" in packet["seed_generation_prompt"]
+
+
+def test_retrograde_seed_candidates_reads_packet_and_writes_response(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """The Skald seed command can run from a saved packet without slot cache."""
+
+    from nexus.agents.orrery import retrograde_seed_candidates
+
+    packet_path = tmp_path / "packet.json"
+    output_path = tmp_path / "seed_candidates.json"
+    packet = {
+        "seed_generation_request": {"budget": {"select_target": 1}},
+        "seed_eligible_vocabulary": {
+            "entity_kinds": ["character", "place"],
+            "registered_single_entity_tags": [],
+            "registered_tags_by_seed_policy": {},
+            "multi_entity_tag_definitions": [],
+            "event_types": [],
+            "relationship_types": [],
+        },
+        "seed_generation_prompt": "prompt",
+    }
+    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+    calls = []
+
+    def fake_generate(
+        *,
+        packet: dict[str, Any],
+        model_name: str | None,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        calls.append((packet, model_name, max_tokens))
+        return {
+            "model": model_name,
+            "prompt_chars": 6,
+            "seed_candidate_response": {
+                "schema_version": "orrery_retrograde_seed_candidates.v0",
+                "candidates": [],
+                "selected_seed_ids": [],
+                "rejected_seed_ids": [],
+            },
+        }
+
+    monkeypatch.setattr(
+        retrograde_seed_candidates,
+        "generate_seed_candidates_with_skald",
+        fake_generate,
+    )
+
+    result = cli.run_retrograde_seed_candidates(
+        Namespace(
+            slot=None,
+            packet=packet_path,
+            weird=None,
+            weird_raw=None,
+            packet_output=None,
+            model="TEST",
+            max_tokens=12000,
+            output=output_path,
+        )
+    )
+
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["success"] is True
+    assert result["packet_input"] == str(packet_path)
+    assert result["packet_output"] is None
+    assert result["candidate_output"] == str(output_path)
+    assert calls == [(packet, "TEST", 12000)]
+    assert written["model"] == "TEST"
+
+
+def test_retrograde_expand_seeds_reads_inputs_and_writes_response(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """The R6 expansion command can run from saved packet/candidate artifacts."""
+
+    from nexus.agents.orrery import retrograde_expansion
+
+    packet_path = tmp_path / "packet.json"
+    candidates_path = tmp_path / "seed_candidates.json"
+    output_path = tmp_path / "expansion.json"
+    packet = {
+        "seed_generation_request": {"budget": {"select_target": 1}},
+        "seed_eligible_vocabulary": {
+            "entity_kinds": ["character", "place"],
+            "registered_single_entity_tags": [],
+            "registered_tags_by_seed_policy": {},
+            "multi_entity_tag_definitions": [],
+            "event_types": [],
+            "relationship_types": [],
+        },
+    }
+    candidates = {
+        "seed_candidate_response": {
+            "schema_version": "orrery_retrograde_seed_candidates.v0",
+            "candidates": [],
+            "selected_seed_ids": [],
+            "rejected_seed_ids": [],
+        }
+    }
+    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+    candidates_path.write_text(json.dumps(candidates), encoding="utf-8")
+    calls = []
+
+    def fake_generate(
+        *,
+        packet: dict[str, Any],
+        seed_candidate_response: dict[str, Any],
+        model_name: str | None,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        calls.append((packet, seed_candidate_response, model_name, max_tokens))
+        return {
+            "model": model_name,
+            "prompt_chars": 8,
+            "retrograde_expansion_plan": {
+                "schema_version": "orrery_retrograde_expansion_plan.v0",
+                "selected_seed_ids": ["seed_001"],
+                "event_plan": [],
+                "entity_tag_plan": [],
+                "pair_tag_plan": [],
+                "relationship_plan": [],
+                "thread_plan": [],
+                "coverage_notes": [],
+                "commit_readiness": {"writes": "none"},
+            },
+        }
+
+    monkeypatch.setattr(
+        retrograde_expansion,
+        "generate_expansion_with_skald",
+        fake_generate,
+    )
+
+    result = cli.run_retrograde_expand_seeds(
+        Namespace(
+            packet=packet_path,
+            seed_candidates=candidates_path,
+            model="TEST",
+            max_tokens=12000,
+            output=output_path,
+        )
+    )
+
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["success"] is True
+    assert result["packet_input"] == str(packet_path)
+    assert result["candidate_input"] == str(candidates_path)
+    assert result["expansion_output"] == str(output_path)
+    assert calls == [
+        (
+            packet,
+            candidates["seed_candidate_response"],
+            "TEST",
+            12000,
+        )
+    ]
+    assert written["model"] == "TEST"

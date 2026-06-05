@@ -8,6 +8,9 @@ from nexus.agents.orrery.retrograde_packet import (
     build_retrograde_dry_run_packet,
     resolve_weird_profile,
 )
+from nexus.agents.orrery.retrograde_seed_candidates import (
+    SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION,
+)
 from nexus.agents.orrery.retrograde_vocabulary import (
     enumerate_seed_eligible_vocabulary,
 )
@@ -107,6 +110,15 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
     assert (
         "mechanical_hints" in seed_request["candidate_output_schema"]["required_fields"]
     )
+    assert "candidate_response_schema" in seed_request
+    assert (
+        seed_request["candidate_response_schema"]["properties"]["schema_version"][
+            "const"
+        ]
+        == SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION
+    )
+    assert "RETROGRADE_SEED_GENERATION_REQUEST" in packet["seed_generation_prompt"]
+    assert "Mara" in packet["seed_generation_prompt"]
     sections = seed_request["prompt_sections"]
     assert all(isinstance(section["items"], list) for section in sections)
     trait_section = next(
