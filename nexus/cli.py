@@ -10,6 +10,7 @@ Commands:
     nexus trait-audit --slot N  Dry-run new-story trait compiler audit
     nexus retrograde-packet --slot N  Build dry-run Retrograde seed packet
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
+    nexus retrograde-expand-seeds  Call Skald for non-mutating R6 expansion
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -300,6 +301,39 @@ def _print_retrograde_seed_candidates(payload: Dict[str, Any]) -> None:
     if payload.get("candidate_output"):
         print()
         print(f"Output: {payload['candidate_output']}")
+
+
+def _print_retrograde_expansion(payload: Dict[str, Any]) -> None:
+    """Print a compact Retrograde R6 expansion summary."""
+
+    generation = payload.get("retrograde_expansion_generation") or {}
+    response = generation.get("retrograde_expansion_plan") or {}
+    events = response.get("event_plan") or []
+    tags = response.get("entity_tag_plan") or []
+    pair_tags = response.get("pair_tag_plan") or []
+    relationships = response.get("relationship_plan") or []
+    threads = response.get("thread_plan") or []
+    readiness = response.get("commit_readiness") or {}
+
+    print("Expansion plan:")
+    print(f"  model: {generation.get('model')}")
+    print(f"  prompt_chars: {generation.get('prompt_chars')}")
+    print(f"  selected_seed_ids: {', '.join(response.get('selected_seed_ids') or [])}")
+    print(f"  events: {len(events)}")
+    print(f"  entity_tags: {len(tags)}")
+    print(f"  pair_tags: {len(pair_tags)}")
+    print(f"  relationships: {len(relationships)}")
+    print(f"  threads: {len(threads)}")
+    print(f"  writes: {readiness.get('writes')}")
+    if readiness.get("blocked_by"):
+        print(f"  blocked_by: {', '.join(readiness['blocked_by'])}")
+    if payload.get("packet_input"):
+        print(f"  packet_input: {payload['packet_input']}")
+    if payload.get("candidate_input"):
+        print(f"  candidate_input: {payload['candidate_input']}")
+    if payload.get("expansion_output"):
+        print()
+        print(f"Output: {payload['expansion_output']}")
 
 
 def _print_faction_audit(payload: Dict[str, Any]) -> None:
@@ -666,6 +700,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("seed_candidate_generation"):
         _print_retrograde_seed_candidates(payload)
+        print()
+
+    if payload.get("retrograde_expansion_generation"):
+        _print_retrograde_expansion(payload)
         print()
 
     if payload.get("faction_audit"):
@@ -1502,14 +1540,11 @@ def run_retrograde_seed_candidates(args: argparse.Namespace) -> Dict[str, Any]:
         packet = packet_result["retrograde_packet"]
         packet_output = packet_result.get("packet_output")
 
-    try:
-        generation = generate_seed_candidates_with_skald(
-            packet=packet,
-            model_name=args.model,
-            max_tokens=args.max_tokens,
-        )
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    generation = generate_seed_candidates_with_skald(
+        packet=packet,
+        model_name=args.model,
+        max_tokens=args.max_tokens,
+    )
 
     output_path = args.output
     if output_path is not None:
@@ -1530,6 +1565,44 @@ def run_retrograde_seed_candidates(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_retrograde_expand_seeds(args: argparse.Namespace) -> Dict[str, Any]:
+    """Call Skald for a non-mutating Retrograde R6 expansion plan."""
+
+    from nexus.agents.orrery.retrograde_expansion import (
+        generate_expansion_with_skald,
+    )
+
+    try:
+        packet = _load_retrograde_packet_file(args.packet)
+        seed_candidates = _load_seed_candidate_file(args.seed_candidates)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {"success": False, "error": str(exc)}
+
+    generation = generate_expansion_with_skald(
+        packet=packet,
+        seed_candidate_response=seed_candidates,
+        model_name=args.model,
+        max_tokens=args.max_tokens,
+    )
+
+    output_path = args.output
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(generation, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    return {
+        "success": True,
+        "message": "Retrograde R6 expansion plan generated.",
+        "packet_input": str(args.packet),
+        "candidate_input": str(args.seed_candidates),
+        "retrograde_expansion_generation": generation,
+        "expansion_output": str(output_path) if output_path is not None else None,
+    }
+
+
 def _load_retrograde_packet_file(path: Path) -> Dict[str, Any]:
     """Load a raw packet or CLI envelope containing a Retrograde packet."""
 
@@ -1542,6 +1615,20 @@ def _load_retrograde_packet_file(path: Path) -> Dict[str, Any]:
     if "seed_generation_request" not in packet:
         raise ValueError(f"{path} is missing seed_generation_request")
     return packet
+
+
+def _load_seed_candidate_file(path: Path) -> Dict[str, Any]:
+    """Load a raw seed-candidate response or CLI generation envelope."""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    response = payload.get("seed_candidate_response") or payload
+    if not isinstance(response, dict):
+        raise ValueError(f"{path} does not contain a seed candidate object")
+    if "candidates" not in response or "selected_seed_ids" not in response:
+        raise ValueError(f"{path} is missing seed candidate response fields")
+    return response
 
 
 def run_faction_audit(args: argparse.Namespace) -> Dict[str, Any]:
@@ -2117,6 +2204,7 @@ Examples:
   nexus trait-audit --slot 5    Dry-run trait compiler audit
   nexus retrograde-packet --slot 5 --output packet.json
   nexus retrograde-seed-candidates --packet packet.json --output seeds.json
+  nexus retrograde-expand-seeds --packet packet.json --seed-candidates seeds.json
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -2325,6 +2413,38 @@ Examples:
         "--output",
         type=Path,
         help="Optional path for the Skald seed candidate response JSON.",
+    )
+
+    # retrograde-expand-seeds command
+    retrograde_expand_parser = subparsers.add_parser(
+        "retrograde-expand-seeds",
+        help="Call Skald for a non-mutating Retrograde R6 expansion plan",
+    )
+    retrograde_expand_parser.add_argument(
+        "--packet",
+        type=Path,
+        required=True,
+        help="Existing Retrograde packet JSON from retrograde-packet.",
+    )
+    retrograde_expand_parser.add_argument(
+        "--seed-candidates",
+        type=Path,
+        required=True,
+        help="Seed candidate JSON from retrograde-seed-candidates.",
+    )
+    retrograde_expand_parser.add_argument(
+        "--model",
+        help="Concrete model id for Skald expansion; defaults to wizard model.",
+    )
+    retrograde_expand_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        help="Optional max output tokens for the Skald expansion response.",
+    )
+    retrograde_expand_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the Skald expansion response JSON.",
     )
 
     # faction-audit command
@@ -2591,6 +2711,8 @@ def main() -> int:
         result = run_retrograde_packet(args)
     elif args.command == "retrograde-seed-candidates":
         result = run_retrograde_seed_candidates(args)
+    elif args.command == "retrograde-expand-seeds":
+        result = run_retrograde_expand_seeds(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":

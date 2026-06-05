@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -194,7 +195,7 @@ def _seed_test_vocabulary() -> SeedEligibleVocabulary:
     return vocabulary
 
 
-def _seed_request(vocabulary: SeedEligibleVocabulary) -> dict[str, object]:
+def _seed_request(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     return build_seed_generation_request(
         candidate_scaffolds={
             "core_entities": [
@@ -214,7 +215,7 @@ def _seed_request(vocabulary: SeedEligibleVocabulary) -> dict[str, object]:
     )
 
 
-def _valid_response_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, object]:
+def _valid_response_payload(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
     event_type = vocabulary["event_types"][0]
     relationship_type = vocabulary["relationship_types"][0]
     return {

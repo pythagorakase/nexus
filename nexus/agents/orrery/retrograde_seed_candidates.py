@@ -9,7 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from nexus.agents.orrery.retrograde_vocabulary import SeedEligibleVocabulary
 
-SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION = "orrery_retrograde_seed_candidates.v0"
+SeedCandidateSchemaVersion = Literal["orrery_retrograde_seed_candidates.v0"]
+SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION: SeedCandidateSchemaVersion = (
+    "orrery_retrograde_seed_candidates.v0"
+)
 
 
 class RetrogradeSeedCandidateValidationError(ValueError):
@@ -107,7 +110,7 @@ class RetrogradeMechanicalHints(BaseModel):
     pair_tags: list[RetrogradePairTagHint] = Field(default_factory=list)
     relationships: list[RetrogradeRelationshipHint] = Field(default_factory=list)
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
 class RetrogradeSeedCandidate(BaseModel):
@@ -148,9 +151,7 @@ class RetrogradeSeedCandidate(BaseModel):
 class RetrogradeSeedCandidateResponse(BaseModel):
     """Structured response from the non-mutating Skald-as-weaver seed pass."""
 
-    schema_version: Literal["orrery_retrograde_seed_candidates.v0"] = (
-        SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION
-    )
+    schema_version: SeedCandidateSchemaVersion = SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION
     candidates: list[RetrogradeSeedCandidate] = Field(
         default_factory=list,
         description="Over-generated candidate seeds.",
@@ -269,7 +270,7 @@ def generate_seed_candidates_with_skald(
 ) -> dict[str, Any]:
     """Make a non-mutating Skald call to generate Retrograde seed candidates."""
 
-    from pydantic_ai import Agent, ModelRetry
+    from pydantic_ai import Agent, ModelRetry, RunContext
     from pydantic_ai.settings import ModelSettings
 
     from nexus.api.config_utils import (
@@ -305,7 +306,7 @@ def generate_seed_candidates_with_skald(
     )
 
     async def _validate_output(
-        _ctx: Any,
+        _ctx: RunContext[None],
         output: RetrogradeSeedCandidateResponse,
     ) -> RetrogradeSeedCandidateResponse:
         try:
@@ -330,15 +331,10 @@ def generate_seed_candidates_with_skald(
             f"{type(response).__name__}, expected RetrogradeSeedCandidateResponse"
         )
 
-    validated = validate_seed_candidate_response(
-        payload=response.model_dump(mode="json"),
-        seed_generation_request=seed_generation_request,
-        vocabulary=vocabulary,
-    )
     return {
         "model": selected_model,
         "prompt_chars": len(prompt),
-        "seed_candidate_response": validated.model_dump(mode="json"),
+        "seed_candidate_response": response.model_dump(mode="json"),
     }
 
 
