@@ -75,6 +75,37 @@ def test_persistence_plan_reports_unresolved_refs() -> None:
     assert "unresolved_or_ambiguous_entity_refs" in _blocker_ids(plan)
 
 
+def test_persistence_plan_can_stage_missing_entity_stubs() -> None:
+    """Opt-in stub staging lets missing exact refs stop blocking dry-runs."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(vocabulary, omit_place=True)
+
+    plan = build_retrograde_persistence_plan(
+        cur,
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+        expansion_plan_payload=_valid_expansion(vocabulary),
+        slot=5,
+        dbname="save_05",
+        dry_run=True,
+        create_missing_entities=True,
+    )
+
+    assert plan["counters"]["entity_stubs_would_insert"] == 1
+    assert plan["counters"]["events_would_insert"] == 1
+    assert plan["counters"]["pair_tags_would_insert"] == 1
+    assert {row["entity_ref"]: row["status"] for row in plan["entity_stub_rows"]} == {
+        "Mara": "already_present",
+        "Shutter Hall": "would_insert",
+        "Vale": "already_present",
+    }
+    assert plan["event_rows"][0]["location"]["resolution"] == "stub_pending"
+    assert plan["pair_tag_rows"][0]["object"]["resolution"] == "stub_pending"
+    assert "unresolved_or_ambiguous_entity_refs" not in _blocker_ids(plan)
+    assert _blocker_ids(plan) == {"relationship_writer_not_available"}
+
+
 def test_persistence_plan_reports_missing_source_enum_values() -> None:
     """Pre-migration slots dry-run cleanly and surface missing provenance enums."""
 

@@ -633,6 +633,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
         slot: int,
         dbname: str,
         dry_run: bool,
+        create_missing_entities: bool,
     ) -> dict[str, Any]:
         calls.append(
             (
@@ -642,6 +643,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
                 slot,
                 dbname,
                 dry_run,
+                create_missing_entities,
             )
         )
         return {
@@ -669,6 +671,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             seed_candidates=candidates_path,
             expansion=expansion_path,
             execute=False,
+            create_stubs=True,
             output=output_path,
         )
     )
@@ -686,6 +689,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             expansion["retrograde_expansion_generation"]["retrograde_expansion_plan"],
             5,
             "save_05",
+            True,
             True,
         )
     ]

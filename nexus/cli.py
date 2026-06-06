@@ -1679,6 +1679,7 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
                     slot=args.slot,
                     dbname=dbname,
                     dry_run=dry_run,
+                    create_missing_entities=args.create_stubs,
                 )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
@@ -2600,6 +2601,15 @@ Examples:
         help=(
             "Write canonical Retrograde rows. Without this flag the command "
             "uses a read-only dry run."
+        ),
+    )
+    retrograde_apply_parser.add_argument(
+        "--create-stubs",
+        action="store_true",
+        help=(
+            "Treat unresolved expansion refs as minimum viable entity stubs. "
+            "Dry-run reports would-create rows; execute inserts them before "
+            "canonical Retrograde rows."
         ),
     )
     retrograde_apply_parser.add_argument(

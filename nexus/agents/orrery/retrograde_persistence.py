@@ -59,6 +59,7 @@ def build_retrograde_persistence_plan(
     slot: int,
     dbname: str,
     dry_run: bool = True,
+    create_missing_entities: bool = False,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
@@ -94,6 +95,8 @@ def build_retrograde_persistence_plan(
         pair_tag_ids=pair_tag_ids,
         source_blockers=source_blockers,
         world_time=world_time,
+        create_missing_entities=create_missing_entities,
+        inserted_stub_keys=frozenset(),
     )
     if dry_run:
         return manifest
@@ -102,6 +105,14 @@ def build_retrograde_persistence_plan(
     if blockers:
         formatted = "; ".join(blocker["reason"] for blocker in blockers)
         raise ValueError(f"Retrograde expansion is not safe to execute: {formatted}")
+
+    inserted_stub_keys = _insert_missing_entity_stubs(
+        cur,
+        entity_stub_rows=manifest["entity_stub_rows"],
+        create_missing_entities=create_missing_entities,
+    )
+    if inserted_stub_keys:
+        entity_index = _load_entity_index(cur)
 
     prologue_chunk_id = existing_prologue_id or _insert_prologue_chunk(cur)
     _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_chunk_id)
@@ -118,6 +129,8 @@ def build_retrograde_persistence_plan(
         pair_tag_ids=pair_tag_ids,
         source_blockers=source_blockers,
         world_time=world_time,
+        create_missing_entities=create_missing_entities,
+        inserted_stub_keys=inserted_stub_keys,
     )
 
 
@@ -135,6 +148,8 @@ def _build_plan(
     pair_tag_ids: Mapping[str, int],
     source_blockers: list[dict[str, str]],
     world_time: Any,
+    create_missing_entities: bool,
+    inserted_stub_keys: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -144,6 +159,19 @@ def _build_plan(
     event_source_available = not any(
         blocker["id"] == "event_source_kind_retrograde" for blocker in source_blockers
     )
+    entity_stub_rows = _plan_entity_stubs(
+        expansion=expansion,
+        entity_index=entity_index,
+        create_missing_entities=create_missing_entities,
+        inserted_stub_keys=inserted_stub_keys,
+    )
+    creatable_refs = frozenset(
+        (row["entity_kind"], _normalize_ref(row["entity_ref"]))
+        for row in entity_stub_rows
+        if row["status"] in {"would_insert", "inserted"}
+    )
+    for stub_row in entity_stub_rows:
+        counters[f"entity_stubs_{stub_row['status']}"] += 1
 
     event_rows = []
     for event in expansion.event_plan:
@@ -155,6 +183,7 @@ def _build_plan(
             entity_index=entity_index,
             event_types=event_types,
             event_source_available=event_source_available,
+            creatable_refs=creatable_refs,
         )
         event_rows.append(planned)
         counters[f"events_{planned['status']}"] += 1
@@ -172,6 +201,7 @@ def _build_plan(
             entity_index=entity_index,
             tag_ids=tag_ids,
             world_time=world_time,
+            creatable_refs=creatable_refs,
         )
         entity_tag_rows.append(planned)
         counters[f"entity_tags_{planned['status']}"] += 1
@@ -187,6 +217,7 @@ def _build_plan(
             entity_index=entity_index,
             pair_tag_ids=pair_tag_ids,
             world_time=world_time,
+            creatable_refs=creatable_refs,
         )
         pair_tag_rows.append(planned)
         counters[f"pair_tags_{planned['status']}"] += 1
@@ -234,6 +265,10 @@ def _build_plan(
         "pair_tags_already_present",
         "pair_tags_blocked",
         "relationships_planned_only",
+        "entity_stubs_would_insert",
+        "entity_stubs_inserted",
+        "entity_stubs_already_present",
+        "entity_stubs_ambiguous_existing",
     ):
         counters.setdefault(key, 0)
 
@@ -252,6 +287,7 @@ def _build_plan(
         "execute_blockers": execute_blockers,
         "reference_issues": reference_issues,
         "vocabulary_issues": vocabulary_issues,
+        "entity_stub_rows": entity_stub_rows,
         "event_rows": event_rows,
         "entity_tag_rows": entity_tag_rows,
         "pair_tag_rows": pair_tag_rows,
@@ -277,6 +313,7 @@ def _plan_event_row(
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     event_types: set[str],
     event_source_available: bool,
+    creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
@@ -285,14 +322,26 @@ def _plan_event_row(
     target_entity_id = None
 
     for participant in event.participants:
-        resolved = _resolve_participant(participant, entity_index)
+        resolved = _resolve_participant(
+            participant,
+            entity_index,
+            creatable_refs=creatable_refs,
+        )
         participant_results.append(resolved)
-        if resolved["resolution"] != "resolved":
+        if resolved["resolution"] not in {"resolved", "stub_pending"}:
             reference_issues.append(resolved)
             continue
-        if participant.role == "actor" and actor_entity_id is None:
+        if (
+            resolved["resolution"] == "resolved"
+            and participant.role == "actor"
+            and actor_entity_id is None
+        ):
             actor_entity_id = resolved["entity_id"]
-        if participant.role == "target" and target_entity_id is None:
+        if (
+            resolved["resolution"] == "resolved"
+            and participant.role == "target"
+            and target_entity_id is None
+        ):
             target_entity_id = resolved["entity_id"]
 
     location = None
@@ -303,10 +352,11 @@ def _plan_event_row(
             "place",
             entity_index,
             role="location",
+            creatable_refs=creatable_refs,
         )
         if location["resolution"] == "resolved":
             location_id = location["place_id"]
-        else:
+        elif location["resolution"] != "stub_pending":
             reference_issues.append(location)
 
     if event.event_type not in event_types:
@@ -370,6 +420,7 @@ def _plan_entity_tag_row(
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     tag_ids: Mapping[str, int],
     world_time: Any,
+    creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
@@ -378,8 +429,9 @@ def _plan_entity_tag_row(
         str(tag_plan["entity_kind"]),
         entity_index,
         role="entity_tag",
+        creatable_refs=creatable_refs,
     )
-    if entity["resolution"] != "resolved":
+    if entity["resolution"] not in {"resolved", "stub_pending"}:
         reference_issues.append(entity)
     tag = str(tag_plan["tag"])
     tag_id = tag_ids.get(tag)
@@ -407,6 +459,10 @@ def _plan_entity_tag_row(
         return {**base, "status": "blocked", "entity_tag_id": None}
     if tag_id is None:
         raise AssertionError("tag_id is required after vocabulary validation")
+    if entity["resolution"] == "stub_pending":
+        if dry_run:
+            return {**base, "status": "would_insert", "entity_tag_id": None}
+        raise AssertionError("stub_pending must be resolved before execute writes")
 
     existing_id = _active_entity_tag_id(cur, int(entity["entity_id"]), int(tag_id))
     if existing_id is not None:
@@ -432,6 +488,7 @@ def _plan_pair_tag_row(
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     pair_tag_ids: Mapping[str, int],
     world_time: Any,
+    creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
@@ -440,15 +497,17 @@ def _plan_pair_tag_row(
         str(pair_plan["subject_kind"]),
         entity_index,
         role="pair_subject",
+        creatable_refs=creatable_refs,
     )
     object_entity = _resolve_entity(
         str(pair_plan["object_ref"]),
         str(pair_plan["object_kind"]),
         entity_index,
         role="pair_object",
+        creatable_refs=creatable_refs,
     )
     for resolved in (subject, object_entity):
-        if resolved["resolution"] != "resolved":
+        if resolved["resolution"] not in {"resolved", "stub_pending"}:
             reference_issues.append(resolved)
     tag = str(pair_plan["tag"])
     pair_tag_id = pair_tag_ids.get(tag)
@@ -494,6 +553,12 @@ def _plan_pair_tag_row(
         return {**base, "status": "blocked", "entity_pair_tag_id": None}
     if pair_tag_id is None:
         raise AssertionError("pair_tag_id is required after vocabulary validation")
+    if subject["resolution"] == "stub_pending" or object_entity["resolution"] == (
+        "stub_pending"
+    ):
+        if dry_run:
+            return {**base, "status": "would_insert", "entity_pair_tag_id": None}
+        raise AssertionError("stub_pending must be resolved before execute writes")
 
     existing_id = _active_pair_tag_id(
         cur,
@@ -880,6 +945,254 @@ def _load_world_time(cur: Any) -> Any:
     return _row_value(row, "world_time", 0)
 
 
+def _plan_entity_stubs(
+    *,
+    expansion: RetrogradeExpansionPlanResponse,
+    entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    create_missing_entities: bool,
+    inserted_stub_keys: frozenset[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    refs = _collect_expansion_entity_refs(expansion)
+    rows = []
+    for key, ref in sorted(refs.items()):
+        matches = list(entity_index.get(key, []))
+        if key in inserted_stub_keys:
+            status = "inserted"
+        elif len(matches) == 1:
+            status = "already_present"
+        elif len(matches) > 1:
+            status = "ambiguous_existing"
+        elif create_missing_entities:
+            status = "would_insert"
+        else:
+            continue
+        row = {
+            "entity_ref": ref["entity_ref"],
+            "entity_kind": ref["entity_kind"],
+            "status": status,
+            "sources": ref["sources"],
+        }
+        if matches:
+            row["candidates"] = [_entity_record_json(match) for match in matches]
+        rows.append(row)
+    return rows
+
+
+def _collect_expansion_entity_refs(
+    expansion: RetrogradeExpansionPlanResponse,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    refs: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def add_ref(
+        entity_ref: Optional[str],
+        entity_kind: Optional[str],
+        *,
+        source: Mapping[str, Any],
+    ) -> None:
+        if not entity_ref or not entity_kind:
+            return
+        key = (str(entity_kind), _normalize_ref(str(entity_ref)))
+        entry = refs.setdefault(
+            key,
+            {
+                "entity_ref": str(entity_ref),
+                "entity_kind": str(entity_kind),
+                "sources": [],
+            },
+        )
+        entry["sources"].append(dict(source))
+
+    for event in expansion.event_plan:
+        for participant in event.participants:
+            add_ref(
+                participant.entity_ref,
+                participant.entity_kind,
+                source={
+                    "plan": "event_plan",
+                    "event_ref": event.event_ref,
+                    "role": participant.role,
+                },
+            )
+        add_ref(
+            event.location_ref,
+            "place",
+            source={
+                "plan": "event_plan",
+                "event_ref": event.event_ref,
+                "role": "location",
+            },
+        )
+
+    for tag_plan in expansion.entity_tag_plan:
+        add_ref(
+            tag_plan.entity_ref,
+            tag_plan.entity_kind,
+            source={
+                "plan": "entity_tag_plan",
+                "tag": tag_plan.tag,
+                "source_event_ref": tag_plan.source_event_ref,
+            },
+        )
+
+    for pair_plan in expansion.pair_tag_plan:
+        add_ref(
+            pair_plan.subject_ref,
+            pair_plan.subject_kind,
+            source={
+                "plan": "pair_tag_plan",
+                "tag": pair_plan.tag,
+                "role": "subject",
+            },
+        )
+        add_ref(
+            pair_plan.object_ref,
+            pair_plan.object_kind,
+            source={
+                "plan": "pair_tag_plan",
+                "tag": pair_plan.tag,
+                "role": "object",
+            },
+        )
+
+    for relationship in expansion.relationship_plan:
+        add_ref(
+            relationship.subject_ref,
+            relationship.subject_kind,
+            source={
+                "plan": "relationship_plan",
+                "relationship_type": relationship.relationship_type,
+                "role": "subject",
+            },
+        )
+        add_ref(
+            relationship.object_ref,
+            relationship.object_kind,
+            source={
+                "plan": "relationship_plan",
+                "relationship_type": relationship.relationship_type,
+                "role": "object",
+            },
+        )
+
+    return refs
+
+
+def _insert_missing_entity_stubs(
+    cur: Any,
+    *,
+    entity_stub_rows: Sequence[Mapping[str, Any]],
+    create_missing_entities: bool,
+) -> frozenset[tuple[str, str]]:
+    if not create_missing_entities:
+        return frozenset()
+
+    inserted: set[tuple[str, str]] = set()
+    for row in entity_stub_rows:
+        if row.get("status") != "would_insert":
+            continue
+        entity_ref = str(row["entity_ref"])
+        entity_kind = str(row["entity_kind"])
+        if entity_kind == "character":
+            _insert_character_stub(cur, entity_ref=entity_ref, sources=row["sources"])
+        elif entity_kind == "place":
+            _insert_place_stub(cur, entity_ref=entity_ref, sources=row["sources"])
+        elif entity_kind == "faction":
+            _insert_faction_stub(cur, entity_ref=entity_ref, sources=row["sources"])
+        else:
+            raise ValueError(f"Unsupported Retrograde stub entity kind {entity_kind!r}")
+        inserted.add((entity_kind, _normalize_ref(entity_ref)))
+    return frozenset(inserted)
+
+
+def _insert_character_stub(
+    cur: Any,
+    *,
+    entity_ref: str,
+    sources: Any,
+) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_character_stub */
+        INSERT INTO characters (
+            name, summary, background, current_activity, extra_data
+        )
+        VALUES (%s, %s, %s, %s, %s::jsonb)
+        """,
+        (
+            entity_ref,
+            _stub_summary(entity_ref, "character"),
+            "Retrograde-generated stub; details intentionally sparse until play.",
+            "latent in generated backstory",
+            json.dumps(_stub_extra_data(sources)),
+        ),
+    )
+
+
+def _insert_place_stub(
+    cur: Any,
+    *,
+    entity_ref: str,
+    sources: Any,
+) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_place_stub */
+        INSERT INTO places (
+            name, type, summary, current_status, extra_data
+        )
+        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb)
+        """,
+        (
+            entity_ref,
+            _stub_summary(entity_ref, "place"),
+            "latent in generated backstory",
+            json.dumps(_stub_extra_data(sources)),
+        ),
+    )
+
+
+def _insert_faction_stub(
+    cur: Any,
+    *,
+    entity_ref: str,
+    sources: Any,
+) -> None:
+    cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM factions")
+    faction_id = int(_row_value(cur.fetchone(), "id", 0))
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_faction_stub */
+        INSERT INTO factions (
+            id, name, summary, current_activity, extra_data
+        )
+        VALUES (%s, %s, %s, %s, %s::jsonb)
+        """,
+        (
+            faction_id,
+            entity_ref,
+            _stub_summary(entity_ref, "faction"),
+            "latent in generated backstory",
+            json.dumps(_stub_extra_data(sources)),
+        ),
+    )
+
+
+def _stub_summary(entity_ref: str, entity_kind: str) -> str:
+    return (
+        f"Retrograde-generated {entity_kind} stub for {entity_ref}. "
+        "Created so Skald-selected setup history can resolve to canonical rows."
+    )
+
+
+def _stub_extra_data(sources: Any) -> dict[str, Any]:
+    return {
+        "source": RETROGRADE_SOURCE_KIND,
+        "stub_kind": "retrograde_expansion_ref",
+        "sources": sources,
+    }
+
+
 def _source_kind_blockers(cur: Any) -> list[dict[str, str]]:
     blockers = []
     if RETROGRADE_SOURCE_KIND not in _load_enum_values(cur, "event_source_kind"):
@@ -915,12 +1228,15 @@ def _load_enum_values(cur: Any, type_name: str) -> set[str]:
 def _resolve_participant(
     participant: RetrogradeExpansionParticipant,
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    *,
+    creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
     return _resolve_entity(
         participant.entity_ref,
         participant.entity_kind,
         entity_index,
         role=participant.role,
+        creatable_refs=creatable_refs,
     )
 
 
@@ -930,14 +1246,25 @@ def _resolve_entity(
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     *,
     role: str,
+    creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
-    matches = list(entity_index.get((entity_kind, _normalize_ref(entity_ref)), []))
+    key = (entity_kind, _normalize_ref(entity_ref))
+    matches = list(entity_index.get(key, []))
     base = {
         "entity_ref": entity_ref,
         "entity_kind": entity_kind,
         "role": role,
     }
     if not matches:
+        if key in creatable_refs:
+            return {
+                **base,
+                "resolution": "stub_pending",
+                "reason": (
+                    "No entity with this exact name/kind exists yet; "
+                    "Retrograde stub creation is enabled"
+                ),
+            }
         return {
             **base,
             "resolution": "unresolved",
