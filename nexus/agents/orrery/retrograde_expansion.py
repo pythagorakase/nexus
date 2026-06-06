@@ -583,6 +583,14 @@ def _relationship_plan_issues(
     if relationship_plan.relationship_type not in relationship_types:
         issues.append(f"{prefix} is not registered")
     if (
+        relationship_plan.subject_kind != "character"
+        or relationship_plan.object_kind != "character"
+    ):
+        issues.append(
+            f"{prefix} must be character->character; use event_plan or "
+            "pair_tag_plan for faction/place mechanics"
+        )
+    if (
         relationship_plan.source_event_ref
         and relationship_plan.source_event_ref not in event_refs
     ):
@@ -645,6 +653,10 @@ def _hard_validation_rules() -> list[str]:
         ),
         "Prompt-visible-only tags must not appear in entity_tag_plan.",
         "Pair tags must obey registered subject/object kind constraints.",
+        (
+            "relationship_plan currently supports only character->character "
+            "rows; express faction/place pressure through events or pair tags."
+        ),
         (
             "commit_readiness must keep writes='none' and include both current "
             "commit blockers."

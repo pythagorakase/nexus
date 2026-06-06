@@ -43,11 +43,12 @@ def test_persistence_plan_resolves_row_shaped_dry_run() -> None:
     assert plan["counters"]["events_would_insert"] == 1
     assert plan["counters"]["entity_tags_would_insert"] == 2
     assert plan["counters"]["pair_tags_would_insert"] == 1
-    assert plan["counters"]["relationships_planned_only"] == 1
+    assert plan["counters"]["relationships_would_insert"] == 1
     assert plan["event_rows"][0]["actor_entity_id"] == 101
     assert plan["event_rows"][0]["location_id"] == 2011
     assert plan["entity_tag_rows"][0]["source_kind"] == "retrograde"
-    assert _blocker_ids(plan) == {"relationship_writer_not_available"}
+    assert plan["relationship_rows"][0]["status"] == "would_insert"
+    assert _blocker_ids(plan) == set()
 
 
 def test_persistence_plan_reports_unresolved_refs() -> None:
@@ -103,7 +104,7 @@ def test_persistence_plan_can_stage_missing_entity_stubs() -> None:
     assert plan["event_rows"][0]["location"]["resolution"] == "stub_pending"
     assert plan["pair_tag_rows"][0]["object"]["resolution"] == "stub_pending"
     assert "unresolved_or_ambiguous_entity_refs" not in _blocker_ids(plan)
-    assert _blocker_ids(plan) == {"relationship_writer_not_available"}
+    assert _blocker_ids(plan) == set()
 
 
 def test_persistence_plan_reports_missing_source_enum_values() -> None:
@@ -128,18 +129,27 @@ def test_persistence_plan_reports_missing_source_enum_values() -> None:
     } <= _blocker_ids(plan)
 
 
-def test_persistence_execute_blocks_relationship_plan_without_writer() -> None:
-    """Execution refuses partial canonical writes while relationships are pending."""
+def test_persistence_execute_rejects_cross_kind_relationship_plan() -> None:
+    """Cross-kind relationships are rejected before canonical writes begin."""
 
     vocabulary = _persistence_test_vocabulary()
     cur = FakeRetrogradePersistenceCursor(vocabulary)
+    expansion = _valid_expansion(vocabulary)
+    expansion["relationship_plan"][0] = {
+        "subject_ref": "Rain Ledger",
+        "subject_kind": "faction",
+        "relationship_type": vocabulary["relationship_types"][0],
+        "object_ref": "Mara",
+        "object_kind": "character",
+        "source_event_ref": "retro_event_001",
+    }
 
-    with pytest.raises(ValueError, match="relationship_plan contains rows"):
+    with pytest.raises(ValueError, match="must be character->character"):
         build_retrograde_persistence_plan(
             cur,
             packet=_packet(vocabulary),
             seed_candidate_response=_seed_response(vocabulary),
-            expansion_plan_payload=_valid_expansion(vocabulary),
+            expansion_plan_payload=expansion,
             slot=5,
             dbname="save_05",
             dry_run=False,
@@ -229,6 +239,8 @@ class FakeRetrogradePersistenceCursor:
         elif "orrery:retrograde:active_entity_tag" in sql:
             self._result = []
         elif "orrery:retrograde:active_pair_tag" in sql:
+            self._result = []
+        elif "orrery:retrograde:existing_character_relationship" in sql:
             self._result = []
         else:
             raise AssertionError(f"Unexpected SQL: {sql}")

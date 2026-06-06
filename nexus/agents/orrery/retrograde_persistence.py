@@ -12,6 +12,7 @@ from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionEventPlan,
     RetrogradeExpansionParticipant,
     RetrogradeExpansionPlanResponse,
+    RetrogradeExpansionRelationshipPlan,
     validate_expansion_plan,
 )
 
@@ -154,6 +155,7 @@ def _build_plan(
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
     vocabulary_issues: list[dict[str, Any]] = []
+    relationship_issues: list[dict[str, Any]] = []
     execute_blockers: list[dict[str, str]] = list(source_blockers)
     event_ref_to_id: dict[str, int] = {}
     event_source_available = not any(
@@ -224,32 +226,23 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         vocabulary_issues.extend(planned.pop("_vocabulary_issues"))
 
-    relationship_rows = [
-        {
-            **relationship.model_dump(mode="json"),
-            "status": "planned_only",
-            "reason": (
-                "Retrograde relationship writes need a dedicated writer because "
-                "character, faction, and faction-character relationships have "
-                "different required columns and valence semantics."
-            ),
-        }
-        for relationship in expansion.relationship_plan
-    ]
-    if relationship_rows:
-        counters["relationships_planned_only"] = len(relationship_rows)
-        execute_blockers.append(
-            {
-                "id": "relationship_writer_not_available",
-                "reason": (
-                    "relationship_plan contains rows, but Retrograde does not "
-                    "yet have a canonical relationship writer"
-                ),
-            }
+    relationship_rows = []
+    for relationship in expansion.relationship_plan:
+        planned = _plan_relationship_row(
+            cur,
+            relationship=relationship,
+            dry_run=dry_run,
+            entity_index=entity_index,
+            creatable_refs=creatable_refs,
         )
+        relationship_rows.append(planned)
+        counters[f"relationships_{planned['status']}"] += 1
+        reference_issues.extend(planned.pop("_reference_issues"))
+        relationship_issues.extend(planned.pop("_relationship_issues"))
 
     _append_reference_blockers(execute_blockers, reference_issues)
     _append_vocabulary_blockers(execute_blockers, vocabulary_issues)
+    _append_relationship_blockers(execute_blockers, relationship_issues)
 
     for key in (
         "events_would_insert",
@@ -264,7 +257,10 @@ def _build_plan(
         "pair_tags_inserted",
         "pair_tags_already_present",
         "pair_tags_blocked",
-        "relationships_planned_only",
+        "relationships_would_insert",
+        "relationships_inserted",
+        "relationships_already_present",
+        "relationships_blocked",
         "entity_stubs_would_insert",
         "entity_stubs_inserted",
         "entity_stubs_already_present",
@@ -287,6 +283,7 @@ def _build_plan(
         "execute_blockers": execute_blockers,
         "reference_issues": reference_issues,
         "vocabulary_issues": vocabulary_issues,
+        "relationship_issues": relationship_issues,
         "entity_stub_rows": entity_stub_rows,
         "event_rows": event_rows,
         "entity_tag_rows": entity_tag_rows,
@@ -590,6 +587,111 @@ def _plan_pair_tag_row(
     }
 
 
+def _plan_relationship_row(
+    cur: Any,
+    *,
+    relationship: RetrogradeExpansionRelationshipPlan,
+    dry_run: bool,
+    entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
+    creatable_refs: frozenset[tuple[str, str]],
+) -> dict[str, Any]:
+    reference_issues: list[dict[str, Any]] = []
+    relationship_issues: list[dict[str, Any]] = []
+    subject = _resolve_entity(
+        relationship.subject_ref,
+        relationship.subject_kind,
+        entity_index,
+        role="relationship_subject",
+        creatable_refs=creatable_refs,
+    )
+    object_entity = _resolve_entity(
+        relationship.object_ref,
+        relationship.object_kind,
+        entity_index,
+        role="relationship_object",
+        creatable_refs=creatable_refs,
+    )
+    for resolved in (subject, object_entity):
+        if resolved["resolution"] not in {"resolved", "stub_pending"}:
+            reference_issues.append(resolved)
+
+    if (
+        subject.get("resolution") == "resolved"
+        and object_entity.get("resolution") == "resolved"
+        and subject.get("entity_id") == object_entity.get("entity_id")
+    ):
+        relationship_issues.append(
+            {
+                "relationship_type": relationship.relationship_type,
+                "subject_ref": relationship.subject_ref,
+                "object_ref": relationship.object_ref,
+                "resolution": "self_edge",
+                "reason": "relationship rows require distinct endpoints",
+            }
+        )
+
+    base = {
+        **relationship.model_dump(mode="json"),
+        "subject": subject,
+        "object": object_entity,
+        "subject_entity_id": subject.get("entity_id"),
+        "object_entity_id": object_entity.get("entity_id"),
+        "template_id": _source_event_template_id(relationship.source_event_ref),
+        "_reference_issues": reference_issues,
+        "_relationship_issues": relationship_issues,
+    }
+    if subject["entity_kind"] != "character" or object_entity["entity_kind"] != (
+        "character"
+    ):
+        relationship_issues.append(
+            {
+                "relationship_type": relationship.relationship_type,
+                "subject_ref": relationship.subject_ref,
+                "subject_kind": relationship.subject_kind,
+                "object_ref": relationship.object_ref,
+                "object_kind": relationship.object_kind,
+                "resolution": "unsupported_relationship_surface",
+                "reason": (
+                    "Retrograde can currently write only character-character "
+                    "relationship_plan rows; use events or pair tags for "
+                    "faction/place mechanics"
+                ),
+            }
+        )
+
+    if reference_issues or relationship_issues:
+        return {**base, "status": "blocked"}
+    if subject["resolution"] == "stub_pending" or object_entity["resolution"] == (
+        "stub_pending"
+    ):
+        if dry_run:
+            return {**base, "status": "would_insert"}
+        raise AssertionError("stub_pending must be resolved before execute writes")
+
+    subject_character_id = subject.get("character_id")
+    object_character_id = object_entity.get("character_id")
+    if subject_character_id is None or object_character_id is None:
+        raise AssertionError("character relationship endpoints require character ids")
+
+    existing = _existing_character_relationship(
+        cur,
+        character1_id=int(subject_character_id),
+        character2_id=int(object_character_id),
+    )
+    if existing is not None:
+        return {**base, "status": "already_present", "existing": existing}
+    if dry_run:
+        return {**base, "status": "would_insert"}
+
+    _insert_character_relationship(
+        cur,
+        relationship=relationship,
+        character1_id=int(subject_character_id),
+        character2_id=int(object_character_id),
+    )
+    return {**base, "status": "inserted"}
+
+
 def _insert_world_event(
     cur: Any,
     *,
@@ -721,6 +823,36 @@ def _insert_pair_tag(
     if row is None:
         return None
     return int(_row_value(row, "id", 0))
+
+
+def _insert_character_relationship(
+    cur: Any,
+    *,
+    relationship: RetrogradeExpansionRelationshipPlan,
+    character1_id: int,
+    character2_id: int,
+) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_character_relationship */
+        INSERT INTO character_relationships (
+            character1_id, character2_id, relationship_type, emotional_valence,
+            dynamic, recent_events, history, extra_data
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+        ON CONFLICT (character1_id, character2_id) DO NOTHING
+        """,
+        (
+            character1_id,
+            character2_id,
+            relationship.relationship_type,
+            _default_emotional_valence(relationship.relationship_type),
+            "latent in generated backstory",
+            _relationship_recent_events(relationship),
+            _relationship_history(relationship),
+            json.dumps(_relationship_extra_data(relationship)),
+        ),
+    )
 
 
 def _insert_prologue_chunk(cur: Any) -> int:
@@ -857,6 +989,34 @@ def _active_pair_tag_id(
     if row is None:
         return None
     return int(_row_value(row, "id", 0))
+
+
+def _existing_character_relationship(
+    cur: Any,
+    *,
+    character1_id: int,
+    character2_id: int,
+) -> Optional[dict[str, Any]]:
+    cur.execute(
+        """
+        /* orrery:retrograde:existing_character_relationship */
+        SELECT relationship_type, emotional_valence, dynamic, recent_events, history
+        FROM character_relationships
+        WHERE character1_id = %s AND character2_id = %s
+        LIMIT 1
+        """,
+        (character1_id, character2_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "relationship_type": str(_row_value(row, "relationship_type", 0)),
+        "emotional_valence": str(_row_value(row, "emotional_valence", 1)),
+        "dynamic": str(_row_value(row, "dynamic", 2)),
+        "recent_events": str(_row_value(row, "recent_events", 3)),
+        "history": str(_row_value(row, "history", 4)),
+    }
 
 
 def _load_entity_index(cur: Any) -> dict[tuple[str, str], list[_EntityRecord]]:
@@ -1193,6 +1353,61 @@ def _stub_extra_data(sources: Any) -> dict[str, Any]:
     }
 
 
+def _relationship_recent_events(
+    relationship: RetrogradeExpansionRelationshipPlan,
+) -> str:
+    if relationship.source_event_ref:
+        return f"Established by Retrograde event {relationship.source_event_ref}."
+    return "Established by Retrograde setup history."
+
+
+def _relationship_history(
+    relationship: RetrogradeExpansionRelationshipPlan,
+) -> str:
+    if relationship.rationale:
+        return relationship.rationale
+    return (
+        "Retrograde-generated setup relationship between "
+        f"{relationship.subject_ref} and {relationship.object_ref}."
+    )
+
+
+def _relationship_extra_data(
+    relationship: RetrogradeExpansionRelationshipPlan,
+) -> dict[str, Any]:
+    return {
+        "source": RETROGRADE_SOURCE_KIND,
+        "retrograde_relationship": True,
+        "relationship_type": relationship.relationship_type,
+        "subject_ref": relationship.subject_ref,
+        "subject_kind": relationship.subject_kind,
+        "object_ref": relationship.object_ref,
+        "object_kind": relationship.object_kind,
+        "source_event_ref": relationship.source_event_ref,
+        "rationale": relationship.rationale,
+    }
+
+
+def _default_emotional_valence(relationship_type: str) -> str:
+    positive = {
+        "ally",
+        "chosen_kin",
+        "companion",
+        "family",
+        "friend",
+        "guardian",
+        "mentor",
+        "romantic",
+        "ward",
+    }
+    negative = {"captor", "enemy", "rival"}
+    if relationship_type in positive:
+        return "+3|trusting"
+    if relationship_type in negative:
+        return "-3|resentful"
+    return "0|neutral"
+
+
 def _source_kind_blockers(cur: Any) -> list[dict[str, str]]:
     blockers = []
     if RETROGRADE_SOURCE_KIND not in _load_enum_values(cur, "event_source_kind"):
@@ -1351,6 +1566,23 @@ def _append_vocabulary_blockers(
             "reason": (
                 f"{len(vocabulary_issues)} planned vocabulary entries are not "
                 "registered in this slot"
+            ),
+        }
+    )
+
+
+def _append_relationship_blockers(
+    execute_blockers: list[dict[str, str]],
+    relationship_issues: Sequence[Mapping[str, Any]],
+) -> None:
+    if not relationship_issues:
+        return
+    execute_blockers.append(
+        {
+            "id": "unsupported_relationship_rows",
+            "reason": (
+                f"{len(relationship_issues)} relationship_plan rows cannot be "
+                "written to canonical relationship tables"
             ),
         }
     )
