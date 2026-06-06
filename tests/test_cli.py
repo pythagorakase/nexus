@@ -543,3 +543,149 @@ def test_retrograde_expand_seeds_reads_inputs_and_writes_response(
         )
     ]
     assert written["model"] == "TEST"
+
+
+class FakeApplyCursor:
+    """Cursor double for apply-style CLI commands."""
+
+    def __enter__(self) -> "FakeApplyCursor":
+        """Enter cursor context."""
+
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        """Exit cursor context."""
+
+        return None
+
+    def execute(self, sql: str, *args: Any) -> None:
+        """Accept read-only transaction setup."""
+
+        if "SET TRANSACTION READ ONLY" not in sql:
+            raise AssertionError(f"Unexpected SQL: {sql}")
+
+
+class FakeApplyConnection:
+    """Connection double with an apply-capable cursor."""
+
+    def __enter__(self) -> "FakeApplyConnection":
+        """Enter connection context."""
+
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        """Exit connection context."""
+
+        return None
+
+    def cursor(self) -> FakeApplyCursor:
+        """Return a cursor double."""
+
+        return FakeApplyCursor()
+
+
+def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    """The persistence command mirrors manifest apply grammar."""
+
+    from nexus.agents.orrery import retrograde_persistence
+    from nexus.api import db_pool
+
+    packet_path = tmp_path / "packet.json"
+    candidates_path = tmp_path / "seed_candidates.json"
+    expansion_path = tmp_path / "expansion.json"
+    output_path = tmp_path / "persistence.json"
+    packet = {"seed_generation_request": {"budget": {"select_target": 1}}}
+    candidates = {
+        "seed_candidate_response": {
+            "schema_version": "orrery_retrograde_seed_candidates.v0",
+            "candidates": [],
+            "selected_seed_ids": [],
+            "rejected_seed_ids": [],
+        }
+    }
+    expansion = {
+        "retrograde_expansion_generation": {
+            "retrograde_expansion_plan": {
+                "schema_version": "orrery_retrograde_expansion_plan.v0",
+                "selected_seed_ids": [],
+                "event_plan": [],
+                "entity_tag_plan": [],
+                "pair_tag_plan": [],
+                "relationship_plan": [],
+                "thread_plan": [],
+            }
+        }
+    }
+    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+    candidates_path.write_text(json.dumps(candidates), encoding="utf-8")
+    expansion_path.write_text(json.dumps(expansion), encoding="utf-8")
+    calls = []
+
+    def fake_build(
+        cur: Any,
+        *,
+        packet: dict[str, Any],
+        seed_candidate_response: dict[str, Any],
+        expansion_plan_payload: dict[str, Any],
+        slot: int,
+        dbname: str,
+        dry_run: bool,
+    ) -> dict[str, Any]:
+        calls.append(
+            (
+                packet,
+                seed_candidate_response,
+                expansion_plan_payload,
+                slot,
+                dbname,
+                dry_run,
+            )
+        )
+        return {
+            "schema_version": "orrery_retrograde_persistence_plan.v0",
+            "dry_run": dry_run,
+            "slot": slot,
+            "dbname": dbname,
+            "counters": {"events_would_insert": 0},
+            "execute_blockers": [],
+        }
+
+    monkeypatch.setattr(
+        db_pool, "get_connection", lambda *args, **kwargs: FakeApplyConnection()
+    )
+    monkeypatch.setattr(
+        retrograde_persistence,
+        "build_retrograde_persistence_plan",
+        fake_build,
+    )
+
+    result = cli.run_retrograde_apply_expansion(
+        Namespace(
+            slot=5,
+            packet=packet_path,
+            seed_candidates=candidates_path,
+            expansion=expansion_path,
+            execute=False,
+            output=output_path,
+        )
+    )
+
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["success"] is True
+    assert result["persistence_output"] == str(output_path)
+    assert result["retrograde_persistence"]["dry_run"] is True
+    assert written["schema_version"] == "orrery_retrograde_persistence_plan.v0"
+    assert calls == [
+        (
+            packet,
+            candidates["seed_candidate_response"],
+            expansion["retrograde_expansion_generation"]["retrograde_expansion_plan"],
+            5,
+            "save_05",
+            True,
+        )
+    ]

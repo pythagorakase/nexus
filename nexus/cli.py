@@ -11,6 +11,7 @@ Commands:
     nexus retrograde-packet --slot N  Build dry-run Retrograde seed packet
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
     nexus retrograde-expand-seeds  Call Skald for non-mutating R6 expansion
+    nexus retrograde-apply-expansion --slot N  Dry-run Retrograde persistence
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -334,6 +335,46 @@ def _print_retrograde_expansion(payload: Dict[str, Any]) -> None:
     if payload.get("expansion_output"):
         print()
         print(f"Output: {payload['expansion_output']}")
+
+
+def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
+    """Print a compact Retrograde persistence manifest summary."""
+
+    plan = payload.get("retrograde_persistence") or {}
+    counters = plan.get("counters") or {}
+    blockers = plan.get("execute_blockers") or []
+    prologue = plan.get("prologue_anchor") or {}
+
+    print("Persistence plan:")
+    print(f"  dry_run: {plan.get('dry_run')}")
+    print(f"  source_kind: {plan.get('source_kind')}")
+    print(f"  prologue_anchor: {prologue.get('status')}")
+    if prologue.get("chunk_id") is not None:
+        print(f"  prologue_chunk_id: {prologue.get('chunk_id')}")
+    for key in (
+        "events_would_insert",
+        "events_inserted",
+        "events_already_present",
+        "events_blocked",
+        "entity_tags_would_insert",
+        "entity_tags_inserted",
+        "entity_tags_already_present",
+        "entity_tags_blocked",
+        "pair_tags_would_insert",
+        "pair_tags_inserted",
+        "pair_tags_already_present",
+        "pair_tags_blocked",
+        "relationships_planned_only",
+    ):
+        print(f"  {key}: {counters.get(key, 0)}")
+    if blockers:
+        print()
+        print("Execute blockers:")
+        for blocker in blockers:
+            print(f"  - {blocker.get('id')}: {blocker.get('reason')}")
+    if payload.get("persistence_output"):
+        print()
+        print(f"Output: {payload['persistence_output']}")
 
 
 def _print_faction_audit(payload: Dict[str, Any]) -> None:
@@ -704,6 +745,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("retrograde_expansion_generation"):
         _print_retrograde_expansion(payload)
+        print()
+
+    if payload.get("retrograde_persistence"):
+        _print_retrograde_persistence(payload)
         print()
 
     if payload.get("faction_audit"):
@@ -1603,6 +1648,63 @@ def run_retrograde_expand_seeds(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
+    """Dry-run or execute a Retrograde R6 expansion persistence plan."""
+
+    from nexus.agents.orrery.retrograde_persistence import (
+        build_retrograde_persistence_plan,
+    )
+    from nexus.api.db_pool import get_connection
+    from nexus.api.slot_utils import slot_dbname
+
+    try:
+        packet = _load_retrograde_packet_file(args.packet)
+        seed_candidates = _load_seed_candidate_file(args.seed_candidates)
+        expansion_plan = _load_retrograde_expansion_file(args.expansion)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {"success": False, "error": str(exc)}
+
+    dbname = slot_dbname(args.slot)
+    dry_run = not args.execute
+    try:
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                if dry_run:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                persistence = build_retrograde_persistence_plan(
+                    cur,
+                    packet=packet,
+                    seed_candidate_response=seed_candidates,
+                    expansion_plan_payload=expansion_plan,
+                    slot=args.slot,
+                    dbname=dbname,
+                    dry_run=dry_run,
+                )
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    output_path = args.output
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(persistence, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    mode = "dry run" if dry_run else "executed"
+    return {
+        "success": True,
+        "message": f"Retrograde persistence plan for slot {args.slot} ({mode}).",
+        "slot": args.slot,
+        "dbname": dbname,
+        "packet_input": str(args.packet),
+        "candidate_input": str(args.seed_candidates),
+        "expansion_input": str(args.expansion),
+        "retrograde_persistence": persistence,
+        "persistence_output": str(output_path) if output_path is not None else None,
+    }
+
+
 def _load_retrograde_packet_file(path: Path) -> Dict[str, Any]:
     """Load a raw packet or CLI envelope containing a Retrograde packet."""
 
@@ -1628,6 +1730,24 @@ def _load_seed_candidate_file(path: Path) -> Dict[str, Any]:
         raise ValueError(f"{path} does not contain a seed candidate object")
     if "candidates" not in response or "selected_seed_ids" not in response:
         raise ValueError(f"{path} is missing seed candidate response fields")
+    return response
+
+
+def _load_retrograde_expansion_file(path: Path) -> Dict[str, Any]:
+    """Load a raw R6 expansion plan or CLI generation envelope."""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    generation = payload.get("retrograde_expansion_generation")
+    if isinstance(generation, dict):
+        response = generation.get("retrograde_expansion_plan")
+    else:
+        response = payload.get("retrograde_expansion_plan") or payload
+    if not isinstance(response, dict):
+        raise ValueError(f"{path} does not contain a Retrograde expansion object")
+    if "event_plan" not in response or "thread_plan" not in response:
+        raise ValueError(f"{path} is missing Retrograde expansion response fields")
     return response
 
 
@@ -2205,6 +2325,7 @@ Examples:
   nexus retrograde-packet --slot 5 --output packet.json
   nexus retrograde-seed-candidates --packet packet.json --output seeds.json
   nexus retrograde-expand-seeds --packet packet.json --seed-candidates seeds.json
+  nexus retrograde-apply-expansion --slot 5 --packet packet.json ...
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -2447,6 +2568,46 @@ Examples:
         help="Optional path for the Skald expansion response JSON.",
     )
 
+    # retrograde-apply-expansion command
+    retrograde_apply_parser = subparsers.add_parser(
+        "retrograde-apply-expansion",
+        help="Dry-run or execute a Retrograde R6 expansion persistence plan",
+    )
+    retrograde_apply_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    retrograde_apply_parser.add_argument(
+        "--packet",
+        type=Path,
+        required=True,
+        help="Existing Retrograde packet JSON from retrograde-packet.",
+    )
+    retrograde_apply_parser.add_argument(
+        "--seed-candidates",
+        type=Path,
+        required=True,
+        help="Seed candidate JSON from retrograde-seed-candidates.",
+    )
+    retrograde_apply_parser.add_argument(
+        "--expansion",
+        type=Path,
+        required=True,
+        help="Expansion JSON from retrograde-expand-seeds.",
+    )
+    retrograde_apply_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "Write canonical Retrograde rows. Without this flag the command "
+            "uses a read-only dry run."
+        ),
+    )
+    retrograde_apply_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional path for the raw persistence plan JSON.",
+    )
+
     # faction-audit command
     faction_audit_parser = subparsers.add_parser(
         "faction-audit",
@@ -2664,6 +2825,7 @@ def main() -> int:
         "clear",
         "trait-audit",
         "retrograde-packet",
+        "retrograde-apply-expansion",
         "faction-audit",
         "faction-manifest",
         "faction-apply",
@@ -2713,6 +2875,8 @@ def main() -> int:
         result = run_retrograde_seed_candidates(args)
     elif args.command == "retrograde-expand-seeds":
         result = run_retrograde_expand_seeds(args)
+    elif args.command == "retrograde-apply-expansion":
+        result = run_retrograde_apply_expansion(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":
