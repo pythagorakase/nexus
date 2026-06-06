@@ -894,7 +894,7 @@ def _ensure_prologue_metadata(cur: Any, *, prologue_chunk_id: int) -> None:
         )
         VALUES (
             %s, 0, 0, 0, 'primary'::world_layer_type,
-            interval '0 seconds', now(), 'RETROGRADE_PROLOGUE',
+            interval '0 seconds', now(), 'RETRO',
             COALESCE(
                 (
                     SELECT min(world_time) - interval '1 second'

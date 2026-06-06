@@ -84,6 +84,25 @@ def read_tag_library(
         conn.close()
 
 
+def read_event_types(dbname: Optional[str] = None) -> list[str]:
+    """Read active world event types from the target slot database."""
+
+    conn = _connect(dbname)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT type
+                FROM event_types
+                WHERE deprecated = FALSE
+                ORDER BY type
+                """
+            )
+            return [str(row["type"]) for row in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def format_tag_library_for_prompt(
     dbname: Optional[str] = None,
     *,

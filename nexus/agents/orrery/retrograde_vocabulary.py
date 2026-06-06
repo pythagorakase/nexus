@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Iterable, Literal, TypedDict
 
 from nexus.agents.orrery.catalog import collect_template_vocabulary
 from nexus.agents.orrery.pair_tag_registry import PAIR_TAG_SEED
 from nexus.agents.orrery.substrate import EntityKind, Slot
-from nexus.agents.orrery.tag_library import read_tag_library
+from nexus.agents.orrery.tag_library import read_event_types, read_tag_library
 from nexus.agents.orrery.templates import BUILTIN_TEMPLATES
 
 
@@ -99,6 +99,11 @@ def enumerate_seed_eligible_vocabulary(
 
     template_vocab = collect_template_vocabulary(BUILTIN_TEMPLATES)
     registry_vocab = _collect_registry_vocabulary(dbname)
+    event_types = (
+        read_event_types(dbname)
+        if dbname is not None
+        else _sorted_strings(template_vocab["event_types"])
+    )
     single_entity_tags = sorted(
         set(template_vocab["durable_tags"])
         | set(template_vocab["ephemeral_tags"])
@@ -132,7 +137,7 @@ def enumerate_seed_eligible_vocabulary(
         ],
         "multi_entity_tag_families": [item["tag"] for item in pair_tag_definitions],
         "multi_entity_tag_definitions": pair_tag_definitions,
-        "event_types": _sorted_strings(template_vocab["event_types"]),
+        "event_types": event_types,
         "place_classes": _sorted_strings(template_vocab["place_classes"]),
         "relationship_types": _sorted_strings(template_vocab["relationship_types"]),
     }
@@ -266,7 +271,7 @@ def _load_pair_tag_definitions() -> list[PairTagPrimitive]:
     return sorted(definitions, key=lambda item: item["tag"])
 
 
-def _sorted_strings(values: object) -> list[str]:
+def _sorted_strings(values: Iterable[object]) -> list[str]:
     """Return stable string ordering for a vocabulary bucket."""
 
     return sorted(str(value) for value in values)
