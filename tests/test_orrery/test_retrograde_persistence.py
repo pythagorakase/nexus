@@ -129,6 +129,55 @@ def test_persistence_plan_reports_missing_source_enum_values() -> None:
     } <= _blocker_ids(plan)
 
 
+def test_persistence_plan_counts_vocabulary_blocked_events() -> None:
+    """Dry-runs do not count vocabulary-invalid events as would-insert rows."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(vocabulary, omit_first_event_type=True)
+
+    plan = build_retrograde_persistence_plan(
+        cur,
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+        expansion_plan_payload=_valid_expansion(vocabulary),
+        slot=5,
+        dbname="save_05",
+        dry_run=True,
+    )
+
+    assert plan["counters"]["events_blocked"] == 1
+    assert plan["counters"]["events_would_insert"] == 0
+    assert "missing_slot_vocabulary" in _blocker_ids(plan)
+
+
+def test_persistence_execute_writes_canonical_rows() -> None:
+    """Execute mode reaches the canonical write helpers when blockers are clear."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(vocabulary)
+
+    plan = build_retrograde_persistence_plan(
+        cur,
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+        expansion_plan_payload=_valid_expansion(vocabulary),
+        slot=5,
+        dbname="save_05",
+        dry_run=False,
+    )
+
+    assert plan["prologue_anchor"]["status"] == "inserted"
+    assert plan["counters"]["events_inserted"] == 1
+    assert plan["counters"]["entity_tags_inserted"] == 2
+    assert plan["counters"]["pair_tags_inserted"] == 1
+    assert plan["counters"]["relationships_inserted"] == 1
+    assert any("insert_prologue_chunk" in sql for sql in cur.statements)
+    assert any("insert_world_event" in sql for sql in cur.statements)
+    assert any("insert_entity_tag" in sql for sql in cur.statements)
+    assert any("insert_pair_tag" in sql for sql in cur.statements)
+    assert any("insert_character_relationship" in sql for sql in cur.statements)
+
+
 def test_persistence_execute_rejects_cross_kind_relationship_plan() -> None:
     """Cross-kind relationships are rejected before canonical writes begin."""
 
@@ -167,10 +216,12 @@ class FakeRetrogradePersistenceCursor:
         *,
         omit_place: bool = False,
         include_retrograde_sources: bool = True,
+        omit_first_event_type: bool = False,
     ) -> None:
         self.vocabulary = vocabulary
         self.omit_place = omit_place
         self.include_retrograde_sources = include_retrograde_sources
+        self.omit_first_event_type = omit_first_event_type
         self.statements: list[str] = []
         self.params: list[Any] = []
         self._result: list[dict[str, Any]] = []
@@ -212,9 +263,10 @@ class FakeRetrogradePersistenceCursor:
                 )
             self._result = rows
         elif "orrery:retrograde:event_types" in sql:
-            self._result = [
-                {"type": event_type} for event_type in self.vocabulary["event_types"]
-            ]
+            event_types = self.vocabulary["event_types"]
+            if self.omit_first_event_type:
+                event_types = event_types[1:]
+            self._result = [{"type": event_type} for event_type in event_types]
         elif "orrery:retrograde:single_entity_tags" in sql:
             self._result = [
                 {"id": 1, "tag": "grieving"},
@@ -241,6 +293,22 @@ class FakeRetrogradePersistenceCursor:
         elif "orrery:retrograde:active_pair_tag" in sql:
             self._result = []
         elif "orrery:retrograde:existing_character_relationship" in sql:
+            self._result = []
+        elif "orrery:retrograde:insert_prologue_chunk" in sql:
+            self._result = [{"id": 900}]
+        elif "orrery:retrograde:prologue_metadata_exists" in sql:
+            self._result = []
+        elif "orrery:retrograde:insert_prologue_metadata" in sql:
+            self._result = []
+        elif "orrery:retrograde:insert_world_event_entity" in sql:
+            self._result = []
+        elif "orrery:retrograde:insert_world_event" in sql:
+            self._result = [{"id": 901}]
+        elif "orrery:retrograde:insert_entity_tag" in sql:
+            self._result = [{"id": 902}]
+        elif "orrery:retrograde:insert_pair_tag" in sql:
+            self._result = [{"id": 903}]
+        elif "orrery:retrograde:insert_character_relationship" in sql:
             self._result = []
         else:
             raise AssertionError(f"Unexpected SQL: {sql}")

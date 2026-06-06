@@ -98,6 +98,7 @@ def build_retrograde_persistence_plan(
         world_time=world_time,
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=frozenset(),
+        prologue_was_inserted=False,
     )
     if dry_run:
         return manifest
@@ -115,6 +116,7 @@ def build_retrograde_persistence_plan(
     if inserted_stub_keys:
         entity_index = _load_entity_index(cur)
 
+    prologue_was_inserted = existing_prologue_id is None
     prologue_chunk_id = existing_prologue_id or _insert_prologue_chunk(cur)
     _ensure_prologue_metadata(cur, prologue_chunk_id=prologue_chunk_id)
     return _build_plan(
@@ -132,6 +134,7 @@ def build_retrograde_persistence_plan(
         world_time=world_time,
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
+        prologue_was_inserted=prologue_was_inserted,
     )
 
 
@@ -151,6 +154,7 @@ def _build_plan(
     world_time: Any,
     create_missing_entities: bool,
     inserted_stub_keys: frozenset[tuple[str, str]],
+    prologue_was_inserted: bool,
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -278,6 +282,7 @@ def _build_plan(
         "prologue_anchor": _prologue_anchor_plan(
             dry_run=dry_run,
             prologue_chunk_id=prologue_chunk_id,
+            prologue_was_inserted=prologue_was_inserted,
         ),
         "counters": dict(counters),
         "execute_blockers": execute_blockers,
@@ -391,8 +396,10 @@ def _plan_event_row(
     }
     if existing_id is not None:
         return {**base, "status": "already_present", "world_event_id": existing_id}
-    if reference_issues or vocabulary_issues or prologue_chunk_id is None:
-        status = "would_insert" if dry_run and not reference_issues else "blocked"
+    if reference_issues or vocabulary_issues:
+        return {**base, "status": "blocked", "world_event_id": None}
+    if prologue_chunk_id is None:
+        status = "would_insert" if dry_run else "blocked"
         return {**base, "status": status, "world_event_id": None}
     if dry_run:
         return {**base, "status": "would_insert", "world_event_id": None}
@@ -474,6 +481,9 @@ def _plan_entity_tag_row(
         template_id=base["template_id"],
         world_time=world_time,
     )
+    if entity_tag_id is None:
+        existing_id = _active_entity_tag_id(cur, int(entity["entity_id"]), int(tag_id))
+        return {**base, "status": "already_present", "entity_tag_id": existing_id}
     return {**base, "status": "inserted", "entity_tag_id": entity_tag_id}
 
 
@@ -580,6 +590,18 @@ def _plan_pair_tag_row(
         template_id=base["template_id"],
         world_time=world_time,
     )
+    if entity_pair_tag_id is None:
+        existing_id = _active_pair_tag_id(
+            cur,
+            subject_entity_id=int(subject["entity_id"]),
+            object_entity_id=int(object_entity["entity_id"]),
+            pair_tag_id=int(pair_tag_id),
+        )
+        return {
+            **base,
+            "status": "already_present",
+            "entity_pair_tag_id": existing_id,
+        }
     return {
         **base,
         "status": "inserted",
@@ -1516,8 +1538,11 @@ def _prologue_anchor_plan(
     *,
     dry_run: bool,
     prologue_chunk_id: Optional[int],
+    prologue_was_inserted: bool,
 ) -> dict[str, Any]:
-    if prologue_chunk_id is not None:
+    if prologue_was_inserted:
+        status = "inserted"
+    elif prologue_chunk_id is not None:
         status = "already_present"
     elif dry_run:
         status = "would_insert"
