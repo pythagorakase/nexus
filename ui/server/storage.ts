@@ -32,6 +32,16 @@ import {
 import { db, getDb } from "./db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
 
+/**
+ * Entity references for a single narrative chunk: the characters in (or
+ * mentioned by) the scene and the places it is set in. Powers the reader's
+ * location header and the Session Ledger's scene cast.
+ */
+export interface ChunkContext {
+  characters: Array<{ id: number; name: string; reference: "present" | "mentioned" }>;
+  places: Array<{ id: number; name: string; referenceType: "setting" | "mentioned" | "transit" }>;
+}
+
 export interface IStorage {
   // Season methods
   getAllSeasons(slot?: number | null): Promise<Season[]>;
@@ -49,6 +59,7 @@ export interface IStorage {
     previous: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
     next: (NarrativeChunk & { metadata?: ChunkMetadata }) | null;
   }>;
+  getChunkContext(chunkId: number, slot?: number | null): Promise<ChunkContext>;
 
   // Character methods
   getCharacters(startId?: number, endId?: number, slot?: number | null): Promise<Character[]>;
@@ -318,6 +329,38 @@ export class PostgresStorage implements IStorage {
     return {
       previous: mapRow(previousResult.rows?.[0]),
       next: mapRow(nextResult.rows?.[0]),
+    };
+  }
+
+  async getChunkContext(chunkId: number, slot?: number | null): Promise<ChunkContext> {
+    const db = getDb(slot) || this.db;
+    const characterResult = await db.execute(sql`
+      SELECT c.id, c.name, ccr.reference
+      FROM chunk_character_references ccr
+      JOIN characters c ON c.id = ccr.character_id
+      WHERE ccr.chunk_id = ${chunkId}
+      ORDER BY (ccr.reference = 'present') DESC, c.id ASC
+    `);
+
+    const placeResult = await db.execute(sql`
+      SELECT p.id, p.name, pcr.reference_type
+      FROM place_chunk_references pcr
+      JOIN places p ON p.id = pcr.place_id
+      WHERE pcr.chunk_id = ${chunkId}
+      ORDER BY (pcr.reference_type = 'setting') DESC, p.id ASC
+    `);
+
+    return {
+      characters: (characterResult.rows as any[]).map((row) => ({
+        id: Number(row.id),
+        name: row.name,
+        reference: row.reference,
+      })),
+      places: (placeResult.rows as any[]).map((row) => ({
+        id: Number(row.id),
+        name: row.name,
+        referenceType: row.reference_type,
+      })),
     };
   }
 
@@ -773,6 +816,11 @@ class MemStorage implements IStorage {
       .sort((a, b) => a.id - b.id)[0] || null;
 
     return { previous, next };
+  }
+
+  async getChunkContext(_chunkId: number): Promise<ChunkContext> {
+    // The in-memory fixture store has no entity reference tables.
+    return { characters: [], places: [] };
   }
 
   async getCharacters(startId?: number, endId?: number): Promise<Character[]> {

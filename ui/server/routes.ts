@@ -9,6 +9,17 @@ import { parse as parseToml } from "toml";
 import * as Toml from "@iarna/toml";
 import sharp from "sharp";
 
+// WebSocket proxy instance for /ws/narrative. http-proxy-middleware only
+// attaches its upgrade listener lazily (after the first plain HTTP request
+// through the same middleware), which never happens on a WS-only path - so
+// the HTTP server must wire `upgrade` events to this instance explicitly
+// (see server/index.ts).
+let narrativeWsProxy: ReturnType<typeof createProxyMiddleware> | null = null;
+
+export function getNarrativeWsProxy() {
+  return narrativeWsProxy;
+}
+
 // Register proxy BEFORE body parsing middleware
 export function registerProxyRoutes(app: Express): void {
   const narrativePort = process.env.NARRATIVE_API_PORT || "8002";
@@ -48,6 +59,12 @@ export function registerProxyRoutes(app: Express): void {
     pathRewrite: (path) => `/api/story${path}`,
   }));
 
+  // Proxy for Slot endpoints (slot state, undo, model, lock)
+  app.use("/api/slot", createProxyMiddleware({
+    ...narrativeProxyOptions,
+    pathRewrite: (path) => `/api/slot${path}`,
+  }));
+
   // Proxy for Chunk Workflow endpoints
   app.use("/api/chunks", createProxyMiddleware({
     ...narrativeProxyOptions,
@@ -66,7 +83,8 @@ export function registerProxyRoutes(app: Express): void {
     pathRewrite: (path) => `/api/config${path}`,
   }));
 
-  app.use("/ws/narrative", createProxyMiddleware({ ...narrativeProxyOptions, ws: true }));
+  narrativeWsProxy = createProxyMiddleware({ ...narrativeProxyOptions, ws: true });
+  app.use("/ws/narrative", narrativeWsProxy);
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -135,6 +153,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching adjacent chunks:", error);
       res.status(500).json({ error: "Failed to fetch adjacent chunks" });
+    }
+  });
+
+  // GET /api/narrative/chunks/:chunkId/context - Get character/place references for a chunk
+  // (must register before the :seasonId/:episodeId route, which would otherwise shadow it)
+  app.get("/api/narrative/chunks/:chunkId/context", async (req, res) => {
+    try {
+      const chunkId = parseInt(req.params.chunkId);
+      if (isNaN(chunkId)) {
+        return res.status(400).json({ error: "Invalid chunk ID" });
+      }
+
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const context = await storage.getChunkContext(chunkId, slot);
+      res.json(context);
+    } catch (error) {
+      console.error("Error fetching chunk context:", error);
+      res.status(500).json({ error: "Failed to fetch chunk context" });
     }
   });
 

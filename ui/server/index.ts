@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes, registerProxyRoutes } from "./routes";
+import type { Socket } from "net";
+import { registerRoutes, registerProxyRoutes, getNarrativeWsProxy } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
@@ -42,6 +43,18 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // Forward /ws/narrative upgrade requests to the FastAPI backend. Scoped by
+  // URL so Vite's HMR websocket (any other path) is left untouched.
+  const wsProxy = getNarrativeWsProxy();
+  if (wsProxy?.upgrade) {
+    server.on("upgrade", (req, socket, head) => {
+      if (req.url?.startsWith("/ws/narrative")) {
+        // Node types the upgrade socket as Duplex; it is a net.Socket at runtime.
+        wsProxy.upgrade(req, socket as Socket, head);
+      }
+    });
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
