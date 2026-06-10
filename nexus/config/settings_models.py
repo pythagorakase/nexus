@@ -554,12 +554,36 @@ def _same_float_boundary(left: float, right: float) -> bool:
     return abs(left - right) <= 1e-9
 
 
+class OrreryRetrogradeRetrievalSettings(BaseModel):
+    """Retrieval-surface settings for persisted Retrograde history."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary_chunks: bool = Field(
+        default=True,
+        description=(
+            "Write one finalized prose summary chunk per persisted Retrograde "
+            "world event so MEMNON chunk search retrieves generated history."
+        ),
+    )
+    embed_after_apply: bool = Field(
+        default=True,
+        description=(
+            "Trigger the standard chunk embedding lifecycle for pending "
+            "Retrograde summary chunks immediately after a successful apply."
+        ),
+    )
+
+
 class OrreryRetrogradeSettings(BaseModel):
     """Retrograde deep-history generation settings."""
 
     model_config = ConfigDict(extra="forbid")
 
     weird: OrreryRetrogradeWeirdSettings
+    retrieval: OrreryRetrogradeRetrievalSettings = Field(
+        default_factory=OrreryRetrogradeRetrievalSettings
+    )
 
 
 class OrrerySettings(BaseModel):

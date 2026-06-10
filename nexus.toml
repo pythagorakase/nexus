@@ -188,6 +188,15 @@ magnitude_base = 0.35
 magnitude_per_level = 0.10
 magnitude_cap = 0.85
 
+[orrery.retrograde.retrieval]
+# Retrieval surface for persisted Retrograde history (spec decision 14 / M3).
+# summary_chunks: write one finalized prose summary chunk per persisted
+# Retrograde world event so MEMNON chunk search retrieves generated history.
+summary_chunks = true
+# embed_after_apply: run the standard chunk embedding lifecycle for pending
+# Retrograde summary chunks immediately after a successful apply commit.
+embed_after_apply = true
+
 [orrery.retrograde.weird]
 # Player-facing Retrograde strangeness is low/medium/high. Each genre remaps
 # those labels onto the raw calibration float below, so "medium" means

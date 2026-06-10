@@ -12,6 +12,7 @@ Commands:
     nexus retrograde-seed-candidates  Call Skald for non-mutating seed candidates
     nexus retrograde-expand-seeds  Call Skald for non-mutating R6 expansion
     nexus retrograde-apply-expansion --slot N  Dry-run Retrograde persistence
+    nexus retrograde-embed-history --slot N  Sync Retrograde retrieval chunks
     nexus faction-audit --slot N  Dry-run legacy faction column migration audit
     nexus faction-manifest --slot N  Build reviewed faction migration manifest
     nexus faction-apply --slot N  Dry-run ready faction manifest operations
@@ -33,7 +34,7 @@ import logging
 from pathlib import Path
 import sys
 import time
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import requests
 
@@ -375,8 +376,23 @@ def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
         "pair_tags_already_present",
         "pair_tags_blocked",
         "relationships_planned_only",
+        "summary_chunks_would_insert",
+        "summary_chunks_inserted",
+        "summary_chunks_already_present",
+        "summary_chunks_blocked",
     ):
         print(f"  {key}: {counters.get(key, 0)}")
+    retrieval = plan.get("retrieval") or {}
+    if retrieval:
+        print(f"  summary_chunks_enabled: {retrieval.get('summary_chunks_enabled')}")
+        pending = retrieval.get("embedding_pending_chunk_ids") or []
+        print(f"  embedding_pending_chunk_ids: {pending}")
+    embedding_results = payload.get("retrograde_embedding") or []
+    if embedding_results:
+        print()
+        print("Embedded summary chunks:")
+        for result in embedding_results:
+            print(f"  - chunk {result.get('chunk_id')}: {result.get('job_id')}")
     if blockers:
         print()
         print("Execute blockers:")
@@ -385,6 +401,32 @@ def _print_retrograde_persistence(payload: Dict[str, Any]) -> None:
     if payload.get("persistence_output"):
         print()
         print(f"Output: {payload['persistence_output']}")
+
+
+def _print_retrograde_embed_history(payload: Dict[str, Any]) -> None:
+    """Print a compact Retrograde history retrieval sync summary."""
+
+    sync = payload.get("retrograde_embed_history") or {}
+    rows = sync.get("summary_chunk_rows") or []
+    pending = sync.get("embedding_pending_chunk_ids") or []
+    embedded = sync.get("embedding_results") or []
+
+    print("Retrograde history retrieval sync:")
+    print(f"  dry_run: {sync.get('dry_run')}")
+    print(f"  summary_chunk_rows: {len(rows)}")
+    for row in rows:
+        chunk = row.get("chunk_id")
+        chunk_label = f"chunk {chunk}" if chunk is not None else "no chunk"
+        print(
+            f"  - {row.get('event_ref')}: {row.get('status')} ({chunk_label}, "
+            f"embedding_pending={row.get('embedding_pending')})"
+        )
+    print(f"  embedding_pending_chunk_ids: {pending}")
+    if embedded:
+        print()
+        print("Embedded summary chunks:")
+        for result in embedded:
+            print(f"  - chunk {result.get('chunk_id')}: {result.get('job_id')}")
 
 
 def _print_faction_audit(payload: Dict[str, Any]) -> None:
@@ -759,6 +801,10 @@ def emit_output(payload: Dict[str, Any], as_json: bool, truncate: bool = False) 
 
     if payload.get("retrograde_persistence"):
         _print_retrograde_persistence(payload)
+        print()
+
+    if payload.get("retrograde_embed_history"):
+        _print_retrograde_embed_history(payload)
         print()
 
     if payload.get("faction_audit"):
@@ -1661,11 +1707,15 @@ def run_retrograde_expand_seeds(args: argparse.Namespace) -> Dict[str, Any]:
 def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
     """Dry-run or execute a Retrograde R6 expansion persistence plan."""
 
+    from nexus.agents.orrery.retrograde_embedding import (
+        embed_retrograde_summary_chunks,
+    )
     from nexus.agents.orrery.retrograde_persistence import (
         build_retrograde_persistence_plan,
     )
     from nexus.api.db_pool import get_connection
     from nexus.api.slot_utils import slot_dbname
+    from nexus.config import load_settings
 
     try:
         packet = _load_retrograde_packet_file(args.packet)
@@ -1674,6 +1724,16 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return {"success": False, "error": str(exc)}
 
+    orrery_settings = load_settings().orrery
+    if orrery_settings is None:
+        return {
+            "success": False,
+            "error": (
+                "nexus.toml is missing the [orrery] section required for "
+                "Retrograde retrieval settings"
+            ),
+        }
+    retrieval_settings = orrery_settings.retrograde.retrieval
     dbname = slot_dbname(args.slot)
     dry_run = not args.execute
     try:
@@ -1690,9 +1750,26 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
                     dbname=dbname,
                     dry_run=dry_run,
                     create_missing_entities=args.create_stubs,
+                    summary_chunks_enabled=retrieval_settings.summary_chunks,
                 )
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
+
+    embedding_results: List[Dict[str, Any]] = []
+    pending_chunk_ids = list(
+        persistence.get("retrieval", {}).get("embedding_pending_chunk_ids", [])
+    )
+    if not dry_run and retrieval_settings.embed_after_apply and pending_chunk_ids:
+        try:
+            embedding_results = embed_retrograde_summary_chunks(
+                dbname, pending_chunk_ids
+            )
+        except RuntimeError as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "retrograde_persistence": persistence,
+            }
 
     output_path = args.output
     if output_path is not None:
@@ -1712,7 +1789,89 @@ def run_retrograde_apply_expansion(args: argparse.Namespace) -> Dict[str, Any]:
         "candidate_input": str(args.seed_candidates),
         "expansion_input": str(args.expansion),
         "retrograde_persistence": persistence,
+        "retrograde_embedding": embedding_results,
         "persistence_output": str(output_path) if output_path is not None else None,
+    }
+
+
+def run_retrograde_embed_history(args: argparse.Namespace) -> Dict[str, Any]:
+    """Ensure and embed summary chunks for persisted Retrograde history."""
+
+    from nexus.agents.orrery.retrograde_embedding import (
+        embed_retrograde_summary_chunks,
+    )
+    from nexus.agents.orrery.retrograde_persistence import (
+        plan_retrograde_summary_chunks,
+    )
+    from nexus.api.db_pool import get_connection
+    from nexus.api.slot_utils import slot_dbname
+    from nexus.config import load_settings
+
+    orrery_settings = load_settings().orrery
+    if orrery_settings is None:
+        return {
+            "success": False,
+            "error": (
+                "nexus.toml is missing the [orrery] section required for "
+                "Retrograde retrieval settings"
+            ),
+        }
+    retrieval_settings = orrery_settings.retrograde.retrieval
+    if not retrieval_settings.summary_chunks:
+        return {
+            "success": False,
+            "error": (
+                "orrery.retrograde.retrieval.summary_chunks is disabled in "
+                "nexus.toml; enable it before embedding Retrograde history"
+            ),
+        }
+
+    dbname = slot_dbname(args.slot)
+    dry_run = not args.execute
+    try:
+        with get_connection(dbname, dict_cursor=True) as conn:
+            with conn.cursor() as cur:
+                if dry_run:
+                    cur.execute("SET TRANSACTION READ ONLY")
+                summary_chunk_rows = plan_retrograde_summary_chunks(
+                    cur,
+                    dry_run=dry_run,
+                )
+    except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+
+    pending_chunk_ids = [
+        int(row["chunk_id"])
+        for row in summary_chunk_rows
+        if row["embedding_pending"] and row["chunk_id"] is not None
+    ]
+    embedding_results: List[Dict[str, Any]] = []
+    if not dry_run and retrieval_settings.embed_after_apply and pending_chunk_ids:
+        try:
+            embedding_results = embed_retrograde_summary_chunks(
+                dbname, pending_chunk_ids
+            )
+        except RuntimeError as exc:
+            return {
+                "success": False,
+                "error": str(exc),
+                "summary_chunk_rows": summary_chunk_rows,
+            }
+
+    mode = "dry run" if dry_run else "executed"
+    return {
+        "success": True,
+        "message": (
+            f"Retrograde history retrieval sync for slot {args.slot} ({mode})."
+        ),
+        "slot": args.slot,
+        "dbname": dbname,
+        "retrograde_embed_history": {
+            "dry_run": dry_run,
+            "summary_chunk_rows": summary_chunk_rows,
+            "embedding_pending_chunk_ids": pending_chunk_ids,
+            "embedding_results": embedding_results,
+        },
     }
 
 
@@ -2337,6 +2496,8 @@ Examples:
   nexus retrograde-seed-candidates --packet packet.json --output seeds.json
   nexus retrograde-expand-seeds --packet packet.json --seed-candidates seeds.json
   nexus retrograde-apply-expansion --slot 5 --packet packet.json ...
+  nexus retrograde-embed-history --slot 5  Dry-run Retrograde retrieval sync
+  nexus retrograde-embed-history --slot 5 --execute
   nexus faction-audit --slot 2  Dry-run faction column migration audit
   nexus faction-manifest --slot 2  Build faction migration manifest
   nexus faction-apply --slot 2  Dry-run ready faction manifest operations
@@ -2628,6 +2789,26 @@ Examples:
         help="Optional path for the raw persistence plan JSON.",
     )
 
+    # retrograde-embed-history command
+    retrograde_embed_parser = subparsers.add_parser(
+        "retrograde-embed-history",
+        help=(
+            "Ensure and embed retrieval summary chunks for persisted "
+            "Retrograde world events"
+        ),
+    )
+    retrograde_embed_parser.add_argument(
+        "--slot", type=int, required=True, help="Slot number (1-5)"
+    )
+    retrograde_embed_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help=(
+            "Write summary chunks and run the standard embedding lifecycle. "
+            "Without this flag the command uses a read-only dry run."
+        ),
+    )
+
     # faction-audit command
     faction_audit_parser = subparsers.add_parser(
         "faction-audit",
@@ -2846,6 +3027,7 @@ def main() -> int:
         "trait-audit",
         "retrograde-packet",
         "retrograde-apply-expansion",
+        "retrograde-embed-history",
         "faction-audit",
         "faction-manifest",
         "faction-apply",
@@ -2897,6 +3079,8 @@ def main() -> int:
         result = run_retrograde_expand_seeds(args)
     elif args.command == "retrograde-apply-expansion":
         result = run_retrograde_apply_expansion(args)
+    elif args.command == "retrograde-embed-history":
+        result = run_retrograde_embed_history(args)
     elif args.command == "faction-audit":
         result = run_faction_audit(args)
     elif args.command == "faction-manifest":
