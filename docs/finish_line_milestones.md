@@ -65,7 +65,7 @@ Port the kit's splash composition (locked values hard-coded in `ui_kits/nexus_ir
 **U3 - NexusLayout Rebuild** - L - DONE 2026-06-10 (PR #374, 90164362; also fixed the never-working /ws/narrative proxy)
 The refreshed reading surface per the kit: 60px icon rail, typeset reader with voice-by-color (warm cream / muted cream + thin hr dividers, no prefix glyphs), choices 1-3 plus freeform slot 0 inline, Session Ledger right rail (phase telemetry, scene cast, hierarchy), no CommandBar, typewriter reveal. Wired to the live narrative API, not kit mock data. Characters pane at kit fidelity.
 
-**U4 - Full MapTab Rebuild** - L
+**U4 - Full MapTab Rebuild** - L - DONE 2026-06-10 (PR #376, 54dc609d; all four spec failure modes mitigated + tested, first vitest suite in ui/)
 Real map per `docs/maptab_rebuild_spec.md` - all four documented failure modes addressed (label culling, zoom anchoring, pointer capture, GeoJSON lng/lat order) - restyled in the new design language.
 
 **U5 - Settings Pane Wiring** - M
