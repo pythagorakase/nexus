@@ -551,6 +551,13 @@ function LoreSection({
   const value = draft ?? saved;
   const dirty = draft !== null && draft !== saved;
 
+  // When the server value moves under the draft (optimistic commit applied,
+  // or a failed PATCH rolled the cache back), the draft is stale - drop it
+  // so the control always re-syncs to server truth.
+  useEffect(() => {
+    setDraft(null);
+  }, [saved]);
+
   if (!slider) return null;
 
   const stopTolerance = slider.step * 5;
@@ -650,6 +657,11 @@ function TypewriterSection({
   const [draft, setDraft] = useState<number | null>(null);
   const value = draft ?? saved;
   const dirty = draft !== null && draft !== saved;
+
+  // Same staleness rule as LoreSection: server movement invalidates the draft.
+  useEffect(() => {
+    setDraft(null);
+  }, [saved]);
 
   if (!bounds) return null;
 
@@ -877,8 +889,32 @@ function SectionRail({
 }
 
 export function SettingsPane() {
-  const { theme, setTheme } = useTheme();
   const { data: settings, error } = useSettingsQuery();
+
+  if (error) {
+    return (
+      <div className="pane-notice" data-testid="settings-pane">
+        <span className="notice-text">[ SETTINGS UNAVAILABLE ]</span>
+        <span className="notice-detail">{error.message}</span>
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="pane-notice" data-testid="settings-pane">
+        <span className="notice-text">[ RECEIVING ]</span>
+      </div>
+    );
+  }
+
+  // The console only mounts once settings exist, so its scroll-tracking
+  // effect can bind on mount with the scroller guaranteed present.
+  return <SettingsConsole settings={settings} />;
+}
+
+function SettingsConsole({ settings }: { settings: SettingsPayload }) {
+  const { theme, setTheme } = useTheme();
   const mutation = useSettingsMutation();
 
   const [active, setActive] = useState<SectionId>("theme");
@@ -906,24 +942,7 @@ export function SettingsPane() {
     };
     root.addEventListener("scroll", onScroll, { passive: true });
     return () => root.removeEventListener("scroll", onScroll);
-  }, [settings !== undefined]);
-
-  if (error) {
-    return (
-      <div className="pane-notice" data-testid="settings-pane">
-        <span className="notice-text">[ SETTINGS UNAVAILABLE ]</span>
-        <span className="notice-detail">{error.message}</span>
-      </div>
-    );
-  }
-
-  if (!settings) {
-    return (
-      <div className="pane-notice" data-testid="settings-pane">
-        <span className="notice-text">[ RECEIVING ]</span>
-      </div>
-    );
-  }
+  }, []);
 
   const testMode = settings.global?.narrative?.test_mode ?? false;
   const testSuffix = settings.global?.narrative?.test_database_suffix ?? "_test";

@@ -9,6 +9,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type {
+  FontMatrix,
   FontSlots,
   SettingsPatch,
   SettingsPayload,
@@ -34,14 +35,20 @@ export function applySettingsPatch(
   if (patch.theme !== undefined) {
     next.ui = { ...next.ui, theme: patch.theme };
   }
-  if (patch.fonts !== undefined && payload.ui?.fonts) {
-    const fonts = { ...payload.ui.fonts };
+  if (patch.fonts !== undefined) {
+    // Merge even when the cached payload predates ui.fonts (cold cache or a
+    // pre-U5 server) so the optimistic projection never silently drops a
+    // font change; the server response remains the authoritative matrix.
+    const fonts = { ...(payload.ui?.fonts ?? {}) } as Record<
+      ThemeId,
+      Partial<FontSlots>
+    >;
     for (const [themeId, slots] of Object.entries(patch.fonts) as Array<
       [ThemeId, Partial<FontSlots>]
     >) {
       fonts[themeId] = { ...fonts[themeId], ...slots };
     }
-    next.ui = { ...next.ui, fonts };
+    next.ui = { ...next.ui, fonts: fonts as FontMatrix };
   }
   if (patch.typewriter_ms_per_char !== undefined) {
     next.ui = { ...next.ui, typewriter_ms_per_char: patch.typewriter_ms_per_char };

@@ -47,7 +47,14 @@ ThemeId = Literal["veil", "gilded", "vector"]
 
 
 class FontSlotsPatch(BaseModel):
-    """Partial font slot update for one theme."""
+    """Partial font slot update for one theme.
+
+    ``display`` (the marquee slot) is locked in the settings pane per the
+    design system's marquee rule, but stays writable here deliberately:
+    the pane's RESET TO KEEPERS action PATCHes the full keeper matrix
+    (display included), and the API remains the operator escape hatch for
+    rebinding the marquee without hand-editing nexus.toml.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -109,6 +116,15 @@ def _field_constraint(model: type[BaseModel], field: str, attr: str) -> Any:
     )
 
 
+# Resolved eagerly so a renamed/removed Pydantic constraint fails at import
+# (server startup) rather than on the first GET /api/settings request.
+_APEX_PROVIDER_PATTERN: str = _field_constraint(APEXSettings, "provider", "pattern")
+_TYPEWRITER_BOUNDS: Dict[str, int] = {
+    "min": _field_constraint(UISettings, "typewriter_ms_per_char", "ge"),
+    "max": _field_constraint(UISettings, "typewriter_ms_per_char", "le"),
+}
+
+
 def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
     """Derive the client-facing metadata block from config + Pydantic models."""
     api_models = raw.get("global", {}).get("model", {}).get("api_models", {})
@@ -130,18 +146,16 @@ def _build_settings_meta(raw: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-    provider_pattern = _field_constraint(APEXSettings, "provider", "pattern")
     apex_allowed_providers = [
-        provider for provider in api_models if re.fullmatch(provider_pattern, provider)
+        provider
+        for provider in api_models
+        if re.fullmatch(_APEX_PROVIDER_PATTERN, provider)
     ]
 
     return {
         "model_roles": model_roles,
         "apex_allowed_providers": apex_allowed_providers,
-        "typewriter": {
-            "min": _field_constraint(UISettings, "typewriter_ms_per_char", "ge"),
-            "max": _field_constraint(UISettings, "typewriter_ms_per_char", "le"),
-        },
+        "typewriter": dict(_TYPEWRITER_BOUNDS),
     }
 
 
@@ -226,7 +240,14 @@ async def get_settings() -> Dict[str, Any]:
 
 @router.patch("")
 async def patch_settings(patch: SettingsPatchRequest) -> Dict[str, Any]:
-    """Persist a safe-subset settings update and return the fresh payload."""
+    """Persist a safe-subset settings update and return the fresh payload.
+
+    Concurrency posture: save_settings does an unlocked read-merge-write on
+    nexus.toml. That is safe for the deployed shape - a single-operator app
+    on a single-worker uvicorn process, where the event loop serializes
+    handlers. Running this API with multiple workers would reintroduce a
+    lost-update race and would need file locking here first.
+    """
     updates = _updates_from_patch(patch)
     if not updates:
         raise HTTPException(status_code=400, detail="No supported settings provided")
