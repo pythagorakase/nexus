@@ -263,6 +263,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET /api/current-place - The narrative's current location (read-only):
+  // the 'setting' place reference on the latest committed chunk. 404 when
+  // the story has no setting references yet.
+  app.get("/api/current-place", async (req, res) => {
+    try {
+      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const currentPlace = await storage.getCurrentPlace(slot);
+      if (!currentPlace) {
+        return res.status(404).json({ error: "No current place recorded" });
+      }
+      res.json(currentPlace);
+    } catch (error) {
+      console.error("Error fetching current place:", error);
+      res.status(500).json({ error: "Failed to fetch current place" });
+    }
+  });
+
   // GET /api/zones - Get all zones
   app.get("/api/zones", async (req, res) => {
     try {

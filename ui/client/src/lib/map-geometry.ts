@@ -229,6 +229,11 @@ export interface LabelCandidate {
   coords: { x: number; y: number };
   /** 4 = selected, 3 = hovered, 2 = current narrative location, 1 = rest */
   priority: number;
+  /**
+   * Optional per-name label width in SVG units (long place names need a
+   * wider collision box). Defaults to the spec's 80/zoom.
+   */
+  labelWidthUnits?: number;
 }
 
 /**
@@ -265,7 +270,6 @@ export function computeLabelVisibility(
   const accepted: Array<{ x1: number; y1: number; x2: number; y2: number }> =
     [];
 
-  const labelWidth = 80 / zoom;
   const labelHeight = 16 / zoom;
   const labelOffsetY = 25 / zoom;
 
@@ -274,7 +278,7 @@ export function computeLabelVisibility(
     return a.index - b.index;
   });
 
-  for (const { placeId, index, coords, priority } of ordered) {
+  for (const { placeId, index, coords, priority, labelWidthUnits } of ordered) {
     const forceVisible = priority > 1;
 
     if (!forceVisible && !shouldDisplayLabelByZoom(index, zoom)) {
@@ -282,6 +286,7 @@ export function computeLabelVisibility(
       continue;
     }
 
+    const labelWidth = labelWidthUnits ?? 80 / zoom;
     const rect = {
       x1: coords.x - labelWidth / 2,
       y1: coords.y - labelOffsetY,

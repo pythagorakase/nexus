@@ -14,6 +14,7 @@ import {
   type CharacterImage,
   type PlaceImage,
   type Place,
+  type CurrentPlace,
   type Zone,
   type Faction,
   seasons,
@@ -79,6 +80,7 @@ export interface IStorage {
 
   // Place methods
   getAllPlaces(slot?: number | null): Promise<Place[]>;
+  getCurrentPlace(slot?: number | null): Promise<CurrentPlace | null>;
 
   // Place image methods
   getPlaceImages(placeId: number, slot?: number | null): Promise<PlaceImage[]>;
@@ -494,6 +496,28 @@ export class PostgresStorage implements IStorage {
     })) as Place[];
   }
 
+  async getCurrentPlace(slot?: number | null): Promise<CurrentPlace | null> {
+    const db = getDb(slot) || this.db;
+    // The narrative's current location = the 'setting' place reference on
+    // the most recent committed chunk that has one. Read-only.
+    const result = await db.execute(sql`
+      SELECT pcr.place_id, p.name, pcr.chunk_id
+      FROM place_chunk_references pcr
+      JOIN places p ON p.id = pcr.place_id
+      WHERE pcr.reference_type = 'setting'
+      ORDER BY pcr.chunk_id DESC
+      LIMIT 1
+    `);
+
+    const row = (result.rows as any[])[0];
+    if (!row) return null;
+    return {
+      placeId: Number(row.place_id),
+      name: row.name as string,
+      chunkId: Number(row.chunk_id),
+    };
+  }
+
   // Place image methods
   async getPlaceImages(placeId: number, slot?: number | null): Promise<PlaceImage[]> {
     const db = getDb(slot) || this.db;
@@ -882,6 +906,11 @@ class MemStorage implements IStorage {
 
   async getAllPlaces(): Promise<Place[]> {
     return this.places;
+  }
+
+  async getCurrentPlace(): Promise<CurrentPlace | null> {
+    // MemStorage carries no chunk/place reference data.
+    return null;
   }
 
   async getPlaceImages(placeId: number): Promise<PlaceImage[]> {

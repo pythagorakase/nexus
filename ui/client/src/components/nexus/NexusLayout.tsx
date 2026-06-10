@@ -114,7 +114,7 @@ export function NexusLayout() {
                 typewriterMsPerChar={typewriterMsPerChar}
               />
             ))}
-          {tab === "map" && <MapPane />}
+          {tab === "map" && <MapPane slot={slot} />}
           {tab === "characters" &&
             (slot === null ? (
               <div className="pane-notice">
