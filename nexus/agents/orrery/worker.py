@@ -12,6 +12,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from pydantic import BaseModel, Field
 
+from nexus.agents.orrery.retrograde_maturation import (
+    drain_maturation_jobs_sync,
+    load_maturation_status_sync,
+)
 from nexus.config import load_settings_as_dict
 from nexus.config.settings_models import OrreryPromoteSettings
 
@@ -55,6 +59,8 @@ class OrreryWorkerResult(BaseModel):
     narrated: int = 0
     failed: int = 0
     semantically_cleared: int = 0
+    matured: int = 0
+    maturation_failed: int = 0
 
 
 class OrreryStatus(BaseModel):
@@ -69,6 +75,10 @@ class OrreryStatus(BaseModel):
     active_semantic_tags: int = 0
     recent_resolutions: int = 0
     recent_narrations: int = 0
+    queued_maturation_jobs: int = 0
+    leased_maturation_jobs: int = 0
+    succeeded_maturation_jobs: int = 0
+    failed_maturation_jobs: int = 0
 
 
 def process_orrery_outbox_sync(
@@ -86,6 +96,7 @@ def process_orrery_outbox_sync(
     ),
     settings: Optional[Mapping[str, Any]] = None,
     narration_provider: Optional[Any] = None,
+    maturation_limit: Optional[int] = None,
 ) -> OrreryWorkerResult:
     """Drain pending Orrery background work."""
 
@@ -108,12 +119,19 @@ def process_orrery_outbox_sync(
         evidence_event_limit=semantic_clearance_evidence_events,
         settings=settings,
     )
+    matured, maturation_failed = drain_maturation_jobs_sync(
+        slot,
+        limit=maturation_limit,
+        settings=settings,
+    )
     return OrreryWorkerResult(
         promoted=promoted,
         skipped=skipped,
         narrated=narrated,
         failed=failed,
         semantically_cleared=semantically_cleared,
+        matured=matured,
+        maturation_failed=maturation_failed,
     )
 
 
@@ -302,7 +320,12 @@ def load_orrery_status_sync(
     try:
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                maturation_counts = load_maturation_status_sync(cur)
                 return OrreryStatus(
+                    queued_maturation_jobs=maturation_counts["queued"],
+                    leased_maturation_jobs=maturation_counts["leased"],
+                    succeeded_maturation_jobs=maturation_counts["succeeded"],
+                    failed_maturation_jobs=maturation_counts["failed"],
                     pending_promotions=_count_sync(
                         cur,
                         """
@@ -693,6 +716,15 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Maximum queued narration jobs to drain in this run.",
     )
     parser.add_argument(
+        "--maturation-limit",
+        type=int,
+        default=None,
+        help=(
+            "Maximum queued Retrograde maturation jobs to drain in this run "
+            "(default: orrery.retrograde.maturation.max_jobs_per_drain)."
+        ),
+    )
+    parser.add_argument(
         "--semantic-clearance-limit",
         type=int,
         default=DEFAULT_SEMANTIC_CLEARANCE_LIMIT,
@@ -729,6 +761,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             semantic_clearance_recent_chunks=args.semantic_clearance_recent_chunks,
             semantic_clearance_evidence_chunks=args.semantic_clearance_evidence_chunks,
             semantic_clearance_evidence_events=args.semantic_clearance_evidence_events,
+            maturation_limit=args.maturation_limit,
         ).model_dump()
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0

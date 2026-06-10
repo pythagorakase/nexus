@@ -22,6 +22,9 @@ from nexus.agents.logon.apex_schema import (
     StateUpdates,
 )
 from nexus.agents.orrery.events import commit_orrery_tick_sync
+from nexus.agents.orrery.retrograde_maturation import (
+    enqueue_declared_entity_maturations,
+)
 from nexus.agents.orrery.tag_writer import _row_value, apply_tag_bestowal
 from nexus.api.db_converters import chronology_to_db_values
 from nexus.api.summary_triggers import (
@@ -325,6 +328,7 @@ def commit_incubator_to_database_sync(
                            COALESCE(orrery_adjudications, '[]'::jsonb)
                                AS orrery_adjudications,
                            COALESCE(authorial_directives, '[]'::jsonb) AS authorial_directives,
+                           COALESCE(new_entities, '[]'::jsonb) AS new_entities,
                            metadata_updates, entity_updates, reference_updates,
                            llm_response_id, status
                     FROM incubator
@@ -556,6 +560,32 @@ def commit_incubator_to_database_sync(
                     orrery_result.deferred_count,
                     orrery_result.voided_count,
                     orrery_result.replaced_count,
+                )
+
+            # Step 8.6: Process Skald new-entity declarations inside the
+            # commit transaction (Retrograde stub maturation outbox, spec
+            # decisions 9/10/12): validate hints, create stubs, and enqueue
+            # durable maturation jobs for declared entities that appear in
+            # the committed chunk.
+            maturation_result = enqueue_declared_entity_maturations(
+                conn,
+                declarations=incubator.get("new_entities") or [],
+                chunk_id=chunk_id,
+                raw_text=raw_text,
+                slot=slot,
+            )
+            if maturation_result.declared:
+                logger.info(
+                    "Processed %s new-entity declarations for chunk %s: "
+                    "%s stubs created, %s jobs enqueued, %s already present, "
+                    "%s without engagement signal, %s skipped (disabled)",
+                    maturation_result.declared,
+                    chunk_id,
+                    maturation_result.stubs_created,
+                    maturation_result.jobs_enqueued,
+                    maturation_result.jobs_already_present,
+                    maturation_result.signal_absent,
+                    maturation_result.skipped_disabled,
                 )
 
             # Step 9: Clear incubator

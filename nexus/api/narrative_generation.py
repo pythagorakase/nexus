@@ -273,9 +273,10 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
             choice_object, choice_text,
             metadata_updates, entity_updates, reference_updates,
             authorial_directives, orrery_proposal, orrery_adjudications,
-            session_id, llm_response_id, status
+            new_entities, session_id, llm_response_id, status
         ) VALUES (
-            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            TRUE, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s
         )
         """
 
@@ -302,6 +303,7 @@ async def write_to_incubator(conn, data: Dict[str, Any]):
                     else None
                 ),
                 json.dumps(data.get("orrery_adjudications", [])),
+                json.dumps(data.get("new_entities", [])),
                 data["session_id"],
                 data["llm_response_id"],
                 data["status"],

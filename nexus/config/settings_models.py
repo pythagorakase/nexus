@@ -621,6 +621,90 @@ class OrreryRetrogradeWizardSettings(BaseModel):
     )
 
 
+class OrreryRetrogradeMaturationSettings(BaseModel):
+    """Runtime stub-maturation settings (spec decisions 9/10/12, M8)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Process Skald new-entity declarations at commit time and run "
+            "asynchronous Retrograde maturation jobs for them."
+        ),
+    )
+    budget_seconds: float = Field(
+        default=30.0,
+        gt=0.0,
+        description=(
+            "Soft per-job wall-clock target for the runtime maturation "
+            "pipeline (spec: ~5-30s). Exceeding it logs a warning and is "
+            "recorded in the job manifest; it does not abort the job."
+        ),
+    )
+    max_jobs_per_drain: int = Field(
+        default=2,
+        ge=1,
+        description="Maximum queued maturation jobs leased per worker drain.",
+    )
+    max_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="Lease attempts before a job stays failed.",
+    )
+    retry_delay_seconds: int = Field(
+        default=300,
+        ge=0,
+        description="Requeue delay after a failed attempt.",
+    )
+    generate_candidates: int = Field(
+        default=4,
+        ge=1,
+        description=(
+            "R4 over-generation budget for a single-entity runtime packet "
+            "(tighter than wizard-time per the spec's ~2x guidance)."
+        ),
+    )
+    select_target: int = Field(
+        default=2,
+        ge=1,
+        description="R5 selection target for a single-entity runtime packet.",
+    )
+    deferred_secret_cap: int = Field(
+        default=1,
+        ge=0,
+        description="Deferred-secret cap for a single-entity runtime packet.",
+    )
+    weird_level: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Coarse weirdness level for runtime maturation seeds.",
+    )
+    model_ref: Optional[str] = Field(
+        default=None,
+        description=(
+            "Frontier model for the R4/R6 maturation calls "
+            "(@provider.role reference). None falls back to the wizard "
+            "default model."
+        ),
+    )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Max output tokens per maturation Skald call. None falls back "
+            "to the wizard max-tokens setting."
+        ),
+    )
+    chunk_excerpt_chars: int = Field(
+        default=1200,
+        ge=200,
+        description=(
+            "How much of the requesting chunk's text rides into the scoped "
+            "maturation packet as prompt material."
+        ),
+    )
+
+
 class OrreryRetrogradeSettings(BaseModel):
     """Retrograde deep-history generation settings."""
 
@@ -632,6 +716,9 @@ class OrreryRetrogradeSettings(BaseModel):
     )
     wizard: OrreryRetrogradeWizardSettings = Field(
         default_factory=OrreryRetrogradeWizardSettings
+    )
+    maturation: OrreryRetrogradeMaturationSettings = Field(
+        default_factory=OrreryRetrogradeMaturationSettings
     )
 
 
@@ -1151,6 +1238,9 @@ class Settings(BaseModel):
         ]
         if self.orrery is not None:
             targets.append((self.orrery.narration, "model_ref", False))
+            targets.append(
+                (self.orrery.retrograde.maturation, "model_ref", True)
+            )
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))
 

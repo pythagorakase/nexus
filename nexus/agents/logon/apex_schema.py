@@ -396,6 +396,92 @@ class NewFaction(BaseModel):
 
 
 # ============================================================================
+# New Entity Declarations (Retrograde Stub Maturation, spec decision 9)
+# ============================================================================
+
+
+class NewEntityPairTagHint(BaseModel):
+    """
+    Optional registered pair-tag hint attached to a new-entity declaration.
+
+    The declared entity is one endpoint; ``other_entity_name`` names the other.
+    Hints are validated against the live ``pair_tags`` registry at commit time
+    (unregistered or kind-incompatible tags are hard errors) and feed the
+    background maturation pass as prompt material — they are not written
+    directly at declaration time.
+    """
+
+    tag: str = Field(
+        min_length=1,
+        description="Registered pair-tag name (e.g., protects, obligation).",
+    )
+    other_entity_name: str = Field(
+        min_length=1,
+        description="Name of the other endpoint entity (existing or declared).",
+    )
+    declared_entity_role: Literal["subject", "object"] = Field(
+        default="subject",
+        description=(
+            "Whether the declared entity is the subject or object of the "
+            "directed pair tag."
+        ),
+    )
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+class NewEntityDeclaration(BaseModel):
+    """
+    Skald's declaration that this chunk introduces a new persistent entity.
+
+    Declarations drive the two-tier promotion pipeline (Retrograde Stub
+    Maturation): the commit path instantiates a stub row when the entity does
+    not already exist, and — when the declared name appears in the committed
+    chunk — enqueues an asynchronous maturation job that generates the
+    entity's shallow connected backstory.
+
+    Declare SPARINGLY: only entities likely to recur or matter. Background
+    crowds and genuinely mundane passersby exist in prose only and must not
+    be declared. Tag hints use registered vocabulary only; unregistered names
+    are hard errors at commit time.
+    """
+
+    kind: Literal["character", "place", "faction"] = Field(
+        description="Entity kind for the new declaration."
+    )
+    name: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Entity name exactly as introduced in the prose.",
+    )
+    summary: str = Field(
+        min_length=1,
+        max_length=500,
+        description=(
+            "One-line summary of who/what this entity is (becomes the stub "
+            "row summary)."
+        ),
+    )
+    tag_hints: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Optional registered single-entity tag names for the stub's "
+            "minimum viable tag set. Validated against the live tags "
+            "registry; unregistered names are hard errors."
+        ),
+    )
+    pair_tag_hints: List[NewEntityPairTagHint] = Field(
+        default_factory=list,
+        description=(
+            "Optional registered pair-tag hints connecting the declared "
+            "entity to another named entity."
+        ),
+    )
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+
+# ============================================================================
 # Entity References (Supporting both existing and new)
 # ============================================================================
 
@@ -922,6 +1008,14 @@ class StorytellerResponseMinimal(AuthorialDirectivesMixin):
         default_factory=list,
         description="Optional defer/replace/void rulings for Orrery proposals",
     )
+    new_entities: List[NewEntityDeclaration] = Field(
+        default_factory=list,
+        description=(
+            "Sparingly declared new persistent entities introduced this "
+            "chunk (likely-to-recur only); drives background backstory "
+            "maturation."
+        ),
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -945,6 +1039,14 @@ class StorytellerResponseStandard(AuthorialDirectivesMixin):
     orrery_adjudications: List[OrreryAdjudication] = Field(
         default_factory=list,
         description="Optional defer/replace/void rulings for Orrery proposals",
+    )
+    new_entities: List[NewEntityDeclaration] = Field(
+        default_factory=list,
+        description=(
+            "Sparingly declared new persistent entities introduced this "
+            "chunk (likely-to-recur only); drives background backstory "
+            "maturation."
+        ),
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -970,6 +1072,14 @@ class StorytellerResponseExtended(AuthorialDirectivesMixin):
     orrery_adjudications: List[OrreryAdjudication] = Field(
         default_factory=list,
         description="Optional defer/replace/void rulings for Orrery proposals",
+    )
+    new_entities: List[NewEntityDeclaration] = Field(
+        default_factory=list,
+        description=(
+            "Sparingly declared new persistent entities introduced this "
+            "chunk (likely-to-recur only); drives background backstory "
+            "maturation."
+        ),
     )
     reasoning: Optional[str] = Field(
         default=None, description="Storyteller's reasoning (debug mode only)"
