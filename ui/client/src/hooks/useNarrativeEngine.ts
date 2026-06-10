@@ -99,6 +99,20 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
     }
   }, [slotState?.session_id]);
 
+  // Refetch slot state + narrative reads. Needed after `complete` (a new
+  // pending chunk exists) AND after `error`: submitting from a pending chunk
+  // auto-approves it before generation runs, so even a failed turn can leave
+  // the previously displayed state stale (chunk now committed, choices gone).
+  const invalidateNarrativeQueries = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/slot/state", slot] });
+    queryClient.invalidateQueries({
+      predicate: (query) =>
+        Array.isArray(query.queryKey) &&
+        typeof query.queryKey[0] === "string" &&
+        query.queryKey[0].startsWith("/api/narrative"),
+    });
+  }, [queryClient, slot]);
+
   const handleProgress = useCallback(
     (payload: NarrativeProgressPayload) => {
       const { session_id: sessionId, status } = payload;
@@ -127,19 +141,17 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         sessionRef.current = null;
         setCompletedGenerations((n) => n + 1);
         // The new pending chunk lives in slot state + incubator.
-        queryClient.invalidateQueries({ queryKey: ["/api/slot/state", slot] });
-        queryClient.invalidateQueries({
-          predicate: (query) =>
-            Array.isArray(query.queryKey) &&
-            typeof query.queryKey[0] === "string" &&
-            query.queryKey[0].startsWith("/api/narrative"),
-        });
+        invalidateNarrativeQueries();
       } else if (nextPhase === "error") {
         stopClock();
         const message =
           (payload.data?.error as string) || "Narrative generation failed";
         setGenerationError(message);
         sessionRef.current = null;
+        // The submitted chunk may already be committed (auto-approval runs
+        // before generation) - resync so the reader doesn't show it as
+        // pending with stale choices.
+        invalidateNarrativeQueries();
         toast({
           title: "Generation Failed",
           description: message,
@@ -149,7 +161,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         setGenerationError(null);
       }
     },
-    [queryClient, slot, stopClock],
+    [invalidateNarrativeQueries, stopClock],
   );
 
   const handleProgressRef = useRef(handleProgress);
@@ -238,6 +250,9 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         const message =
           error instanceof Error ? error.message : "Failed to start turn";
         setGenerationError(message);
+        // A mid-endpoint failure can still land after the server-side
+        // auto-approve - resync rather than trust the cached state.
+        invalidateNarrativeQueries();
         toast({
           title: "Generation Failed",
           description: message,
@@ -245,7 +260,7 @@ export function useNarrativeEngine(slot: number | null): NarrativeEngine {
         });
       }
     },
-    [slot, startClock, stopClock],
+    [slot, startClock, stopClock, invalidateNarrativeQueries],
   );
 
   let skaldStatus: SkaldStatus = "READY";
