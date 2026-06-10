@@ -10,12 +10,14 @@ import { ModelProvider } from "@/contexts/ModelContext";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/SplashPage";
 import NewStoryPage from "@/pages/NewStoryPage";
+import { NexusLayout } from "@/components/nexus";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={SplashPage} />
       <Route path="/new-story" component={NewStoryPage} />
+      <Route path="/nexus" component={NexusLayout} />
       <Route component={NotFound} />
     </Switch>
   );

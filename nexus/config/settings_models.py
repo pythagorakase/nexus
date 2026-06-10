@@ -929,6 +929,26 @@ class IREvalSettings(BaseModel):
     judgment: IREvalJudgmentConfig
 
 
+class UISettings(BaseModel):
+    """Settings consumed by the React client.
+
+    Served verbatim to the browser through the Express ``GET /api/settings``
+    endpoint (which reads nexus.toml); keep keys JSON-friendly.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    typewriter_ms_per_char: int = Field(
+        default=35,
+        ge=1,
+        le=500,
+        description=(
+            "Typewriter reveal speed for incoming narrative chunks in "
+            "milliseconds per character (design system: 30-50 ms/char)"
+        ),
+    )
+
+
 class SecretsConfig(BaseModel):
     """Provider -> 1Password reference mappings.
 
@@ -976,6 +996,10 @@ class Settings(BaseModel):
     apex: APEXSettings
     wizard: WizardSettings
     api: Optional[APISettings] = Field(default=None, description="API settings")
+    ui: UISettings = Field(
+        default_factory=UISettings,
+        description="React client settings (served via GET /api/settings)",
+    )
     ir_eval: Optional[IREvalSettings] = Field(
         default=None,
         description="IR evaluation subsystem settings",
