@@ -1,198 +1,110 @@
 /**
- * Font preferences context for managing typography across the application.
- * Theme-aware: Applies appropriate fonts for each theme (Gilded, Vector, Veil).
+ * Font preferences context. Theme-aware: applies the persisted font matrix
+ * (ui.fonts in nexus.toml, served via GET /api/settings) to the CSS custom
+ * properties for the active theme. Writes go through PATCH /api/settings -
+ * localStorage only seeds the first paint before the query resolves.
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useTheme } from './ThemeContext';
+import { useSettingsMutation, useSettingsQuery } from '@/hooks/useSettings';
+import type { FontMatrix, FontSlotId, ThemeId } from '@/types/settings';
 
-interface FontPreferences {
-  // Vector (Cyberpunk) theme fonts
-  vectorNarrativeFont: string;
-  vectorUIFont: string;
-  vectorDisplayFont: string;
-  // Gilded theme fonts
-  gildedBodyFont: string;
-  gildedMenuFont: string;
-  gildedDisplayFont: string;
-  // Veil theme fonts
-  veilBodyFont: string;
-  veilMenuFont: string;
-  veilDisplayFont: string;
-  // Legacy aliases (deprecated - use vector* instead)
-  cyberpunkNarrativeFont?: string;
-  cyberpunkUIFont?: string;
-  cyberpunkDisplayFont?: string;
-}
+/**
+ * The NEXUS IRIS keeper matrix - first-paint seed only. The persisted
+ * defaults live in UISettings (settings_models.py) and nexus.toml [ui.fonts].
+ */
+const KEEPERS: FontMatrix = {
+  veil: { body: 'Spectral', menu: 'Cinzel', display: 'Megrim' },
+  gilded: { body: 'Cormorant Garamond', menu: 'Space Mono', display: 'Monoton' },
+  vector: { body: 'Rajdhani', menu: 'Source Code Pro', display: 'Sixtyfour' },
+};
+
+const STORAGE_KEY = 'nexus-font-preferences-v5';
 
 interface FontContextType {
-  fonts: FontPreferences;
-  // Vector (Cyberpunk) setters
-  setVectorNarrativeFont: (font: string) => void;
-  setVectorUIFont: (font: string) => void;
-  setVectorDisplayFont: (font: string) => void;
-  // Gilded setters
-  setGildedBodyFont: (font: string) => void;
-  setGildedMenuFont: (font: string) => void;
-  setGildedDisplayFont: (font: string) => void;
-  // Veil setters
-  setVeilBodyFont: (font: string) => void;
-  setVeilMenuFont: (font: string) => void;
-  setVeilDisplayFont: (font: string) => void;
-  resetToDefaults: () => void;
-  // Convenience getters for current theme
+  fonts: FontMatrix;
+  setFont: (theme: ThemeId, slot: FontSlotId, font: string) => void;
+  resetToKeepers: () => void;
+  // Convenience getters for the active theme
   currentBodyFont: string;
   currentMenuFont: string;
   currentDisplayFont: string;
-  // Legacy aliases
-  setCyberpunkNarrativeFont: (font: string) => void;
-  setCyberpunkUIFont: (font: string) => void;
-  setCyberpunkDisplayFont: (font: string) => void;
 }
 
 const FontContext = createContext<FontContextType | undefined>(undefined);
 
-const DEFAULT_FONTS: FontPreferences = {
-  // Vector (Cyberpunk) theme
-  vectorNarrativeFont: 'Rajdhani',
-  vectorUIFont: 'Source Code Pro',
-  vectorDisplayFont: 'Sixtyfour',
-  // Gilded theme
-  gildedBodyFont: 'Cormorant Garamond',
-  gildedMenuFont: 'Space Mono',
-  gildedDisplayFont: 'Monoton',
-  // Veil theme (Art Nouveau)
-  veilBodyFont: 'Spectral',
-  veilMenuFont: 'Cinzel',
-  veilDisplayFont: 'Megrim',
-};
-
-const STORAGE_KEY = 'nexus-font-preferences-v4';
+function seedFromStorage(): FontMatrix {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as Partial<FontMatrix>;
+      return {
+        veil: { ...KEEPERS.veil, ...parsed.veil },
+        gilded: { ...KEEPERS.gilded, ...parsed.gilded },
+        vector: { ...KEEPERS.vector, ...parsed.vector },
+      };
+    } catch {
+      return KEEPERS;
+    }
+  }
+  return KEEPERS;
+}
 
 export function FontProvider({ children }: { children: ReactNode }) {
-  const { theme, isGilded, isVector, isVeil } = useTheme();
+  const { theme } = useTheme();
+  const { data: settings } = useSettingsQuery();
+  const mutation = useSettingsMutation();
 
-  const [fonts, setFonts] = useState<FontPreferences>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        return { ...DEFAULT_FONTS, ...JSON.parse(stored) };
-      } catch {
-        return DEFAULT_FONTS;
-      }
+  const [seed] = useState<FontMatrix>(seedFromStorage);
+  const fonts: FontMatrix = settings?.ui?.fonts ?? seed;
+
+  // Mirror the server matrix into localStorage so the next first paint
+  // matches the persisted state.
+  useEffect(() => {
+    if (settings?.ui?.fonts) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings.ui.fonts));
     }
-    return DEFAULT_FONTS;
-  });
+  }, [settings?.ui?.fonts]);
 
   useEffect(() => {
     const root = document.documentElement;
+    const slots = fonts[theme as ThemeId] ?? KEEPERS[theme as ThemeId];
 
-    if (isGilded) {
-      // Gilded theme: Art Deco aesthetic
-      root.style.setProperty('--font-narrative', fonts.gildedBodyFont);
-      root.style.setProperty('--font-sans', fonts.gildedBodyFont);
-      root.style.setProperty('--font-serif', fonts.gildedBodyFont);
-      root.style.setProperty('--font-mono', fonts.gildedMenuFont);
-      root.style.setProperty('--font-display', fonts.gildedDisplayFont);
-    } else if (isVector) {
-      // Vector theme: Cyberpunk/terminal aesthetic
-      root.style.setProperty('--font-narrative', fonts.vectorNarrativeFont);
-      root.style.setProperty('--font-sans', fonts.vectorUIFont);
-      root.style.setProperty('--font-serif', fonts.vectorUIFont);
-      root.style.setProperty('--font-mono', fonts.vectorUIFont);
-      root.style.setProperty('--font-display', fonts.vectorDisplayFont);
-    } else if (isVeil) {
-      // Veil theme: Art Nouveau aesthetic
-      root.style.setProperty('--font-narrative', fonts.veilBodyFont);
-      root.style.setProperty('--font-sans', fonts.veilBodyFont);
-      root.style.setProperty('--font-serif', fonts.veilBodyFont);
-      root.style.setProperty('--font-mono', fonts.veilMenuFont);
-      root.style.setProperty('--font-display', fonts.veilDisplayFont);
+    root.style.setProperty('--font-narrative', slots.body);
+    root.style.setProperty('--font-display', slots.display);
+    if (theme === 'vector') {
+      // Vector chrome is all-terminal: the menu font carries every UI face.
+      root.style.setProperty('--font-sans', slots.menu);
+      root.style.setProperty('--font-serif', slots.menu);
+      root.style.setProperty('--font-mono', slots.menu);
+    } else {
+      root.style.setProperty('--font-sans', slots.body);
+      root.style.setProperty('--font-serif', slots.body);
+      root.style.setProperty('--font-mono', slots.menu);
     }
+  }, [fonts, theme]);
 
-    // Save to localStorage
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fonts));
-  }, [fonts, isGilded, isVector, isVeil, theme]);
-
-  // Vector setters
-  const setVectorNarrativeFont = (font: string) => {
-    setFonts(prev => ({ ...prev, vectorNarrativeFont: font }));
+  const setFont = (themeId: ThemeId, slot: FontSlotId, font: string) => {
+    mutation.mutate({ fonts: { [themeId]: { [slot]: font } } });
   };
 
-  const setVectorUIFont = (font: string) => {
-    setFonts(prev => ({ ...prev, vectorUIFont: font }));
+  const resetToKeepers = () => {
+    mutation.mutate({ fonts: KEEPERS });
   };
 
-  const setVectorDisplayFont = (font: string) => {
-    setFonts(prev => ({ ...prev, vectorDisplayFont: font }));
-  };
-
-  // Gilded setters
-  const setGildedBodyFont = (font: string) => {
-    setFonts(prev => ({ ...prev, gildedBodyFont: font }));
-  };
-
-  const setGildedMenuFont = (font: string) => {
-    setFonts(prev => ({ ...prev, gildedMenuFont: font }));
-  };
-
-  const setGildedDisplayFont = (font: string) => {
-    setFonts(prev => ({ ...prev, gildedDisplayFont: font }));
-  };
-
-  // Veil setters
-  const setVeilBodyFont = (font: string) => {
-    setFonts(prev => ({ ...prev, veilBodyFont: font }));
-  };
-
-  const setVeilMenuFont = (font: string) => {
-    setFonts(prev => ({ ...prev, veilMenuFont: font }));
-  };
-
-  const setVeilDisplayFont = (font: string) => {
-    setFonts(prev => ({ ...prev, veilDisplayFont: font }));
-  };
-
-  const resetToDefaults = () => {
-    setFonts(DEFAULT_FONTS);
-  };
-
-  // Convenience getters for current theme
-  const currentBodyFont = isGilded ? fonts.gildedBodyFont
-    : isVector ? fonts.vectorNarrativeFont
-    : fonts.veilBodyFont;
-  const currentMenuFont = isGilded ? fonts.gildedMenuFont
-    : isVector ? fonts.vectorUIFont
-    : fonts.veilMenuFont;
-  const currentDisplayFont = isGilded ? fonts.gildedDisplayFont
-    : isVector ? fonts.vectorDisplayFont
-    : fonts.veilDisplayFont;
-
-  // Legacy aliases for backwards compatibility
-  const setCyberpunkNarrativeFont = setVectorNarrativeFont;
-  const setCyberpunkUIFont = setVectorUIFont;
-  const setCyberpunkDisplayFont = setVectorDisplayFont;
+  const active = fonts[theme as ThemeId] ?? KEEPERS[theme as ThemeId];
 
   return (
-    <FontContext.Provider value={{
-      fonts,
-      setVectorNarrativeFont,
-      setVectorUIFont,
-      setVectorDisplayFont,
-      setGildedBodyFont,
-      setGildedMenuFont,
-      setGildedDisplayFont,
-      setVeilBodyFont,
-      setVeilMenuFont,
-      setVeilDisplayFont,
-      resetToDefaults,
-      currentBodyFont,
-      currentMenuFont,
-      currentDisplayFont,
-      // Legacy aliases
-      setCyberpunkNarrativeFont,
-      setCyberpunkUIFont,
-      setCyberpunkDisplayFont,
-    }}>
+    <FontContext.Provider
+      value={{
+        fonts,
+        setFont,
+        resetToKeepers,
+        currentBodyFont: active.body,
+        currentMenuFont: active.menu,
+        currentDisplayFont: active.display,
+      }}
+    >
       {children}
     </FontContext.Provider>
   );

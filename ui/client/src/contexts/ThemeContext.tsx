@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useSettingsMutation, useSettingsQuery } from '@/hooks/useSettings';
 
 export type Theme = 'gilded' | 'vector' | 'veil';
+
+const THEMES: Theme[] = ['gilded', 'vector', 'veil'];
 
 interface ThemeContextType {
   theme: Theme;
@@ -21,12 +24,27 @@ const STORAGE_KEY = 'nexus-theme';
 const DEFAULT_THEME: Theme = 'veil';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  // localStorage seeds the first paint only; the persisted source of truth
+  // is ui.theme in nexus.toml (GET/PATCH /api/settings).
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     // Handle migration from old 'cyberpunk' to 'vector'
     if (stored === 'cyberpunk') return 'vector';
-    return (stored === 'gilded' || stored === 'vector' || stored === 'veil') ? stored : DEFAULT_THEME;
+    return THEMES.includes(stored as Theme) ? (stored as Theme) : DEFAULT_THEME;
   });
+
+  const { data: settings } = useSettingsQuery();
+  const mutation = useSettingsMutation();
+  const serverTheme = settings?.ui?.theme;
+
+  // Adopt the server-persisted theme when it arrives or changes. Because
+  // setTheme() updates the query cache optimistically, this also reverts the
+  // chrome automatically if a PATCH fails and the cache rolls back.
+  useEffect(() => {
+    if (serverTheme && THEMES.includes(serverTheme) && serverTheme !== theme) {
+      setThemeState(serverTheme);
+    }
+  }, [serverTheme, theme]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -42,7 +60,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  const setTheme = (newTheme: Theme) => setThemeState(newTheme);
+  const setTheme = (newTheme: Theme) => {
+    setThemeState(newTheme);
+    mutation.mutate({ theme: newTheme });
+  };
 
   const isGilded = theme === 'gilded';
   const isVector = theme === 'vector';

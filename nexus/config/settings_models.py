@@ -929,11 +929,78 @@ class IREvalSettings(BaseModel):
     judgment: IREvalJudgmentConfig
 
 
+class UIFontSlots(BaseModel):
+    """Font choices for one theme's three slots (NEXUS IRIS keeper matrix).
+
+    ``display`` is the marquee slot — reserved for the NEXUS wordmark per the
+    design system's marquee rule. It is persisted for completeness but the
+    settings pane renders it locked.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(..., description="Narrative prose font (--font-narrative)")
+    menu: str = Field(..., description="Chrome/menu font (--font-mono)")
+    display: str = Field(..., description="Marquee font (--font-display, locked)")
+
+
+def _default_veil_fonts() -> UIFontSlots:
+    return UIFontSlots(body="Spectral", menu="Cinzel", display="Megrim")
+
+
+def _default_gilded_fonts() -> UIFontSlots:
+    return UIFontSlots(body="Cormorant Garamond", menu="Space Mono", display="Monoton")
+
+
+def _default_vector_fonts() -> UIFontSlots:
+    return UIFontSlots(body="Rajdhani", menu="Source Code Pro", display="Sixtyfour")
+
+
+class UIFontMatrix(BaseModel):
+    """Per-theme font slot choices persisted from the settings pane."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    veil: UIFontSlots = Field(default_factory=_default_veil_fonts)
+    gilded: UIFontSlots = Field(default_factory=_default_gilded_fonts)
+    vector: UIFontSlots = Field(default_factory=_default_vector_fonts)
+
+
+def _default_lore_budget_stops() -> List[int]:
+    return [75_000, 100_000, 150_000, 200_000]
+
+
+class UILoreBudgetSlider(BaseModel):
+    """Bounds and ladder stops for the LORE budget slider in the settings pane."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    min: int = Field(default=10_000, ge=1000, description="Slider lower bound (tok)")
+    max: int = Field(default=200_000, ge=1000, description="Slider upper bound (tok)")
+    step: int = Field(default=1000, ge=1, description="Slider step size (tok)")
+    stops: List[int] = Field(
+        default_factory=_default_lore_budget_stops,
+        description="Preset ladder stops rendered above the slider",
+    )
+
+    @model_validator(mode="after")
+    def _validate_range(self) -> "UILoreBudgetSlider":
+        if self.min > self.max:
+            raise ValueError("lore_budget_slider min must be <= max")
+        for stop in self.stops:
+            if not self.min <= stop <= self.max:
+                raise ValueError(
+                    f"lore_budget_slider stop {stop} is outside "
+                    f"[{self.min}, {self.max}]"
+                )
+        return self
+
+
 class UISettings(BaseModel):
     """Settings consumed by the React client.
 
-    Served verbatim to the browser through the Express ``GET /api/settings``
-    endpoint (which reads nexus.toml); keep keys JSON-friendly.
+    Served to the browser through ``GET /api/settings`` (FastAPI, proxied by
+    Express; reads nexus.toml); keep keys JSON-friendly.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -946,6 +1013,18 @@ class UISettings(BaseModel):
             "Typewriter reveal speed for incoming narrative chunks in "
             "milliseconds per character (design system: 30-50 ms/char)"
         ),
+    )
+    theme: Literal["veil", "gilded", "vector"] = Field(
+        default="veil",
+        description="Active NEXUS IRIS theme, persisted across sessions",
+    )
+    fonts: UIFontMatrix = Field(
+        default_factory=UIFontMatrix,
+        description="Per-theme font slot choices (keeper matrix)",
+    )
+    lore_budget_slider: UILoreBudgetSlider = Field(
+        default_factory=UILoreBudgetSlider,
+        description="Bounds and ladder stops for the LORE budget slider",
     )
 
 

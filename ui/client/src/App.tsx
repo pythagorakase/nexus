@@ -24,21 +24,23 @@ function Router() {
 }
 
 function App() {
+  // QueryClientProvider wraps the theme/font contexts so they can hydrate
+  // from (and persist through) the GET/PATCH /api/settings query.
   return (
-    <ThemeProvider>
-      <FontProvider>
-        <ModelProvider>
-          <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <FontProvider>
+          <ModelProvider>
             <TooltipProvider>
               <ErrorBoundary>
                 <Toaster />
                 <Router />
               </ErrorBoundary>
             </TooltipProvider>
-          </QueryClientProvider>
-        </ModelProvider>
-      </FontProvider>
-    </ThemeProvider>
+          </ModelProvider>
+        </FontProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 
