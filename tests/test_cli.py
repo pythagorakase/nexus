@@ -634,6 +634,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
         dbname: str,
         dry_run: bool,
         create_missing_entities: bool,
+        summary_chunks_enabled: bool,
     ) -> dict[str, Any]:
         calls.append(
             (
@@ -644,6 +645,7 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
                 dbname,
                 dry_run,
                 create_missing_entities,
+                summary_chunks_enabled,
             )
         )
         return {
@@ -691,5 +693,113 @@ def test_retrograde_apply_expansion_dry_runs_saved_artifacts(
             "save_05",
             True,
             True,
+            True,
         )
     ]
+
+
+def test_retrograde_embed_history_executes_and_embeds(monkeypatch) -> None:
+    """Execute mode ensures summary chunks then embeds pending ones."""
+
+    from nexus.agents.orrery import retrograde_embedding, retrograde_persistence
+    from nexus.api import db_pool
+
+    plan_calls = []
+    embed_calls = []
+    summary_rows = [
+        {
+            "event_ref": "r6_e01",
+            "marker": "orrery:retrograde_event:r6_e01",
+            "world_event_id": 107,
+            "source_status": "persisted",
+            "status": "inserted",
+            "chunk_id": 72,
+            "embedding_pending": True,
+        },
+        {
+            "event_ref": "r6_e02",
+            "marker": "orrery:retrograde_event:r6_e02",
+            "world_event_id": 108,
+            "source_status": "persisted",
+            "status": "already_present",
+            "chunk_id": 73,
+            "embedding_pending": False,
+        },
+    ]
+
+    def fake_plan(cur: Any, *, dry_run: bool, event_sources: Any = None) -> Any:
+        plan_calls.append((dry_run, event_sources))
+        return summary_rows
+
+    def fake_embed(dbname: str, chunk_ids: Any) -> Any:
+        embed_calls.append((dbname, list(chunk_ids)))
+        return [{"chunk_id": 72, "job_id": "embed_72_test"}]
+
+    monkeypatch.setattr(
+        db_pool, "get_connection", lambda *args, **kwargs: FakeApplyConnection()
+    )
+    monkeypatch.setattr(
+        retrograde_persistence,
+        "plan_retrograde_summary_chunks",
+        fake_plan,
+    )
+    monkeypatch.setattr(
+        retrograde_embedding,
+        "embed_retrograde_summary_chunks",
+        fake_embed,
+    )
+
+    result = cli.run_retrograde_embed_history(Namespace(slot=5, execute=True))
+
+    assert result["success"] is True
+    sync = result["retrograde_embed_history"]
+    assert sync["dry_run"] is False
+    assert sync["embedding_pending_chunk_ids"] == [72]
+    assert sync["embedding_results"] == [{"chunk_id": 72, "job_id": "embed_72_test"}]
+    assert plan_calls == [(False, None)]
+    assert embed_calls == [("save_05", [72])]
+
+
+def test_retrograde_embed_history_dry_run_skips_embedding(monkeypatch) -> None:
+    """Dry-run mode never reaches the embedding lifecycle."""
+
+    from nexus.agents.orrery import retrograde_embedding, retrograde_persistence
+    from nexus.api import db_pool
+
+    def fake_plan(cur: Any, *, dry_run: bool, event_sources: Any = None) -> Any:
+        return [
+            {
+                "event_ref": "r6_e01",
+                "marker": "orrery:retrograde_event:r6_e01",
+                "world_event_id": 107,
+                "source_status": "persisted",
+                "status": "would_insert",
+                "chunk_id": None,
+                "embedding_pending": True,
+            }
+        ]
+
+    def fail_embed(dbname: str, chunk_ids: Any) -> Any:
+        raise AssertionError("dry run must not embed")
+
+    monkeypatch.setattr(
+        db_pool, "get_connection", lambda *args, **kwargs: FakeApplyConnection()
+    )
+    monkeypatch.setattr(
+        retrograde_persistence,
+        "plan_retrograde_summary_chunks",
+        fake_plan,
+    )
+    monkeypatch.setattr(
+        retrograde_embedding,
+        "embed_retrograde_summary_chunks",
+        fail_embed,
+    )
+
+    result = cli.run_retrograde_embed_history(Namespace(slot=5, execute=False))
+
+    assert result["success"] is True
+    sync = result["retrograde_embed_history"]
+    assert sync["dry_run"] is True
+    assert sync["embedding_pending_chunk_ids"] == []
+    assert sync["embedding_results"] == []

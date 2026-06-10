@@ -87,6 +87,32 @@ def test_warm_slice_recent_chunks_reads_only_narrative_chunks() -> None:
     assert "offscreen_narrations" not in issued_sql
 
 
+def test_warm_slice_recent_chunks_excludes_retrograde_prologue() -> None:
+    """Generated Retrograde history is memory, not recent narration.
+
+    The recency surface filters out both the synthetic prologue anchor and
+    per-event Retrograde summary chunks; those chunks stay reachable through
+    vector and text search only.
+    """
+
+    session = CapturingSession(rows=[])
+    memnon = SimpleNamespace(Session=lambda: session)
+
+    result = MEMNON.get_recent_chunks(memnon, limit=5)
+
+    assert result["results"] == []
+    issued_sql, params = session.executed[0]
+    assert "authorial_directives" in issued_sql.lower()
+    assert "where not" in issued_sql.lower()
+    assert params is not None
+    assert params["retrograde_prologue_marker"] == (
+        '["orrery:retrograde_prologue_anchor"]'
+    )
+    assert params["retrograde_summary_marker"] == (
+        '["orrery:retrograde_event_summary"]'
+    )
+
+
 def test_text_search_reads_only_narrative_chunks() -> None:
     """Text search stays on accepted narrative chunks, not Orrery prose."""
 

@@ -1719,8 +1719,18 @@ class MEMNON:
         Returns:
             Dictionary containing the recent chunks and metadata
         """
+        from nexus.agents.orrery.retrograde_markers import (
+            RETROGRADE_PROLOGUE_MARKER,
+            RETROGRADE_SUMMARY_MARKER,
+        )
+
         try:
             with self.Session() as session:
+                # Retrograde prologue chunks (the anchor stub and per-event
+                # history summaries) are deliberately excluded from this
+                # recency surface: generated history is memory, reachable via
+                # vector/text search like aged play history, not recent
+                # narration for the warm slice.
                 query = text(
                     """
                     SELECT nc.id, nc.raw_text,
@@ -1729,12 +1739,29 @@ class MEMNON:
                            cm.world_layer
                     FROM narrative_chunks nc
                     LEFT JOIN chunk_metadata cm ON nc.id = cm.chunk_id
+                    WHERE NOT (
+                        COALESCE(nc.authorial_directives, '[]'::jsonb)
+                            @> CAST(:retrograde_prologue_marker AS jsonb)
+                        OR COALESCE(nc.authorial_directives, '[]'::jsonb)
+                            @> CAST(:retrograde_summary_marker AS jsonb)
+                    )
                     ORDER BY nc.id DESC
                     LIMIT :limit
                 """
                 )
 
-                results = session.execute(query, {"limit": limit}).fetchall()
+                results = session.execute(
+                    query,
+                    {
+                        "limit": limit,
+                        "retrograde_prologue_marker": json.dumps(
+                            [RETROGRADE_PROLOGUE_MARKER]
+                        ),
+                        "retrograde_summary_marker": json.dumps(
+                            [RETROGRADE_SUMMARY_MARKER]
+                        ),
+                    },
+                ).fetchall()
 
                 chunks = []
                 for result in results:

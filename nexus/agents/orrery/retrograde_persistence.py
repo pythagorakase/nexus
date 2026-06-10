@@ -15,10 +15,14 @@ from nexus.agents.orrery.retrograde_expansion import (
     RetrogradeExpansionRelationshipPlan,
     validate_expansion_plan,
 )
+from nexus.agents.orrery.retrograde_markers import (
+    RETROGRADE_PROLOGUE_MARKER,
+    RETROGRADE_SUMMARY_MARKER,
+    retrograde_event_marker,
+)
 
-RETROGRADE_PERSISTENCE_SCHEMA_VERSION = "orrery_retrograde_persistence_plan.v0"
+RETROGRADE_PERSISTENCE_SCHEMA_VERSION = "orrery_retrograde_persistence_plan.v1"
 RETROGRADE_SOURCE_KIND = "retrograde"
-RETROGRADE_PROLOGUE_MARKER = "orrery:retrograde_prologue_anchor"
 RETROGRADE_PROLOGUE_RAW_TEXT = (
     "[Retrograde prologue anchor: generated setup history before the first "
     "narrated scene.]"
@@ -68,13 +72,17 @@ def build_retrograde_persistence_plan(
     dbname: str,
     dry_run: bool = True,
     create_missing_entities: bool = False,
+    summary_chunks_enabled: bool = True,
 ) -> dict[str, Any]:
     """Build or apply a canonical persistence plan for a Retrograde expansion.
 
     Dry-run mode performs only reads and returns row-shaped operations. Execute
     mode writes the prologue anchor, world_events, entity_tags, and
     entity_pair_tags when every planned reference resolves and no unsupported
-    relationship rows remain.
+    relationship rows remain. When ``summary_chunks_enabled`` is true, execute
+    mode also writes one finalized prose summary chunk per persisted Retrograde
+    world event so MEMNON chunk search retrieves generated history; the
+    returned manifest lists chunk ids still pending embedding.
     """
 
     expansion = validate_expansion_plan(
@@ -106,6 +114,7 @@ def build_retrograde_persistence_plan(
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=frozenset(),
         prologue_was_inserted=False,
+        summary_chunks_enabled=summary_chunks_enabled,
     )
     if dry_run:
         return manifest
@@ -142,6 +151,7 @@ def build_retrograde_persistence_plan(
         create_missing_entities=create_missing_entities,
         inserted_stub_keys=inserted_stub_keys,
         prologue_was_inserted=prologue_was_inserted,
+        summary_chunks_enabled=summary_chunks_enabled,
     )
 
 
@@ -162,6 +172,7 @@ def _build_plan(
     create_missing_entities: bool,
     inserted_stub_keys: frozenset[tuple[str, str]],
     prologue_was_inserted: bool,
+    summary_chunks_enabled: bool,
 ) -> dict[str, Any]:
     counters: Counter[str] = Counter()
     reference_issues: list[dict[str, Any]] = []
@@ -251,6 +262,24 @@ def _build_plan(
         reference_issues.extend(planned.pop("_reference_issues"))
         relationship_issues.extend(planned.pop("_relationship_issues"))
 
+    summary_chunk_rows: list[dict[str, Any]] = []
+    if summary_chunks_enabled:
+        summary_chunk_rows = plan_retrograde_summary_chunks(
+            cur,
+            dry_run=dry_run,
+            event_sources=[
+                {
+                    "event_ref": str(row["event_ref"]),
+                    "summary": str(row["summary"]),
+                    "world_event_id": row.get("world_event_id"),
+                    "source_status": str(row["status"]),
+                }
+                for row in event_rows
+            ],
+        )
+        for summary_row in summary_chunk_rows:
+            counters[f"summary_chunks_{summary_row['status']}"] += 1
+
     _append_reference_blockers(execute_blockers, reference_issues)
     _append_vocabulary_blockers(execute_blockers, vocabulary_issues)
     _append_relationship_blockers(execute_blockers, relationship_issues)
@@ -276,6 +305,10 @@ def _build_plan(
         "entity_stubs_inserted",
         "entity_stubs_already_present",
         "entity_stubs_ambiguous_existing",
+        "summary_chunks_would_insert",
+        "summary_chunks_inserted",
+        "summary_chunks_already_present",
+        "summary_chunks_blocked",
     ):
         counters.setdefault(key, 0)
 
@@ -301,6 +334,16 @@ def _build_plan(
         "entity_tag_rows": entity_tag_rows,
         "pair_tag_rows": pair_tag_rows,
         "relationship_rows": relationship_rows,
+        "summary_chunk_rows": summary_chunk_rows,
+        "retrieval": {
+            "summary_chunks_enabled": summary_chunks_enabled,
+            "summary_chunk_marker": RETROGRADE_SUMMARY_MARKER,
+            "embedding_pending_chunk_ids": [
+                int(row["chunk_id"])
+                for row in summary_chunk_rows
+                if row["embedding_pending"] and row["chunk_id"] is not None
+            ],
+        },
         "thread_plan": [
             thread.model_dump(mode="json") for thread in expansion.thread_plan
         ],
@@ -734,6 +777,234 @@ def _plan_relationship_row(
         character2_id=int(object_character_id),
     )
     return {**base, "status": "inserted"}
+
+
+def plan_retrograde_summary_chunks(
+    cur: Any,
+    *,
+    dry_run: bool,
+    event_sources: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> list[dict[str, Any]]:
+    """Ensure one finalized prose summary chunk per Retrograde world event.
+
+    Each summary chunk carries the Skald-woven event summary as raw_text and
+    storyteller_text, a shared retrieval marker plus a per-event idempotency
+    marker in authorial_directives, and a chunk_metadata row in the season-0
+    prologue block. Execute mode also cross-links the source world event via
+    ``payload.retrograde_summary_chunk_id``. Embedding is intentionally not
+    performed here; callers trigger the standard chunk embedding lifecycle for
+    the returned ``embedding_pending`` chunk ids after the transaction commits.
+
+    Args:
+        cur: An open database cursor owned by the caller's transaction.
+        dry_run: When true, perform only reads and report planned statuses.
+        event_sources: Event descriptors with ``event_ref``, ``summary``,
+            ``world_event_id``, and ``source_status`` keys. Defaults to every
+            persisted Retrograde world event in the slot.
+
+    Returns:
+        Row-shaped plan entries, one per source event.
+    """
+
+    if event_sources is None:
+        event_sources = _load_persisted_retrograde_event_sources(cur)
+
+    rows: list[dict[str, Any]] = []
+    next_scene: Optional[int] = None
+    for source in event_sources:
+        event_ref = str(source["event_ref"])
+        marker = retrograde_event_marker(event_ref)
+        source_status = str(source.get("source_status") or "persisted")
+        world_event_id = _optional_int(source.get("world_event_id"))
+        base = {
+            "event_ref": event_ref,
+            "marker": marker,
+            "world_event_id": world_event_id,
+            "source_status": source_status,
+        }
+        if source_status == "blocked":
+            rows.append(
+                {
+                    **base,
+                    "status": "blocked",
+                    "chunk_id": None,
+                    "embedding_pending": False,
+                }
+            )
+            continue
+
+        summary = str(source.get("summary") or "").strip()
+        if not summary:
+            raise ValueError(
+                f"Retrograde event {event_ref!r} has no summary text; cannot "
+                "build a retrievable summary chunk"
+            )
+
+        existing = _find_summary_chunk(cur, marker=marker)
+        if existing is not None:
+            rows.append(
+                {
+                    **base,
+                    "status": "already_present",
+                    "chunk_id": existing["chunk_id"],
+                    "embedding_pending": existing["embedding_generated_at"] is None,
+                }
+            )
+            continue
+
+        if dry_run or world_event_id is None:
+            rows.append(
+                {
+                    **base,
+                    "status": "would_insert",
+                    "chunk_id": None,
+                    "embedding_pending": True,
+                }
+            )
+            continue
+
+        if next_scene is None:
+            next_scene = _next_prologue_scene(cur)
+        chunk_id = _insert_summary_chunk(cur, summary=summary, marker=marker)
+        _insert_summary_metadata(cur, chunk_id=chunk_id, scene=next_scene)
+        next_scene += 1
+        _link_summary_chunk(cur, world_event_id=world_event_id, chunk_id=chunk_id)
+        rows.append(
+            {
+                **base,
+                "status": "inserted",
+                "chunk_id": chunk_id,
+                "scene": next_scene - 1,
+                "embedding_pending": True,
+            }
+        )
+    return rows
+
+
+def _load_persisted_retrograde_event_sources(cur: Any) -> list[dict[str, Any]]:
+    cur.execute(
+        """
+        /* orrery:retrograde:persisted_retrograde_events */
+        SELECT
+            id AS world_event_id,
+            payload ->> 'retrograde_event_ref' AS event_ref,
+            payload ->> 'summary' AS summary
+        FROM world_events
+        WHERE source = 'retrograde'::event_source_kind
+        ORDER BY id
+        """
+    )
+    sources = []
+    for row in cur.fetchall():
+        world_event_id = int(_row_value(row, "world_event_id", 0))
+        event_ref = _row_value(row, "event_ref", 1)
+        summary = _row_value(row, "summary", 2)
+        if not event_ref:
+            raise ValueError(
+                f"Retrograde world event {world_event_id} is missing "
+                "payload.retrograde_event_ref"
+            )
+        sources.append(
+            {
+                "event_ref": str(event_ref),
+                "summary": summary,
+                "world_event_id": world_event_id,
+                "source_status": "persisted",
+            }
+        )
+    return sources
+
+
+def _find_summary_chunk(cur: Any, *, marker: str) -> Optional[dict[str, Any]]:
+    cur.execute(
+        """
+        /* orrery:retrograde:summary_chunk_lookup */
+        SELECT id, embedding_generated_at
+        FROM narrative_chunks
+        WHERE authorial_directives @> %s::jsonb
+        ORDER BY id
+        LIMIT 1
+        """,
+        (json.dumps([marker]),),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "chunk_id": int(_row_value(row, "id", 0)),
+        "embedding_generated_at": _row_value(row, "embedding_generated_at", 1),
+    }
+
+
+def _next_prologue_scene(cur: Any) -> int:
+    cur.execute(
+        """
+        /* orrery:retrograde:summary_scene_base */
+        SELECT COALESCE(MAX(scene), -1) + 1 AS next_scene
+        FROM chunk_metadata
+        WHERE season = 0 AND episode = 0
+        """
+    )
+    return int(_row_value(cur.fetchone(), "next_scene", 0))
+
+
+def _insert_summary_chunk(cur: Any, *, summary: str, marker: str) -> int:
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_summary_chunk */
+        INSERT INTO narrative_chunks (
+            raw_text, storyteller_text, choice_object, choice_text,
+            authorial_directives, state, finalized_at
+        )
+        VALUES (%s, %s, NULL, NULL, %s::jsonb, 'finalized', now())
+        RETURNING id
+        """,
+        (
+            summary,
+            summary,
+            json.dumps([RETROGRADE_SUMMARY_MARKER, marker]),
+        ),
+    )
+    return int(_row_value(cur.fetchone(), "id", 0))
+
+
+def _insert_summary_metadata(cur: Any, *, chunk_id: int, scene: int) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:insert_summary_metadata */
+        INSERT INTO chunk_metadata (
+            chunk_id, season, episode, scene, world_layer, time_delta,
+            generation_date, slug, world_time
+        )
+        VALUES (
+            %s, 0, 0, %s, 'primary'::world_layer_type,
+            interval '0 seconds', now(), 'RETRO',
+            COALESCE(
+                (
+                    SELECT min(world_time) - interval '1 second'
+                    FROM chunk_metadata
+                    WHERE world_time IS NOT NULL
+                ),
+                now()
+            )
+        )
+        """,
+        (chunk_id, scene),
+    )
+
+
+def _link_summary_chunk(cur: Any, *, world_event_id: int, chunk_id: int) -> None:
+    cur.execute(
+        """
+        /* orrery:retrograde:link_summary_chunk */
+        UPDATE world_events
+        SET payload = jsonb_set(
+            payload, '{retrograde_summary_chunk_id}', to_jsonb(%s::bigint), true
+        )
+        WHERE id = %s
+        """,
+        (chunk_id, world_event_id),
+    )
 
 
 def _insert_world_event(
