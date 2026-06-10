@@ -68,7 +68,7 @@ The refreshed reading surface per the kit: 60px icon rail, typeset reader with v
 **U4 - Full MapTab Rebuild** - L - DONE 2026-06-10 (PR #376, 54dc609d; all four spec failure modes mitigated + tested, first vitest suite in ui/)
 Real map per `docs/maptab_rebuild_spec.md` - all four documented failure modes addressed (label culling, zoom anchoring, pointer capture, GeoJSON lng/lat order) - restyled in the new design language.
 
-**U5 - Settings Pane Wiring** - M
+**U5 - Settings Pane Wiring** - M - DONE 2026-06-10 (PR #377, 154e5150; all seven sections live against nexus.toml, nothing deferred - U-TRACK COMPLETE)
 Kit settings pane (theme, typography, narrative mode, model, token budget, PWA icon) wired to real `/api/settings` persistence instead of local draft state.
 
 ## Dependency Sketch
