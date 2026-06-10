@@ -268,7 +268,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // the story has no setting references yet.
   app.get("/api/current-place", async (req, res) => {
     try {
-      const slot = req.query.slot ? parseInt(req.query.slot as string) : undefined;
+      const slot = req.query.slot
+        ? parseInt(req.query.slot as string, 10)
+        : undefined;
+      // Reject malformed slots loudly — a NaN would silently fall back to
+      // the default database and serve the wrong slot's location.
+      if (slot !== undefined && Number.isNaN(slot)) {
+        return res.status(400).json({ error: "slot must be an integer" });
+      }
       const currentPlace = await storage.getCurrentPlace(slot);
       if (!currentPlace) {
         return res.status(404).json({ error: "No current place recorded" });

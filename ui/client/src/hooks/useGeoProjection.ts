@@ -8,9 +8,9 @@
  * fictional worlds) by using D3's data-agnostic projection system.
  */
 
-import { useMemo, useCallback } from 'react';
-import { geoEquirectangular, geoPath } from 'd3-geo';
-import type { GeoProjection, GeoPath, GeoPermissibleObjects } from 'd3-geo';
+import { useMemo, useCallback } from "react";
+import { geoEquirectangular, geoPath } from "d3-geo";
+import type { GeoProjection, GeoPath, GeoPermissibleObjects } from "d3-geo";
 
 interface MapBounds {
   minLng: number;
@@ -74,10 +74,10 @@ export function useGeoProjection({ mapDimensions, mapBounds }: ProjectionConfig)
     // Create bounding box as GeoJSON Feature for fitSize
     // This tells D3 what geographic area we want to display
     const boundingFeature = {
-      type: 'Feature' as const,
+      type: "Feature" as const,
       properties: {},
       geometry: {
-        type: 'Polygon' as const,
+        type: "Polygon" as const,
         coordinates: [[
           [bounds.minLng, bounds.minLat],
           [bounds.maxLng, bounds.minLat],

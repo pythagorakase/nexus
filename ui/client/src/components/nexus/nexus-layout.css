@@ -908,7 +908,7 @@
   text-align: left;
 }
 .map-zone-header:hover {
-  background: hsl(270 30% 14% / .5);
+  background: color-mix(in srgb, var(--border-faint) 50%, transparent);
 }
 .map-zone-header svg {
   color: var(--brass);
@@ -952,12 +952,12 @@
 }
 .map-place-row:hover {
   color: var(--fg);
-  background: hsl(270 30% 14% / .5);
+  background: color-mix(in srgb, var(--border-faint) 50%, transparent);
 }
 .map-place-row.on {
   color: var(--brass-bright);
   border-left-color: var(--brass);
-  background: hsl(320 55% 50% / .12);
+  background: color-mix(in srgb, var(--brass) 12%, transparent);
 }
 .map-place-row.here {
   color: var(--brass-bright);
@@ -1019,7 +1019,7 @@
   flex-direction: column;
   gap: 5px;
   padding: 9px 13px;
-  background: hsl(220 35% 8% / .88);
+  background: color-mix(in srgb, var(--bg-elev-2) 88%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   pointer-events: none;
@@ -1081,7 +1081,8 @@
   top: 14px;
   right: 14px;
   max-width: 340px;
-  border-color: var(--destructive, hsl(0 65% 50%));
+  /* --destructive holds HSL components (shadcn convention), not a color */
+  border-color: hsl(var(--destructive));
 }
 .map-error-detail {
   font-family: var(--font-body);
