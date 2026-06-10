@@ -40,7 +40,7 @@ Every trait except the wildcard compiles to mechanical state - no prose-only rem
 **M6 - Turn On the Orrery, End to End** - M - DONE 2026-06-10 (PR #371, c6ab59e2)
 Live-proven on slot 2: 9 promotions, 9/9 real narrations, 3 Bleed candidates woven into prose; thresholds recalibrated (priority 30.0, magnitude 0.35) with corpus evidence; offscreen-narrations embedding explicitly deferred. Original scope: flip `orrery.enabled = true` and make the full cycle actually fire on slot 5 with real API calls: Resolve proposals -> Skald adjudication -> CommitOrreryTick -> worker Promote -> Narrate -> Bleed. The flag flip is trivial; the work is promotion-threshold tuning (104/106 resolutions currently skip at defaults - Promote has never promoted) and the first live Narrate/Bleed exercise, plus a decision on the orphaned `offscreen_narrations` embedding path (wire it or explicitly defer). Ship default-on.
 
-**M7 - Package Self-Awareness (#282)** - M
+**M7 - Package Self-Awareness (#282)** - M - DONE 2026-06-10 (PR #375, 7552b84d; zero vocabulary additions, fame-in-entry-gates structurally banned, 17 branch shifts on tagged profiles / 0 diffs on untagged corpus)
 Branch selection reads the acting entity's own properties (fame, resources, disposition) per the locked three-stage design: entry-gating / branch-selection / outcome. Deliberately sequenced after M6: the first live Promote/Narrate/Bleed runs establish a branch-selection baseline, so threshold tuning and self-awareness don't confound each other. Runs parallel with M8.
 
 **M8 - Retrograde Phase B-Lite: Runtime Stub Maturation** - L
