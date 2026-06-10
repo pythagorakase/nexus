@@ -183,16 +183,21 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
                 f"on entity {item['entity_id']}"
             )
 
+    def _endpoint_label(entity_id: Any, name: Any) -> str:
+        if entity_id is not None:
+            return str(entity_id)
+        return f"(pending stub) {name or '?'}"
+
     pair_tags = audit.get("applied_pair_tags") or []
     if pair_tags:
         print()
         print("Applied pair tags:")
         for item in pair_tags:
-            print(
-                "  - "
-                f"{item['trait']}: {item['tag']} "
-                f"{item['subject_entity_id']} -> {item['object_entity_id']}"
+            subject = _endpoint_label(
+                item.get("subject_entity_id"), item.get("subject_name")
             )
+            obj = _endpoint_label(item.get("object_entity_id"), item.get("object_name"))
+            print(f"  - {item['trait']}: {item['tag']} {subject} -> {obj}")
 
     created_entities = audit.get("created_entities") or []
     if created_entities:
@@ -200,10 +205,12 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
         print("Created entities:")
         for item in created_entities:
             name = f" ({item['name']})" if item.get("name") else ""
+            entity_id = item.get("entity_id")
+            entity_label = entity_id if entity_id is not None else "pending"
             print(
                 "  - "
                 f"{item['trait']}: {item['entity_kind']} "
-                f"entity {item['entity_id']}{name}"
+                f"entity {entity_label}{name}"
             )
 
     created_relationships = audit.get("created_relationships") or []
@@ -211,10 +218,13 @@ def _print_trait_audit(payload: Dict[str, Any]) -> None:
         print()
         print("Created relationships:")
         for item in created_relationships:
+            target = _endpoint_label(
+                item.get("character2_id"), item.get("character2_name")
+            )
             print(
                 "  - "
                 f"{item['trait']}: character {item['character1_id']} -> "
-                f"{item['character2_id']} "
+                f"{target} "
                 f"({item['relationship_type']}, {item['emotional_valence']})"
             )
 

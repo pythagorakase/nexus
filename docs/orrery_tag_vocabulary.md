@@ -855,16 +855,17 @@ entity tags describe facts.
 | `operates_from` | faction | place | Operational base (distinct from `claims`) |
 | `originates_from` | character | place | Origin / hometown |
 
-### Character / Faction Relations (6)
+### Character / Faction Relations (7)
 
 | Tag | Subject | Object | Purpose |
 |---|---|---|---|
 | `hunting` | character \| faction | character | Active intentional targeting; ephemeral. Confers narrow elevated detection sensitivity for the target (see issue #282). Migration 048 renames live `pursuing` rows to `hunting`, deprecates the old pair-tag, and retires the single-entity `under_active_pursuit` signal. *Reskinning rationale: "hunt" generalizes better than "pursue" across genres; the concept is not physical-chase-specific.* |
 | `handles` | character | character | Operative-handler relationship; covert/operational |
-| `obligation` | character \| faction | character \| faction | Debt / oath / loyalty; kind inferable from establishing event |
+| `obligation` | character \| faction | character \| faction | Debt / oath / loyalty; kind inferable from establishing event. The Obligations trait compiler writes `obligation(protagonist → counterparty)` at wizard time; for those rows the establishing context lives in the companion relationship row / trait prose |
 | `authority_over` | character \| faction | character \| faction | Interpersonal/positional power over a specific other entity. Distinct from scope-bound status (a king has `authority_over` a vassal directly; a senior officer in an institution holds `status:senior(→ faction)` against that institution's membership) |
 | `protects` | character \| faction | character | Active protective relationship; durable |
 | `mentors` | character | character | Teaching/training |
+| `sponsors` | character \| faction | character | Economic or positional backing without implied command or instruction. Registered by migration 061 to fill the Patron trait "sponsors gap" (#305): a benefactor who bankrolls but neither commands nor mentors. Written by the Patron compiler only for user-affirmed patron functions, never as a default bundle |
 
 ### Scope-Bound Status (1 Family — `status:<level>`)
 
@@ -939,13 +940,15 @@ Compiler surfaces:
 | `Allies` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` writes `ally(char → char)` in the same transaction. | Per #303, affective relationship row first; pair-tag only when a package gate needs the binary edge. |
 | `Contacts` | Writes `character_relationships` rows from structured targets. No pair-tag by default; optional `apply_pair_tag=True` requires `contact_kind` (`lodging`, `social`, or `intimate`) or an explicit `contact:<kind>` pair-tag. | The bare `contact` pair-tag is deprecated as a package gate. Needs templates consume `has_contact_of_kind(...)` predicates. |
 | `Enemies` | Writes `character_relationships` rows from structured targets. Optional `apply_pair_tag=True` can write `hostile_to`; target-to-protagonist direction is supported. | Acute targeting remains the `hunting` pair-tag track, not default `hostile_to`. |
-| `Domain` | Current MVP returns a prose-only remainder. | Target design: create/identify a place entity and write `claims(char → place)`; registry polymorphism is ready, compiler input/schema is not. |
-| `Patron` | Current MVP returns a prose-only remainder. | Target design: one `character_relationships` row for the patron-client bond; package-specific pair-tags later as needed. This preserves the #305 resolution: patron is not decomposed into a default OR/AND bundle of mentor, sponsor, protector, and authority edges. |
-| `Dependents` | Current MVP returns a prose-only remainder. | Target design: `protects(char → dependent)` plus affective relationship row; no default `authority_over`/`obligation` edge. |
-| `Obligations` | Current MVP returns a prose-only remainder. | Target design: `obligation(char → target)` when a structured target exists. |
+| `Domain` | Writes `claims(char → place)` from `TraitCompileInputs.domain`. The place is resolved by id/entity-id/exact name; an unmatched name creates a minimum-viable place stub (`type='other'`, trait-compiler provenance in `extra_data`). Unknown ids and ambiguous names become structured remainders. | Landed in M5 (migration 061 era). The `claims` subject-kind polymorphism shipped in migration 045. |
+| `Patron` | Writes one `character_relationships` row (`relationship_type='patron'`, default valence `+2\|deferential`); the patron is resolved or stub-created. User-affirmed `functions` (`mentors`, `sponsors`, `protects`, `authority_over`) each add one pair-tag from patron to protagonist; no functions means relationship row only. | Preserves the #305 resolution: patron is never decomposed into a default OR/AND bundle of mentor, sponsor, protector, and authority edges. Migration 061 registered `sponsors` to close the #305 sponsors gap. |
+| `Dependents` | Per target: `protects(char → dependent)` pair-tag plus a `character_relationships` row (`relationship_type='dependent'`, default valence `+3\|devoted`); targets are resolved or stub-created. No default `authority_over`/`obligation` edge (per the #306 resolution). | A target name resolving to the protagonist, or matching multiple rows, becomes a structured remainder. |
+| `Obligations` | Per target: `obligation(protagonist → counterparty)` where the counterparty is a character or faction (resolved or stub-created by name). Character counterparties also get a `character_relationships` row (`relationship_type='obligation'`, default valence `-1\|beholden`) carrying the affective aspect; faction counterparties carry the pair-tag alone. | Obligations to pure concepts (an unwitnessed oath, filial piety in the abstract) have no mechanical referent: bind them to the enforcing/benefiting entity — stub allowed — to compile, or leave them as prose in the trait description. |
 | `Wildcard` | Outside the current selected-trait compiler loop. The wizard persists prose in `characters.extra_data.wildcard`, and any Skald-bestowed `orrery_tags` apply through the ordinary tag bestowal surface. | Future wildcard decomposition may only use registered vocabulary. It cannot mint tags; novel mechanics remain prose/`extra_data` until a compiler surface exists. There is no planned `items` table; inanimate artifacts stay prose/`extra_data` unless/until project scope changes. |
 
-**Migration 045 landed the trait-compiler substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. **Migration 047 refines contacts** by deprecating bare `contact`, adding `contact:lodging` / `contact:social` / `contact:intimate`, and deprecating the old single-entity contact flags. The compiler code owns only the current MVP rows above; the table is deliberately split so future docs do not confuse registry readiness with compiler readiness.
+**Migration 045 landed the trait-compiler substrate portion**: `role.resources`, `role.fame`, the status pair-tag family, `ally`, `contact`, `hostile_to`, the `claims` subject-kind extension, the `assets.traits` `reputation` → `fame` rename, and the `trait_compile_result` cache column. **Migration 047 refines contacts** by deprecating bare `contact`, adding `contact:lodging` / `contact:social` / `contact:intimate`, and deprecating the old single-entity contact flags. **Migration 061 closes the vocabulary for the M5 compiler completion** by registering `sponsors`; `claims`, `protects`, and `obligation` needed no new rows (042/045 already carried the required polymorphism). With M5, every menu trait except the wildcard compiles; the wildcard-cannot-mint rule stands.
+
+**Stub creation (M5).** Patron, Dependents, and Obligations targets — and Domain places — may be named without existing rows. The compiler then creates minimum-viable stub entities following the Retrograde persistence conventions (sparse columns; `extra_data.source='trait_compiler'`, `stub_kind='trait_compiler_target_ref'`, plus a `sources` provenance list), exactly the input wizard-time Retrograde Phase A matures into history. Nothing is generated recursively for stubs. On dry-run (`nexus trait-audit`), pending stubs are reported in `created_entities` with `entity_id: null` and named pair-tag/relationship endpoints instead of being created.
 
 ---
 
@@ -997,6 +1000,7 @@ Compiler surfaces:
 - `migrations/053_retire_faction_legacy_write_defaults.py` — drops the legacy `factions.power_level` default so new runtime inserts do not create fresh obsolete faction strength values.
 - `migrations/054_orrery_completed_tag_vocab.py` — seeds completed state and place anchors, including globally unique place registry names and the `wilderness` legacy-category rewrite.
 - `migrations/058_retire_faction_legacy_columns.py` — snapshots obsolete faction-table semantic columns into `extra_data.legacy_faction_columns` and drops the columns after the Orrery tag cutover.
+- `migrations/061_trait_compiler_sponsors_pair_tag.py` — registers `sponsors` for user-affirmed Patron functions (the #305 sponsors gap); the complete vocabulary delta for the M5 compiler completion.
 - Issue #275 / PR #276 — Skald sovereignty (adjudication) model. *Merged.*
 - Issue #282 — Package self-awareness architectural pattern (three-stage gating: entry → branch → outcome; `hunting` tags confer targeted detection sensitivity). *Open.*
 - PR #283 — `entity_pair_tags` substrate (migration 042 + writer functions). *Merged.*

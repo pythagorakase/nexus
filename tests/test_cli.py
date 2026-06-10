@@ -342,6 +342,76 @@ def test_main_trait_audit_policy_failure_keeps_output(monkeypatch, capsys) -> No
     assert "resources: missing_structured_trait_input" in captured.out
 
 
+def test_print_trait_audit_renders_pending_stub_endpoints(capsys) -> None:
+    """Dry-run rows with pending stubs print names instead of null ids."""
+
+    cli._print_trait_audit(
+        {
+            "character_name": "Mara",
+            "traits": ["domain", "patron", "dependents"],
+            "trait_audit": {
+                "counters": {
+                    "applied_single_entity_tags": 0,
+                    "applied_pair_tags": 2,
+                    "created_entities": 2,
+                    "created_relationships": 1,
+                    "prose_only_remainders": 0,
+                },
+                "applied_pair_tags": [
+                    {
+                        "trait": "domain",
+                        "tag": "claims",
+                        "subject_entity_id": 501,
+                        "object_entity_id": None,
+                        "object_name": "Hollow Spire",
+                    },
+                    {
+                        "trait": "patron",
+                        "tag": "sponsors",
+                        "subject_entity_id": None,
+                        "subject_name": "Magistrate Hale",
+                        "object_entity_id": 501,
+                    },
+                ],
+                "created_entities": [
+                    {
+                        "trait": "domain",
+                        "entity_kind": "place",
+                        "entity_id": None,
+                        "name": "Hollow Spire",
+                    },
+                    {
+                        "trait": "patron",
+                        "entity_kind": "character",
+                        "entity_id": 1042,
+                        "name": "Magistrate Hale",
+                    },
+                ],
+                "created_relationships": [
+                    {
+                        "trait": "patron",
+                        "character1_id": 1,
+                        "character2_id": None,
+                        "character2_name": "Magistrate Hale",
+                        "relationship_type": "patron",
+                        "emotional_valence": "+2|deferential",
+                    }
+                ],
+            },
+        }
+    )
+
+    captured = capsys.readouterr()
+    assert "domain: claims 501 -> (pending stub) Hollow Spire" in captured.out
+    assert "patron: sponsors (pending stub) Magistrate Hale -> 501" in captured.out
+    assert "domain: place entity pending (Hollow Spire)" in captured.out
+    assert "patron: character entity 1042 (Magistrate Hale)" in captured.out
+    assert (
+        "patron: character 1 -> (pending stub) Magistrate Hale "
+        "(patron, +2|deferential)" in captured.out
+    )
+
+
 def test_retrograde_packet_writes_dry_run_packet(monkeypatch, tmp_path) -> None:
     """The CLI Retrograde packet command is read-only except optional output JSON."""
 
