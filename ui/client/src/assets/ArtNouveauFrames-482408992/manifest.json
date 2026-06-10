@@ -15,6 +15,13 @@
   "extracted_from": "AdobeStock-482408992-ArtNouveauFrames.ai",
   "extractor": ".claude/skills/extract-vector-grid",
   "naming_convention": "`name` is always non-null. When `name` equals the file stem (e.g. \"r1c2\"), the frame still awaits a human-vetted descriptive label. When `name` differs (e.g. \"CrescentMoon\"), it's a curated label.",
+  "derived": [
+    {
+      "file": "r1c5-inner.ts",
+      "from": "r1c5.svg",
+      "description": "Landscape-rotated (-90deg) inner SVG payload with per-path fills stripped, from the NEXUS IRIS design handoff. Consumed by components/veil/NouveauFrame.tsx (the Veil splash border)."
+    }
+  ],
   "grid": {"rows": 2, "cols": 5},
   "frames": [
     {"file": "r1c1.svg", "position": [1, 1], "name": "CrescentMoon"},
