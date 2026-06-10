@@ -260,6 +260,7 @@ def _insert_declared_stub(
     cur: Any, declaration: NewEntityDeclaration
 ) -> _DeclaredEntityRecord:
     if declaration.kind == "character":
+        _sync_id_sequence(cur, "characters")
         cur.execute(
             """
             INSERT INTO characters (name, summary)
@@ -269,6 +270,7 @@ def _insert_declared_stub(
             (declaration.name, declaration.summary),
         )
     elif declaration.kind == "place":
+        _sync_id_sequence(cur, "places")
         cur.execute(
             """
             INSERT INTO places (name, type, summary)
@@ -297,6 +299,27 @@ def _insert_declared_stub(
         entity_id=int(_row_value(row, "entity_id", 1)),
         name=declaration.name,
         created=True,
+    )
+
+
+def _sync_id_sequence(cur: Any, table: str) -> None:
+    """Advance a table's id sequence to MAX(id) before a serial insert.
+
+    Slot databases populated by data imports can carry id sequences far
+    behind MAX(id); a serial insert then collides with existing rows. The
+    sync is cheap and idempotent, and sequences never roll back, so doing it
+    inside the commit transaction is safe.
+    """
+
+    if table not in _SUBTYPE_TABLES.values():
+        raise ValueError(f"Unexpected table for id-sequence sync: {table!r}")
+    cur.execute(
+        f"""
+        SELECT setval(
+            pg_get_serial_sequence('{table}', 'id'),
+            GREATEST((SELECT COALESCE(MAX(id), 0) FROM {table}), 1)
+        )
+        """
     )
 
 
@@ -1002,7 +1025,7 @@ def _entity_event_count(cur: Any, entity_id: int) -> int:
             SELECT id FROM world_events
             WHERE actor_entity_id = %s OR target_entity_id = %s
             UNION
-            SELECT event_id FROM world_event_participants WHERE entity_id = %s
+            SELECT event_id FROM world_event_entities WHERE entity_id = %s
         ) participation
         """,
         (entity_id, entity_id, entity_id),
