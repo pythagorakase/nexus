@@ -127,7 +127,7 @@ max_total_threats = 10
 # =============================================================================
 
 [orrery]
-enabled = false
+enabled = true
 
 [orrery.binding]
 window_chunks = 30
@@ -144,8 +144,19 @@ model_ref = "@anthropic.default"
 max_candidates = 3
 
 [orrery.promote]
-priority_threshold = 50.0
-magnitude_threshold = 0.5
+# Calibrated against the 106-resolution corpus on save_05 (39 ticks, 2026-06).
+# Template priorities seam cleanly: mundane needs band tops out at 26
+# (routine_commute); relational/dramatic templates start at 35 (consult_rival).
+# priority_threshold = 30 promotes every above-mundane template while skipping
+# the drink/eat/work/tend_craft/maintain_cover noise floor (4/106 = 3.8% of the
+# historical corpus, ~1 promotion per 10 ticks of a quiet stretch).
+# Observed routine-outcome magnitudes max at 0.22; catalog branch magnitudes
+# for noteworthy outcomes start at ~0.34-0.40. magnitude_threshold = 0.35 lets
+# a dramatic outcome of a mundane template (e.g. sleep 0.74, eat 0.62) promote
+# via the OR-side without ever firing on routine outcomes. The old default of
+# 0.5 was unreachable: no observed resolution exceeded 0.22.
+priority_threshold = 30.0
+magnitude_threshold = 0.35
 perceptual_summary_max_chars = 240
 
 [orrery.sunhelm]
