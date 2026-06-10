@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
 from nexus.agents.orrery.status_family import (
@@ -19,7 +20,14 @@ from nexus.api.new_story_schemas import CharacterSheet
 from nexus.api.trait_compiler_schemas import (
     AppliedPairTag,
     AppliedTag,
+    CreatedEntity,
     CreatedRelationship,
+    DependentsTraitInput,
+    DependentTargetInput,
+    DomainTraitInput,
+    ObligationsTraitInput,
+    ObligationTargetInput,
+    PatronTraitInput,
     RelationshipTargetInput,
     SingleEntityTraitInput,
     StatusTraitInput,
@@ -53,6 +61,31 @@ RELATIONSHIP_DEFAULTS = {
         "pair_tag": "hostile_to",
     },
 }
+
+DOMAIN_PAIR_TAG = "claims"
+DEPENDENT_PAIR_TAG = "protects"
+OBLIGATION_PAIR_TAG = "obligation"
+
+PATRON_RELATIONSHIP_TYPE = "patron"
+PATRON_DEFAULT_VALENCE = "+2|deferential"
+DEPENDENT_RELATIONSHIP_TYPE = "dependent"
+DEPENDENT_DEFAULT_VALENCE = "+3|devoted"
+OBLIGATION_RELATIONSHIP_TYPE = "obligation"
+OBLIGATION_DEFAULT_VALENCE = "-1|beholden"
+
+TRAIT_COMPILER_SOURCE = "trait_compiler"
+TRAIT_STUB_KIND = "trait_compiler_target_ref"
+
+
+@dataclass(frozen=True)
+class _ResolvedTarget:
+    """A trait target resolved to canonical ids or a pending dry-run stub."""
+
+    row_id: Optional[int]
+    entity_id: Optional[int]
+    name: Optional[str]
+    pending_stub: bool = False
+
 
 PAIR_TAG_RELATIONSHIP_TYPES = frozenset({"ally", "hostile_to"}) | frozenset(
     CONTACT_PAIR_TAGS.values()
@@ -128,6 +161,45 @@ def compile_character_traits(
                 character_id=character_id,
                 character_entity_id=character_entity_id,
                 typed_input=getattr(inputs, canonical_trait),
+                dry_run=dry_run,
+            )
+        elif canonical_trait == "domain":
+            _compile_domain(
+                cur,
+                result=result,
+                trait=trait_name,
+                character_entity_id=character_entity_id,
+                typed_input=inputs.domain,
+                dry_run=dry_run,
+            )
+        elif canonical_trait == "patron":
+            _compile_patron(
+                cur,
+                result=result,
+                trait=trait_name,
+                character_id=character_id,
+                character_entity_id=character_entity_id,
+                typed_input=inputs.patron,
+                dry_run=dry_run,
+            )
+        elif canonical_trait == "dependents":
+            _compile_dependents(
+                cur,
+                result=result,
+                trait=trait_name,
+                character_id=character_id,
+                character_entity_id=character_entity_id,
+                typed_input=inputs.dependents,
+                dry_run=dry_run,
+            )
+        elif canonical_trait == "obligations":
+            _compile_obligations(
+                cur,
+                result=result,
+                trait=trait_name,
+                character_id=character_id,
+                character_entity_id=character_entity_id,
+                typed_input=inputs.obligations,
                 dry_run=dry_run,
             )
         else:
@@ -645,6 +717,837 @@ def _resolve_contact_pair_tag(
     return None
 
 
+def _compile_domain(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_entity_id: int,
+    typed_input: Optional[DomainTraitInput],
+    dry_run: bool,
+) -> None:
+    """Compile Domain to ``claims(protagonist -> place)`` per the design target."""
+
+    if typed_input is None:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message="Domain has no structured place input.",
+        )
+        return
+    if not _registered_pair_tag_exists(cur, DOMAIN_PAIR_TAG):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG,
+            message=f"No active registered pair_tag for {DOMAIN_PAIR_TAG}.",
+            details={"pair_tag": DOMAIN_PAIR_TAG},
+        )
+        return
+
+    resolved = _resolve_place_target(
+        cur,
+        result=result,
+        trait=trait,
+        place_id=typed_input.place_id,
+        place_entity_id=typed_input.place_entity_id,
+        name=typed_input.name,
+        dry_run=dry_run,
+    )
+    if resolved is None:
+        return
+
+    inserted: Optional[bool] = None
+    if not dry_run:
+        if resolved.entity_id is None:
+            raise AssertionError("apply-mode place target must have an entity id")
+        inserted = apply_pair_tag_bestowal(
+            cur,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            subject_kind="character",
+            object_kind="place",
+            tag=DOMAIN_PAIR_TAG,
+            source_kind="skald_inline",
+        )
+    result.applied_pair_tags.append(
+        AppliedPairTag(
+            trait=trait,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            object_name=resolved.name if resolved.pending_stub else None,
+            tag=DOMAIN_PAIR_TAG,
+            inserted=inserted,
+            dry_run=dry_run,
+        )
+    )
+
+
+def _compile_patron(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_id: int,
+    character_entity_id: int,
+    typed_input: Optional[PatronTraitInput],
+    dry_run: bool,
+) -> None:
+    """Compile Patron per #305: relationship row plus user-affirmed functions."""
+
+    if typed_input is None:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message="Patron has no structured target input.",
+        )
+        return
+
+    functions = list(dict.fromkeys(typed_input.functions))
+    for function in functions:
+        if not _registered_pair_tag_exists(cur, function):
+            _add_remainder(
+                result,
+                trait=trait,
+                reason_code=TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG,
+                message=f"No active registered pair_tag for {function}.",
+                details={"pair_tag": function},
+            )
+            return
+
+    resolved = _resolve_character_target(
+        cur,
+        result=result,
+        trait=trait,
+        role="patron",
+        target_character_id=typed_input.character_id,
+        target_character_entity_id=typed_input.character_entity_id,
+        name=typed_input.name,
+        protagonist_character_id=character_id,
+        dry_run=dry_run,
+    )
+    if resolved is None:
+        return
+
+    for function in functions:
+        inserted: Optional[bool] = None
+        if not dry_run:
+            if resolved.entity_id is None:
+                raise AssertionError("apply-mode patron must have an entity id")
+            inserted = apply_pair_tag_bestowal(
+                cur,
+                subject_entity_id=resolved.entity_id,
+                object_entity_id=character_entity_id,
+                subject_kind="character",
+                object_kind="character",
+                tag=function,
+                source_kind="skald_inline",
+            )
+        result.applied_pair_tags.append(
+            AppliedPairTag(
+                trait=trait,
+                subject_entity_id=resolved.entity_id,
+                subject_name=resolved.name if resolved.pending_stub else None,
+                object_entity_id=character_entity_id,
+                tag=function,
+                inserted=inserted,
+                dry_run=dry_run,
+            )
+        )
+
+    emotional_valence = typed_input.emotional_valence or PATRON_DEFAULT_VALENCE
+    additional_extra_data: dict[str, Any] = {}
+    if functions:
+        additional_extra_data["trait_compiler_patron_functions"] = functions
+    _write_trait_relationship(
+        cur,
+        result=result,
+        trait=trait,
+        character1_id=character_id,
+        target=resolved,
+        relationship_type=PATRON_RELATIONSHIP_TYPE,
+        emotional_valence=emotional_valence,
+        dynamic=typed_input.dynamic,
+        recent_events=typed_input.recent_events,
+        history=typed_input.history,
+        additional_extra_data=additional_extra_data,
+        dry_run=dry_run,
+    )
+
+
+def _compile_dependents(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_id: int,
+    character_entity_id: int,
+    typed_input: Optional[DependentsTraitInput],
+    dry_run: bool,
+) -> None:
+    """Compile Dependents per the settled target: protects edge + bond row."""
+
+    if typed_input is None or not typed_input.targets:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message="Dependents has no structured targets.",
+        )
+        return
+    if not _registered_pair_tag_exists(cur, DEPENDENT_PAIR_TAG):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG,
+            message=f"No active registered pair_tag for {DEPENDENT_PAIR_TAG}.",
+            details={"pair_tag": DEPENDENT_PAIR_TAG},
+        )
+        return
+
+    for target in typed_input.targets:
+        _compile_dependent_target(
+            cur,
+            result=result,
+            trait=trait,
+            character_id=character_id,
+            character_entity_id=character_entity_id,
+            target=target,
+            dry_run=dry_run,
+        )
+
+
+def _compile_dependent_target(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_id: int,
+    character_entity_id: int,
+    target: DependentTargetInput,
+    dry_run: bool,
+) -> None:
+    resolved = _resolve_character_target(
+        cur,
+        result=result,
+        trait=trait,
+        role="dependent",
+        target_character_id=target.character_id,
+        target_character_entity_id=target.character_entity_id,
+        name=target.name,
+        protagonist_character_id=character_id,
+        dry_run=dry_run,
+    )
+    if resolved is None:
+        return
+
+    inserted: Optional[bool] = None
+    if not dry_run:
+        if resolved.entity_id is None:
+            raise AssertionError("apply-mode dependent must have an entity id")
+        inserted = apply_pair_tag_bestowal(
+            cur,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            subject_kind="character",
+            object_kind="character",
+            tag=DEPENDENT_PAIR_TAG,
+            source_kind="skald_inline",
+        )
+    result.applied_pair_tags.append(
+        AppliedPairTag(
+            trait=trait,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            object_name=resolved.name if resolved.pending_stub else None,
+            tag=DEPENDENT_PAIR_TAG,
+            inserted=inserted,
+            dry_run=dry_run,
+        )
+    )
+
+    _write_trait_relationship(
+        cur,
+        result=result,
+        trait=trait,
+        character1_id=character_id,
+        target=resolved,
+        relationship_type=DEPENDENT_RELATIONSHIP_TYPE,
+        emotional_valence=target.emotional_valence or DEPENDENT_DEFAULT_VALENCE,
+        dynamic=target.dynamic,
+        recent_events=target.recent_events,
+        history=target.history,
+        additional_extra_data={
+            "trait_compiler_functional_pair_tag": DEPENDENT_PAIR_TAG
+        },
+        dry_run=dry_run,
+    )
+
+
+def _compile_obligations(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_id: int,
+    character_entity_id: int,
+    typed_input: Optional[ObligationsTraitInput],
+    dry_run: bool,
+) -> None:
+    """Compile Obligations to ``obligation(protagonist -> counterparty)``."""
+
+    if typed_input is None or not typed_input.targets:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message="Obligations has no structured targets.",
+        )
+        return
+    if not _registered_pair_tag_exists(cur, OBLIGATION_PAIR_TAG):
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG,
+            message=f"No active registered pair_tag for {OBLIGATION_PAIR_TAG}.",
+            details={"pair_tag": OBLIGATION_PAIR_TAG},
+        )
+        return
+
+    for target in typed_input.targets:
+        _compile_obligation_target(
+            cur,
+            result=result,
+            trait=trait,
+            character_id=character_id,
+            character_entity_id=character_entity_id,
+            target=target,
+            dry_run=dry_run,
+        )
+
+
+def _compile_obligation_target(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character_id: int,
+    character_entity_id: int,
+    target: ObligationTargetInput,
+    dry_run: bool,
+) -> None:
+    if target.counterparty_kind == "character":
+        resolved = _resolve_character_target(
+            cur,
+            result=result,
+            trait=trait,
+            role="obligation_counterparty",
+            target_character_id=target.counterparty_id,
+            target_character_entity_id=target.counterparty_entity_id,
+            name=target.name,
+            protagonist_character_id=character_id,
+            dry_run=dry_run,
+        )
+    else:
+        resolved = _resolve_faction_target(
+            cur,
+            result=result,
+            trait=trait,
+            faction_id=target.counterparty_id,
+            faction_entity_id=target.counterparty_entity_id,
+            name=target.name,
+            dry_run=dry_run,
+        )
+    if resolved is None:
+        return
+
+    inserted: Optional[bool] = None
+    if not dry_run:
+        if resolved.entity_id is None:
+            raise AssertionError("apply-mode counterparty must have an entity id")
+        inserted = apply_pair_tag_bestowal(
+            cur,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            subject_kind="character",
+            object_kind=target.counterparty_kind,
+            tag=OBLIGATION_PAIR_TAG,
+            source_kind="skald_inline",
+        )
+    result.applied_pair_tags.append(
+        AppliedPairTag(
+            trait=trait,
+            subject_entity_id=character_entity_id,
+            object_entity_id=resolved.entity_id,
+            object_name=resolved.name if resolved.pending_stub else None,
+            tag=OBLIGATION_PAIR_TAG,
+            inserted=inserted,
+            dry_run=dry_run,
+        )
+    )
+
+    if target.counterparty_kind == "character":
+        _write_trait_relationship(
+            cur,
+            result=result,
+            trait=trait,
+            character1_id=character_id,
+            target=resolved,
+            relationship_type=OBLIGATION_RELATIONSHIP_TYPE,
+            emotional_valence=target.emotional_valence or OBLIGATION_DEFAULT_VALENCE,
+            dynamic=target.dynamic,
+            recent_events=target.recent_events,
+            history=target.history,
+            additional_extra_data={
+                "trait_compiler_functional_pair_tag": OBLIGATION_PAIR_TAG
+            },
+            dry_run=dry_run,
+        )
+
+
+def _write_trait_relationship(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    character1_id: int,
+    target: _ResolvedTarget,
+    relationship_type: str,
+    emotional_valence: str,
+    dynamic: str,
+    recent_events: str,
+    history: str,
+    additional_extra_data: Optional[dict[str, Any]],
+    dry_run: bool,
+) -> None:
+    """Record (and on apply, upsert) a compiler-authored relationship row."""
+
+    if not dry_run:
+        if target.row_id is None:
+            raise AssertionError("apply-mode relationship target must have a row id")
+        _upsert_character_relationship(
+            cur,
+            character1_id=character1_id,
+            character2_id=target.row_id,
+            relationship_type=relationship_type,
+            emotional_valence=emotional_valence,
+            dynamic=dynamic,
+            recent_events=recent_events,
+            history=history,
+            trait=trait,
+            pair_tag=None,
+            pair_tag_direction=None,
+            contact_kind=None,
+            additional_extra_data=additional_extra_data,
+        )
+    result.created_relationships.append(
+        CreatedRelationship(
+            trait=trait,
+            character1_id=character1_id,
+            character2_id=target.row_id,
+            character2_name=target.name if target.pending_stub else None,
+            relationship_type=relationship_type,
+            emotional_valence=emotional_valence,
+            dry_run=dry_run,
+        )
+    )
+
+
+def _resolve_character_target(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    role: str,
+    target_character_id: Optional[int],
+    target_character_entity_id: Optional[int],
+    name: Optional[str],
+    protagonist_character_id: int,
+    dry_run: bool,
+) -> Optional[_ResolvedTarget]:
+    """Resolve a character target by id, entity id, or exact name (stub-creatable)."""
+
+    if target_character_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM characters WHERE id = %s",
+            (target_character_id,),
+        )
+        rows = cur.fetchall()
+    elif target_character_entity_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM characters WHERE entity_id = %s",
+            (target_character_entity_id,),
+        )
+        rows = cur.fetchall()
+    elif name:
+        cur.execute(
+            "SELECT id, entity_id, name FROM characters WHERE name = %s ORDER BY id",
+            (name,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            return _create_target_stub(
+                cur,
+                result=result,
+                trait=trait,
+                entity_kind="character",
+                name=name,
+                role=role,
+                dry_run=dry_run,
+            )
+    else:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message=f"{trait} target requires a character id, entity id, or name.",
+        )
+        return None
+
+    resolved = _single_row_target(
+        result,
+        trait=trait,
+        rows=rows,
+        lookup={
+            "character_id": target_character_id,
+            "character_entity_id": target_character_entity_id,
+            "name": name,
+        },
+    )
+    if resolved is None:
+        return None
+    if resolved.row_id == protagonist_character_id:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.AMBIGUOUS_TARGET,
+            message=f"{trait} target resolves to the protagonist.",
+            details={"character_id": resolved.row_id},
+        )
+        return None
+    return resolved
+
+
+def _resolve_place_target(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    place_id: Optional[int],
+    place_entity_id: Optional[int],
+    name: Optional[str],
+    dry_run: bool,
+) -> Optional[_ResolvedTarget]:
+    """Resolve a place target by id, entity id, or exact name (stub-creatable)."""
+
+    if place_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM places WHERE id = %s",
+            (place_id,),
+        )
+        rows = cur.fetchall()
+    elif place_entity_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM places WHERE entity_id = %s",
+            (place_entity_id,),
+        )
+        rows = cur.fetchall()
+    elif name:
+        cur.execute(
+            "SELECT id, entity_id, name FROM places WHERE name = %s ORDER BY id",
+            (name,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            return _create_target_stub(
+                cur,
+                result=result,
+                trait=trait,
+                entity_kind="place",
+                name=name,
+                role="domain",
+                dry_run=dry_run,
+            )
+    else:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message=f"{trait} requires a place id, entity id, or name.",
+        )
+        return None
+
+    return _single_row_target(
+        result,
+        trait=trait,
+        rows=rows,
+        lookup={
+            "place_id": place_id,
+            "place_entity_id": place_entity_id,
+            "name": name,
+        },
+    )
+
+
+def _resolve_faction_target(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    faction_id: Optional[int],
+    faction_entity_id: Optional[int],
+    name: Optional[str],
+    dry_run: bool,
+) -> Optional[_ResolvedTarget]:
+    """Resolve a faction target by id, entity id, or exact name (stub-creatable)."""
+
+    if faction_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM factions WHERE id = %s",
+            (faction_id,),
+        )
+        rows = cur.fetchall()
+    elif faction_entity_id is not None:
+        cur.execute(
+            "SELECT id, entity_id, name FROM factions WHERE entity_id = %s",
+            (faction_entity_id,),
+        )
+        rows = cur.fetchall()
+    elif name:
+        cur.execute(
+            "SELECT id, entity_id, name FROM factions WHERE name = %s ORDER BY id",
+            (name,),
+        )
+        rows = cur.fetchall()
+        if not rows:
+            return _create_target_stub(
+                cur,
+                result=result,
+                trait=trait,
+                entity_kind="faction",
+                name=name,
+                role="obligation_counterparty",
+                dry_run=dry_run,
+            )
+    else:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT,
+            message=f"{trait} requires a faction id, entity id, or name.",
+        )
+        return None
+
+    return _single_row_target(
+        result,
+        trait=trait,
+        rows=rows,
+        lookup={
+            "faction_id": faction_id,
+            "faction_entity_id": faction_entity_id,
+            "name": name,
+        },
+    )
+
+
+def _single_row_target(
+    result: TraitCompileResult,
+    *,
+    trait: str,
+    rows: list[Any],
+    lookup: dict[str, Any],
+) -> Optional[_ResolvedTarget]:
+    details = {key: value for key, value in lookup.items() if value is not None}
+    if not rows:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.AMBIGUOUS_TARGET,
+            message=f"{trait} target was not found.",
+            details=details,
+        )
+        return None
+    if len(rows) > 1:
+        _add_remainder(
+            result,
+            trait=trait,
+            reason_code=TraitCompileReasonCode.AMBIGUOUS_TARGET,
+            message=f"{trait} target name matches multiple rows.",
+            details={**details, "match_count": len(rows)},
+        )
+        return None
+    row = rows[0]
+    return _ResolvedTarget(
+        row_id=_row_value(row, "id", 0),
+        entity_id=_row_value(row, "entity_id", 1),
+        name=_row_value(row, "name", 2),
+    )
+
+
+def _create_target_stub(
+    cur: Any,
+    *,
+    result: TraitCompileResult,
+    trait: str,
+    entity_kind: str,
+    name: str,
+    role: str,
+    dry_run: bool,
+) -> _ResolvedTarget:
+    """Create (or, on dry-run, plan) a minimum-viable stub for a trait target.
+
+    Stub rows follow the Retrograde persistence conventions: intentionally
+    sparse columns plus ``extra_data`` provenance, so wizard-time Retrograde
+    Phase A can mature them into history. Nothing is generated recursively
+    for stubs.
+    """
+
+    if dry_run:
+        # Coalesce repeated references to one absent target: apply mode
+        # creates the stub once and resolves later same-name lookups to that
+        # row, so the dry-run audit must plan exactly one stub per
+        # (entity_kind, name) too.
+        already_planned = any(
+            item.dry_run and item.entity_kind == entity_kind and item.name == name
+            for item in result.created_entities
+        )
+        if not already_planned:
+            result.created_entities.append(
+                CreatedEntity(
+                    trait=trait,
+                    entity_kind=entity_kind,
+                    entity_id=None,
+                    row_id=None,
+                    name=name,
+                    dry_run=True,
+                )
+            )
+        return _ResolvedTarget(
+            row_id=None,
+            entity_id=None,
+            name=name,
+            pending_stub=True,
+        )
+
+    if entity_kind == "character":
+        row_id, entity_id = _insert_character_stub(
+            cur, name=name, trait=trait, role=role
+        )
+    elif entity_kind == "place":
+        row_id, entity_id = _insert_place_stub(cur, name=name, trait=trait, role=role)
+    elif entity_kind == "faction":
+        row_id, entity_id = _insert_faction_stub(cur, name=name, trait=trait, role=role)
+    else:
+        raise ValueError(f"Unsupported trait stub entity kind {entity_kind!r}")
+    result.created_entities.append(
+        CreatedEntity(
+            trait=trait,
+            entity_kind=entity_kind,
+            entity_id=entity_id,
+            row_id=row_id,
+            name=name,
+            dry_run=False,
+        )
+    )
+    return _ResolvedTarget(row_id=row_id, entity_id=entity_id, name=name)
+
+
+def _insert_character_stub(
+    cur: Any, *, name: str, trait: str, role: str
+) -> tuple[int, int]:
+    cur.execute(
+        """
+        /* trait_compiler:insert_character_stub */
+        INSERT INTO characters (
+            name, summary, background, current_activity, extra_data
+        )
+        VALUES (%s, %s, %s, %s, %s::jsonb)
+        RETURNING id, entity_id
+        """,
+        (
+            name,
+            _stub_summary(name, "character"),
+            "Trait-compiler stub; details intentionally sparse until play.",
+            "latent in compiled trait backstory",
+            json.dumps(_stub_extra_data(trait=trait, role=role)),
+        ),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError(f"Character stub insert for {name!r} returned no row.")
+    return _row_value(row, "id", 0), _row_value(row, "entity_id", 1)
+
+
+def _insert_place_stub(
+    cur: Any, *, name: str, trait: str, role: str
+) -> tuple[int, int]:
+    cur.execute(
+        """
+        /* trait_compiler:insert_place_stub */
+        INSERT INTO places (
+            name, type, summary, current_status, extra_data
+        )
+        VALUES (%s, 'other'::place_type, %s, %s, %s::jsonb)
+        RETURNING id, entity_id
+        """,
+        (
+            name,
+            _stub_summary(name, "place"),
+            "latent in compiled trait backstory",
+            json.dumps(_stub_extra_data(trait=trait, role=role)),
+        ),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError(f"Place stub insert for {name!r} returned no row.")
+    return _row_value(row, "id", 0), _row_value(row, "entity_id", 1)
+
+
+def _insert_faction_stub(
+    cur: Any, *, name: str, trait: str, role: str
+) -> tuple[int, int]:
+    cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
+    cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM factions")
+    faction_id = int(_row_value(cur.fetchone(), "id", 0))
+    cur.execute(
+        """
+        /* trait_compiler:insert_faction_stub */
+        INSERT INTO factions (
+            id, name, summary, extra_data
+        )
+        VALUES (%s, %s, %s, %s::jsonb)
+        RETURNING entity_id
+        """,
+        (
+            faction_id,
+            name,
+            _stub_summary(name, "faction"),
+            json.dumps(_stub_extra_data(trait=trait, role=role)),
+        ),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError(f"Faction stub insert for {name!r} returned no row.")
+    return faction_id, _row_value(row, "entity_id", 0)
+
+
+def _stub_summary(name: str, entity_kind: str) -> str:
+    return (
+        f"Trait-compiler {entity_kind} stub for {name}. "
+        "Created so wizard trait selections resolve to canonical rows."
+    )
+
+
+def _stub_extra_data(*, trait: str, role: str) -> dict[str, Any]:
+    return {
+        "source": TRAIT_COMPILER_SOURCE,
+        "stub_kind": TRAIT_STUB_KIND,
+        "sources": [{"plan": "trait_compile", "trait": trait, "role": role}],
+    }
+
+
 def _upsert_character_relationship(
     cur: Any,
     *,
@@ -659,6 +1562,7 @@ def _upsert_character_relationship(
     pair_tag: Optional[str],
     pair_tag_direction: Optional[str],
     contact_kind: Optional[str],
+    additional_extra_data: Optional[dict[str, Any]] = None,
 ) -> None:
     extra_data: dict[str, Any] = {
         "source": "trait_compiler",
@@ -670,6 +1574,8 @@ def _upsert_character_relationship(
         extra_data["trait_compiler_pair_tag_direction"] = pair_tag_direction
     if contact_kind is not None:
         extra_data["trait_compiler_contact_kind"] = contact_kind
+    if additional_extra_data:
+        extra_data.update(additional_extra_data)
     cur.execute(
         """
         INSERT INTO character_relationships (

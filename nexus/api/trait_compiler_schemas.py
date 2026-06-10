@@ -13,6 +13,8 @@ from nexus.agents.orrery.substrate import ContactKind
 ResourceLevel = Literal["destitute", "poor", "comfortable", "wealthy", "magnate"]
 FameLevel = Literal["obscure", "known", "renowned", "legendary"]
 PairTagDirection = Literal["protagonist_to_target", "target_to_protagonist"]
+PatronFunction = Literal["mentors", "sponsors", "protects", "authority_over"]
+ObligationCounterpartyKind = Literal["character", "faction"]
 
 
 def canonical_trait_name(trait_name: str) -> str:
@@ -114,6 +116,171 @@ class RelationshipTraitInput(BaseModel):
     targets: List[RelationshipTargetInput] = Field(default_factory=list)
 
 
+class DomainTraitInput(BaseModel):
+    """Typed input for the Domain trait: a place the character claims.
+
+    The compiler resolves the place by ``place_id``, ``place_entity_id``, or
+    exact ``name`` lookup; an unmatched name creates a minimum-viable place
+    stub so Retrograde Phase A can mature it into history later.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    place_id: Optional[int] = Field(None, description="Existing places row id.")
+    place_entity_id: Optional[int] = Field(
+        None, description="Existing place entity_id."
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Place name for exact lookup or stub creation.",
+        min_length=1,
+    )
+
+
+class PatronTraitInput(BaseModel):
+    """Typed input for the Patron trait.
+
+    Per the #305 resolution the default compile is a single
+    ``character_relationships`` row for the patron-client bond. The optional
+    ``functions`` list holds user-affirmed functional edges only; each one
+    writes a registered pair-tag from patron to protagonist. The compiler
+    never pre-provisions a default bundle of patron edges.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    character_id: Optional[int] = Field(
+        None, description="Existing patron characters row id."
+    )
+    character_entity_id: Optional[int] = Field(
+        None, description="Existing patron character entity_id."
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Patron name for exact lookup or stub creation.",
+        min_length=1,
+    )
+    functions: List[PatronFunction] = Field(
+        default_factory=list,
+        description=(
+            "User-affirmed patron functions; each writes one functional "
+            "pair-tag from patron to protagonist."
+        ),
+    )
+    emotional_valence: Optional[str] = Field(
+        None, description="character_relationships.emotional_valence override."
+    )
+    dynamic: str = Field(
+        "",
+        description="Current relationship state written to character_relationships.",
+    )
+    recent_events: str = Field(
+        "",
+        description="Recent events summary written to character_relationships.",
+    )
+    history: str = Field(
+        "",
+        description="History summary written to character_relationships.",
+    )
+
+
+class DependentTargetInput(BaseModel):
+    """Typed input for one dependent under the Dependents trait."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    character_id: Optional[int] = Field(
+        None, description="Existing dependent characters row id."
+    )
+    character_entity_id: Optional[int] = Field(
+        None, description="Existing dependent character entity_id."
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Dependent name for exact lookup or stub creation.",
+        min_length=1,
+    )
+    emotional_valence: Optional[str] = Field(
+        None, description="character_relationships.emotional_valence override."
+    )
+    dynamic: str = Field(
+        "",
+        description="Current relationship state written to character_relationships.",
+    )
+    recent_events: str = Field(
+        "",
+        description="Recent events summary written to character_relationships.",
+    )
+    history: str = Field(
+        "",
+        description="History summary written to character_relationships.",
+    )
+
+
+class DependentsTraitInput(BaseModel):
+    """Typed input for the Dependents trait."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    targets: List[DependentTargetInput] = Field(default_factory=list)
+
+
+class ObligationTargetInput(BaseModel):
+    """Typed input for one obligation counterparty.
+
+    Obligations compile to ``obligation(protagonist -> counterparty)``; the
+    counterparty is a character or faction (stub-creatable by name). An
+    obligation to a pure concept (an oath, filial piety) has no mechanical
+    referent: bind it to the enforcing or benefiting entity to compile, or
+    leave it as prose in the trait description.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    counterparty_kind: ObligationCounterpartyKind = Field(
+        "character",
+        description="Entity kind of the obligation counterparty.",
+    )
+    counterparty_id: Optional[int] = Field(
+        None, description="Existing characters/factions row id for the counterparty."
+    )
+    counterparty_entity_id: Optional[int] = Field(
+        None, description="Existing counterparty entity_id."
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Counterparty name for exact lookup or stub creation.",
+        min_length=1,
+    )
+    emotional_valence: Optional[str] = Field(
+        None,
+        description=(
+            "character_relationships.emotional_valence override; character "
+            "counterparties only."
+        ),
+    )
+    dynamic: str = Field(
+        "",
+        description="Current relationship state written to character_relationships.",
+    )
+    recent_events: str = Field(
+        "",
+        description="Recent events summary written to character_relationships.",
+    )
+    history: str = Field(
+        "",
+        description="History summary written to character_relationships.",
+    )
+
+
+class ObligationsTraitInput(BaseModel):
+    """Typed input for the Obligations trait."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    targets: List[ObligationTargetInput] = Field(default_factory=list)
+
+
 class TraitCompileInputs(BaseModel):
     """Optional typed mechanical inputs collected during the wizard."""
 
@@ -129,6 +296,10 @@ class TraitCompileInputs(BaseModel):
     allies: Optional[RelationshipTraitInput] = None
     contacts: Optional[RelationshipTraitInput] = None
     enemies: Optional[RelationshipTraitInput] = None
+    domain: Optional[DomainTraitInput] = None
+    patron: Optional[PatronTraitInput] = None
+    dependents: Optional[DependentsTraitInput] = None
+    obligations: Optional[ObligationsTraitInput] = None
 
 
 class AppliedTag(BaseModel):
@@ -143,33 +314,44 @@ class AppliedTag(BaseModel):
 
 
 class AppliedPairTag(BaseModel):
-    """Pair-tag that was or would be applied."""
+    """Pair-tag that was or would be applied.
+
+    Entity ids are ``None`` only on dry-run rows whose endpoint is a pending
+    stub; the matching ``*_name`` field then carries the stub reference.
+    """
 
     trait: str
-    subject_entity_id: int
-    object_entity_id: int
+    subject_entity_id: Optional[int] = None
+    object_entity_id: Optional[int] = None
+    subject_name: Optional[str] = None
+    object_name: Optional[str] = None
     tag: str
     inserted: Optional[bool] = None
     dry_run: bool = False
 
 
 class CreatedEntity(BaseModel):
-    """Entity created by trait compilation."""
+    """Entity created (or pending creation on dry-run) by trait compilation."""
 
     trait: str
     entity_kind: str
-    entity_id: int
+    entity_id: Optional[int] = None
     row_id: Optional[int] = None
     name: Optional[str] = None
     dry_run: bool = False
 
 
 class CreatedRelationship(BaseModel):
-    """character_relationships row that was or would be written."""
+    """character_relationships row that was or would be written.
+
+    ``character2_id`` is ``None`` only on dry-run rows whose target is a
+    pending stub; ``character2_name`` then carries the stub reference.
+    """
 
     trait: str
     character1_id: int
-    character2_id: int
+    character2_id: Optional[int] = None
+    character2_name: Optional[str] = None
     relationship_type: str
     emotional_valence: str
     pair_tag: Optional[str] = None

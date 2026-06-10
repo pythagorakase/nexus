@@ -16,6 +16,12 @@ from nexus.api.trait_compiler import (
     reconcile_trait_relationship_pair_tags,
 )
 from nexus.api.trait_compiler_schemas import (
+    DependentsTraitInput,
+    DependentTargetInput,
+    DomainTraitInput,
+    ObligationsTraitInput,
+    ObligationTargetInput,
+    PatronTraitInput,
     RelationshipTargetInput,
     RelationshipTraitInput,
     SingleEntityTraitInput,
@@ -74,12 +80,47 @@ class TraitCompilerCursor:
                 "subject_kinds": ["character", "faction"],
                 "object_kinds": ["character", "faction"],
             },
+            "claims": {
+                "id": 110,
+                "subject_kinds": ["character", "faction"],
+                "object_kinds": ["place"],
+            },
+            "protects": {
+                "id": 111,
+                "subject_kinds": ["character", "faction"],
+                "object_kinds": ["character"],
+            },
+            "obligation": {
+                "id": 112,
+                "subject_kinds": ["character", "faction"],
+                "object_kinds": ["character", "faction"],
+            },
+            "mentors": {
+                "id": 113,
+                "subject_kinds": ["character"],
+                "object_kinds": ["character"],
+            },
+            "sponsors": {
+                "id": 114,
+                "subject_kinds": ["character", "faction"],
+                "object_kinds": ["character"],
+            },
+            "authority_over": {
+                "id": 115,
+                "subject_kinds": ["character", "faction"],
+                "object_kinds": ["character", "faction"],
+            },
         }
-        self.characters = {
-            1: {"entity_id": 501},
-            2: {"entity_id": 502},
+        self.characters: dict[int, dict[str, Any]] = {
+            1: {"entity_id": 501, "name": "Mara"},
+            2: {"entity_id": 502, "name": "Bren"},
         }
-        self.factions = {"The Guild": 900}
+        self.places: dict[int, dict[str, Any]] = {
+            7: {"entity_id": 701, "name": "The Roost"},
+        }
+        self.factions: dict[int, dict[str, Any]] = {
+            3: {"entity_id": 900, "name": "The Guild"},
+        }
         self.entity_tags: list[dict[str, Any]] = []
         self.entity_pair_tags: list[dict[str, Any]] = []
         self.character_relationships: list[dict[str, Any]] = []
@@ -87,7 +128,28 @@ class TraitCompilerCursor:
         self.rowcount = 0
         self._next_row: Optional[Any] = None
         self._next_rows: list[Any] = []
-        self._savepoints: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]] = []
+        self._savepoints: list[dict[str, Any]] = []
+
+    def _lookup_rows(
+        self, table: dict[int, dict[str, Any]], normalized: str, params: tuple
+    ) -> list[tuple[int, int, str]]:
+        (value,) = params
+        if "WHERE ID =" in normalized:
+            rows = [(row_id, row) for row_id, row in table.items() if row_id == value]
+        elif "WHERE ENTITY_ID =" in normalized:
+            rows = [
+                (row_id, row)
+                for row_id, row in table.items()
+                if row["entity_id"] == value
+            ]
+        else:
+            rows = [
+                (row_id, row) for row_id, row in table.items() if row["name"] == value
+            ]
+        return [
+            (row_id, row["entity_id"], row["name"])
+            for row_id, row in sorted(rows, key=lambda item: item[0])
+        ]
 
     def execute(self, sql: str, params: Optional[tuple] = None) -> None:
         params = params or ()
@@ -95,22 +157,94 @@ class TraitCompilerCursor:
 
         if normalized.startswith("SAVEPOINT"):
             self._savepoints.append(
-                (
-                    deepcopy(self.entity_pair_tags),
-                    deepcopy(self.character_relationships),
+                deepcopy(
+                    {
+                        "entity_pair_tags": self.entity_pair_tags,
+                        "character_relationships": self.character_relationships,
+                        "entity_tags": self.entity_tags,
+                        "characters": self.characters,
+                        "places": self.places,
+                        "factions": self.factions,
+                    }
                 )
             )
             self.rowcount = 0
             return
         if normalized.startswith("ROLLBACK TO SAVEPOINT"):
-            self.entity_pair_tags, self.character_relationships = deepcopy(
-                self._savepoints[-1]
-            )
+            snapshot = deepcopy(self._savepoints[-1])
+            self.entity_pair_tags = snapshot["entity_pair_tags"]
+            self.character_relationships = snapshot["character_relationships"]
+            self.entity_tags = snapshot["entity_tags"]
+            self.characters = snapshot["characters"]
+            self.places = snapshot["places"]
+            self.factions = snapshot["factions"]
             self.rowcount = 0
             return
         if normalized.startswith("RELEASE SAVEPOINT"):
             self._savepoints.pop()
             self.rowcount = 0
+            return
+
+        if normalized.startswith("SELECT ID, ENTITY_ID, NAME FROM CHARACTERS"):
+            self._next_rows = self._lookup_rows(self.characters, normalized, params)
+            self.rowcount = len(self._next_rows)
+            return
+
+        if normalized.startswith("SELECT ID, ENTITY_ID, NAME FROM PLACES"):
+            self._next_rows = self._lookup_rows(self.places, normalized, params)
+            self.rowcount = len(self._next_rows)
+            return
+
+        if normalized.startswith("SELECT ID, ENTITY_ID, NAME FROM FACTIONS"):
+            self._next_rows = self._lookup_rows(self.factions, normalized, params)
+            self.rowcount = len(self._next_rows)
+            return
+
+        if "TRAIT_COMPILER:INSERT_CHARACTER_STUB" in normalized:
+            name, _summary, _background, _activity, extra_data = params
+            row_id = max(self.characters, default=0) + 1
+            entity_id = 1000 + row_id
+            self.characters[row_id] = {
+                "entity_id": entity_id,
+                "name": name,
+                "extra_data": json.loads(extra_data),
+            }
+            self._next_row = (row_id, entity_id)
+            self.rowcount = 1
+            return
+
+        if "TRAIT_COMPILER:INSERT_PLACE_STUB" in normalized:
+            name, _summary, _status, extra_data = params
+            row_id = max(self.places, default=0) + 1
+            entity_id = 2000 + row_id
+            self.places[row_id] = {
+                "entity_id": entity_id,
+                "name": name,
+                "extra_data": json.loads(extra_data),
+            }
+            self._next_row = (row_id, entity_id)
+            self.rowcount = 1
+            return
+
+        if normalized.startswith("LOCK TABLE FACTIONS"):
+            self.rowcount = 0
+            return
+
+        if normalized.startswith("SELECT COALESCE(MAX(ID), 0) + 1 AS ID FROM FACTIONS"):
+            self._next_row = (max(self.factions, default=0) + 1,)
+            self.rowcount = 1
+            return
+
+        if "TRAIT_COMPILER:INSERT_FACTION_STUB" in normalized:
+            row_id, name, _summary, extra_data = params
+            entity_id = 3000 + row_id
+            self.factions[row_id] = {
+                "entity_id": entity_id,
+                "name": name,
+                "extra_data": json.loads(extra_data),
+            }
+            self._next_row = (entity_id,)
+            self.rowcount = 1
             return
 
         if normalized.startswith("SELECT MAX(WORLD_TIME)"):
@@ -162,9 +296,13 @@ class TraitCompilerCursor:
 
         if normalized.startswith("SELECT ENTITY_ID FROM FACTIONS"):
             (name,) = params
-            entity_id = self.factions.get(name)
-            self._next_row = (entity_id,) if entity_id is not None else None
-            self.rowcount = 1 if entity_id is not None else 0
+            entity_ids = [
+                row["entity_id"]
+                for row in self.factions.values()
+                if row["name"] == name
+            ]
+            self._next_row = (entity_ids[0],) if entity_ids else None
+            self.rowcount = 1 if entity_ids else 0
             return
 
         if normalized.startswith("UPDATE ENTITY_TAGS ET"):
@@ -795,6 +933,437 @@ def test_reconciliation_ignores_deprecated_bare_contact_pair_tag() -> None:
     )
 
     assert reconcile_trait_relationship_pair_tags(cur) == []
+
+
+def test_new_trait_compilers_without_inputs_return_structured_remainders() -> None:
+    cur = TraitCompilerCursor()
+    result = compile_character_traits(
+        cur,
+        character=_character("domain", "patron", "dependents"),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    assert result.counters.prose_only_remainders == 3
+    assert {item.trait for item in result.prose_only_remainders} == {
+        "domain",
+        "patron",
+        "dependents",
+    }
+    assert {item.reason_code for item in result.prose_only_remainders} == {
+        TraitCompileReasonCode.MISSING_STRUCTURED_TRAIT_INPUT
+    }
+
+
+def test_domain_claims_existing_place_by_name() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(domain=DomainTraitInput(name="The Roost"))
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("domain", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    domain_tags = [item for item in result.applied_pair_tags if item.trait == "domain"]
+    assert domain_tags[0].tag == "claims"
+    assert domain_tags[0].subject_entity_id == 501
+    assert domain_tags[0].object_entity_id == 701
+    assert result.created_entities == []
+    assert cur.entity_pair_tags[0]["pair_tag_id"] == 110
+
+
+def test_domain_creates_place_stub_for_unknown_name() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(domain=DomainTraitInput(name="Hollow Spire"))
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("domain", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    created = result.created_entities[0]
+    assert created.entity_kind == "place"
+    assert created.name == "Hollow Spire"
+    assert created.entity_id is not None
+    assert created.row_id is not None
+    stub_row = cur.places[created.row_id]
+    assert stub_row["extra_data"]["source"] == "trait_compiler"
+    assert stub_row["extra_data"]["stub_kind"] == "trait_compiler_target_ref"
+    assert stub_row["extra_data"]["sources"][0]["trait"] == "domain"
+    assert cur.entity_pair_tags[0]["object_entity_id"] == created.entity_id
+
+
+def test_domain_dry_run_reports_pending_stub_without_writes() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(domain=DomainTraitInput(name="Hollow Spire"))
+
+    result = compile_character_traits(
+        cur,
+        character=_character("domain", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    domain_tags = [item for item in result.applied_pair_tags if item.trait == "domain"]
+    assert domain_tags[0].object_entity_id is None
+    assert domain_tags[0].object_name == "Hollow Spire"
+    assert result.created_entities[0].entity_id is None
+    assert result.created_entities[0].dry_run is True
+    assert cur.entity_pair_tags == []
+    assert all(item.trait != "domain" for item in result.prose_only_remainders)
+
+
+def test_domain_unknown_place_id_is_structured_remainder() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(domain=DomainTraitInput(place_id=999))
+
+    result = compile_character_traits(
+        cur,
+        character=_character("domain", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    remainder = result.prose_only_remainders[0]
+    assert remainder.trait == "domain"
+    assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
+    assert remainder.details["place_id"] == 999
+
+
+def test_patron_default_compiles_relationship_row_only() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(
+            name="Magistrate Hale",
+            dynamic="Hale opens doors and expects discretion.",
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("patron", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.applied_pair_tags == []
+    assert cur.entity_pair_tags == []
+    created = result.created_entities[0]
+    assert created.entity_kind == "character"
+    assert created.name == "Magistrate Hale"
+    relationship = result.created_relationships[0]
+    assert relationship.relationship_type == "patron"
+    assert relationship.emotional_valence == "+2|deferential"
+    assert relationship.character2_id == created.row_id
+    assert cur.character_relationships[0]["character2_id"] == created.row_id
+    extra_data = json.loads(cur.character_relationships[0]["extra_data"])
+    assert extra_data["source"] == "trait_compiler"
+    assert "trait_compiler_patron_functions" not in extra_data
+
+
+def test_patron_user_affirmed_functions_write_pair_tags() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(
+            character_id=2,
+            functions=["sponsors", "mentors", "sponsors"],
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("patron", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert [
+        (item.tag, item.subject_entity_id, item.object_entity_id)
+        for item in result.applied_pair_tags
+    ] == [
+        ("sponsors", 502, 501),
+        ("mentors", 502, 501),
+    ]
+    assert {row["pair_tag_id"] for row in cur.entity_pair_tags} == {113, 114}
+    extra_data = json.loads(cur.character_relationships[0]["extra_data"])
+    assert extra_data["trait_compiler_patron_functions"] == ["sponsors", "mentors"]
+
+
+def test_patron_unregistered_function_is_structured_remainder() -> None:
+    cur = TraitCompilerCursor()
+    del cur.pair_tags["sponsors"]
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(character_id=2, functions=["sponsors"])
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("patron", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    remainder = result.prose_only_remainders[0]
+    assert remainder.trait == "patron"
+    assert remainder.reason_code == TraitCompileReasonCode.REGISTRY_MISSING_PAIR_TAG
+    assert remainder.details["pair_tag"] == "sponsors"
+    assert cur.entity_pair_tags == []
+    assert cur.character_relationships == []
+
+
+def test_dependents_compile_protects_edge_and_relationship_per_target() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        dependents=DependentsTraitInput(
+            targets=[
+                DependentTargetInput(character_id=2),
+                DependentTargetInput(name="Pip"),
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("dependents", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.counters.prose_only_remainders == 2  # resources/allies no input
+    assert all(item.tag == "protects" for item in result.applied_pair_tags)
+    assert all(item.subject_entity_id == 501 for item in result.applied_pair_tags)
+    assert len(result.applied_pair_tags) == 2
+    assert len(result.created_relationships) == 2
+    assert {item.relationship_type for item in result.created_relationships} == {
+        "dependent"
+    }
+    created = result.created_entities[0]
+    assert created.entity_kind == "character"
+    assert created.name == "Pip"
+    extra_data = json.loads(cur.character_relationships[0]["extra_data"])
+    assert extra_data["trait_compiler_functional_pair_tag"] == "protects"
+    assert reconcile_trait_relationship_pair_tags(cur) == []
+
+
+def test_dependent_target_resolving_to_protagonist_is_remainder() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        dependents=DependentsTraitInput(targets=[DependentTargetInput(name="Mara")])
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("dependents", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    remainder = result.prose_only_remainders[0]
+    assert remainder.trait == "dependents"
+    assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
+    assert "protagonist" in remainder.message
+    assert cur.entity_pair_tags == []
+    assert cur.character_relationships == []
+
+
+def test_ambiguous_target_name_is_structured_remainder() -> None:
+    cur = TraitCompilerCursor()
+    cur.characters[4] = {"entity_id": 504, "name": "Bren"}
+    inputs = TraitCompileInputs(
+        dependents=DependentsTraitInput(targets=[DependentTargetInput(name="Bren")])
+    )
+
+    result = compile_character_traits(
+        cur,
+        character=_character("dependents", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    remainder = result.prose_only_remainders[0]
+    assert remainder.trait == "dependents"
+    assert remainder.reason_code == TraitCompileReasonCode.AMBIGUOUS_TARGET
+    assert remainder.details["match_count"] == 2
+
+
+def test_obligation_character_counterparty_writes_edge_and_relationship() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(
+                    counterparty_kind="character",
+                    counterparty_id=2,
+                    dynamic="A debt collector with a patient ledger.",
+                )
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("obligations", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    tag = result.applied_pair_tags[0]
+    assert tag.tag == "obligation"
+    assert tag.subject_entity_id == 501
+    assert tag.object_entity_id == 502
+    relationship = result.created_relationships[0]
+    assert relationship.relationship_type == "obligation"
+    assert relationship.emotional_valence == "-1|beholden"
+    assert cur.entity_pair_tags[0]["pair_tag_id"] == 112
+    extra_data = json.loads(cur.character_relationships[0]["extra_data"])
+    assert extra_data["trait_compiler_functional_pair_tag"] == "obligation"
+
+
+def test_obligation_faction_counterparty_writes_pair_tag_only() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(counterparty_kind="faction", name="The Guild")
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("obligations", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    tag = result.applied_pair_tags[0]
+    assert tag.tag == "obligation"
+    assert tag.object_entity_id == 900
+    assert result.created_relationships == []
+    assert cur.character_relationships == []
+    assert result.created_entities == []
+
+
+def test_obligation_unknown_faction_creates_stub() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(counterparty_kind="faction", name="Iron Tithe")
+            ]
+        )
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("obligations", "resources", "allies", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    created = result.created_entities[0]
+    assert created.entity_kind == "faction"
+    assert created.name == "Iron Tithe"
+    assert created.row_id == 4
+    stub_row = cur.factions[4]
+    assert stub_row["extra_data"]["stub_kind"] == "trait_compiler_target_ref"
+    assert cur.entity_pair_tags[0]["object_entity_id"] == created.entity_id
+
+
+def test_dry_run_coalesces_duplicate_pending_stubs() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(name="Magistrate Hale"),
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(
+                    counterparty_kind="character", name="Magistrate Hale"
+                )
+            ]
+        ),
+    )
+
+    result = compile_character_traits(
+        cur,
+        character=_character("patron", "obligations", "resources", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    assert len(result.created_entities) == 1
+    assert result.created_entities[0].name == "Magistrate Hale"
+    assert result.created_entities[0].entity_id is None
+    obligation_tags = [
+        item for item in result.applied_pair_tags if item.tag == "obligation"
+    ]
+    assert obligation_tags[0].object_name == "Magistrate Hale"
+
+
+def test_apply_resolves_second_reference_to_created_stub() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(name="Magistrate Hale"),
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(
+                    counterparty_kind="character", name="Magistrate Hale"
+                )
+            ]
+        ),
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("patron", "obligations", "resources", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert len(result.created_entities) == 1
+    stub_entity_id = result.created_entities[0].entity_id
+    assert stub_entity_id is not None
+    obligation_tags = [
+        item for item in result.applied_pair_tags if item.tag == "obligation"
+    ]
+    assert obligation_tags[0].object_entity_id == stub_entity_id
+    assert {item.relationship_type for item in result.created_relationships} == {
+        "patron",
+        "obligation",
+    }
+
+
+def test_standard_selection_with_full_inputs_has_zero_remainders() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        domain=DomainTraitInput(name="The Roost"),
+        patron=PatronTraitInput(name="Magistrate Hale", functions=["sponsors"]),
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(counterparty_kind="faction", name="The Guild")
+            ]
+        ),
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("domain", "patron", "obligations", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert result.counters.prose_only_remainders == 0
+    assert result.counters.applied_pair_tags == 3  # claims, sponsors, obligation
+    assert result.counters.created_relationships == 1
+    assert result.counters.created_entities == 1
 
 
 def test_persist_trait_compile_result_requires_wizard_cache_row() -> None:
