@@ -1278,6 +1278,69 @@ def test_obligation_unknown_faction_creates_stub() -> None:
     assert cur.entity_pair_tags[0]["object_entity_id"] == created.entity_id
 
 
+def test_dry_run_coalesces_duplicate_pending_stubs() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(name="Magistrate Hale"),
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(
+                    counterparty_kind="character", name="Magistrate Hale"
+                )
+            ]
+        ),
+    )
+
+    result = compile_character_traits(
+        cur,
+        character=_character("patron", "obligations", "resources", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+        dry_run=True,
+    )
+
+    assert len(result.created_entities) == 1
+    assert result.created_entities[0].name == "Magistrate Hale"
+    assert result.created_entities[0].entity_id is None
+    obligation_tags = [
+        item for item in result.applied_pair_tags if item.tag == "obligation"
+    ]
+    assert obligation_tags[0].object_name == "Magistrate Hale"
+
+
+def test_apply_resolves_second_reference_to_created_stub() -> None:
+    cur = TraitCompilerCursor()
+    inputs = TraitCompileInputs(
+        patron=PatronTraitInput(name="Magistrate Hale"),
+        obligations=ObligationsTraitInput(
+            targets=[
+                ObligationTargetInput(
+                    counterparty_kind="character", name="Magistrate Hale"
+                )
+            ]
+        ),
+    )
+
+    result = apply_character_trait_compilation(
+        cur,
+        character=_character("patron", "obligations", "resources", inputs=inputs),
+        character_id=1,
+        character_entity_id=501,
+    )
+
+    assert len(result.created_entities) == 1
+    stub_entity_id = result.created_entities[0].entity_id
+    assert stub_entity_id is not None
+    obligation_tags = [
+        item for item in result.applied_pair_tags if item.tag == "obligation"
+    ]
+    assert obligation_tags[0].object_entity_id == stub_entity_id
+    assert {item.relationship_type for item in result.created_relationships} == {
+        "patron",
+        "obligation",
+    }
+
+
 def test_standard_selection_with_full_inputs_has_zero_remainders() -> None:
     cur = TraitCompilerCursor()
     inputs = TraitCompileInputs(

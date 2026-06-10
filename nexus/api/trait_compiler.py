@@ -1405,16 +1405,25 @@ def _create_target_stub(
     """
 
     if dry_run:
-        result.created_entities.append(
-            CreatedEntity(
-                trait=trait,
-                entity_kind=entity_kind,
-                entity_id=None,
-                row_id=None,
-                name=name,
-                dry_run=True,
-            )
+        # Coalesce repeated references to one absent target: apply mode
+        # creates the stub once and resolves later same-name lookups to that
+        # row, so the dry-run audit must plan exactly one stub per
+        # (entity_kind, name) too.
+        already_planned = any(
+            item.dry_run and item.entity_kind == entity_kind and item.name == name
+            for item in result.created_entities
         )
+        if not already_planned:
+            result.created_entities.append(
+                CreatedEntity(
+                    trait=trait,
+                    entity_kind=entity_kind,
+                    entity_id=None,
+                    row_id=None,
+                    name=name,
+                    dry_run=True,
+                )
+            )
         return _ResolvedTarget(
             row_id=None,
             entity_id=None,
