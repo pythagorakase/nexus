@@ -290,12 +290,12 @@ class OrreryPromoteSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     priority_threshold: float = Field(
-        default=50.0,
+        default=30.0,
         ge=0.0,
         description="Promote resolutions whose priority is at or above this value.",
     )
     magnitude_threshold: float = Field(
-        default=0.5,
+        default=0.35,
         ge=0.0,
         description="Promote resolutions whose magnitude is at or above this value.",
     )
@@ -595,7 +595,7 @@ class OrrerySettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = False
+    enabled: bool = True
     binding: OrreryBindingSettings = Field(default_factory=OrreryBindingSettings)
     route_graph: OrreryRouteGraphSettings = Field(
         default_factory=OrreryRouteGraphSettings

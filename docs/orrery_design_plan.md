@@ -424,6 +424,8 @@ CREATE TABLE offscreen_narrations (
 
 `narrative_chunks` is always player-visible; `offscreen_narrations` never is. MEMNON's retrieval logic queries both tables with explicit semantic intent: warm-slice → `narrative_chunks` only; off-screen retrieval → both, with `offscreen_narrations` clearly labeled. `narrative_view.world_time` does NOT count off-screen narrations toward chronological advancement.
 
+**Embedding path is deliberately deferred (decided 2026-06, M6).** `embedding_status` stays at its `'pending'` default and no processor drains it. Rationale: no off-screen retrieval surface exists yet — `tests/test_orrery/test_retrieval_boundaries.py` deliberately excludes `offscreen_narrations` from every MEMNON surface (warm slice, text search, vector collections), and Bleed reads narrations relationally, not semantically. Embedding rows today would burn tokens for vectors nothing may query, and wiring them into the existing `narrative_chunks` collection would violate the boundary tests. The durable `'pending'` backlog (visible via `python -m nexus.agents.orrery.worker --status`) is the designed re-entry point: when a labeled off-screen retrieval surface lands (post-1.0), a processor can drain the backlog without schema changes.
+
 ### Bleed Selector — Cross-Turn Ambient Surfacing
 
 **Bleed handles cross-turn grace, not current-tick proposals.** Current-tick proposals flow through the authority model above — Skald sees them directly in `orrery_imminent_activity` and adjudicates. Bleed's role is narrower: surfacing *prior-turn* narrated events that weren't included in any chunk yet but remain eligible to bleed through within a temporal grace window.
@@ -547,10 +549,21 @@ model_ref = "@anthropic.default"                # resolved via [global.model.api
 max_candidates = 3
 
 [orrery.promote]
-priority_threshold = 50.0
-magnitude_threshold = 0.5
+priority_threshold = 30.0    # template seam: mundane needs <= 26, relational/dramatic >= 35
+magnitude_threshold = 0.35   # routine outcomes observed <= 0.22; noteworthy branches >= ~0.34
 perceptual_summary_max_chars = 240
 ```
+
+Promotion thresholds were calibrated 2026-06 against the 106-resolution corpus
+on `save_05` (39 ticks). The discriminator promotes on `priority >= threshold
+OR magnitude >= threshold` provided the resolution carries content. The
+priority axis separates the template catalog's mundane-needs band (`work` 14
+through `routine_commute` 26) from relational and dramatic templates
+(`consult_rival` 35 through `evade_pursuers` 100). The magnitude axis exists
+for dramatic outcomes of mundane templates (e.g. `sleep` branches up to 0.74);
+observed routine outcomes never exceeded 0.22, so 0.35 cannot fire on the
+noise floor. The previous defaults (50.0 / 0.5) made magnitude unreachable in
+practice.
 
 Every model reference uses the `@provider.role` syntax that the config loader resolves against `[global.model.api_models]` — never a hardcoded model ID in runtime code (per `CLAUDE.md` "Testing Defaults").
 

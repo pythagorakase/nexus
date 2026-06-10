@@ -233,6 +233,46 @@ def test_promote_pending_resolutions_uses_state_signal_without_brief() -> None:
     assert verdict["perceptual_summary"] is None
 
 
+def test_promote_default_thresholds_match_calibrated_seams() -> None:
+    """Default thresholds promote eventful templates and dramatic outcomes only.
+
+    Calibrated against the save_05 corpus (2026-06): the template catalog's
+    mundane-needs band tops out at priority 26 / routine magnitude 0.22, while
+    relational and dramatic templates start at priority 35 and noteworthy
+    branch magnitudes start near 0.34.
+    """
+
+    rows = [
+        # (template-like row, expected_promote)
+        (dict(_promotion_row(), id=1, priority=14, magnitude=0.18), False),  # work
+        (dict(_promotion_row(), id=2, priority=25, magnitude=0.28), False),  # mourn
+        (dict(_promotion_row(), id=3, priority=35, magnitude=0.34), True),  # rival
+        (dict(_promotion_row(), id=4, priority=84, magnitude=0.36), True),  # hide
+        (dict(_promotion_row(), id=5, priority=25, magnitude=0.74), True),  # sleep!
+    ]
+    settings = _settings()
+    del settings["orrery"]["promote"]  # exercise OrreryPromoteSettings defaults
+    cursor = WorkerCursor(promotion_rows=[row for row, _expected in rows])
+
+    promoted, skipped = promote_pending_resolutions_sync(
+        slot=5,
+        settings=settings,
+        conn=WorkerConn(cursor),
+    )
+
+    verdicts = [
+        json.loads(params[0])
+        for sql, params in cursor.executed
+        if "promotion_verdict" in str(sql)
+    ]
+
+    assert promoted == 3
+    assert skipped == 2
+    assert [verdict["promote"] for verdict in verdicts] == [
+        expected for _row, expected in rows
+    ]
+
+
 def test_promote_pending_resolutions_uses_configured_thresholds() -> None:
     """Promotion salience should be tuned through Orrery promote config."""
 

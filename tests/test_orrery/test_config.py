@@ -21,13 +21,13 @@ def test_orrery_settings_resolve_model_reference() -> None:
     settings = load_settings("nexus.toml")
 
     assert settings.orrery is not None
-    assert settings.orrery.enabled is False
+    assert settings.orrery.enabled is True
     assert settings.orrery.binding.window_chunks == 30
     expected_model = settings.global_.model.api_models["anthropic"].roles["default"]
     assert settings.orrery.narration.model_ref == expected_model
     assert settings.orrery.promote.provider is None
-    assert settings.orrery.promote.priority_threshold == 50.0
-    assert settings.orrery.promote.magnitude_threshold == 0.5
+    assert settings.orrery.promote.priority_threshold == 30.0
+    assert settings.orrery.promote.magnitude_threshold == 0.35
     assert settings.orrery.promote.perceptual_summary_max_chars == 240
     assert settings.orrery.sunhelm.accrual_rates == {
         "sleep": 1.0,
@@ -78,8 +78,8 @@ def test_orrery_promote_accepts_deprecated_provider_key() -> None:
 
     assert settings.provider == "local"
     dumped = settings.model_dump()
-    assert dumped["priority_threshold"] == 50.0
-    assert dumped["magnitude_threshold"] == 0.5
+    assert dumped["priority_threshold"] == 30.0
+    assert dumped["magnitude_threshold"] == 0.35
     assert dumped["perceptual_summary_max_chars"] == 240
     assert "provider" not in dumped
 
