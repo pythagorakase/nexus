@@ -28,8 +28,8 @@ Merged as 6b5e0b4c (squash, via Codex cleanup); branch pruned.
 **M2 - Bring the Database Fleet to 060** - S - DONE 2026-06-10
 All six databases (NEXUS_template + save_01..05) now at migration 060; slot 1 unlocked, migrated (20 applied), re-locked. 66 migrations applied total, 0 failures.
 
-**M3 - Make Retrograde History Retrievable** - M
-The spec promises MEMNON retrieves generated history identically to play-generated; today it can't. Decide and build the surface: embed real prologue prose chunks, embed per-event summaries as chunks, or accept structured-only visibility for v1.0 (and say so). This is the unstated implementation half of spec decision 14.
+**M3 - Make Retrograde History Retrievable** - M - DONE 2026-06-10 (PR #373, 6ac8de74)
+Shipped as per-event embedded summary chunks (excluded from the warm slice, fully searchable; live top-hit 0.95 on save_05). The spec promises MEMNON retrieves generated history identically to play-generated; today it can't. Decide and build the surface: embed real prologue prose chunks, embed per-event summaries as chunks, or accept structured-only visibility for v1.0 (and say so). This is the unstated implementation half of spec decision 14.
 
 **M4 - Wire Retrograde Into the New-Story Wizard** - M
 The pipeline exists only as CLI verbs (zero references in `nexus/api/`). New-story flow should run R1-R6 + persistence automatically at slot creation. Requires settling decision 14's product boundary (when generated history becomes visible; behavior when expansion succeeds but persistence is blocked), decision 8's entity-coverage caps, and the seed-eligible vs prompt-visible category split.
@@ -37,8 +37,8 @@ The pipeline exists only as CLI verbs (zero references in `nexus/api/`). New-sto
 **M5 - Finish the Trait Compiler** - M - DONE 2026-06-10 (PR #372, fae2ebd5)
 Every trait except the wildcard compiles to mechanical state - no prose-only remainders. Implement the four remaining compilers (Domain, Patron, Dependents, Obligations) following the #295 pattern (affective traits -> relationship row primary; pair-tags only where packages gate), with latitude to expand or tune the trait vocabulary where the registry lacks what a compiler needs - design-time registry additions via migration stay compatible with the #293 runtime lockdown. Patron and Dependents create stub entities, which is exactly the input Retrograde Phase A matures at wizard time - so this lands best before M4, letting cold-start history cover compiled relationships.
 
-**M6 - Turn On the Orrery, End to End** - M
-Flip `orrery.enabled = true` and make the full cycle actually fire on slot 5 with real API calls: Resolve proposals -> Skald adjudication -> CommitOrreryTick -> worker Promote -> Narrate -> Bleed. The flag flip is trivial; the work is promotion-threshold tuning (104/106 resolutions currently skip at defaults - Promote has never promoted) and the first live Narrate/Bleed exercise, plus a decision on the orphaned `offscreen_narrations` embedding path (wire it or explicitly defer). Ship default-on.
+**M6 - Turn On the Orrery, End to End** - M - DONE 2026-06-10 (PR #371, c6ab59e2)
+Live-proven on slot 2: 9 promotions, 9/9 real narrations, 3 Bleed candidates woven into prose; thresholds recalibrated (priority 30.0, magnitude 0.35) with corpus evidence; offscreen-narrations embedding explicitly deferred. Original scope: flip `orrery.enabled = true` and make the full cycle actually fire on slot 5 with real API calls: Resolve proposals -> Skald adjudication -> CommitOrreryTick -> worker Promote -> Narrate -> Bleed. The flag flip is trivial; the work is promotion-threshold tuning (104/106 resolutions currently skip at defaults - Promote has never promoted) and the first live Narrate/Bleed exercise, plus a decision on the orphaned `offscreen_narrations` embedding path (wire it or explicitly defer). Ship default-on.
 
 **M7 - Package Self-Awareness (#282)** - M
 Branch selection reads the acting entity's own properties (fame, resources, disposition) per the locked three-stage design: entry-gating / branch-selection / outcome. Deliberately sequenced after M6: the first live Promote/Narrate/Bleed runs establish a branch-selection baseline, so threshold tuning and self-awareness don't confound each other. Runs parallel with M8.
