@@ -1,14 +1,16 @@
 """Live Orrery cycle integration test on slot 2.
 
-Exercises Resolve -> Commit -> Promote -> Narrate -> Bleed against the real
-``save_02`` database with a real frontier narration call. Skipped unless both
-``NEXUS_RUN_LIVE_LLM=1`` and ``NEXUS_RUN_POSTGRES=1`` are set.
+Exercises Resolve -> Commit (with Clear's expiry sweep) -> Promote ->
+Narrate -> Bleed against the real ``save_02`` database with a real frontier
+narration call. Skipped unless both ``NEXUS_RUN_LIVE_LLM=1`` and
+``NEXUS_RUN_POSTGRES=1`` are set.
 
 The test commits one synthetic high-salience resolution (real entity, valid
 template) so Promote is guaranteed a row above the configured thresholds
 regardless of current story state, then cleans up every row it created.
-Resolve runs read-only against live world state. Narration drain may also
-process unrelated queued jobs - that is the worker's actual contract.
+Resolve runs read-only against live world state. Narration drains are
+bounded to at most ten single-job iterations so ambient outbox backlog
+cannot turn the test into an unbounded API spend.
 """
 
 from __future__ import annotations
@@ -39,6 +41,8 @@ from nexus.api.slot_utils import get_slot_db_url
 from nexus.config import load_settings_as_dict
 
 LIVE_SLOT = 2
+PROMOTION_DRAIN_ATTEMPTS = 20
+NARRATION_DRAIN_ATTEMPTS = 10
 
 pytestmark = [pytest.mark.live_llm, pytest.mark.requires_postgres]
 
@@ -93,37 +97,41 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
     priority_threshold = float(promote_settings["priority_threshold"])
 
     engine = create_engine(get_slot_db_url(slot=LIVE_SLOT))
-    session_factory = sessionmaker(bind=engine)
-
-    # Stage 1 - Resolve: read-only dry run against live world state.
-    with session_factory() as session:
-        anchor_row = (
-            session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
-            .mappings()
-            .first()
-        )
-        assert anchor_row is not None and anchor_row["max_id"] is not None
-        anchor_chunk_id = int(anchor_row["max_id"])
-        proposal = resolve_dry_run(
-            session,
-            BUILTIN_TEMPLATES,
-            anchor_chunk_id=anchor_chunk_id,
-            window_chunks=int(orrery_settings["binding"]["window_chunks"]),
-            sunhelm_settings=orrery_settings.get("sunhelm"),
-        )
-    assert proposal.anchor_chunk_id == anchor_chunk_id
-    assert proposal.actor_count >= 0
-
-    conn = _connect()
+    conn: Any = None
     created_resolution_ids: list[int] = []
     try:
+        session_factory = sessionmaker(engine)
+
+        # Stage 1 - Resolve: read-only dry run against live world state.
+        with session_factory() as session:
+            anchor_row = (
+                session.execute(text("SELECT max(id) AS max_id FROM narrative_chunks"))
+                .mappings()
+                .first()
+            )
+            assert anchor_row is not None and anchor_row["max_id"] is not None
+            anchor_chunk_id = int(anchor_row["max_id"])
+            proposal = resolve_dry_run(
+                session,
+                BUILTIN_TEMPLATES,
+                anchor_chunk_id=anchor_chunk_id,
+                window_chunks=int(orrery_settings["binding"]["window_chunks"]),
+                sunhelm_settings=orrery_settings.get("sunhelm"),
+            )
+        assert proposal.anchor_chunk_id == anchor_chunk_id
+        assert proposal.actor_count >= 1, "Mature slot 2 must bind live actors"
+
+        conn = _connect()
         with conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT id FROM entities ORDER BY id LIMIT 1")
                 actor_entity_id = int(cur.fetchone()["id"])
 
-        # Stage 2 - Commit: materialize a synthetic salient draft stamped to
-        # the anchor chunk. The unique binding hash keeps reruns idempotent.
+        # Stages 2+3 - Commit: materialize a synthetic salient draft stamped
+        # to the anchor chunk; Clear's scheduled-expiry sweep runs inside the
+        # same commit transaction. The unique binding hash keeps reruns
+        # idempotent. Magnitude is set high so the Bleed selector's
+        # tick-then-magnitude ordering deterministically ranks this row.
         binding_hash = f"live-cycle-{uuid.uuid4().hex}"
         salient_draft = OrreryResolutionDraft(
             template_id="hide",
@@ -135,7 +143,7 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                 "{actor} drops out of sight for a few hours, testing how far "
                 "the city's attention can be made to slide off."
             ),
-            magnitude=0.2,
+            magnitude=0.9,
         )
         synthetic_proposal = OrreryTickProposal(
             anchor_chunk_id=anchor_chunk_id,
@@ -150,9 +158,9 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                 slot=LIVE_SLOT,
                 sunhelm_settings=orrery_settings.get("sunhelm"),
             )
-        assert result.resolution_count == 1
-
-        with conn:
+            assert result.resolution_count == 1
+            # Capture the id inside the commit transaction so cleanup can
+            # never miss a row that made it to disk.
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute(
                     """
@@ -162,8 +170,8 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
                     (binding_hash,),
                 )
                 row = cur.fetchone()
-        resolution_id = int(row["id"])
-        created_resolution_ids.append(resolution_id)
+            resolution_id = int(row["id"])
+            created_resolution_ids.append(resolution_id)
         assert row["promotion_status"] == "pending"
 
         # Stage 4 - Promote: deterministic discriminator with config values.
@@ -171,7 +179,7 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         # until any pre-existing backlog ahead of the synthetic row is
         # processed rather than relying on a single global limit.
         promoted_row = None
-        for _attempt in range(20):
+        for _attempt in range(PROMOTION_DRAIN_ATTEMPTS):
             promoted, skipped = promote_pending_resolutions_sync(
                 LIVE_SLOT,
                 limit=50,
@@ -199,14 +207,14 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         assert "Deterministic promotion" in promoted_row["reason"]
 
         # Stage 5 - Narrate: real frontier call via the durable outbox.
-        # Same isolation concern: the outbox may hold unrelated queued jobs,
-        # so loop (bounded) until this resolution's job is processed and
-        # assert on the synthetic row, not on global drain counters.
+        # Single-job drains keep total API spend bounded by the attempt cap
+        # even when the outbox holds unrelated queued jobs; assertions are
+        # scoped to the synthetic row, not global drain counters.
         narration = None
-        for _attempt in range(10):
+        for _attempt in range(NARRATION_DRAIN_ATTEMPTS):
             narrated, failed = drain_narration_outbox_sync(
                 LIVE_SLOT,
-                limit=20,
+                limit=1,
                 settings=settings,
                 conn=conn,
             )
@@ -231,16 +239,20 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         assert len(narration["text"].strip()) > 40
         assert narration["embedding_status"] == "pending"
 
-        # Stage 6 - Bleed: the narrated resolution is a deterministic
-        # candidate for the next turn's ambient menu.
+        # Stage 6 - Bleed: the synthetic narrated resolution must propagate
+        # into the deterministic ambient menu for the next turn.
         with session_factory() as session:
             menu = select_bleed_menu(
                 session,
                 anchor_chunk_id=anchor_chunk_id,
                 max_candidates=int(orrery_settings["bleed"]["max_candidates"]),
             )
-        assert menu.candidates_considered >= 1
+        selected_resolution_ids = {
+            candidate.resolution_id for candidate in menu.selected
+        }
+        assert resolution_id in selected_resolution_ids
     finally:
-        _cleanup_resolutions(conn, created_resolution_ids)
-        conn.close()
+        if conn is not None:
+            _cleanup_resolutions(conn, created_resolution_ids)
+            conn.close()
         engine.dispose()
