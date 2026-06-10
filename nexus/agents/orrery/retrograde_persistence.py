@@ -969,24 +969,22 @@ def _insert_summary_chunk(cur: Any, *, summary: str, marker: str) -> int:
 
 
 def _insert_summary_metadata(cur: Any, *, chunk_id: int, scene: int) -> None:
+    # slug and world_time are intentionally omitted: the BEFORE INSERT
+    # trigger set_chunk_slug derives the unique scene slug (S00E00_NNN) from
+    # season/episode/scene, and the statement-level trigger
+    # refresh_world_time_from_chunk_trigger recomputes world_time for every
+    # row from global base_timestamp + cumulative time_delta ordered by
+    # chunk_id — any values supplied here would be overwritten.
     cur.execute(
         """
         /* orrery:retrograde:insert_summary_metadata */
         INSERT INTO chunk_metadata (
             chunk_id, season, episode, scene, world_layer, time_delta,
-            generation_date, slug, world_time
+            generation_date
         )
         VALUES (
             %s, 0, 0, %s, 'primary'::world_layer_type,
-            interval '0 seconds', now(), 'RETRO',
-            COALESCE(
-                (
-                    SELECT min(world_time) - interval '1 second'
-                    FROM chunk_metadata
-                    WHERE world_time IS NOT NULL
-                ),
-                now()
-            )
+            interval '0 seconds', now()
         )
         """,
         (chunk_id, scene),
@@ -1200,24 +1198,17 @@ def _ensure_prologue_metadata(cur: Any, *, prologue_chunk_id: int) -> None:
     )
     if cur.fetchone() is not None:
         return
+    # slug and world_time are trigger-derived; see _insert_summary_metadata.
     cur.execute(
         """
         /* orrery:retrograde:insert_prologue_metadata */
         INSERT INTO chunk_metadata (
             chunk_id, season, episode, scene, world_layer, time_delta,
-            generation_date, slug, world_time
+            generation_date
         )
         VALUES (
             %s, 0, 0, 0, 'primary'::world_layer_type,
-            interval '0 seconds', now(), 'RETRO',
-            COALESCE(
-                (
-                    SELECT min(world_time) - interval '1 second'
-                    FROM chunk_metadata
-                    WHERE world_time IS NOT NULL
-                ),
-                now()
-            )
+            interval '0 seconds', now()
         )
         """,
         (prologue_chunk_id,),
@@ -1659,19 +1650,20 @@ def _insert_faction_stub(
     cur.execute("LOCK TABLE factions IN SHARE ROW EXCLUSIVE MODE")
     cur.execute("SELECT COALESCE(MAX(id), 0) + 1 AS id FROM factions")
     faction_id = int(_row_value(cur.fetchone(), "id", 0))
+    # factions.current_activity was retired by migration 058; faction stub
+    # state lives in summary and extra_data only.
     cur.execute(
         """
         /* orrery:retrograde:insert_faction_stub */
         INSERT INTO factions (
-            id, name, summary, current_activity, extra_data
+            id, name, summary, extra_data
         )
-        VALUES (%s, %s, %s, %s, %s::jsonb)
+        VALUES (%s, %s, %s, %s::jsonb)
         """,
         (
             faction_id,
             entity_ref,
             _stub_summary(entity_ref, "faction"),
-            "latent in generated backstory",
             json.dumps(_stub_extra_data(sources)),
         ),
     )

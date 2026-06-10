@@ -24,6 +24,9 @@ from nexus.agents.orrery.retrograde_markers import (
     retrograde_event_marker,
 )
 from nexus.agents.orrery.retrograde_persistence import (
+    _insert_character_stub,
+    _insert_faction_stub,
+    _insert_place_stub,
     plan_retrograde_summary_chunks,
 )
 
@@ -66,6 +69,7 @@ def test_summary_chunks_cover_every_retrograde_event(save_05_cursor: Any) -> Non
     rows = plan_retrograde_summary_chunks(cur, dry_run=False)
 
     assert len(rows) == event_count
+    slugs: list[str] = []
     for row in rows:
         assert row["status"] in {"inserted", "already_present"}
         assert row["chunk_id"] is not None
@@ -74,7 +78,7 @@ def test_summary_chunks_cover_every_retrograde_event(save_05_cursor: Any) -> Non
             """
             SELECT nc.raw_text, nc.storyteller_text, nc.authorial_directives,
                    nc.state, cm.season, cm.episode, cm.world_layer::text AS layer,
-                   cm.slug
+                   cm.slug, cm.world_time
             FROM narrative_chunks nc
             JOIN chunk_metadata cm ON cm.chunk_id = nc.id
             WHERE nc.id = %s
@@ -91,7 +95,11 @@ def test_summary_chunks_cover_every_retrograde_event(save_05_cursor: Any) -> Non
         assert chunk["season"] == 0
         assert chunk["episode"] == 0
         assert chunk["layer"] == "primary"
+        # slug comes from the set_chunk_slug trigger; world_time from the
+        # statement-level cumulative time_delta recompute.
         assert str(chunk["slug"]).startswith("S00E00_")
+        assert chunk["world_time"] is not None
+        slugs.append(str(chunk["slug"]))
 
         cur.execute(
             """
@@ -106,6 +114,8 @@ def test_summary_chunks_cover_every_retrograde_event(save_05_cursor: Any) -> Non
         assert event["summary"] == chunk["raw_text"]
         if row["status"] == "inserted":
             assert int(event["linked_chunk"]) == row["chunk_id"]
+
+    assert len(set(slugs)) == len(slugs), f"summary slugs must be unique: {slugs}"
 
 
 def test_summary_chunk_planning_is_idempotent(save_05_cursor: Any) -> None:
@@ -129,6 +139,49 @@ def test_dry_run_is_read_only(save_05_cursor: Any) -> None:
 
     assert len(rows) == _retrograde_event_count(cur)
     assert all(row["status"] in {"would_insert", "already_present"} for row in rows)
+
+
+def test_entity_stub_inserts_match_live_schema(save_05_cursor: Any) -> None:
+    """Stub INSERT column lists stay aligned with the live slot schema.
+
+    Regression coverage for migration 058 (retire faction legacy columns):
+    the faction stub used to write factions.current_activity, which no
+    longer exists, so execute-mode stub creation crashed on current schema.
+    """
+
+    cur = save_05_cursor
+    sources = [{"plan": "event_plan", "event_ref": "pg_test", "role": "actor"}]
+
+    _insert_faction_stub(cur, entity_ref="M3 PG Test Faction", sources=sources)
+    cur.execute(
+        "SELECT summary, extra_data, entity_id FROM factions WHERE name = %s",
+        ("M3 PG Test Faction",),
+    )
+    faction = cur.fetchone()
+    assert faction is not None
+    assert faction["entity_id"] is not None
+    assert faction["extra_data"]["source"] == "retrograde"
+    assert "faction stub" in faction["summary"]
+
+    _insert_character_stub(cur, entity_ref="M3 PG Test Character", sources=sources)
+    cur.execute(
+        "SELECT extra_data, entity_id FROM characters WHERE name = %s",
+        ("M3 PG Test Character",),
+    )
+    character = cur.fetchone()
+    assert character is not None
+    assert character["entity_id"] is not None
+    assert character["extra_data"]["source"] == "retrograde"
+
+    _insert_place_stub(cur, entity_ref="M3 PG Test Place", sources=sources)
+    cur.execute(
+        "SELECT extra_data, entity_id FROM places WHERE name = %s",
+        ("M3 PG Test Place",),
+    )
+    place = cur.fetchone()
+    assert place is not None
+    assert place["entity_id"] is not None
+    assert place["extra_data"]["source"] == "retrograde"
 
 
 def test_recent_chunks_surface_excludes_retrograde_history() -> None:
