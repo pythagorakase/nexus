@@ -56,10 +56,10 @@ Close #369 (side-effect-free API imports). Reconcile nexus.toml/settings.json dr
 
 Backend milestones take priority on contention; v1.0 means engine + new face. Design source: `design_handoff/` (NEXUS IRIS design system, Veil theme canonical). Read `design_handoff/nexus-iris-design-system/project/README.md` and the chat transcripts before implementing - the intent lives in the chats.
 
-**U1 - Vendor the Design System** - S
+**U1 - Vendor the Design System** - S - DONE 2026-06-10 (PR #370, efd72c22)
 Tokens, keeper fonts, and theme CSS into `ui/` (`colors_and_type.css` -> theme layer; Veil at `:root`, Gilded/Vector as override classes). Licensed assets follow the established per-set convention with TOS PDFs at `licenses/`.
 
-**U2 - Veil Splash per the Chosen Hero** - M
+**U2 - Veil Splash per the Chosen Hero** - M - DONE 2026-06-10 (PR #370; Frame composition, kit-locked values)
 Port the kit's splash composition (locked values hard-coded in `ui_kits/nexus_iris/splash.jsx`) into the React/TS `VeilSplash`. Wizard preserved as-is; Gilded and Vector splashes untouched.
 
 **U3 - NexusLayout Rebuild** - L
