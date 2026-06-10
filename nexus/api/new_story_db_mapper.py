@@ -721,20 +721,7 @@ class NewStoryDatabaseMapper:
                         # so a history-less story can never silently begin.
                         in_transaction(cur)
 
-                # Transaction commits automatically on successful context exit
                 logger.info("Atomic transition complete")
-
-                # Clear the wizard cache - this is what transitions to narrative mode
-                # (mode is derived from data presence, not a flag)
-                clear_cache(self.dbname)
-                logger.debug("Cleared wizard cache, slot now in narrative mode")
-
-                return {
-                    "character_id": character_id,
-                    "layer_id": location_ids["layer_id"],
-                    "zone_id": location_ids["zone_id"],
-                    "place_id": location_ids["place_id"],
-                }
 
             except Exception as e:
                 # Transaction rolls back automatically on exception
@@ -743,6 +730,23 @@ class NewStoryDatabaseMapper:
                     f"All database changes rolled back (no partial data)."
                 )
                 raise
+
+        # The connection context has exited, so the transaction is committed.
+        # Clear the wizard cache - this is what transitions to narrative mode
+        # (mode is derived from data presence, not a flag). This must happen
+        # AFTER commit: clear_cache uses its own pooled connection, and the
+        # trait compiler updates assets.new_story_creator inside the
+        # transition transaction, so deleting the cache row pre-commit
+        # self-deadlocks on the uncommitted row version.
+        clear_cache(self.dbname)
+        logger.debug("Cleared wizard cache, slot now in narrative mode")
+
+        return {
+            "character_id": character_id,
+            "layer_id": location_ids["layer_id"],
+            "zone_id": location_ids["zone_id"],
+            "place_id": location_ids["place_id"],
+        }
 
     def _build_character_extra_data(self, character: CharacterSheet) -> Dict[str, Any]:
         """

@@ -134,6 +134,7 @@ def _install_fixture_world() -> Any:
 
     from datetime import datetime, timezone
 
+    from nexus.api.config_utils import get_new_story_model
     from nexus.api.db_pool import close_pool
     from nexus.api.new_story_cache import write_cache
     from nexus.api.new_story_schemas import (
@@ -146,11 +147,17 @@ def _install_fixture_world() -> Any:
         TransitionData,
         ZoneDefinition,
     )
+    from nexus.api.save_slots import upsert_slot
     from nexus.api.wizard_test_cache import load_cache
     from scripts.new_story_setup import create_slot_schema_only
 
     close_pool(SAVE_05_DBNAME)
     create_slot_schema_only(SLOT, source_db="NEXUS_template", force=True)
+
+    # Fresh slots default to the mock TEST model (global.model.
+    # default_slot_model); a real wizard run overrides it in start_setup.
+    # Mirror that here so the transition engages real Retrograde generation.
+    upsert_slot(SLOT, model=get_new_story_model(), dbname=SAVE_05_DBNAME)
 
     cache = load_cache()
     write_cache(
