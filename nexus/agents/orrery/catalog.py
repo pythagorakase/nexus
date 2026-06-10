@@ -180,6 +180,38 @@ _register(
     ),
 )
 
+# Self-awareness predicates (issue #282): stage-2 reads of the acting
+# entity's own fame / resources tiers and self-scoped status edges.
+_register(
+    r"fame_at_or_above\((?P<tier>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (f"{_slot(m.group('slot'))}'s own fame is `{m.group('tier')}` or wider"),
+)
+_register(
+    r"fame_below\((?P<tier>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s own fame is narrower than `{m.group('tier')}`"
+    ),
+)
+_register(
+    r"resources_at_or_above\((?P<tier>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s own resources are `{m.group('tier')}` or better"
+    ),
+)
+_register(
+    r"resources_below\((?P<tier>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))}'s own resources are below `{m.group('tier')}`"
+    ),
+)
+_register(
+    r"has_any_status_at_or_above\((?P<level>[^@()]+)@(?P<slot>\w+)\)",
+    lambda m: (
+        f"{_slot(m.group('slot'))} holds `status:{m.group('level')}`+ "
+        "toward any faction"
+    ),
+)
+
 # Location predicates
 _register(
     r"in_location_class\((?P<lc>[^@()]+)@(?P<slot>\w+)\)",

@@ -17,8 +17,11 @@ from nexus.agents.orrery.substrate import (
     co_located,
     count_co_located,
     direct_contact_is_dramatic,
+    fame_at_or_above,
+    fame_below,
     has_any_intimacy_suppressor,
     has_any_current_tag,
+    has_any_status_at_or_above,
     has_any_tag,
     has_contact_of_kind,
     has_ephemeral,
@@ -40,6 +43,8 @@ from nexus.agents.orrery.substrate import (
     recent_event,
     relationship_is_asymmetric,
     relationship_is_mutual_warm,
+    resources_at_or_above,
+    resources_below,
     at_routine_anchor,
     away_from_routine_anchor,
     routine_anchor_due,
@@ -51,6 +56,7 @@ from nexus.agents.orrery.substrate import (
     travel_risk_is,
     trust_at_least,
     trust_below,
+    validate_no_fame_in_entry_gates,
     weather_is,
 )
 
@@ -130,6 +136,25 @@ EVADE_PURSUERS = Template(
             magnitude=0.72,
         ),
         Branch(
+            label="Buy a discreet extraction",
+            conditions=AND(
+                fame_at_or_above("renowned"),
+                resources_at_or_above("wealthy"),
+            ),
+            narrative_stub=(
+                "{actor} knows their face does half the pursuers' work for "
+                "them, so they pay for the kind of exit that never touches "
+                "public flow: a closed vehicle, a bought route, a driver "
+                "whose business is not remembering."
+            ),
+            state_delta={
+                "character.current_activity": "buying a discreet extraction",
+            },
+            event_type="evade_pursuit",
+            changed_fields=("character.current_activity",),
+            magnitude=0.64,
+        ),
+        Branch(
             label="Reach a safe house through contacts",
             conditions=has_contact_of_kind("lodging"),
             narrative_stub=(
@@ -145,7 +170,11 @@ EVADE_PURSUERS = Template(
         ),
         Branch(
             label="Keep moving, blend into public flow",
-            conditions=can_move_publicly(),
+            # Self-awareness: blending into a crowd only works for actors
+            # whose ambient detection radius is narrow. Renowned-or-better
+            # actors cannot disappear into pedestrian flow; without funds
+            # for an extraction they fall through to breaking line of sight.
+            conditions=AND(can_move_publicly(), fame_below("renowned")),
             narrative_stub=(
                 "{actor} joins the densest pedestrian current nearby, never "
                 "stopping long enough to make a clean pattern."
@@ -188,6 +217,70 @@ HIDE = Template(
         since_last_event_at_least("counter_surveillance_sweep", minimum_ticks=6),
     ),
     branches=(
+        # Stage-2 self-awareness (issue #282 worked example): concealment
+        # escalates with the actor's own fame because a wide detection radius
+        # makes laying low ineffective. Each escalation tier must also be
+        # affordable; an actor who cannot pay for their tier falls through to
+        # the cheaper measure below it. Obscure actors ride out concealment
+        # with the lay-low maintenance branches further down.
+        Branch(
+            label="Erase the identity and vanish completely",
+            conditions=AND(
+                fame_at_or_above("legendary"),
+                resources_at_or_above("magnate"),
+            ),
+            narrative_stub=(
+                "{actor} is too widely known to be hidden by walls or "
+                "habits, so they spend what almost no one can spend: the "
+                "records, the debts, the face in the right databases — an "
+                "identity dismantled piece by piece until there is nothing "
+                "left to recognize."
+            ),
+            state_delta={
+                "character.current_activity": "erasing their identity",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.62,
+        ),
+        Branch(
+            label="Relocate to safer ground",
+            conditions=AND(
+                fame_at_or_above("renowned"),
+                resources_at_or_above("wealthy"),
+            ),
+            narrative_stub=(
+                "{actor} accepts that a recognizable face cannot outlast "
+                "the neighborhood that recognizes it, and pays for the "
+                "quiet logistics of being somewhere else entirely before "
+                "anyone thinks to look."
+            ),
+            state_delta={
+                "character.current_activity": "relocating to safer ground",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.52,
+        ),
+        Branch(
+            label="Change the face they show the street",
+            conditions=AND(
+                fame_at_or_above("known"),
+                resources_at_or_above("comfortable"),
+            ),
+            narrative_stub=(
+                "{actor} is recognizable enough that habit alone will not "
+                "protect them, so they spend on the cosmetic arithmetic of "
+                "not being noticed: hair, clothes, gait, the small paid "
+                "alterations that make a familiar face unfamiliar."
+            ),
+            state_delta={
+                "character.current_activity": "altering their appearance",
+            },
+            event_type="hideout_maintained",
+            changed_fields=("character.current_activity",),
+            magnitude=0.44,
+        ),
         Branch(
             label="Harden or sanitize a safehouse",
             conditions=AND(
@@ -452,9 +545,33 @@ MAINTAIN_COVER = Template(
         since_last_event_at_least("maintain_cover", minimum_ticks=6),
     ),
     branches=(
+        # Self-awareness inversion: a recognizable actor cannot maintain
+        # cover by generating anonymous civilian noise — their cover IS the
+        # public pattern people expect to see. Fame is unvalenced detection
+        # radius; here visibility composes into an asset.
+        Branch(
+            label="Be seen exactly where they are expected",
+            conditions=fame_at_or_above("renowned"),
+            narrative_stub=(
+                "{actor} cannot be nobody, so they are conspicuously, "
+                "boringly themselves: the usual table, the usual hours, the "
+                "usual complaints — a public pattern so consistent that "
+                "nobody thinks to ask what it covers."
+            ),
+            state_delta={
+                "character.current_activity": "performing the expected public pattern",
+            },
+            event_type="maintain_cover",
+            changed_fields=("character.current_activity",),
+            magnitude=0.14,
+        ),
         Branch(
             label="Run a low-level courier job",
-            conditions=AND(URBAN_PUBLIC_FLOW_PLACE, can_move_publicly()),
+            conditions=AND(
+                URBAN_PUBLIC_FLOW_PLACE,
+                can_move_publicly(),
+                fame_below("renowned"),
+            ),
             narrative_stub=(
                 "{actor} picks up a benign data packet, walks it across the "
                 "district, and earns just enough to register as ordinary."
@@ -496,7 +613,7 @@ MAINTAIN_COVER = Template(
         ),
         Branch(
             label="Drift through public space",
-            conditions=can_move_publicly(),
+            conditions=AND(can_move_publicly(), fame_below("renowned")),
             narrative_stub=(
                 "{actor} moves through public space at the pace of someone "
                 "with somewhere to be, generating forgettable civilian noise."
@@ -1655,6 +1772,66 @@ TRAVEL = Template(
             ),
             magnitude=0.18,
         ),
+        # Self-awareness route styles: the actor's own wealth and fame shape
+        # HOW they depart before the generic departure logic applies. Wealth
+        # substitutes for preparation (a charter is bought, not packed);
+        # fame forces recognizable travelers off public flow onto covert
+        # routings, which still demand real preparation.
+        Branch(
+            label="Charter private transport",
+            conditions=AND(
+                has_travel_destination(),
+                NOT(is_in_transit()),
+                resources_at_or_above("wealthy"),
+            ),
+            narrative_stub=(
+                "{actor} does not queue, transfer, or wait. Money turns the "
+                "journey into a closed door and a window: a private vehicle, "
+                "a paid schedule, a route that exists because they asked "
+                "for it."
+            ),
+            state_delta={
+                "character.current_activity": "departing by chartered transport",
+                "travel.start": {"mode": "vehicle", "initial_progress": 0.05},
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.30,
+        ),
+        Branch(
+            label="Slip out along covert routes",
+            conditions=AND(
+                has_travel_destination(),
+                NOT(is_in_transit()),
+                fame_at_or_above("renowned"),
+                OR(
+                    has_tag("travel_ready"),
+                    has_tag("travel_provisioned"),
+                    has_tag("route_familiar"),
+                ),
+            ),
+            narrative_stub=(
+                "{actor} cannot ride public flow without being a sighting, "
+                "so the route runs through the city's blind spots: service "
+                "levels, freight corridors, the hours and angles where a "
+                "recognizable face passes unwitnessed."
+            ),
+            state_delta={
+                "character.current_activity": "departing along covert routes",
+                "travel.start": {"mode": "covert", "initial_progress": 0.05},
+            },
+            event_type="travel_departed",
+            changed_fields=(
+                "character.current_activity",
+                "character_travel_states.status",
+                "character_travel_states.progress_ratio",
+            ),
+            magnitude=0.32,
+        ),
         Branch(
             label="Depart toward the planned destination",
             conditions=AND(
@@ -1731,6 +1908,41 @@ WORK = Template(
         NOT(has_ephemeral("grieving")),
     ),
     branches=(
+        # Self-awareness: the actor's own wealth tier shapes what "work"
+        # means before role or place do. Destitution makes work a matter of
+        # survival; magnate-tier wealth makes it a matter of direction.
+        Branch(
+            label="Take whatever paying work the day offers",
+            conditions=resources_below("poor"),
+            narrative_stub=(
+                "{actor} cannot afford the luxury of work that matches who "
+                "they are. They take what the day pays for — hauling, "
+                "queueing, standing in for someone luckier — and count the "
+                "result in meals, not meaning."
+            ),
+            state_delta={
+                "character.current_activity": "scraping together day labor",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.20,
+        ),
+        Branch(
+            label="Direct the work rather than perform it",
+            conditions=resources_at_or_above("wealthy"),
+            narrative_stub=(
+                "{actor} does not stand a shift; they decide what the "
+                "shifts are for. An hour of instructions, approvals, and "
+                "quiet corrections moves more value than a day at any "
+                "counter would."
+            ),
+            state_delta={
+                "character.current_activity": "directing the work of others",
+            },
+            event_type="work_performed",
+            changed_fields=("character.current_activity",),
+            magnitude=0.16,
+        ),
         Branch(
             label="Work a public-facing shift",
             conditions=OR(
@@ -1767,9 +1979,13 @@ WORK = Template(
         ),
         Branch(
             label="Keep administrative obligations moving",
+            # Self-scoped status read: senior-or-better standing toward any
+            # faction means the actor's work is rosters, approvals, and
+            # institutional upkeep even away from an administration place.
             conditions=OR(
                 ADMINISTRATION_PLACE,
                 has_any_tag("researcher", "academic", "soldier"),
+                has_any_status_at_or_above("senior"),
             ),
             narrative_stub=(
                 "{actor} moves necessary work through the quiet machinery: "
@@ -1883,6 +2099,26 @@ TEND_CRAFT = Template(
         NOT(has_ephemeral("grieving")),
     ),
     branches=(
+        # Self-awareness: wealth changes how craft is tended — money buys
+        # materials, commissions, and time that poorer practitioners must
+        # improvise around (the improvisation IS the branches below).
+        Branch(
+            label="Put real money into the craft",
+            conditions=resources_at_or_above("wealthy"),
+            narrative_stub=(
+                "{actor} spends on the work the way only someone with money "
+                "can: the proper materials instead of the workable ones, "
+                "the commissioned part instead of the salvaged one, the "
+                "bought afternoon of uninterrupted attention."
+            ),
+            state_delta={
+                "character.current_activity": "investing in the craft",
+                "entity_tags.add": ["recently_tended_craft"],
+            },
+            event_type="craft_tended",
+            changed_fields=("character.current_activity", "entity_tags"),
+            magnitude=0.18,
+        ),
         Branch(
             label="Make the weapon ready for what comes next",
             conditions=has_any_tag("combat_trained", "soldier", "warrior", "fighter"),
@@ -2954,6 +3190,40 @@ SOCIALIZE = Template(
         NOT(has_ephemeral("wounded")),
     ),
     branches=(
+        # Self-awareness: a renowned-or-better actor cannot get casual
+        # anonymous company from a public room — the room reorganizes
+        # around them. Their socializing happens on ground they control,
+        # with people they already know. Listed before the disposition
+        # branch below deliberately: fame structurally constrains WHERE
+        # company can happen, so it outranks disposition (which only
+        # shapes the medium) when both match.
+        Branch(
+            label="Host chosen company on their own ground",
+            conditions=AND(
+                fame_at_or_above("renowned"),
+                has_contact_of_kind("social"),
+            ),
+            narrative_stub=(
+                "{actor} does not go looking for company in rooms that "
+                "would turn to watch them enter. They summon it instead: a "
+                "few chosen people, a door that closes, an evening where "
+                "nobody performs recognition."
+            ),
+            state_delta={
+                "character.current_activity": "hosting chosen company privately",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "private_company",
+                    "discharge_debt": 9999,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.24,
+        ),
         Branch(
             label="Seek company after extended isolation",
             conditions=AND(
@@ -2961,6 +3231,7 @@ SOCIALIZE = Template(
                 NOT(count_co_located(1)),
                 NOT(SOCIAL_VENUE_PLACE),
                 can_move_publicly(),
+                fame_below("renowned"),
                 has_location_class_destination(
                     "commerce", "entertainment", "meeting", "place_open"
                 ),
@@ -3018,12 +3289,43 @@ SOCIALIZE = Template(
             ),
             magnitude=0.22,
         ),
+        # Self-awareness: dispositionally private actors with someone to
+        # call prefer a trusted voice over an anonymous crowd, even when a
+        # public venue is reachable.
+        Branch(
+            label="Seek a trusted voice rather than a crowd",
+            conditions=AND(
+                has_any_tag("solitary", "reserved"),
+                has_contact_of_kind("social"),
+            ),
+            narrative_stub=(
+                "{actor} weighs the noise of a public room against the "
+                "particular relief of one familiar voice, and chooses the "
+                "voice — a long, unhurried exchange with someone who does "
+                "not need anything explained."
+            ),
+            state_delta={
+                "character.current_activity": "talking with a trusted contact",
+                "need.fulfill": {
+                    "type": "socialize",
+                    "quality": "trusted_contact",
+                    "discharge_debt": 72,
+                },
+            },
+            event_type="socialized",
+            changed_fields=(
+                "character.current_activity",
+                "character_need_states.debt_score",
+            ),
+            magnitude=0.22,
+        ),
         Branch(
             label="Set out toward public company",
             conditions=AND(
                 NOT(count_co_located(1)),
                 NOT(SOCIAL_VENUE_PLACE),
                 can_move_publicly(),
+                fame_below("renowned"),
                 has_location_class_destination(
                     "commerce", "entertainment", "meeting", "place_open"
                 ),
@@ -3058,7 +3360,7 @@ SOCIALIZE = Template(
         ),
         Branch(
             label="Go where people are",
-            conditions=SOCIAL_VENUE_PLACE,
+            conditions=AND(SOCIAL_VENUE_PLACE, fame_below("renowned")),
             narrative_stub=(
                 "{actor} goes to one of the places built around the fact "
                 "that people gather there, and stays long enough to become "
@@ -3311,3 +3613,9 @@ BUILTIN_TEMPLATES = (
     INTIMACY,
     MAINTAIN_COVER,
 )
+
+# Enforce the issue #282 stage contract at import time: fame predicates are
+# stage-2/3 vocabulary and must never appear in stage-1 entry gating. A
+# fame-gated template added to this catalog raises immediately rather than
+# relying on test coverage.
+validate_no_fame_in_entry_gates(BUILTIN_TEMPLATES)

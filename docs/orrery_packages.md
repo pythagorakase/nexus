@@ -49,7 +49,20 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} slips off a Rootline platform into a flooded service corridor and kills every transmitter on their person.
 
-### Branch 2 — Reach a safe house through contacts  *(mag 0.58)*
+### Branch 2 — Buy a discreet extraction  *(mag 0.64)*
+
+**When:**
+
+- **AND:**
+  - actor's own fame is `renowned` or wider
+  - actor's own resources are `wealthy` or better
+
+**Does:** activity → "buying a discreet extraction"
+**Event:** `evade_pursuit`
+
+> {actor} knows their face does half the pursuers' work for them, so they pay for the kind of exit that never touches public flow: a closed vehicle, a bought route, a driver whose business is not remembering.
+
+### Branch 3 — Reach a safe house through contacts  *(mag 0.58)*
 
 **When:** actor has outbound `contact:lodging` pair tag
 
@@ -58,16 +71,20 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} pings a broker through a low-bandwidth dead-drop and takes a four-hop route to a safe house.
 
-### Branch 3 — Keep moving, blend into public flow  *(mag 0.42)*
+### Branch 4 — Keep moving, blend into public flow  *(mag 0.42)*
 
-**When:** actor can plausibly move through public flow
+**When:**
+
+- **AND:**
+  - actor can plausibly move through public flow
+  - actor's own fame is narrower than `renowned`
 
 **Does:** activity → "blending into public flow"
 **Event:** `evade_pursuit`
 
 > {actor} joins the densest pedestrian current nearby, never stopping long enough to make a clean pattern.
 
-### Branch 4 — Break line of sight without a clean route  *(mag 0.28)*
+### Branch 5 — Break line of sight without a clean route  *(mag 0.28)*
 
 **When:** *(always)*
 
@@ -325,7 +342,46 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - ≥ 6 ticks since last `signal_exposure_reduced` event for actor
   - ≥ 6 ticks since last `counter_surveillance_sweep` event for actor
 
-### Branch 1 — Harden or sanitize a safehouse  *(mag 0.4)*
+### Branch 1 — Erase the identity and vanish completely  *(mag 0.62)*
+
+**When:**
+
+- **AND:**
+  - actor's own fame is `legendary` or wider
+  - actor's own resources are `magnate` or better
+
+**Does:** activity → "erasing their identity"
+**Event:** `hideout_maintained`
+
+> {actor} is too widely known to be hidden by walls or habits, so they spend what almost no one can spend: the records, the debts, the face in the right databases — an identity dismantled piece by piece until there is nothing left to recognize.
+
+### Branch 2 — Relocate to safer ground  *(mag 0.52)*
+
+**When:**
+
+- **AND:**
+  - actor's own fame is `renowned` or wider
+  - actor's own resources are `wealthy` or better
+
+**Does:** activity → "relocating to safer ground"
+**Event:** `hideout_maintained`
+
+> {actor} accepts that a recognizable face cannot outlast the neighborhood that recognizes it, and pays for the quiet logistics of being somewhere else entirely before anyone thinks to look.
+
+### Branch 3 — Change the face they show the street  *(mag 0.44)*
+
+**When:**
+
+- **AND:**
+  - actor's own fame is `known` or wider
+  - actor's own resources are `comfortable` or better
+
+**Does:** activity → "altering their appearance"
+**Event:** `hideout_maintained`
+
+> {actor} is recognizable enough that habit alone will not protect them, so they spend on the cosmetic arithmetic of not being noticed: hair, clothes, gait, the small paid alterations that make a familiar face unfamiliar.
+
+### Branch 4 — Harden or sanitize a safehouse  *(mag 0.4)*
 
 **When:**
 
@@ -340,7 +396,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} spends the turn making the safe place safer: cleaning traces, changing habits, checking exits, and removing the small comforts that become evidence.
 
-### Branch 2 — Go dark and reduce signal exposure  *(mag 0.36)*
+### Branch 5 — Go dark and reduce signal exposure  *(mag 0.36)*
 
 **When:**
 
@@ -353,7 +409,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} trims their signal down to almost nothing — no unnecessary pings, no sentimental check-ins, no pattern that would let a watcher say yes, there.
 
-### Branch 3 — Run a counter-surveillance sweep  *(mag 0.34)*
+### Branch 6 — Run a counter-surveillance sweep  *(mag 0.34)*
 
 **When:**
 
@@ -366,7 +422,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} checks whether anyone has learned the shape of their absence: doubled-back routes, watcher positions, unusual queries, and the tiny repetitions that turn hiding into a map.
 
-### Branch 4 — Shift a mobile route without surfacing  *(mag 0.3)*
+### Branch 7 — Shift a mobile route without surfacing  *(mag 0.3)*
 
 **When:**
 
@@ -381,7 +437,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} changes the route without making the change look like a change, letting timing and terrain do what panic would ruin.
 
-### Branch 5 — Preserve the silence another day  *(mag 0.22)*
+### Branch 8 — Preserve the silence another day  *(mag 0.22)*
 
 **When:** *(always)*
 
@@ -1463,7 +1519,39 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} keeps moving: transfers, crossings, service corridors, streets whose names matter less than the fact that each one puts the destination a little closer.
 
-### Branch 5 — Depart toward the planned destination  *(mag 0.28)*
+### Branch 5 — Charter private transport  *(mag 0.3)*
+
+**When:**
+
+- **AND:**
+  - actor has a planned travel destination
+  - **NOT:** actor is in transit
+  - actor's own resources are `wealthy` or better
+
+**Does:** activity → "departing by chartered transport"; starts planned travel
+**Event:** `travel_departed`
+
+> {actor} does not queue, transfer, or wait. Money turns the journey into a closed door and a window: a private vehicle, a paid schedule, a route that exists because they asked for it.
+
+### Branch 6 — Slip out along covert routes  *(mag 0.32)*
+
+**When:**
+
+- **AND:**
+  - actor has a planned travel destination
+  - **NOT:** actor is in transit
+  - actor's own fame is `renowned` or wider
+  - **OR:**
+    - actor has `travel_ready` tag
+    - actor has `travel_provisioned` tag
+    - actor has `route_familiar` tag
+
+**Does:** activity → "departing along covert routes"; starts planned travel
+**Event:** `travel_departed`
+
+> {actor} cannot ride public flow without being a sighting, so the route runs through the city's blind spots: service levels, freight corridors, the hours and angles where a recognizable face passes unwitnessed.
+
+### Branch 7 — Depart toward the planned destination  *(mag 0.28)*
 
 **When:**
 
@@ -1481,7 +1569,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} starts the journey with enough of a route in mind to make the first leg real. The exact path can change; the destination no longer can.
 
-### Branch 6 — Prepare the journey rather than starting badly  *(mag 0.12)*
+### Branch 8 — Prepare the journey rather than starting badly  *(mag 0.12)*
 
 **When:** *(always)*
 
@@ -1510,7 +1598,20 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has `grieving` ephemeral
   - **NOT:** actor has `wounded` ephemeral
 
-### Branch 1 — Seek company after extended isolation  *(mag 0.54)*
+### Branch 1 — Host chosen company on their own ground  *(mag 0.24)*
+
+**When:**
+
+- **AND:**
+  - actor's own fame is `renowned` or wider
+  - actor has outbound `contact:social` pair tag
+
+**Does:** activity → "hosting chosen company privately"; fulfills `socialize` need, quality `private_company`, discharge 9999
+**Event:** `socialized`
+
+> {actor} does not go looking for company in rooms that would turn to watch them enter. They summon it instead: a few chosen people, a door that closes, an evening where nobody performs recognition.
+
+### Branch 2 — Seek company after extended isolation  *(mag 0.54)*
 
 **When:**
 
@@ -1524,6 +1625,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
       - actor is in `meeting` place class
       - actor is in `place_open` place class
   - actor can plausibly move through public flow
+  - actor's own fame is narrower than `renowned`
   - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking company after isolation"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
@@ -1531,7 +1633,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} feels the particular pressure that comes from going too long without other people in their life, and moves toward somewhere there will be voices, even if those voices are not for them.
 
-### Branch 2 — Engage with company already present  *(mag 0.22)*
+### Branch 3 — Engage with company already present  *(mag 0.22)*
 
 **When:** 1+ other entities co-located with actor
 
@@ -1540,7 +1642,20 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} spends real attention on the people around them — not transactional attention, the other kind — for long enough that the social need is briefly met without anyone naming it as such.
 
-### Branch 3 — Set out toward public company  *(mag 0.26)*
+### Branch 4 — Seek a trusted voice rather than a crowd  *(mag 0.22)*
+
+**When:**
+
+- **AND:**
+  - actor has any of [`solitary`, `reserved`]
+  - actor has outbound `contact:social` pair tag
+
+**Does:** activity → "talking with a trusted contact"; fulfills `socialize` need, quality `trusted_contact`, discharge 72
+**Event:** `socialized`
+
+> {actor} weighs the noise of a public room against the particular relief of one familiar voice, and chooses the voice — a long, unhurried exchange with someone who does not need anything explained.
+
+### Branch 5 — Set out toward public company  *(mag 0.26)*
 
 **When:**
 
@@ -1553,6 +1668,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
       - actor is in `meeting` place class
       - actor is in `place_open` place class
   - actor can plausibly move through public flow
+  - actor's own fame is narrower than `renowned`
   - actor can resolve a destination with place class `commerce,entertainment,meeting,place_open`
 
 **Does:** activity → "seeking public company"; starts travel toward a `commerce`, `entertainment`, `meeting`, `place_open` destination
@@ -1560,22 +1676,24 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} chooses movement over more empty time and sets out toward a place where other people can be encountered without requiring the story to pre-name them.
 
-### Branch 4 — Go where people are  *(mag 0.2)*
+### Branch 6 — Go where people are  *(mag 0.2)*
 
 **When:**
 
-- **OR:**
-  - actor is in `commerce` place class
-  - actor is in `entertainment` place class
-  - actor is in `meeting` place class
-  - actor is in `place_open` place class
+- **AND:**
+  - **OR:**
+    - actor is in `commerce` place class
+    - actor is in `entertainment` place class
+    - actor is in `meeting` place class
+    - actor is in `place_open` place class
+  - actor's own fame is narrower than `renowned`
 
 **Does:** activity → "passing time in a populated place"; fulfills `socialize` need, quality `public_company`, discharge 9999
 **Event:** `socialized`
 
 > {actor} goes to one of the places built around the fact that people gather there, and stays long enough to become part of the room's ordinary texture.
 
-### Branch 5 — Reach out to a contact for no urgent reason  *(mag 0.24)*
+### Branch 7 — Reach out to a contact for no urgent reason  *(mag 0.24)*
 
 **When:** actor has outbound `contact:social` pair tag
 
@@ -1584,7 +1702,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} thinks of someone they have not spoken with in too long and reaches out for no urgent reason, which is its own kind of reason.
 
-### Branch 6 — Practice parasocial company  *(mag 0.16)*
+### Branch 8 — Practice parasocial company  *(mag 0.16)*
 
 **When:** *(always)*
 
@@ -1705,7 +1823,16 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
-### Branch 1 — Make the weapon ready for what comes next  *(mag 0.18)*
+### Branch 1 — Put real money into the craft  *(mag 0.18)*
+
+**When:** actor's own resources are `wealthy` or better
+
+**Does:** activity → "investing in the craft"; adds `recently_tended_craft` to actor
+**Event:** `craft_tended`
+
+> {actor} spends on the work the way only someone with money can: the proper materials instead of the workable ones, the commissioned part instead of the salvaged one, the bought afternoon of uninterrupted attention.
+
+### Branch 2 — Make the weapon ready for what comes next  *(mag 0.18)*
 
 **When:** actor has any of [`combat_trained`, `soldier`, `warrior`, `fighter`]
 
@@ -1714,7 +1841,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} takes the weapon apart with the slow patience of someone who has done this enough times to know the geometry of each piece by feel, and puts it back together the same way, attentive to small things only they will notice.
 
-### Branch 2 — Lay hands on the arcane work-in-progress  *(mag 0.18)*
+### Branch 3 — Lay hands on the arcane work-in-progress  *(mag 0.18)*
 
 **When:** actor has `arcane_caster` tag
 
@@ -1723,7 +1850,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} spends an unhurried hour with whatever is currently between their hands and the world's underlying grammar — checking small things, adjusting smaller things, letting the work tell them what it still needs.
 
-### Branch 3 — Maintain and improve the tools of the trade  *(mag 0.18)*
+### Branch 4 — Maintain and improve the tools of the trade  *(mag 0.18)*
 
 **When:** actor has any of [`engineer`, `mechanic`, `tinkerer`, `hacker`, `artificer`]
 
@@ -1732,7 +1859,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} attends to the equipment — the part that's been annoying them for weeks, the upgrade they keep meaning to install, the calibration that's been just slightly off — and emerges with the tools a small degree better than they were.
 
-### Branch 4 — Run through the work that keeps the work possible  *(mag 0.18)*
+### Branch 5 — Run through the work that keeps the work possible  *(mag 0.18)*
 
 **When:** actor has any of [`musician`, `dancer`, `performer`, `artist`, `writer`, `artisan`]
 
@@ -1741,7 +1868,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} works through the practice that no one will ever see — the scales, the exercises, the small motions that the public version of the art rests on — for an hour, the way the practice has to be done if the work is to stay alive.
 
-### Branch 5 — Move the body through its daily reckoning  *(mag 0.18)*
+### Branch 6 — Move the body through its daily reckoning  *(mag 0.18)*
 
 **When:** actor has any of [`athlete`, `martial_artist`, `ranger`, `scout`, `monk`]
 
@@ -1750,7 +1877,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} puts the body through its daily reckoning — the run, the forms, the small punishments that keep the body ready for whatever the next demand will be — and finishes marginally sharper than they began.
 
-### Branch 6 — Tend the small shop's quiet machinery  *(mag 0.18)*
+### Branch 7 — Tend the small shop's quiet machinery  *(mag 0.18)*
 
 **When:** actor has any of [`keeps_shop`, `merchant`, `innkeeper`, `trader`]
 
@@ -1759,7 +1886,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} does the things a place of business needs in order to keep being a place of business: the count, the ledger, the small repairs, the conversations with regulars who came in for something other than the thing they actually bought.
 
-### Branch 7 — Keep the household running  *(mag 0.18)*
+### Branch 8 — Keep the household running  *(mag 0.18)*
 
 **When:** actor has any of [`domestic_role`, `cares_for_household`, `matriarch`, `patriarch`]
 
@@ -1768,7 +1895,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} does the work that holds a household together — the meals, the cleaning, the small attentions no one particularly thanks anyone for but whose absence would be felt immediately. It is enough work for a full day, every day, by itself.
 
-### Branch 8 — Return to the unfinished study  *(mag 0.18)*
+### Branch 9 — Return to the unfinished study  *(mag 0.18)*
 
 **When:** actor has any of [`scholar`, `researcher`, `academic`, `loremaster`]
 
@@ -1777,7 +1904,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} returns to the long work that is always almost but never finished — reading carefully, taking notes that may yet matter, following a thread that may yet lead somewhere — and gives the work another quiet evening of the only thing it really needs.
 
-### Branch 9 — Take a small action of care for the work that is theirs  *(mag 0.12)*
+### Branch 10 — Take a small action of care for the work that is theirs  *(mag 0.12)*
 
 **When:** *(always)*
 
@@ -1812,7 +1939,25 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
   - **NOT:** actor has `wounded` ephemeral
   - **NOT:** actor has `grieving` ephemeral
 
-### Branch 1 — Work a public-facing shift  *(mag 0.18)*
+### Branch 1 — Take whatever paying work the day offers  *(mag 0.2)*
+
+**When:** actor's own resources are below `poor`
+
+**Does:** activity → "scraping together day labor"
+**Event:** `work_performed`
+
+> {actor} cannot afford the luxury of work that matches who they are. They take what the day pays for — hauling, queueing, standing in for someone luckier — and count the result in meals, not meaning.
+
+### Branch 2 — Direct the work rather than perform it  *(mag 0.16)*
+
+**When:** actor's own resources are `wealthy` or better
+
+**Does:** activity → "directing the work of others"
+**Event:** `work_performed`
+
+> {actor} does not stand a shift; they decide what the shifts are for. An hour of instructions, approvals, and quiet corrections moves more value than a day at any counter would.
+
+### Branch 3 — Work a public-facing shift  *(mag 0.18)*
 
 **When:**
 
@@ -1831,7 +1976,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} gives the day to work that other people can see: the counter, the ledger, the bargaining, the small maintenance of trust that keeps trade from becoming chaos.
 
-### Branch 2 — Handle field or maintenance work  *(mag 0.2)*
+### Branch 4 — Handle field or maintenance work  *(mag 0.2)*
 
 **When:**
 
@@ -1847,20 +1992,21 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} spends the hour in practical labor: repairs, inspection, hauling, checking systems whose importance only becomes visible when they fail.
 
-### Branch 3 — Keep administrative obligations moving  *(mag 0.16)*
+### Branch 5 — Keep administrative obligations moving  *(mag 0.16)*
 
 **When:**
 
 - **OR:**
   - actor is in `administration` place class
   - actor has any of [`researcher`, `academic`, `soldier`]
+  - actor holds `status:senior`+ toward any faction
 
 **Does:** activity → "handling administrative work"
 **Event:** `work_performed`
 
 > {actor} moves necessary work through the quiet machinery: forms, messages, rosters, notes, approvals, the kind of paper trail that decides what can happen tomorrow.
 
-### Branch 4 — Do the labor that holds a household together  *(mag 0.18)*
+### Branch 6 — Do the labor that holds a household together  *(mag 0.18)*
 
 **When:** actor has any of [`domestic_role`, `cares_for_household`]
 
@@ -1869,7 +2015,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} does household work with the competence of someone who knows that ordinary life is not self-maintaining: food, cleaning, repairs, care, the small logistics of everyone getting through the day.
 
-### Branch 5 — Keep the obligation from slipping  *(mag 0.1)*
+### Branch 7 — Keep the obligation from slipping  *(mag 0.1)*
 
 **When:** *(always)*
 
@@ -1904,7 +2050,16 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - actor is in `meeting` place class
   - ≥ 6 ticks since last `maintain_cover` event for actor
 
-### Branch 1 — Run a low-level courier job  *(mag 0.16)*
+### Branch 1 — Be seen exactly where they are expected  *(mag 0.14)*
+
+**When:** actor's own fame is `renowned` or wider
+
+**Does:** activity → "performing the expected public pattern"
+**Event:** `maintain_cover`
+
+> {actor} cannot be nobody, so they are conspicuously, boringly themselves: the usual table, the usual hours, the usual complaints — a public pattern so consistent that nobody thinks to ask what it covers.
+
+### Branch 2 — Run a low-level courier job  *(mag 0.16)*
 
 **When:**
 
@@ -1916,13 +2071,14 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
     - actor is in `commerce` place class
     - actor is in `meeting` place class
   - actor can plausibly move through public flow
+  - actor's own fame is narrower than `renowned`
 
 **Does:** activity → "running low-level cover work"
 **Event:** `maintain_cover`
 
 > {actor} picks up a benign data packet, walks it across the district, and earns just enough to register as ordinary.
 
-### Branch 2 — Maintain a specific cover identity  *(mag 0.14)*
+### Branch 3 — Maintain a specific cover identity  *(mag 0.14)*
 
 **When:** actor has any current tag of [`cover_identity`, `public_role`, `undercover`]
 
@@ -1931,7 +2087,7 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} services the identity that keeps questions from forming: one believable errand, one ordinary exchange, one small proof that the mask has a life of its own.
 
-### Branch 3 — Keep a public role legible  *(mag 0.12)*
+### Branch 4 — Keep a public role legible  *(mag 0.12)*
 
 **When:** actor has any current tag of [`broker`, `fixer`, `operative`]
 
@@ -1940,16 +2096,20 @@ Drive bands are authoring metadata: they explain whether a package is crisis/con
 
 > {actor} keeps their visible role legible to the people who expect to see it — enough routine, enough responsiveness, enough plausible friction to look like a life.
 
-### Branch 4 — Drift through public space  *(mag 0.1)*
+### Branch 5 — Drift through public space  *(mag 0.1)*
 
-**When:** actor can plausibly move through public flow
+**When:**
+
+- **AND:**
+  - actor can plausibly move through public flow
+  - actor's own fame is narrower than `renowned`
 
 **Does:** activity → "maintaining public cover"
 **Event:** `maintain_cover`
 
 > {actor} moves through public space at the pace of someone with somewhere to be, generating forgettable civilian noise.
 
-### Branch 5 — Keep the ledger plausible from a fixed post  *(mag 0.08)*
+### Branch 6 — Keep the ledger plausible from a fixed post  *(mag 0.08)*
 
 **When:** *(always)*
 
@@ -2038,12 +2198,14 @@ the seeding migrations to confirm catalog ↔ schema agreement:
 - `ranger`
 - `religiously_abstinent`
 - `researcher`
+- `reserved`
 - `ritual_practitioner`
 - `route_familiar`
 - `scholar`
 - `scout`
 - `seeking_identity`
 - `soldier`
+- `solitary`
 - `surgical_training`
 - `survivalist`
 - `tinkerer`

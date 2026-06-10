@@ -10,6 +10,11 @@ import json
 from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional, Tuple
 
 from nexus.agents.orrery.needs import normalize_need_type
+from nexus.agents.orrery.status_family import (
+    STATUS_LEVEL_RANKS,
+    STATUS_TAG_PREFIX,
+    normalize_status_level,
+)
 
 
 class EntityKind(str, Enum):
@@ -145,6 +150,33 @@ CONTACT_PAIR_TAGS: Mapping[ContactKind, str] = {
 }
 LOADED_TRUST_FORWARD_MIN = 2
 LOADED_TRUST_REVERSE_MAX = -1
+
+# Package self-awareness (issue #282): exclusive single-entity tier ladders the
+# acting entity reads about *itself* during stage-2 branch selection. Ranks are
+# vocabulary semantics (registry tag ordering), not tunable weights. Absence of
+# a tier tag IS the default tier — the registry's documented default-absent
+# pattern (`role.fame:obscure`, `role.resources:comfortable`).
+FAME_TIER_RANKS: Mapping[str, int] = {
+    "obscure": 0,
+    "known": 1,
+    "renowned": 2,
+    "legendary": 3,
+}
+DEFAULT_FAME_TIER = "obscure"
+RESOURCES_TIER_RANKS: Mapping[str, int] = {
+    "destitute": 0,
+    "poor": 1,
+    "comfortable": 2,
+    "wealthy": 3,
+    "magnate": 4,
+}
+DEFAULT_RESOURCES_TIER = "comfortable"
+# Fame predicates are stage-2/stage-3 vocabulary ONLY. Entry gating (stage 1)
+# must never read fame; validate_no_fame_in_entry_gates enforces this.
+_FAME_PREDICATE_NAME_PREFIXES: Tuple[str, ...] = (
+    "fame_at_or_above(",
+    "fame_below(",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,6 +464,177 @@ def has_any_current_tag(*tags: str, slot: Slot = Slot.ACTOR) -> Condition:
         return bool(candidates & current_tags)
 
     return _named(_condition, f"has_any_current_tag({','.join(tags)}@{slot.value})")
+
+
+def _tier_rank(
+    state: WorldState,
+    entity_id: int,
+    ranks: Mapping[str, int],
+    default_tier: str,
+    ladder: str,
+) -> int:
+    """Return an entity's rank on an exclusive tier ladder (durable tags).
+
+    Tier ladders are exclusive-cardinality registry categories: an entity
+    carrying more than one tier tag on the same ladder is corrupt state, and
+    corrupt state must surface loudly rather than be quietly resolved.
+    """
+
+    present = sorted(
+        tag for tag in state.tags.get(entity_id, frozenset()) if tag in ranks
+    )
+    if len(present) > 1:
+        raise ValueError(
+            f"Entity {entity_id} holds multiple {ladder} tier tags {present}; "
+            f"{ladder} is an exclusive ladder"
+        )
+    if present:
+        return ranks[present[0]]
+    return ranks[default_tier]
+
+
+def _validate_tier(tier: str, ranks: Mapping[str, int], ladder: str) -> str:
+    normalized = str(tier).strip()
+    if normalized not in ranks:
+        raise ValueError(
+            f"Unknown {ladder} tier {tier!r}; expected one of {sorted(ranks)}"
+        )
+    return normalized
+
+
+def fame_at_or_above(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity's own fame meets a tier threshold.
+
+    Fame is an unvalenced ambient detection radius (inverse stealth); absence
+    of a ``role.fame`` tag reads as ``obscure``. Stage-2/3 vocabulary only —
+    never use this in a package gate (stage 1 entry gating).
+    """
+
+    normalized = _validate_tier(tier, FAME_TIER_RANKS, "fame")
+    threshold = FAME_TIER_RANKS[normalized]
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return (
+            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER, "fame")
+            >= threshold
+        )
+
+    return _named(_condition, f"fame_at_or_above({normalized}@{slot.value})")
+
+
+def fame_below(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity's own fame is below a tier threshold.
+
+    Same stage discipline as :func:`fame_at_or_above`: stage-2/3 only.
+    """
+
+    normalized = _validate_tier(tier, FAME_TIER_RANKS, "fame")
+    threshold = FAME_TIER_RANKS[normalized]
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return (
+            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER, "fame")
+            < threshold
+        )
+
+    return _named(_condition, f"fame_below({normalized}@{slot.value})")
+
+
+def resources_at_or_above(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity's own wealth meets a tier threshold.
+
+    Absence of a ``role.resources`` tag reads as ``comfortable`` per the
+    registry's default-absent pattern.
+    """
+
+    normalized = _validate_tier(tier, RESOURCES_TIER_RANKS, "resources")
+    threshold = RESOURCES_TIER_RANKS[normalized]
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return (
+            _tier_rank(
+                state,
+                entity_id,
+                RESOURCES_TIER_RANKS,
+                DEFAULT_RESOURCES_TIER,
+                "resources",
+            )
+            >= threshold
+        )
+
+    return _named(_condition, f"resources_at_or_above({normalized}@{slot.value})")
+
+
+def resources_below(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether a slot-bound entity's own wealth is below a tier threshold."""
+
+    normalized = _validate_tier(tier, RESOURCES_TIER_RANKS, "resources")
+    threshold = RESOURCES_TIER_RANKS[normalized]
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        return (
+            _tier_rank(
+                state,
+                entity_id,
+                RESOURCES_TIER_RANKS,
+                DEFAULT_RESOURCES_TIER,
+                "resources",
+            )
+            < threshold
+        )
+
+    return _named(_condition, f"resources_below({normalized}@{slot.value})")
+
+
+def has_any_status_at_or_above(threshold: str, slot: Slot = Slot.ACTOR) -> Condition:
+    """Return whether the entity holds outbound status at a rank, in any scope.
+
+    Status is scope-bound (``status:<level>`` pair tags, subject → faction);
+    this is the self-scoped read: does the acting entity hold standing at or
+    above ``threshold`` toward *any* scope faction. Negative levels never
+    satisfy a positive threshold because ranks are ordered.
+    """
+
+    normalized = normalize_status_level(threshold)
+    threshold_rank = STATUS_LEVEL_RANKS[normalized]
+
+    def _condition(state: WorldState, bindings: Bindings) -> bool:
+        entity_id = _slot_entity(bindings, slot)
+        if entity_id is None:
+            return False
+        # Known cost: O(total pair-tag relationships) per evaluation, the
+        # same shape as _has_outbound_pair_tag / _has_inbound_pair_tag.
+        # WorldState.pair_tags is keyed by (subject, object) with no subject
+        # index; if stage-3 encounter rolls make this measurable, add a
+        # derived pair_tags_by_subject map at hydration rather than here.
+        for (subject_id, _object_id), tags in state.pair_tags.items():
+            if subject_id != entity_id:
+                continue
+            for tag in tags:
+                if not tag.startswith(STATUS_TAG_PREFIX):
+                    continue
+                level = tag.removeprefix(STATUS_TAG_PREFIX)
+                rank = STATUS_LEVEL_RANKS.get(level)
+                if rank is not None and rank >= threshold_rank:
+                    return True
+        return False
+
+    return _named(
+        _condition,
+        f"has_any_status_at_or_above({normalized}@{slot.value})",
+    )
 
 
 def has_ephemeral(tag: str, slot: Slot = Slot.ACTOR) -> Condition:
@@ -1594,6 +1797,38 @@ def validate_always_fallbacks(templates: Iterable[Template]) -> None:
         raise ValueError(
             "Orrery templates missing terminal ALWAYS branch: "
             + ", ".join(sorted(missing))
+        )
+
+
+def _condition_tree_leaves(condition: Condition) -> Iterable[Condition]:
+    """Yield leaf predicates of a (possibly compound) condition tree."""
+
+    if isinstance(condition, CompoundCondition):
+        for child in condition.children:
+            yield from _condition_tree_leaves(child)
+    else:
+        yield condition
+
+
+def validate_no_fame_in_entry_gates(templates: Iterable[Template]) -> None:
+    """Enforce the issue #282 stage contract: fame never gates package entry.
+
+    Fame is stage-2 (branch selection) and stage-3 (outcome) vocabulary only.
+    A package gate that reads the actor's fame would make recognizability
+    decide *whether* a behavior fires instead of *how* it is performed, which
+    the locked design forbids.
+    """
+
+    offenders: list[str] = []
+    for template in templates:
+        for leaf in _condition_tree_leaves(template.package_gate):
+            name = getattr(leaf, "__name__", "")
+            if name.startswith(_FAME_PREDICATE_NAME_PREFIXES):
+                offenders.append(f"{template.id}: {name}")
+    if offenders:
+        raise ValueError(
+            "Fame predicates are stage-2/3 only and must not appear in "
+            "package gates (issue #282 stage contract): " + ", ".join(sorted(offenders))
         )
 
 
