@@ -122,6 +122,11 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
             ),
         ],
     )
+    monkeypatch.setattr(
+        retrograde_vocabulary,
+        "read_event_types",
+        lambda _dbname: ["live_warning"],
+    )
 
     vocabulary = enumerate_seed_eligible_vocabulary(dbname="save_05")
     policies = {
@@ -141,6 +146,7 @@ def test_seed_eligible_vocabulary_classifies_registered_categories(
     assert vocabulary["registered_tags_by_seed_policy"]["prompt_visible_only"] == [
         "untested_signal"
     ]
+    assert vocabulary["event_types"] == ["live_warning"]
 
 
 def test_category_seed_policy_returns_complete_struct() -> None:
@@ -161,21 +167,21 @@ def test_seed_eligible_pair_tags_are_sorted() -> None:
     """Stable ordering keeps snapshots and future prompt generation deterministic."""
 
     vocabulary = enumerate_seed_eligible_vocabulary()
-    list_keys = (
-        "entity_kinds",
-        "slots",
-        "single_entity_tag_anchors",
-        "durable_tags",
-        "ephemeral_tags",
-        "current_tags",
-        "applied_tags",
-        "registered_single_entity_tags",
-        "registered_tag_categories",
-        "multi_entity_tag_families",
-        "event_types",
-        "place_classes",
-        "relationship_types",
+    sorted_buckets = (
+        vocabulary["entity_kinds"],
+        vocabulary["slots"],
+        vocabulary["single_entity_tag_anchors"],
+        vocabulary["durable_tags"],
+        vocabulary["ephemeral_tags"],
+        vocabulary["current_tags"],
+        vocabulary["applied_tags"],
+        vocabulary["registered_single_entity_tags"],
+        vocabulary["registered_tag_categories"],
+        vocabulary["multi_entity_tag_families"],
+        vocabulary["event_types"],
+        vocabulary["place_classes"],
+        vocabulary["relationship_types"],
     )
 
-    for key in list_keys:
-        assert vocabulary[key] == sorted(vocabulary[key])
+    for values in sorted_buckets:
+        assert values == sorted(values)

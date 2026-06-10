@@ -53,6 +53,7 @@ def test_expansion_prompt_includes_selected_seeds_and_commit_blockers() -> None:
     assert "RETROGRADE_EXPANSION_REQUEST" in prompt
     assert "seed_001" in prompt
     assert "pre_game_tick_chunk_id" in prompt
+    assert "relationship_plan currently supports only character->character" in prompt
     assert RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION in prompt
 
 
@@ -102,6 +103,24 @@ def test_expansion_plan_validates_pair_tag_kinds() -> None:
     with pytest.raises(
         RetrogradeExpansionValidationError,
         match="does not allow object_kind",
+    ):
+        validate_expansion_plan(
+            payload=payload,
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_rejects_cross_kind_relationships() -> None:
+    """R6 relationship writes are limited to character-character rows."""
+
+    vocabulary = _expansion_test_vocabulary()
+    payload = _valid_expansion(vocabulary)
+    payload["relationship_plan"][0]["subject_kind"] = "faction"
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="must be character->character",
     ):
         validate_expansion_plan(
             payload=payload,

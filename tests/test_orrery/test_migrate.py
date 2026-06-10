@@ -62,6 +62,24 @@ def test_relationship_valence_migration_uses_explicit_mapping() -> None:
         assert f"WHEN '{label}' THEN {magnitude}" in migration_sql
 
 
+def test_retrograde_persistence_migration_adds_distinct_sources() -> None:
+    """Retrograde canonical writes need explicit event and tag provenance."""
+
+    migration_source = (
+        Path(__file__).parent.parent.parent
+        / "migrations"
+        / "060_retrograde_persistence_sources.py"
+    ).read_text()
+
+    assert '_add_enum_value(conn, "event_source_kind", RETROGRADE_SOURCE)' in (
+        migration_source
+    )
+    assert '_add_enum_value(conn, "entity_tag_source_kind", RETROGRADE_SOURCE)' in (
+        migration_source
+    )
+    assert "ALTER TYPE {} ADD VALUE IF NOT EXISTS {}" in migration_source
+
+
 def test_place_affordance_migration_corrects_category_conflicts() -> None:
     """Place affordance vocabulary must not silently keep wrong categories."""
 
