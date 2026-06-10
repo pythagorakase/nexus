@@ -1,7 +1,26 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   LOCAL DISPLAY FONTS
-   Decorative fonts for headings and display text
+   LOCAL FONTS — KEEPERS ONLY
+   One font per slot per theme (the canonical "keeper" matrix; see
+   FontContext.tsx and the NEXUS IRIS design system handoff):
+
+     Slot      Veil (default)   Gilded               Vector
+     Marquee   Megrim           Monoton              Sixtyfour
+     Menu      Cinzel           Space Mono           Source Code Pro
+     Body      Spectral         Cormorant Garamond   Rajdhani
+
+   All families are self-hosted — no CDN dependency. Earlier candidates
+   (Major Mono Display, Jura, Libre Baskerville, Courier Prime) were rejected
+   and are no longer shipped.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Marquee fonts ─── */
+@font-face {
+  font-family: 'Megrim';
+  src: url('/fonts/Megrim-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
 @font-face {
   font-family: 'Monoton';
@@ -12,18 +31,140 @@
 }
 
 @font-face {
-  font-family: 'Major Mono Display';
-  src: url('/fonts/MajorMonoDisplay-Regular.ttf') format('truetype');
+  font-family: 'Sixtyfour';
+  src: url('/fonts/Sixtyfour-Variable.ttf') format('truetype');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Menu / chrome fonts ─── */
+@font-face {
+  font-family: 'Cinzel';
+  src: url('/fonts/Cinzel-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Sixtyfour';
-  src: url('/fonts/Sixtyfour-Variable.ttf') format('truetype');
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  src: url('/fonts/SpaceMono-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  src: url('/fonts/SourceCodePro-VariableFont_wght.ttf') format('truetype');
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Code Pro';
+  src: url('/fonts/SourceCodePro-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 200 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ─── Body / narrative fonts ─── */
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-MediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-SemiBoldItalic.ttf') format('truetype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Spectral';
+  src: url('/fonts/Spectral-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('/fonts/CormorantGaramond-VariableFont_wght.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  src: url('/fonts/CormorantGaramond-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 300 700;
+  font-style: italic;
   font-display: swap;
 }
 
@@ -35,29 +176,14 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Jura';
-  src: url('/fonts/Jura-VariableFont_wght.ttf') format('truetype');
-  font-weight: 300 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Megrim';
-  src: url('/fonts/Megrim-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent white flash during page transitions - matches dark theme background */
+/* Prevent white flash during page transitions - matches the Veil (default
+   theme) deep blue-black page background */
 html {
-  background-color: #0a0a0a;
+  background-color: #09101c;
 }
 
 /* LIGHT MODE */
@@ -184,10 +310,156 @@ html {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   GILDED ART DECO THEME (DEFAULT)
-   Ink black + warm brass + Cormorant Garamond
+   VEIL THEME (DEFAULT) — Art Nouveau
+   Deep blue-black + magenta + coral + warm cream. Spectral body, Cinzel
+   chrome, Megrim marquee. Veil is the canonical theme: bare `.dark` is Veil;
+   Gilded and Vector are override classes (.theme-gilded / .theme-vector).
    ═══════════════════════════════════════════════════════════════════════════ */
 .dark {
+  --button-outline: rgba(184, 61, 122, .15);
+  --badge-outline: rgba(184, 61, 122, .10);
+
+  --opaque-button-border-intensity: 12;
+
+  /* Magenta-tinted elevation overlays */
+  --elevate-1: rgba(184, 61, 122, 0.05);
+  --elevate-2: rgba(184, 61, 122, 0.10);
+
+  /* Core Surfaces - Deep Blue-Black */
+  --background: 220 40% 6%;
+  /* #09101c */
+  --foreground: 42 45% 77%;
+  /* #e1cd97 warm cream */
+
+  --border: 270 30% 25%;
+  /* deep violet */
+
+  /* Cards/Panels */
+  --card: 220 35% 8%;
+  /* #0d1320 */
+  --card-foreground: 42 45% 77%;
+  --card-border: 270 30% 32%;
+  /* deep violet, stronger */
+
+  /* Sidebar */
+  --sidebar-background: 220 40% 5%;
+  --sidebar-foreground: 42 45% 77%;
+  --sidebar-border: 270 30% 20%;
+  --sidebar-primary: 320 55% 48%;
+  /* #b83d7a magenta rose */
+  --sidebar-primary-foreground: 42 45% 92%;
+  --sidebar-accent: 15 75% 60%;
+  --sidebar-accent-foreground: 220 40% 6%;
+  --sidebar-ring: 320 55% 48%;
+
+  /* Popover */
+  --popover: 220 35% 8%;
+  --popover-foreground: 42 45% 77%;
+  --popover-border: 270 30% 32%;
+
+  /* Primary - Magenta Rose #b83d7a */
+  --primary: 320 55% 48%;
+  --primary-foreground: 42 45% 92%;
+
+  /* Secondary - Copper */
+  --secondary: 27 45% 46%;
+  --secondary-foreground: 42 45% 90%;
+
+  /* Muted - Deep Violet */
+  --muted: 270 40% 20%;
+  --muted-foreground: 42 30% 65%;
+
+  /* Accent - Coral #e86a4a */
+  --accent: 15 75% 60%;
+  --accent-foreground: 220 40% 6%;
+
+  /* Destructive */
+  --destructive: 0 65% 50%;
+  --destructive-foreground: 0 0% 98%;
+
+  /* Form elements */
+  --input: 270 30% 18%;
+  --ring: 320 55% 48%;
+
+  /* Charts - magenta leads */
+  --chart-1: 320 55% 48%;
+  --chart-2: 15 75% 60%;
+  --chart-3: 27 45% 46%;
+  --chart-4: 270 40% 45%;
+  --chart-5: 42 45% 70%;
+
+  /* Typography - Veil keepers (FontContext overrides at runtime) */
+  --font-sans: 'Spectral', Georgia, serif;
+  --font-serif: 'Spectral', Georgia, serif;
+  --font-mono: 'Cinzel', 'Cormorant Garamond', serif;
+  --font-display: 'Megrim', 'Cinzel', serif;
+  --radius: 0.25rem;
+
+  /* Shadows - warm magenta tint */
+  --shadow-sm: 0 1px 2px 0 hsl(320 45% 10% / 0.25);
+  --shadow: 0 1px 3px 0 hsl(320 45% 10% / 0.2), 0 1px 2px -1px hsl(320 45% 10% / 0.2);
+  --shadow-md: 0 4px 6px -1px hsl(320 45% 10% / 0.15), 0 2px 4px -2px hsl(320 45% 10% / 0.1);
+  --shadow-lg: 0 10px 15px -3px hsl(320 45% 10% / 0.15), 0 4px 6px -4px hsl(320 45% 10% / 0.1);
+
+  /* ─── Brand tokens (NEXUS IRIS design system — lift these, never invent) ─── */
+  --bg: hsl(220 40% 6%);
+  --bg-elev-1: hsl(220 40% 5%);
+  --bg-elev-2: hsl(220 35% 8%);
+  --bg-elev-3: hsl(220 35% 10%);
+  --bg-overlay: rgba(9, 16, 28, 0.86);
+  --fg: hsl(42 45% 77%);
+  --fg-muted: hsl(42 30% 65%);
+  --fg-dim: hsl(42 20% 50%);
+  --brass: hsl(320 55% 48%);
+  /* magenta rose — PRIMARY (legacy name from the Gilded era) */
+  --brass-bright: hsl(320 60% 60%);
+  --brass-hot: hsl(15 80% 65%);
+  --bronze: hsl(15 75% 60%);
+  /* coral — ACCENT */
+  --bronze-dark: hsl(27 45% 46%);
+  /* copper — SECONDARY */
+  --magenta: hsl(320 55% 48%);
+  --magenta-light: hsl(320 60% 60%);
+  --coral: hsl(15 75% 60%);
+  --copper: hsl(27 45% 46%);
+  --deep-violet: hsl(270 40% 28%);
+  --border-strong: hsl(270 30% 32%);
+  --border-faint: hsl(270 25% 16%);
+  --glow-soft: 0 0 8px hsl(320 55% 48% / 0.55), 0 0 18px hsl(15 75% 60% / 0.25);
+  --glow-strong: 0 0 10px currentColor, 0 0 22px currentColor;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --track-wide: 0.05em;
+  --track-wider: 0.1em;
+  --track-widest: 0.25em;
+  --font-menu: var(--font-mono);
+  --font-body: var(--font-serif);
+  --font-narrative: var(--font-serif);
+
+  /* Computed borders */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GILDED THEME — Art Deco (override class)
+   Ink black + warm brass + cream. Cormorant Garamond body, Space Mono chrome,
+   Monoton marquee.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.dark.theme-gilded,
+.theme-gilded .dark {
   --button-outline: rgba(201, 162, 39, .15);
   --badge-outline: rgba(201, 162, 39, .08);
 
@@ -214,7 +486,7 @@ html {
   /* brass border */
 
   /* Sidebar */
-  --sidebar: 0 0% 5%;
+  --sidebar-background: 0 0% 5%;
   --sidebar-foreground: 45 20% 93%;
   --sidebar-border: 43 35% 25%;
   --sidebar-primary: 43 74% 47%;
@@ -266,10 +538,10 @@ html {
   --chart-5: 50 30% 50%;
   /* muted gold */
 
-  /* Typography - Cormorant Garamond for body, mono font controlled by FontContext */
+  /* Typography - Gilded keepers (FontContext overrides at runtime) */
   --font-sans: 'Cormorant Garamond', Georgia, serif;
   --font-serif: 'Cormorant Garamond', Georgia, serif;
-  /* NOTE: --font-mono and --font-display are set dynamically by FontContext */
+  --font-mono: 'Space Mono', 'Source Code Pro', monospace;
   --font-display: 'Monoton', fantasy;
 
   /* Sharper corners for Art Deco aesthetic */
@@ -285,6 +557,27 @@ html {
   --shadow-lg: 0px 6px 12px 0px hsl(43 50% 10% / 0.4);
   --shadow-xl: 0px 8px 16px 0px hsl(43 50% 10% / 0.4);
   --shadow-2xl: 0px 12px 24px 0px hsl(43 50% 10% / 0.45);
+
+  /* ─── Brand tokens (NEXUS IRIS design system) ─── */
+  --bg: hsl(0 0% 4%);
+  --bg-elev-1: hsl(0 0% 5%);
+  --bg-elev-2: hsl(0 0% 7%);
+  --bg-elev-3: hsl(0 0% 8%);
+  --bg-overlay: rgba(10, 10, 11, 0.85);
+  --fg: hsl(45 20% 93%);
+  --fg-muted: hsl(43 40% 52%);
+  --fg-dim: hsl(43 30% 40%);
+  --brass: hsl(43 74% 47%);
+  --brass-bright: hsl(45 55% 60%);
+  --brass-hot: hsl(45 80% 70%);
+  --bronze: hsl(30 50% 45%);
+  --bronze-dark: hsl(35 40% 35%);
+  --border-strong: hsl(43 40% 28%);
+  --border-faint: hsl(43 30% 15%);
+  --glow-soft: 0 0 8px hsl(43 74% 47% / 0.5), 0 0 16px hsl(43 74% 47% / 0.25);
+  --glow-strong: 0 0 10px currentColor, 0 0 20px currentColor;
+  --radius-sm: 2px;
+  --radius-md: 4px;
 
   /* Computed borders */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -380,6 +673,27 @@ html {
 
   --radius: .25rem;
 
+  /* ─── Brand tokens (NEXUS IRIS design system) ─── */
+  --bg: hsl(180 30% 3%);
+  --bg-elev-1: hsl(180 30% 4%);
+  --bg-elev-2: hsl(180 30% 5%);
+  --bg-elev-3: hsl(180 30% 6%);
+  --bg-overlay: rgba(5, 12, 14, 0.85);
+  --fg: hsl(180 30% 90%);
+  --fg-muted: hsl(185 40% 55%);
+  --fg-dim: hsl(185 30% 40%);
+  --brass: hsl(185 100% 50%);
+  /* neon cyan */
+  --brass-bright: hsl(190 80% 60%);
+  --brass-hot: hsl(160 80% 60%);
+  --bronze: hsl(200 90% 55%);
+  --bronze-dark: hsl(260 60% 60%);
+  --border-strong: hsl(185 50% 28%);
+  --border-faint: hsl(185 50% 14%);
+  --glow-soft: 0 0 8px hsl(185 100% 50% / 0.6), 0 0 16px hsl(185 100% 50% / 0.3);
+  --glow-strong: 0 0 10px currentColor, 0 0 20px currentColor;
+  --radius-sm: 4px;
+
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
   --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00),
@@ -410,111 +724,18 @@ html {
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   VEIL THEME (Art Nouveau)
-   Mystical coral/magenta aesthetic with ornamental frames
-   ═══════════════════════════════════════════════════════════════════════════ */
-.dark.theme-veil,
-.theme-veil .dark {
-  --button-outline: rgba(184, 61, 122, .15);
-  --badge-outline: rgba(184, 61, 122, .10);
-
-  --opaque-button-border-intensity: 12;
-
-  --elevate-1: rgba(184, 61, 122, 0.04);
-  --elevate-2: rgba(184, 61, 122, 0.08);
-
-  /* Deep Blue-Black Background */
-  --background: 220 40% 6%;
-  --foreground: 42 45% 77%;
-
-  /* Magenta Primary - the signature Veil color */
-  --primary: 320 55% 48%;
-  --primary-foreground: 42 45% 92%;
-
-  /* Coral Accent - warm complement */
-  --accent: 15 75% 60%;
-  --accent-foreground: 220 40% 6%;
-
-  /* Deep Violet Muted */
-  --muted: 270 40% 20%;
-  --muted-foreground: 42 30% 65%;
-
-  /* Copper Secondary */
-  --secondary: 27 45% 46%;
-  --secondary-foreground: 42 45% 90%;
-
-  /* Destructive */
-  --destructive: 0 65% 50%;
-  --destructive-foreground: 0 0% 98%;
-
-  /* Borders & Cards */
-  --border: 270 30% 25%;
-  --ring: 320 55% 48%;
-  --card: 220 35% 8%;
-  --card-foreground: 42 45% 77%;
-  --popover: 220 35% 8%;
-  --popover-foreground: 42 45% 77%;
-  --input: 270 30% 18%;
-
-  /* Chart Colors - magenta leads */
-  --chart-1: 320 55% 48%;
-  --chart-2: 15 75% 60%;
-  --chart-3: 27 45% 46%;
-  --chart-4: 270 40% 45%;
-  --chart-5: 42 45% 70%;
-
-  /* Sidebar */
-  --sidebar-background: 220 40% 5%;
-  --sidebar-foreground: 42 45% 77%;
-  --sidebar-primary: 320 55% 48%;
-  --sidebar-primary-foreground: 42 45% 92%;
-  --sidebar-accent: 15 75% 60%;
-  --sidebar-accent-foreground: 220 40% 6%;
-  --sidebar-border: 270 30% 20%;
-  --sidebar-ring: 320 55% 48%;
-
-  /* Typography - Spectral body, Cinzel display/menu */
-  --font-sans: 'Spectral', Georgia, serif;
-  --font-serif: 'Spectral', Georgia, serif;
-  --font-mono: 'Cinzel', serif;  /* Used for UI elements with small-caps */
-  --font-display: 'Cinzel', serif;
-  --radius: 0.25rem;
-
-  /* Shadows - warm magenta tint */
-  --shadow-sm: 0 1px 2px 0 hsl(320 45% 10% / 0.25);
-  --shadow: 0 1px 3px 0 hsl(320 45% 10% / 0.2), 0 1px 2px -1px hsl(320 45% 10% / 0.2);
-  --shadow-md: 0 4px 6px -1px hsl(320 45% 10% / 0.15), 0 2px 4px -2px hsl(320 45% 10% / 0.1);
-  --shadow-lg: 0 10px 15px -3px hsl(320 45% 10% / 0.15), 0 4px 6px -4px hsl(320 45% 10% / 0.1);
-
-  /* Computed borders */
-  --sidebar-primary-border: hsl(var(--sidebar-primary));
-  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --sidebar-accent-border: hsl(var(--sidebar-accent));
-  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --primary-border: hsl(var(--primary));
-  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --secondary-border: hsl(var(--secondary));
-  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --muted-border: hsl(var(--muted));
-  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --accent-border: hsl(var(--accent));
-  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-  --destructive-border: hsl(var(--destructive));
-  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-}
-
-/* Veil theme font variants: small-caps for mono, uppercase for display */
-.dark.theme-veil .font-mono {
+/* Veil theme font variants: small-caps for mono, uppercase for display.
+   Veil is the default theme (bare .dark), so exclude the override classes. */
+.dark:not(.theme-gilded):not(.theme-vector) .font-mono {
   font-variant: small-caps;
 }
-.dark.theme-veil .font-display {
+.dark:not(.theme-gilded):not(.theme-vector) .font-display {
   text-transform: uppercase;
 }
 /* Reset inherited small-caps on body text classes */
-.dark.theme-veil .font-serif,
-.dark.theme-veil .font-sans,
-.dark.theme-veil .font-narrative {
+.dark:not(.theme-gilded):not(.theme-vector) .font-serif,
+.dark:not(.theme-gilded):not(.theme-vector) .font-sans,
+.dark:not(.theme-gilded):not(.theme-vector) .font-narrative {
   font-variant: normal;
   text-transform: none;
 }

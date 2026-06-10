@@ -18,7 +18,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'nexus-theme';
-const DEFAULT_THEME: Theme = 'gilded';
+const DEFAULT_THEME: Theme = 'veil';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
@@ -31,13 +31,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('dark');
-    // Remove all theme classes first
-    root.classList.remove('theme-vector', 'theme-veil');
-    // Add the appropriate theme class
-    if (theme === 'vector') {
+    // Veil is the default theme (bare .dark); Gilded and Vector are override
+    // classes. Remove all override classes first (theme-veil is legacy).
+    root.classList.remove('theme-gilded', 'theme-vector', 'theme-veil');
+    if (theme === 'gilded') {
+      root.classList.add('theme-gilded');
+    } else if (theme === 'vector') {
       root.classList.add('theme-vector');
-    } else if (theme === 'veil') {
-      root.classList.add('theme-veil');
     }
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);

@@ -15,6 +15,18 @@
   "extracted_from": "AdobeStock-549888080-ArtDecoFrames.ai",
   "extractor": ".claude/skills/extract-vector-grid",
   "naming_convention": "`name` is always non-null. When `name` equals the file stem (e.g. \"r1c2\"), the frame still awaits a human-vetted descriptive label. When `name` differs (e.g. an Art Deco label like \"SunburstCorner\"), it's a curated label.",
+  "derived": [
+    {
+      "file": "r1c1.png",
+      "from": "r1c1.svg",
+      "description": "Raster render of r1c1 from the NEXUS IRIS design handoff (the frame chosen for the Gilded splash window border)."
+    },
+    {
+      "file": "frames-meta.ts",
+      "from": "r1c1.svg ... r3c3.svg",
+      "description": "Measured multi-band slicing geometry (safe stretch zones + per-band ink centers) for all nine frames, from the NEXUS IRIS design handoff. Enables distortion-free frame resizing; do not replace with naive CSS border-image 9-slice."
+    }
+  ],
   "grid": {"rows": 3, "cols": 3},
   "frames": [
     {"file": "r1c1.svg", "position": [1, 1], "name": "r1c1"},
