@@ -150,6 +150,40 @@ def test_persistence_plan_counts_vocabulary_blocked_events() -> None:
     assert "missing_slot_vocabulary" in _blocker_ids(plan)
 
 
+def test_persistence_plan_blocks_entity_kind_incompatible_tags() -> None:
+    """Registered tag names still have to fit the target entity kind."""
+
+    vocabulary = _persistence_test_vocabulary()
+    cur = FakeRetrogradePersistenceCursor(vocabulary)
+    expansion = _valid_expansion(vocabulary)
+    expansion["entity_tag_plan"][0] = {
+        "entity_ref": "Shutter Hall",
+        "entity_kind": "place",
+        "tag": "grieving",
+        "source_event_ref": "retro_event_001",
+    }
+
+    plan = build_retrograde_persistence_plan(
+        cur,
+        packet=_packet(vocabulary),
+        seed_candidate_response=_seed_response(vocabulary),
+        expansion_plan_payload=expansion,
+        slot=5,
+        dbname="save_05",
+        dry_run=True,
+    )
+
+    assert plan["counters"]["entity_tags_blocked"] == 1
+    assert plan["counters"]["entity_tags_would_insert"] == 1
+    assert "missing_slot_vocabulary" in _blocker_ids(plan)
+    assert any(
+        issue["value"] == "grieving"
+        and issue["entity_kind"] == "place"
+        and issue["reason"] == "tag category is not registered for this entity kind"
+        for issue in plan["vocabulary_issues"]
+    )
+
+
 def test_persistence_execute_writes_canonical_rows() -> None:
     """Execute mode reaches the canonical write helpers when blockers are clear."""
 
@@ -269,8 +303,18 @@ class FakeRetrogradePersistenceCursor:
             self._result = [{"type": event_type} for event_type in event_types]
         elif "orrery:retrograde:single_entity_tags" in sql:
             self._result = [
-                {"id": 1, "tag": "grieving"},
-                {"id": 2, "tag": "scholar"},
+                {
+                    "id": 1,
+                    "tag": "grieving",
+                    "category": "state",
+                    "entity_kind": "character",
+                },
+                {
+                    "id": 2,
+                    "tag": "scholar",
+                    "category": "role.function",
+                    "entity_kind": "character",
+                },
             ]
         elif "orrery:retrograde:pair_tags" in sql:
             self._result = [{"id": 3, "tag": "knows_location"}]

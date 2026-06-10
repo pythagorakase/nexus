@@ -51,6 +51,13 @@ class _EntityRecord:
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class _TagRecord:
+    tag_id: int
+    category: str
+    entity_kinds: frozenset[str]
+
+
 def build_retrograde_persistence_plan(
     cur: Any,
     *,
@@ -78,7 +85,7 @@ def build_retrograde_persistence_plan(
     existing_prologue_id = _find_prologue_chunk_id(cur)
     entity_index = _load_entity_index(cur)
     event_types = _load_event_types(cur)
-    tag_ids = _load_tag_ids(cur)
+    tag_records = _load_tag_records(cur)
     pair_tag_ids = _load_pair_tag_ids(cur)
     source_blockers = _source_kind_blockers(cur)
     world_time = _load_world_time(cur)
@@ -92,7 +99,7 @@ def build_retrograde_persistence_plan(
         prologue_chunk_id=existing_prologue_id,
         entity_index=entity_index,
         event_types=event_types,
-        tag_ids=tag_ids,
+        tag_records=tag_records,
         pair_tag_ids=pair_tag_ids,
         source_blockers=source_blockers,
         world_time=world_time,
@@ -128,7 +135,7 @@ def build_retrograde_persistence_plan(
         prologue_chunk_id=prologue_chunk_id,
         entity_index=entity_index,
         event_types=event_types,
-        tag_ids=tag_ids,
+        tag_records=tag_records,
         pair_tag_ids=pair_tag_ids,
         source_blockers=source_blockers,
         world_time=world_time,
@@ -148,7 +155,7 @@ def _build_plan(
     prologue_chunk_id: Optional[int],
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
     event_types: set[str],
-    tag_ids: Mapping[str, int],
+    tag_records: Mapping[str, _TagRecord],
     pair_tag_ids: Mapping[str, int],
     source_blockers: list[dict[str, str]],
     world_time: Any,
@@ -205,7 +212,7 @@ def _build_plan(
             tag_plan=tag_plan.model_dump(mode="json"),
             dry_run=dry_run,
             entity_index=entity_index,
-            tag_ids=tag_ids,
+            tag_records=tag_records,
             world_time=world_time,
             creatable_refs=creatable_refs,
         )
@@ -422,7 +429,7 @@ def _plan_entity_tag_row(
     tag_plan: Mapping[str, Any],
     dry_run: bool,
     entity_index: Mapping[tuple[str, str], Sequence[_EntityRecord]],
-    tag_ids: Mapping[str, int],
+    tag_records: Mapping[str, _TagRecord],
     world_time: Any,
     creatable_refs: frozenset[tuple[str, str]],
 ) -> dict[str, Any]:
@@ -438,8 +445,9 @@ def _plan_entity_tag_row(
     if entity["resolution"] not in {"resolved", "stub_pending"}:
         reference_issues.append(entity)
     tag = str(tag_plan["tag"])
-    tag_id = tag_ids.get(tag)
-    if tag_id is None:
+    tag_record = tag_records.get(tag)
+    tag_id = tag_record.tag_id if tag_record is not None else None
+    if tag_record is None:
         vocabulary_issues.append(
             {
                 "kind": "single_entity_tag",
@@ -448,6 +456,20 @@ def _plan_entity_tag_row(
                 "reason": "tag is not registered in this slot",
             }
         )
+    else:
+        entity_kind = str(entity.get("entity_kind") or tag_plan["entity_kind"])
+        if entity_kind not in tag_record.entity_kinds:
+            vocabulary_issues.append(
+                {
+                    "kind": "single_entity_tag",
+                    "entity_ref": tag_plan["entity_ref"],
+                    "entity_kind": entity_kind,
+                    "value": tag,
+                    "category": tag_record.category,
+                    "allowed_entity_kinds": sorted(tag_record.entity_kinds),
+                    "reason": ("tag category is not registered for this entity kind"),
+                }
+            )
 
     base = {
         **dict(tag_plan),
@@ -1086,18 +1108,42 @@ def _load_event_types(cur: Any) -> set[str]:
     return {str(_row_value(row, "type", 0)) for row in cur.fetchall()}
 
 
-def _load_tag_ids(cur: Any) -> dict[str, int]:
+def _load_tag_records(cur: Any) -> dict[str, _TagRecord]:
     cur.execute(
         """
         /* orrery:retrograde:single_entity_tags */
-        SELECT id, tag
-        FROM tags
-        WHERE deprecated = false AND synonym_for IS NULL
+        SELECT
+            t.id,
+            t.tag,
+            t.category,
+            r.entity_kind::text AS entity_kind
+        FROM tags t
+        LEFT JOIN tag_category_registry r ON r.category = t.category
+        WHERE t.deprecated = false AND t.synonym_for IS NULL
+        ORDER BY t.tag, r.entity_kind::text
         """
     )
+    rows_by_tag: dict[str, dict[str, Any]] = {}
+    for row in cur.fetchall():
+        tag = str(_row_value(row, "tag", 1))
+        entry = rows_by_tag.setdefault(
+            tag,
+            {
+                "tag_id": int(_row_value(row, "id", 0)),
+                "category": str(_row_value(row, "category", 2)),
+                "entity_kinds": set(),
+            },
+        )
+        entity_kind = _row_value(row, "entity_kind", 3)
+        if entity_kind is not None:
+            entry["entity_kinds"].add(str(entity_kind))
     return {
-        str(_row_value(row, "tag", 1)): int(_row_value(row, "id", 0))
-        for row in cur.fetchall()
+        tag: _TagRecord(
+            tag_id=int(entry["tag_id"]),
+            category=str(entry["category"]),
+            entity_kinds=frozenset(entry["entity_kinds"]),
+        )
+        for tag, entry in rows_by_tag.items()
     }
 
 
