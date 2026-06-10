@@ -499,11 +499,14 @@ export class PostgresStorage implements IStorage {
   async getCurrentPlace(slot?: number | null): Promise<CurrentPlace | null> {
     const db = getDb(slot) || this.db;
     // The narrative's current location = the 'setting' place reference on
-    // the most recent committed chunk that has one. Read-only.
+    // the most recent COMMITTED chunk that has one. Committed = has a
+    // chunk_metadata row (same convention as getLatestChunk); without the
+    // join, a draft/incubator chunk's setting would leak in. Read-only.
     const result = await db.execute(sql`
       SELECT pcr.place_id, p.name, pcr.chunk_id
       FROM place_chunk_references pcr
       JOIN places p ON p.id = pcr.place_id
+      JOIN chunk_metadata cm ON cm.chunk_id = pcr.chunk_id
       WHERE pcr.reference_type = 'setting'
       ORDER BY pcr.chunk_id DESC
       LIMIT 1
