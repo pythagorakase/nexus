@@ -471,14 +471,25 @@ def _tier_rank(
     entity_id: int,
     ranks: Mapping[str, int],
     default_tier: str,
+    ladder: str,
 ) -> int:
-    """Return an entity's rank on an exclusive tier ladder (durable tags)."""
+    """Return an entity's rank on an exclusive tier ladder (durable tags).
 
-    present = [
-        ranks[tag] for tag in state.tags.get(entity_id, frozenset()) if tag in ranks
-    ]
+    Tier ladders are exclusive-cardinality registry categories: an entity
+    carrying more than one tier tag on the same ladder is corrupt state, and
+    corrupt state must surface loudly rather than be quietly resolved.
+    """
+
+    present = sorted(
+        tag for tag in state.tags.get(entity_id, frozenset()) if tag in ranks
+    )
+    if len(present) > 1:
+        raise ValueError(
+            f"Entity {entity_id} holds multiple {ladder} tier tags {present}; "
+            f"{ladder} is an exclusive ladder"
+        )
     if present:
-        return max(present)
+        return ranks[present[0]]
     return ranks[default_tier]
 
 
@@ -507,7 +518,7 @@ def fame_at_or_above(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
         if entity_id is None:
             return False
         return (
-            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER)
+            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER, "fame")
             >= threshold
         )
 
@@ -528,7 +539,8 @@ def fame_below(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
         if entity_id is None:
             return False
         return (
-            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER) < threshold
+            _tier_rank(state, entity_id, FAME_TIER_RANKS, DEFAULT_FAME_TIER, "fame")
+            < threshold
         )
 
     return _named(_condition, f"fame_below({normalized}@{slot.value})")
@@ -549,7 +561,13 @@ def resources_at_or_above(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
         if entity_id is None:
             return False
         return (
-            _tier_rank(state, entity_id, RESOURCES_TIER_RANKS, DEFAULT_RESOURCES_TIER)
+            _tier_rank(
+                state,
+                entity_id,
+                RESOURCES_TIER_RANKS,
+                DEFAULT_RESOURCES_TIER,
+                "resources",
+            )
             >= threshold
         )
 
@@ -567,7 +585,13 @@ def resources_below(tier: str, slot: Slot = Slot.ACTOR) -> Condition:
         if entity_id is None:
             return False
         return (
-            _tier_rank(state, entity_id, RESOURCES_TIER_RANKS, DEFAULT_RESOURCES_TIER)
+            _tier_rank(
+                state,
+                entity_id,
+                RESOURCES_TIER_RANKS,
+                DEFAULT_RESOURCES_TIER,
+                "resources",
+            )
             < threshold
         )
 
@@ -590,6 +614,11 @@ def has_any_status_at_or_above(threshold: str, slot: Slot = Slot.ACTOR) -> Condi
         entity_id = _slot_entity(bindings, slot)
         if entity_id is None:
             return False
+        # Known cost: O(total pair-tag relationships) per evaluation, the
+        # same shape as _has_outbound_pair_tag / _has_inbound_pair_tag.
+        # WorldState.pair_tags is keyed by (subject, object) with no subject
+        # index; if stage-3 encounter rolls make this measurable, add a
+        # derived pair_tags_by_subject map at hydration rather than here.
         for (subject_id, _object_id), tags in state.pair_tags.items():
             if subject_id != entity_id:
                 continue

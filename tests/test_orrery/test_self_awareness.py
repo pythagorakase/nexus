@@ -112,6 +112,23 @@ def test_tier_predicates_reject_unknown_tiers() -> None:
         resources_below("broke")
 
 
+def test_multiple_tier_tags_on_one_ladder_raise_loudly() -> None:
+    """Exclusive ladders treat multiple tier tags as corrupt state, no fallback."""
+
+    corrupt_fame = _state(actor_tags=frozenset({"known", "legendary"}))
+    with pytest.raises(ValueError, match="multiple fame tier tags"):
+        fame_at_or_above("obscure")(corrupt_fame, ACTOR_BINDINGS)
+
+    corrupt_resources = _state(actor_tags=frozenset({"poor", "wealthy"}))
+    with pytest.raises(ValueError, match="multiple resources tier tags"):
+        resources_below("magnate")(corrupt_resources, ACTOR_BINDINGS)
+
+    # One tag per ladder across DIFFERENT ladders is fine.
+    cross_ladder = _state(actor_tags=frozenset({"legendary", "magnate"}))
+    assert fame_at_or_above("legendary")(cross_ladder, ACTOR_BINDINGS)
+    assert resources_at_or_above("magnate")(cross_ladder, ACTOR_BINDINGS)
+
+
 def test_tier_predicates_require_bound_entity() -> None:
     state = _state(actor_tags=frozenset({"legendary", "magnate"}))
     empty: dict = {}
@@ -352,6 +369,22 @@ def test_solitary_actor_with_a_contact_prefers_a_trusted_voice() -> None:
     assert resolution.branch_label == "Seek a trusted voice rather than a crowd"
 
 
+def test_renowned_solitary_actor_hosts_rather_than_calls() -> None:
+    """Branch-order pin: fame outranks disposition when both branches match.
+
+    Fame is a structural constraint on WHERE company can happen (public rooms
+    reorganize around a renowned actor); disposition only shapes the medium.
+    The hosting branch is intentionally listed first.
+    """
+
+    state = _social_state(
+        frozenset({"renowned", "solitary"}), with_contact=True, at_venue=True
+    )
+    resolution = evaluate(SOCIALIZE, state, ACTOR_BINDINGS)
+    assert resolution.passes
+    assert resolution.branch_label == "Host chosen company on their own ground"
+
+
 # ---------------------------------------------------------------------------
 # WORK / TEND_CRAFT: resource-gated branches
 # ---------------------------------------------------------------------------
@@ -447,6 +480,20 @@ def test_renowned_unprepared_traveler_prepares_before_going_covert() -> None:
     )
     assert resolution.passes
     assert resolution.branch_label == "Prepare the journey rather than starting badly"
+
+
+def test_renowned_wealthy_prepared_traveler_charters_over_covert_routes() -> None:
+    """Branch-order pin: wealth precedence — a chartered private route is
+    already discreet, so the charter branch is intentionally listed before
+    covert routing and wins when both are satisfied."""
+
+    resolution = evaluate(
+        TRAVEL,
+        _travel_state(frozenset({"renowned", "wealthy", "travel_ready"})),
+        ACTOR_BINDINGS,
+    )
+    assert resolution.passes
+    assert resolution.branch_label == "Charter private transport"
 
 
 def test_ordinary_prepared_traveler_departs_normally() -> None:

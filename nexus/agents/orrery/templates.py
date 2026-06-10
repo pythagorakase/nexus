@@ -56,6 +56,7 @@ from nexus.agents.orrery.substrate import (
     travel_risk_is,
     trust_at_least,
     trust_below,
+    validate_no_fame_in_entry_gates,
     weather_is,
 )
 
@@ -3192,7 +3193,10 @@ SOCIALIZE = Template(
         # Self-awareness: a renowned-or-better actor cannot get casual
         # anonymous company from a public room — the room reorganizes
         # around them. Their socializing happens on ground they control,
-        # with people they already know.
+        # with people they already know. Listed before the disposition
+        # branch below deliberately: fame structurally constrains WHERE
+        # company can happen, so it outranks disposition (which only
+        # shapes the medium) when both match.
         Branch(
             label="Host chosen company on their own ground",
             conditions=AND(
@@ -3609,3 +3613,9 @@ BUILTIN_TEMPLATES = (
     INTIMACY,
     MAINTAIN_COVER,
 )
+
+# Enforce the issue #282 stage contract at import time: fame predicates are
+# stage-2/3 vocabulary and must never appear in stage-1 entry gating. A
+# fame-gated template added to this catalog raises immediately rather than
+# relying on test coverage.
+validate_no_fame_in_entry_gates(BUILTIN_TEMPLATES)
