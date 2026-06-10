@@ -78,8 +78,8 @@ def test_orrery_promote_accepts_deprecated_provider_key() -> None:
 
     assert settings.provider == "local"
     dumped = settings.model_dump()
-    assert dumped["priority_threshold"] == 50.0
-    assert dumped["magnitude_threshold"] == 0.5
+    assert dumped["priority_threshold"] == 30.0
+    assert dumped["magnitude_threshold"] == 0.35
     assert dumped["perceptual_summary_max_chars"] == 240
     assert "provider" not in dumped
 
