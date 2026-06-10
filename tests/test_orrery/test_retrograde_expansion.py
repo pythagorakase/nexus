@@ -150,6 +150,28 @@ def test_expansion_plan_requires_thread_for_each_selected_seed() -> None:
         )
 
 
+def test_expansion_plan_rejects_kind_incompatible_tag() -> None:
+    """Plan tags must be registered for their entity kind, as in persistence."""
+
+    vocabulary = _expansion_test_vocabulary()
+    # Seed-stage hints ('grieving' on a character) stay legal, but the
+    # expansion's 'scholar' tag on a character is no longer kind-registered.
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "character": ["grieving", "untested_signal"],
+        "faction": ["scholar"],
+    }
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="not registered for entity_kind",
+    ):
+        validate_expansion_plan(
+            payload=_valid_expansion(vocabulary),
+            packet=_packet(vocabulary),
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
 def test_expansion_plan_enforces_new_entity_budget() -> None:
     """Decision 8: refs beyond the first-class set respect the stub cap."""
 

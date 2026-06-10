@@ -379,6 +379,10 @@ def _response_contract_issues(
         policy: set(tags)
         for policy, tags in vocabulary.get("registered_tags_by_seed_policy", {}).items()
     }
+    tags_by_entity_kind = {
+        kind: set(tags)
+        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+    }
 
     for candidate in response.candidates:
         issues.extend(
@@ -391,6 +395,7 @@ def _response_contract_issues(
                 pair_definitions=pair_definitions,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
             )
         )
 
@@ -407,6 +412,7 @@ def _candidate_contract_issues(
     pair_definitions: Mapping[str, Mapping[str, Any]],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
 ) -> list[str]:
     issues: list[str] = []
     candidate_prefix = f"candidate {candidate.seed_id!r}"
@@ -443,6 +449,7 @@ def _candidate_contract_issues(
                 entity_kinds=entity_kinds,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
                 events_by_ref=events_by_ref,
             )
         )
@@ -477,6 +484,7 @@ def _single_tag_issues(
     entity_kinds: set[str],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
     events_by_ref: Mapping[str, RetrogradeSeedEventHint],
 ) -> list[str]:
     issues: list[str] = []
@@ -489,6 +497,19 @@ def _single_tag_issues(
         issues.append(
             f"{candidate_prefix} proposes unregistered single-entity tag "
             f"{tag_hint.tag!r}"
+        )
+        return issues
+    # Persistence resolves tag <-> entity-kind compatibility through the
+    # slot's tag_category_registry; enforce the same constraint here so an
+    # incompatible hint is repaired at generation time instead of blocking
+    # the wizard transition. Only enforceable when the live registry mapping
+    # is present in the vocabulary (i.e., enumeration ran against a slot).
+    if tags_by_entity_kind and tag_hint.tag not in tags_by_entity_kind.get(
+        tag_hint.entity_kind, set()
+    ):
+        issues.append(
+            f"{candidate_prefix} tag {tag_hint.tag!r} is not registered for "
+            f"entity_kind {tag_hint.entity_kind!r}"
         )
         return issues
 

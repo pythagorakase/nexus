@@ -1865,24 +1865,42 @@ def _prologue_anchor_plan(
     }
 
 
+_BLOCKER_DETAIL_LIMIT = 8
+
+
+def _blocker_details(parts: list[str]) -> str:
+    """Join blocker item details, truncating very long lists."""
+
+    shown = parts[:_BLOCKER_DETAIL_LIMIT]
+    suffix = "" if len(parts) <= _BLOCKER_DETAIL_LIMIT else ", ..."
+    return ", ".join(shown) + suffix
+
+
 def _append_reference_blockers(
     execute_blockers: list[dict[str, str]],
     reference_issues: Sequence[Mapping[str, Any]],
 ) -> None:
     if not reference_issues:
         return
-    unresolved_count = sum(
-        1
+    unresolved = [
+        issue
         for issue in reference_issues
         if issue.get("resolution") in {"unresolved", "ambiguous", "self_edge"}
-    )
-    if unresolved_count:
+    ]
+    if unresolved:
+        details = _blocker_details(
+            [
+                f"{issue.get('entity_kind')}:{issue.get('entity_ref')} "
+                f"({issue.get('resolution')})"
+                for issue in unresolved
+            ]
+        )
         execute_blockers.append(
             {
                 "id": "unresolved_or_ambiguous_entity_refs",
                 "reason": (
-                    f"{unresolved_count} entity references must resolve before "
-                    "Retrograde can write canonical rows"
+                    f"{len(unresolved)} entity references must resolve before "
+                    f"Retrograde can write canonical rows: {details}"
                 ),
             }
         )
@@ -1894,12 +1912,18 @@ def _append_vocabulary_blockers(
 ) -> None:
     if not vocabulary_issues:
         return
+    details = _blocker_details(
+        [
+            f"{issue.get('kind')}:{issue.get('value')} ({issue.get('reason')})"
+            for issue in vocabulary_issues
+        ]
+    )
     execute_blockers.append(
         {
             "id": "missing_slot_vocabulary",
             "reason": (
                 f"{len(vocabulary_issues)} planned vocabulary entries are not "
-                "registered in this slot"
+                f"registered in this slot: {details}"
             ),
         }
     )
@@ -1911,12 +1935,19 @@ def _append_relationship_blockers(
 ) -> None:
     if not relationship_issues:
         return
+    details = _blocker_details(
+        [
+            f"{issue.get('subject_ref')}-[{issue.get('relationship_type')}]->"
+            f"{issue.get('object_ref')} ({issue.get('reason')})"
+            for issue in relationship_issues
+        ]
+    )
     execute_blockers.append(
         {
             "id": "unsupported_relationship_rows",
             "reason": (
                 f"{len(relationship_issues)} relationship_plan rows cannot be "
-                "written to canonical relationship tables"
+                f"written to canonical relationship tables: {details}"
             ),
         }
     )

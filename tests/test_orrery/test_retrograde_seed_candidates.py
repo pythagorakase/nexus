@@ -83,6 +83,26 @@ def test_seed_candidate_response_rejects_prompt_visible_mechanics() -> None:
         )
 
 
+def test_seed_candidate_response_rejects_kind_incompatible_tag() -> None:
+    """Tags must be registered for the hinted entity kind, as in persistence."""
+
+    vocabulary = _seed_test_vocabulary()
+    vocabulary["registered_tags_by_entity_kind"] = {
+        "faction": ["scholar", "grieving", "untested_signal"],
+    }
+    payload = _valid_response_payload(vocabulary)
+
+    with pytest.raises(
+        RetrogradeSeedCandidateValidationError,
+        match="not registered for entity_kind",
+    ):
+        validate_seed_candidate_response(
+            payload=payload,
+            seed_generation_request=_seed_request(vocabulary),
+            vocabulary=vocabulary,
+        )
+
+
 def test_seed_candidate_response_requires_event_for_event_anchored_tag() -> None:
     """Event-anchored current-state tags need an explicit supporting event."""
 

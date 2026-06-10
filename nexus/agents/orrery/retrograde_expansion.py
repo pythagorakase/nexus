@@ -436,6 +436,10 @@ def _expansion_contract_issues(
         policy: set(tags)
         for policy, tags in vocabulary.get("registered_tags_by_seed_policy", {}).items()
     }
+    tags_by_entity_kind = {
+        kind: set(tags)
+        for kind, tags in vocabulary.get("registered_tags_by_entity_kind", {}).items()
+    }
 
     for event in response.event_plan:
         issues.extend(
@@ -454,6 +458,7 @@ def _expansion_contract_issues(
                 entity_kinds=entity_kinds,
                 registered_tags=registered_tags,
                 tags_by_seed_policy=tags_by_seed_policy,
+                tags_by_entity_kind=tags_by_entity_kind,
                 event_refs=event_refs,
             )
         )
@@ -632,6 +637,7 @@ def _entity_tag_plan_issues(
     entity_kinds: set[str],
     registered_tags: set[str],
     tags_by_seed_policy: Mapping[str, set[str]],
+    tags_by_entity_kind: Mapping[str, set[str]],
     event_refs: set[str],
 ) -> list[str]:
     issues: list[str] = []
@@ -640,6 +646,17 @@ def _entity_tag_plan_issues(
         issues.append(f"{prefix} uses unknown entity_kind {tag_plan.entity_kind!r}")
     if tag_plan.tag not in registered_tags:
         issues.append(f"{prefix} is not a registered single-entity tag")
+        return issues
+    # Mirror the persistence layer's tag_category_registry kind check so an
+    # incompatible plan is repaired by ModelRetry at generation time instead
+    # of blocking the wizard transition. Enforceable only when the live
+    # registry mapping rode along in the packet vocabulary.
+    if tags_by_entity_kind and tag_plan.tag not in tags_by_entity_kind.get(
+        tag_plan.entity_kind, set()
+    ):
+        issues.append(
+            f"{prefix} is not registered for entity_kind {tag_plan.entity_kind!r}"
+        )
         return issues
     policy = _tag_seed_policy(tag_plan.tag, tags_by_seed_policy)
     if policy is None:
