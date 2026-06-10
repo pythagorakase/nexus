@@ -1,16 +1,19 @@
 """Tests for the GET/PATCH /api/settings surface (nexus/api/settings_endpoints).
 
 These exercise the real nexus.toml in the repository root (payload assembly,
-metadata derivation) and real tomlkit writes against a temporary copy - no
-mocks. The HTTP layer itself is exercised by the live round-trip in the U5
-validation workflow (uvicorn + curl); these tests pin the pure logic.
+metadata derivation), real tomlkit writes against a temporary copy, and the
+HTTP layer through a TestClient mounting the real router - no mocks. Write
+paths over HTTP are limited to rejection cases so the repository config is
+never mutated; the full PATCH round-trip is covered on the temp copy and by
+the live uvicorn + curl validation in the U5 workflow.
 """
 
 import shutil
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from nexus.api.settings_endpoints import (
     SettingsPatchRequest,
@@ -19,6 +22,7 @@ from nexus.api.settings_endpoints import (
     _provider_from_ref,
     _read_raw_settings,
     _updates_from_patch,
+    router,
 )
 from nexus.config.loader import save_settings, load_settings
 
@@ -28,6 +32,46 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def raw_settings() -> dict:
     return _read_raw_settings()
+
+
+@pytest.fixture
+def client() -> TestClient:
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+class TestHTTPSurface:
+    """The wire contract, including the HEAD connectivity probe."""
+
+    def test_head_probe_returns_200(self, client: TestClient) -> None:
+        # useNarrativeEngine polls HEAD /api/settings; FastAPI does not
+        # auto-serve HEAD from GET handlers, so this pins the explicit route.
+        response = client.head("/api/settings")
+        assert response.status_code == 200
+
+    def test_get_serves_payload(self, client: TestClient) -> None:
+        response = client.get("/api/settings")
+        assert response.status_code == 200
+        payload = response.json()
+        assert "settings_meta" in payload
+        assert "secrets" not in payload
+
+    def test_patch_empty_body_is_400(self, client: TestClient) -> None:
+        assert client.patch("/api/settings", json={}).status_code == 400
+
+    def test_patch_unknown_key_is_422(self, client: TestClient) -> None:
+        response = client.patch("/api/settings", json={"embedding_model": "x"})
+        assert response.status_code == 422
+
+    def test_patch_malformed_ref_is_422(self, client: TestClient) -> None:
+        response = client.patch(
+            "/api/settings",
+            json={
+                "apex_model_ref": "gpt-5.5"
+            },  # pin: malformed-ref fixture, never persisted
+        )
+        assert response.status_code == 422
 
 
 class TestBuildPayload:
@@ -109,9 +153,7 @@ class TestProviderFromRef:
 class TestRoundTripOnCopy:
     """Real tomlkit write of endpoint-shaped updates on a temp copy."""
 
-    def test_patch_updates_persist_and_preserve_comments(
-        self, tmp_path: Path
-    ) -> None:
+    def test_patch_updates_persist_and_preserve_comments(self, tmp_path: Path) -> None:
         toml_copy = tmp_path / "nexus.toml"
         shutil.copy2(REPO_ROOT / "nexus.toml", toml_copy)
         original = toml_copy.read_text()

@@ -19,7 +19,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # Python 3.11+ ships tomllib; mirror the loader's fallback for older runtimes.
@@ -203,6 +203,19 @@ def _updates_from_patch(patch: SettingsPatchRequest) -> Dict[str, Any]:
     if patch.apex_context_window is not None:
         updates["lore.token_budget.apex_context_window"] = patch.apex_context_window
     return updates
+
+
+@router.head("")
+async def head_settings() -> Response:
+    """Connectivity probe (useNarrativeEngine polls HEAD /api/settings).
+
+    FastAPI's APIRoute does not auto-serve HEAD from GET handlers (unlike
+    bare Starlette routes), so the probe needs this explicit handler.
+    Raises - and therefore returns 500 - if the config file is unreadable,
+    matching the retired Express behavior.
+    """
+    _read_raw_settings()
+    return Response(status_code=200)
 
 
 @router.get("")
