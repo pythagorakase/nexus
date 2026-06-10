@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 from nexus.api.new_story_schemas import (
@@ -533,7 +533,11 @@ class NewStoryDatabaseMapper:
                     )
                     raise
 
-    def perform_transition(self, transition_data: TransitionData) -> Dict[str, int]:
+    def perform_transition(
+        self,
+        transition_data: TransitionData,
+        in_transaction: Optional[Callable[[Any], None]] = None,
+    ) -> Dict[str, int]:
         """
         Perform complete transition from setup to narrative mode.
 
@@ -547,10 +551,15 @@ class NewStoryDatabaseMapper:
         5. Creates complete location hierarchy (layer -> zone -> place)
         6. Applies typed trait compilation and persists the audit result
         7. Sets base timestamp
-        8. Clears the wizard cache (mode is derived from data presence)
+        8. Runs the optional in_transaction hook on the same cursor (used by
+           Retrograde wizard-time persistence so generated history commits
+           atomically with the world; a raise rolls back everything)
+        9. Clears the wizard cache (mode is derived from data presence)
 
         Args:
             transition_data: Complete transition data package
+            in_transaction: Optional callable invoked with the open cursor
+                after all transition writes, before commit
 
         Returns:
             Dictionary with created IDs
@@ -705,6 +714,12 @@ class NewStoryDatabaseMapper:
                         "UPDATE global_variables SET base_timestamp = %s WHERE id = true",
                         (transition_data.base_timestamp,),
                     )
+
+                    if in_transaction is not None:
+                        # Retrograde wizard-time persistence joins this
+                        # transaction; a raise here rolls back the whole world
+                        # so a history-less story can never silently begin.
+                        in_transaction(cur)
 
                 # Transaction commits automatically on successful context exit
                 logger.info("Atomic transition complete")

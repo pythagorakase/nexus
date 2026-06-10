@@ -163,6 +163,55 @@ def test_category_seed_policy_returns_complete_struct() -> None:
     }
 
 
+def test_category_seed_policy_settles_live_registry_split() -> None:
+    """Issue #300 split: every live registry category classifies explicitly."""
+
+    # Stable identity/role/affordance categories promoted in M4.
+    for category, entity_kind in (
+        ("bodyform", "character"),
+        ("role", "character"),
+        ("profession_lite", "character"),
+        ("place_affordance", "place"),
+        ("ideology_axis", "faction"),
+        ("resource_class", "faction"),
+        ("legitimacy_status", "faction"),
+        ("operational_secrecy", "faction"),
+        ("power_posture", "faction"),
+        ("history_class", "faction"),
+    ):
+        assert (
+            category_seed_policy(category, entity_kind)["policy"] == "stable_seed"
+        ), category
+
+    # Pressure/relational categories that require a causing event.
+    for category, entity_kind in (
+        ("hidden_agenda_class", "faction"),
+        ("relationship_risk", "character"),
+    ):
+        assert (
+            category_seed_policy(category, entity_kind)["policy"] == "event_anchored"
+        ), category
+
+
+def test_category_seed_policy_pins_runtime_categories_prompt_only() -> None:
+    """orrery_* runtime bookkeeping must never be seed-writeable."""
+
+    policy = category_seed_policy("orrery_need", "character")
+    assert policy["policy"] == "prompt_visible_only"
+    assert "tick loop" in policy["reason"]
+    assert (
+        category_seed_policy("orrery_schedule", "character")["policy"]
+        == "prompt_visible_only"
+    )
+
+
+def test_category_seed_policy_defaults_unknown_to_prompt_only() -> None:
+    """Unclassified future categories ship locked (conservative direction)."""
+
+    policy = category_seed_policy("experimental_new_axis", "character")
+    assert policy["policy"] == "prompt_visible_only"
+
+
 def test_seed_eligible_pair_tags_are_sorted() -> None:
     """Stable ordering keeps snapshots and future prompt generation deterministic."""
 

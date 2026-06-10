@@ -8,6 +8,7 @@ story creation, including:
 - Transition from wizard to narrative mode
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,8 +39,7 @@ from nexus.api.new_story_cache import (
     read_cache,
     write_wizard_choices,
 )
-from nexus.api.new_story_db_mapper import NewStoryDatabaseMapper
-from nexus.api.new_story_flow import record_drafts
+from nexus.api.new_story_flow import perform_transition_with_retrograde, record_drafts
 from nexus.api.new_story_generator import generate_set_design
 from nexus.api.new_story_schemas import (
     SettingCard,
@@ -928,11 +928,21 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             status_code=422, detail=f"Setup data validation failed: {e.errors()}"
         )
 
-    # Perform atomic transition
-    mapper = NewStoryDatabaseMapper(dbname=dbname)
+    # Perform atomic transition with Retrograde cold-start history. The
+    # frontier generation takes minutes, so it runs in a worker thread to
+    # keep the event loop (and the progress endpoint) responsive.
     try:
-        result = mapper.perform_transition(transition_data)
-        logger.info(f"Transition complete for slot {request.slot}: {result}")
+        result = await asyncio.to_thread(
+            perform_transition_with_retrograde,
+            request.slot,
+            transition_data,
+        )
+        logger.info(
+            "Transition complete for slot %s: character_id=%s retrograde=%s",
+            request.slot,
+            result["character_id"],
+            result.get("retrograde", {}).get("enabled"),
+        )
 
         return TransitionResponse(
             status="transitioned",
@@ -941,10 +951,30 @@ async def transition_to_narrative_endpoint(request: TransitionRequest):
             layer_id=result["layer_id"],
             zone_id=result["zone_id"],
             message=f"Welcome to {transition_data.setting.world_name}. Your story begins.",
+            retrograde=result.get("retrograde"),
         )
     except ValueError as e:
+        # Includes RetrogradePersistenceBlockedError: the transaction rolled
+        # back, the wizard cache is intact, and the transition is retryable.
         logger.error(f"Transition validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Transition failed: {e}")
         raise HTTPException(status_code=500, detail=f"Transition failed: {str(e)}")
+
+
+@router.get("/retrograde/status")
+async def retrograde_status_endpoint(slot: int) -> Dict[str, Any]:
+    """
+    Report wizard-time Retrograde progress for a slot.
+
+    Stages: packet -> seed_candidates -> expansion -> persistence ->
+    embedding -> done (or failed). Returns stage "idle" when no Retrograde
+    run has been recorded for the slot in this server process.
+    """
+    from nexus.agents.orrery.retrograde_orchestrator import get_retrograde_progress
+
+    progress = get_retrograde_progress(slot)
+    if progress is None:
+        return {"slot": slot, "stage": "idle", "stages": []}
+    return progress

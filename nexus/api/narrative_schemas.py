@@ -172,7 +172,9 @@ class SlotStateResponse(BaseModel):
     has_pending: bool = False  # True if incubator has pending content
     storyteller_text: Optional[str] = None
     choices: List[str] = []
-    session_id: Optional[str] = None  # Live session ID while incubator pending; basis for regenerate
+    session_id: Optional[str] = (
+        None  # Live session ID while incubator pending; basis for regenerate
+    )
     model: Optional[str] = None
     # Trait selection menu (character phase, traits subphase)
     trait_menu: Optional[List[TraitMenuItemResponse]] = None
@@ -316,3 +318,13 @@ class TransitionResponse(BaseModel):
     layer_id: int
     zone_id: int
     message: str
+    retrograde: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Retrograde cold-start outcome (spec decision 6 surface split): "
+            "visible woven entities/relationships plus hidden-material counts, "
+            "stage timings, and embedded summary-chunk ids. The high-entropy "
+            "long tail (event prose, tags, deferred seeds) is intentionally "
+            "withheld from this response."
+        ),
+    )

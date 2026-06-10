@@ -84,10 +84,13 @@ def build_retrograde_dry_run_packet(
         zone=zone,
         initial_location=initial_location,
     )
+    if settings.orrery is None:
+        raise ValueError("settings.orrery is required for Retrograde budgets")
     seed_generation_request = build_seed_generation_request(
         candidate_scaffolds=candidate_scaffolds,
         vocabulary=vocabulary,
         weird=weird,
+        max_new_entity_stubs=settings.orrery.retrograde.wizard.max_new_entity_stubs,
     )
 
     return {
@@ -134,6 +137,7 @@ def build_seed_generation_request(
     candidate_scaffolds: Mapping[str, Any],
     vocabulary: SeedEligibleVocabulary,
     weird: Mapping[str, Any],
+    max_new_entity_stubs: Optional[int] = None,
 ) -> dict[str, Any]:
     """Build the non-mutating R4/R5 request contract for Skald-as-weaver."""
 
@@ -145,6 +149,11 @@ def build_seed_generation_request(
         1,
         round(budget["generate_candidates"] / budget["select_target"]),
     )
+    if max_new_entity_stubs is not None:
+        # Decision 8 entity-coverage cap: how many entities beyond the
+        # first-class starting set the eventual R6 expansion may introduce
+        # as minimum-viable stubs.
+        budget["max_new_entity_stubs"] = int(max_new_entity_stubs)
 
     return {
         "schema_version": SEED_REQUEST_SCHEMA_VERSION,

@@ -153,6 +153,26 @@ def test_retrograde_packet_is_dry_run_and_selection_oriented() -> None:
     assert packet["vocabulary_summary"]["event_types"] > 0
 
 
+def test_retrograde_packet_budget_carries_entity_stub_cap() -> None:
+    """Decision 8: the wizard stub cap from nexus.toml rides in the budget."""
+
+    settings = load_settings()
+    assert settings.orrery is not None
+    packet = build_retrograde_dry_run_packet(
+        slot=5,
+        dbname="save_05",
+        cache=FakeRetrogradeCache(),
+        vocabulary=enumerate_seed_eligible_vocabulary(),
+        settings=settings,
+        weird_level="medium",
+    )
+
+    assert (
+        packet["seed_generation_request"]["budget"]["max_new_entity_stubs"]
+        == settings.orrery.retrograde.wizard.max_new_entity_stubs
+    )
+
+
 def test_retrograde_seed_request_respects_vocabulary_policy() -> None:
     """Registered categories are prompt-visible but not equally seed-writeable."""
 

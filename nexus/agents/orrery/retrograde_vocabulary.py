@@ -55,23 +55,42 @@ class SeedEligibleVocabulary(TypedDict):
     relationship_types: list[str]
 
 
+# Seed-eligible vs prompt-visible category split (issue #300, settled in M4).
+# Every category registered in the live tag registry is classified explicitly
+# below; categories absent from both seed-eligible sets are prompt-visible
+# only, which is the conservative direction (prose context, never mechanical
+# Retrograde writes). New categories therefore ship locked until a deliberate
+# edit promotes them.
 STABLE_SEED_TAG_CATEGORIES: frozenset[str] = frozenset(
     {
+        # Character identity, role, and capability (stable present-state).
+        "bodyform",
         "bodyform.lineage",
         "bodyform.condition",
         "disposition",
         "capacity",
+        "profession_lite",
+        "role",
         "role.function",
         "role.resources",
         "role.fame",
+        # Place affordances and stable place character.
         "place_function",
+        "place_affordance",
         "place_visibility",
         "place_access",
         "place_environment",
+        # Faction identity, economy, posture, and standing.
         "ideology",
+        "ideology_axis",
         "resource_base",
+        "resource_class",
         "legitimacy",
+        "legitimacy_status",
         "operational_mode",
+        "operational_secrecy",
+        "power_posture",
+        "history_class",
     }
 )
 EVENT_ANCHORED_TAG_CATEGORIES: frozenset[str] = frozenset(
@@ -80,8 +99,14 @@ EVENT_ANCHORED_TAG_CATEGORIES: frozenset[str] = frozenset(
         "place_threat",
         "power_status",
         "agenda",
+        "hidden_agenda_class",
+        "relationship_risk",
     }
 )
+# Forward-runtime Orrery bookkeeping (needs, schedules, signals, cover, and
+# intimacy machinery). Pinned prompt-visible-only: the tick loop owns these
+# writes; Retrograde history generation must never seed them mechanically.
+RUNTIME_ONLY_TAG_CATEGORY_PREFIX = "orrery_"
 
 
 def enumerate_seed_eligible_vocabulary(
@@ -218,6 +243,16 @@ def category_seed_policy(category: str, entity_kind: str) -> CategorySeedPolicy:
 
     normalized = str(category)
     normalized_kind = str(entity_kind)
+    if normalized.startswith(RUNTIME_ONLY_TAG_CATEGORY_PREFIX):
+        return {
+            "category": normalized,
+            "entity_kind": normalized_kind,
+            "policy": "prompt_visible_only",
+            "reason": (
+                "Forward-runtime Orrery bookkeeping category; the tick loop "
+                "owns these writes and Retrograde must never seed them."
+            ),
+        }
     if normalized in STABLE_SEED_TAG_CATEGORIES:
         return {
             "category": normalized,

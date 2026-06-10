@@ -150,6 +150,56 @@ def test_expansion_plan_requires_thread_for_each_selected_seed() -> None:
         )
 
 
+def test_expansion_plan_enforces_new_entity_budget() -> None:
+    """Decision 8: refs beyond the first-class set respect the stub cap."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    # The valid expansion references Vale and Shutter Hall beyond core Mara.
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 1
+
+    with pytest.raises(
+        RetrogradeExpansionValidationError,
+        match="max_new_entity_stubs",
+    ):
+        validate_expansion_plan(
+            payload=_valid_expansion(vocabulary),
+            packet=packet,
+            seed_candidate_response=_seed_response(vocabulary),
+        )
+
+
+def test_expansion_plan_accepts_new_entities_within_budget() -> None:
+    """New refs at or under the configured stub cap stay valid."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 2
+
+    response = validate_expansion_plan(
+        payload=_valid_expansion(vocabulary),
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert response.selected_seed_ids == ["seed_001"]
+
+
+def test_expansion_prompt_surfaces_budget() -> None:
+    """The R6 prompt shows the request budget, including the stub cap."""
+
+    vocabulary = _expansion_test_vocabulary()
+    packet = _packet(vocabulary)
+    packet["seed_generation_request"]["budget"]["max_new_entity_stubs"] = 3
+
+    prompt = render_expansion_prompt(
+        packet=packet,
+        seed_candidate_response=_seed_response(vocabulary),
+    )
+
+    assert '"max_new_entity_stubs": 3' in prompt
+
+
 def _expansion_test_vocabulary() -> SeedEligibleVocabulary:
     vocabulary = enumerate_seed_eligible_vocabulary()
     vocabulary["registered_single_entity_tags"] = [

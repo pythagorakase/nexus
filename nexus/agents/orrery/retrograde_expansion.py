@@ -269,6 +269,7 @@ def render_expansion_prompt(
             "reason": "R6 expansion remains dry-run until commit blockers resolve.",
         },
         "commit_blockers": list(RETROGRADE_COMMIT_BLOCKERS),
+        "budget": seed_generation_request.get("budget", {}),
         "selected_seed_ids": candidates.selected_seed_ids,
         "selected_candidates": selected_candidates,
         "core_prompt_sections": (
@@ -315,6 +316,8 @@ def validate_expansion_plan(
         response=response,
         selected_seed_ids=set(candidates.selected_seed_ids),
         vocabulary=vocabulary,
+        known_entity_keys=_packet_known_entity_keys(packet),
+        max_new_entity_stubs=_budget_entity_stub_cap(seed_generation_request),
     )
     if issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)
@@ -395,8 +398,17 @@ def _expansion_contract_issues(
     response: RetrogradeExpansionPlanResponse,
     selected_seed_ids: set[str],
     vocabulary: SeedEligibleVocabulary,
+    known_entity_keys: Optional[set[tuple[str, str]]] = None,
+    max_new_entity_stubs: Optional[int] = None,
 ) -> list[str]:
     issues: list[str] = []
+    issues.extend(
+        _new_entity_budget_issues(
+            response=response,
+            known_entity_keys=known_entity_keys or set(),
+            max_new_entity_stubs=max_new_entity_stubs,
+        )
+    )
     response_seed_ids = set(response.selected_seed_ids)
     unknown_response_seeds = sorted(response_seed_ids - selected_seed_ids)
     if unknown_response_seeds:
@@ -475,6 +487,120 @@ def _expansion_contract_issues(
     )
     issues.extend(_commit_readiness_issues(response.commit_readiness))
     return issues
+
+
+STUB_CREATABLE_ENTITY_KINDS = frozenset({"character", "place", "faction"})
+
+
+def _new_entity_budget_issues(
+    *,
+    response: RetrogradeExpansionPlanResponse,
+    known_entity_keys: set[tuple[str, str]],
+    max_new_entity_stubs: Optional[int],
+) -> list[str]:
+    """Enforce the Decision 8 entity-coverage cap against plan entity refs."""
+
+    if max_new_entity_stubs is None:
+        return []
+    new_keys = sorted(
+        key
+        for key in _collect_plan_entity_keys(response)
+        if key[0] in STUB_CREATABLE_ENTITY_KINDS and key not in known_entity_keys
+    )
+    if len(new_keys) <= max_new_entity_stubs:
+        return []
+    listed = ", ".join(f"{kind}:{ref}" for kind, ref in new_keys)
+    return [
+        f"expansion introduces {len(new_keys)} entities beyond the first-class "
+        f"starting set, exceeding budget.max_new_entity_stubs="
+        f"{max_new_entity_stubs}: {listed}. Drop or merge minor entities, or "
+        "reattach their threads to first-class starting entities."
+    ]
+
+
+def _collect_plan_entity_keys(
+    response: RetrogradeExpansionPlanResponse,
+) -> set[tuple[str, str]]:
+    """Collect distinct (kind, normalized ref) keys across all plan sections."""
+
+    keys: set[tuple[str, str]] = set()
+    for event in response.event_plan:
+        for participant in event.participants:
+            keys.add(
+                (participant.entity_kind, _normalize_entity_ref(participant.entity_ref))
+            )
+        if event.location_ref:
+            keys.add(("place", _normalize_entity_ref(event.location_ref)))
+    for tag_plan in response.entity_tag_plan:
+        keys.add((tag_plan.entity_kind, _normalize_entity_ref(tag_plan.entity_ref)))
+    for pair_plan in response.pair_tag_plan:
+        keys.add((pair_plan.subject_kind, _normalize_entity_ref(pair_plan.subject_ref)))
+        keys.add((pair_plan.object_kind, _normalize_entity_ref(pair_plan.object_ref)))
+    for relationship in response.relationship_plan:
+        keys.add(
+            (relationship.subject_kind, _normalize_entity_ref(relationship.subject_ref))
+        )
+        keys.add(
+            (relationship.object_kind, _normalize_entity_ref(relationship.object_ref))
+        )
+    return keys
+
+
+def _packet_known_entity_keys(packet: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """First-class starting entity keys known to the Retrograde packet.
+
+    Reads both the top-level candidate scaffolds (full dry-run packets) and
+    the seed request prompt sections (always present in loadable packets), so
+    saved or compacted packets keep the same first-class entity surface.
+    """
+
+    keys: set[tuple[str, str]] = set()
+
+    def add_card(card: Any) -> None:
+        if not isinstance(card, Mapping):
+            return
+        kind = card.get("kind")
+        name = card.get("name")
+        if kind in STUB_CREATABLE_ENTITY_KINDS and name:
+            keys.add((str(kind), _normalize_entity_ref(str(name))))
+
+    scaffolds = packet.get("candidate_scaffolds")
+    if isinstance(scaffolds, Mapping):
+        for card in scaffolds.get("core_entities") or ():
+            add_card(card)
+        for npc in scaffolds.get("named_seed_npcs") or ():
+            add_card(npc)
+
+    seed_generation_request = packet.get("seed_generation_request")
+    if isinstance(seed_generation_request, Mapping):
+        for section in seed_generation_request.get("prompt_sections") or ():
+            if not isinstance(section, Mapping):
+                continue
+            if section.get("heading") not in {"Core entities", "Named seed NPCs"}:
+                continue
+            for card in section.get("items") or ():
+                add_card(card)
+    return keys
+
+
+def _budget_entity_stub_cap(
+    seed_generation_request: Mapping[str, Any],
+) -> Optional[int]:
+    """Read the optional Decision 8 stub cap from the request budget."""
+
+    budget = seed_generation_request.get("budget")
+    if not isinstance(budget, Mapping):
+        return None
+    cap = budget.get("max_new_entity_stubs")
+    if cap is None:
+        return None
+    return int(cap)
+
+
+def _normalize_entity_ref(value: str) -> str:
+    """Match the persistence layer's prompt-local ref normalization."""
+
+    return " ".join(value.split()).casefold()
 
 
 def _event_plan_issues(

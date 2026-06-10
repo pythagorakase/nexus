@@ -575,6 +575,52 @@ class OrreryRetrogradeRetrievalSettings(BaseModel):
     )
 
 
+class OrreryRetrogradeWizardSettings(BaseModel):
+    """Wizard-time cold-start firing of the Retrograde pipeline (spec M4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=True,
+        description=(
+            "Run the full Retrograde pipeline (packet, seed candidates, "
+            "expansion, persistence, embedding) during the wizard ready -> "
+            "narrative transition."
+        ),
+    )
+    create_entity_stubs: bool = Field(
+        default=True,
+        description=(
+            "Allow persistence to create minimum-viable character/place/"
+            "faction stubs for expansion refs that resolve to no canonical row."
+        ),
+    )
+    max_new_entity_stubs: int = Field(
+        default=6,
+        ge=0,
+        description=(
+            "Decision 8 entity-coverage cap: maximum number of new minimum-"
+            "viable stubs one wizard-time expansion may introduce."
+        ),
+    )
+    max_tokens: int = Field(
+        default=16000,
+        gt=0,
+        description=(
+            "Max output tokens for wizard-time R4/R6 Skald calls; seed and "
+            "expansion responses are larger than ordinary wizard chat turns."
+        ),
+    )
+    transition_timeout_seconds: int = Field(
+        default=900,
+        gt=0,
+        description=(
+            "HTTP client timeout for the wizard transition call; frontier "
+            "generation runs inside it, so the budget is minutes, not seconds."
+        ),
+    )
+
+
 class OrreryRetrogradeSettings(BaseModel):
     """Retrograde deep-history generation settings."""
 
@@ -583,6 +629,9 @@ class OrreryRetrogradeSettings(BaseModel):
     weird: OrreryRetrogradeWeirdSettings
     retrieval: OrreryRetrogradeRetrievalSettings = Field(
         default_factory=OrreryRetrogradeRetrievalSettings
+    )
+    wizard: OrreryRetrogradeWizardSettings = Field(
+        default_factory=OrreryRetrogradeWizardSettings
     )
 
 
