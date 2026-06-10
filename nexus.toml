@@ -60,6 +60,15 @@ test_mode = false
 test_database_suffix = "_test"
 
 # =============================================================================
+# UI Settings (read by the React client via GET /api/settings)
+# =============================================================================
+
+[ui]
+# Typewriter reveal speed for incoming narrative chunks (NEXUS IRIS design
+# system specifies 30-50 ms/char).
+typewriter_ms_per_char = 35
+
+# =============================================================================
 # Wizard Settings (New Story Setup)
 # =============================================================================
 
