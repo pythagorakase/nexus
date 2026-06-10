@@ -623,7 +623,7 @@ html {
   --card-foreground: 180 30% 90%;
   --card-border: 185 50% 20%;
 
-  --sidebar: 180 30% 4%;
+  --sidebar-background: 180 30% 4%;
   --sidebar-foreground: 180 30% 90%;
   --sidebar-border: 185 50% 20%;
   --sidebar-primary: 185 100% 50%;
