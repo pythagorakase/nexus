@@ -34,7 +34,7 @@ The spec promises MEMNON retrieves generated history identically to play-generat
 **M4 - Wire Retrograde Into the New-Story Wizard** - M
 The pipeline exists only as CLI verbs (zero references in `nexus/api/`). New-story flow should run R1-R6 + persistence automatically at slot creation. Requires settling decision 14's product boundary (when generated history becomes visible; behavior when expansion succeeds but persistence is blocked), decision 8's entity-coverage caps, and the seed-eligible vs prompt-visible category split.
 
-**M5 - Finish the Trait Compiler** - M
+**M5 - Finish the Trait Compiler** - M - DONE 2026-06-10 (PR #372, fae2ebd5)
 Every trait except the wildcard compiles to mechanical state - no prose-only remainders. Implement the four remaining compilers (Domain, Patron, Dependents, Obligations) following the #295 pattern (affective traits -> relationship row primary; pair-tags only where packages gate), with latitude to expand or tune the trait vocabulary where the registry lacks what a compiler needs - design-time registry additions via migration stay compatible with the #293 runtime lockdown. Patron and Dependents create stub entities, which is exactly the input Retrograde Phase A matures at wizard time - so this lands best before M4, letting cold-start history cover compiled relationships.
 
 **M6 - Turn On the Orrery, End to End** - M
