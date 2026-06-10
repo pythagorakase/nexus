@@ -62,7 +62,7 @@ Tokens, keeper fonts, and theme CSS into `ui/` (`colors_and_type.css` -> theme l
 **U2 - Veil Splash per the Chosen Hero** - M - DONE 2026-06-10 (PR #370; Frame composition, kit-locked values)
 Port the kit's splash composition (locked values hard-coded in `ui_kits/nexus_iris/splash.jsx`) into the React/TS `VeilSplash`. Wizard preserved as-is; Gilded and Vector splashes untouched.
 
-**U3 - NexusLayout Rebuild** - L
+**U3 - NexusLayout Rebuild** - L - DONE 2026-06-10 (PR #374, 90164362; also fixed the never-working /ws/narrative proxy)
 The refreshed reading surface per the kit: 60px icon rail, typeset reader with voice-by-color (warm cream / muted cream + thin hr dividers, no prefix glyphs), choices 1-3 plus freeform slot 0 inline, Session Ledger right rail (phase telemetry, scene cast, hierarchy), no CommandBar, typewriter reveal. Wired to the live narrative API, not kit mock data. Characters pane at kit fidelity.
 
 **U4 - Full MapTab Rebuild** - L
