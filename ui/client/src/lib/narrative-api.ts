@@ -5,7 +5,16 @@
  * generation/slot routes are proxied through Express to FastAPI :8002.
  * Errors surface as thrown exceptions — no silent fallbacks.
  */
-import type { Season, Episode, Character, CharacterImage } from "@shared/schema";
+import type {
+  Season,
+  Episode,
+  Character,
+  CharacterImage,
+  CurrentPlace,
+  Place,
+  PlaceImage,
+  Zone,
+} from "@shared/schema";
 import type {
   ChunkContext,
   ChunkWithMetadata,
@@ -74,6 +83,39 @@ export function getCharacterImages(
 
 export function getUserCharacter(slot: number): Promise<{ name: string } | null> {
   return getJson(`/api/user-character?slot=${slot}`);
+}
+
+/** Slot-qualified query string; the map tab is reachable without a bound slot. */
+function slotQuery(slot: number | null): string {
+  return slot === null ? "" : `?slot=${slot}`;
+}
+
+export function getPlaces(slot: number | null): Promise<Place[]> {
+  return getJson(`/api/places${slotQuery(slot)}`);
+}
+
+export function getZones(slot: number | null): Promise<Zone[]> {
+  return getJson(`/api/zones${slotQuery(slot)}`);
+}
+
+export function getPlaceImages(
+  placeId: number,
+  slot: number | null,
+): Promise<PlaceImage[]> {
+  return getJson(`/api/places/${placeId}/images${slotQuery(slot)}`);
+}
+
+/** Returns null when the story has no setting references yet (404). */
+export async function getCurrentPlace(
+  slot: number | null,
+): Promise<CurrentPlace | null> {
+  const res = await fetch(`/api/current-place${slotQuery(slot)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+  return res.json();
 }
 
 export function getIncubator(slot: number): Promise<IncubatorPayload> {
