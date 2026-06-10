@@ -61,6 +61,7 @@ from nexus.api.narrative_generation import (
     generate_bootstrap_narrative,
 )
 from nexus.api.config_utils import get_max_choice_text_length
+from nexus.api.settings_endpoints import router as settings_router
 from nexus.api.slot_endpoints import router as slot_router
 from nexus.api.setup_endpoints import router as setup_router
 from nexus.api.wizard_chat import router as wizard_chat_router
@@ -80,6 +81,7 @@ app.add_middleware(
 
 
 # Include modular routers
+app.include_router(settings_router)
 app.include_router(slot_router)
 app.include_router(setup_router)
 app.include_router(wizard_chat_router)

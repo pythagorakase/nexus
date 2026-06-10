@@ -68,6 +68,34 @@ test_database_suffix = "_test"
 # system specifies 30-50 ms/char).
 typewriter_ms_per_char = 35
 
+# Active NEXUS IRIS theme, persisted across sessions via PATCH /api/settings.
+theme = "veil"
+
+[ui.lore_budget_slider]
+# Bounds, step, and preset ladder stops for the LORE budget slider in the
+# settings pane. Values are token counts for lore.token_budget.apex_context_window.
+min = 10_000
+max = 200_000
+step = 1000
+stops = [75_000, 100_000, 150_000, 200_000]
+
+# Per-theme font slot choices (NEXUS IRIS keeper matrix). The display slot is
+# the marquee font — reserved for the NEXUS wordmark and locked in the UI.
+[ui.fonts.veil]
+body = "Spectral"
+menu = "Cinzel"
+display = "Megrim"
+
+[ui.fonts.gilded]
+body = "Cormorant Garamond"
+menu = "Space Mono"
+display = "Monoton"
+
+[ui.fonts.vector]
+body = "Rajdhani"
+menu = "Source Code Pro"
+display = "Sixtyfour"
+
 # =============================================================================
 # Wizard Settings (New Story Setup)
 # =============================================================================
