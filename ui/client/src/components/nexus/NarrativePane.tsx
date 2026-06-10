@@ -103,6 +103,43 @@ export function NarrativePane({
     return `S${m.season ?? 0}·E${m.episode ?? 0}·S${m.scene ?? 0}`;
   }, [latestChunk?.metadata]);
 
+  const currentChunkId = hasPending
+    ? null // the pending block below is current
+    : slotState?.current_chunk_id ?? null;
+
+  // Pre-compute the prose segments per chunk. The voice divider appears only
+  // on actual speaker changes, tracked across chunk boundaries; doing this in
+  // a memo keeps render pure (no mutation during JSX evaluation).
+  const { chunkRenders, pendingDivider } = useMemo(() => {
+    let previousVoice: "st" | "you" | null = null;
+    const renders = chunks.map((chunk) => {
+      const parts: Array<{ voice: "st" | "you"; text: string; divider: boolean }> =
+        [];
+      const storyteller = chunk.storytellerText ?? chunk.rawText;
+      if (storyteller) {
+        parts.push({
+          voice: "st",
+          text: storyteller,
+          divider: previousVoice !== null && previousVoice !== "st",
+        });
+        previousVoice = "st";
+      }
+      if (chunk.choiceText) {
+        parts.push({
+          voice: "you",
+          text: chunk.choiceText,
+          divider: previousVoice !== null && previousVoice !== "you",
+        });
+        previousVoice = "you";
+      }
+      return { id: chunk.id, isCurrent: chunk.id === currentChunkId, parts };
+    });
+    return {
+      chunkRenders: renders,
+      pendingDivider: previousVoice !== null && previousVoice !== "st",
+    };
+  }, [chunks, currentChunkId]);
+
   const canSubmit = !isGenerating && !!slotState && !slotState.is_wizard_mode;
 
   const handleChoice = useCallback(
@@ -182,19 +219,6 @@ export function NarrativePane({
     );
   }
 
-  // Track speaker across chunk boundaries so the voice divider only appears
-  // on actual speaker changes.
-  let previousVoice: "st" | "you" | null = null;
-  const voiceDividerBefore = (voice: "st" | "you"): boolean => {
-    const changed = previousVoice !== null && previousVoice !== voice;
-    previousVoice = voice;
-    return changed;
-  };
-
-  const currentChunkId = hasPending
-    ? null // pending block below is current
-    : slotState.current_chunk_id;
-
   return (
     <article className="reader" data-testid="narrative-reader">
       <div className="reader-frame">
@@ -217,38 +241,29 @@ export function NarrativePane({
           </header>
 
           <section className="chunk-stream">
-            {chunks.map((chunk) => {
-              const isCurrent = chunk.id === currentChunkId;
-              const storyteller = chunk.storytellerText ?? chunk.rawText;
-              const response = chunk.choiceText;
-              return (
-                <div
-                  key={chunk.id}
-                  className={`chunk-block ${isCurrent ? "current" : ""}`}
-                  data-testid={`chunk-${chunk.id}`}
-                >
-                  <div className="prose-block">
-                    {storyteller && (
-                      <>
-                        {voiceDividerBefore("st") && <hr className="voice-divider" />}
-                        <p className="line st">{renderProse(storyteller)}</p>
-                      </>
-                    )}
-                    {response && (
-                      <>
-                        {voiceDividerBefore("you") && <hr className="voice-divider" />}
-                        <p className="line you">{renderProse(response)}</p>
-                      </>
-                    )}
-                  </div>
+            {chunkRenders.map((chunk) => (
+              <div
+                key={chunk.id}
+                className={`chunk-block ${chunk.isCurrent ? "current" : ""}`}
+                data-testid={`chunk-${chunk.id}`}
+              >
+                <div className="prose-block">
+                  {chunk.parts.map((part) => (
+                    <Fragment key={part.voice}>
+                      {part.divider && <hr className="voice-divider" />}
+                      <p className={`line ${part.voice}`}>
+                        {renderProse(part.text)}
+                      </p>
+                    </Fragment>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
 
             {pendingText && (
               <div className="chunk-block current" data-testid="chunk-pending">
                 <div className="prose-block">
-                  {voiceDividerBefore("st") && <hr className="voice-divider" />}
+                  {pendingDivider && <hr className="voice-divider" />}
                   <p className="line st">
                     <TypewriterText
                       key={completedGenerations}
@@ -288,7 +303,7 @@ export function NarrativePane({
             <section className="choices" data-testid="story-choices">
               {choices.map((text, i) => (
                 <button
-                  key={i}
+                  key={`${i}-${text}`}
                   className="choice"
                   onClick={() => handleChoice(i + 1)}
                   disabled={!canSubmit}

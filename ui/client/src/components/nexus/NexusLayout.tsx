@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useNarrativeEngine } from "@/hooks/useNarrativeEngine";
 import { getUserCharacter } from "@/lib/narrative-api";
+import type { SettingsPayload } from "@/types/settings";
 import { LeftRail, type NexusTab } from "./LeftRail";
 import { TopBar } from "./TopBar";
 import { NarrativePane } from "./NarrativePane";
@@ -27,6 +28,8 @@ import { SettingsPane } from "./SettingsPane";
 import "./nexus-layout.css";
 
 const TABS: NexusTab[] = ["narrative", "map", "characters", "settings"];
+// Fallback used only until GET /api/settings resolves. Must stay in sync
+// with `[ui] typewriter_ms_per_char` in nexus.toml (UISettings default).
 const DEFAULT_TYPEWRITER_MS = 35;
 
 function initialTab(): NexusTab {
@@ -45,10 +48,6 @@ function activeSlot(): number | null {
   } catch {
     return null;
   }
-}
-
-interface SettingsPayload {
-  ui?: { typewriter_ms_per_char?: number };
 }
 
 export function NexusLayout() {

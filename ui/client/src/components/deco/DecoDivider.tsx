@@ -17,9 +17,14 @@ const THEME_GLYPHS: Record<Theme, string> = {
  * Decorative horizontal separator with Art Deco motifs.
  *
  * The `glyph` variant centers the active theme's signature character
- * (Veil ⟡, Gilded ◆, Vector ▮) between the gradient rules.
+ * (Veil ⟡, Gilded ◆, Vector ▮) between the gradient rules. The default
+ * stays `diamond` so callers that omit `variant` are visually unchanged.
+ *
+ * Trade-off: `useTheme()` runs unconditionally (rules of hooks), so every
+ * DecoDivider subscribes to ThemeContext even when variant !== 'glyph'.
+ * Theme switches are rare user actions; the extra re-render is negligible.
  */
-export function DecoDivider({ className, variant = 'glyph' }: DecoDividerProps) {
+export function DecoDivider({ className, variant = 'diamond' }: DecoDividerProps) {
   const { theme } = useTheme();
 
   return (

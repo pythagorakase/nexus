@@ -7,6 +7,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
+import type { SettingsPayload } from "@/types/settings";
 
 /** Palette swatches from the NEXUS IRIS theme matrix (display-only). */
 const THEME_CARDS: Array<{
@@ -34,16 +35,6 @@ const THEME_CARDS: Array<{
     swatches: ["#031414", "#00e5ff", "#3aa1ff", "#a3f0ff"],
   },
 ];
-
-interface SettingsPayload {
-  ["Agent Settings"]?: {
-    global?: {
-      model?: { default_model?: string };
-      narrative?: { test_mode?: boolean };
-    };
-  };
-  ui?: { typewriter_ms_per_char?: number };
-}
 
 export function SettingsPane() {
   const { theme, setTheme } = useTheme();
