@@ -167,48 +167,67 @@ def test_live_orrery_cycle_resolve_commit_promote_narrate_bleed() -> None:
         assert row["promotion_status"] == "pending"
 
         # Stage 4 - Promote: deterministic discriminator with config values.
-        promoted, _skipped = promote_pending_resolutions_sync(
-            LIVE_SLOT,
-            limit=50,
-            settings=settings,
-            conn=conn,
-        )
-        assert promoted >= 1
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT promotion_status, narration_status,
-                           promotion_verdict->>'reason' AS reason
-                    FROM orrery_resolutions WHERE id = %s
-                    """,
-                    (resolution_id,),
-                )
-                promoted_row = cur.fetchone()
+        # The worker drains pending rows oldest-tick first, so loop (bounded)
+        # until any pre-existing backlog ahead of the synthetic row is
+        # processed rather than relying on a single global limit.
+        promoted_row = None
+        for _attempt in range(20):
+            promoted, skipped = promote_pending_resolutions_sync(
+                LIVE_SLOT,
+                limit=50,
+                settings=settings,
+                conn=conn,
+            )
+            with conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT promotion_status, narration_status,
+                               promotion_verdict->>'reason' AS reason
+                        FROM orrery_resolutions WHERE id = %s
+                        """,
+                        (resolution_id,),
+                    )
+                    promoted_row = cur.fetchone()
+            if promoted_row["promotion_status"] != "pending":
+                break
+            if promoted == 0 and skipped == 0:
+                break  # nothing left to drain; assertions below fail loudly
+        assert promoted_row is not None
         assert promoted_row["promotion_status"] == "promoted"
         assert promoted_row["narration_status"] == "queued"
         assert "Deterministic promotion" in promoted_row["reason"]
 
         # Stage 5 - Narrate: real frontier call via the durable outbox.
-        narrated, failed = drain_narration_outbox_sync(
-            LIVE_SLOT,
-            limit=20,
-            settings=settings,
-            conn=conn,
+        # Same isolation concern: the outbox may hold unrelated queued jobs,
+        # so loop (bounded) until this resolution's job is processed and
+        # assert on the synthetic row, not on global drain counters.
+        narration = None
+        for _attempt in range(10):
+            narrated, failed = drain_narration_outbox_sync(
+                LIVE_SLOT,
+                limit=20,
+                settings=settings,
+                conn=conn,
+            )
+            with conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(
+                        """
+                        SELECT text, embedding_status FROM offscreen_narrations
+                        WHERE resolution_id = %s
+                        """,
+                        (resolution_id,),
+                    )
+                    narration = cur.fetchone()
+            if narration is not None:
+                break
+            if narrated == 0 and failed == 0:
+                break  # outbox idle without our row; assertions fail loudly
+        assert narration is not None, (
+            "Narration outbox drained without producing a narration for the "
+            f"synthetic resolution {resolution_id}"
         )
-        assert failed == 0
-        assert narrated >= 1
-        with conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(
-                    """
-                    SELECT text, embedding_status FROM offscreen_narrations
-                    WHERE resolution_id = %s
-                    """,
-                    (resolution_id,),
-                )
-                narration = cur.fetchone()
-        assert narration is not None
         assert len(narration["text"].strip()) > 40
         assert narration["embedding_status"] == "pending"
 
