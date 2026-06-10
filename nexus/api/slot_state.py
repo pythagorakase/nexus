@@ -21,6 +21,7 @@ Phase detection uses normalized columns and assets.traits:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -264,14 +265,34 @@ def _get_narrative_state(cur) -> NarrativeState:
             session_id=incubator_row.get("session_id"),
         )
 
-    # No pending content - get latest committed chunk
+    # No pending content - get latest committed chunk. Retrograde-authored
+    # chunks (the prologue anchor and per-event history summaries) are
+    # excluded from this resume surface, mirroring MEMNON's recent-chunks
+    # boundary: generated history is memory, not recent narration. Without
+    # this filter a freshly transitioned slot would resolve a Retrograde
+    # summary chunk as the continuation parent and skip bootstrap.
+    from nexus.agents.orrery.retrograde_markers import (
+        RETROGRADE_PROLOGUE_MARKER,
+        RETROGRADE_SUMMARY_MARKER,
+    )
+
     cur.execute(
         """
         SELECT nc.id, nc.raw_text, nc.choice_object
         FROM narrative_chunks nc
+        WHERE NOT (
+            COALESCE(nc.authorial_directives, '[]'::jsonb)
+                @> %(retrograde_prologue_marker)s::jsonb
+            OR COALESCE(nc.authorial_directives, '[]'::jsonb)
+                @> %(retrograde_summary_marker)s::jsonb
+        )
         ORDER BY nc.id DESC
         LIMIT 1
-        """
+        """,
+        {
+            "retrograde_prologue_marker": json.dumps([RETROGRADE_PROLOGUE_MARKER]),
+            "retrograde_summary_marker": json.dumps([RETROGRADE_SUMMARY_MARKER]),
+        },
     )
     chunk_row = cur.fetchone()
 
