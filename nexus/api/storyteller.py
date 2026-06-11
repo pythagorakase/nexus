@@ -46,7 +46,7 @@ from nexus.api.chunk_workflow import (
     EditPreviousRequest,
     EditPreviousResponse,
     build_embedding_scheduler,
-    default_workflow,
+    get_default_workflow,
 )
 from nexus.api.retry_handler import (
     retry_with_backoff,
@@ -187,7 +187,9 @@ class NewStoryRecordRequest(BaseModel):
     character: Optional[Dict[str, Any]] = None
     seed: Optional[Dict[str, Any]] = None
     location: Optional[Dict[str, Any]] = None
-    base_timestamp: Optional[str] = Field(None, pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$')
+    base_timestamp: Optional[str] = Field(
+        None, pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$"
+    )
 
 
 class NewStoryRecordResponse(BaseModel):
@@ -352,9 +354,13 @@ async def _startup_tasks() -> None:
     for metadata in await session_manager.list_sessions():
         if metadata.current_phase not in {"idle", "error"}:
             await session_manager.update_metadata(
-                metadata.session_id, current_phase="idle", last_accessed=metadata.last_accessed
+                metadata.session_id,
+                current_phase="idle",
+                last_accessed=metadata.last_accessed,
             )
-    logger.info("Session store ready (%s sessions)", len(await session_manager.list_sessions()))
+    logger.info(
+        "Session store ready (%s sessions)", len(await session_manager.list_sessions())
+    )
 
 
 @app.post("/api/story/session/create", response_model=CreateSessionResponse)
@@ -407,7 +413,9 @@ async def get_session_state(
     try:
         state = await manager.load_session(session_id)
     except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), session_id)) from exc
+        raise HTTPException(
+            status_code=404, detail=_format_error("not_found", str(exc), session_id)
+        ) from exc
 
     metadata = state.metadata
     metadata_response = SessionMetadataResponse(
@@ -438,7 +446,9 @@ async def get_history(
         turns = await manager.load_turn_history(session_id, limit=limit, offset=offset)
         state = await manager.load_session(session_id)
     except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), session_id)) from exc
+        raise HTTPException(
+            status_code=404, detail=_format_error("not_found", str(exc), session_id)
+        ) from exc
 
     return TurnHistoryResponse(
         turns=[_to_turn_record(turn) for turn in turns],
@@ -457,7 +467,9 @@ async def get_context(
     try:
         context = await manager.load_context(session_id, turn_id=turn_id)
     except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), session_id)) from exc
+        raise HTTPException(
+            status_code=404, detail=_format_error("not_found", str(exc), session_id)
+        ) from exc
 
     return context
 
@@ -472,13 +484,24 @@ async def story_turn(
     """Execute a full story turn and persist the results."""
 
     try:
-        await manager.update_metadata(request.session_id, current_phase="processing", last_accessed=datetime.now(timezone.utc))
+        await manager.update_metadata(
+            request.session_id,
+            current_phase="processing",
+            last_accessed=datetime.now(timezone.utc),
+        )
     except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), request.session_id)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail=_format_error("not_found", str(exc), request.session_id),
+        ) from exc
 
     await stream_manager.broadcast(
         request.session_id,
-        {"event": "phase", "phase": "processing", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {
+            "event": "phase",
+            "phase": "processing",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
     )
 
     try:
@@ -586,12 +609,19 @@ async def regenerate_turn(
     try:
         last_turn = await manager.get_last_turn(request.session_id)
     except (SessionNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), request.session_id)) from exc
+        raise HTTPException(
+            status_code=404,
+            detail=_format_error("not_found", str(exc), request.session_id),
+        ) from exc
 
     await manager.update_metadata(request.session_id, current_phase="regenerating")
     await stream_manager.broadcast(
         request.session_id,
-        {"event": "phase", "phase": "regenerating", "timestamp": datetime.now(timezone.utc).isoformat()},
+        {
+            "event": "phase",
+            "phase": "regenerating",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
     )
 
     try:
@@ -689,7 +719,9 @@ async def delete_session(
     try:
         await manager.delete_session(session_id)
     except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=_format_error("not_found", str(exc), session_id)) from exc
+        raise HTTPException(
+            status_code=404, detail=_format_error("not_found", str(exc), session_id)
+        ) from exc
     return DeleteSessionResponse()
 
 
@@ -704,11 +736,15 @@ def new_story_setup_start(request: NewStoryStartRequest) -> NewStoryStartRespons
 
 
 @app.get("/api/story/new/setup/resume", response_model=NewStoryResumeResponse)
-def new_story_setup_resume(slot: int = Query(..., ge=1, le=5)) -> NewStoryResumeResponse:
+def new_story_setup_resume(
+    slot: int = Query(..., ge=1, le=5)
+) -> NewStoryResumeResponse:
     """Resume setup by returning cached drafts for the slot."""
     cache = resume_new_story_setup(slot)
     if not cache:
-        raise HTTPException(status_code=404, detail="No setup in progress for this slot")
+        raise HTTPException(
+            status_code=404, detail="No setup in progress for this slot"
+        )
     return NewStoryResumeResponse(**cache)
 
 
@@ -741,8 +777,12 @@ def new_story_slot_select(request: NewStoryActivateRequest) -> NewStoryActivateR
     """
     results = activate_new_story_slot(request.slot)
     if results.get(str(request.slot)) == "unavailable":
-        raise HTTPException(status_code=404, detail="Target slot database not available")
-    return NewStoryActivateResponse(status="activated", slot=request.slot, results=results)
+        raise HTTPException(
+            status_code=404, detail="Target slot database not available"
+        )
+    return NewStoryActivateResponse(
+        status="activated", slot=request.slot, results=results
+    )
 
 
 @app.websocket("/api/story/stream/{session_id}")
@@ -773,11 +813,12 @@ def accept_chunk(
     embeddings are generated for it.
     """
     try:
-        return default_workflow.accept_chunk(
+        workflow = get_default_workflow()
+        return workflow.accept_chunk(
             request.chunk_id,
             request.session_id,
             embedding_scheduler=build_embedding_scheduler(
-                default_workflow, background_tasks.add_task
+                workflow, background_tasks.add_task
             ),
         )
     except ValueError as e:
@@ -799,9 +840,7 @@ def reject_chunk(request: ChunkRejectRequest) -> ChunkRejectResponse:
     try:
         workflow = ChunkWorkflow()
         return workflow.reject_chunk(
-            request.chunk_id,
-            request.session_id,
-            request.action
+            request.chunk_id, request.session_id, request.action
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -812,8 +851,7 @@ def reject_chunk(request: ChunkRejectRequest) -> ChunkRejectResponse:
 
 @app.post("/api/chunks/{chunk_id}/edit-user-input", response_model=EditPreviousResponse)
 def edit_previous_input(
-    chunk_id: int,
-    request: EditPreviousRequest
+    chunk_id: int, request: EditPreviousRequest
 ) -> EditPreviousResponse:
     """
     Edit the user's input from the previous chunk.
@@ -828,9 +866,7 @@ def edit_previous_input(
 
         workflow = ChunkWorkflow()
         return workflow.edit_previous_input(
-            chunk_id,
-            request.new_user_input,
-            request.session_id
+            chunk_id, request.new_user_input, request.session_id
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -842,7 +878,7 @@ def edit_previous_input(
 @app.get("/api/chunks/states")
 def get_chunk_states(
     start: int = Query(..., ge=1, description="Starting chunk ID"),
-    end: int = Query(..., ge=1, description="Ending chunk ID")
+    end: int = Query(..., ge=1, description="Ending chunk ID"),
 ) -> List[Dict[str, Any]]:
     """
     Get the states of chunks in a range.
@@ -850,7 +886,9 @@ def get_chunk_states(
     Returns information about chunk states, finalization status, and embedding generation.
     """
     if start > end:
-        raise HTTPException(status_code=400, detail="Start must be less than or equal to end")
+        raise HTTPException(
+            status_code=400, detail="Start must be less than or equal to end"
+        )
 
     try:
         workflow = ChunkWorkflow()

@@ -673,6 +673,7 @@ def _narration_retry_settings(settings: Mapping[str, Any]) -> tuple[int, int]:
 
 
 def _connect_for_slot(slot: Optional[int]) -> Any:
+    from nexus.api.db_pool import get_connect_timeout_seconds
     from nexus.api.slot_utils import require_slot_dbname
 
     dbname = require_slot_dbname(slot=slot)
@@ -681,6 +682,9 @@ def _connect_for_slot(slot: Optional[int]) -> Any:
         database=dbname,
         user=os.environ.get("PGUSER", "pythagor"),
         port=os.environ.get("PGPORT", "5432"),
+        connect_timeout=int(
+            os.environ.get("PGCONNECT_TIMEOUT") or get_connect_timeout_seconds()
+        ),
     )
 
 

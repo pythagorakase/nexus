@@ -666,5 +666,23 @@ class ChunkWorkflow:
                 return [dict(row) for row in cur.fetchall()]
 
 
-# Create a singleton instance for the default database
-default_workflow = ChunkWorkflow()
+# Lazily constructed singleton for the default database. Building the
+# workflow eagerly at import time opened a Postgres pool and ran
+# _ensure_schema() before any caller asked for a DB-backed action, which
+# coupled every `nexus.api` import to database availability (issue #369).
+_default_workflow: Optional[ChunkWorkflow] = None
+_default_workflow_lock = threading.Lock()
+
+
+def get_default_workflow() -> ChunkWorkflow:
+    """Return the default-database ChunkWorkflow, constructing it on first use.
+
+    The first call opens the connection pool and runs schema validation;
+    subsequent calls return the cached instance.
+    """
+    global _default_workflow
+    if _default_workflow is None:
+        with _default_workflow_lock:
+            if _default_workflow is None:
+                _default_workflow = ChunkWorkflow()
+    return _default_workflow
