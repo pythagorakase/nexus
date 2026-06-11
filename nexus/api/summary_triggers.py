@@ -172,6 +172,16 @@ def _run_single_task(
                 task.episode,
             )
             return
+        # The Storyteller may open play mid-numbering (e.g., the first played
+        # chunk lands in S01E02 while S01E01 holds no chunks); an episode
+        # with nothing in it has nothing to summarize (M9 gate finding).
+        if db_manager.get_episode_chunk_span(task.season, task.episode) is None:
+            logger.info(
+                "Skipping summary for S%02dE%02d because the episode has no " "chunks",
+                task.season,
+                task.episode,
+            )
+            return
         runner: Callable[[SummaryGenerator], Optional[dict]] = (
             lambda gen: gen.generate_episode_summary(task.season, task.episode)
         )
