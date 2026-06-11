@@ -257,7 +257,8 @@ class AnthropicProvider(LLMProvider):
                 timeout: int = 120,
                 thinking_enabled: bool = False,
                 thinking_budget_tokens: Optional[int] = None,
-                structured_output_retries: Optional[int] = None):
+                structured_output_retries: Optional[int] = None,
+                output_validator: Optional[Any] = None):
         """
         Initialize Anthropic provider.
 
@@ -274,6 +275,8 @@ class AnthropicProvider(LLMProvider):
             thinking_budget_tokens: Thinking token budget (typically 32000)
             structured_output_retries: Validation retry budget for structured
                 output agents (apex.structured_output_retries in nexus.toml)
+            output_validator: Optional async pydantic_ai output validator
+                registered on structured agents (may raise ModelRetry)
         """
         self.top_p = top_p
         self.top_k = top_k
@@ -285,6 +288,7 @@ class AnthropicProvider(LLMProvider):
             if structured_output_retries is not None
             else self.STRUCTURED_OUTPUT_RETRIES
         )
+        self.output_validator = output_validator
 
         # Validate thinking configuration
         if thinking_enabled and thinking_budget_tokens is None:
@@ -536,6 +540,8 @@ class AnthropicProvider(LLMProvider):
             model_settings=model_settings,
             retries=self.structured_output_retries,
         )
+        if self.output_validator is not None:
+            agent.output_validator(self.output_validator)
 
         return agent
 

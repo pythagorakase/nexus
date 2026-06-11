@@ -278,6 +278,19 @@ class LogonUtility:
         self._provider_bootstrap_mode = provider_bootstrap_mode
 
         structured_output_retries = apex_settings.get("structured_output_retries", 3)
+
+        # Generation-time registry validation for Skald's orrery_tags: invalid
+        # names become a ModelRetry while the model still owns the turn,
+        # instead of a dead commit later (M9 gate finding).
+        from nexus.agents.logon.orrery_tag_validation import (
+            build_storyteller_tag_validator,
+        )
+        from nexus.api.slot_utils import require_slot_dbname
+
+        output_validator = build_storyteller_tag_validator(
+            require_slot_dbname(dbname=self.dbname)
+        )
+
         if provider_type in {"openai", "test"}:
             self.provider = OpenAIProvider(
                 model=model,
@@ -288,6 +301,7 @@ class LogonUtility:
                 base_url=base_url,
                 api_key=api_key,
                 structured_output_retries=structured_output_retries,
+                output_validator=output_validator,
             )
         elif provider_type == "anthropic":
             self.provider = AnthropicProvider(
@@ -297,6 +311,7 @@ class LogonUtility:
                 ),
                 system_prompt=system_prompt,
                 structured_output_retries=structured_output_retries,
+                output_validator=output_validator,
             )
         else:
             raise ValueError(f"Unsupported provider type: {provider_type}")
