@@ -177,7 +177,13 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
 
 
 def close_all_pools():
-    """Close all connection pools. Call this on application shutdown."""
+    """Close all connection pools and reset cached connection config.
+
+    Call this on application shutdown or after a nexus.toml edit: pools
+    rebuilt afterwards re-read the configured connect timeout, because the
+    ``get_connect_timeout_seconds`` cache is cleared here — the two resets
+    are semantically coupled whenever a config reload is the motivation.
+    """
     for db_key, conn_pool in _pools.items():
         try:
             conn_pool.closeall()
@@ -186,6 +192,7 @@ def close_all_pools():
             logger.error("Error closing pool for %s: %s", db_key, e)
 
     _pools.clear()
+    get_connect_timeout_seconds.cache_clear()
 
 
 def close_pool(dbname: Optional[str] = None) -> None:

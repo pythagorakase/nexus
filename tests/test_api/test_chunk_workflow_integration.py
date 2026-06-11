@@ -132,9 +132,12 @@ def test_default_workflow_singleton_reuses_one_pool() -> None:
         second = chunk_workflow.get_default_workflow()
         assert first is second
 
-        # A real read through the workflow must reuse the existing pool.
+        # Any real query forces pool creation; (1, 1) is an arbitrary
+        # one-chunk range, not a boundary assertion.
         first.get_chunk_states(1, 1)
         assert list(db_pool._pools) == [first.dbname]
     finally:
+        # close_all_pools() also clears the connect-timeout cache, so this
+        # fully resets pool-related state for subsequent tests.
         chunk_workflow._default_workflow = None
         db_pool.close_all_pools()
