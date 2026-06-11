@@ -1003,6 +1003,14 @@ class APEXSettings(BaseModel):
     model: str
     reasoning_effort: str = Field(..., pattern="^(low|medium|high)$")
     max_output_tokens: int = Field(..., ge=1)
+    structured_output_retries: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Validation retry budget for apex structured-output calls. Each "
+            "retry feeds the validation error back to the model."
+        ),
+    )
 
 
 # =============================================================================

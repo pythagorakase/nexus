@@ -15,9 +15,12 @@ mechanical state (relationship rows, pair-tags, stub entities).
    `scope_faction_entity_id`). This is a brand-new world: there are no existing
    rows to reference. Identify people, places, and factions by `name` only.
 3. Reuse proper names that already appear in the character sheet or trait
-   descriptions. Invent a fitting in-world name only when the prose names
-   nobody. Names must be concrete ("Doctor Imari Voss"), never generic
-   placeholders ("the patron", "a friend").
+   descriptions, and always use the FULLEST form of the name found anywhere
+   in the prose (given name plus family name, plus title or honorific when
+   the prose uses one). These names become canonical database rows that
+   later passes must match exactly. Invent a fitting in-world name only when
+   the prose names nobody. Names must be concrete ("Doctor Imari Voss"),
+   never generic placeholders ("the patron", "a friend").
 4. Use the canonical `fame` field, never the legacy `reputation` alias.
 5. Closed vocabularies are exhaustive. `resources.level` and `fame.level` must
    come from the levels in the request vocabulary. `status.level` must come

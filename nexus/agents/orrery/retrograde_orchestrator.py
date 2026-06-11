@@ -145,6 +145,7 @@ def generate_retrograde_history(
     weird_level: Optional[str] = None,
     weird_raw: Optional[float] = None,
     progress: Optional[ProgressCallback] = None,
+    trait_compile_inputs: Optional[Mapping[str, Any]] = None,
 ) -> RetrogradeGenerationBundle:
     """Run the non-mutating Retrograde stages from a wizard cache snapshot.
 
@@ -174,6 +175,7 @@ def generate_retrograde_history(
         settings=settings,
         weird_level=weird_level,
         weird_raw=weird_raw,
+        trait_compile_inputs=trait_compile_inputs,
     )
     timings.append(
         RetrogradeStageTiming(stage="packet", seconds=time.monotonic() - started)

@@ -250,6 +250,7 @@ def perform_transition_with_retrograde(
     def _progress(stage: str, detail: Dict[str, Any]) -> None:
         record_retrograde_progress(slot_number, stage, detail)
 
+    derived_inputs = transition_data.character.trait_compile_inputs
     bundle = generate_retrograde_history(
         slot=slot_number,
         dbname=dbname,
@@ -258,6 +259,11 @@ def perform_transition_with_retrograde(
         model_name=effective_model,
         max_tokens=orrery_settings.retrograde.wizard.max_tokens,
         progress=_progress,
+        trait_compile_inputs=(
+            derived_inputs.model_dump(mode="json", exclude_none=True)
+            if derived_inputs is not None
+            else None
+        ),
     )
 
     manifest_holder: Dict[str, Any] = {}
