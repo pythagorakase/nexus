@@ -500,7 +500,12 @@ text_search_max_score = 0.85     # Maximum possible score from text search
 structured_search_char_score = 0.95    # Score when character matches
 structured_search_place_score = 0.9    # Score when location matches
 
-# Enable/disable structured entity search
+# Structured entity search stays OFF for v1.0 — intentional, not a TODO.
+# The 2026-05-18 retrieval bake-off (docs/retrieval_query_bakeoff_2026_05_18.md)
+# validated raw chunk text feeding the hybrid text+vector stack as the
+# retrieval baseline; the structured entity-database path predates that stack
+# and is not part of the validated mix ([memnon.query] include_structured_results
+# is likewise 0). Revisit only with bake-off-grade evidence.
 structured_data_enabled = false
 
 [memnon.retrieval.source_weights]
