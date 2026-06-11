@@ -28,7 +28,7 @@ python -m nexus.agents.lore.lore "Eclipse Biotech corporate structure" --chunk 1
 python -m nexus.agents.lore.lore "Neural implant technology" --chunk 60 --debug
 
 Note: The --chunk parameter is REQUIRED when providing retrieval directives.
-Each directive gets 5 SQL queries by default (configurable via settings.json: Agent Settings > LORE > query_budget).
+Each directive gets 5 SQL queries by default (configurable via nexus.toml: [lore] query_budget).
 """
 
 import asyncio
@@ -91,7 +91,7 @@ class LORE:
         Initialize LORE agent.
 
         Args:
-            settings_path: Path to settings.json file
+            settings_path: Path to nexus.toml (defaults to the repo root copy)
             debug: Enable debug logging
             enable_logon: Whether to enable LOGON utility
             dbname: Database name (save_01 through save_05).
@@ -132,18 +132,14 @@ class LORE:
 
     def _load_settings(self, settings_path: Optional[str] = None) -> Dict[str, Any]:
         """
-        Load and validate settings from nexus.toml (or legacy settings.json).
+        Load and validate settings from nexus.toml.
 
-        Uses Pydantic models for validation and type safety.
-        Falls back to settings.json for backward compatibility.
+        Uses Pydantic models for validation and type safety. nexus.toml is
+        the sole runtime configuration file (settings.json was retired).
         """
         if not settings_path:
-            # Try nexus.toml first, then fall back to settings.json
             config_dir = Path(__file__).parent.parent.parent.parent
-            toml_path = config_dir / "nexus.toml"
-            json_path = config_dir / "settings.json"
-
-            settings_path = toml_path if toml_path.exists() else json_path
+            settings_path = config_dir / "nexus.toml"
 
         self.settings_path = settings_path  # Store for later use
 
@@ -662,7 +658,7 @@ async def main():
         help="Narrative chunk ID to build context for",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--settings", help="Path to settings.json")
+    parser.add_argument("--settings", help="Path to nexus.toml")
     parser.add_argument("--test", action="store_true", help="Run test turn cycle")
     parser.add_argument("--status", action="store_true", help="Show component status")
     parser.add_argument("--qa", help="(Deprecated) Use positional argument instead")

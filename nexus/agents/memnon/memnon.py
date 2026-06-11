@@ -320,7 +320,7 @@ class MEMNON:
         query_config = MEMNON_SETTINGS.get("query", {})
         retrieval_config = MEMNON_SETTINGS.get("retrieval", {})
 
-        # Configure retrieval settings using values from settings.json
+        # Configure retrieval settings using values from nexus.toml
         self.retrieval_settings = {
             "default_top_k": query_config.get("default_limit", 10),
             "max_query_results": retrieval_config.get("max_results", 50),
