@@ -14,9 +14,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import psycopg2
+import psycopg2  # type: ignore[import-untyped]
 import pytest
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor  # type: ignore[import-untyped]
 
 SAVE_05_DSN = "postgresql://pythagor@localhost:5432/save_05"
 SAVE_05_DBNAME = "save_05"
@@ -182,6 +182,9 @@ def _install_fixture_world() -> Any:
         location=PlaceProfile(**cache["initial_location"]),
         base_timestamp=datetime.now(timezone.utc),
         thread_id="thread_retrograde_wizard_live",
+        setup_duration_minutes=None,
+        ready_for_transition=True,
+        validated=True,
     )
 
 
