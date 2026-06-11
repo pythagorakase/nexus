@@ -11,6 +11,7 @@ or can be explicitly passed to connection functions.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 from contextlib import contextmanager
@@ -32,19 +33,22 @@ MIN_CONNECTIONS = 1
 MAX_CONNECTIONS = 10
 
 
+@functools.lru_cache(maxsize=None)
 def get_connect_timeout_seconds() -> int:
     """Read the configured Postgres connect timeout from nexus.toml.
 
-    Loaded lazily at connection time (never at import) so that importing
-    this module stays free of configuration and database side effects.
+    Loaded lazily on first connection (never at import) so that importing
+    this module stays free of configuration and database side effects. The
+    value is static config, so it is cached after the first read; call
+    ``get_connect_timeout_seconds.cache_clear()`` to force a re-read.
     """
     from nexus.config import load_settings
 
     settings = load_settings()
     if settings.api is None:
         raise RuntimeError(
-            "nexus.toml is missing the [api.database] section; "
-            "connect_timeout_seconds is required"
+            "nexus.toml is missing the [api] section; "
+            "[api.database] connect_timeout_seconds is required"
         )
     return settings.api.database.connect_timeout_seconds
 
@@ -173,7 +177,13 @@ def get_connection(dbname: Optional[str] = None, dict_cursor: bool = False):
 
 
 def close_all_pools():
-    """Close all connection pools. Call this on application shutdown."""
+    """Close all connection pools and reset cached connection config.
+
+    Call this on application shutdown or after a nexus.toml edit: pools
+    rebuilt afterwards re-read the configured connect timeout, because the
+    ``get_connect_timeout_seconds`` cache is cleared here — the two resets
+    are semantically coupled whenever a config reload is the motivation.
+    """
     for db_key, conn_pool in _pools.items():
         try:
             conn_pool.closeall()
@@ -182,6 +192,7 @@ def close_all_pools():
             logger.error("Error closing pool for %s: %s", db_key, e)
 
     _pools.clear()
+    get_connect_timeout_seconds.cache_clear()
 
 
 def close_pool(dbname: Optional[str] = None) -> None:

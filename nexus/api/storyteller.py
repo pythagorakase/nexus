@@ -38,7 +38,6 @@ from nexus.api.new_story_flow import (
     activate_slot as activate_new_story_slot,
 )
 from nexus.api.chunk_workflow import (
-    ChunkWorkflow,
     ChunkAcceptRequest,
     ChunkAcceptResponse,
     ChunkRejectRequest,
@@ -838,8 +837,7 @@ def reject_chunk(request: ChunkRejectRequest) -> ChunkRejectResponse:
     - edit_previous: Enable editing of the user's previous input
     """
     try:
-        workflow = ChunkWorkflow()
-        return workflow.reject_chunk(
+        return get_default_workflow().reject_chunk(
             request.chunk_id, request.session_id, request.action
         )
     except ValueError as e:
@@ -864,8 +862,7 @@ def edit_previous_input(
         if chunk_id != request.chunk_id:
             raise ValueError("Chunk ID mismatch")
 
-        workflow = ChunkWorkflow()
-        return workflow.edit_previous_input(
+        return get_default_workflow().edit_previous_input(
             chunk_id, request.new_user_input, request.session_id
         )
     except ValueError as e:
@@ -891,8 +888,7 @@ def get_chunk_states(
         )
 
     try:
-        workflow = ChunkWorkflow()
-        return workflow.get_chunk_states(start, end)
+        return get_default_workflow().get_chunk_states(start, end)
     except Exception as e:
         logger.error(f"Error getting chunk states: {e}")
         raise HTTPException(status_code=500, detail="Failed to get chunk states")
