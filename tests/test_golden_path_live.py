@@ -38,9 +38,10 @@ Stages (ordered; each test asserts one category against the shared run):
 Gating: NEXUS_RUN_LIVE_LLM=1, NEXUS_RUN_POSTGRES=1, and the destructive
 opt-in NEXUS_GOLDEN_PATH_E2E=1.
 
-Cost and wall clock: roughly 30-60 frontier calls (transition ~4-7 min;
-each turn ~2-4 min; plus embeddings); expect 25-50 minutes total at
-2026-06 gpt-5.5 latencies. Budget accordingly before wiring into CI.
+Cost and wall clock: measured green run (2026-06-11, gpt-5.5 +
+@anthropic.default narration): 20 frontier calls, 14m30s end to end.
+Budget ~20-35 calls / 15-30 minutes; the adaptive tail adds turns only
+when promotion/bleed/maturation lag. Budget accordingly before CI.
 
 Cleanup: the API server subprocess is terminated on teardown. Slot 5 is
 deliberately left with the run's data for post-mortem inspection; rerun
