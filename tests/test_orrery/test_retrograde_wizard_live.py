@@ -60,7 +60,8 @@ def test_wizard_transition_cold_starts_retrograde_history() -> None:
     # Canonical history landed with source='retrograde'.
     rows = _query(
         """
-        SELECT id, event_type, summary,
+        SELECT id, event_type,
+               payload ->> 'summary' AS summary,
                payload ->> 'retrograde_summary_chunk_id' AS summary_chunk_id
         FROM world_events
         WHERE source = 'retrograde'
