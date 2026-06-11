@@ -650,6 +650,11 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         "registered_tags_by_seed_policy": vocabulary.get(
             "registered_tags_by_seed_policy", {}
         ),
+        # The validator enforces per-kind tag registration, so Skald must see
+        # the same mapping up front; otherwise kind mismatches burn retries.
+        "registered_tags_by_entity_kind": vocabulary.get(
+            "registered_tags_by_entity_kind", {}
+        ),
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
     }
 
@@ -704,6 +709,11 @@ def _hard_validation_rules() -> list[str]:
         (
             "Pair tags must use the exact subject_kind/object_kind constraints "
             "from multi_entity_tag_definitions."
+        ),
+        (
+            "Single-entity tags must be registered for the tagged entity_kind "
+            "in registered_tags_by_entity_kind; a tag listed only under another "
+            "kind is illegal."
         ),
         (
             "selected_seed_ids and rejected_seed_ids must reference returned "

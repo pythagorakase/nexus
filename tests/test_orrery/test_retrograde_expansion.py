@@ -56,6 +56,7 @@ def test_expansion_prompt_includes_selected_seeds_and_commit_blockers() -> None:
     assert "seed_001" in prompt
     assert "pre_game_tick_chunk_id" in prompt
     assert "relationship_plan currently supports only character->character" in prompt
+    assert "registered_tags_by_entity_kind" in prompt
     assert RETROGRADE_EXPANSION_RESPONSE_SCHEMA_VERSION in prompt
 
 

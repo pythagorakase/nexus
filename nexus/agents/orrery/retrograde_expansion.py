@@ -812,6 +812,11 @@ def _hard_validation_rules() -> list[str]:
         "Prompt-visible-only tags must not appear in entity_tag_plan.",
         "Pair tags must obey registered subject/object kind constraints.",
         (
+            "Single-entity tags must be registered for the tagged entity_kind "
+            "in registered_tags_by_entity_kind; a tag listed only under another "
+            "kind is illegal."
+        ),
+        (
             "relationship_plan currently supports only character->character "
             "rows; express faction/place pressure through events or pair tags."
         ),
@@ -856,6 +861,11 @@ def _prompt_vocabulary(vocabulary: SeedEligibleVocabulary) -> dict[str, Any]:
         "relationship_types": vocabulary["relationship_types"],
         "registered_tags_by_seed_policy": vocabulary.get(
             "registered_tags_by_seed_policy", {}
+        ),
+        # The validator enforces per-kind tag registration, so Skald must see
+        # the same mapping up front; otherwise kind mismatches burn retries.
+        "registered_tags_by_entity_kind": vocabulary.get(
+            "registered_tags_by_entity_kind", {}
         ),
         "multi_entity_tag_definitions": vocabulary["multi_entity_tag_definitions"],
     }

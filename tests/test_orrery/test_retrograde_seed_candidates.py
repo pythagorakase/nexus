@@ -56,6 +56,7 @@ def test_seed_candidate_prompt_embeds_schema_and_allowed_vocabulary() -> None:
     assert "Return JSON only" in prompt
     assert SEED_CANDIDATE_RESPONSE_SCHEMA_VERSION in prompt
     assert "registered_tags_by_seed_policy" in prompt
+    assert "registered_tags_by_entity_kind" in prompt
     assert "scholar" in prompt
     assert "knows_location" in prompt
 
