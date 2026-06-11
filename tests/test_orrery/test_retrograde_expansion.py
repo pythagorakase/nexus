@@ -107,16 +107,19 @@ def test_expansion_plan_rejects_kind_inapplicable_tag() -> None:
     """
 
     vocabulary = _expansion_test_vocabulary()
-    vocabulary["registered_tags_by_entity_kind"] = {
-        "character": ["scholar", "untested_signal"],
-        "place": ["grieving"],
-        "faction": [],
-    }
     payload = _valid_expansion(vocabulary)
+    # "scholar" is registered for characters only; planning it on a place is
+    # an expansion-level violation (the seed hints stay kind-clean, so the
+    # R4/R5 seed validation embedded in validate_expansion_plan passes).
+    payload["entity_tag_plan"][1] = {
+        "entity_ref": "Shutter Hall",
+        "entity_kind": "place",
+        "tag": "scholar",
+    }
 
     with pytest.raises(
         RetrogradeExpansionValidationError,
-        match="is not registered for entity_kind 'character'",
+        match="is not registered for entity_kind 'place'",
     ):
         validate_expansion_plan(
             payload=payload,

@@ -1255,9 +1255,7 @@ class Settings(BaseModel):
         ]
         if self.orrery is not None:
             targets.append((self.orrery.narration, "model_ref", False))
-            targets.append(
-                (self.orrery.retrograde.maturation, "model_ref", True)
-            )
+            targets.append((self.orrery.retrograde.maturation, "model_ref", True))
         if self.ir_eval is not None and self.ir_eval.judgment is not None:
             targets.append((self.ir_eval.judgment, "model", False))
 
