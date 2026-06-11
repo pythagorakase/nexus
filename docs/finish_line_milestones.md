@@ -43,8 +43,11 @@ Live-proven on slot 2: 9 promotions, 9/9 real narrations, 3 Bleed candidates wov
 **M7 - Package Self-Awareness (#282)** - M - DONE 2026-06-10 (PR #375, 7552b84d; zero vocabulary additions, fame-in-entry-gates structurally banned, 17 branch shifts on tagged profiles / 0 diffs on untagged corpus)
 Branch selection reads the acting entity's own properties (fame, resources, disposition) per the locked three-stage design: entry-gating / branch-selection / outcome. Deliberately sequenced after M6: the first live Promote/Narrate/Bleed runs establish a branch-selection baseline, so threshold tuning and self-awareness don't confound each other. Runs parallel with M8.
 
-**M8 - Retrograde Phase B-Lite: Runtime Stub Maturation** - L
+**M8 - Retrograde Phase B-Lite: Runtime Stub Maturation** - L - DONE 2026-06-10 (PR #379; live-proven on slot 2: Skald-declared entity matured with 4 events in 171s, retrievable via MEMNON; maturation drain detached from the play loop, +3.2min -> +106ms)
 When Skald declares `new_entities` mid-narrative, mature them. MVP cut: the structured-output declaration schema (decision 9), a conservative engagement-signal set (decision 12), and the fire-and-forget job contract with persistence-on-completion (the core of decision 10) - running only on the *committed* branch. Deferred past 1.0: A/B/C speculative branch maturation (decision 10's tail) and the rule-based prose-audit pass (decision 11).
+
+**M8.5 - Wizard Multi-Model Support** - M (added 2026-06-10 per user)
+The wizard and its Retrograde calls should route through the same pluggable provider layer as the main narrative engine: gpt-5.5 stays the default testing workhorse, Anthropic models become selectable (config + settings UI dropdown), structured-output paths provider-agnostic. No literal model IDs in runtime code.
 
 **M9 - Golden-Path Release Gate** - M
 One scripted end-to-end run, real API calls, fresh slot: wizard -> Retrograde cold start -> ~10 live turns with Orrery on -> assert chunk persistence, embedding lifecycle, retrieval of retrograde-sourced history (per M3's chosen surface), and at least one off-screen event bleeding into prose. Codified as a repeatable `NEXUS_RUN_LIVE_LLM=1` test. Passing this run *is* the MVP.
