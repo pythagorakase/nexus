@@ -268,6 +268,12 @@ def ensure_trait_compile_inputs(
 ) -> Optional[dict[str, Any]]:
     """Derive and attach trait inputs to the transition's character sheet.
 
+    MUTATES ``transition_data.character`` in place: the derived
+    ``TraitCompileInputs`` are assigned to ``trait_compile_inputs``, and the
+    caller (``perform_transition_with_retrograde``) depends on that
+    assignment when it later forwards the inputs to Retrograde generation
+    and the trait compiler.
+
     Returns an outcome block for the transition result, or ``None`` when the
     sheet already carries typed inputs (a future wizard may collect them
     conversationally; derivation never overwrites).

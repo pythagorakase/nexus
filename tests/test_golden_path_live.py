@@ -562,12 +562,26 @@ def test_stage7_runtime_maturation(golden_path: GoldenPathRun) -> None:
 
 
 def test_stage8_server_log_clean(golden_path: GoldenPathRun) -> None:
-    """The full run produced no tracebacks and no ERROR lines."""
+    """The full run produced no tracebacks and no ERROR lines.
+
+    The level matcher is coupled to the standard ``- LEVEL -`` log format,
+    so a format-detection canary guards against the assertion silently
+    becoming a no-op if the logging format ever changes.
+    """
 
     assert golden_path.log_path is not None
     log_text = golden_path.log_path.read_text()
+    assert " - INFO - " in log_text, (
+        "Log format canary failed: no ' - INFO - ' lines found, so the "
+        "ERROR matcher below cannot be trusted. Update both matchers to "
+        "the current logging format."
+    )
     assert "Traceback (most recent call last)" not in log_text
-    error_lines = [line for line in log_text.splitlines() if " - ERROR - " in line]
+    error_lines = [
+        line
+        for line in log_text.splitlines()
+        if " - ERROR - " in line or " - CRITICAL - " in line
+    ]
     assert not error_lines, "Server log contains errors:\n" + "\n".join(
         error_lines[:20]
     )

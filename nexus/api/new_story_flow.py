@@ -207,10 +207,18 @@ def perform_transition_with_retrograde(
     ):
         from nexus.api.trait_input_derivation import ensure_trait_compile_inputs
 
+        if effective_model is None:
+            raise ValueError(
+                f"Slot {slot_number} has no configured model; cannot derive "
+                "trait compile inputs at the transition"
+            )
+        # Sync context only: the transition endpoint runs this whole
+        # function via asyncio.to_thread, and the deriver uses
+        # agent.run_sync, which would deadlock inside a running event loop.
         trait_inputs_outcome = ensure_trait_compile_inputs(
             transition_data,
             slot=slot_number,
-            model_name=effective_model or get_new_story_model(),
+            model_name=effective_model,
             max_tokens=trait_inputs_settings.max_tokens,
             retries=settings.wizard.max_retries,
         )
