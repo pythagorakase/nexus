@@ -94,9 +94,18 @@ The setup script uses `pg_dump -s` to extract schema from `NEXUS_template`.
 
 #### Refreshing the Template
 
+The template is the canonical fresh-slot image: latest schema **plus**
+seed/vocab rows (`tags`, `event_types`, `pair_tags`, `tag_category_registry`,
+`assets.traits`) **plus** a fully stamped `schema_migrations` table. Slot
+initialization copies all three; a template without migration stamps is
+rejected loudly (the runner would otherwise replay already-applied
+migrations against the post-migration schema and fail).
+
 To update `NEXUS_template` from a known-good slot:
 ```bash
 dropdb NEXUS_template && createdb NEXUS_template && pg_dump -s -d save_01 | psql -d NEXUS_template
+pg_dump --data-only -d save_01 -t schema_migrations -t tags -t event_types \
+  -t pair_tags -t tag_category_registry -t assets.traits | psql -d NEXUS_template
 ```
 
 ### Active Slot Configuration
