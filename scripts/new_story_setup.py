@@ -242,18 +242,35 @@ def initialize_slot_database(
     LOG.info("Database %s ready", target_db)
 
 
-def _copy_template_data(source_db: str, target_db: str) -> None:
-    """Copy all rows from the template into the freshly restored schema.
+# The template's canonical seed image: the only tables whose ROWS are copied
+# into a fresh story database. Keep in sync with the "Refreshing the Template"
+# section of CLAUDE.md. Everything else arrives schema-only, so pointing
+# --mode schema at a populated source can never leak narrative or cache rows
+# into a fresh slot.
+TEMPLATE_SEED_TABLES = (
+    "public.schema_migrations",
+    "public.tags",
+    "public.event_types",
+    "public.pair_tags",
+    "public.tag_category_registry",
+    "assets.traits",
+)
 
-    The template carries no narrative data, so a data-only dump transfers
-    exactly the seed/vocab tables (tags, event_types, pair_tags,
-    tag_category_registry, assets.traits, ...) and the schema_migrations
-    baseline. ON_ERROR_STOP keeps failures loud.
+
+def _copy_template_data(source_db: str, target_db: str) -> None:
+    """Copy the seed image from the template into the freshly restored schema.
+
+    Transfers exactly the seed/vocab tables and the schema_migrations
+    baseline (TEMPLATE_SEED_TABLES) — never narrative or cache rows, even if
+    the source database carries them. ON_ERROR_STOP keeps failures loud.
     """
     LOG.info("Copying template data (seed rows + migration stamps) from %s", source_db)
+    dump_cmd = ["pg_dump", "--data-only", source_db]
+    for table in TEMPLATE_SEED_TABLES:
+        dump_cmd.extend(["-t", table])
     with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".sql") as tmp:
         subprocess.run(
-            ["pg_dump", "--data-only", "-n", "public", "-n", "assets", source_db],
+            dump_cmd,
             check=True,
             stdout=tmp,
         )

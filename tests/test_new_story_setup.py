@@ -58,6 +58,7 @@ def template_db() -> Generator[str, None, None]:
             with conn, conn.cursor() as cur:
                 cur.execute(
                     """
+                    CREATE SCHEMA assets;
                     CREATE TABLE public.schema_migrations (
                         version TEXT PRIMARY KEY,
                         name TEXT NOT NULL,
@@ -73,6 +74,18 @@ def template_db() -> Generator[str, None, None]:
                         tag TEXT NOT NULL,
                         entity_kind TEXT NOT NULL
                     );
+                    CREATE TABLE public.event_types (id SERIAL PRIMARY KEY, name TEXT);
+                    CREATE TABLE public.pair_tags (id SERIAL PRIMARY KEY, tag TEXT);
+                    CREATE TABLE public.tag_category_registry (
+                        id SERIAL PRIMARY KEY, category TEXT
+                    );
+                    CREATE TABLE assets.traits (id SERIAL PRIMARY KEY, name TEXT);
+                    -- Non-seed table: rows here must NEVER reach a fresh slot,
+                    -- even when --mode schema points at a populated source.
+                    CREATE TABLE public.narrative_chunks (
+                        id BIGSERIAL PRIMARY KEY,
+                        raw_text TEXT
+                    );
                     """
                 )
                 cur.executemany(
@@ -83,6 +96,10 @@ def template_db() -> Generator[str, None, None]:
                 cur.executemany(
                     "INSERT INTO public.tags (tag, entity_kind) VALUES (%s, %s)",
                     _SEED_ROWS,
+                )
+                cur.execute(
+                    "INSERT INTO public.narrative_chunks (raw_text) "
+                    "VALUES ('story data that must stay behind')"
                 )
         finally:
             conn.close()
@@ -114,6 +131,8 @@ def test_fresh_database_is_baseline_stamped(
                     "SELECT new_story FROM public.global_variables WHERE id = TRUE"
                 )
                 global_row = cur.fetchone()
+                cur.execute("SELECT COUNT(*) FROM public.narrative_chunks")
+                narrative_count = cur.fetchone()[0]
         finally:
             conn.close()
 
@@ -123,6 +142,8 @@ def test_fresh_database_is_baseline_stamped(
         )
         assert seeds == _SEED_ROWS
         assert global_row is not None and global_row[0] is True
+        # Only the seed image crosses; story rows in the source stay behind.
+        assert narrative_count == 0
 
         # The regression itself: a follow-up migrate run must be pure no-op —
         # nothing pending (already stamped), nothing failed (no 053 replay).
