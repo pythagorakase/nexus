@@ -52,7 +52,7 @@ The wizard and its Retrograde calls should route through the same pluggable prov
 **M9 - Golden-Path Release Gate** - M
 One scripted end-to-end run, real API calls, fresh slot: wizard -> Retrograde cold start -> ~10 live turns with Orrery on -> assert chunk persistence, embedding lifecycle, retrieval of retrograde-sourced history (per M3's chosen surface), and at least one off-screen event bleeding into prose. Codified as a repeatable `NEXUS_RUN_LIVE_LLM=1` test. Passing this run *is* the MVP.
 
-**M10 - Release Hygiene** - M
+**M10 - Release Hygiene** - M - DONE except the tag, 2026-06-10 (PR #380, ac3734e6; #369 closed, settings.json retired, fresh-slot migration stamping fixed, README rewritten; v1.0.0 tag fires after M9 passes)
 Close #369 (side-effect-free API imports). Reconcile nexus.toml/settings.json drift. Document intentional flag states (`structured_data_enabled = false` stays off). Rewrite README to match reality. Update stale issue/spec checklists (#300 prerequisites). Tag v1.0.0.
 
 ## UI Track (Parallel Lane)
